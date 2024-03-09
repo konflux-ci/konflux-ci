@@ -3,16 +3,23 @@ name: Sanity Test
 on: pull_request
 
 jobs:
-  create-cluster:
+  sanity-test:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+  
       - name: Create k8s Kind Cluster
         uses: helm/kind-action@v1
       
-      - name: Show version infromation
+      - name: Show version information
         run: |
           kubectl version
           kind version
+
+      - name: Installing Dependencies
+        run: |
+          kubectl create -k dependencies
 
       - name: List namespaces
         run: |
