@@ -24,3 +24,7 @@ jobs:
       - name: List namespaces
         run: |
           kubectl get namespace
+
+      - name: Wait for the dependencies to be ready
+        run: |
+          ./wait-for-all-deployments.sh
