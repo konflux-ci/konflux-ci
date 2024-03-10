@@ -19,7 +19,10 @@ jobs:
 
       - name: Installing Dependencies
         run: |
-          kubectl create -k dependencies
+          kubectl create -k dependencies/tekton-operator
+          kubectl create -k dependencies/tekton-config
+          kubectl create -k dependencies/pipelines-as-code
+          sleep 10
 
       - name: List namespaces
         run: |
