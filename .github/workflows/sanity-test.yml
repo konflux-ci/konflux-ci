@@ -32,3 +32,7 @@ jobs:
       - name: Wait for the dependencies to be ready
         run: |
           ./wait-for-all.sh
+
+      - name: Install Konflux
+        run: |
+          kubectl create -k konflux-ci/application-api
