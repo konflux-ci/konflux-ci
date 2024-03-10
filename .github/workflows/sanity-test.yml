@@ -22,6 +22,7 @@ jobs:
           kubectl create -k dependencies/tekton-operator
           kubectl create -k dependencies/tekton-config
           kubectl create -k dependencies/pipelines-as-code
+          kubectl create -k dependencies/cert-manager
           sleep 10
 
       - name: List namespaces
