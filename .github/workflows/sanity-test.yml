@@ -36,3 +36,12 @@ jobs:
       - name: Install Konflux
         run: |
           kubectl create -k konflux-ci/application-api
+          kubectl create -k konflux-ci/release
+
+      - name: List namespaces
+        run: |
+          kubectl get namespace
+
+      - name: Wait for Konflux to be ready
+        run: |
+          ./wait-for-all.sh
