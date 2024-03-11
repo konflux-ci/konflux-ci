@@ -40,6 +40,8 @@ jobs:
           # This will deploy the commos CRDs used in Konflux
           kubectl create -k konflux-ci/application-api
 
+          kubectl create -k konflux-ci/enterprise-contract/core
+
           kubectl create -k konflux-ci/release
 
           # The build-service depends on CRDs from the release-service

@@ -1,0 +1,10 @@
+apiVersion: v1
+data:
+  verify_ec_task_bundle: quay.io/enterprise-contract/ec-task-bundle:007593d8afd87f5ee612d7d2cc1adf8ae474bb75@sha256:bf6f20badff9cd473b607c96d3125b40a30e3cd564efe450837f486d6ffbb05a
+  verify_ec_task_git_pathInRepo: tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml
+  verify_ec_task_git_revision: 007593d8afd87f5ee612d7d2cc1adf8ae474bb75
+  verify_ec_task_git_url: https://github.com/enterprise-contract/ec-cli.git
+kind: ConfigMap
+metadata:
+  name: ec-defaults
+  namespace: enterprise-contract-service

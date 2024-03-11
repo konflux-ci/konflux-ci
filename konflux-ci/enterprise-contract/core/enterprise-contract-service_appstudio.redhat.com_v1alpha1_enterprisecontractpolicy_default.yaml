@@ -1,0 +1,24 @@
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: EnterpriseContractPolicy
+metadata:
+  name: default
+  namespace: enterprise-contract-service
+spec:
+  description: Includes rules for levels 1, 2 & 3 of SLSA v0.1. This is the default
+    config used for new Konflux applications. Available collections are defined in
+    https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/release_policy.html#_available_rule_collections.
+    If a different policy configuration is desired, this resource can serve as a starting
+    point. See the docs on how to include and exclude rules https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/policy_configuration.html#_including_and_excluding_rules.
+  name: Default
+  publicKey: k8s://openshift-pipelines/public-key
+  sources:
+  - config:
+      exclude: []
+      include:
+      - '@slsa3'
+    data:
+    - oci::quay.io/redhat-appstudio-tekton-catalog/data-acceptable-bundles:latest
+    - github.com/release-engineering/rhtap-ec-policy//data
+    name: Default
+    policy:
+    - oci::quay.io/enterprise-contract/ec-release-policy:git-fe45153@sha256:94b62b263b947a762b08d5aa2715f37ff3ba25ff7462850dba9d9a8eec1b4c49
