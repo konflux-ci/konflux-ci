@@ -1,0 +1,160 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    controller-gen.kubebuilder.io/version: v0.8.0
+  creationTimestamp: null
+  name: buildpipelineselectors.appstudio.redhat.com
+spec:
+  group: appstudio.redhat.com
+  names:
+    kind: BuildPipelineSelector
+    listKind: BuildPipelineSelectorList
+    plural: buildpipelineselectors
+    singular: buildpipelineselector
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: BuildPipelineSelector is the Schema for the BuildPipelineSelectors
+          API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: BuildPipelineSelectorSpec defines the desired state of BuildPipelineSelector
+            properties:
+              selectors:
+                description: Defines chain of pipeline selectors. The first matching
+                  item is used.
+                items:
+                  description: PipelineSelector defines allowed build pipeline and
+                    conditions when it should be used.
+                  properties:
+                    name:
+                      description: Name of the selector item. Optional.
+                      type: string
+                    pipelineParams:
+                      description: Extra arguments to add to the specified pipeline
+                        run.
+                      items:
+                        description: PipelineParam is a type to describe pipeline
+                          parameters. tektonapi.Param type is not used due to validation
+                          issues.
+                        properties:
+                          name:
+                            type: string
+                          value:
+                            type: string
+                        required:
+                        - name
+                        - value
+                        type: object
+                      type: array
+                      x-kubernetes-list-type: atomic
+                    pipelineRef:
+                      description: Build Pipeline to use if the selector conditions
+                        are met.
+                      properties:
+                        apiVersion:
+                          description: API version of the referent
+                          type: string
+                        name:
+                          description: 'Name of the referent; More info: http://kubernetes.io/docs/user-guide/identifiers#names'
+                          type: string
+                        params:
+                          description: Params contains the parameters used to identify
+                            the referenced Tekton resource. Example entries might
+                            include "repo" or "path" but the set of params ultimately
+                            depends on the chosen resolver.
+                          items:
+                            description: Param declares an ParamValues to use for
+                              the parameter called name.
+                            properties:
+                              name:
+                                type: string
+                              value:
+                                type: string
+                            required:
+                            - name
+                            - value
+                            type: object
+                          type: array
+                          x-kubernetes-list-type: atomic
+                        resolver:
+                          description: Resolver is the name of the resolver that should
+                            perform resolution of the referenced Tekton resource,
+                            such as "git".
+                          type: string
+                      type: object
+                    when:
+                      description: Defines the selector conditions when given build
+                        pipeline should be used. All conditions are connected via
+                        AND, whereas cases within any condition connected via OR.
+                        If the section is omitted, then the condition is considered
+                        true (usually used for fallback condition).
+                      properties:
+                        annotations:
+                          additionalProperties:
+                            type: string
+                          description: Defines annotations to match. The values to
+                            compare with are taken from component.metadata.annotations
+                            field.
+                          type: object
+                        componentName:
+                          description: Defines list of allowed component names to
+                            match, e.g. 'my-component'. The value to compare with
+                            is taken from component.metadata.name field.
+                          type: string
+                        dockerfile:
+                          description: Defines if a Dockerfile should be present in
+                            the component. Note, unset (nil) value is not the same
+                            as false (unset means skip the dockerfile check). The
+                            value to compare with is taken from devfile components
+                            of image type.
+                          type: boolean
+                        labels:
+                          additionalProperties:
+                            type: string
+                          description: Defines labels to match. The values to compare
+                            with are taken from component.metadata.labels field.
+                          type: object
+                        language:
+                          description: Defines component language to match, e.g. 'java'.
+                            The value to compare with is taken from devfile.metadata.language
+                            field.
+                          type: string
+                        projectType:
+                          description: Defines type of project of the component to
+                            match, e.g. 'quarkus'. The value to compare with is taken
+                            from devfile.metadata.projectType field.
+                          type: string
+                      type: object
+                  required:
+                  - pipelineRef
+                  type: object
+                type: array
+            required:
+            - selectors
+            type: object
+        type: object
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

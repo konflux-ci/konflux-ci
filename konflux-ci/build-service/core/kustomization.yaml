@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - apiextensions.k8s.io_v1_customresourcedefinition_buildpipelineselectors.appstudio.redhat.com.yaml
+  - appstudio.redhat.com_v1alpha1_buildpipelineselector_build-pipeline-selector.yaml
+  - apps_v1_deployment_build-service-controller-manager.yaml
+  - rbac.authorization.k8s.io_v1_clusterrolebinding_build-service-manager-rolebinding.yaml
+  - rbac.authorization.k8s.io_v1_clusterrolebinding_build-service-proxy-rolebinding.yaml
+  - rbac.authorization.k8s.io_v1_clusterrole_build-service-manager-role.yaml
+  - rbac.authorization.k8s.io_v1_clusterrole_build-service-proxy-role.yaml
+  - rbac.authorization.k8s.io_v1_rolebinding_build-service-leader-election-rolebinding.yaml
+  - rbac.authorization.k8s.io_v1_rolebinding_build-service-manager-rolebinding.yaml
+  - rbac.authorization.k8s.io_v1_role_build-service-leader-election-role.yaml
+  - rbac.authorization.k8s.io_v1_role_build-service-manager-role.yaml
+  - v1_configmap_build-service-manager-config.yaml
+  - v1_namespace_build-service.yaml
+  - v1_serviceaccount_build-service-controller-manager.yaml
+  - v1_service_build-service-controller-manager-metrics-service.yaml
