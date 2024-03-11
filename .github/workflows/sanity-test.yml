@@ -35,8 +35,15 @@ jobs:
 
       - name: Install Konflux
         run: |
+          # The order is important
+
+          # This will deploy the commos CRDs used in Konflux
           kubectl create -k konflux-ci/application-api
+
           kubectl create -k konflux-ci/release
+
+          # The build-service depends on CRDs from the release-service
+          kubectl create -k konflux-ci/build-service
 
       - name: List namespaces
         run: |

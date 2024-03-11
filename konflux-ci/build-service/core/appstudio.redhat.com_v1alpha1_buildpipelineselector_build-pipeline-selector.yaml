@@ -1,0 +1,57 @@
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: BuildPipelineSelector
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+  name: build-pipeline-selector
+  namespace: build-service
+spec:
+  selectors:
+  - name: FBC
+    pipelineRef:
+      params:
+      - name: name
+        value: fbc-builder
+      - name: bundle
+        value: quay.io/redhat-appstudio-tekton-catalog/pipeline-fbc-builder:6c0dade45d84fd1244da79db04a97f1a846d273c
+      - name: kind
+        value: pipeline
+      resolver: bundles
+    when:
+      language: fbc
+  - name: Docker build
+    pipelineRef:
+      params:
+      - name: name
+        value: docker-build
+      - name: bundle
+        value: quay.io/redhat-appstudio-tekton-catalog/pipeline-docker-build:6c0dade45d84fd1244da79db04a97f1a846d273c
+      - name: kind
+        value: pipeline
+      resolver: bundles
+    when:
+      dockerfile: true
+  - name: Java
+    pipelineRef:
+      params:
+      - name: name
+        value: java-builder
+      - name: bundle
+        value: quay.io/redhat-appstudio-tekton-catalog/pipeline-java-builder:6c0dade45d84fd1244da79db04a97f1a846d273c
+      - name: kind
+        value: pipeline
+      resolver: bundles
+    when:
+      language: java
+  - name: NodeJS
+    pipelineRef:
+      params:
+      - name: name
+        value: nodejs-builder
+      - name: bundle
+        value: quay.io/redhat-appstudio-tekton-catalog/pipeline-nodejs-builder:6c0dade45d84fd1244da79db04a97f1a846d273c
+      - name: kind
+        value: pipeline
+      resolver: bundles
+    when:
+      language: nodejs,node
