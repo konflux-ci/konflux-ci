@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - apiextensions.k8s.io_v1_customresourcedefinition_enterprisecontractpolicies.appstudio.redhat.com.yaml
+  - enterprise-contract-service_appstudio.redhat.com_v1alpha1_enterprisecontractpolicy_all.yaml
+  - enterprise-contract-service_appstudio.redhat.com_v1alpha1_enterprisecontractpolicy_default.yaml
+  - enterprise-contract-service_appstudio.redhat.com_v1alpha1_enterprisecontractpolicy_redhat-no-hermetic.yaml
+  - enterprise-contract-service_appstudio.redhat.com_v1alpha1_enterprisecontractpolicy_redhat-trusted-tasks.yaml
+  - enterprise-contract-service_appstudio.redhat.com_v1alpha1_enterprisecontractpolicy_redhat.yaml
+  - enterprise-contract-service_appstudio.redhat.com_v1alpha1_enterprisecontractpolicy_slsa3.yaml
+  - enterprise-contract-service_rbac.authorization.k8s.io_v1_rolebinding_public-ec-cm.yaml
+  - enterprise-contract-service_rbac.authorization.k8s.io_v1_rolebinding_public-ecp.yaml
+  - enterprise-contract-service_v1_configmap_ec-defaults.yaml
+  - rbac.authorization.k8s.io_v1_clusterrole_enterprisecontract-configmap-viewer-role.yaml
+  - rbac.authorization.k8s.io_v1_clusterrole_enterprisecontractpolicy-editor-role.yaml
+  - rbac.authorization.k8s.io_v1_clusterrole_enterprisecontractpolicy-viewer-role.yaml
+  - ns.yaml
+
