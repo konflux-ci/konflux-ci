@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: integration-service-snapshot-garbage-collector
+  namespace: integration-service
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - command:
+            - /snapshotgc
+            - --zap-log-level=debug
+            - --pr-snapshots-to-keep=100
+            - --non-pr-snapshots-to-keep=700
+            image: quay.io/redhat-appstudio/integration-service:b37833f64c8017c942ba95ca648d3b880b39af62
+            imagePullPolicy: Always
+            name: test-gc
+            resources:
+              limits:
+                cpu: 1000m
+                memory: 500Mi
+              requests:
+                cpu: 1000m
+                memory: 500Mi
+            securityContext:
+              readOnlyRootFilesystem: true
+              runAsNonRoot: true
+          restartPolicy: Never
+          serviceAccountName: integration-service-snapshot-garbage-collector
+  schedule: 0 5 * * *

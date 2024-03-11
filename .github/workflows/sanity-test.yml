@@ -45,6 +45,9 @@ jobs:
           # The build-service depends on CRDs from the release-service
           kubectl create -k konflux-ci/build-service
 
+          # The integration-service depends on CRDs from the release-service
+          kubectl create -k konflux-ci/integration
+
       - name: List namespaces
         run: |
           kubectl get namespace
