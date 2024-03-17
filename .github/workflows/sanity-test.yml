@@ -50,6 +50,8 @@ jobs:
           # The integration-service depends on CRDs from the release-service
           kubectl create -k konflux-ci/integration
 
+          kubectl create -k konflux-ci/ui
+
       - name: List namespaces
         run: |
           kubectl get namespace
