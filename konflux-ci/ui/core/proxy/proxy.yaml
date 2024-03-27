@@ -1,0 +1,133 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: proxy
+  name: proxy
+  annotations:
+    ignore-check.kube-linter.io/no-anti-affinity: "Using topologySpreadConstraints"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: proxy
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+  template:
+    metadata:
+      labels:
+        app: proxy
+    spec:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: proxy
+      initContainers:
+      - name: copy-chrome-static-content
+        image: quay.io/cloudservices/chrome-service:d205bf3
+        command:
+          - cp
+          - -R
+          - /static
+          - /mnt/chrome
+        volumeMounts:
+        - name: chrome-static
+          mountPath: "/mnt/chrome"
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+        resources:
+          limits:
+            cpu: 50m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+      containers:
+      - image: registry.access.redhat.com/ubi9/nginx-120@sha256:88a4f2d184f52c4d3956be06b12d578d0bf681ec9d0a8b80e558a98c1860fa12
+        name: nginx-120
+        command:
+          - nginx
+          - -g 
+          - "daemon off;"
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 1
+        ports:
+        - containerPort: 8080
+          name: web
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 300m
+            memory: 256Mi
+          requests:
+            cpu: 30m
+            memory: 128Mi
+        volumeMounts:
+          - mountPath: /etc/nginx/nginx.conf
+            subPath: nginx.conf
+            name: proxy
+            readOnly: true
+          - name: chrome-static
+            mountPath: /opt/app-root/src/chrome
+          - name: logs
+            mountPath: /var/log/nginx
+          - name: nginx-tmp
+            mountPath: /var/lib/nginx/tmp
+          - name: run
+            mountPath: /run
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+      volumes:
+        - configMap:
+            defaultMode: 420
+            name: proxy
+            items:
+              - key: nginx.conf
+                path: nginx.conf 
+          name: proxy
+        - name: chrome-static
+          emptyDir: {}
+        - name: logs
+          emptyDir: {}
+        - name: nginx-tmp
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: proxy
+  name: proxy
+spec:
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+    - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+    - appProtocol: http
+      name: web
+      port: 8080
+      protocol: TCP
+      targetPort: web
+  selector:
+    app: proxy
