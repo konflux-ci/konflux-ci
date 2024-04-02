@@ -1,0 +1,23 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: konflux-ui
+  annotations:
+    cert-manager.io/cluster-issuer: self-signed-cluster-issuer
+spec:
+  tls:
+    - hosts:
+        - "ui.konflux.dev"
+      secretName: proxy-tls-cert
+  rules:
+  - host: "ui.konflux.dev"
+    http:
+      paths:
+      - pathType: Prefix
+        path: /
+        backend:
+          service:
+            name: proxy
+            port:
+              number: 8080

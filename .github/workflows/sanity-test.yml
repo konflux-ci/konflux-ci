@@ -40,6 +40,8 @@ jobs:
         run: |
           # The order is important
 
+          kubectl create -k dependencies/cluster-issuer
+
           # This will deploy the commos CRDs used in Konflux
           kubectl create -k konflux-ci/application-api
 
