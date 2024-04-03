@@ -50,6 +50,36 @@ spec:
           requests:
             cpu: 10m
             memory: 64Mi
+      - name: add-sva-token-to-nginx-config
+        image: registry.access.redhat.com/ubi9/ubi@sha256:66233eebd72bb5baa25190d4f55e1dc3fff3a9b77186c1f91a0abdb274452072
+        command:
+          - sh
+          - -c
+          - |
+            set -e
+            
+            token=$(cat /mnt/api-token/token)
+            token64=$(cat /mnt/api-token/token | base64 -w 0 | head -c-2)
+
+            echo "proxy_set_header Authorization \"Bearer $token\";" > /mnt/nginx-generated-config/bearer.conf
+
+            echo "proxy_set_header Sec-WebSocket-Protocol \"base64url.bearer.authorization.k8s.io.${token64}, base64.binary.k8s.io\";" > /mnt/nginx-generated-config/websocket.conf
+        volumeMounts:
+        - name: nginx-generated-config
+          mountPath: /mnt/nginx-generated-config
+        - name: api-token
+          mountPath: /mnt/api-token
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+        resources:
+          limits:
+            cpu: 50m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
       containers:
       - image: registry.access.redhat.com/ubi9/nginx-120@sha256:88a4f2d184f52c4d3956be06b12d578d0bf681ec9d0a8b80e558a98c1860fa12
         name: nginx-120
@@ -61,8 +91,8 @@ spec:
           failureThreshold: 3
           httpGet:
             path: /health
-            port: 8080
-            scheme: HTTP
+            port: 6443
+            scheme: HTTPS
           initialDelaySeconds: 10
           periodSeconds: 60
           successThreshold: 1
@@ -70,6 +100,9 @@ spec:
         ports:
         - containerPort: 8080
           name: web
+          protocol: TCP
+        - containerPort: 6443
+          name: web-tls
           protocol: TCP
         resources:
           limits:
@@ -91,6 +124,10 @@ spec:
             mountPath: /var/lib/nginx/tmp
           - name: run
             mountPath: /run
+          - name: serving-cert
+            mountPath: /mnt
+          - name: nginx-generated-config
+            mountPath: /mnt/nginx-generated-config
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
@@ -111,6 +148,14 @@ spec:
           emptyDir: {}
         - name: run
           emptyDir: {}
+        - name: serving-cert
+          secret:
+            secretName: serving-cert
+        - name: nginx-generated-config
+          emptyDir: {}
+        - name: api-token
+          secret:
+            secretName: proxy
 ---
 apiVersion: v1
 kind: Service
@@ -119,15 +164,21 @@ metadata:
     app: proxy
   name: proxy
 spec:
+  type: NodePort
   internalTrafficPolicy: Cluster
   ipFamilies:
     - IPv4
   ipFamilyPolicy: SingleStack
   ports:
-    - appProtocol: http
-      name: web
-      port: 8080
+    - name: web
+      port: 8888
+      nodePort: 30010
       protocol: TCP
       targetPort: web
+    - name: web-tls
+      port: 9443
+      nodePort: 30011
+      protocol: TCP
+      targetPort: web-tls
   selector:
     app: proxy

@@ -1,0 +1,241 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: konflux-list-namespaces
+rules:
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get", "list"]
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: konflux-admin-user-actions
+rules:
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+      - deletecollection
+    apiGroups:
+      - appstudio.redhat.com
+    resources:
+      - applications
+      - components
+      - componentdetectionqueries
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    apiGroups:
+      - appstudio.redhat.com
+    resources:
+      - promotionruns
+      - snapshotenvironmentbindings
+      - snapshots
+      - environments
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    apiGroups:
+      - appstudio.redhat.com
+    resources:
+      - deploymenttargets
+      - deploymenttargetclaims
+  - verbs:
+      - get
+      - list
+      - watch
+    apiGroups:
+      - managed-gitops.redhat.com
+    resources:
+      - gitopsdeployments
+      - gitopsdeploymentmanagedenvironments
+      - gitopsdeploymentrepositorycredentials
+      - gitopsdeploymentsyncruns
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    apiGroups:
+      - tekton.dev
+    resources:
+      - pipelineruns
+  - verbs:
+      - get
+      - list
+    apiGroups:
+      - results.tekton.dev
+    resources:
+      - results
+      - records
+      - logs
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    apiGroups:
+      - appstudio.redhat.com
+    resources:
+      - enterprisecontractpolicies
+      - integrationtestscenarios
+      - releases
+      - releasestrategies
+      - releaseplans
+      - releaseplanadmissions
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    apiGroups:
+      - jvmbuildservice.io
+    resources:
+      - jbsconfigs
+      - artifactbuilds
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    apiGroups:
+      - appstudio.redhat.com
+    resources:
+      - spiaccesstokenbindings
+      - spiaccesschecks
+      - spiaccesstokens
+      - spifilecontentrequests
+      - spiaccesstokendataupdates
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    apiGroups:
+      - appstudio.redhat.com
+    resources:
+      - remotesecrets
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    apiGroups:
+      - ''
+    resources:
+      - secrets
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    apiGroups:
+      - ''
+    resources:
+      - configmaps
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    apiGroups:
+      - appstudio.redhat.com
+    resources:
+      - buildpipelineselectors
+  - verbs:
+      - get
+      - list
+      - watch
+      - update
+      - patch
+    apiGroups:
+      - ''
+    resources:
+      - serviceaccounts
+    resourceNames:
+      - appstudio-pipeline
+  - verbs:
+      - create
+    apiGroups:
+      - ''
+    resources:
+      - pods/exec
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    apiGroups:
+      - toolchain.dev.openshift.com
+    resources:
+      - spacebindingrequests
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    apiGroups:
+      - projctl.konflux.dev
+    resources:
+      - projects
+      - projectdevelopmentstreams
+      - projectdevelopmentstreamtemplates
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: konflux-self-access-reviewer
+rules:
+  - verbs:
+      - create
+      - list
+    apiGroups:
+      - authorization.k8s.io
+    resources:
+      - selfsubjectaccessreviews
