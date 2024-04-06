@@ -21,6 +21,7 @@ spec:
       labels:
         app: proxy
     spec:
+      serviceAccountName: impersonator
       topologySpreadConstraints:
       - maxSkew: 1
         topologyKey: topology.kubernetes.io/zone
@@ -39,6 +40,34 @@ spec:
         volumeMounts:
         - name: chrome-static
           mountPath: "/mnt/chrome"
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+        resources:
+          limits:
+            cpu: 50m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+      - name: add-sva-token-to-nginx-config
+        image: registry.access.redhat.com/ubi9/ubi@sha256:66233eebd72bb5baa25190d4f55e1dc3fff3a9b77186c1f91a0abdb274452072
+        command:
+          - sh
+          - -c
+          - |
+            set -e
+            
+            token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+            token64=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token | base64 -w 0 | head -c-2)
+
+            echo "proxy_set_header Authorization \"Bearer $token\";" > /mnt/nginx-generated-config/bearer.conf
+
+            echo "proxy_set_header Sec-WebSocket-Protocol \"base64url.bearer.authorization.k8s.io.${token64}, base64.binary.k8s.io\";" > /mnt/nginx-generated-config/websocket.conf
+        volumeMounts:
+        - name: nginx-generated-config
+          mountPath: /mnt/nginx-generated-config
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
@@ -96,6 +125,8 @@ spec:
             mountPath: /run
           - name: serving-cert
             mountPath: /mnt
+          - name: nginx-generated-config
+            mountPath: /mnt/nginx-generated-config
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
@@ -119,6 +150,8 @@ spec:
         - name: serving-cert
           secret:
             secretName: serving-cert
+        - name: nginx-generated-config
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
