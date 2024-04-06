@@ -61,8 +61,8 @@ spec:
           failureThreshold: 3
           httpGet:
             path: /health
-            port: 8080
-            scheme: HTTP
+            port: 6443
+            scheme: HTTPS
           initialDelaySeconds: 10
           periodSeconds: 60
           successThreshold: 1
@@ -70,6 +70,9 @@ spec:
         ports:
         - containerPort: 8080
           name: web
+          protocol: TCP
+        - containerPort: 6443
+          name: web-tls
           protocol: TCP
         resources:
           limits:
@@ -91,6 +94,8 @@ spec:
             mountPath: /var/lib/nginx/tmp
           - name: run
             mountPath: /run
+          - name: serving-cert
+            mountPath: /mnt
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
@@ -111,6 +116,9 @@ spec:
           emptyDir: {}
         - name: run
           emptyDir: {}
+        - name: serving-cert
+          secret:
+            secretName: serving-cert
 ---
 apiVersion: v1
 kind: Service
@@ -119,15 +127,21 @@ metadata:
     app: proxy
   name: proxy
 spec:
+  type: NodePort
   internalTrafficPolicy: Cluster
   ipFamilies:
     - IPv4
   ipFamilyPolicy: SingleStack
   ports:
-    - appProtocol: http
-      name: web
-      port: 8080
+    - name: web
+      port: 8888
+      nodePort: 30010
       protocol: TCP
       targetPort: web
+    - name: web-tls
+      port: 9443
+      nodePort: 30011
+      protocol: TCP
+      targetPort: web-tls
   selector:
     app: proxy

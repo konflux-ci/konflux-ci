@@ -5,6 +5,8 @@ metadata:
   name: konflux-ui
   annotations:
     cert-manager.io/cluster-issuer: self-signed-cluster-issuer
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
 spec:
   tls:
     - hosts:
