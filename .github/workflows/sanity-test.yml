@@ -19,14 +19,9 @@ jobs:
           kubectl version
           kind version
 
-      - name: Installing Dependencies
+      - name: Deploying Dependencies
         run: |
-          kubectl create -k dependencies/tekton-operator
-          kubectl create -k dependencies/tekton-config
-          kubectl create -k dependencies/pipelines-as-code
-          kubectl create -k dependencies/cert-manager
-          kubectl create -k dependencies/ingress-nginx
-          sleep 10
+          ./deploy-deps.sh
 
       - name: List namespaces
         run: |
@@ -36,37 +31,14 @@ jobs:
         run: |
           ./wait-for-all.sh
 
-      - name: Install Konflux
+      - name: Deploying Konflux
         run: |
-          # The order is important
-
-          kubectl create -k dependencies/cluster-issuer
-
-          # This will deploy the commos CRDs used in Konflux
-          kubectl create -k konflux-ci/application-api
-
-          kubectl create -k dependencies/rbac
-
-          kubectl create -k konflux-ci/enterprise-contract/core
-
-          kubectl create -k konflux-ci/release
-
-          # The build-service depends on CRDs from the release-service
-          kubectl create -k konflux-ci/build-service
-
-          # The integration-service depends on CRDs from the release-service
-          kubectl create -k konflux-ci/integration
-
-          kubectl create -k konflux-ci/ui
+          ./deploy-konflux.sh
 
       - name: List namespaces
         run: |
           kubectl get namespace
 
-      - name: Wait for Konflux to be ready
-        run: |
-          ./wait-for-all.sh
-
       - name: Deploy test resources
         run: |
-          kubectl create -k test/resources/demo-users
+          ./deploy-test-resources.sh
