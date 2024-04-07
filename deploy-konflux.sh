@@ -31,6 +31,9 @@ deploy() {
     kubectl create -k "${script_path}/konflux-ci/integration"
 
     kubectl create -k "${script_path}/konflux-ci/ui"
+    if [[ "$KONFLUX_PULL_SECRET" ]]; then
+        echo "$KONFLUX_PULL_SECRET" | kubectl create -n konflux-ui -f -
+    fi
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

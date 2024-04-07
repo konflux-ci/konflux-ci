@@ -30,7 +30,7 @@ patches:
       - op: add
         path: /spec/template/spec/imagePullSecrets
         value:
-          [name: gbenhaim0-pull-secret]
+          [name: konflux-pull-secret]
 
 configMapGenerator:
   - name: fed-modules
