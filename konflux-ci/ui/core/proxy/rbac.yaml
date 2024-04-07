@@ -1,0 +1,37 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: proxy
+  namespace: konflux-ui
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: proxy
+  namespace: konflux-ui
+  annotations:
+    kubernetes.io/service-account.name: proxy
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: konflux-proxy
+rules:
+- apiGroups: [""]
+  resources: ["users", "groups"]
+  verbs: ["impersonate"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: konflux-proxy
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: konflux-proxy
+subjects:
+- kind: ServiceAccount
+  name: proxy
+  namespace: konflux-ui

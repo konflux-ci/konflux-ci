@@ -8,20 +8,29 @@ resources:
 images:
   # chrome frontend
   - name: quay.io/cloudservices/insights-chrome-frontend
-    newName: quay.io/cloudservices/insights-chrome-frontend
+    newName: quay.io/gbenhaim0/cloudservices/insights-chrome-frontend
     newTag: 9ddfec6
   # chrome service
   - name: quay.io/cloudservices/chrome-service
-    newName: quay.io/cloudservices/chrome-service
+    newName: quay.io/gbenhaim0/cloudservices/chrome-service
     newTag: 457001e
   # hac
   - name: quay.io/cloudservices/hac-core-frontend
-    newName: quay.io/cloudservices/hac-core-frontend
+    newName: quay.io/gbenhaim0/cloudservices/hac-core-frontend
     newTag: 0bffd43
   # hac-dev
   - name: quay.io/cloudservices/hac-dev-frontend
-    newName: quay.io/cloudservices/hac-dev-frontend
-    newTag: 7932b2a   
+    newName: quay.io/gbenhaim0/cloudservices/hac-dev-frontend
+    newTag: 7932b2a
+
+patches:
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/imagePullSecrets
+        value:
+          [name: konflux-pull-secret]
 
 configMapGenerator:
   - name: fed-modules
