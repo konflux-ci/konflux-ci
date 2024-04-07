@@ -7,7 +7,7 @@ main() {
     install_konflux
 
     echo "Waiting for Konflux to be ready" >&2
-    "${script_path}/wait-for-all-.sh"
+    "${script_path}/wait-for-all.sh"
 }
 
 deploy() {

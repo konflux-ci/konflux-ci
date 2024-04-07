@@ -7,7 +7,7 @@ main() {
     deploy
 
     echo "Waiting for Konflux to be ready" >&2
-    "${script_path}/wait-for-all-.sh"
+    "${script_path}/wait-for-all.sh"
 }
 
 deploy() {
@@ -18,7 +18,7 @@ deploy() {
     # This will deploy the commos CRDs used in Konflux
     kubectl create -k "${script_path}/konflux-ci/application-api"
 
-    kubectl create -k "${script_path}/dependencies/rbac"
+    kubectl create -k "${script_path}/konflux-ci/rbac"
 
     kubectl create -k "${script_path}/konflux-ci/enterprise-contract/core"
 
