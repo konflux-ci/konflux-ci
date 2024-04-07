@@ -2,6 +2,7 @@ kind: Kustomization
 apiVersion: kustomize.config.k8s.io/v1beta1
 resources:
   - proxy.yaml
+  - rbac.yaml
 configMapGenerator:
   - name: proxy
     files:

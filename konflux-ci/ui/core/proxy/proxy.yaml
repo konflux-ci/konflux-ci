@@ -21,7 +21,6 @@ spec:
       labels:
         app: proxy
     spec:
-      serviceAccountName: impersonator
       topologySpreadConstraints:
       - maxSkew: 1
         topologyKey: topology.kubernetes.io/zone
@@ -59,8 +58,8 @@ spec:
           - |
             set -e
             
-            token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-            token64=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token | base64 -w 0 | head -c-2)
+            token=$(cat /mnt/api-token/token)
+            token64=$(cat /mnt/api-token/token | base64 -w 0 | head -c-2)
 
             echo "proxy_set_header Authorization \"Bearer $token\";" > /mnt/nginx-generated-config/bearer.conf
 
@@ -68,6 +67,8 @@ spec:
         volumeMounts:
         - name: nginx-generated-config
           mountPath: /mnt/nginx-generated-config
+        - name: api-token
+          mountPath: /mnt/api-token
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
@@ -152,6 +153,9 @@ spec:
             secretName: serving-cert
         - name: nginx-generated-config
           emptyDir: {}
+        - name: api-token
+          secret:
+            secretName: proxy
 ---
 apiVersion: v1
 kind: Service
