@@ -59,7 +59,7 @@ spec:
             set -e
             
             token=$(cat /mnt/api-token/token)
-            token64=$(cat /mnt/api-token/token | base64 -w 0 | head -c-2)
+            token64=$(cat /mnt/api-token/token | base64 -w 0 | head -c-1)
 
             echo "proxy_set_header Authorization \"Bearer $token\";" > /mnt/nginx-generated-config/bearer.conf
 
