@@ -1,72 +1,17 @@
 ---
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: user-ns1
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: user-ns2
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
-  name: user-ns1
-  namespace: user-ns1
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: admin
-subjects:
-- kind: User
-  name: user1
-  apiGroup: rbac.authorization.k8s.io
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
-  name: user-ns2
-  namespace: user-ns2
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: admin
-subjects:
-- kind: User
-  name: user1
-  apiGroup: rbac.authorization.k8s.io
----
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: list-namespaces
+  name: konflux-list-namespaces
 rules:
 - apiGroups: [""]
   resources: ["namespaces"]
   verbs: ["get", "list"]
 ---
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: user1-list-namespaces
-subjects:
-- kind: User
-  name: user1
-  apiGroup: rbac.authorization.k8s.io
-roleRef:
-  kind: ClusterRole
-  name: list-namespaces
-  apiGroup: rbac.authorization.k8s.io
----
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: appstudio-admin-user-actions
+  name: konflux-admin-user-actions
 rules:
   - verbs:
       - get
@@ -282,67 +227,10 @@ rules:
       - projectdevelopmentstreams
       - projectdevelopmentstreamtemplates
 ---
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: user-appstudio-admin
-  namespace: user-ns1
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: appstudio-admin-user-actions
-subjects:
-- kind: User
-  name: user1
-  apiGroup: rbac.authorization.k8s.io
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: user-appstudio-admin
-  namespace: user-ns2
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: appstudio-admin-user-actions
-subjects:
-- kind: User
-  name: user1
-  apiGroup: rbac.authorization.k8s.io
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: user-appstudio-admin-gbenhaim
-  namespace: user-ns1
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: appstudio-admin-user-actions
-subjects:
-- kind: User
-  name: gbenhaim
-  apiGroup: rbac.authorization.k8s.io
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: user-appstudio-admin-gbenhaim
-  namespace: user-ns2
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: appstudio-admin-user-actions
-subjects:
-- kind: User
-  name: gbenhaim
-  apiGroup: rbac.authorization.k8s.io
-
----
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: self-access-reviewer
+  name: konflux-self-access-reviewer
 rules:
   - verbs:
       - create
@@ -351,16 +239,3 @@ rules:
       - authorization.k8s.io
     resources:
       - selfsubjectaccessreviews
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: user1-self-access-review
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: self-access-reviewer
-subjects:
-- kind: User
-  name: user1
-  apiGroup: rbac.authorization.k8s.io

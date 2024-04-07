@@ -45,6 +45,8 @@ jobs:
           # This will deploy the commos CRDs used in Konflux
           kubectl create -k konflux-ci/application-api
 
+          kubectl create -k dependencies/rbac
+
           kubectl create -k konflux-ci/enterprise-contract/core
 
           kubectl create -k konflux-ci/release
@@ -64,3 +66,7 @@ jobs:
       - name: Wait for Konflux to be ready
         run: |
           ./wait-for-all.sh
+
+      - name: Deploy test resources
+        run: |
+          kubectl create -k test/resources/demo-users
