@@ -79,6 +79,7 @@ rules:
       - tekton.dev
     resources:
       - pipelineruns
+      - taskruns      
   - verbs:
       - get
       - list
@@ -200,6 +201,13 @@ rules:
       - ''
     resources:
       - pods/exec
+  - verbs:
+      - get
+    apiGroups:
+      - ''
+    resources:
+      - pods
+      - pods/log
   - verbs:
       - get
       - list
