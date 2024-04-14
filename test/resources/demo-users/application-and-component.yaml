@@ -1,0 +1,28 @@
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Application
+metadata:
+  name: sample-component
+  namespace: user-ns1
+  annotations:
+    application.thumbnail: "1"
+spec:
+  displayName: sample-component
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  name: sample-component
+  namespace: user-ns1
+  annotations:
+    build.appstudio.openshift.io/request: configure-pac
+    image.redhat.com/generate: '{"visibility": "public"}'
+spec:
+  application: sample-component
+  componentName: sample-component
+  source:
+    git:
+      revision: main
+      url: https://github.com/gbenhaim/sample-component.git
+      dockerfileUrl: Dockerfile
+      context: ./
