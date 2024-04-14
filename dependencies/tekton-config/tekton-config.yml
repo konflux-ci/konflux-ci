@@ -12,3 +12,10 @@ spec:
     - taskrun
     keep: 100
     schedule: "0 8 * * *"
+  chain:
+    artifacts.oci.storage: oci
+    artifacts.pipelinerun.format: in-toto
+    artifacts.pipelinerun.storage: oci
+    artifacts.taskrun.format: in-toto
+    artifacts.taskrun.storage: ""
+    transparency.enabled: "false"

@@ -41,6 +41,13 @@ kind create cluster --name konflux --config kind-config.yaml
 
 - has requires secret for creating gitops repos
 - chains signing and push secret
+    - install cosign - https://github.com/sigstore/cosign
+    - connect to the kind cluster and run
+    ```bash
+    cosign generate-key-pair k8s://tekton-pipelines/signing-secrets
+
+    k create secret generic public-key --from-file cosign.pub -n tekton-pipelines
+    ```
 - build-service github app (global or namespace)
 - integration-service github app
 
@@ -54,3 +61,6 @@ Add the following entry to `/etc/hosts`
 
 Open your browser and navigate to: https://ui.konflux.dev:6443/application-pipeline
 
+## Running A Build Pipeline
+
+1. Configure a push secret for the component [configuring-docker-authentication-for-docker](https://tekton.dev/docs/pipelines/auth/#configuring-docker-authentication-for-docker)
