@@ -46,3 +46,5 @@ resources:
   - v1_serviceaccount_release-service-controller-manager.yaml
   - v1_service_release-service-controller-manager-metrics-service.yaml
   - v1_service_release-service-webhook-service.yaml
+  - release-service-config.yaml
+  - https://github.com/redhat-appstudio/internal-services/config/crd?ref=7edcb7e47f44c002edb94ad6c6ff70e7930f3dfc

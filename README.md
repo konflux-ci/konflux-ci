@@ -61,6 +61,8 @@ Add the following entry to `/etc/hosts`
 
 Open your browser and navigate to: https://ui.konflux.dev:6443/application-pipeline
 
-## Running A Build Pipeline
+## Running A Build/Test/Release Pipelines
 
 1. Configure a push secret for the component [configuring-docker-authentication-for-docker](https://tekton.dev/docs/pipelines/auth/#configuring-docker-authentication-for-docker)
+
+2. Configure push secret for the release pipeline (same steps as above but now in the managed service)
