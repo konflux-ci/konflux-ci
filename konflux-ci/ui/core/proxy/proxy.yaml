@@ -82,12 +82,14 @@ spec:
             cpu: 10m
             memory: 64Mi
       containers:
-      - image: registry.access.redhat.com/ubi9/nginx-120@sha256:88a4f2d184f52c4d3956be06b12d578d0bf681ec9d0a8b80e558a98c1860fa12
+      - image: openresty/openresty:1.25.3.1-0-jammy
         name: nginx-120
-        command:
-          - nginx
-          - -g 
+        command: 
+          - "/usr/local/openresty/bin/openresty"
+          - "-g"
           - "daemon off;"
+          - -c
+          - /etc/nginx/nginx.conf
         livenessProbe:
           failureThreshold: 3
           httpGet:
@@ -129,6 +131,8 @@ spec:
             mountPath: /mnt
           - name: nginx-generated-config
             mountPath: /mnt/nginx-generated-config
+          - name: openresty
+            mountPath: /var/run/openresty
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
@@ -137,6 +141,46 @@ spec:
         name: workspace-manager
         ports:
           - containerPort: 5000
+            name: web
+            protocol: TCP
+        resources:
+          limits:
+            cpu: 300m
+            memory: 256Mi
+          requests:
+            cpu: 30m
+            memory: 128Mi
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+      - image: quay.io/oauth2-proxy/oauth2-proxy@sha256:3da33b9670c67bd782277f99acadf7026f75b9507bfba2088eb2d497266ef7fc
+        name: oauth2-proxy
+        args:
+          - --provider
+          - keycloak-oidc
+          - --http-address
+          - "127.0.0.1:6000"
+          - --oidc-issuer-url
+          - https://keycloak-rhtap-auth.apps.rosa.stone-stage-p01.apys.p3.openshiftapps.com/auth/realms/redhat-external
+          - --skip-jwt-bearer-tokens
+          - "true"
+          - --set-xauthrequest
+          - "true"
+          - --insecure-oidc-allow-unverified-email
+          - "true"
+          - --email-domain
+          - "*"
+          - --cookie-secret
+          - NOT_USED_BUT_REQUIRED_VALUE_32b_
+          - --client-secret
+          - this_value_is_required_but_not_used
+          - --client-id
+          - oauth2-proxy
+          - --oidc-extra-audience
+          - "account"
+        ports:
+          - containerPort: 6000
             name: web
             protocol: TCP
         resources:
@@ -174,6 +218,8 @@ spec:
         - name: api-token
           secret:
             secretName: proxy
+        - name: openresty
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
