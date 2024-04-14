@@ -13,8 +13,6 @@ main() {
 deploy() {
     # The order is important
 
-    kubectl create -k "${script_path}/dependencies/cluster-issuer"
-
     # This will deploy the commos CRDs used in Konflux
     kubectl create -k "${script_path}/konflux-ci/application-api"
 
