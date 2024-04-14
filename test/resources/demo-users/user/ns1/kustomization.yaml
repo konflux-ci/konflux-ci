@@ -5,3 +5,5 @@ resources:
   - rbac.yaml
   - application-and-component.yaml
   - ec-integration-test.yaml
+  - release-plan.yaml
+namespace: user-ns1
