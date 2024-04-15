@@ -137,7 +137,7 @@ spec:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
           runAsUser: 1001
-      - image: quay.io/yftacherzog/workspace-manager:v1
+      - image: quay.io/yftacherzog/workspace-manager:v1.1
         name: workspace-manager
         ports:
           - containerPort: 5000
