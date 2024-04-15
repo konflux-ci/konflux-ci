@@ -2,7 +2,7 @@
     "chrome": {
         "manifestLocation": "/apps/chrome/js/fed-mods.json",
         "config": {
-            "ssoUrl": "ADD-KEYCLOAK-ENDPOINT"
+            "ssoUrl": "https://localhost:9443/idp/"
         },
         "fullProfile": false
     },
