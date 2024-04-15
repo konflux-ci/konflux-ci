@@ -19,6 +19,10 @@ jobs:
           kubectl version
           kind version
 
+      - name: List namespaces
+        run: |
+          kubectl get namespace
+
       - name: Deploying Dependencies
         run: |
           ./deploy-deps.sh
