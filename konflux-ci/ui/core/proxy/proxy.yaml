@@ -94,7 +94,7 @@ spec:
           failureThreshold: 3
           httpGet:
             path: /health
-            port: 6443
+            port: 9443
             scheme: HTTPS
           initialDelaySeconds: 10
           periodSeconds: 60
@@ -104,7 +104,7 @@ spec:
         - containerPort: 8080
           name: web
           protocol: TCP
-        - containerPort: 6443
+        - containerPort: 9443
           name: web-tls
           protocol: TCP
         resources:
@@ -162,7 +162,9 @@ spec:
           - --http-address
           - "127.0.0.1:6000"
           - --oidc-issuer-url
-          - https://keycloak-rhtap-auth.apps.rosa.stone-stage-p01.apys.p3.openshiftapps.com/auth/realms/redhat-external
+          - https://localhost:9443/idp/realms/redhat-external
+          - --ssl-insecure-skip-verify
+          - "true"
           - --skip-jwt-bearer-tokens
           - "true"
           - --set-xauthrequest

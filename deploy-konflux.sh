@@ -7,7 +7,11 @@ main() {
     deploy
 
     echo "Waiting for Konflux to be ready" >&2
-    "${script_path}/wait-for-all.sh"
+    local ret=0
+    "${script_path}/wait-for-all.sh" || ret="$?"
+    kubectl describe deployment proxy -n konflux-ui
+    kubectl logs deployment/proxy -n konflux-ui --all-containers=true --tail=10
+    exit "$ret"
 }
 
 deploy() {
