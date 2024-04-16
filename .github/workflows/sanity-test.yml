@@ -36,8 +36,6 @@ jobs:
           ./wait-for-all.sh
 
       - name: Deploying Konflux
-        env:
-          KONFLUX_PULL_SECRET: ${{ secrets.KONFLUX_PULL_SECRET }}
         run: |
           ./deploy-konflux.sh
 
