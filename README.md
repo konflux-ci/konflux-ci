@@ -37,6 +37,12 @@ kind create cluster --name konflux --config kind-config.yaml
 ./deploy-test-resources.sh
 ```
 
+6. The UI will be available at https://localhost:9443. You can login using the test user.
+
+`username:` `user1`
+
+`password:` `password`
+
 ## Required Secrets (TBA)
 
 - has requires secret for creating gitops repos
@@ -50,16 +56,6 @@ kind create cluster --name konflux --config kind-config.yaml
     ```
 - build-service github app (global or namespace)
 - integration-service github app
-
-## Accessing The UI
-
-Add the following entry to `/etc/hosts`
-
-```bash
-127.0.0.1 ui.konflux.dev
-```
-
-Open your browser and navigate to: https://ui.konflux.dev:6443/application-pipeline
 
 ## Running A Build/Test/Release Pipelines
 
