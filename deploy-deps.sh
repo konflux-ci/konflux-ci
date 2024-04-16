@@ -16,7 +16,11 @@ deploy() {
 
     kubectl create -k "${script_path}/dependencies/cluster-issuer"
     kubectl create -k "${script_path}/dependencies/tekton-operator"
-    kubectl apply -k "${script_path}/dependencies/tekton-config"
+
+
+    retry kubectl apply -k "${script_path}/dependencies/tekton-config"
+
+
     kubectl create -k "${script_path}/dependencies/pipelines-as-code"
     kubectl wait --for=condition=Ready tektonconfig/config --timeout=120s
 
@@ -56,6 +60,19 @@ deploy_keycloak() {
 
     kubectl wait --for=condition=Ready --timeout=120s -l app=postgresql-db -n keycloak pod
     kubectl wait --for=condition=Ready --timeout=120s -l app=keycloak -n keycloak pod
+}
+
+retry() {
+    for _ in {1..3}; do
+        local ret=0
+        "$@" || ret="$?"
+        if [[ "$ret" -eq 0 ]]; then
+            return 0
+        fi
+        sleep 3
+    done
+
+    return "$ret"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
