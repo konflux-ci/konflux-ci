@@ -63,7 +63,7 @@ kubectl create secret generic public-key --from-file cosign.pub -n tekton-pipeli
 
 ### Configuring a push secret for the build pipeline
 
-After the build-pipeline builds and image, it will try to
+After the build-pipeline builds an image, it will try to
 push it to a container registry. The namespace where the pipeline is running should be configured with a push secret for the container registry.
 
 Tekton pipelines provides a way to inject push secrets into pipelines by attaching them to a service account.
