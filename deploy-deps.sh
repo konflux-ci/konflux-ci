@@ -36,7 +36,7 @@ deploy() {
 
 deploy_cert_manager() {
     kubectl create -k "${script_path}/dependencies/cert-manager"
-    kubectl wait --for=condition=Ready --timeout=120s -l app.kubernetes.io/instance=cert-manager -n cert-manager pod
+    retry kubectl wait --for=condition=Ready --timeout=120s -l app.kubernetes.io/instance=cert-manager -n cert-manager pod
 }
 
 deploy_keycloak() {
