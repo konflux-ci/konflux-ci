@@ -53,7 +53,7 @@ In addition, The enterprise contract pipeline needs the matching public key for 
 ```bash
 cosign generate-key-pair k8s://tekton-pipelines/signing-secrets
 
-k create secret generic public-key --from-file cosign.pub -n tekton-pipelines
+kubectl create secret generic public-key --from-file cosign.pub -n tekton-pipelines
 ```
 
 ### Github Application
