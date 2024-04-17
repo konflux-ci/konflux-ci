@@ -15,7 +15,7 @@ deploy() {
 
     kubectl apply -k "${script_path}/dependencies/cluster-issuer"
     kubectl apply -k "${script_path}/dependencies/tekton-operator"
-
+    retry kubectl wait --for=condition=Ready -l app=tekton-operator -n tekton-operator pod --timeout=240s
 
     retry kubectl apply -k "${script_path}/dependencies/tekton-config"
 
@@ -52,7 +52,8 @@ deploy_keycloak() {
     fi
 
     local ret=0
-    kubectl wait --for=condition=Ready --timeout=120s  -n keycloak keycloak/keycloak || ret="$?"
+    retry kubectl wait --for=condition=Ready --timeout=240s -n keycloak -l app.kubernetes.io/name=keycloak-operator pod
+    kubectl wait --for=condition=Ready --timeout=240s -n keycloak keycloak/keycloak || ret="$?"
 
     if [[ ret -ne 0 ]]; then
         kubectl get -o yaml keycloak/keycloak -n keycloak
