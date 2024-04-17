@@ -1,13 +1,11 @@
-# konflux-ci
+# Konflux-CI
 Integration and release of Konflux-CI
-
 
 ## Trying Out Konflux
 
 The recommended way to try out Konflux is using [Kind](https://kind.sigs.k8s.io/)
-Create you Kind cluster using the provided config in this repository.
-The config tells Kind to forward ports from the host to the Kind cluster. Those ports
-are needed for accessing Konflux.
+Create a Kind cluster using the provided config in this repository.
+The config tells Kind to forward port `9443` from the host to the Kind cluster.  The port forwarding is needed for accessing Konflux.
 
 From the root of this repository, run the following commands:
 
@@ -43,22 +41,123 @@ kind create cluster --name konflux --config kind-config.yaml
 
 `password:` `password`
 
-## Required Secrets (TBA)
+## Configuring Secrets
 
-- has requires secret for creating gitops repos
-- chains signing and push secret
-    - install cosign - https://github.com/sigstore/cosign
-    - connect to the kind cluster and run
-    ```bash
-    cosign generate-key-pair k8s://tekton-pipelines/signing-secrets
+### Configuring a secret for Tekton chains
 
-    k create secret generic public-key --from-file cosign.pub -n tekton-pipelines
-    ```
-- build-service github app (global or namespace)
-- integration-service github app
+Tekton chains needs a key for signing attestations.
+In addition, The enterprise contract pipeline needs the matching public key for verifying the signature of the attestations.
 
-## Running A Build/Test/Release Pipelines
+- install cosign - https://github.com/sigstore/cosign
+- connect to the kind cluster and run:
+```bash
+cosign generate-key-pair k8s://tekton-pipelines/signing-secrets
 
-1. Configure a push secret for the component [configuring-docker-authentication-for-docker](https://tekton.dev/docs/pipelines/auth/#configuring-docker-authentication-for-docker)
+k create secret generic public-key --from-file cosign.pub -n tekton-pipelines
+```
 
-2. Configure push secret for the release pipeline (same steps as above but now in the managed service)
+### Github Application
+
+- build-service github app (global or namespace) - TBA
+- integration-service github app - TBA
+
+### Configuring a push secret for the build pipeline
+
+After the build-pipeline builds and image, it will try to
+push it to a container registry. The namespace where the pipeline is running should be configured with a push secret for the container registry.
+
+Tekton pipelines provides a way to inject push secrets into pipelines by attaching them to a service account.
+
+The service account used for running the pipelines is the `default` service account.
+
+1. Create the secret in the namespace:
+
+```bash
+kubectl create secret generic regcred \
+ --from-file=.dockerconfigjson=<path/to/.docker/config.json> \
+ --type=kubernetes.io/dockerconfigjson
+```
+
+2. Add the secret to the default service account
+
+```bash
+kubectl patch serviceaccount default -p '{"secrets": [{"name": "regcred"}]}'
+```
+
+### Configuring a push secret for the release pipeline
+
+If the release pipeline used need to push image to a container
+registry, it needs to be configured with a push secret as well.
+
+In the `managed` namespace, repeat the same steps mentioned [above](#configuring-a-push-secret-for-the-build-pipeline) for
+configuring the push secret.
+
+## Using Konflux
+
+### Create an Application and Component
+
+TBA
+
+### Create Integration test for your application
+
+TBA
+
+### Configure a release pipeline
+
+TBA
+
+## Namespace and user management
+
+### Creating a new namespace
+
+```bash
+# Replace $NS with the name of the new namespace
+
+kubectl create namespace $NS
+kubectl label namespace "$NS konflux.ci/type=user
+```
+
+Example:
+
+```bash
+kubectl create namespace user-ns3
+kubectl label namespace user-ns3 konflux.ci/type=user
+```
+
+### Granting a user access to a namespace
+
+```bash
+# Replace $RB with the name of the role binding (you can choose the name)
+# Replace $USER with the email address of the user
+# Replace $NS with the name of the namespace the user should access
+
+kubectl create rolebinding $RB --clusterrole konflux-admin-user-actions --user $USER -n $NS
+```
+
+Example:
+
+```bash
+kubectl create rolebinding user1-konflux --clusterrole konflux-admin-user-actions --user user1@konflux.dev -n user-ns3
+```
+
+### Add a new user
+
+Konflux is using [Keycloak](https://www.keycloak.org/) for managing users and authentication.
+The administration console for Keycloak is exposed at https://localhost:9443/idp/admin/master/console/#/redhat-external
+
+For getting the username and password for the console run:
+
+```bash
+# USERNAME
+
+kubectl get -n keycloak secrets/keycloak-initial-admin --template={{.data.username}} | base64 -d
+
+# PASSWORD
+
+kubectl get -n keycloak secrets/keycloak-initial-admin --template={{.data.password}} | base64 -d
+```
+
+After login into the console, click on the `Users` tab
+on the left for adding a user.
+
+In addition, you can configure additional `Identity providers` such as `Github`, `Google`, etc.. by clicking on the `Identity providers` tab on the left.
