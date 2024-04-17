@@ -21,7 +21,7 @@ deploy() {
 
 
     kubectl apply -k "${script_path}/dependencies/pipelines-as-code"
-    kubectl wait --for=condition=Ready tektonconfig/config --timeout=120s
+    kubectl wait --for=condition=Ready tektonconfig/config --timeout=360s
 
     if ! kubectl get secret tekton-results-postgres -n tekton-pipelines; then
         kubectl create secret generic tekton-results-postgres \
