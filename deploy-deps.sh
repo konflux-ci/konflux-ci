@@ -24,10 +24,12 @@ deploy() {
     kubectl wait --for=condition=Ready tektonconfig/config --timeout=360s
 
     if ! kubectl get secret tekton-results-postgres -n tekton-pipelines; then
+        local db_password
+        db_password="$(openssl rand -base64 20)"
         kubectl create secret generic tekton-results-postgres \
             --namespace="tekton-pipelines" \
             --from-literal=POSTGRES_USER=postgres \
-            --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 20)"
+            --from-literal=POSTGRES_PASSWORD="$db_password"
     fi
     kubectl apply -k "${script_path}/dependencies/tekton-results"
 
@@ -45,10 +47,12 @@ deploy_keycloak() {
     sleep 2 # Give the api time to realize it support new CRDs
     kubectl apply -k "${script_path}/dependencies/keycloak/deployment"
     if ! kubectl get secret keycloak-db-secret -n keycloak; then
+        local db_password
+        db_password="$(openssl rand -base64 20)"
         kubectl create secret generic keycloak-db-secret \
             --namespace=keycloak \
             --from-literal=POSTGRES_USER=postgres \
-            --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 20)"
+            --from-literal=POSTGRES_PASSWORD="$db_password"
     fi
 
     local ret=0
