@@ -8,7 +8,7 @@ main() {
 }
 
 deploy() {
-    kubectl create -k "${script_path}/test/resources/demo-users/user/"
+    kubectl apply -k "${script_path}/test/resources/demo-users/user/"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

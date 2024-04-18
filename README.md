@@ -7,14 +7,32 @@ The recommended way to try out Konflux is using [Kind](https://kind.sigs.k8s.io/
 Create a Kind cluster using the provided config in this repository.
 The config tells Kind to forward port `9443` from the host to the Kind cluster. The port forwarding is needed for accessing Konflux.
 
+### Machine requirements
+
+The deployment requires 8GB of free RAM.
+
+### Installing the dependencies
+
+Install [Kind and kubectl](https://kind.sigs.k8s.io/docs/user/quick-start/#installation)
+
+Install `openssl`
+
+### Bootstrapping the cluster
+
 From the root of this repository, run the following commands:
 
-1. Install [Kind and kubectl](https://kind.sigs.k8s.io/docs/user/quick-start/#installation)
-
-2. Create a cluster
+1. Create a cluster
 
 ```bash
 kind create cluster --name konflux --config kind-config.yaml
+```
+
+**Note:** If the cluster fails to start because of [too many open files](https://kind.sigs.k8s.io/docs/user/known-issues/#pod-errors-due-to-too-many-open-files)
+run the following commands:
+
+```bash
+sudo sysctl fs.inotify.max_user_watches=524288
+sudo sysctl fs.inotify.max_user_instances=512
 ```
 
 3. Deploy the dependencies
