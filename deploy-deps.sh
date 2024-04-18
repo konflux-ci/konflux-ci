@@ -5,24 +5,31 @@ script_path="$(dirname -- "${BASH_SOURCE[0]}")"
 main() {
     echo "Deploying Konflux Dependencies" >&2
     deploy
-    
     echo "Waiting for the dependencies to be ready" >&2
     "${script_path}/wait-for-all.sh"
 }
 
 deploy() {
     deploy_cert_manager
-
     kubectl apply -k "${script_path}/dependencies/cluster-issuer"
+    deploy_tekton
+    kubectl apply -k "${script_path}/dependencies/ingress-nginx"
+    deploy_keycloak
+}
+
+deploy_tekton() {
+    # Operator
     kubectl apply -k "${script_path}/dependencies/tekton-operator"
     retry kubectl wait --for=condition=Ready -l app=tekton-operator -n tekton-operator pod --timeout=240s
-
     retry kubectl apply -k "${script_path}/dependencies/tekton-config"
 
-
+    # Pipeline As Code
     kubectl apply -k "${script_path}/dependencies/pipelines-as-code"
+
+    # Config
     kubectl wait --for=condition=Ready tektonconfig/config --timeout=360s
 
+    # Tekton Results
     if ! kubectl get secret tekton-results-postgres -n tekton-pipelines; then
         local db_password
         db_password="$(openssl rand -base64 20)"
@@ -32,9 +39,6 @@ deploy() {
             --from-literal=POSTGRES_PASSWORD="$db_password"
     fi
     kubectl apply -k "${script_path}/dependencies/tekton-results"
-
-    kubectl apply -k "${script_path}/dependencies/ingress-nginx"
-    deploy_keycloak
 }
 
 deploy_cert_manager() {
