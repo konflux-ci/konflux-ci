@@ -61,19 +61,6 @@ sudo sysctl fs.inotify.max_user_instances=512
 
 ## Configuring Secrets
 
-### Configuring a secret for Tekton chains
-
-Tekton chains needs a key for signing attestations.
-In addition, The enterprise contract pipeline needs the matching public key for verifying the signature of the attestations.
-
-- install cosign - https://github.com/sigstore/cosign
-- connect to the kind cluster and run:
-```bash
-cosign generate-key-pair k8s://tekton-pipelines/signing-secrets
-
-kubectl create secret generic public-key --from-file cosign.pub -n tekton-pipelines
-```
-
 ### Github Application
 
 - build-service github app (global or namespace) - TBA
