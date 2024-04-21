@@ -137,7 +137,7 @@ spec:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
           runAsUser: 1001
-      - image: quay.io/yftacherzog/workspace-manager:v1.1
+      - image: quay.io/redhat-user-workloads/rhtap-o11y-tenant/workspace-manager/workspace-manager:06df38da81280ba2cf6b4a532d494f1ead8670fe
         name: workspace-manager
         ports:
           - containerPort: 5000
