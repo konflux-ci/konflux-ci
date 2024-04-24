@@ -1,0 +1,39 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: smee-client
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gosmee-client
+  namespace: smee-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gosmee-client
+  template:
+    metadata:
+      labels:
+        app: gosmee-client
+    spec:
+      containers:
+        - image: "ghcr.io/chmouel/gosmee:v0.21.0"
+          imagePullPolicy: Always
+          name: gosmee
+          args:
+            - "client"
+            - <smee-channel>
+            - "http://pipelines-as-code-controller.pipelines-as-code:8080"
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsNonRoot: false
+          resources:
+            limits:
+              cpu: 1
+              memory: 320Mi
+            requests:
+              cpu: 1
+              memory: 320Mi
