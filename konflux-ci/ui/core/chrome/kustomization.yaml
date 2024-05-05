@@ -2,3 +2,7 @@ kind: Kustomization
 apiVersion: kustomize.config.k8s.io/v1beta1
 resources:
   - chrome-frontend.yaml
+configMapGenerator:
+  - name: logo
+    files:
+      - logo.svg
