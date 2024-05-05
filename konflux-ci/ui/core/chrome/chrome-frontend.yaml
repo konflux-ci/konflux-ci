@@ -79,6 +79,10 @@ spec:
               name: config
             - mountPath: /opt/app-root/src/build/preview/operator-generated
               name: config
+            - mountPath: /opt/app-root/src/build/stable/js/d6083bde9a964ab4.svg
+              subPath: d6083bde9a964ab4.svg
+              name: logo
+              readOnly: true
           securityContext:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
@@ -92,6 +96,12 @@ spec:
             defaultMode: 420
             name: fed-modules
           name: config
+        - configMap:
+            name: logo
+            items:
+            - key: logo.svg
+              path: d6083bde9a964ab4.svg
+          name: logo
 ---
 apiVersion: v1
 kind: Service
