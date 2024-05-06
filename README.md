@@ -36,10 +36,17 @@ sudo sysctl fs.inotify.max_user_watches=524288
 sudo sysctl fs.inotify.max_user_instances=512
 ```
 
+**Note:** When using Podman, it is recommended that you increase the PID limit on the
+container running the cluster, as the default might not be enough when the cluster
+becomes busy:
+
+```bash
+podman update --pids-limit 4096 konflux-control-plane
+```
+
 **Note:** If pods still fail to start due to missing resources, you may need to reserve
 additional resources to the Kind cluster. Edit [kind-config.yaml](./kind-config.yaml)
-and add a `system-reserved` line under `kubeletExtraArgs`. For example (the actual value
-depends on your setup's requirements):
+and modify the `system-reserved` line under `kubeletExtraArgs`:
 
 ```yaml
   kubeadmConfigPatches:
@@ -48,7 +55,7 @@ depends on your setup's requirements):
     nodeRegistration:
       kubeletExtraArgs:
         node-labels: "ingress-ready=true"
-        system-reserved: memory=8Gi
+        system-reserved: memory=12Gi
 ```
 
 3. Deploy the dependencies
