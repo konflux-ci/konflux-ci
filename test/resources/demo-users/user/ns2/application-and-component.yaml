@@ -2,28 +2,28 @@
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: Application
 metadata:
-  name: sample-component
+  name: test-component
   namespace: user-ns2
   annotations:
     application.thumbnail: "1"
 spec:
-  displayName: sample-component
+  displayName: test-component
 ---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: Component
 metadata:
-  name: sample-component
+  name: test-component
   namespace: user-ns2
   annotations:
     build.appstudio.openshift.io/request: configure-pac
     image.redhat.com/generate: '{"visibility": "public"}'
 spec:
-  application: sample-component
-  componentName: sample-component
+  application: test-component
+  componentName: test-component
   source:
     git:
       revision: main
-      url: https://github.com/yftacherzog/sample-component.git
+      url: https://github.com/konflux-ci/testrepo.git
       dockerfileUrl: Dockerfile
       context: ./
 ---
@@ -33,4 +33,4 @@ metadata:
   name: project-repository
   namespace: user-ns2
 spec:
-  url: "https://github.com/yftacherzog/sample-component"
+  url: "https://github.com/konflux-ci/testrepo"
