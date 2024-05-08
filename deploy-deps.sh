@@ -15,6 +15,7 @@ deploy() {
     deploy_tekton
     kubectl apply -k "${script_path}/dependencies/ingress-nginx"
     deploy_keycloak
+    deploy_registry
 }
 
 deploy_tekton() {
@@ -72,6 +73,11 @@ deploy_keycloak() {
 
     kubectl wait --for=condition=Ready --timeout=240s -l app=postgresql-db -n keycloak pod
     kubectl wait --for=condition=Ready --timeout=240s -l app=keycloak -n keycloak pod
+}
+
+deploy_registry() {
+    kubectl create -k "${script_path}/dependencies/registry"
+    retry kubectl wait --for=condition=Ready --timeout=240s -n kind-registry -l run=registry pod
 }
 
 retry() {
