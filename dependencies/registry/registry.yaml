@@ -1,0 +1,43 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kind-registry
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    run: registry
+  name: registry
+  namespace: kind-registry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: registry
+  template:
+    metadata:
+      labels:
+        run: registry
+    spec:
+      containers:
+      - name: registry
+        image: registry:2
+        ports:
+        - containerPort: 5000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry-service
+  namespace: kind-registry
+spec:
+  type: NodePort
+  selector:
+    run: registry
+  ports:
+    - protocol: TCP
+      nodePort: 30001
+      port: 5001
+      targetPort: 5000
