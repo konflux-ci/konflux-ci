@@ -8,8 +8,8 @@ resources:
 images:
   # chrome frontend
   - name: quay.io/cloudservices/insights-chrome-frontend
-    newName: quay.io/cloudservices/insights-chrome-frontend
-    newTag: 9ddfec6
+    newName: quay.io/redhat-user-workloads/konflux-console-tenant/insights-chrome-rebrand/insights-chrome-rebrand
+    newTag: 0903f0329cc309170f8e51b2d30ffe3e26a9fd1d
   # chrome service
   - name: quay.io/cloudservices/chrome-service
     newName: quay.io/cloudservices/chrome-service
