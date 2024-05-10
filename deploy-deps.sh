@@ -13,7 +13,6 @@ deploy() {
     deploy_cert_manager
     kubectl apply -k "${script_path}/dependencies/cluster-issuer"
     deploy_tekton
-    kubectl apply -k "${script_path}/dependencies/ingress-nginx"
     deploy_keycloak
     deploy_registry
 }
