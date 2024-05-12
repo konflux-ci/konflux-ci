@@ -542,3 +542,7 @@ podman restart konflux-control-plane
 
 **Note:** It might take a few minutes for the UI to become available once the container
 is restarted.
+
+## Repository Links
+
+* [Release guidelines](./RELEASE.md)
