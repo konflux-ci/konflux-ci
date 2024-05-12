@@ -329,12 +329,12 @@ kubectl -n pipelines-as-code create secret generic pipelines-as-code-secret \
 ```
 
 ```bash
-kubectl -n pipelines-as-code create secret generic build-service \
+kubectl -n build-service create secret generic pipelines-as-code-secret \
 ...
 ```
 
 ```bash
-kubectl -n pipelines-as-code create secret generic integration-service \
+kubectl -n integration-service create secret generic pipelines-as-code-secret \
 ...
 ```
 
