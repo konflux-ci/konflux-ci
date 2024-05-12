@@ -123,6 +123,9 @@ pipelines-as-code (Tekton) inside the cluster.
    instructions, providing the location of the private key, the App ID, and the
    openssl-generated secret created during the process.
 
+   **Note:** the same secret should be created inside the `build-service` and the
+   `integration-service` namespaces. See [later sections](#github-application)
+
 3. Deploy the smee-client on the cluster:
 
    Edit the [smee-client manifest](./smee/smee-client.yaml), replacing `<smee-channel>`
@@ -314,8 +317,28 @@ exhaustive:
 
 ### Github Application
 
-- build-service github app (global or namespace) - TBA
-- integration-service github app - TBA
+The process of creating a GitHub application is explained as part of process of
+[triggering builds via webhooks](#enable-pipelines-triggering-via-webhooks).
+The same secret described in the Pipelines as Code documentation, should be deployed
+to the `build-service` and `integration-service` namespaces.
+
+To do that, repeat `kubectl create secret` command described there for the
+`pipelines-as-code` namespace also to those namespace:
+
+```bash
+kubectl -n pipelines-as-code create secret generic pipelines-as-code-secret \
+...
+```
+
+```bash
+kubectl -n pipelines-as-code create secret generic build-service \
+...
+```
+
+```bash
+kubectl -n pipelines-as-code create secret generic integration-service \
+...
+```
 
 ### Configuring a Push Secret for the Build Pipeline
 
