@@ -1,6 +1,7 @@
 # Konflux-CI
 
-Integration and release of Konflux-CI
+<!-- toc -->
+<!-- tocstop -->
 
 ## Trying Out Konflux
 
