@@ -11,7 +11,7 @@ Once you have it running, consult later sections for additional integration and
 configuration options.
 
 The recommended way to try out Konflux is using [Kind](https://kind.sigs.k8s.io/).
-Create a Kind cluster using the provided config in this repository.
+The process below creates a Kind cluster using the provided config in this repository.
 The config tells Kind to forward port `9443` from the host to the Kind cluster. The port
 forwarding is needed for accessing Konflux.
 
