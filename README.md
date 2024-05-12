@@ -1,8 +1,5 @@
 # Konflux-CI
 
-<!-- toc -->
-<!-- tocstop -->
-
 ## Trying Out Konflux
 
 This section demonstrates the process of deploying Konflux locally, onboarding users and
