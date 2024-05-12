@@ -497,12 +497,23 @@ kubectl delete pods -n smee-client gosmee-client-<some-id>
 
 ```bash
 kubectl get pods -n pipelines-as-code
-kubectllogs -n pipelines-as-code pipelines-as-code-controller-<some-id>
+kubectl logs -n pipelines-as-code pipelines-as-code-controller-<some-id>
 <fix the manifests>
 kubectl apply -f ./test/resources/demo-users/user/ns2/application-and-component.yaml
 ```
 
-5. On the PR page, type `/retest` on the comment box and post the comment. Observe the
+5. If the pipelines-as-code logs mention secret `pipelines-as-code-secret` is
+   missing/malformed, make sure you created the secret for the GitHub app, providing
+   values for fields `github-private-key`, `github-application-id` and `webhook.secret`
+   for the app your created. If the secret needs to be fixed, delete it (see command
+   below) and deploy it once more based on the Pipelines as Code instructions in
+   [previous steps](#enable-pipelines-triggering-via-webhooks).
+
+```bash
+kubectl delete secret pipelines-as-code-secret -n pipelines-as-code
+```
+
+6. On the PR page, type `/retest` on the comment box and post the comment. Observe the
    behavior once more.
 
 ### Setup Scripts or Pipeline Execution Fail
