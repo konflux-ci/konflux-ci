@@ -3,10 +3,37 @@
 script_path="$(dirname -- "${BASH_SOURCE[0]}")"
 
 main() {
+    echo "Checking requirements" >&2
+    check_req
     echo "Deploying Konflux Dependencies" >&2
     deploy
     echo "Waiting for the dependencies to be ready" >&2
     "${script_path}/wait-for-all.sh"
+}
+
+check_req(){
+    # declare the requirements
+    local requirements=(kubectl openssl)
+    local uninstalled_requirements=()
+
+    # check if requirements are installed
+    for i in ${requirements[@]}; do
+        if ! command -v $i &> /dev/null; then
+                uninstalled_requirements+=("$i")
+        else
+                echo -e "$i is installed"
+        fi  
+    done
+
+    if (( ${#uninstalled_requirements[@]} == 0 )); then
+        echo -e "\nAll requirements are met\nContinue"
+    else
+        echo -e "\nSome requirements are missing, please install the following requirements first:"
+        for req in ${uninstalled_requirements[@]}; do
+                echo $req
+        done
+        exit 1
+    fi
 }
 
 deploy() {
