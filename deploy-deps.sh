@@ -102,7 +102,7 @@ deploy_keycloak() {
 }
 
 deploy_registry() {
-    kubectl create -k "${script_path}/dependencies/registry"
+    kubectl apply -k "${script_path}/dependencies/registry"
     retry kubectl wait --for=condition=Ready --timeout=240s -n kind-registry -l run=registry pod
 }
 
