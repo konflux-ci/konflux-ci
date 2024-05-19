@@ -48,13 +48,15 @@ deploy_tekton() {
     # Operator
     kubectl apply -k "${script_path}/dependencies/tekton-operator"
     retry kubectl wait --for=condition=Ready -l app=tekton-operator -n tekton-operator pod --timeout=240s
+    # Wait for the operator to create configs for the first time before applying configs
+    kubectl wait --for=condition=Ready tektonconfig/config --timeout=360s
     retry kubectl apply -k "${script_path}/dependencies/tekton-config"
 
     # Pipeline As Code
     kubectl apply -k "${script_path}/dependencies/pipelines-as-code"
 
-    # Config
-    kubectl wait --for=condition=Ready tektonconfig/config --timeout=360s
+    # Wait for the operator to reconcile after applying the configs
+    kubectl wait --for=condition=Ready tektonconfig/config --timeout=60s
 
     # Tekton Results
     if ! kubectl get secret tekton-results-postgres -n tekton-pipelines; then
