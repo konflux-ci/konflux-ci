@@ -1,0 +1,25 @@
+apiVersion: appstudio.redhat.com/v1beta1
+kind: IntegrationTestScenario
+metadata:
+  annotations:
+    test.appstudio.openshift.io/kind: enterprise-contract
+    test.appstudio.openshift.io/optional: "true"
+  name: sample-component-enterprise-contract
+  namespace: user-ns2
+spec:
+  application: test-component
+  contexts:
+    - description: Application testing
+      name: application
+  params:
+    - name: PUBLIC_KEY
+      value: "k8s://tekton-pipelines/public-key"
+  resolverRef:
+    params:
+      - name: url
+        value: 'https://github.com/gbenhaim/build-definitions'
+      - name: revision
+        value: ec-pub-key
+      - name: pathInRepo
+        value: pipelines/enterprise-contract.yaml
+    resolver: git
