@@ -224,8 +224,8 @@ Once your PR is created, you should see a status is being reported at the bottom
 PR's comments section (just above the "Add a comment" box).
 
 Your GitHub App should now send PR events to your smee channel. Navigate to your smee
-channel's web page. You should see `issue_comment` and `check_run` events were sent just
-after you created the PR.
+channel's web page. You should see a couple of events were sent just after you created
+the PR. E.g. `check_run`, `pull_request`.
 
 Log into the Konflux UI as `user2` and check your applications. Select the application
 you created earlier, click on `Activity` and `Pipeline runs`. A build should be triggered
@@ -295,11 +295,92 @@ be9a47b76264e8fb324d9ef7cddc93a933630695669afc4060e8f4c835c750e9
 Start a container based on the image you pulled:
 
 ```bash
-podman run be9a47b76264e8fb324d9ef7cddc93a933630695669afc4060e8f4c835c750e9
+podman run --rm --timeout=10 be9a47b76264e8fb324d9ef7cddc9...
 hello world
 hello world
-...
+hello world
 ```
+
+### Configure Integration Tests
+
+You will now configure your application to trigger integration tests after each PR build
+is done.
+
+#### Push Builds to External Repository
+
+Before you do that, you'll configure your application to use an external registry
+instead of the internal one used so far. In order to do that, you'd need to have a
+repository, on a public registry, in which you have push permissions.
+E.g. [Docker Hub](https://hub.docker.com/), [Quay.io](https://quay.io/repository/):
+
+1. Create an account on a public registry (unless you have one already).
+
+2. Create a [push secret](#configuring-a-push-secret-for-the-build-pipeline) based on
+   your login information and deploy it to your namespace on the cluster.
+
+3. Create a new repository on the registry to which your images will be pushed.
+   For example, in Quay.io, you'd need to click the
+   [Create New Repository](https://quay.io/new/) button and provide it with name and
+   location. Free accounts tend to have limits on private repositories, so for the
+   purpose of this example, you can make your repository public.
+
+4. Configure your build pipeline to use your new repository on the public registry
+   instead of the local registry.
+
+   To do that, edit `.tekton/testrepo-pull-request.yaml` inside your `testrepo` fork
+   and replace the value of `output-image` to point to your repository. For example,
+   if using Quay.io and your username is `my-user` and you created a repository called
+   `my-konflux-component` under your own organization, then the configs should look like this:
+
+```yaml
+  - name: output-image
+    value: quay.io/my-user/my-konflux-component:on-pr-{{revision}}
+```
+
+5. Push your changes to your `testrepo` fork, either as a new PR or as a change to your
+   previous PR. Observe the behavior as before, and verify that the build pipeline
+   finishes successfully, and that your public repository contains the images pushed by
+   the pipeline.
+
+#### Integration Tests
+
+You can add integration tests either via the Konflux UI, or by applying the equivalent
+Kubernetes resource.
+
+In our case, The resource is defined in
+`test/resources/demo-users/user/ns2/ec-integration-test.yaml`. You can directly apply
+it with the following command:
+
+```bash
+oc create -f test/resources/demo-users/user/ns2/ec-integration-test.yaml
+```
+
+Alternatively, you can provide the content from that YAML using the UI:
+
+1. Login as user2 and navigate to your application and component.
+
+2. Click the `Integration tests` tab.
+
+3. Click `Add Integration test`.
+
+4. Fill-in the details from the YAML.
+
+5. Click `Add Integration test`.
+
+Either way, you should now see the test listed in the UI under `Integration tests`.
+
+Our integration test is using a pipeline residing in the location defined under the
+`resolverRef` field on the YAML mentioned above. From now on, after the build pipeline
+runs, the pipeline mentioned on the integration test will also be triggered.
+
+To verify that, go back to your GitHub PR and add a comment: `/retest`.
+
+On the Konflux UI, under your component `Activity` tab, you should now see the build
+pipeline running again (`test-component-on-pull-request-...`), and when it's done, you
+should see another pipeline run called `test-component-c6glg-...` being triggered.
+
+You can click it and examine the logs to see the kind of things it verifies, and confirm
+it passes successfully.
 
 ### Next Steps
 
@@ -350,7 +431,8 @@ service account.
 The service account used for running the pipelines is the namespace's `default` service
 account.
 
-1. Create the secret in the pipeline's namespace (see example below for extracting the
+1. Create the secret in the pipeline's namespace (see the
+   [example below](#example---extract-quay-push-secret) for extracting the
    secret):
 
 ```bash
@@ -382,7 +464,8 @@ for creating the secret. If not using quay, apply your registry's equivalent pro
 
 6. Click Download `<your-username>-auth.json` and take note of the download location.
 
-7. Replace `<path/to/.docker/config.json>` with this path.
+7. Replace `<path/to/.docker/config.json>` on the `kubectl create secret` command with
+   this path.
 
 ### Configuring a Push Secret for the Release Pipeline
 
