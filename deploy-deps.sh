@@ -49,7 +49,7 @@ deploy_tekton() {
     kubectl apply -k "${script_path}/dependencies/tekton-operator"
     retry kubectl wait --for=condition=Ready -l app=tekton-operator -n tekton-operator pod --timeout=240s
     # Wait for the operator to create configs for the first time before applying configs
-    kubectl wait --for=condition=Ready tektonconfig/config --timeout=360s
+    retry kubectl wait --for=condition=Ready tektonconfig/config --timeout=360s
     retry kubectl apply -k "${script_path}/dependencies/tekton-config"
 
     # Pipeline As Code
