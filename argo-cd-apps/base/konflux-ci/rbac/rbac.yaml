@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: rbac
+spec:
+  generators:
+    - clusters: {}
+  template:
+    metadata:
+      name: rbac-{{nameNormalized}}
+    spec:
+      project: default
+      source:
+        path: konflux-ci/rbac
+        repoURL: https://github.com/hmariset/konflux-ci.git
+        targetRevision: refs/heads/deploy-apps
+      destination:
+        namespace: rbac-service
+        server: '{{server}}'
+      syncPolicy:
+        automated: 
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        retry:
+          limit: 50
+          backoff:
+            duration: 15s

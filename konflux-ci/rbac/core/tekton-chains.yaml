@@ -219,7 +219,9 @@ spec:
             memory: 10Mi
         securityContext:
           readOnlyRootFilesystem: true
+          runAsGroup: 1001
           runAsNonRoot: true
+          runAsUser: 1001
       dnsPolicy: ClusterFirst
       restartPolicy: OnFailure
       serviceAccount: chains-secrets-admin

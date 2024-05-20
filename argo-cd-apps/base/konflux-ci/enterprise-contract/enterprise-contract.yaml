@@ -1,0 +1,30 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: enterprise-contract
+spec:
+  generators:
+    - clusters: {}
+  template:
+    metadata:
+      name: enterprise-contract-{{nameNormalized}}
+    spec:
+      project: default
+      source:
+        path: konflux-ci/enterprise-contract
+        repoURL: https://github.com/konflux-ci/konflux-ci.git
+        targetRevision: main
+      destination:
+        namespace: enterprise-contract-service
+        server: '{{server}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+        retry:
+          limit: 50
+          backoff:
+            duration: 15s

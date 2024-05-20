@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: tekton-results
+spec:
+  generators:
+    - clusters: {}
+  template:
+    metadata:
+      name: tekton-results-{{nameNormalized}}
+    spec:
+      project: default
+      source:
+        path: dependencies/tekton-results
+        repoURL: https://github.com/hmariset/konflux-ci.git
+        targetRevision: refs/heads/deploy-apps
+      destination:
+        namespace: tekton-results
+        server: 'https://kubernetes.default.svc'
+      syncPolicy:
+        automated: 
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        retry:
+          limit: 50
+          backoff:
+            duration: 15s

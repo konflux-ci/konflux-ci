@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: keycloak
+spec:
+  generators:
+    - clusters: {}
+  template:
+    metadata:
+      name: keycloak-{{nameNormalized}}
+    spec:
+      project: default
+      source:
+        path: dependencies/keycloak/deployment
+        repoURL: https://github.com/konflux-ci/konflux-ci.git
+        targetRevision: main
+      destination:
+        namespace: keycloak
+        server: 'https://kubernetes.default.svc'
+      syncPolicy:
+        automated: 
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        retry:
+          limit: 50
+          backoff:
+            duration: 15s

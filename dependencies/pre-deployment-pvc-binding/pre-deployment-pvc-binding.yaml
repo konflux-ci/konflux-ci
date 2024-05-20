@@ -5,6 +5,21 @@ metadata:
   name: test-pvc-ns
 ---
 apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: temp-storage
+  namespace: test-pvc-ns
+spec:
+  capacity:
+    storage: 1Gi
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: gp2
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/data"
+---
+apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: test-pvc
