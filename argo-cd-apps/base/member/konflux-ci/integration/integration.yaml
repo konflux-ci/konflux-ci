@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: integration
+spec:
+  generators:
+    - clusters: {}
+  template:
+    metadata:
+      name: integration-{{nameNormalized}}
+    spec:
+      project: default
+      source:
+        path: konflux-ci/integration
+        repoURL: https://github.com/konflux-ci/konflux-ci.git
+        targetRevision: main
+      destination:
+        namespace: integration-service
+        server: '{{server}}'
+      syncPolicy:
+        automated: 
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        retry:
+          limit: 50
+          backoff:
+            duration: 15s

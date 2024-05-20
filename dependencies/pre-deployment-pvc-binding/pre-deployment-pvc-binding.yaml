@@ -10,6 +10,7 @@ metadata:
   name: test-pvc
   namespace: test-pvc-ns
 spec:
+  storageClassName: gp2
   accessModes:
   - ReadWriteOnce
   resources:

@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: tekton-config
+spec:
+  generators:
+    - clusters: {}
+  template:
+    metadata:
+      name: tekton-config-{{nameNormalized}}
+    spec:
+      project: default
+      source:
+        path: dependencies/tekton-config
+        repoURL: https://github.com/konflux-ci/konflux-ci.git
+        targetRevision: main
+      destination:
+        namespace: tekton-config
+        server: 'https://kubernetes.default.svc'
+      syncPolicy:
+        automated: 
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        retry:
+          limit: 50
+          backoff:
+            duration: 15s

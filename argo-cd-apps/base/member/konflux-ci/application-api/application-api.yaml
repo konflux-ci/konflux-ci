@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: application-api
+spec:
+  generators:
+    - clusters: {}
+  template:
+    metadata:
+      name: application-api-{{nameNormalized}}
+    spec:
+      project: default
+      source:
+        path: konflux-ci/application-api
+        repoURL: https://github.com/konflux-ci/konflux-ci.git
+        targetRevision: main
+      destination:
+        namespace: application-api
+        server: 'https://kubernetes.default.svc'
+      syncPolicy:
+        automated: 
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        retry:
+          limit: 50
+          backoff:
+            duration: 15s

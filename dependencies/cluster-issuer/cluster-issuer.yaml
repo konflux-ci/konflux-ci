@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: cluster-issuer
+spec:
+  generators:
+    - clusters: {}
+  template:
+    metadata:
+      name: cluster-issuer-{{nameNormalized}}
+    spec:
+      project: default
+      source:
+        path: dependencies/cluster-issuer
+        repoURL: https://github.com/konflux-ci/konflux-ci.git
+        targetRevision: main
+      destination:
+        namespace: cluster-issuer
+        server: 'https://kubernetes.default.svc'
+      syncPolicy:
+        automated: 
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        retry:
+          limit: 50
+          backoff:
+            duration: 15s
