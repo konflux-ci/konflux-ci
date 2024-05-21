@@ -212,8 +212,8 @@ git push origin HEAD
 ```
 
 4. Your terminal should now display a link for creating a new Pull Request in GitHub.
-   Click the link, make sure the PR is targeted against your fork's `main` branch and
-   not against the repository from which it was forked (i.e. `base repository` should
+   Click the link, **make sure the PR is targeted against your fork's `main` branch and
+   not against the repository from which it was forked** (i.e. `base repository` should
    reside under your user name).
 
    Finally, click "Create pull request".
@@ -556,6 +556,20 @@ In addition, you can configure additional `Identity providers` such as `Github`,
 `Google`, etc.. by clicking on the `Identity providers` tab on the left.
 
 ## Troubleshooting Common Issues
+
+### Using Podman with Kind while also having Docker Installed
+
+If you have docker installed, Kind will try to use it by default, so if you want
+it to use Podman, you can do it by creating the cluster with the following command:
+
+```bash
+KIND_EXPERIMENTAL_PROVIDER=podman kind create cluster --name konflux --config kind-config.yaml
+```
+
+### Unknown Field "replacements"
+
+If you get the following error: `error: json: unknown field "replacements"`, while executing
+any of the setup scripts, you will need to update your `kubectl`.
 
 ### PR changes are not Triggering Pipelines
 
