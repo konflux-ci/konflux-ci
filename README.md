@@ -382,6 +382,129 @@ should see another pipeline run called `test-component-c6glg-...` being triggere
 You can click it and examine the logs to see the kind of things it verifies, and confirm
 it passes successfully.
 
+### Configure Release
+
+You will now configure Konflux to release your application to the external registry
+configured in previous steps.
+
+This requires:
+
+* A pipeline that will run on push events to the component repository.
+
+* `ReleasePlan` and `ReleasePlanAdmission` resources, that will react on the snapshot to
+  be created after the on-push pipeline will be triggered, which, in turn, will trigger
+  the creation of the release.
+
+#### Create the on-push Pipeline
+
+You will now introduce a new pipeline that will be triggered whenever new commits are
+created on branch `main` (e.g. when PRs are merged).
+
+On your local clone of the testrepo repository, copy the pipeline to the `.tekton`
+directory:
+
+```bash
+cp pipelines/testrepo-push.yaml .tekton/
+```
+
+Edit the content of the new copy at `.tekton/testrepo-push.yaml`, replacing the value of
+`output-image`, so that the repository URL is identical to the one
+[previously set](#push-builds-to-external-repository) for the `pull-request` pipeline.
+
+For example, if using Quay.io and your username is `my-user` and you created a
+repository called `my-konflux-component` under your own organization, then the configs
+should look like this:
+
+```yaml
+  - name: output-image
+    value: quay.io/my-user/my-konflux-component:{{revision}}
+```
+
+**Note:** this is the same as for the pull request pipeline, but the tag portion now
+only includes the revision.
+
+#### Create ReleasePlan and ReleasePlanAdmission Resources
+
+Once the on-push pipeline completes, a snapshot will be created and the integration
+tests will run against the container images built on the on-push pipeline.
+
+Konflux now needs `ReleasePlan` and `ReleasePlanAdmission` resources that will be used
+together with the snapshot for creating a new `Release` resource.
+
+The `ReleasePlan` resource includes a reference to the application that the development
+team wants to release, along with the namespace where the application is supposed to be
+released.
+
+The `ReleasePlanAdmission` resource defines how the application should be released, and
+it is typically maintained, not by the development team, but by the managed environment
+team (the team that supports the deployments of that application).
+
+The `ReleasePlanAdmission` resource makes use of an Enterprise Contract (EC) policy,
+which defines criteria for gating releases.
+
+Lastly, the process also requires permissions to be granted to the managed environment
+default service account on several resources.
+
+For more details you can examine the manifests under the
+[managed-ns2 directory](./test/resources/demo-users/user/managed-ns2/).
+
+Deploy the Release Plan under the development team namespace (`user-ns2`):
+
+```bash
+kubectl create -f ./test/resources/demo-users/user/ns2/release-plan.yaml
+```
+
+Edit the `ReleasePlanAdmission` manifest, replacing `<repository url>` with the URL
+of the repository on the registry to which your images are being pushed.
+
+For example, if using Quay.io and your username is `my-user` and you created a
+repository called `my-konflux-component` under your own organization, then the configs
+should look like this:
+
+```yaml
+    mapping:
+      components:
+        - name: test-component
+          repository: quay.io/my-user/my-konflux-component
+```
+
+Deploy the manged environment team's namespace, along with the resources mentioned
+above:
+
+```bash
+kubectl create -k ./test/resources/demo-users/user/managed-ns2
+```
+
+#### Create a Registry Secret for the Managed Namespace
+
+In order for the release service to be able to push images to the registry, a secret is
+needed on the managed namespace (`managed-ns2`). This is the same secret as was
+previously created on the development namespace (`user-ns2`).
+
+To do that, follow the instructions for
+[creating a push secret](#configuring-a-push-secret-for-the-release-pipeline)
+for the release pipeline.
+
+#### Trigger the Release
+
+You can now push the changes to your PR, merge it once the build-pipeline passes and
+observe the behavior:
+
+1. Commit the changes you did on your `testrepo` branch (i.e. introducing the on-push
+   pipeline).
+
+2. Once the build-pipeline and the integration tests finish successfully, merge the PR.
+
+3. On the Konflux UI, you should now see your on-push pipeline being triggered.
+
+4. Once it finishes successfully, the integration tests should run once more, and
+   a release should be created under the `Releases` tab.
+
+5. Wait for the Release to be complete, and check your registry repository for the
+   released image.
+
+**Congratulations**: You just created a release for your application!
+
 ### Next Steps
 
 The procedure above is intentionally simplified. Things you can do next to make it more
@@ -488,17 +611,9 @@ Those resources currently need to be created directly in Kubernetes.
 are available for creating such resources. Modify them per your requirements, setting
 the relevant user namespace and repository URL.
 
-### Create Integration Test for your Application
+### Namespace and User Management
 
-TBA
-
-### Configure a Release Pipeline
-
-TBA
-
-## Namespace and User Management
-
-### Creating a new Namespace
+#### Creating a new Namespace
 
 ```bash
 # Replace $NS with the name of the new namespace
@@ -514,7 +629,7 @@ kubectl create namespace user-ns3
 kubectl label namespace user-ns3 konflux.ci/type=user
 ```
 
-### Granting a User Access to a Namespace
+#### Granting a User Access to a Namespace
 
 ```bash
 # Replace $RB with the name of the role binding (you can choose the name)
@@ -530,7 +645,7 @@ Example:
 kubectl create rolebinding user1-konflux --clusterrole konflux-admin-user-actions --user user1@konflux.dev -n user-ns3
 ```
 
-### Add a new User
+#### Add a new User
 
 Konflux is using [Keycloak](https://www.keycloak.org/) for managing users and
 authentication.
@@ -646,6 +761,66 @@ podman restart konflux-control-plane
 
 **Note:** It might take a few minutes for the UI to become available once the container
 is restarted.
+
+### Release Fails
+
+If a release is triggered, but then fails, check the logs of the pods on the managed
+namespace (e.g. `managed-ns2`).
+
+List the pods and look for ones with status `Error`:
+
+```bash
+kubectl get pods -n managed-ns2
+```
+
+Check the logs of the pods with status `Error`:
+
+```bash
+kubectl logs -n managed-ns2 managed-7lxdn-push-snapshot-pod
+```
+
+Once you addressed the issue, create a PR and merge it or directly push a change to the
+main branch, so that the on-push pipeline is triggered.
+
+#### Common Issues
+
+The logs contain statements similar to this:
+
+```bash
+++ jq -r .containerImage
+parse error: Unfinished string at EOF at line 2, column 0
+```
+
+**Solution**: Verify that you provided a value to the `repository` field inside the
+[rpa.yaml file](./test/resources/demo-users/user/managed-ns2/rpa.yaml).
+
+Complete the value and redeploy the manifest:
+
+```bash
+kubectl apply -k ./test/resources/demo-users/user/managed-ns2
+```
+
+The logs contain statements similar to this:
+
+```bash
+Error: PUT https://quay.io/...: unexpected status code 400 Bad Request: <html>
+<head><title>400 Bad Request</title></head>
+<body>
+<center><h1>400 Bad Request</h1></center>
+</body>
+</html>
+
+main.go:74: error during command execution: PUT https://quay.io/...: unexpected status code 400 Bad Request: <html>
+<head><title>400 Bad Request</title></head>
+<body>
+<center><h1>400 Bad Request</h1></center>
+</body>
+</html>
+```
+
+**Solution**: verify that you
+[created the registry secret](#configuring-a-push-secret-for-the-release-pipeline),
+also for the managed namespace.
 
 ## Repository Links
 
