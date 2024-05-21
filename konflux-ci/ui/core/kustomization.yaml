@@ -13,7 +13,7 @@ images:
   # chrome service
   - name: quay.io/cloudservices/chrome-service
     newName: quay.io/cloudservices/chrome-service
-    newTag: 457001e
+    newTag: b781410
   # hac
   - name: quay.io/cloudservices/hac-core-frontend
     newName: quay.io/cloudservices/hac-core-frontend
@@ -21,7 +21,7 @@ images:
   # hac-dev
   - name: quay.io/cloudservices/hac-dev-frontend
     newName: quay.io/cloudservices/hac-dev-frontend
-    newTag: 7932b2a
+    newTag: 91e1a9d
 
 configMapGenerator:
   - name: fed-modules
