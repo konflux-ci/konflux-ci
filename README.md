@@ -193,20 +193,22 @@ cd <my-fork-name>
 git checkout -b build-pipeline
 ```
 
-2. Modify the build-pipeline definition to point to your fork repository. The
-   build-pipeline is defined in: `.tekton/testrepo-pull-request.yaml`.
+2. The build-pipeline definition inside the fork is generic enough to work on the
+   newly-created environment without any changes, but in order to trigger it, you'll
+   need to create a Pull Request, and for that you need to introduce a change to the
+   fork's codebase.
 
-   Edit the `git-url` field so that it points to your repository.
+   Run the following command inside the directory of your local copy of `tesetrepo` to
+   introduce an arbitrary change:
 
-```yaml
-- name: git-url
-   value: https://github.com/<my-org>/<my-repo>.git
+```bash
+echo "Trigger rebuild: $(date '+%Y-%m-%d %H:%M:%S')" >> REBUILD.txt
 ```
 
 3. Commit your changes and push them to your repository:
 
 ```bash
-git add .tekton/testrepo-pull-request.yaml
+git add REBUILD.txt
 git commit -m "set the build-pipeline"
 git push origin HEAD
 ```
@@ -454,8 +456,9 @@ Deploy the Release Plan under the development team namespace (`user-ns2`):
 kubectl create -f ./test/resources/demo-users/user/ns2/release-plan.yaml
 ```
 
-Edit the `ReleasePlanAdmission` manifest, replacing `<repository url>` with the URL
-of the repository on the registry to which your images are being pushed.
+Edit the [`ReleasePlanAdmission`](./test/resources/demo-users/user/managed-ns2/rpa.yaml)
+manifest, replacing `<repository url>` with the URL of the repository on the registry to
+which your images are being pushed.
 
 For example, if using Quay.io and your username is `my-user` and you created a
 repository called `my-konflux-component` under your own organization, then the configs
@@ -468,7 +471,7 @@ should look like this:
           repository: quay.io/my-user/my-konflux-component
 ```
 
-Deploy the manged environment team's namespace, along with the resources mentioned
+Deploy the managed environment team's namespace, along with the resources mentioned
 above:
 
 ```bash
