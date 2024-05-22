@@ -1,0 +1,32 @@
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ReleasePlanAdmission
+metadata:
+  name: test-component
+  labels:
+    release.appstudio.openshift.io/auto-release: 'true'
+spec:
+  applications:
+    - test-component
+  data:
+    images:
+      addGitShaTag: true
+      floatingTags:
+        - latest
+    mapping:
+      components:
+        - name: test-component
+          repository: <repository url>
+  origin: user-ns2
+  pipeline:
+    pipelineRef:
+      resolver: git
+      params:
+        - name: url
+          value: "https://github.com/gbenhaim/release-service-catalog.git"
+        - name: revision
+          value: production
+        - name: pathInRepo
+          value: "pipelines/push-to-external-registry/push-to-external-registry.yaml"
+    serviceAccountName: default
+  policy: default
