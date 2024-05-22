@@ -1,0 +1,21 @@
+name: Check for README updates
+
+on: pull_request
+
+jobs:
+  check-toc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Verify ToC
+        run: |
+          npx markdown-toc README.md -i
+          if [[ $(git status --porcelain) ]]; then
+              echo ERROR: "Did you forget to update the README table of contents?" >&2
+              echo ERROR: "Please run 'npx markdown-toc README.md -i' and update your PR" >&2
+              git diff >&2
+              exit 1
+          fi
+          echo "the table of contents is up to date" >&2
