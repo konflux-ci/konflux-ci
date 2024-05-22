@@ -1,5 +1,48 @@
 # Konflux-CI
 
+<!-- toc -->
+
+- [Trying Out Konflux](#trying-out-konflux)
+  * [Machine Requirements](#machine-requirements)
+  * [Installing Software Dependencies](#installing-software-dependencies)
+  * [Bootstrapping the Cluster](#bootstrapping-the-cluster)
+  * [Enable Pipelines Triggering via Webhooks](#enable-pipelines-triggering-via-webhooks)
+  * [Onboard a new Application](#onboard-a-new-application)
+  * [Image Registry](#image-registry)
+  * [Creating a Pull Request](#creating-a-pull-request)
+  * [Observe the Behavior](#observe-the-behavior)
+  * [Pull your new Image](#pull-your-new-image)
+  * [Configure Integration Tests](#configure-integration-tests)
+    + [Push Builds to External Repository](#push-builds-to-external-repository)
+    + [Integration Tests](#integration-tests)
+  * [Configure Release](#configure-release)
+    + [Create the on-push Pipeline](#create-the-on-push-pipeline)
+    + [Create ReleasePlan and ReleasePlanAdmission Resources](#create-releaseplan-and-releaseplanadmission-resources)
+    + [Create a Registry Secret for the Managed Namespace](#create-a-registry-secret-for-the-managed-namespace)
+    + [Trigger the Release](#trigger-the-release)
+  * [Next Steps](#next-steps)
+- [Configuring Secrets](#configuring-secrets)
+  * [Github Application](#github-application)
+  * [Configuring a Push Secret for the Build Pipeline](#configuring-a-push-secret-for-the-build-pipeline)
+    + [Example - Extract Quay Push Secret:](#example---extract-quay-push-secret)
+  * [Configuring a Push Secret for the Release Pipeline](#configuring-a-push-secret-for-the-release-pipeline)
+- [Using Konflux](#using-konflux)
+  * [Create Application and Component](#create-application-and-component)
+  * [Namespace and User Management](#namespace-and-user-management)
+    + [Creating a new Namespace](#creating-a-new-namespace)
+    + [Granting a User Access to a Namespace](#granting-a-user-access-to-a-namespace)
+    + [Add a new User](#add-a-new-user)
+- [Troubleshooting Common Issues](#troubleshooting-common-issues)
+  * [Using Podman with Kind while also having Docker Installed](#using-podman-with-kind-while-also-having-docker-installed)
+  * [Unknown Field "replacements"](#unknown-field-replacements)
+  * [PR changes are not Triggering Pipelines](#pr-changes-are-not-triggering-pipelines)
+  * [Setup Scripts or Pipeline Execution Fail](#setup-scripts-or-pipeline-execution-fail)
+  * [Release Fails](#release-fails)
+    + [Common Issues](#common-issues)
+- [Repository Links](#repository-links)
+
+<!-- tocstop -->
+
 ## Trying Out Konflux
 
 This section demonstrates the process of deploying Konflux locally, onboarding users and
@@ -842,3 +885,4 @@ also for the managed namespace.
 ## Repository Links
 
 * [Release guidelines](./RELEASE.md)
+* [Contributing guidelines](./CONTRIBUTING.md)
