@@ -247,7 +247,7 @@ from the registry.
 Port-forward the registry service, so you can reach it from outside of the cluster:
 
 ```bash
-kubectl port-forward -n kind-registry svc/registry-service 30001:5001
+kubectl port-forward -n kind-registry svc/registry-service 30001:80
 ```
 
 Leave the terminal hanging and on a new terminal window:
