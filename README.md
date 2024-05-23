@@ -397,7 +397,7 @@ In our case, The resource is defined in
 it with the following command:
 
 ```bash
-oc create -f test/resources/demo-users/user/ns2/ec-integration-test.yaml
+kubectl create -f test/resources/demo-users/user/ns2/ec-integration-test.yaml
 ```
 
 Alternatively, you can provide the content from that YAML using the UI:
