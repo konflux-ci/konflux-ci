@@ -37,6 +37,8 @@
   * [Unknown Field "replacements"](#unknown-field-replacements)
   * [PR changes are not Triggering Pipelines](#pr-changes-are-not-triggering-pipelines)
   * [Setup Scripts or Pipeline Execution Fail](#setup-scripts-or-pipeline-execution-fail)
+    + [Running out of Resources](#running-out-of-resources)
+    + [Unable to Bind PVCs](#unable-to-bind-pvcs)
   * [Release Fails](#release-fails)
     + [Common Issues](#common-issues)
 - [Repository Links](#repository-links)
@@ -70,7 +72,7 @@ The following applications are required on the host machine:
 
 ### Bootstrapping the Cluster
 
-From the root of this repository, run the following commands:
+From the root of this repository, run the setup scripts:
 
 1. Create a cluster
 
@@ -797,6 +799,8 @@ kubectl delete secret pipelines-as-code-secret -n pipelines-as-code
 
 ### Setup Scripts or Pipeline Execution Fail
 
+#### Running out of Resources
+
 If setup scripts fail or pipelines are stuck or tend to fail at relatively random
 stages, it might be that the cluster is running out of resources.
 
@@ -813,7 +817,7 @@ As last resort, you could restart the container running the cluster node. If you
 that, you'd have to, once more, increase the PID limit for that container as explained
 in the [cluster setup section](#bootstrapping-the-cluster).
 
-To restart the container ( if using Docker, replace `podman` with `docker`):
+To restart the container (if using Docker, replace `podman` with `docker`):
 
 ```bash
 podman restart konflux-control-plane
@@ -821,6 +825,16 @@ podman restart konflux-control-plane
 
 **Note:** It might take a few minutes for the UI to become available once the container
 is restarted.
+
+#### Unable to Bind PVCs
+The `deploy-deps` script includes a check to verify whether PVCs on the default storage
+class can be bind. If volume claims are unable to be fulfilled, the script will fail,
+displaying:
+`error: timed out waiting for the condition on persistentvolumeclaims/test-pvc`.
+
+If you are using Kind, try to [restart the container](#running-out-of-resources).
+Otherwise, ensure that PVCs (Persistent Volume Claims) can be allocated for the
+cluster's default storage class.
 
 ### Release Fails
 
