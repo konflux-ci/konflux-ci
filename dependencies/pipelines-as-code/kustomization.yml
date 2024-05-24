@@ -3,3 +3,9 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - https://github.com/openshift-pipelines/pipelines-as-code/releases/download/v0.24.1/release.k8s.yaml
+patches:
+  - path: custom-console-patch.yaml
+    target:
+      kind: ConfigMap
+      version: v1
+      name: pipelines-as-code
