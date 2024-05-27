@@ -78,7 +78,7 @@ From the root of this repository, run the following commands:
 kind create cluster --name konflux --config kind-config.yaml
 ```
 
-**Note:** If the cluster fails to start because of [too many open files](https://kind.sigs.k8s.io/docs/user/known-issues/#pod-errors-due-to-too-many-open-files)
+**Note:** If the cluster or any deployments fail to start because of [too many open files](https://kind.sigs.k8s.io/docs/user/known-issues/#pod-errors-due-to-too-many-open-files)
 run the following commands:
 
 ```bash
