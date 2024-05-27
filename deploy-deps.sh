@@ -47,10 +47,12 @@ deploy() {
 deploy_tekton() {
     # Operator
     kubectl apply -k "${script_path}/dependencies/tekton-operator"
-    retry kubectl wait --for=condition=Ready -l app=tekton-operator -n tekton-operator pod --timeout=240s
+    retry "kubectl wait --for=condition=Ready -l app=tekton-operator -n tekton-operator pod --timeout=240s" \
+          "Tekton Operator did not become available within the allocated time"
     # Wait for the operator to create configs for the first time before applying configs
     kubectl wait --for=condition=Ready tektonconfig/config --timeout=360s
-    retry kubectl apply -k "${script_path}/dependencies/tekton-config"
+    retry "kubectl apply -k ${script_path}/dependencies/tekton-config" \
+          "The Tekton Config resource was not updated within the allocated time"
 
     # Pipeline As Code
     kubectl apply -k "${script_path}/dependencies/pipelines-as-code"
@@ -72,7 +74,8 @@ deploy_tekton() {
 
 deploy_cert_manager() {
     kubectl apply -k "${script_path}/dependencies/cert-manager"
-    retry kubectl wait --for=condition=Ready --timeout=120s -l app.kubernetes.io/instance=cert-manager -n cert-manager pod
+    retry "kubectl wait --for=condition=Ready --timeout=120s -l app.kubernetes.io/instance=cert-manager -n cert-manager pod" \
+          "Cert manager did not become available within the allocated time"
 }
 
 deploy_keycloak() {
@@ -89,7 +92,8 @@ deploy_keycloak() {
     fi
 
     local ret=0
-    retry kubectl wait --for=condition=Ready --timeout=240s -n keycloak -l app.kubernetes.io/name=keycloak-operator pod
+    retry "kubectl wait --for=condition=Ready --timeout=240s -n keycloak -l app.kubernetes.io/name=keycloak-operator pod" \
+          "Keycloack did not become available within the allocated time"
     kubectl wait --for=condition=Ready --timeout=240s -n keycloak keycloak/keycloak || ret="$?"
 
     if [[ ret -ne 0 ]]; then
@@ -105,19 +109,21 @@ deploy_keycloak() {
 
 deploy_registry() {
     kubectl apply -k "${script_path}/dependencies/registry"
-    retry kubectl wait --for=condition=Ready --timeout=240s -n kind-registry -l run=registry pod
+    retry "kubectl wait --for=condition=Ready --timeout=240s -n kind-registry -l run=registry pod" \
+          "The local registry did not become available within the allocated time"
 }
 
 retry() {
     for _ in {1..3}; do
         local ret=0
-        "$@" || ret="$?"
+        $1 || ret="$?"
         if [[ "$ret" -eq 0 ]]; then
             return 0
         fi
         sleep 3
     done
 
+    echo "$1": "$2."
     return "$ret"
 }
 
