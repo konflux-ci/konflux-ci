@@ -1,0 +1,8 @@
+checks:
+
+  # include explicitly adds checks, by name. You can reference any of the built-in checks.
+  # Note that customChecks defined above are included automatically.
+  include: [ ]
+  # exclude explicitly excludes checks, by name. exclude has the highest priority: if a check is
+  # in exclude, then it is not considered, even if it is in include as well.
+  exclude: [ ]

@@ -7,3 +7,27 @@ resources:
   - db.yaml
   - configure-keycloak.yaml
 namespace: keycloak
+
+patches:
+  - patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: 10m
+            memory: 10Mi
+          limits:
+            cpu: 100m
+            memory: 100Mi
+    target:
+      kind: Deployment
+      name: keycloak-operator
+  - patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext
+        value:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+    target:
+      kind: Deployment
+      name: keycloak-operator

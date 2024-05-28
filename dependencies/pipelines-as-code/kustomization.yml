@@ -3,3 +3,71 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - https://github.com/openshift-pipelines/pipelines-as-code/releases/download/v0.24.1/release.k8s.yaml
+
+patches:
+  - patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: 10m
+            memory: 10Mi
+          limits:
+            cpu: 100m
+            memory: 100Mi
+    target:
+      kind: Deployment
+      name: pipelines-as-code-controller
+  - patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext
+        value:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+    target:
+      kind: Deployment
+      name: pipelines-as-code-controller
+  - patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: 10m
+            memory: 10Mi
+          limits:
+            cpu: 100m
+            memory: 100Mi
+    target:
+      kind: Deployment
+      name: pipelines-as-code-watcher
+  - patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext
+        value:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+    target:
+      kind: Deployment
+      name: pipelines-as-code-watcher
+  - patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: 10m
+            memory: 10Mi
+          limits:
+            cpu: 100m
+            memory: 100Mi
+    target:
+      kind: Deployment
+      name: pipelines-as-code-webhook
+  - patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext
+        value:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+    target:
+      kind: Deployment
+      name: pipelines-as-code-webhook

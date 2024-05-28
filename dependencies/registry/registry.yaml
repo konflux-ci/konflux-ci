@@ -24,6 +24,16 @@ spec:
       containers:
       - name: registry
         image: registry:2
+        resources:
+          limits:
+            cpu: 100m
+            memory: 250Mi
+          requests:
+            cpu: 10m
+            memory: 50Mi
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
         ports:
         - containerPort: 5000
 ---
