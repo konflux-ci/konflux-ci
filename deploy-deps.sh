@@ -5,6 +5,8 @@ script_path="$(dirname -- "${BASH_SOURCE[0]}")"
 main() {
     echo "Checking requirements" >&2
     check_req
+    echo "Testing PVC creation for default storage class" >&2
+    test_pvc_binding
     echo "Deploying Konflux Dependencies" >&2
     deploy
     echo "Waiting for the dependencies to be ready" >&2
@@ -42,6 +44,15 @@ deploy() {
     deploy_tekton
     deploy_keycloak
     deploy_registry
+}
+
+test_pvc_binding(){
+    local pvc_resources="${script_path}/dependencies/pre-deployment-pvc-binding"
+    echo "Creating PVC from '$pvc_resources' using the cluster's default storage class"
+    kubectl apply -k "$pvc_resources"
+    retry kubectl wait --for=jsonpath='{status.phase}'=Bound pvc/test-pvc -n test-pvc-ns --timeout=20s
+    kubectl delete -k "$pvc_resources"
+    echo "PVC binding successfull"
 }
 
 deploy_tekton() {
