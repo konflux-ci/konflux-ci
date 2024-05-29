@@ -612,10 +612,10 @@ kubectl create -n $NS secret generic regcred \
  --type=kubernetes.io/dockerconfigjson
 ```
 
-2. Add the secret to the namespace's default service account
+2. Add the secret to the namespace's appstudio-pipeline service account
 
 ```bash
-kubectl patch -n $NS serviceaccount default -p '{"secrets": [{"name": "regcred"}]}'
+kubectl patch -n $NS serviceaccount appstudio-pipeline -p '{"secrets": [{"name": "regcred"}]}'
 ```
 
 #### Example - Extract Quay Push Secret:
@@ -668,6 +668,7 @@ the relevant user namespace and repository URL.
 
 kubectl create namespace $NS
 kubectl label namespace "$NS konflux.ci/type=user
+kubectl create serviceaccount appstudio-pipeline -n $NS
 ```
 
 Example:
@@ -675,6 +676,7 @@ Example:
 ```bash
 kubectl create namespace user-ns3
 kubectl label namespace user-ns3 konflux.ci/type=user
+kubectl create serviceaccount appstudio-pipeline -n user-ns3
 ```
 
 #### Granting a User Access to a Namespace
