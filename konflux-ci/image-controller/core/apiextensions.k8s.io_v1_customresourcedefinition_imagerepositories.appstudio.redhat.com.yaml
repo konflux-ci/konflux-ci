@@ -1,0 +1,152 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.9.2
+  creationTimestamp: null
+  name: imagerepositories.appstudio.redhat.com
+spec:
+  group: appstudio.redhat.com
+  names:
+    kind: ImageRepository
+    listKind: ImageRepositoryList
+    plural: imagerepositories
+    singular: imagerepository
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.image.url
+      name: Image
+      type: string
+    - jsonPath: .status.image.visibility
+      name: Visibility
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ImageRepository is the Schema for the imagerepositories API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ImageRepositorySpec defines the desired state of ImageRepository
+            properties:
+              credentials:
+                description: Credentials management.
+                properties:
+                  regenerate-token:
+                    description: RegenerateToken defines a request to refresh image
+                      accessing credentials. Refreshes both, push and pull tokens.
+                      The field gets cleared after the refresh.
+                    type: boolean
+                type: object
+              image:
+                description: Requested image repository configuration.
+                properties:
+                  name:
+                    description: Name of the image within configured Quay organization.
+                      If ommited, then defaults to "cr-namespace/cr-name". This field
+                      cannot be changed after the resource creation.
+                    pattern: ^[a-z0-9][.a-z0-9_-]*(/[a-z0-9][.a-z0-9_-]*)*$
+                    type: string
+                  visibility:
+                    description: Visibility defines whether the image is publicly
+                      visible. Allowed values are public and private. "public" is
+                      the default.
+                    enum:
+                    - public
+                    - private
+                    type: string
+                type: object
+            type: object
+          status:
+            description: ImageRepositoryStatus defines the observed state of ImageRepository
+            properties:
+              credentials:
+                description: Credentials contain information related to image repository
+                  credentials.
+                properties:
+                  generationTimestamp:
+                    description: GenerationTime shows timestamp when the current credentials
+                      were generated.
+                    format: date-time
+                    type: string
+                  pull-remote-secret:
+                    description: PullRemoteSecretName is present only if ImageRepository
+                      has labels that connect it to Application and Component. Holds
+                      the name of the RemoteSecret object that manages pull Secret.
+                    type: string
+                  pull-robot-account:
+                    description: PullRobotAccountName is present only if ImageRepository
+                      has labels that connect it to Application and Component. Holds
+                      name of the quay robot account with real (pull only) permissions
+                      from the generated repository.
+                    type: string
+                  pull-secret:
+                    description: PullSecretName is present only if ImageRepository
+                      has labels that connect it to Application and Component. Holds
+                      name of the dockerconfig secret with credentials to pull only
+                      from the generated repository. The secret might not be present
+                      in the same namespace as ImageRepository, but created in other
+                      environments.
+                    type: string
+                  push-remote-secret:
+                    description: PushRemoteSecretName holds name of RemoteSecret object
+                      that manages push Secret and its linking to appstudio-pipeline
+                      Service Account.
+                    type: string
+                  push-robot-account:
+                    description: PushRobotAccountName holds name of the quay robot
+                      account with write (push and pull) permissions into the generated
+                      repository.
+                    type: string
+                  push-secret:
+                    description: PushSecretName holds name of the dockerconfig secret
+                      with credentials to push (and pull) into the generated repository.
+                    type: string
+                type: object
+              image:
+                description: Image describes actual state of the image repository.
+                properties:
+                  url:
+                    description: URL is the full image repository url to push into
+                      / pull from.
+                    type: string
+                  visibility:
+                    allOf:
+                    - enum:
+                      - public
+                      - private
+                    - enum:
+                      - public
+                      - private
+                    description: Visibility shows actual generated image repository
+                      visibility.
+                    type: string
+                type: object
+              message:
+                description: Message shows error information for the request. It could
+                  contain non critical error, like failed to change image visibility,
+                  while the state is ready and image resitory could be used.
+                type: string
+              state:
+                description: State shows if image repository could be used. "ready"
+                  means repository was created and usable, "failed" means that the
+                  image repository creation request failed.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

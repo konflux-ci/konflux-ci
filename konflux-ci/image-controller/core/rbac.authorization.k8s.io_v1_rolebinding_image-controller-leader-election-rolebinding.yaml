@@ -1,0 +1,13 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: image-controller-leader-election-rolebinding
+  namespace: image-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: image-controller-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: image-controller-controller-manager
+  namespace: image-controller
