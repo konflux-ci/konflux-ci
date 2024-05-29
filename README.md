@@ -830,7 +830,10 @@ is restarted.
 The `deploy-deps` script includes a check to verify whether PVCs on the default storage
 class can be bind. If volume claims are unable to be fulfilled, the script will fail,
 displaying:
-`error: timed out waiting for the condition on persistentvolumeclaims/test-pvc`.
+```bash
+error: timed out waiting for the condition on persistentvolumeclaims/test-pvc
+... Test PVC unable to bind on default storage class
+```
 
 If you are using Kind, try to [restart the container](#running-out-of-resources).
 Otherwise, ensure that PVCs (Persistent Volume Claims) can be allocated for the
