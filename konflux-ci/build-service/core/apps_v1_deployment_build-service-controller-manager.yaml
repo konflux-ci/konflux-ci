@@ -27,7 +27,7 @@ spec:
         - --leader-elect
         command:
         - /manager
-        image: quay.io/redhat-appstudio/build-service:29b09e5d8350f75c92d5796fbbf62647fe28610b
+        image: quay.io/konflux-ci/build-service
         livenessProbe:
           httpGet:
             path: /healthz

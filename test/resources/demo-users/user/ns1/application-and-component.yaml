@@ -17,12 +17,13 @@ metadata:
   annotations:
     build.appstudio.openshift.io/request: configure-pac
     image.redhat.com/generate: '{"visibility": "public"}'
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build", "bundle": "latest"}'
 spec:
   application: sample-component
   componentName: sample-component
   source:
     git:
       revision: main
-      url: https://github.com/gbenhaim/sample-component.git
+      url: https://github.com/konflux-ci/testrepo.git
       dockerfileUrl: Dockerfile
       context: ./

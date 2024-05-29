@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: build-pipeline-config
+  namespace: build-service
+data:
+  config.yaml: |
+    default-pipeline-name: docker-build
+    pipelines:
+    - name: fbc-builder
+      bundle: quay.io/redhat-appstudio-tekton-catalog/pipeline-fbc-builder:13ecd03ec9f7de811f837a5460c41105231c911a
+    - name: docker-build
+      bundle: quay.io/redhat-appstudio-tekton-catalog/pipeline-docker-build:13ecd03ec9f7de811f837a5460c41105231c911a
