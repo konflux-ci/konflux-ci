@@ -19,8 +19,8 @@ check_req(){
     local uninstalled_requirements=()
 
     # check if requirements are installed
-    for i in ${requirements[@]}; do
-        if ! command -v $i &> /dev/null; then
+    for i in "${requirements[@]}"; do
+        if ! command -v "$i" &> /dev/null; then
                 uninstalled_requirements+=("$i")
         else
                 echo -e "$i is installed"
@@ -31,8 +31,8 @@ check_req(){
         echo -e "\nAll requirements are met\nContinue"
     else
         echo -e "\nSome requirements are missing, please install the following requirements first:"
-        for req in ${uninstalled_requirements[@]}; do
-                echo $req
+        for req in "${uninstalled_requirements[@]}"; do
+                echo "$req"
         done
         exit 1
     fi
