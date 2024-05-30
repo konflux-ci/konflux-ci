@@ -19,3 +19,5 @@ spec:
     artifacts.taskrun.format: in-toto
     artifacts.taskrun.storage: ""
     transparency.enabled: "false"
+  pipeline:
+    default-service-account: appstudio-pipeline

@@ -3,3 +3,4 @@ kind: Kustomization
 resources:
   - ns.yaml
   - rbac.yaml
+  - appstudio-pipeline-sa.yaml
