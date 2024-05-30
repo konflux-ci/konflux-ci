@@ -5,9 +5,14 @@ script_path="$(dirname -- "${BASH_SOURCE[0]}")"
 main() {
     local token="${1:?A token for quay should be provided}"
     local org=${2:?Quay organization name should be provided}
-
-    create_secret "$token" "$org"
     deploy
+    create_secret "$token" "$org"
+    wait
+}
+
+deploy() {
+    echo "Deploying Image-Controller" >&2
+    kubectl apply -k "${script_path}/konflux-ci/image-controller"
 }
 
 create_secret() {
@@ -21,30 +26,33 @@ create_secret() {
         return
     fi
 
+    echo "Creating secret $secret"
     kubectl create secret generic "$secret" \
         --namespace="$ns" \
         --from-literal=quaytoken="$token" \
         --from-literal=organization="$org"
 }
 
-deploy() {
-    echo "Deploying Image-Controller" >&2
-    kubectl apply -k "${script_path}/konflux-ci/image-controller"
-
+wait() {
     echo "Waiting for Image-Controller to be ready" >&2
-    retry kubectl wait --for=condition=Ready --timeout=240s -l app=image-controller -n image-controller pod
+    retry "kubectl wait --for=condition=Ready --timeout=240s -l app=image-controller -n image-controller pod" \
+          "Image-Controller did not become available within the allocated time"
 }
+    
+
 
 retry() {
     for _ in {1..3}; do
         local ret=0
-        "$@" || ret="$?"
+        $1 || ret="$?"
         if [[ "$ret" -eq 0 ]]; then
             return 0
         fi
+        echo "Retrying"
         sleep 3
     done
 
+    echo "$1": "$2."
     return "$ret"
 }
 
