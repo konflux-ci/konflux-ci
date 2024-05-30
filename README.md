@@ -14,6 +14,7 @@
   * [Pull your new Image](#pull-your-new-image)
   * [Configure Integration Tests](#configure-integration-tests)
     + [Push Builds to External Repository](#push-builds-to-external-repository)
+    + [Automatically Provision Quay Repositories for Container Images](#automatically-provision-quay-repositories-for-container-images)
     + [Integration Tests](#integration-tests)
   * [Configure Release](#configure-release)
     + [Create the on-push Pipeline](#create-the-on-push-pipeline)
@@ -388,6 +389,36 @@ E.g. [Docker Hub](https://hub.docker.com/), [Quay.io](https://quay.io/repository
    previous PR. Observe the behavior as before, and verify that the build pipeline
    finishes successfully, and that your public repository contains the images pushed by
    the pipeline.
+
+
+#### Automatically Provision Quay Repositories for Container Images
+
+**Note**: This step is mandatory for importing components using the UI.
+
+Konflux integrates with the [Image Controller](https://github.com/konflux-ci/image-controller)
+that can automatically create Quay repositories when onboarding a component.
+The image controller requires an access to a Quay organization.
+Please follow the following steps for configuring it:
+
+1. [Create a user on Quay.io](https://quay.io/)
+
+2. [Create Quay Organization](https://docs.projectquay.io/use_quay.html#org-create)
+
+3. [Create Quay Application](https://docs.projectquay.io/use_quay.html#_create_oauth_access_token) - The application should have the following permissions:
+
+   - Administer Organization
+   - Administer Repositories
+   - Create Repositories
+
+4. Run the `deploy-image-controller.sh` script:
+
+`$TOKEN` - the token for the application you've created on step 3.
+
+`$ORGANIZATION` - the name of the organization you created on step 2.
+
+```bash
+./deploy-image-controller.sh $TOKEN $ORGANIZATION
+```
 
 #### Integration Tests
 
