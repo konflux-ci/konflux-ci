@@ -86,6 +86,7 @@ deploy_tekton() {
 
 deploy_cert_manager() {
     kubectl apply -k "${script_path}/dependencies/cert-manager"
+    sleep 5
     retry "kubectl wait --for=condition=Ready --timeout=120s -l app.kubernetes.io/instance=cert-manager -n cert-manager pod" \
           "Cert manager did not become available within the allocated time"
 }
@@ -104,9 +105,9 @@ deploy_keycloak() {
     fi
 
     local ret=0
-    retry "kubectl wait --for=condition=Ready --timeout=240s -n keycloak -l app.kubernetes.io/name=keycloak-operator pod" \
+    retry "kubectl wait --for=condition=Ready --timeout=300s -n keycloak -l app.kubernetes.io/name=keycloak-operator pod" \
           "Keycloack did not become available within the allocated time"
-    kubectl wait --for=condition=Ready --timeout=240s -n keycloak keycloak/keycloak || ret="$?"
+    kubectl wait --for=condition=Ready --timeout=300s -n keycloak keycloak/keycloak || ret="$?"
 
     if [[ ret -ne 0 ]]; then
         kubectl get -o yaml keycloak/keycloak -n keycloak
@@ -116,7 +117,7 @@ deploy_keycloak() {
     fi
 
     kubectl wait --for=condition=Ready --timeout=240s -l app=postgresql-db -n keycloak pod
-    kubectl wait --for=condition=Ready --timeout=240s -l app=keycloak -n keycloak pod
+    kubectl wait --for=condition=Ready --timeout=300s -l app=keycloak -n keycloak pod
 }
 
 deploy_registry() {
