@@ -1,12 +1,21 @@
-# Contributing Guidelines
+Contributing Guidelines
+===
 
-## Editing the README
+<!-- toc -->
 
-If the structure of the README.md file changes, the README table of contents needs to be
-updated as well.
+- [Editing Markdown Files](#editing-markdown-files)
 
-To update it, run the command below and add the README changes to your PR.
+<!-- tocstop -->
+
+# Editing Markdown Files
+
+If the structure of markdown files containing table of contents changes, those
+need to be updated as well.
+
+To do that, run the command below and add the produced changes to your PR.
 
 ```bash
-npx markdown-toc README.md -i
+find . -name "*.md" | while read -r file; do
+    npx markdown-toc $file -i
+done
 ```

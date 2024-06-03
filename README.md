@@ -1,4 +1,5 @@
-# Konflux-CI
+Konflux-CI
+===
 
 <!-- toc -->
 
@@ -8,57 +9,61 @@
   * [Bootstrapping the Cluster](#bootstrapping-the-cluster)
   * [Enable Pipelines Triggering via Webhooks](#enable-pipelines-triggering-via-webhooks)
   * [Onboard a new Application](#onboard-a-new-application)
-  * [Image Registry](#image-registry)
-  * [Creating a Pull Request](#creating-a-pull-request)
-  * [Observe the Behavior](#observe-the-behavior)
-  * [Pull your new Image](#pull-your-new-image)
-  * [Configure Integration Tests](#configure-integration-tests)
-    + [Push Builds to External Repository](#push-builds-to-external-repository)
-    + [Automatically Provision Quay Repositories for Container Images](#automatically-provision-quay-repositories-for-container-images)
+    + [Option 1: Onboard Application with the Konflux UI](#option-1-onboard-application-with-the-konflux-ui)
+      - [Create Application and Component via the Konflux UI](#create-application-and-component-via-the-konflux-ui)
+    + [Option 2: Onboard Application with Kubernetes Manifests](#option-2-onboard-application-with-kubernetes-manifests)
+      - [Image Registry](#image-registry)
+      - [Creating a Pull Request](#creating-a-pull-request)
+    + [Observe the Behavior](#observe-the-behavior)
+    + [Pull your new Image](#pull-your-new-image)
+      - [Public Registry](#public-registry)
+      - [Local Registry](#local-registry)
+      - [Start a Container](#start-a-container)
     + [Integration Tests](#integration-tests)
-  * [Configure Release](#configure-release)
-    + [Create the on-push Pipeline](#create-the-on-push-pipeline)
-    + [Create ReleasePlan and ReleasePlanAdmission Resources](#create-releaseplan-and-releaseplanadmission-resources)
-    + [Create a Registry Secret for the Managed Namespace](#create-a-registry-secret-for-the-managed-namespace)
-    + [Trigger the Release](#trigger-the-release)
-  * [Next Steps](#next-steps)
-- [Configuring Secrets](#configuring-secrets)
-  * [Github Application](#github-application)
-  * [Configuring a Push Secret for the Build Pipeline](#configuring-a-push-secret-for-the-build-pipeline)
-    + [Example - Extract Quay Push Secret:](#example---extract-quay-push-secret)
-  * [Configuring a Push Secret for the Release Pipeline](#configuring-a-push-secret-for-the-release-pipeline)
-- [Using Konflux](#using-konflux)
-  * [Create Application and Component](#create-application-and-component)
+      - [Push Builds to External Repository](#push-builds-to-external-repository)
+      - [Configure Integration Tests](#configure-integration-tests)
+    + [Configure Releases](#configure-releases)
+      - [Create the on-push Pipeline](#create-the-on-push-pipeline)
+      - [Create ReleasePlan and ReleasePlanAdmission Resources](#create-releaseplan-and-releaseplanadmission-resources)
+      - [Create a Registry Secret for the Managed Namespace](#create-a-registry-secret-for-the-managed-namespace)
+      - [Trigger the Release](#trigger-the-release)
   * [Namespace and User Management](#namespace-and-user-management)
     + [Creating a new Namespace](#creating-a-new-namespace)
     + [Granting a User Access to a Namespace](#granting-a-user-access-to-a-namespace)
     + [Add a new User](#add-a-new-user)
-- [Troubleshooting Common Issues](#troubleshooting-common-issues)
-  * [Using Podman with Kind while also having Docker Installed](#using-podman-with-kind-while-also-having-docker-installed)
-  * [Unknown Field "replacements"](#unknown-field-replacements)
-  * [PR changes are not Triggering Pipelines](#pr-changes-are-not-triggering-pipelines)
-  * [Setup Scripts or Pipeline Execution Fail](#setup-scripts-or-pipeline-execution-fail)
-    + [Running out of Resources](#running-out-of-resources)
-    + [Unable to Bind PVCs](#unable-to-bind-pvcs)
-  * [Release Fails](#release-fails)
-    + [Common Issues](#common-issues)
-- [Repository Links](#repository-links)
+  * [Repository Links](#repository-links)
 
 <!-- tocstop -->
 
-## Trying Out Konflux
+# Trying Out Konflux
 
-This section demonstrates the process of deploying Konflux locally, onboarding users and
-building and releasing an application. This procedure emphasizes streamlined deployment.
-Once you have it running, consult later sections for additional integration and
-configuration options.
+This section demonstrates the process for deploying Konflux locally, onboarding users
+and building and releasing an application. The procedure contains two options for the
+user to choose from for onboarding applications to Konflux:
 
-The recommended way to try out Konflux is using [Kind](https://kind.sigs.k8s.io/).
+- Using the Konflux UI
+- Using Kubernetes manifests
+
+Each of those options has its pros and cons: the procedure described using the UI,
+provides more streamlined user experience once setup is done, but it requires using
+[Quay.io](https://quay.io) for image registry and requires some additional initial setup
+steps comparing to using Kubernetes manifest alone. The latter also supports using any
+image registry.
+
+**Note:** The procedure that is described using the UI can also be fulfilled using CLI
+and Kubernetes manifests.
+
+In both cases, the recommended way to try out Konflux is using
+[Kind](https://kind.sigs.k8s.io/).
 The process below creates a Kind cluster using the provided config in this repository.
 The config tells Kind to forward port `9443` from the host to the Kind cluster. The port
 forwarding is needed for accessing Konflux.
 
-### Machine Minimum Requirements
+**Note:** If using a remote machine for setup, you'd need to port-forward port `9443` on
+the remote machine to port `9443` on your local machine to be able to access the UI from
+your local machine.
+
+## Machine Minimum Requirements
 
 The deployment requires the following **free** resources:
 
@@ -68,7 +73,7 @@ The deployment requires the following **free** resources:
 **Note:** Additional load from running multiple pipelines in parallel will require
 additional resources.
 
-### Installing Software Dependencies
+## Installing Software Dependencies
 
 The following applications are required on the host machine:
 
@@ -77,7 +82,7 @@ The following applications are required on the host machine:
 * `git`
 * `openssl`
 
-### Bootstrapping the Cluster
+## Bootstrapping the Cluster
 
 From the root of this repository, run the setup scripts:
 
@@ -87,7 +92,8 @@ From the root of this repository, run the setup scripts:
 kind create cluster --name konflux --config kind-config.yaml
 ```
 
-**Note:** If the cluster or any deployments fail to start because of [too many open files](https://kind.sigs.k8s.io/docs/user/known-issues/#pod-errors-due-to-too-many-open-files)
+**Note:** If the cluster or any deployments fail to start because of
+[too many open files](https://kind.sigs.k8s.io/docs/user/known-issues/#pod-errors-due-to-too-many-open-files)
 run the following commands:
 
 ```bash
@@ -144,7 +150,7 @@ and modify the `system-reserved` line under `kubeletExtraArgs`:
 We now have Konflux up and running. Next, we shall configure Konflux to respond
 to Pull Request webhooks, build a user application and push it to a registry.
 
-### Enable Pipelines Triggering via Webhooks
+## Enable Pipelines Triggering via Webhooks
 
 Pipelines Can be triggered by Pull Request activities, and their outcomes will be
 reported back to the PR page in GitHub.
@@ -169,12 +175,14 @@ pipelines-as-code (Tekton) inside the cluster.
 
    For `Webhook URL` insert the smee client's webhook proxy URL from previous steps.
 
-   Generate and download the private key and create a secret on the cluster per PaC
-   instructions, providing the location of the private key, the App ID, and the
+   per the instructions on the link, generate and download the private key and create a
+   secret on the cluster providing the location of the private key, the App ID, and the
    openssl-generated secret created during the process.
 
-   **Note:** the same secret should be created inside the `build-service` and the
-   `integration-service` namespaces. See [later sections](#github-application)
+   **Note:** To allow Konflux to send PRs to your application repositories, the same
+   secret should be created inside the `build-service` and the
+   `integration-service` namespaces. See additional details under
+   [Configuring GitHub Application Secrets](./docs/github-secrets.md)
 
 3. Deploy the smee-client on the cluster:
 
@@ -187,18 +195,78 @@ pipelines-as-code (Tekton) inside the cluster.
 kubectl create -f ./smee/smee-client.yaml
 ```
 
-### Onboard a new Application
+## Onboard a new Application
 
-We now create a new GitHub repository for our application and set it up in Konflux:
+The next step is to onboard an application to Konflux on behalf of `user2`.
 
-1. Fork the
-   [example repository](https://github.com/konflux-ci/testrepo), by
-   clicking the Fork button from that repository and following the instructions on the
-   "Create a new fork" page.
+At this point, you have a choice between using the Konflux UI to onboard and using
+Kubernetes manifests.
 
-   We will use our Konflux deployment to build and release Pull Requests for this fork.
+Both options will use an example repository containing a Dockerfile to be built by
+Konflux:
 
-2. Use a text editor to edit your local copy of the
+1. Fork the [example repository](https://github.com/konflux-ci/testrepo), by clicking
+   the `Fork` button from that repository and following the instructions on the "Create
+   a new fork" page.
+
+2. Install the GitHub app on your fork: Go to the app's page on GitHub, click on Install
+   App on the left-hand side, Select the organization the fork repository is on, click
+   `Only select repositories`, and select your fork repository.
+
+We will use our Konflux deployment to build and release Pull Requests for this fork.
+
+### Option 1: Onboard Application with the Konflux UI
+
+With this approach, Konflux can create:
+1. The manifests in GitHub for the pipelines it will run against the applications
+   onboarded to Konflux.
+2. The Quay.io repositories into which it will push container images.
+
+The former is enabled by creating the
+[GitHub Application Secrets](./docs/github-secrets.md) **on all 3 namespaces** and
+installing your newly-created GitHub app on your repository, as explained above.
+
+The latter is achieved by:
+1. Configuring a push secret that will allow the build pipeline to push images to
+   Quay.io for namespace `user-ns2`. For that, follow the
+   [procedure for configuring the push secret](./docs/quay.md#configuring-a-push-secret-for-the-build-pipeline).
+2. Creating an organization and an application in Quay.io that will allow Konflux to
+   create repositories for your applications. To do that,
+   [Follow the procedure](./docs/quay.md#automatically-provision-quay-repositories-for-container-images)
+   to configure a Quay.io application and deploy `image-controller`.
+
+#### Create Application and Component via the Konflux UI
+
+Follow these steps to onboard your application:
+
+1. Login to [Konflux](https://localhost:9443) as `user2`.
+2. Click `Create application`
+3. Provide a name to the application and click "Add a component"
+4. Under `Git repository url`, copy the **https** link to your fork. This should
+   be something similar to `https://github.com/<your-name>/testrepo.git`.
+5. Under the Pipeline drop-down list, select `docker-build`.
+6. Click `Create application`.
+
+The UI should now display the Lifecycle diagram for your application. In the Components
+tab you should be able to see your component listed and you'll be prompted to merge the
+automatically-created Pull Request (don't do that just yet).
+
+In your GitHub repository you should now see a PR was created with two new pipelines.
+One is triggered by PR events (e.g. when PRs are created or changed), and the other is
+triggered by push events (e.g. when PRs are merged).
+
+Your application is now onboarded, and you can continue to the
+[next step](#observe-the-behavior).
+
+### Option 2: Onboard Application with Kubernetes Manifests
+
+With this approach, we use `kubectl` to deploy the manifests for creating the
+`Application` and `Component` resources and we manually create the PR for introducing
+the pipelines to run using Konflux.
+
+To do that:
+
+1. Use a text editor to edit your local copy of the
    [example application manifests](./test/resources/demo-users/user/ns2/application-and-component.yaml):
 
    Under the `Component` and `Repository` resources, change the `url` fields so they
@@ -212,56 +280,45 @@ We now create a new GitHub repository for our application and set it up in Konfl
 ```bash
 kubectl create -f ./test/resources/demo-users/user/ns2/application-and-component.yaml
 ```
-
-**Note:** Further explanation about those resources can be found in
-[later sections](#create-application-and-component).
-
-3. Log into the Konflux UI as `user2` (password: `password`). You should be able to see
+2. Log into the Konflux UI as `user2` (password: `password`). You should be able to see
    your new Application and Component by clicking "View my applications".
 
-4. Install the GitHub app on your fork: Go to the app's page on GitHub, click on Install
-   App on the left-hand side, Select the organization the fork repository is on, click
-   `Only select repositories`, and select your fork repository.
+#### Image Registry
 
-### Image Registry
-
-The pipeline that we're about to run pushes the image it builds to an image registry.
+The build pipeline that you're about to run pushes the image it builds to an image
+registry.
 
 For the sake of simplicity, it's configured to use a registry deployed into the
 cluster during previous steps of this setup (when dependencies were installed).
 
-See [next steps](#next-steps) for having your pipelines use registries outside of the
-cluster.
+**Note:** The statement above is only true when not onboarding via the Konflux UI.
+Later in the process, you'll convert it to use a public image registry.
 
-### Creating a Pull Request
+#### Creating a Pull Request
 
-We're now ready to create our first PR to our fork.
+You're now ready to create your first PR to your fork.
 
 1. Clone your fork and create a new branch:
 
 ```bash
 git clone <my-fork-url>
 cd <my-fork-name>
-git checkout -b build-pipeline
+git checkout -b add-pipelines
 ```
 
-2. The build-pipeline definition inside the fork is generic enough to work on the
-   newly-created environment without any changes, but in order to trigger it, you'll
-   need to create a Pull Request, and for that you need to introduce a change to the
-   fork's codebase.
-
-   Run the following command inside the directory of your local copy of `tesetrepo` to
-   introduce an arbitrary change:
+2. Tekton will trigger pipelines present in the `.tekton` directory. The pipelines
+   already exist on your repository, you just need to copy them to that location:
 
 ```bash
-echo "Trigger rebuild: $(date '+%Y-%m-%d %H:%M:%S')" >> REBUILD.txt
+mkdir -p .tekton
+cp pipelines/* .tekton/
 ```
 
 3. Commit your changes and push them to your repository:
 
 ```bash
-git add REBUILD.txt
-git commit -m "set the build-pipeline"
+git add .tekton
+git commit -m "add pipelines"
 git push origin HEAD
 ```
 
@@ -278,12 +335,12 @@ Once your PR is created, you should see a status is being reported at the bottom
 PR's comments section (just above the "Add a comment" box).
 
 Your GitHub App should now send PR events to your smee channel. Navigate to your smee
-channel's web page. You should see a couple of events were sent just after you created
-the PR. E.g. `check_run`, `pull_request`.
+channel's web page. You should see a couple of events were sent just after your PR was
+created. E.g. `check_run`, `pull_request`.
 
 Log into the Konflux UI as `user2` and check your applications. Select the application
-you created earlier, click on `Activity` and `Pipeline runs`. A build should be triggered
-a few seconds after the PR was created/changed.
+you created earlier, click on `Activity` and `Pipeline runs`. A build should've been
+triggered a few seconds after the PR was created.
 
 Follow the build progress. Depending on your system's load and network connection (the
 build process involves pulling images), it might take a few minutes for the build to
@@ -291,14 +348,27 @@ complete. It will clone the repository, build using the Dockerfile, and
 push the image to the registry.
 
 If a build is not starting or if you're running into troubles, consult the
-[troubleshooting section](#troubleshooting-common-issues).
+[troubleshooting document](./docs/troubleshooting.md#pr-changes-are-not-triggering-pipelines).
 
 ### Pull your new Image
 
 When the build process is done, you can check out the image you just built by pulling it
 from the registry.
 
-Port-forward the registry service, so you can reach it from outside of the cluster:
+#### Public Registry
+
+If using a public registry, navigate to the repository URL mentioned in the
+`output-image` value of your pull-request pipeline and locate your build.
+
+For example, if using [Quay.io](https://quay.io/repository/), you'd need to go to the
+`Tags` tab and locate the relevant build for the tag mentioned on the `output-image`
+value (e.g. `on-pr-{{revision}}`), and click the `Fetch Tag` button on the right to
+generate the command to pull the image.
+
+#### Local Registry
+
+if using a local registry, Port-forward the registry service, so you can reach it from
+outside of the cluster:
 
 ```bash
 kubectl port-forward -n kind-registry svc/registry-service 30001:80
@@ -346,6 +416,8 @@ Writing manifest to image destination
 be9a47b76264e8fb324d9ef7cddc93a933630695669afc4060e8f4c835c750e9
 ```
 
+#### Start a Container
+
 Start a container based on the image you pulled:
 
 ```bash
@@ -355,10 +427,19 @@ hello world
 hello world
 ```
 
-### Configure Integration Tests
+### Integration Tests
 
-You will now configure your application to trigger integration tests after each PR build
-is done.
+If you onboarded your application using the Konflux UI, the integration tests
+are automatically created for you by Konflux.
+
+On the Konflux UI, the integration tests definition should be visible in the
+`Integration tests` tab under your application, and a pipeline should've been triggered for them under the `Activity` tab, named after the name of the application. You can
+click it and examine the logs to see the kind of things it verifies, and to confirm it passed successfully.
+
+Once confirmed, skip to [configuring a release](#configure-releases).
+
+if you onboarded your application manually, you will now configure your application to
+trigger integration tests after each PR build is done.
 
 #### Push Builds to External Repository
 
@@ -370,7 +451,7 @@ E.g. [Docker Hub](https://hub.docker.com/), [Quay.io](https://quay.io/repository
 1. Create an account on a public registry (unless you have one already).
 
 2. Create a [push secret](#configuring-a-push-secret-for-the-build-pipeline) based on
-   your login information and deploy it to your namespace on the cluster.
+   your login information and deploy it to namespace `user-ns2` on the cluster.
 
 3. Create a new repository on the registry to which your images will be pushed.
    For example, in Quay.io, you'd need to click the
@@ -396,37 +477,7 @@ E.g. [Docker Hub](https://hub.docker.com/), [Quay.io](https://quay.io/repository
    finishes successfully, and that your public repository contains the images pushed by
    the pipeline.
 
-
-#### Automatically Provision Quay Repositories for Container Images
-
-**Note**: This step is mandatory for importing components using the UI.
-
-Konflux integrates with the [Image Controller](https://github.com/konflux-ci/image-controller)
-that can automatically create Quay repositories when onboarding a component.
-The image controller requires an access to a Quay organization.
-Please follow the following steps for configuring it:
-
-1. [Create a user on Quay.io](https://quay.io/)
-
-2. [Create Quay Organization](https://docs.projectquay.io/use_quay.html#org-create)
-
-3. [Create Quay Application](https://docs.projectquay.io/use_quay.html#_create_oauth_access_token) - The application should have the following permissions:
-
-   - Administer Organization
-   - Administer Repositories
-   - Create Repositories
-
-4. Run the `deploy-image-controller.sh` script:
-
-`$TOKEN` - the token for the application you've created on step 3.
-
-`$ORGANIZATION` - the name of the organization you created on step 2.
-
-```bash
-./deploy-image-controller.sh $TOKEN $ORGANIZATION
-```
-
-#### Integration Tests
+#### Configure Integration Tests
 
 You can add integration tests either via the Konflux UI, or by applying the equivalent
 Kubernetes resource.
@@ -466,7 +517,7 @@ should see another pipeline run called `test-component-c6glg-...` being triggere
 You can click it and examine the logs to see the kind of things it verifies, and confirm
 it passes successfully.
 
-### Configure Release
+### Configure Releases
 
 You will now configure Konflux to release your application to the external registry
 configured in previous steps.
@@ -479,20 +530,17 @@ This requires:
   be created after the on-push pipeline will be triggered, which, in turn, will trigger
   the creation of the release.
 
+If onboarded using the Konflux UI, the pipeline was already created and configured for
+you. Skip to
+[creating the release resources](#create-releaseplan-and-releaseplanadmission-resources).
+
 #### Create the on-push Pipeline
 
-You will now introduce a new pipeline that will be triggered whenever new commits are
-created on branch `main` (e.g. when PRs are merged).
+You will now configure the on-push pipeline that will be triggered whenever new commits
+are created on branch `main` (e.g. when PRs are merged).
 
-On your local clone of the testrepo repository, copy the pipeline to the `.tekton`
-directory:
-
-```bash
-cp pipelines/testrepo-push.yaml .tekton/
-```
-
-Edit the content of the new copy at `.tekton/testrepo-push.yaml`, replacing the value of
-`output-image`, so that the repository URL is identical to the one
+Edit the content of the copy you made earlier to the on-push pipeline at
+`.tekton/testrepo-push.yaml`, replacing the value of `output-image`, so that the repository URL is identical to the one
 [previously set](#push-builds-to-external-repository) for the `pull-request` pipeline.
 
 For example, if using Quay.io and your username is `my-user` and you created a
@@ -509,8 +557,9 @@ only includes the revision.
 
 #### Create ReleasePlan and ReleasePlanAdmission Resources
 
-Once the on-push pipeline completes, a snapshot will be created and the integration
-tests will run against the container images built on the on-push pipeline.
+Once you merge a PR, the on-push pipeline will be triggered and once it completes, a
+snapshot will be created and the integration tests will run against the container images
+built on the on-push pipeline.
 
 Konflux now needs `ReleasePlan` and `ReleasePlanAdmission` resources that will be used
 together with the snapshot for creating a new `Release` resource.
@@ -527,10 +576,15 @@ The `ReleasePlanAdmission` resource makes use of an Enterprise Contract (EC) pol
 which defines criteria for gating releases.
 
 Lastly, the process also requires permissions to be granted to the managed environment
-default service account on several resources.
+`appstudio-pipeline` service account on several resources.
 
 For more details you can examine the manifests under the
 [managed-ns2 directory](./test/resources/demo-users/user/managed-ns2/).
+
+To do all that, follow these steps:
+
+Edit the [release plan](./test/resources/demo-users/user/ns2/release-plan.yaml) and
+verify that the `application` field contains the name of your application.
 
 Deploy the Release Plan under the development team namespace (`user-ns2`):
 
@@ -538,20 +592,25 @@ Deploy the Release Plan under the development team namespace (`user-ns2`):
 kubectl create -f ./test/resources/demo-users/user/ns2/release-plan.yaml
 ```
 
-Edit the [`ReleasePlanAdmission`](./test/resources/demo-users/user/managed-ns2/rpa.yaml)
-manifest, replacing `<repository url>` with the URL of the repository on the registry to
-which your images are being pushed.
+Edit the `ReleasePlanAdmission`
+[manifest](./test/resources/demo-users/user/managed-ns2/rpa.yaml):
 
-For example, if using Quay.io and your username is `my-user` and you created a
-repository called `my-konflux-component` under your own organization, then the configs
-should look like this:
+1. Replace `<repository url>` with the URL of the repository on the registry to
+   which your released images are to be pushed. This is typically a different repository
+   comparing to the one builds are being pushed during tests.
+
+   For example, if using Quay.io and your username is `my-user` and you created a
+   repository called `my-konflux-component-release` under your own organization, then
+   the configs should look like this:
 
 ```yaml
     mapping:
       components:
         - name: test-component
-          repository: quay.io/my-user/my-konflux-component
+          repository: quay.io/my-user/my-konflux-component-release
 ```
+
+2. Under `applications`, verify that your application is the one listed.
 
 Deploy the managed environment team's namespace, along with the resources mentioned
 above:
@@ -567,16 +626,16 @@ needed on the managed namespace (`managed-ns2`). This is the same secret as was
 previously created on the development namespace (`user-ns2`).
 
 To do that, follow the instructions for
-[creating a push secret](#configuring-a-push-secret-for-the-release-pipeline)
-for the release pipeline.
+[creating a push secret for the release pipeline](./docs/quay.md#configuring-a-push-secret-for-the-release-pipeline)
+for namespace `managed-ns2`.
 
 #### Trigger the Release
 
-You can now push the changes to your PR, merge it once the build-pipeline passes and
-observe the behavior:
+You can now push the changes (if any) to your PR, merge it once the build-pipeline
+passes and observe the behavior:
 
 1. Commit the changes you did on your `testrepo` branch (i.e. introducing the on-push
-   pipeline).
+   pipeline, in case you did not onboard via the UI) and push them to GitHub.
 
 2. Once the build-pipeline and the integration tests finish successfully, merge the PR.
 
@@ -590,115 +649,13 @@ observe the behavior:
 
 **Congratulations**: You just created a release for your application!
 
-### Next Steps
+Your released
+image should be available inside the repository pointed by your `ReleasePlanAdmission`
+resource.
 
-The procedure above is intentionally simplified. Things you can do next to make it more
-exhaustive:
+## Namespace and User Management
 
-* Onboard your own application.
-
-* Enable your pipeline to push to a public registry service by configuring a
-  [push secret](#configuring-a-push-secret-for-the-build-pipeline).
-
-## Configuring Secrets
-
-### Github Application
-
-The process of creating a GitHub application is explained as part of process of
-[triggering builds via webhooks](#enable-pipelines-triggering-via-webhooks).
-The same secret described in the Pipelines as Code documentation, should be deployed
-to the `build-service` and `integration-service` namespaces.
-
-To do that, repeat `kubectl create secret` command described there for the
-`pipelines-as-code` namespace also to those namespace:
-
-```bash
-kubectl -n pipelines-as-code create secret generic pipelines-as-code-secret \
-...
-```
-
-```bash
-kubectl -n build-service create secret generic pipelines-as-code-secret \
-...
-```
-
-```bash
-kubectl -n integration-service create secret generic pipelines-as-code-secret \
-...
-```
-
-### Configuring a Push Secret for the Build Pipeline
-
-After the build-pipeline builds an image, it will try to push it to a container registry.
-If using a registry that requires authentication, the namespace where the pipeline is
-running should be configured with a push secret for the registry.
-
-Tekton provides a way to inject push secrets into pipelines by attaching them to a
-service account.
-
-The service account used for running the pipelines is the namespace's `default` service
-account.
-
-1. Create the secret in the pipeline's namespace (see the
-   [example below](#example---extract-quay-push-secret) for extracting the
-   secret):
-
-```bash
-kubectl create -n $NS secret generic regcred \
- --from-file=.dockerconfigjson=<path/to/.docker/config.json> \
- --type=kubernetes.io/dockerconfigjson
-```
-
-2. Add the secret to the namespace's appstudio-pipeline service account
-
-```bash
-kubectl patch -n $NS serviceaccount appstudio-pipeline -p '{"secrets": [{"name": "regcred"}]}'
-```
-
-#### Example - Extract Quay Push Secret:
-
-If using Quay.io, you can follow the procedure below to obtain the config.json file used
-for creating the secret. If not using quay, apply your registry's equivalent procedure.
-
-1. Log into quay.io and click your user icon on the top-right corner.
-
-2. Select Account Settings.
-
-3. Click on Generate Encrypted Password.
-
-4. Enter your login password and click Verify.
-
-5. Select Docker Configuration.
-
-6. Click Download `<your-username>-auth.json` and take note of the download location.
-
-7. Replace `<path/to/.docker/config.json>` on the `kubectl create secret` command with
-   this path.
-
-### Configuring a Push Secret for the Release Pipeline
-
-If the release pipeline used need to push image to a container registry, it needs to be
-configured with a push secret as well.
-
-In the `managed` namespace, repeat the same steps mentioned
-[above](#configuring-a-push-secret-for-the-build-pipeline) for configuring the push
-secret.
-
-## Using Konflux
-
-### Create Application and Component
-
-Application and Component resources allow Konflux to track user builds and releases.
-A Repository resource is required for triggering CI on PR changes (webhooks).
-
-Those resources currently need to be created directly in Kubernetes.
-[Example manifests](./test/resources/demo-users/user/ns2/application-and-component.yaml)
-are available for creating such resources. Modify them per your requirements, setting
-the relevant user namespace and repository URL.
-
-### Namespace and User Management
-
-#### Creating a new Namespace
+### Creating a new Namespace
 
 ```bash
 # Replace $NS with the name of the new namespace
@@ -716,7 +673,7 @@ kubectl label namespace user-ns3 konflux.ci/type=user
 kubectl create serviceaccount appstudio-pipeline -n user-ns3
 ```
 
-#### Granting a User Access to a Namespace
+### Granting a User Access to a Namespace
 
 ```bash
 # Replace $RB with the name of the role binding (you can choose the name)
@@ -732,7 +689,7 @@ Example:
 kubectl create rolebinding user1-konflux --clusterrole konflux-admin-user-actions --user user1@konflux.dev -n user-ns3
 ```
 
-#### Add a new User
+### Add a new User
 
 Konflux is using [Keycloak](https://www.keycloak.org/) for managing users and
 authentication.
@@ -757,188 +714,10 @@ on the left for adding a user.
 In addition, you can configure additional `Identity providers` such as `Github`,
 `Google`, etc.. by clicking on the `Identity providers` tab on the left.
 
-## Troubleshooting Common Issues
-
-### Using Podman with Kind while also having Docker Installed
-
-If you have docker installed, Kind will try to use it by default, so if you want
-it to use Podman, you can do it by creating the cluster with the following command:
-
-```bash
-KIND_EXPERIMENTAL_PROVIDER=podman kind create cluster --name konflux --config kind-config.yaml
-```
-
-### Unknown Field "replacements"
-
-If you get the following error: `error: json: unknown field "replacements"`, while executing
-any of the setup scripts, you will need to update your `kubectl`.
-
-### PR changes are not Triggering Pipelines
-
-Follow this procedure if you create a PR or make changes to a PR and a pipeline is not
-triggered:
-
-1. Confirm that events were logged to the smee channel. if not, verify your steps for
-   setting up the GitHub app and installing the app to your fork repository.
-
-2. Confirm that events are being relayed by the smee client. List the pods under the
-   `smee-client` namespace and check the logs of the pod on the namespace. Those should
-   have mentions of the channel events being forwarded to pipelines-as-code.
-
-```bash
-kubectl get pods -n smee-client
-kubectl logs -n smee-client gosmee-client-<some-id>
-```
-
-3. If the pod is not there or the logs do not include the mentioned entries, confirm you
-   properly set the **smee channel** on the smee-client manifest and that you deploy the
-   manifest to your cluster.
-
-```bash
-kubectl delete -f ./smee/smee-client.yaml
-<fix the manifests>
-kubectl create -f ./smee/smee-client.yaml
-```
-
-**Note:** if the host machine goes to sleep mode, the smee client might stop responding
-to events on the smee channel, once the host is up again. This can be addressed by
-deleting the client pod and waiting for it to be recreated:
-
-```bash
-kubectl get pods -n smee-client
-kubectl delete pods -n smee-client gosmee-client-<some-id>
-```
-
-4. Check the pipelines-as-code logs to see that events are being properly linked to the
-   Repository resource. If you see log entries mentioning a repository resource cannot
-   be found, compare the repository mentioned on the logs to the one deployed when
-   creating the application and component resources. Fix the Repository resource
-   manifest and redeploy it.
-
-```bash
-kubectl get pods -n pipelines-as-code
-kubectl logs -n pipelines-as-code pipelines-as-code-controller-<some-id>
-<fix the manifests>
-kubectl apply -f ./test/resources/demo-users/user/ns2/application-and-component.yaml
-```
-
-5. If the pipelines-as-code logs mention secret `pipelines-as-code-secret` is
-   missing/malformed, make sure you created the secret for the GitHub app, providing
-   values for fields `github-private-key`, `github-application-id` and `webhook.secret`
-   for the app your created. If the secret needs to be fixed, delete it (see command
-   below) and deploy it once more based on the Pipelines as Code instructions in
-   [previous steps](#enable-pipelines-triggering-via-webhooks).
-
-```bash
-kubectl delete secret pipelines-as-code-secret -n pipelines-as-code
-```
-
-6. On the PR page, type `/retest` on the comment box and post the comment. Observe the
-   behavior once more.
-
-### Setup Scripts or Pipeline Execution Fail
-
-#### Running out of Resources
-
-If setup scripts fail or pipelines are stuck or tend to fail at relatively random
-stages, it might be that the cluster is running out of resources.
-
-That could be:
-
-* Open files limit.
-* Open threads limit.
-* Cluster running out of memory.
-
-For mitigation steps, consult the notes at the top of the
-[cluster setup section](#bootstrapping-the-cluster).
-
-As last resort, you could restart the container running the cluster node. If you do
-that, you'd have to, once more, increase the PID limit for that container as explained
-in the [cluster setup section](#bootstrapping-the-cluster).
-
-To restart the container (if using Docker, replace `podman` with `docker`):
-
-```bash
-podman restart konflux-control-plane
-```
-
-**Note:** It might take a few minutes for the UI to become available once the container
-is restarted.
-
-#### Unable to Bind PVCs
-The `deploy-deps` script includes a check to verify whether PVCs on the default storage
-class can be bind. If volume claims are unable to be fulfilled, the script will fail,
-displaying:
-```bash
-error: timed out waiting for the condition on persistentvolumeclaims/test-pvc
-... Test PVC unable to bind on default storage class
-```
-
-If you are using Kind, try to [restart the container](#running-out-of-resources).
-Otherwise, ensure that PVCs (Persistent Volume Claims) can be allocated for the
-cluster's default storage class.
-
-### Release Fails
-
-If a release is triggered, but then fails, check the logs of the pods on the managed
-namespace (e.g. `managed-ns2`).
-
-List the pods and look for ones with status `Error`:
-
-```bash
-kubectl get pods -n managed-ns2
-```
-
-Check the logs of the pods with status `Error`:
-
-```bash
-kubectl logs -n managed-ns2 managed-7lxdn-push-snapshot-pod
-```
-
-Once you addressed the issue, create a PR and merge it or directly push a change to the
-main branch, so that the on-push pipeline is triggered.
-
-#### Common Issues
-
-The logs contain statements similar to this:
-
-```bash
-++ jq -r .containerImage
-parse error: Unfinished string at EOF at line 2, column 0
-```
-
-**Solution**: Verify that you provided a value to the `repository` field inside the
-[rpa.yaml file](./test/resources/demo-users/user/managed-ns2/rpa.yaml).
-
-Complete the value and redeploy the manifest:
-
-```bash
-kubectl apply -k ./test/resources/demo-users/user/managed-ns2
-```
-
-The logs contain statements similar to this:
-
-```bash
-Error: PUT https://quay.io/...: unexpected status code 400 Bad Request: <html>
-<head><title>400 Bad Request</title></head>
-<body>
-<center><h1>400 Bad Request</h1></center>
-</body>
-</html>
-
-main.go:74: error during command execution: PUT https://quay.io/...: unexpected status code 400 Bad Request: <html>
-<head><title>400 Bad Request</title></head>
-<body>
-<center><h1>400 Bad Request</h1></center>
-</body>
-</html>
-```
-
-**Solution**: verify that you
-[created the registry secret](#configuring-a-push-secret-for-the-release-pipeline),
-also for the managed namespace.
-
 ## Repository Links
 
+* [Configuring GitHub Secrets](./docs/github-secrets.md)
+* [Quay-related Procedures](./docs/quay.md)
+* [Troubleshooting common issues](./docs/troubleshooting.md)
 * [Release guidelines](./RELEASE.md)
 * [Contributing guidelines](./CONTRIBUTING.md)
