@@ -3,7 +3,7 @@
 <!-- toc -->
 
 - [Trying Out Konflux](#trying-out-konflux)
-  * [Machine Requirements](#machine-requirements)
+  * [Machine Minimum Requirements](#machine-minimum-requirements)
   * [Installing Software Dependencies](#installing-software-dependencies)
   * [Bootstrapping the Cluster](#bootstrapping-the-cluster)
   * [Enable Pipelines Triggering via Webhooks](#enable-pipelines-triggering-via-webhooks)
@@ -58,9 +58,15 @@ The process below creates a Kind cluster using the provided config in this repos
 The config tells Kind to forward port `9443` from the host to the Kind cluster. The port
 forwarding is needed for accessing Konflux.
 
-### Machine Requirements
+### Machine Minimum Requirements
 
-The deployment requires 8GB of free RAM.
+The deployment requires the following **free** resources:
+
+**CPU**: 4 cores\
+**RAM**: 8 GB
+
+**Note:** Additional load from running multiple pipelines in parallel will require
+additional resources.
 
 ### Installing Software Dependencies
 
