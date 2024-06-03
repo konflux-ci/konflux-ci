@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - ns.yaml
   - rbac.yaml
+  - appstudio-pipeline-sa.yaml
   - application-and-component.yaml
   - ec-integration-test.yaml
   - release-plan.yaml

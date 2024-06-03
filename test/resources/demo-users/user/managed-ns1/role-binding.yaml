@@ -10,5 +10,5 @@ roleRef:
   name: release-pipeline-resource-role
 subjects:
   - kind: ServiceAccount
-    name: default
+    name: appstudio-pipeline
     namespace: managed-ns1
