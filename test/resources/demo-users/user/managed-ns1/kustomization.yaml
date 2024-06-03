@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - ns.yaml
   - ec-policy.yaml
+  - appstudio-pipeline-sa.yaml
   - pvc.yaml
   - role-binding.yaml
   - rpa.yaml
