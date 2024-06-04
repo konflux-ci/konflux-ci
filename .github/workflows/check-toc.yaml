@@ -11,11 +11,13 @@ jobs:
 
       - name: Verify ToC
         run: |
-          npx markdown-toc README.md -i
+          find . -name "*.md" | while read -r file; do
+              npx markdown-toc $file -i
+          done
           if [[ $(git status --porcelain) ]]; then
-              echo ERROR: "Did you forget to update the README table of contents?" >&2
-              echo ERROR: "Please run 'npx markdown-toc README.md -i' and update your PR" >&2
+              echo ERROR: "Did you forget to update markdowns table of contents?" >&2
+              echo ERROR: "Check CONTRIBUTING.md for instructions and update your PR" >&2
               git diff >&2
               exit 1
           fi
-          echo "the table of contents is up to date" >&2
+          echo "Markdowns table of contents are up to date" >&2
