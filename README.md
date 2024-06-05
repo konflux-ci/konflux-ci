@@ -180,12 +180,12 @@ pipelines-as-code (Tekton) inside the cluster.
    secret on the cluster providing the location of the private key, the App ID, and the
    openssl-generated secret created during the process.
 
-   **Note:** To allow Konflux to send PRs to your application repositories, the same
-   secret should be created inside the `build-service` and the
-   `integration-service` namespaces. See additional details under
-   [Configuring GitHub Application Secrets](./docs/github-secrets.md)
+3. To allow Konflux to send PRs to your application repositories, the same secret should
+   be created inside the `build-service` and the `integration-service` namespaces. See
+   additional details under
+   [Configuring GitHub Application Secrets](./docs/github-secrets.md).
 
-3. Deploy the smee-client on the cluster:
+4. Deploy the smee-client on the cluster:
 
    Edit the [smee-client manifest](./smee/smee-client.yaml), replacing `<smee-channel>`
    with the webhook proxy URL generated when creating the channel.
@@ -350,6 +350,10 @@ Follow the build progress. Depending on your system's load and network connectio
 build process involves pulling images), it might take a few minutes for the build to
 complete. It will clone the repository, build using the Dockerfile, and
 push the image to the registry.
+
+**Note:** If a pipeline is triggered, but it seems stuck for a long time, especially at
+early stages, refer to the troubleshooting document's running out of resources
+[section](./docs/troubleshooting.md#running-out-of-resources).
 
 ### Pull your new Image
 

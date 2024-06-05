@@ -6,7 +6,7 @@ Troubleshooting Common Issues
 - [Using Podman with Kind while also having Docker Installed](#using-podman-with-kind-while-also-having-docker-installed)
 - [Unknown Field "replacements"](#unknown-field-replacements)
 - [PR changes are not Triggering Pipelines](#pr-changes-are-not-triggering-pipelines)
-- [Setup Scripts or Pipeline Execution Fail](#setup-scripts-or-pipeline-execution-fail)
+- [Setup Scripts Fail or Pipeline Execution Stuck or Fails](#setup-scripts-fail-or-pipeline-execution-stuck-or-fails)
   * [Running out of Resources](#running-out-of-resources)
   * [Unable to Bind PVCs](#unable-to-bind-pvcs)
   * [Release Fails](#release-fails)
@@ -64,10 +64,11 @@ kubectl get pods -n smee-client
 kubectl delete pods -n smee-client gosmee-client-<some-id>
 ```
 
-4. Check the pipelines-as-code logs to see that events are being properly linked to the
-   Repository resource. If you see log entries mentioning a repository resource cannot
-   be found, compare the repository mentioned on the logs to the one deployed when
-   creating the application and component resources. Fix the Repository resource manifest and redeploy it.
+4. Check the pipelines-as-code **controller** logs to see that events are being properly
+   linked to the Repository resource. If you see log entries mentioning a repository
+   resource cannot be found, compare the repository mentioned on the logs to the one
+   deployed when creating the application and component resources. Fix the Repository
+   resource manifest and redeploy it.
 
    **Note:** this should only be relevant if the application was onboarded manually
    (i.e. not using the Konflux UI).
@@ -93,7 +94,7 @@ kubectl delete secret pipelines-as-code-secret -n pipelines-as-code
 6. On the PR page, type `/retest` on the comment box and post the comment. Observe the
    behavior once more.
 
-# Setup Scripts or Pipeline Execution Fail
+# Setup Scripts Fail or Pipeline Execution Stuck or Fails
 
 ## Running out of Resources
 
@@ -106,12 +107,20 @@ That could be:
 * Open threads limit.
 * Cluster running out of memory.
 
+The symptoms may include:
+
+* Setup scripts fail.
+* Pipelines are triggered, but seem stuck and listing the pods on the user namespace
+  (e.g. running `kubectl get pods -n user-ns2`) shows pods stuck in pending for a long
+  time.
+* Pipelines fail at inconsistent stages.
+
 For mitigation steps, consult the notes at the top of the
 [cluster setup instructions](../README.md#bootstrapping-the-cluster).
 
 As last resort, you could restart the container running the cluster node. If you do
-that, you'd have to, once more, increase the PID limit for that container as explained
-in the [cluster setup instructions](../README.md#bootstrapping-the-cluster).
+that, you'd have to, once more, **increase the PID limit** for that container as
+explained in the [cluster setup instructions](../README.md#bootstrapping-the-cluster).
 
 To restart the container (if using Docker, replace `podman` with `docker`):
 
