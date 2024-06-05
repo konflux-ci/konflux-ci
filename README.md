@@ -331,6 +331,9 @@ git push origin HEAD
 
 ### Observe the Behavior
 
+**Note:** If the behavior you see is not as described below, consult the
+[troubleshooting document](./docs/troubleshooting.md#pr-changes-are-not-triggering-pipelines).
+
 Once your PR is created, you should see a status is being reported at the bottom of the
 PR's comments section (just above the "Add a comment" box).
 
@@ -346,9 +349,6 @@ Follow the build progress. Depending on your system's load and network connectio
 build process involves pulling images), it might take a few minutes for the build to
 complete. It will clone the repository, build using the Dockerfile, and
 push the image to the registry.
-
-If a build is not starting or if you're running into troubles, consult the
-[troubleshooting document](./docs/troubleshooting.md#pr-changes-are-not-triggering-pipelines).
 
 ### Pull your new Image
 
