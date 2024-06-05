@@ -22,6 +22,7 @@ Konflux-CI
     + [Integration Tests](#integration-tests)
       - [Push Builds to External Repository](#push-builds-to-external-repository)
       - [Configure Integration Tests](#configure-integration-tests)
+      - [Add Customized Integration Tests (Optional)](#add-customized-integration-tests-optional)
     + [Configure Releases](#configure-releases)
       - [Create the on-push Pipeline](#create-the-on-push-pipeline)
       - [Create ReleasePlan and ReleasePlanAdmission Resources](#create-releaseplan-and-releaseplanadmission-resources)
@@ -421,9 +422,7 @@ be9a47b76264e8fb324d9ef7cddc93a933630695669afc4060e8f4c835c750e9
 Start a container based on the image you pulled:
 
 ```bash
-podman run --rm --timeout=10 be9a47b76264e8fb324d9ef7cddc9...
-hello world
-hello world
+podman run --rm be9a47b76264e8fb324d9ef7cddc9...
 hello world
 ```
 
@@ -436,7 +435,8 @@ On the Konflux UI, the integration tests definition should be visible in the
 `Integration tests` tab under your application, and a pipeline should've been triggered for them under the `Activity` tab, named after the name of the application. You can
 click it and examine the logs to see the kind of things it verifies, and to confirm it passed successfully.
 
-Once confirmed, skip to [configuring a release](#configure-releases).
+Once confirmed, skip to
+[adding customized integration tests](#add-customized-integration-tests-optional).
 
 if you onboarded your application manually, you will now configure your application to
 trigger integration tests after each PR build is done.
@@ -496,7 +496,7 @@ Alternatively, you can provide the content from that YAML using the UI:
 
 2. Click the `Integration tests` tab.
 
-3. Click `Add Integration test`.
+3. Click `Actions` and select `Add Integration test`.
 
 4. Fill-in the details from the YAML.
 
@@ -516,6 +516,66 @@ should see another pipeline run called `test-component-c6glg-...` being triggere
 
 You can click it and examine the logs to see the kind of things it verifies, and confirm
 it passes successfully.
+
+#### Add Customized Integration Tests (Optional)
+
+The integration tests you added just now are relatively generic
+[Enterprise Contract](https://enterprisecontract.dev/) tests. The next step adds
+a customized test scenario which is specific to our application.
+
+Our simple application is a container image with an entrypoint that prints `hello world`
+and exits, and we're going to add a test to verify that it does indeed print that.
+
+An integration test scenario references a pipeline definition. In this case, the
+pipeline is defined on our
+[example repository](https://github.com/konflux-ci/testrepo/blob/main/integration-tests/testrepo-integration.yaml).
+Looking at the pipelines definition, you can see that it takes a single parameter named
+`SNAPSHOT`. This parameter is provided automatically by Konflux and it contains
+references to the images built by the pipeline that triggered the integration tests.
+We can define additional parameters to be passed from Konflux to the pipeline, but in
+this case, we only need the snapshot.
+
+The pipeline then uses the snapshot to extract the image that was built by the pipeline
+that triggered it and deploys that image. Next, it collects the execution logs and
+verifies that they indeed contain `hello world`.
+
+We can either use the Konflux UI or the Kubernetes CLI to add the integration test
+scenario.
+
+To add it through the Konflux UI:
+
+1. Login as user2 and navigate to your application and component.
+
+2. Click the `Integration tests` tab.
+
+3. Click `Actions` and select `Add Integration test`.
+
+4. Fill in the fields:
+
+* Integration test name: a name of your choice
+* GitHub URL: `https://github.com/konflux-ci/testrepo`
+* Revision: `main`
+* Path in repository: `integration-tests/testrepo-integration.yaml`
+
+5. Click `Add Integration test`.
+
+Alternatively, you can create it using `kubectl`. The manifest is stored in
+`test/resources/demo-users/user/ns2/integration-test-hello.yaml`:
+
+1. Verify the `application` field contains your application name.
+
+2. Deploy the manifest:
+
+```bash
+kubectl create -f .test/resources/demo-users/user/ns2/integration-test-hello.yaml
+```
+
+You can now post a `/retest` comment on your GitHub PR, and once the `pull-request`
+pipeline is done, you should see your new integration test being triggered alongside
+the one you had before.
+
+If you examine the logs, you should be able to see the snapshot being parsed and the
+test being executed.
 
 ### Configure Releases
 
@@ -649,9 +709,8 @@ passes and observe the behavior:
 
 **Congratulations**: You just created a release for your application!
 
-Your released
-image should be available inside the repository pointed by your `ReleasePlanAdmission`
-resource.
+Your released image should be available inside the repository pointed by your
+`ReleasePlanAdmission` resource.
 
 ## Namespace and User Management
 
