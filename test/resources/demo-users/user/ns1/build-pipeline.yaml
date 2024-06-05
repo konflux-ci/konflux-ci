@@ -20,9 +20,9 @@ spec:
   - name: dockerfile
     value: Dockerfile
   - name: git-url
-    value: https://github.com/gbenhaim/sample-component.git
+    value: <Git repository URL>
   - name: output-image
-    value: quay.io/gbenhaim0/sample-component:main
+    value: <Image repository URL>
   - name: path-context
     value: .
   - name: revision
