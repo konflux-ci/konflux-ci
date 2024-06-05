@@ -3,3 +3,36 @@ kind: ServiceAccount
 metadata:
   name: appstudio-pipeline
   namespace: user-ns2
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: user-ns2
+  name: ns2-pod-viewer-job-creator
+rules:
+- apiGroups: [""]
+  resources:
+    - pods
+  verbs: ["get", "list", "watch", "delete"]
+- apiGroups: ["batch"]
+  resources:
+    - jobs
+  verbs: ["create", "delete", "get", "list", "watch"]
+- apiGroups: [""]
+  resources:
+    - pods/log
+  verbs: ["get", "list"]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: user-ns2
+  name: ns2-pod-viewer-job-creator-binding
+subjects:
+- kind: ServiceAccount
+  name: appstudio-pipeline
+  namespace: user-ns2
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ns2-pod-viewer-job-creator
