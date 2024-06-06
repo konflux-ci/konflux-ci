@@ -659,13 +659,16 @@ kubectl create -f ./test/resources/demo-users/user/ns2/release-plan.yaml
 Edit the `ReleasePlanAdmission`
 [manifest](./test/resources/demo-users/user/managed-ns2/rpa.yaml):
 
-1. Replace `<repository url>` with the URL of the repository on the registry to
-   which your released images are to be pushed. This is typically a different repository
-   comparing to the one builds are being pushed during tests.
+1. Under `applications`, verify that your application is the one listed.
 
-   For example, if using Quay.io and your username is `my-user` and you created a
-   repository called `my-konflux-component-release` under your own organization, then
-   the configs should look like this:
+2. Under the components mapping list, set the `name` field so it matches the name of
+   your component and replace `<repository url>` with the URL of the repository on the
+   registry to which your released images are to be pushed. This is typically a
+   different repository comparing to the one builds are being pushed during tests.
+
+   For example, if your component is called `test-component`, and you wish to release
+   your images to a Quay.io repository called `my-user/my-konflux-component-release`,
+   then the configs should look like this:
 
 ```yaml
     mapping:
@@ -674,7 +677,12 @@ Edit the `ReleasePlanAdmission`
           repository: quay.io/my-user/my-konflux-component-release
 ```
 
-2. Under `applications`, verify that your application is the one listed.
+3. If onboarded not using the UI, you'd need to have the repository created on the
+   registry before releases can be pushed to it. See more details on creating
+   repositories in [previous steps](#push-builds-to-external-repository).
+
+   If you're using the UI to onboard, the Quay.io application you created will be able
+   to create new repositories under that application's organization.
 
 Deploy the managed environment team's namespace, along with the resources mentioned
 above:
