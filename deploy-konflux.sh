@@ -18,21 +18,21 @@ deploy() {
     # The order is important
 
     # This will deploy the commos CRDs used in Konflux
-    kubectl apply -k "${script_path}/konflux-ci/application-api"
+    kubectl apply -k "${script_path}/konflux-core/application-api"
 
-    kubectl apply -k "${script_path}/konflux-ci/rbac"
+    kubectl apply -k "${script_path}/konflux-core/rbac"
 
-    retry kubectl apply -k "${script_path}/konflux-ci/enterprise-contract/core"
+    retry kubectl apply -k "${script_path}/konflux-core/enterprise-contract/core"
 
-    retry kubectl apply -k "${script_path}/konflux-ci/release"
+    retry kubectl apply -k "${script_path}/konflux-core/release"
 
     # The build-service depends on CRDs from the release-service
-    retry kubectl apply -k "${script_path}/konflux-ci/build-service"
+    retry kubectl apply -k "${script_path}/konflux-core/build-service"
 
     # The integration-service depends on CRDs from the release-service
-    retry kubectl apply -k "${script_path}/konflux-ci/integration"
+    retry kubectl apply -k "${script_path}/konflux-core/integration"
 
-    kubectl apply -k "${script_path}/konflux-ci/ui"
+    kubectl apply -k "${script_path}/konflux-core/ui"
 }
 
 
