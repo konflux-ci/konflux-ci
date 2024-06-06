@@ -13,7 +13,7 @@ spec:
       - name: name
         value: fbc-builder
       - name: bundle
-        value: quay.io/redhat-appstudio-tekton-catalog/pipeline-fbc-builder:6c0dade45d84fd1244da79db04a97f1a846d273c
+        value: quay.io/konflux-ci/tekton-catalog/pipeline-fbc-builder:ab6b0b8e40e440158e7288c73aff1cf83a2cc8a9
       - name: kind
         value: pipeline
       resolver: bundles
@@ -25,7 +25,7 @@ spec:
       - name: name
         value: docker-build
       - name: bundle
-        value: quay.io/redhat-appstudio-tekton-catalog/pipeline-docker-build:6c0dade45d84fd1244da79db04a97f1a846d273c
+        value: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build:ab6b0b8e40e440158e7288c73aff1cf83a2cc8a9
       - name: kind
         value: pipeline
       resolver: bundles
@@ -37,7 +37,7 @@ spec:
       - name: name
         value: java-builder
       - name: bundle
-        value: quay.io/redhat-appstudio-tekton-catalog/pipeline-java-builder:6c0dade45d84fd1244da79db04a97f1a846d273c
+        value: quay.io/konflux-ci/tekton-catalog/pipeline-java-builder:ab6b0b8e40e440158e7288c73aff1cf83a2cc8a9
       - name: kind
         value: pipeline
       resolver: bundles
@@ -49,7 +49,7 @@ spec:
       - name: name
         value: nodejs-builder
       - name: bundle
-        value: quay.io/redhat-appstudio-tekton-catalog/pipeline-nodejs-builder:6c0dade45d84fd1244da79db04a97f1a846d273c
+        value: quay.io/konflux-ci/tekton-catalog/pipeline-nodejs-builder:ab6b0b8e40e440158e7288c73aff1cf83a2cc8a9
       - name: kind
         value: pipeline
       resolver: bundles
