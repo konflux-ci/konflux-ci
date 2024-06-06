@@ -17,6 +17,16 @@ rules:
   - update
   - watch
 - apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - appstudio.redhat.com
   resources:
   - components
@@ -52,12 +62,3 @@ rules:
   - get
   - patch
   - update
-- apiGroups:
-  - appstudio.redhat.com
-  resources:
-  - remotesecrets
-  verbs:
-  - create
-  - get
-  - list
-  - watch
