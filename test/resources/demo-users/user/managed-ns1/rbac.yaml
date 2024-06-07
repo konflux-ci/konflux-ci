@@ -1,39 +1,43 @@
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: RoleBinding
 metadata:
-  name: user1-self-access-review
+  name: managed1-konflux-admin
+  namespace: managed-ns1
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: konflux-self-access-reviewer
+  name: konflux-admin-user-actions
 subjects:
 - kind: User
-  name: user1@konflux.dev
+  name: managed1@konflux.dev
   apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: RoleBinding
 metadata:
-  name: managed1-self-access-review
+  name: user1-konflux-admin
+  namespace: managed-ns1
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: konflux-self-access-reviewer
+  name: konflux-admin-user-actions
 subjects:
   - kind: User
-    name: managed1@konflux.dev
+    name: user1@konflux.dev
     apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: RoleBinding
 metadata:
-  name: managed2-self-access-review
+  name: user2-konflux-admin
+  namespace: managed-ns1
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: konflux-self-access-reviewer
+  name: konflux-admin-user-actions
 subjects:
   - kind: User
-    name: managed2@konflux.dev
+    name: user2@konflux.dev
     apiGroup: rbac.authorization.k8s.io
+

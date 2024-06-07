@@ -301,6 +301,30 @@ spec:
         firstName: user2
         lastName: user2
         username: user2
+      - clientRoles:
+          account:
+            - manage-account
+        credentials:
+          - type: password
+            value: managed
+        email: managed1@konflux.dev
+        emailVerified: false
+        enabled: true
+        firstName: managed1
+        lastName: managed1
+        username: managed1
+      - clientRoles:
+          account:
+            - manage-account
+        credentials:
+          - type: password
+            value: managed
+        email: managed2@konflux.dev
+        emailVerified: false
+        enabled: true
+        firstName: managed2
+        lastName: managed2
+        username: managed2
     clients:
       - enabled: true
         clientAuthenticatorType: client-secret
