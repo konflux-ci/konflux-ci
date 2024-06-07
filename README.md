@@ -252,6 +252,10 @@ The UI should now display the Lifecycle diagram for your application. In the Com
 tab you should be able to see your component listed and you'll be prompted to merge the
 automatically-created Pull Request (don't do that just yet).
 
+**NOTE:** if you have NOT completed the Quay.io setup steps in the previous section,
+Konflux will be UNABLE to send a PR to your repository. Konflux will display "Sending
+Pull Request".
+
 In your GitHub repository you should now see a PR was created with two new pipelines.
 One is triggered by PR events (e.g. when PRs are created or changed), and the other is
 triggered by push events (e.g. when PRs are merged).
@@ -447,6 +451,9 @@ trigger integration tests after each PR build is done.
 
 #### Push Builds to External Repository
 
+**NOTE:** This section is only needed if you did not perform the Quay.io setup steps and
+image-controller deployment.
+
 Before you do that, you'll configure your application to use an external registry
 instead of the internal one used so far. In order to do that, you'd need to have a
 repository, on a public registry, in which you have push permissions.
@@ -485,6 +492,9 @@ E.g. [Docker Hub](https://hub.docker.com/), [Quay.io](https://quay.io/repository
 
 You can add integration tests either via the Konflux UI, or by applying the equivalent
 Kubernetes resource.
+
+**NOTE:** If you have imported your component via the UI, a similiar Integration Test is
+pre-installed.
 
 In our case, The resource is defined in
 `test/resources/demo-users/user/ns2/ec-integration-test.yaml`. You can directly apply
@@ -690,6 +700,9 @@ above:
 ```bash
 kubectl create -k ./test/resources/demo-users/user/managed-ns2
 ```
+
+At this point, you can navigate to the **Releases** tab in the UI. The status for your
+ReleasePlan should be **"Matched"**.
 
 #### Create a Registry Secret for the Managed Namespace
 
