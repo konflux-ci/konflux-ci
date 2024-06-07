@@ -6,6 +6,38 @@ metadata:
     release.appstudio.openshift.io/auto-release: 'true'
     release.appstudio.openshift.io/standing-attribution: 'true'
   name: sample-component
+  namespace: user-ns1
 spec:
   application: sample-component
   target: managed-ns1
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ReleasePlan
+metadata:
+  labels:
+    release.appstudio.openshift.io/auto-release: "true"
+    release.appstudio.openshift.io/standing-attribution: "false"
+  name: local-release
+  namespace: user-ns1
+spec:
+  application: sample-component
+  pipeline:
+    pipelineRef:
+      resolver: git
+      params:
+        - name: url
+          value: https://github.com/scoheb/release-service-catalog.git
+        - name: revision
+          value: tenant-pipelines
+        - name: pathInRepo
+          value: "pipelines/tenant-push-to-external-registry/tenant-push-to-external-registry.yaml"
+    serviceAccountName: appstudio-pipeline
+  data:
+    images:
+      addGitShaTag: true
+      floatingTags:
+        - latest
+    mapping:
+      components:
+        - name: testrepo
+          repository: "quay.io/scoheb_devconfworkshop/releases/testrepo"
