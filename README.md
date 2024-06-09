@@ -245,8 +245,9 @@ Follow these steps to onboard your application:
 3. Provide a name to the application and click "Add a component"
 4. Under `Git repository url`, copy the **https** link to your fork. This should
    be something similar to `https://github.com/<your-name>/testrepo.git`.
-5. Under the Pipeline drop-down list, select `docker-build`.
-6. Click `Create application`.
+5. Leave `Docker file` blank. The default value of `Dockerfile` will be used.
+6. Under the Pipeline drop-down list, select `docker-build`.
+7. Click `Create application`.
 
 The UI should now display the Lifecycle diagram for your application. In the Components
 tab you should be able to see your component listed and you'll be prompted to merge the
@@ -701,8 +702,8 @@ above:
 kubectl create -k ./test/resources/demo-users/user/managed-ns2
 ```
 
-At this point, you can navigate to the **Releases** tab in the UI. The status for your
-ReleasePlan should be **"Matched"**.
+At this point, you can click **Releases** on the left pane in the UI. The status
+for your ReleasePlan should be **"Matched"**.
 
 #### Create a Registry Secret for the Managed Namespace
 
