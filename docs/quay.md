@@ -26,6 +26,12 @@ The service account used for running the pipelines is the namespace's
    [example below](#example---extract-quay-push-secret) for extracting the
    secret):
 
+Replace $NS with the correct namespace. For example:
+- for user1, specify 'user-ns1'
+- for user2, specify 'user-ns2'
+- for managed1, specify 'managed-ns1'
+- for managed2, specify 'managed-ns2'
+
 ```bash
 kubectl create -n $NS secret generic regcred \
  --from-file=.dockerconfigjson=<path/to/.docker/config.json> \
