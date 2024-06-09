@@ -6,4 +6,4 @@ resources:
 images:
 - name: quay.io/konflux-ci/build-service
   newName: quay.io/konflux-ci/build-service
-  newTag: edd586d9d07aba61d6d7f853a3db679db7d1a893
+  newTag: 632b0096f304baf3949cf58f066814d0dc19ae6c

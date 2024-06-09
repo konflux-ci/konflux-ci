@@ -19,6 +19,7 @@ rules:
       - applications
       - components
       - componentdetectionqueries
+      - imagerepositories
   - verbs:
       - get
       - list
