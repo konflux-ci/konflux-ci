@@ -46,3 +46,7 @@ jobs:
       - name: Deploy test resources
         run: |
           ./deploy-test-resources.sh
+      
+      - name: Generate error logs
+        run: |
+          ./generate-err-logs.sh
