@@ -5,6 +5,7 @@ Troubleshooting Common Issues
 
 - [Using Podman with Kind while also having Docker Installed](#using-podman-with-kind-while-also-having-docker-installed)
 - [Unknown Field "replacements"](#unknown-field-replacements)
+- [Restarting the Cluster](#restarting-the-cluster)
 - [PR changes are not Triggering Pipelines](#pr-changes-are-not-triggering-pipelines)
 - [Setup Scripts Fail or Pipeline Execution Stuck or Fails](#setup-scripts-fail-or-pipeline-execution-stuck-or-fails)
   * [Running out of Resources](#running-out-of-resources)
@@ -27,6 +28,25 @@ KIND_EXPERIMENTAL_PROVIDER=podman kind create cluster --name konflux --config ki
 
 If you get the following error: `error: json: unknown field "replacements"`, while
 executing any of the setup scripts, you will need to update your `kubectl`.
+
+# Restarting the Cluster
+
+When running on Kind, and the host has been restarted or taken out of sleep mode, or if
+you're unable to troubleshoot some other issues, you may need to restart the container
+on which the Kind cluster runs.
+
+If you do that, you'd have to, once more, **increase the PID limit** for that container
+and the **open files limit** for the host (if the host was restarted), as explained in
+the [cluster setup instructions](../README.md#bootstrapping-the-cluster).
+
+To restart the container (if using Docker, replace `podman` with `docker`):
+
+```bash
+podman restart konflux-control-plane
+```
+
+**Note:** It might take a few minutes for the UI to become available once the container
+is restarted.
 
 # PR changes are not Triggering Pipelines
 
@@ -118,18 +138,8 @@ The symptoms may include:
 For mitigation steps, consult the notes at the top of the
 [cluster setup instructions](../README.md#bootstrapping-the-cluster).
 
-As last resort, you could restart the container running the cluster node. If you do
-that, you'd have to, once more, **increase the PID limit** for that container as
-explained in the [cluster setup instructions](../README.md#bootstrapping-the-cluster).
-
-To restart the container (if using Docker, replace `podman` with `docker`):
-
-```bash
-podman restart konflux-control-plane
-```
-
-**Note:** It might take a few minutes for the UI to become available once the container
-is restarted.
+As last resort, you could restart the container running the cluster node. To do that,
+refer to the instructions for [restarting the cluster](#restarting-the-cluster).
 
 ## Unable to Bind PVCs
 The `deploy-deps.sh` script includes a check to verify whether PVCs on the default
