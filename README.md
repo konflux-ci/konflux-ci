@@ -25,9 +25,14 @@ Konflux-CI
       - [Add Customized Integration Tests (Optional)](#add-customized-integration-tests-optional)
     + [Configure Releases](#configure-releases)
       - [Create the on-push Pipeline](#create-the-on-push-pipeline)
-      - [Create ReleasePlan and ReleasePlanAdmission Resources](#create-releaseplan-and-releaseplanadmission-resources)
+      - [Create Release Resources](#create-release-resources)
+      - [Setting up a Tenant Release Pipeline](#setting-up-a-tenant-release-pipeline)
       - [Create a Registry Secret for the Managed Namespace](#create-a-registry-secret-for-the-managed-namespace)
       - [Trigger the Release](#trigger-the-release)
+      + [Managed Release Pipelines (optional)](#managed-release-pipelines-optional)
+          - [Setting up a Managed Release Pipeline](#setting-up-a-managed-release-pipeline)
+          - [Create a Registry Secret for the Managed Namespace](#create-a-registry-secret-for-the-managed-namespace)
+          - [Trigger the Managed Release](#trigger-the-managed-release)
   * [Namespace and User Management](#namespace-and-user-management)
     + [Creating a new Namespace](#creating-a-new-namespace)
     + [Granting a User Access to a Namespace](#granting-a-user-access-to-a-namespace)
@@ -607,7 +612,7 @@ This requires:
 
 If onboarded using the Konflux UI, the pipeline was already created and configured for
 you. Skip to
-[creating the release resources](#create-releaseplan-and-releaseplanadmission-resources).
+[creating the release resources](#create-release-resources).
 
 #### Create the on-push Pipeline
 
@@ -630,14 +635,96 @@ should look like this:
 **Note:** this is the same as for the pull request pipeline, but the tag portion now
 only includes the revision.
 
-#### Create ReleasePlan and ReleasePlanAdmission Resources
+#### Create Release Resources
 
 Once you merge a PR, the on-push pipeline will be triggered and once it completes, a
 snapshot will be created and the integration tests will run against the container images
 built on the on-push pipeline.
 
-Konflux now needs `ReleasePlan` and `ReleasePlanAdmission` resources that will be used
+Konflux now needs Release resources that will be used
 together with the snapshot for creating a new `Release` resource.
+
+There are 2 modes of processing Releases.
+
+* **Tenant Release Pipelines**
+  * These are Release pipelines that are executed within the user or development workspace that are meant to promote and artifacts.
+* **Managed Release Pipelines**
+  * These are Release pipelines that are meant to be executed in a controlled or managed namespace where sensitive credentials are kept.
+  * Consider a release process whereby images are published to a corporate registry to be exposed to the public.
+
+Let's focus on Tenant Release pipelines.
+
+##### Setting up a Tenant Release Pipeline
+
+A `Tenant Release Pipeline` simply requires a `ReleasePlan` resource. The `ReleasePlan` resource includes a reference to the application
+that a development team wants to release, along with a specification of which `Pipeline` to execute. In addition, `Paramters` may be specified.
+
+The process also requires permissions to be granted to the development environment
+`appstudio-pipeline` service account on several resources.
+
+Let's configure the Tenant Release Pipeline.
+
+1. Edit the [release plan](./test/resources/demo-users/user/ns2/release-plan.yaml) and
+verify that the `application` field contains the name of your application.
+
+2. Under the components mapping list, set the `name` field such that it matches the name of
+   your component and replace `<repository url>` with the URL of the repository on the
+   registry to which your released images are to be pushed. This is typically a
+   different repository comparing to the one builds are being pushed during tests.
+
+   For example, if your component is called `test-component`, and you wish to release
+   your images to a Quay.io repository called `my-user/my-konflux-component-release`,
+   then the configs should look like this:
+
+```yaml
+    mapping:
+      components:
+        - name: test-component
+          repository: quay.io/my-user/my-konflux-component-release
+```
+
+3. If onboarded not using the UI, you'd need to have the repository created on the
+   registry before releases can be pushed to it. See more details on creating
+   repositories in [previous steps](#push-builds-to-external-repository).
+
+   If you're using the UI to onboard, the Quay.io application you created will be able
+   to create new repositories under that application's organization.
+
+Deploy the Release Plan under the development team namespace (`user-ns2`):
+
+```bash
+kubectl create -f ./test/resources/demo-users/user/ns2/tenant-release-plan.yaml
+```
+
+#### Trigger the Release
+
+You can now push the changes (if any) to your PR, merge it once the build-pipeline
+passes and observe the behavior:
+
+1. Commit the changes you did on your `testrepo` branch (i.e. introducing the on-push
+   pipeline, in case you did not onboard via the UI) and push them to GitHub.
+
+2. Once the build-pipeline and the integration tests finish successfully, merge the PR.
+
+3. On the Konflux UI, you should now see your on-push pipeline being triggered.
+
+4. Once it finishes successfully, the integration tests should run once more, and
+   a release should be created under the `Releases` tab.
+
+5. Wait for the Release to be complete, and check your registry repository for the
+   released image.
+
+**Congratulations**: You just created a release for your application!
+
+Your released image should be available inside the repository pointed by your
+`ReleasePlan` resource.
+
+#### Managed Release Pipelines (optional)
+
+##### Setting up a Managed Release Pipeline
+
+A `Managed Release Pipeline` requires both a `ReleasePlan` and a `ReleasePlanAdmission` resource. 
+Together, they form the agreement on how and where artifacts should be published.
 
 The `ReleasePlan` resource includes a reference to the application that the development
 team wants to release, along with the namespace where the application is supposed to be
@@ -658,13 +745,13 @@ For more details you can examine the manifests under the
 
 To do all that, follow these steps:
 
-Edit the [release plan](./test/resources/demo-users/user/ns2/release-plan.yaml) and
+Edit the [managed release plan](./test/resources/demo-users/user/ns2/managed-release-plan.yaml) and
 verify that the `application` field contains the name of your application.
 
 Deploy the Release Plan under the development team namespace (`user-ns2`):
 
 ```bash
-kubectl create -f ./test/resources/demo-users/user/ns2/release-plan.yaml
+kubectl create -f ./test/resources/demo-users/user/ns2/managed-release-plan.yaml
 ```
 
 Edit the `ReleasePlanAdmission`
@@ -705,7 +792,7 @@ kubectl create -k ./test/resources/demo-users/user/managed-ns2
 At this point, you can click **Releases** on the left pane in the UI. The status
 for your ReleasePlan should be **"Matched"**.
 
-#### Create a Registry Secret for the Managed Namespace
+##### Create a Registry Secret for the Managed Namespace
 
 In order for the release service to be able to push images to the registry, a secret is
 needed on the managed namespace (`managed-ns2`). This is the same secret as was
@@ -715,7 +802,7 @@ To do that, follow the instructions for
 [creating a push secret for the release pipeline](./docs/quay.md#configuring-a-push-secret-for-the-release-pipeline)
 for namespace `managed-ns2`.
 
-#### Trigger the Release
+##### Trigger the Managed Release
 
 You can now push the changes (if any) to your PR, merge it once the build-pipeline
 passes and observe the behavior:
@@ -733,7 +820,7 @@ passes and observe the behavior:
 5. Wait for the Release to be complete, and check your registry repository for the
    released image.
 
-**Congratulations**: You just created a release for your application!
+**Congratulations**: You just created a managed release for your application!
 
 Your released image should be available inside the repository pointed by your
 `ReleasePlanAdmission` resource.
