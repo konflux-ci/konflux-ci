@@ -240,7 +240,7 @@ The latter is achieved by:
 
 Follow these steps to onboard your application:
 
-1. Login to [Konflux](https://localhost:9443) as `user2`.
+1. Login to [Konflux](https://localhost:9443) as `user2` (password: `password`).
 2. Click `Create application`
 3. Provide a name to the application and click "Add a component"
 4. Under `Git repository url`, copy the **https** link to your fork. This should
