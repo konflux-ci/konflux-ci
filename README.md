@@ -462,7 +462,7 @@ E.g. [Docker Hub](https://hub.docker.com/), [Quay.io](https://quay.io/repository
 
 1. Create an account on a public registry (unless you have one already).
 
-2. Create a [push secret](#configuring-a-push-secret-for-the-build-pipeline) based on
+2. Create a [push secret](./docs/quay.md#configuring-a-push-secret-for-the-build-pipeline) based on
    your login information and deploy it to namespace `user-ns2` on the cluster.
 
 3. Create a new repository on the registry to which your images will be pushed.
