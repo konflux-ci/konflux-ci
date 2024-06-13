@@ -32,7 +32,7 @@ spec:
               \                                                                                                      \nexport
               -f deleteAndLog\nxargs -a ${EXPIRED_RELEASES_FILE} -i -P ${MAX_PROCS}
               bash -c 'deleteAndLog \"{}\"'\n"
-            image: quay.io/redhat-appstudio/release-service-utils:305541d8b8c2670dea4b50bd8c56858c365ca11e
+            image: quay.io/konflux-ci/release-service-utils:38c3bfd7479c86b832cba5b61f9bbde40c469393
             imagePullPolicy: IfNotPresent
             name: release-cleanup
             resources:

@@ -47,7 +47,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: quay.io/redhat-appstudio/release-service:386031571e33e33fa211b1029b359c93ee363c62
+        image: quay.io/konflux-ci/release-service:5e27ea8bc9073de6a18dee73534ec93dffb93aba
         livenessProbe:
           httpGet:
             path: /healthz
