@@ -22,7 +22,7 @@ service account.
 The service account used for running the pipelines is the namespace's
 `appstudio-pipeline` service account.
 
-1. Create the secret in the pipeline's namespace (see the
+1. :gear: Create the secret in the pipeline's namespace (see the
    [example below](#example---extract-quay-push-secret) for extracting the
    secret):
 
@@ -38,7 +38,7 @@ kubectl create -n $NS secret generic regcred \
  --type=kubernetes.io/dockerconfigjson
 ```
 
-2. Add the secret to the namespace's appstudio-pipeline service account
+2. :gear: Add the secret to the namespace's appstudio-pipeline service account
 
 ```bash
 kubectl patch -n $NS serviceaccount appstudio-pipeline -p '{"secrets": [{"name": "regcred"}]}'
@@ -49,27 +49,28 @@ kubectl patch -n $NS serviceaccount appstudio-pipeline -p '{"secrets": [{"name":
 If using Quay.io, you can follow the procedure below to obtain the config.json file used
 for creating the secret. If not using quay, apply your registry's equivalent procedure.
 
-1. Log into quay.io and click your user icon on the top-right corner.
+1. :gear: Log into quay.io and click your user icon on the top-right corner.
 
-2. Select Account Settings.
+2. :gear: Select Account Settings.
 
-3. Click on Generate Encrypted Password.
+3. :gear: Click on Generate Encrypted Password.
 
-4. Enter your login password and click Verify.
+4. :gear: Enter your login password and click Verify.
 
-5. Select Docker Configuration.
+5. :gear: Select Docker Configuration.
 
-6. Click Download `<your-username>-auth.json` and take note of the download location.
+6. :gear: Click Download `<your-username>-auth.json` and take note of the download
+   location.
 
-7. Replace `<path/to/.docker/config.json>` on the `kubectl create secret` command with
-   this path.
+7. :gear: Replace `<path/to/.docker/config.json>` on the `kubectl create secret` command
+   with this path.
 
 # Configuring a Push Secret for the Release Pipeline
 
 If the release pipeline used need to push image to a container registry, it needs to be
 configured with a push secret as well.
 
-In the `managed` namespace, repeat the same steps mentioned
+:gear: In the `managed` namespace, repeat the same steps mentioned
 [above](#configuring-a-push-secret-for-the-build-pipeline) for configuring the push
 secret.
 
@@ -83,17 +84,17 @@ that can automatically create Quay repositories when onboarding a component.
 The image controller requires access to a Quay organization.
 Please follow the following steps for configuring it:
 
-1. [Create a user on Quay.io](https://quay.io/)
+1. :gear: [Create a user on Quay.io](https://quay.io/)
 
-2. [Create Quay Organization](https://docs.projectquay.io/use_quay.html#org-create)
+2. :gear: [Create Quay Organization](https://docs.projectquay.io/use_quay.html#org-create)
 
-3. [Create Application and OAuth access token](https://docs.projectquay.io/use_quay.html#_create_oauth_access_token).
+3. :gear: [Create Application and OAuth access token](https://docs.projectquay.io/use_quay.html#_create_oauth_access_token).
    The application should have the following permissions:
    - Administer Organization
    - Administer Repositories
    - Create Repositories
 
-4. Run the `deploy-image-controller.sh` script:
+4. :gear: Run the `deploy-image-controller.sh` script:
 
 `$TOKEN` - the token for the application you've created on step 3.
 

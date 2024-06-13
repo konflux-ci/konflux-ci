@@ -3,6 +3,7 @@ Konflux-CI
 
 <!-- toc -->
 
+- [Document Conventions](#document-conventions)
 - [Trying Out Konflux](#trying-out-konflux)
   * [Machine Minimum Requirements](#machine-minimum-requirements)
   * [Installing Software Dependencies](#installing-software-dependencies)
@@ -35,6 +36,11 @@ Konflux-CI
   * [Repository Links](#repository-links)
 
 <!-- tocstop -->
+
+# Document Conventions
+
+:gear: - **Action Required**: This symbol signifies that the text to follow it requires
+the reader to fulfill an action.
 
 # Trying Out Konflux
 
@@ -76,7 +82,7 @@ additional resources.
 
 ## Installing Software Dependencies
 
-The following applications are required on the host machine:
+:gear: Verify that the applications below are installed on the host machine:
 
 * [Kind and kubectl](https://kind.sigs.k8s.io/docs/user/quick-start/#installation)
   along with `podman` or `docker`
@@ -87,7 +93,7 @@ The following applications are required on the host machine:
 
 From the root of this repository, run the setup scripts:
 
-1. Create a cluster
+1. :gear: Create a cluster
 
 ```bash
 kind create cluster --name konflux --config kind-config.yaml
@@ -124,27 +130,27 @@ and modify the `system-reserved` line under `kubeletExtraArgs`:
         system-reserved: memory=12Gi
 ```
 
-2. Deploy the dependencies
+2. :gear: Deploy the dependencies
 
 ```bash
 ./deploy-deps.sh
 ```
 
-3. Deploy Konflux
+3. :gear: Deploy Konflux
 
 ```bash
 ./deploy-konflux.sh
 ```
 
-4. Deploy demo users
+4. :gear: Deploy demo users
 
 ```bash
 ./deploy-test-resources.sh
 ```
 
-5. The UI will be available at https://localhost:9443. You can login using the test user.
+5. The UI will be available at https://localhost:9443. You can login using a test user.
 
-`username:` `user1`
+`username:` `user2`
 
 `password:` `password`
 
@@ -166,26 +172,26 @@ events to a channel we create on a public `smee` server, and we deploy a client
 within the cluster to listen to those events. The client will relay those events to
 pipelines-as-code (Tekton) inside the cluster.
 
-1. Start a new channel in [smee](https://smee.io/), and take a note of the webhook
+1. :gear: Start a new channel in [smee](https://smee.io/), and take a note of the webhook
    proxy URL.
 
-2. Create a GitHub app following
+2. :gear: Create a GitHub app following
    [Pipelines-as-Code documentation](https://pipelinesascode.com/docs/install/github_apps/#manual-setup).
 
    For `Homepage URL` you can insert `https://localhost:9443/` (it doesn't matter).
 
    For `Webhook URL` insert the smee client's webhook proxy URL from previous steps.
 
-   per the instructions on the link, generate and download the private key and create a
+   :gear: Per the instructions on the link, generate and download the private key and create a
    secret on the cluster providing the location of the private key, the App ID, and the
    openssl-generated secret created during the process.
 
-3. To allow Konflux to send PRs to your application repositories, the same secret should
-   be created inside the `build-service` and the `integration-service` namespaces. See
-   additional details under
+3. :gear: To allow Konflux to send PRs to your application repositories, the same secret
+   should be created inside the `build-service` and the `integration-service`
+   namespaces. See additional details under
    [Configuring GitHub Application Secrets](./docs/github-secrets.md).
 
-4. Deploy the smee-client on the cluster:
+4. :gear: Deploy the smee-client on the cluster:
 
    Edit the [smee-client manifest](./smee/smee-client.yaml), replacing `<smee-channel>`
    with the webhook proxy URL generated when creating the channel.
@@ -206,13 +212,13 @@ Kubernetes manifests.
 Both options will use an example repository containing a Dockerfile to be built by
 Konflux:
 
-1. Fork the [example repository](https://github.com/konflux-ci/testrepo), by clicking
-   the `Fork` button from that repository and following the instructions on the "Create
-   a new fork" page.
+1. :gear: Fork the [example repository](https://github.com/konflux-ci/testrepo), by
+   clicking the `Fork` button from that repository and following the instructions on the
+   "Create a new fork" page.
 
-2. Install the GitHub app on your fork: Go to the app's page on GitHub, click on Install
-   App on the left-hand side, Select the organization the fork repository is on, click
-   `Only select repositories`, and select your fork repository.
+2. :gear: Install the GitHub app on your fork: Go to the app's page on GitHub, click on
+   Install App on the left-hand side, Select the organization the fork repository is on,
+   click `Only select repositories`, and select your fork repository.
 
 We will use our Konflux deployment to build and release Pull Requests for this fork.
 
@@ -227,18 +233,18 @@ The former is enabled by creating the
 [GitHub Application Secrets](./docs/github-secrets.md) **on all 3 namespaces** and
 installing your newly-created GitHub app on your repository, as explained above.
 
-The latter is achieved by:
-1. Configuring a push secret that will allow the build pipeline to push images to
+To achieve the latter follow the steps below:
+1. :gear: Configure a push secret that will allow the build pipeline to push images to
    Quay.io for namespace `user-ns2`. For that, follow the
    [procedure for configuring the push secret](./docs/quay.md#configuring-a-push-secret-for-the-build-pipeline).
-2. Creating an organization and an application in Quay.io that will allow Konflux to
+2. :gear: Create an organization and an application in Quay.io that will allow Konflux to
    create repositories for your applications. To do that,
    [Follow the procedure](./docs/quay.md#automatically-provision-quay-repositories-for-container-images)
    to configure a Quay.io application and deploy `image-controller`.
 
 #### Create Application and Component via the Konflux UI
 
-Follow these steps to onboard your application:
+:gear: Follow these steps to onboard your application:
 
 1. Login to [Konflux](https://localhost:9443) as `user2` (password: `password`).
 2. Click `Create application`
@@ -272,7 +278,7 @@ the pipelines to run using Konflux.
 
 To do that:
 
-1. Use a text editor to edit your local copy of the
+1. :gear: Use a text editor to edit your local copy of the
    [example application manifests](./test/resources/demo-users/user/ns2/application-and-component.yaml):
 
    Under the `Component` and `Repository` resources, change the `url` fields so they
@@ -286,12 +292,12 @@ To do that:
 ```bash
 kubectl create -f ./test/resources/demo-users/user/ns2/application-and-component.yaml
 ```
-2. Log into the Konflux UI as `user2` (password: `password`). You should be able to see
-   your new Application and Component by clicking "View my applications".
+2. :gear: Log into the Konflux UI as `user2` (password: `password`). You should be able
+   to see your new Application and Component by clicking "View my applications".
 
 #### Image Registry
 
-The build pipeline that you're about to run pushes the image it builds to an image
+The build pipeline that you're about to run pushes the images it builds to an image
 registry.
 
 For the sake of simplicity, it's configured to use a registry deployed into the
@@ -304,7 +310,7 @@ Later in the process, you'll convert it to use a public image registry.
 
 You're now ready to create your first PR to your fork.
 
-1. Clone your fork and create a new branch:
+1. :gear: Clone your fork and create a new branch:
 
 ```bash
 git clone <my-fork-url>
@@ -313,14 +319,16 @@ git checkout -b add-pipelines
 ```
 
 2. Tekton will trigger pipelines present in the `.tekton` directory. The pipelines
-   already exist on your repository, you just need to copy them to that location:
+   already exist on your repository, you just need to copy them to that location.
+
+   :gear: Copy the manifests:
 
 ```bash
 mkdir -p .tekton
 cp pipelines/* .tekton/
 ```
 
-3. Commit your changes and push them to your repository:
+3. :gear: Commit your changes and push them to your repository:
 
 ```bash
 git add .tekton
@@ -328,10 +336,10 @@ git commit -m "add pipelines"
 git push origin HEAD
 ```
 
-4. Your terminal should now display a link for creating a new Pull Request in GitHub.
-   Click the link, **make sure the PR is targeted against your fork's `main` branch and
-   not against the repository from which it was forked** (i.e. `base repository` should
-   reside under your user name).
+4. :gear: Your terminal should now display a link for creating a new Pull Request in
+   GitHub. Click the link, **make sure the PR is targeted against your fork's `main`
+   branch and not against the repository from which it was forked** (i.e.
+   `base repository` should reside under your user name).
 
    Finally, click "Create pull request".
 
@@ -347,9 +355,9 @@ Your GitHub App should now send PR events to your smee channel. Navigate to your
 channel's web page. You should see a couple of events were sent just after your PR was
 created. E.g. `check_run`, `pull_request`.
 
-Log into the Konflux UI as `user2` and check your applications. Select the application
-you created earlier, click on `Activity` and `Pipeline runs`. A build should've been
-triggered a few seconds after the PR was created.
+:gear: Log into the Konflux UI as `user2` and check your applications. Select the
+application you created earlier, click on `Activity` and `Pipeline runs`. A build
+should've been triggered a few seconds after the PR was created.
 
 Follow the build progress. Depending on your system's load and network connection (the
 build process involves pulling images), it might take a few minutes for the build to
@@ -377,7 +385,7 @@ generate the command to pull the image.
 
 #### Local Registry
 
-if using a local registry, Port-forward the registry service, so you can reach it from
+:gear: If using a local registry, Port-forward the registry service, so you can reach it from
 outside of the cluster:
 
 ```bash
@@ -386,7 +394,7 @@ kubectl port-forward -n kind-registry svc/registry-service 30001:80
 
 Leave the terminal hanging and on a new terminal window:
 
-List the repositories on the registry:
+:gear: List the repositories on the registry:
 
 ```bash
 curl http://localhost:30001/v2/_catalog
@@ -398,7 +406,7 @@ The output should look like this:
 {"repositories":["test-component"]}
 ```
 
-You can now list the tags on that `test-component` repository (assuming you did not
+:gear: List the tags on that `test-component` repository (assuming you did not
 change the pipeline's output-image parameter):
 
 ```bash
@@ -411,8 +419,8 @@ You should see a list of tags pushed to that repository. Take a note of that.
 {"name":"test-component","tags":["on-pr-1ab9e6d756fbe84aa727fc8bb27c7362d40eb3a4","sha256-b63f3d381f8bb2789f2080716d88ed71fe5060421277746d450fbcf938538119.sbom"]}
 ```
 
-Pull the image starting with `on-pr-` (we use `podman` below, but the commands should be
-similar on `docker`):
+:gear: Pull the image starting with `on-pr-` (we use `podman` below, but the commands
+should be similar on `docker`):
 
 ```bash
 podman pull --tls-verify=false localhost:30001/test-component:on-pr-1ab9e6d756fbe84aa727fc8bb27c7362d40eb3a4
@@ -428,7 +436,7 @@ be9a47b76264e8fb324d9ef7cddc93a933630695669afc4060e8f4c835c750e9
 
 #### Start a Container
 
-Start a container based on the image you pulled:
+:gear: Start a container based on the image you pulled:
 
 ```bash
 podman run --rm be9a47b76264e8fb324d9ef7cddc9...
@@ -460,21 +468,22 @@ instead of the internal one used so far. In order to do that, you'd need to have
 repository, on a public registry, in which you have push permissions.
 E.g. [Docker Hub](https://hub.docker.com/), [Quay.io](https://quay.io/repository/):
 
-1. Create an account on a public registry (unless you have one already).
+1. :gear: Create an account on a public registry (unless you have one already).
 
-2. Create a [push secret](./docs/quay.md#configuring-a-push-secret-for-the-build-pipeline) based on
-   your login information and deploy it to namespace `user-ns2` on the cluster.
+2. :gear: Create a
+   [push secret](./docs/quay.md#configuring-a-push-secret-for-the-build-pipeline)
+   based on your login information and deploy it to namespace `user-ns2` on the cluster.
 
-3. Create a new repository on the registry to which your images will be pushed.
+3. :gear: Create a new repository on the registry to which your images will be pushed.
    For example, in Quay.io, you'd need to click the
    [Create New Repository](https://quay.io/new/) button and provide it with name and
    location. Free accounts tend to have limits on private repositories, so for the
    purpose of this example, you can make your repository public.
 
 4. Configure your build pipeline to use your new repository on the public registry
-   instead of the local registry.
+   instead of the local registry:
 
-   To do that, edit `.tekton/testrepo-pull-request.yaml` inside your `testrepo` fork
+   :gear: Edit `.tekton/testrepo-pull-request.yaml` inside your `testrepo` fork
    and replace the value of `output-image` to point to your repository. For example,
    if using Quay.io and your username is `my-user` and you created a repository called
    `my-konflux-component` under your own organization, then the configs should look like this:
@@ -484,10 +493,10 @@ E.g. [Docker Hub](https://hub.docker.com/), [Quay.io](https://quay.io/repository
     value: quay.io/my-user/my-konflux-component:on-pr-{{revision}}
 ```
 
-5. Push your changes to your `testrepo` fork, either as a new PR or as a change to your
-   previous PR. Observe the behavior as before, and verify that the build pipeline
-   finishes successfully, and that your public repository contains the images pushed by
-   the pipeline.
+5. :gear: Push your changes to your `testrepo` fork, either as a new PR or as a change
+   to your previous PR. Observe the behavior as before, and verify that the build
+   pipeline finishes successfully, and that your public repository contains the images
+   pushed by the pipeline.
 
 #### Configure Integration Tests
 
@@ -498,8 +507,9 @@ Kubernetes resource.
 pre-installed.
 
 In our case, The resource is defined in
-`test/resources/demo-users/user/ns2/ec-integration-test.yaml`. You can directly apply
-it with the following command:
+`test/resources/demo-users/user/ns2/ec-integration-test.yaml`.
+
+:gear: Apply the resource manifest:
 
 ```bash
 kubectl create -f test/resources/demo-users/user/ns2/ec-integration-test.yaml
@@ -507,15 +517,15 @@ kubectl create -f test/resources/demo-users/user/ns2/ec-integration-test.yaml
 
 Alternatively, you can provide the content from that YAML using the UI:
 
-1. Login as user2 and navigate to your application and component.
+1. :gear: Login as user2 and navigate to your application and component.
 
-2. Click the `Integration tests` tab.
+2. :gear: Click the `Integration tests` tab.
 
-3. Click `Actions` and select `Add Integration test`.
+3. :gear: Click `Actions` and select `Add Integration test`.
 
-4. Fill-in the details from the YAML.
+4. :gear: Fill-in the details from the YAML.
 
-5. Click `Add Integration test`.
+5. :gear: Click `Add Integration test`.
 
 Either way, you should now see the test listed in the UI under `Integration tests`.
 
@@ -523,7 +533,7 @@ Our integration test is using a pipeline residing in the location defined under 
 `resolverRef` field on the YAML mentioned above. From now on, after the build pipeline
 runs, the pipeline mentioned on the integration test will also be triggered.
 
-To verify that, go back to your GitHub PR and add a comment: `/retest`.
+:gear: To verify that, go back to your GitHub PR and add a comment: `/retest`.
 
 On the Konflux UI, under your component `Activity` tab, you should now see the build
 pipeline running again (`test-component-on-pull-request-...`), and when it's done, you
@@ -559,33 +569,33 @@ scenario.
 
 To add it through the Konflux UI:
 
-1. Login as user2 and navigate to your application and component.
+1. :gear: Login as user2 and navigate to your application and component.
 
-2. Click the `Integration tests` tab.
+2. :gear: Click the `Integration tests` tab.
 
-3. Click `Actions` and select `Add Integration test`.
+3. :gear: Click `Actions` and select `Add Integration test`.
 
-4. Fill in the fields:
+4. :gear: Fill in the fields:
 
 * Integration test name: a name of your choice
 * GitHub URL: `https://github.com/konflux-ci/testrepo`
 * Revision: `main`
 * Path in repository: `integration-tests/testrepo-integration.yaml`
 
-5. Click `Add Integration test`.
+5. :gear: Click `Add Integration test`.
 
 Alternatively, you can create it using `kubectl`. The manifest is stored in
 `test/resources/demo-users/user/ns2/integration-test-hello.yaml`:
 
-1. Verify the `application` field contains your application name.
+1. :gear: Verify the `application` field contains your application name.
 
-2. Deploy the manifest:
+2. :gear: Deploy the manifest:
 
 ```bash
 kubectl create -f .test/resources/demo-users/user/ns2/integration-test-hello.yaml
 ```
 
-You can now post a `/retest` comment on your GitHub PR, and once the `pull-request`
+:gear: Post a `/retest` comment on your GitHub PR, and once the `pull-request`
 pipeline is done, you should see your new integration test being triggered alongside
 the one you had before.
 
@@ -614,8 +624,9 @@ you. Skip to
 You will now configure the on-push pipeline that will be triggered whenever new commits
 are created on branch `main` (e.g. when PRs are merged).
 
-Edit the content of the copy you made earlier to the on-push pipeline at
-`.tekton/testrepo-push.yaml`, replacing the value of `output-image`, so that the repository URL is identical to the one
+:gear: Edit the content of the copy you made earlier to the on-push pipeline at
+`.tekton/testrepo-push.yaml`, replacing the value of `output-image`, so that the
+repository URL is identical to the one
 [previously set](#push-builds-to-external-repository) for the `pull-request` pipeline.
 
 For example, if using Quay.io and your username is `my-user` and you created a
@@ -658,10 +669,10 @@ For more details you can examine the manifests under the
 
 To do all that, follow these steps:
 
-Edit the [release plan](./test/resources/demo-users/user/ns2/release-plan.yaml) and
-verify that the `application` field contains the name of your application.
+:gear: Edit the [release plan](./test/resources/demo-users/user/ns2/release-plan.yaml)
+and verify that the `application` field contains the name of your application.
 
-Deploy the Release Plan under the development team namespace (`user-ns2`):
+:gear: Deploy the Release Plan under the development team namespace (`user-ns2`):
 
 ```bash
 kubectl create -f ./test/resources/demo-users/user/ns2/release-plan.yaml
@@ -670,11 +681,11 @@ kubectl create -f ./test/resources/demo-users/user/ns2/release-plan.yaml
 Edit the `ReleasePlanAdmission`
 [manifest](./test/resources/demo-users/user/managed-ns2/rpa.yaml):
 
-1. Under `applications`, verify that your application is the one listed.
+1. :gear: Under `applications`, verify that your application is the one listed.
 
-2. Under the components mapping list, set the `name` field so it matches the name of
-   your component and replace `<repository url>` with the URL of the repository on the
-   registry to which your released images are to be pushed. This is typically a
+2. :gear: Under the components mapping list, set the `name` field so it matches the name
+   of your component and replace `<repository url>` with the URL of the repository on
+   the registry to which your released images are to be pushed. This is typically a
    different repository comparing to the one builds are being pushed during tests.
 
    For example, if your component is called `test-component`, and you wish to release
@@ -688,15 +699,15 @@ Edit the `ReleasePlanAdmission`
           repository: quay.io/my-user/my-konflux-component-release
 ```
 
-3. If onboarded not using the UI, you'd need to have the repository created on the
-   registry before releases can be pushed to it. See more details on creating
+3. :gear: If onboarded not using the UI, you'd need to have the repository created on
+   the registry before releases can be pushed to it. See more details on creating
    repositories in [previous steps](#push-builds-to-external-repository).
 
    If you're using the UI to onboard, the Quay.io application you created will be able
    to create new repositories under that application's organization.
 
-Deploy the managed environment team's namespace, along with the resources mentioned
-above:
+:gear: Deploy the managed environment team's namespace, along with the resources
+mentioned above:
 
 ```bash
 kubectl create -k ./test/resources/demo-users/user/managed-ns2
@@ -711,7 +722,7 @@ In order for the release service to be able to push images to the registry, a se
 needed on the managed namespace (`managed-ns2`). This is the same secret as was
 previously created on the development namespace (`user-ns2`).
 
-To do that, follow the instructions for
+:gear: To do that, follow the instructions for
 [creating a push secret for the release pipeline](./docs/quay.md#configuring-a-push-secret-for-the-release-pipeline)
 for namespace `managed-ns2`.
 
@@ -720,18 +731,19 @@ for namespace `managed-ns2`.
 You can now push the changes (if any) to your PR, merge it once the build-pipeline
 passes and observe the behavior:
 
-1. Commit the changes you did on your `testrepo` branch (i.e. introducing the on-push
-   pipeline, in case you did not onboard via the UI) and push them to GitHub.
+1. :gear: Commit the changes you did on your `testrepo` branch (i.e. introducing the
+   on-push pipeline, in case you did not onboard via the UI) and push them to GitHub.
 
-2. Once the build-pipeline and the integration tests finish successfully, merge the PR.
+2. :gear: Once the build-pipeline and the integration tests finish successfully, merge
+   the PR.
 
 3. On the Konflux UI, you should now see your on-push pipeline being triggered.
 
 4. Once it finishes successfully, the integration tests should run once more, and
    a release should be created under the `Releases` tab.
 
-5. Wait for the Release to be complete, and check your registry repository for the
-   released image.
+5. :gear: Wait for the Release to be complete, and check your registry repository for
+   the released image.
 
 **Congratulations**: You just created a release for your application!
 

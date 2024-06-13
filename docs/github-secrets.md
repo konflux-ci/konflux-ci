@@ -6,8 +6,8 @@ The process of creating a GitHub application is explained in
 The same secret described there, should be deployed to the `build-service` and
 `integration-service` namespaces as well.
 
-To do that, repeat the `kubectl create secret` command described there for the
-`pipelines-as-code` namespace also to those namespace:
+:gear: Repeat the `kubectl create secret` command described there for the
+`pipelines-as-code` namespace, also for those namespace:
 
 ```bash
 kubectl -n pipelines-as-code create secret generic pipelines-as-code-secret \
