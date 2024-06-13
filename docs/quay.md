@@ -67,7 +67,7 @@ for creating the secret. If not using quay, apply your registry's equivalent pro
 
 # Configuring a Push Secret for the Release Pipeline
 
-If the release pipeline used need to push image to a container registry, it needs to be
+If the release pipeline needs to push images to a container registry, it needs to be
 configured with a push secret as well.
 
 :gear: In the `managed` namespace, repeat the same steps mentioned
