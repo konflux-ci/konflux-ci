@@ -233,14 +233,12 @@ The former is enabled by creating the
 [GitHub Application Secrets](./docs/github-secrets.md) **on all 3 namespaces** and
 installing your newly-created GitHub app on your repository, as explained above.
 
-To achieve the latter follow the steps below:
-1. :gear: Configure a push secret that will allow the build pipeline to push images to
-   Quay.io for namespace `user-ns2`. For that, follow the
-   [procedure for configuring the push secret](./docs/quay.md#configuring-a-push-secret-for-the-build-pipeline).
-2. :gear: Create an organization and an application in Quay.io that will allow Konflux to
-   create repositories for your applications. To do that,
-   [Follow the procedure](./docs/quay.md#automatically-provision-quay-repositories-for-container-images)
-   to configure a Quay.io application and deploy `image-controller`.
+To achieve the latter follow the step below:
+
+:gear: Create an organization and an application in Quay.io that will allow Konflux to
+create repositories for your applications. To do that,
+[Follow the procedure](./docs/quay.md#automatically-provision-quay-repositories-for-container-images)
+to configure a Quay.io application and deploy `image-controller`.
 
 #### Create Application and Component via the Konflux UI
 
@@ -719,10 +717,13 @@ for your ReleasePlan should be **"Matched"**.
 #### Create a Registry Secret for the Managed Namespace
 
 In order for the release service to be able to push images to the registry, a secret is
-needed on the managed namespace (`managed-ns2`). This is the same secret as was
-previously created on the development namespace (`user-ns2`).
+needed on the managed namespace (`managed-ns2`).
 
-:gear: To do that, follow the instructions for
+The secret needs to be created on this namespace regardless of whether you used the
+UI for onboarding or not, but if you weren't, then this secret is identical to the one
+that was previously created on the development namespace (`user-ns2`).
+
+:gear: To create it, follow the instructions for
 [creating a push secret for the release pipeline](./docs/quay.md#configuring-a-push-secret-for-the-release-pipeline)
 for namespace `managed-ns2`.
 
