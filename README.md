@@ -90,6 +90,12 @@ additional resources.
 * `openssl`
 
 ## Bootstrapping the Cluster
+:gear: Clone this repository:
+
+ ```bash
+git clone https://github.com/konflux-ci/konflux-ci.git
+cd konflux-ci
+```
 
 From the root of this repository, run the setup scripts:
 
