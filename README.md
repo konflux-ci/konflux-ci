@@ -246,12 +246,14 @@ to configure a Quay.io application and deploy `image-controller`.
 
 1. Login to [Konflux](https://localhost:9443) as `user2` (password: `password`).
 2. Click `Create application`
-3. Provide a name to the application and click "Add a component"
-4. Under `Git repository url`, copy the **https** link to your fork. This should
+3. Verify the workspace is set to `user-ns2` (notice the `ws` breadcrumb trail just
+   above `Create an application` and click the `...` to switch workspaces as needed).
+4. Provide a name to the application and click "Add a component"
+5. Under `Git repository url`, copy the **https** link to your fork. This should
    be something similar to `https://github.com/<your-name>/testrepo.git`.
-5. Leave `Docker file` blank. The default value of `Dockerfile` will be used.
-6. Under the Pipeline drop-down list, select `docker-build`.
-7. Click `Create application`.
+6. Leave `Docker file` blank. The default value of `Dockerfile` will be used.
+7. Under the Pipeline drop-down list, select `docker-build`.
+8. Click `Create application`.
 
 The UI should now display the Lifecycle diagram for your application. In the Components
 tab you should be able to see your component listed and you'll be prompted to merge the
