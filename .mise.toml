@@ -1,0 +1,3 @@
+[tools]
+kind = "0.22.0"
+kubectl = "1.30.0"
