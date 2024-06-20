@@ -1,0 +1,16 @@
+
+checks:
+
+  include: [ ]
+
+  exclude: 
+    - "unset-cpu-requirements"
+    - "unset-memory-requirements"
+    - "no-read-only-root-fs"
+    - "run-as-non-root"
+    - "env-var-secret"
+    - "liveness-port"
+    - "readiness-port"
+    - "startup-port"
+    - "non-existent-service-account"
+    - "latest-tag"

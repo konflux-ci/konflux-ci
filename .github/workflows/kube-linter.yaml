@@ -1,0 +1,31 @@
+name: Static code checks
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+jobs:
+  kube-linter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create ./.kube-linter/ directory
+        shell: bash
+        run: mkdir -p ./.kube-linter/
+      - name: Generate default configuration
+        shell: bash
+        run: |
+          find . -name "kustomization.yaml" -o -name "kustomization.yml" | while read -r file; do
+            dir=$(dirname "$file")
+            dir=${dir#./}
+            output_file=$(echo "out-$dir" | tr "/" "-")
+            kustomize build "$dir" > "./.kube-linter/$output_file.yaml"
+          done
+      - name: Scan yaml files with kube-linter
+        uses: stackrox/kube-linter-action@v1
+        id: kube-linter-action-scan
+        with:
+          directory: ./.kube-linter/
+          config: ./.github/.kube-linter-config.yaml
