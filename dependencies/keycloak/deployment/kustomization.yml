@@ -7,3 +7,19 @@ resources:
   - db.yaml
   - configure-keycloak.yaml
 namespace: keycloak
+
+patches:
+  - patch: |
+      - op: add
+        path: /metadata/annotations/ignore-check.kube-linter.io~1no-read-only-root-fs
+        value: "This deployment needs to have write permissions"
+    target:
+      kind: Deployment
+      name: keycloak-operator
+  - patch: |
+      - op: add
+        path: /metadata/annotations/ignore-check.kube-linter.io~1run-as-non-root
+        value: "This deployment needs to have root permissions"
+    target:
+      kind: Deployment
+      name: keycloak-operator
