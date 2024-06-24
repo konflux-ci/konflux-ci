@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/konflux-ci/konflux-ci/pkg/konftool/gh_app"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -26,8 +27,9 @@ func setupEcho() *echo.Echo {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
-	// Routes
-	e.GET("/", hello)
+	// Sub-apps
+	gha := gh_app.GitHubApp{}
+	gha.SetupRoutes(e)
 
 	return e
 }
