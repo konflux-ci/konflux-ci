@@ -14,11 +14,6 @@ import (
 // An opaque wrapper around http.Server for adding our Start/Stop logic
 type Web struct{ server *http.Server }
 
-// Handler
-func hello(c echo.Context) error {
-	return c.String(http.StatusOK, "Hello, World!")
-}
-
 func setupEcho() *echo.Echo {
 	// Echo instance
 	e := echo.New()
@@ -27,8 +22,15 @@ func setupEcho() *echo.Echo {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
+	// Templates & Rendering
+	renderer := &renderer{}
+	e.Renderer = renderer
+
 	// Sub-apps
 	gha := gh_app.GitHubApp{}
+	if err:= gha.LoadTemplates(renderer); err != nil {
+		panic(err)
+	}
 	gha.SetupRoutes(e)
 
 	return e
