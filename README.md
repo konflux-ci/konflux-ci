@@ -331,7 +331,7 @@ git checkout -b add-pipelines
 
 ```bash
 mkdir -p .tekton
-cp pipelines/* .tekton/
+cp ./tests/resources/pipelines/* .tekton/
 ```
 
 3. :gear: Commit your changes and push them to your repository:
