@@ -6,17 +6,13 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/konflux-ci/konflux-ci/pkg/konftool/gh_app"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
 
 // An opaque wrapper around http.Server for adding our Start/Stop logic
 type Web struct{ server *http.Server }
-
-// Handler
-func hello(c echo.Context) error {
-	return c.String(http.StatusOK, "Hello, World!")
-}
 
 func setupEcho() *echo.Echo {
 	// Echo instance
@@ -26,8 +22,16 @@ func setupEcho() *echo.Echo {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
-	// Routes
-	e.GET("/", hello)
+	// Templates & Rendering
+	renderer := &renderer{}
+	e.Renderer = renderer
+
+	// Sub-apps
+	gha := gh_app.GitHubApp{}
+	if err:= gha.LoadTemplates(renderer); err != nil {
+		panic(err)
+	}
+	gha.SetupRoutes(e)
 
 	return e
 }
