@@ -21,6 +21,7 @@ generate_logs() {
 
     for namespace in $namespaces; do
         # Get all 'Warning' type events that occured on the namespace and extract the relevant fields from it as variables.
+        echo -e "----------\nnamespace '$namespace'\n----------"
         local events
         events=$(kubectl get events -n "$namespace" \
                 --field-selector type=Warning \
@@ -32,8 +33,8 @@ generate_logs() {
             if [ "$kind" == "Pod" ]; then
                 local pod_definition
                 local pod_logs
-                pod_definition=$(kubectl get pod -n "$namespace" "$name" -o yaml 2>&1)
-                pod_logs=$(kubectl logs -n "$namespace" "$name" --all-containers=true 2>&1)
+                pod_definition=$(kubectl get pod -n "$namespace" "$name" -o yaml 2>&1 || echo "Failed to get pod definition for $name in namespace $namespace")
+                pod_logs=$(kubectl logs -n "$namespace" "$name" --all-containers=true 2>&1 || echo "Failed to get pod logs for $name in namespace $namespace")
 
                 printf "%s\n---\n" "$pod_definition" | tee -a "$pod_definitions_file"
                 echo "Pod '$name' under namespace '$namespace':" | tee -a "$pod_logs_file" | tee -a "$event_messages_file"
