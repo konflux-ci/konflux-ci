@@ -48,5 +48,6 @@ jobs:
           ./deploy-test-resources.sh
       
       - name: Generate error logs
+        if: ${{ !cancelled() }}
         run: |
           ./generate-err-logs.sh
