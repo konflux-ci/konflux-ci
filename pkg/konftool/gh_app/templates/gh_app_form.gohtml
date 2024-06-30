@@ -1,0 +1,52 @@
+<p>A GitHub App would be configured with the following details:
+<table>
+    <tr><th>Name:</th><td>(You will select a name in the GitHub UI)</td></tr>
+    <tr><th>Home page URL:</th><td>{{.KonfluxHomepageURL}}</td></tr>
+    <tr><th>WebHook URL:</th><td>{{.WebHookURL}}
+        {{ if .RejectedWebHookURL }}
+            <p>WARNING: Unreachable WebHook URLs will be rejected by GitHub<p>
+        {{ end }}
+    </td></tr>
+    <tr><th>Public:</th><td>{{.AppIsPublic}}</td>
+    <tr><th>Permissions<th><th>Subscribed events</th></tr>
+    <tr>
+        <td>
+            <ul>
+                <li>
+                    Repository permissions:
+                    <ul>
+                        <li>Checks: Read & Write</li>
+                        <li>Contents: Read & Write</li>
+                        <li>Issues: Read & Write</li>
+                        <li>Meatadata: Read only</li>
+                        <li>Pull request: Read & Write</li>
+                    </ul>
+                </li>
+                <li>
+                    Organization permissions:
+                    <ul>
+                        <li>Members: Read only</li>
+                        <li>Plan: Read only</li>
+                    </ul>
+                </li>
+            </ul>
+        </td>
+        <td>
+            <ul>
+                <li>Check run</li>
+                <li>Check suite</li>
+                <li>Issue comment</li>
+                <li>Commit comment</li>
+                <li>Pull request</li>
+                <li>Push</li>
+            </ul>
+        </td>
+    </tr>
+</table>
+<p>Clicking the button below will redirect you to GitHub to complete the 
+GitHub app creation process. Depending on your configuration, you may be
+required to authenticate.
+<form method="post" action="{{.GitHubNewAppURL}}">
+    <p><input name="manifest" value="{{.Manifest}}">
+    <p><button type="submit">Configure GitHub App</button>
+<form>
