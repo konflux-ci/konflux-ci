@@ -2,6 +2,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - tekton-config.yml
-  - ns.yaml
-  - tekton-config-application-set.yaml
+  - crd
+  - deployment
+  - keycloak.yaml

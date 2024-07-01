@@ -1,0 +1,31 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: build-service
+spec:
+  generators:
+    - clusters: {}
+  template:
+    metadata:
+      name: build-service-{{nameNormalized}}
+    spec:
+      project: default
+      source:
+        path: konflux-ci/build-service
+        repoURL: https://github.com/konflux-ci/konflux-ci.git
+        targetRevision: main
+      destination:
+        namespace: default
+        server: '{{server}}'
+      syncPolicy:
+        automated: 
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        retry:
+          limit: -1
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m
