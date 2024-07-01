@@ -17,7 +17,7 @@ spec:
   resolverRef:
     params:
       - name: url
-        value: 'https://github.com/gbenhaim/build-definitions'
+        value: 'https://github.com/konflux-ci/build-definitions'
       - name: revision
         value: ec-pub-key
       - name: pathInRepo
