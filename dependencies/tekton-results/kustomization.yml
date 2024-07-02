@@ -4,4 +4,25 @@ kind: Kustomization
 resources:
   - https://storage.googleapis.com/tekton-releases/results/previous/v0.9.2/release.yaml
   - certificate.yaml
-  
+patches:
+  - patch: |
+      - op: add
+        path: /metadata/annotations/ignore-check.kube-linter.io~1no-read-only-root-fs
+        value: "This deployment needs to have write permissions"
+    target:
+      kind: Deployment
+      name: tekton-results-api
+  - patch: |
+      - op: add
+        path: /metadata/annotations/ignore-check.kube-linter.io~1no-read-only-root-fs
+        value: "This deployment needs to have write permissions"
+    target:
+      kind: Deployment
+      name: tekton-results-watcher
+  - patch: |
+      - op: add
+        path: /metadata/annotations/ignore-check.kube-linter.io~1no-read-only-root-fs
+        value: "This deployment needs to have write permissions"
+    target:
+      kind: StatefulSet
+      name: tekton-results-postgres

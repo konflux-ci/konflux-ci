@@ -25,6 +25,9 @@ spec:
   containers:
   - name: test-pvc-consumer
     image: registry:2
+    securityContext:
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
     volumeMounts:
     - name: my-volume
       mountPath: /data

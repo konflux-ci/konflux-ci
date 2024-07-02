@@ -9,3 +9,30 @@ patches:
       kind: ConfigMap
       version: v1
       name: pipelines-as-code
+  - patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext
+        value:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+    target:
+      kind: Deployment
+      name: pipelines-as-code-controller
+  - patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext
+        value:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+    target:
+      kind: Deployment
+      name: pipelines-as-code-watcher
+  - patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext
+        value:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+    target:
+      kind: Deployment
+      name: pipelines-as-code-webhook

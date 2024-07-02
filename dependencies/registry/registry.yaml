@@ -11,6 +11,9 @@ metadata:
     run: registry
   name: registry
   namespace: kind-registry
+  annotations:
+    ignore-check.kube-linter.io/no-read-only-root-fs: ""
+    ignore-check.kube-linter.io/run-as-non-root: ""
 spec:
   replicas: 1
   selector:
