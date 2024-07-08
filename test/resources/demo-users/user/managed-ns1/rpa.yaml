@@ -25,7 +25,7 @@ spec:
         - name: url
           value: "https://github.com/gbenhaim/release-service-catalog.git"
         - name: revision
-          value: production
+          value: f345fc8dcb855666200c5f21d12a9e02fd7ab791
         - name: pathInRepo
           value: "pipelines/push-to-external-registry/push-to-external-registry.yaml"
     serviceAccountName: appstudio-pipeline
