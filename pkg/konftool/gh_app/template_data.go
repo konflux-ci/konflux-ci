@@ -1,16 +1,20 @@
 package gh_app
 
 import (
-	"net/url"
-
 	"github.com/konflux-ci/konflux-ci/pkg/konftool/gh_app/ghappregstate"
+	"github.com/konflux-ci/konflux-ci/pkg/konftool/weberrors"
 	"github.com/labstack/echo/v4"
 )
 
 // Data structure for passing data to the page template
 type templateData struct {
 	gitHubApp   *GitHubApp
+	pageErrors  *weberrors.List
 	echoContext echo.Context
+}
+
+func (t *templateData) Errors() weberrors.List {
+	return *t.pageErrors
 }
 
 func (t *templateData) KonfluxHomepageURL() string {
@@ -31,27 +35,7 @@ func (t *templateData) AppIsPublic() bool {
 }
 
 func (t *templateData) RedirectURL() string {
-	// Apparently it takes a bit a crazyness to get a full URL
-	urlStr := t.echoContext.Echo().Reverse(ghAppHomeRoute)
-	if urlObj, err := url.Parse(urlStr); err == nil {
-		if urlObj.Host == "" {
-			if t.echoContext.Request().URL.Host == "" {
-				urlObj.Host = t.echoContext.Request().Host
-			} else {
-				urlObj.Host = t.echoContext.Request().URL.Host
-			}
-			urlStr = urlObj.String()
-		}
-		if urlObj.Scheme == "" {
-			if t.echoContext.Request().URL.Scheme == "" {
-				urlObj.Scheme = "http"
-			} else {
-				urlObj.Scheme = t.echoContext.Request().URL.Scheme
-			}
-			urlStr = urlObj.String()
-		}
-	}
-	return urlStr
+	return t.gitHubApp.getHomeURL(t.echoContext)
 }
 
 func (t *templateData) GitHubNewAppURL() string {

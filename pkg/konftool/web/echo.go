@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/konflux-ci/konflux-ci/pkg/konftool/filestore"
 	"github.com/konflux-ci/konflux-ci/pkg/konftool/gh_app"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -22,6 +23,9 @@ func setupEcho() *echo.Echo {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
+	// Data store
+	store := filestore.Filestore{}
+
 	// Templates & Rendering
 	renderer := &renderer{}
 	e.Renderer = renderer
@@ -31,7 +35,7 @@ func setupEcho() *echo.Echo {
 	if err:= gha.LoadTemplates(renderer); err != nil {
 		panic(err)
 	}
-	gha.SetupRoutes(e)
+	gha.SetupRoutes(&store, e)
 
 	return e
 }

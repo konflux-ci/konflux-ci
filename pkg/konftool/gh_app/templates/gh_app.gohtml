@@ -7,6 +7,7 @@
 
 <body>
     <h1>GitHub integration setup</h1>
+    {{ template "error_list.gohtml" . }}
     <p>GitHub App registration status: {{.AppRegState}}
     {{ if .AppRegState.Is "Unconfigured" }}
         {{ template "gh_app_form.gohtml" . }}

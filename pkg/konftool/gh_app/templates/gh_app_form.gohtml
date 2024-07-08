@@ -47,6 +47,6 @@
 GitHub app creation process. Depending on your configuration, you may be
 required to authenticate.
 <form method="post" action="{{.GitHubNewAppURL}}">
-    <p><input name="manifest" value="{{.Manifest}}">
+    <p><input type="hidden" name="manifest" value="{{.Manifest}}">
     <p><button type="submit">Configure GitHub App</button>
 <form>
