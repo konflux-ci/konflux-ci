@@ -24,3 +24,10 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - releases/status
+  verbs:
+  - get
+  - patch
