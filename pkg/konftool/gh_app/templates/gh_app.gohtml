@@ -2,16 +2,14 @@
 
 <html>
 <head>
-<title>GitHub App setup</title>
+<title>GitHub integration setup</title>
 </head>
 
 <body>
-<h1>GitHub App setup</h1>
-<p>GitHub App setup status: Unconfigured
-<form>
-<p>Clicking the button below will redirect you to GitHub to complete the 
-GitHub app creation process.
-<p><button type="submit">Configure GitHub App</button>
-<form>
+    <h1>GitHub integration setup</h1>
+    <p>GitHub App registration status: {{.AppRegState}}
+    {{ if .AppRegState.Is "Unconfigured" }}
+        {{ template "gh_app_form.gohtml" . }}
+    {{ end }}
 </body>
 </html>

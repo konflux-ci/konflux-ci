@@ -3,22 +3,39 @@ package gh_app
 import (
 	"net/http"
 
+	"github.com/konflux-ci/konflux-ci/pkg/konftool/gh_app/ghappregstate"
 	"github.com/konflux-ci/konflux-ci/pkg/konftool/gh_app/templates"
 	"github.com/konflux-ci/konflux-ci/pkg/konftool/webapps"
 	"github.com/labstack/echo/v4"
 )
 
-type GitHubApp struct{}
+const (
+	ghAppHomeRoute = "gh_app_home"
+)
+
+type GitHubApp struct {
+	SetWebHookURL *string
+	AppRegState ghappregstate.Enum
+	AppRegCode string
+	AppIsPublic bool
+}
 
 func (ghapp *GitHubApp) SetupRoutes(e webapps.EchoLike) {
 	e.GET("/", func(c echo.Context) error {
-		//return c.String(http.StatusOK, "Hello from GitHub App controller")
-		return c.Render(http.StatusOK, "gh_app.gohtml", nil)
-	})
-	e.GET("/another", func(c echo.Context) error {
-		//return c.String(http.StatusOK, "Hello from GitHub App controller")
-		return c.Render(http.StatusOK, "another.gohtml", nil)
-	})
+		// TODO: Temp hack to get a proper configuration for GitHub, Provide UI
+		//       to edit this instead of hardcoding here
+		tempWebHookURL := "https://smee.io/d3E32qmidjtLumte"
+		ghapp.SetWebHookURL = &tempWebHookURL
+
+		if c.QueryParams().Has("code") {
+			ghapp.AppRegState = ghappregstate.FetchingAppData
+			ghapp.AppRegCode = c.QueryParam("code")
+		}
+		return c.Render(http.StatusOK, "gh_app.gohtml", &templateData{
+			gitHubApp:   ghapp,
+			echoContext: c,
+		})
+	}).Name = ghAppHomeRoute
 }
 
 func (ghapp *GitHubApp) LoadTemplates(t webapps.TemplateLoader) error {
