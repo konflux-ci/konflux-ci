@@ -28,7 +28,7 @@ spec:
         - name: url
           value: https://github.com/scoheb/release-service-catalog.git
         - name: revision
-          value: tenant-pipelines
+          value: 105efb845cf6a87891a1392a3a61764e20bc8498
         - name: pathInRepo
           value: "pipelines/tenant-push-to-external-registry/tenant-push-to-external-registry.yaml"
     serviceAccountName: appstudio-pipeline
