@@ -266,7 +266,8 @@ to configure a Quay.io application and deploy `image-controller`.
 
 The UI should now display the Lifecycle diagram for your application. In the Components
 tab you should be able to see your component listed and you'll be prompted to merge the
-automatically-created Pull Request (don't do that just yet).
+automatically-created Pull Request (don't do that just yet. we'll have it merged in
+section [Trigger the Release](#trigger-the-release)).
 
 **NOTE:** if you have NOT completed the Quay.io setup steps in the previous section,
 Konflux will be UNABLE to send a PR to your repository. Konflux will display "Sending
@@ -350,7 +351,8 @@ git push origin HEAD
    branch and not against the repository from which it was forked** (i.e.
    `base repository` should reside under your user name).
 
-   Finally, click "Create pull request".
+   Finally, click "Create pull request" (we'll have it merged in section
+   [Trigger the Release](#trigger-the-release)).
 
 ### Observe the Behavior
 
