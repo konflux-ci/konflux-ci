@@ -512,7 +512,7 @@ Kubernetes resource.
 **NOTE:** If you have imported your component via the UI, a similiar Integration Test is
 pre-installed.
 
-In our case, The resource is defined in
+In our case, the resource is defined in
 `test/resources/demo-users/user/ns2/ec-integration-test.yaml`.
 
 :gear: Apply the resource manifest:
@@ -598,7 +598,7 @@ Alternatively, you can create it using `kubectl`. The manifest is stored in
 2. :gear: Deploy the manifest:
 
 ```bash
-kubectl create -f .test/resources/demo-users/user/ns2/integration-test-hello.yaml
+kubectl create -f ./test/resources/demo-users/user/ns2/integration-test-hello.yaml
 ```
 
 :gear: Post a `/retest` comment on your GitHub PR, and once the `pull-request`
