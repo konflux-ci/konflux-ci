@@ -4,6 +4,15 @@ kind: Namespace
 metadata:
   name: test-pvc-ns
 ---
+# The pod sometimes fails to be created as it depends on the default SA to be created
+# for the new namespace, which causes the retry command to fail immediately.
+# So, creating it here explicitly to avoid this.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: default
+  namespace: test-pvc-ns
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
