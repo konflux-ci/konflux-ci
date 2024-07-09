@@ -658,7 +658,7 @@ together with the snapshot for creating a new `Release` resource.
 
 The `ReleasePlan` resource includes a reference to the application that the development
 team wants to release, along with the namespace where the application is supposed to be
-released.
+released (in this case, `managed-ns2`).
 
 The `ReleasePlanAdmission` resource defines how the application should be released, and
 it is typically maintained, not by the development team, but by the managed environment
