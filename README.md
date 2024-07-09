@@ -261,6 +261,9 @@ to configure a Quay.io application and deploy `image-controller`.
 7. Under the Pipeline drop-down list, select `docker-build`.
 8. Click `Create application`.
 
+**NOTE:** If you encounter `404 Not Found` error, refer to the
+[troubleshooting guide](./docs/troubleshooting.md#unable-to-create-application-with-component-using-the-konflux-ui).
+
 The UI should now display the Lifecycle diagram for your application. In the Components
 tab you should be able to see your component listed and you'll be prompted to merge the
 automatically-created Pull Request (don't do that just yet).
@@ -509,7 +512,7 @@ E.g. [Docker Hub](https://hub.docker.com/), [Quay.io](https://quay.io/repository
 You can add integration tests either via the Konflux UI, or by applying the equivalent
 Kubernetes resource.
 
-**NOTE:** If you have imported your component via the UI, a similiar Integration Test is
+**NOTE:** If you have imported your component via the UI, a similar Integration Test is
 pre-installed.
 
 In our case, the resource is defined in

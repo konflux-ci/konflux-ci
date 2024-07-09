@@ -6,6 +6,7 @@ Troubleshooting Common Issues
 - [Using Podman with Kind while also having Docker Installed](#using-podman-with-kind-while-also-having-docker-installed)
 - [Unknown Field "replacements"](#unknown-field-replacements)
 - [Restarting the Cluster](#restarting-the-cluster)
+- [Unable to Create Application with Component Using the Konflux UI](#unable-to-create-application-with-component-using-the-konflux-ui)
 - [PR changes are not Triggering Pipelines](#pr-changes-are-not-triggering-pipelines)
 - [Setup Scripts Fail or Pipeline Execution Stuck or Fails](#setup-scripts-fail-or-pipeline-execution-stuck-or-fails)
   * [Running out of Resources](#running-out-of-resources)
@@ -55,6 +56,14 @@ podman restart konflux-control-plane
 
 **Note:** It might take a few minutes for the UI to become available once the container
 is restarted.
+
+# Unable to Create Application with Component Using the Konflux UI
+
+If you see error `404 Not Found` when trying to create an Application with a Component
+using the Konflux UI, this is most probably because image-controller was not properly
+installed before trying to onboard the application. Refer to the Quay.io application
+[setup step](../README.md#option-1-onboard-application-with-the-konflux-ui) and try
+again.
 
 # PR changes are not Triggering Pipelines
 
