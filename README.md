@@ -97,21 +97,22 @@ git clone https://github.com/konflux-ci/konflux-ci.git
 cd konflux-ci
 ```
 
+**Note:** It is recommended that you increase the `inotify` resource limits in order to
+avoid issues related to
+[too many open files](https://kind.sigs.k8s.io/docs/user/known-issues/#pod-errors-due-to-too-many-open-files). To increase the limits temporarily, run the
+following commands:
+
+```bash
+sudo sysctl fs.inotify.max_user_watches=524288
+sudo sysctl fs.inotify.max_user_instances=512
+```
+
 From the root of this repository, run the setup scripts:
 
 1. :gear: Create a cluster
 
 ```bash
 kind create cluster --name konflux --config kind-config.yaml
-```
-
-**Note:** If the cluster or any deployments fail to start because of
-[too many open files](https://kind.sigs.k8s.io/docs/user/known-issues/#pod-errors-due-to-too-many-open-files)
-run the following commands:
-
-```bash
-sudo sysctl fs.inotify.max_user_watches=524288
-sudo sysctl fs.inotify.max_user_instances=512
 ```
 
 **Note:** When using Podman, it is recommended that you increase the PID limit on the
