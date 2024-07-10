@@ -72,6 +72,8 @@ your local machine.
 
 ## Machine Minimum Requirements
 
+The deployment is currently only supported on **x86_64 Linux** platforms.
+
 The deployment requires the following **free** resources:
 
 **CPU**: 4 cores\
