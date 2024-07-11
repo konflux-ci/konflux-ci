@@ -1,0 +1,31 @@
+issuer: https://localhost:9443/idp/
+storage:
+  type: kubernetes
+  config:
+    inCluster: true
+web:
+  https: 0.0.0.0:9443
+  tlsCert: /etc/dex/tls/tls.crt
+  tlsKey: /etc/dex/tls/tls.key
+oauth2:
+  skipApprovalScreen: true
+staticClients:
+- id: oauth2-proxy
+  redirectURIs:
+  - 'https://localhost:9443/oauth2/callback'
+  name: 'oauth2-proxy'
+  secretEnv: 'CLIENT_SECRET'
+enablePasswordDB: true
+staticPasswords:
+- email: "user1@konflux.dev"
+  # bcrypt hash of the string "password": $(echo password | htpasswd -BinC 10 admin | cut -d: -f2)
+  hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"
+  username: "user1"
+  userID: "7138d2fe-724e-4e86-af8a-db7c4b080e20"
+- email: "user2@konflux.dev"
+  # bcrypt hash of the string "password": $(echo password | htpasswd -BinC 10 admin | cut -d: -f2)
+  hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"
+  username: "user2"
+  userID: "ea8e8ee1-2283-4e03-83d4-b00f8b821b64"
+telemetry:
+  http: 0.0.0.0:5558
