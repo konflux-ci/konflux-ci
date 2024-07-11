@@ -33,6 +33,23 @@ deploy() {
     retry kubectl apply -k "${script_path}/konflux-ci/integration"
 
     kubectl apply -k "${script_path}/konflux-ci/ui"
+    if ! kubectl get secret oauth2-proxy-client-secret -n konflux-ui; then
+        kubectl get secret oauth2-proxy-client-secret --namespace=dex \
+            -o yaml | grep -v '^\s*namespace:\s' \
+            | kubectl apply --namespace=konflux-ui -f -
+    fi
+    if ! kubectl get secret oauth2-proxy-cookie-secret -n konflux-ui; then
+        local cookie_secret
+        # The cookie secret needs to be 16, 24, or 32 bytes long.
+        # kubectl is re-encoding the value of cookie_secret, so when it's being served
+        # to oauth2-proxy, it's actually the 24 bytes string which was the output of
+        # openssl's encoding.
+        # Need to make sure this is consistent, or find a different approach.
+        cookie_secret="$(openssl rand -base64 16)"
+        kubectl create secret generic oauth2-proxy-cookie-secret \
+            --namespace=konflux-ui \
+            --from-literal=cookie-secret="$cookie_secret"
+    fi
 }
 
 
