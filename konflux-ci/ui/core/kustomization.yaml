@@ -1,33 +1,7 @@
 kind: Kustomization
 apiVersion: kustomize.config.k8s.io/v1beta1
 resources:
-  - chrome
-  - hac
   - ns.yaml
   - proxy
-images:
-  # chrome frontend
-  - name: quay.io/cloudservices/insights-chrome-frontend
-    newName: quay.io/redhat-user-workloads/konflux-console-tenant/insights-chrome-rebrand/insights-chrome-rebrand
-    newTag: 0903f0329cc309170f8e51b2d30ffe3e26a9fd1d
-  # chrome service
-  - name: quay.io/cloudservices/chrome-service
-    newName: quay.io/cloudservices/chrome-service
-    newTag: 6f08f67
-  # hac
-  - name: quay.io/cloudservices/hac-core-frontend
-    newName: quay.io/cloudservices/hac-core-frontend
-    newTag: 0bffd43
-  # hac-dev
-  - name: quay.io/cloudservices/hac-dev-frontend
-    newName: quay.io/cloudservices/hac-dev-frontend
-    newTag: 9522a36
-  # workspace-manager
-  - name: quay.io/konflux-ci/workspace-manager
-    digest: sha256:a46d51b8a306f89eb36a63cb463b04324b3b59808361e10da3945a7ad961e0e6
 
-configMapGenerator:
-  - name: fed-modules
-    files:
-      - fed-modules.json
 namespace: konflux-ui
