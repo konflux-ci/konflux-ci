@@ -30,27 +30,6 @@ spec:
           matchLabels:
             app: proxy
       initContainers:
-      - name: copy-chrome-static-content
-        image: quay.io/cloudservices/chrome-service:d205bf3
-        command:
-          - cp
-          - -R
-          - /static
-          - /mnt/chrome
-        volumeMounts:
-        - name: chrome-static
-          mountPath: "/mnt/chrome"
-        securityContext:
-          readOnlyRootFilesystem: true
-          runAsNonRoot: true
-          runAsUser: 1001
-        resources:
-          limits:
-            cpu: 50m
-            memory: 128Mi
-          requests:
-            cpu: 10m
-            memory: 64Mi
       - name: add-sva-token-to-nginx-config
         image: registry.access.redhat.com/ubi9/ubi@sha256:66233eebd72bb5baa25190d4f55e1dc3fff3a9b77186c1f91a0abdb274452072
         command:
@@ -119,8 +98,6 @@ spec:
             subPath: nginx.conf
             name: proxy
             readOnly: true
-          - name: chrome-static
-            mountPath: /opt/app-root/src/chrome
           - name: logs
             mountPath: /var/log/nginx
           - name: nginx-tmp
@@ -154,33 +131,53 @@ spec:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
           runAsUser: 1001
+      - image: kennethreitz/httpbin
+        name: httpbin
+        resources:
+          limits:
+            cpu: 300m
+            memory: 256Mi
+          requests:
+            cpu: 30m
+            memory: 128Mi
       - image: quay.io/oauth2-proxy/oauth2-proxy@sha256:3da33b9670c67bd782277f99acadf7026f75b9507bfba2088eb2d497266ef7fc
         name: oauth2-proxy
+        env:
+        - name: OAUTH2_PROXY_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: oauth2-proxy-client-secret
+              key: client-secret
+        - name: OAUTH2_PROXY_COOKIE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: oauth2-proxy-cookie-secret
+              key: cookie-secret
         args:
           - --provider
-          - keycloak-oidc
+          - oidc
+          - --provider-display-name
+          - "Dex OIDC"
+          - --client-id
+          - oauth2-proxy
           - --http-address
           - "127.0.0.1:6000"
+          - --redirect-url
+          - https://localhost:9443/oauth2/callback
           - --oidc-issuer-url
-          - https://localhost:9443/idp/realms/redhat-external
-          - --ssl-insecure-skip-verify
+          - https://localhost:9443/idp/
+          - --cookie-secure
           - "true"
-          - --skip-jwt-bearer-tokens
+          - --cookie-name
+          - __Host-konflux-ci-cookie
+          - --email-domain
+          - "*"
+          - --ssl-insecure-skip-verify
           - "true"
           - --set-xauthrequest
           - "true"
-          - --insecure-oidc-allow-unverified-email
-          - "true"
-          - --email-domain
-          - "*"
-          - --cookie-secret
-          - NOT_USED_BUT_REQUIRED_VALUE_32b_
-          - --client-secret
-          - this_value_is_required_but_not_used
-          - --client-id
-          - oauth2-proxy
-          - --oidc-extra-audience
-          - "account"
+          - --whitelist-domain
+          - localhost:9443
         ports:
           - containerPort: 6000
             name: web
@@ -204,8 +201,6 @@ spec:
               - key: nginx.conf
                 path: nginx.conf 
           name: proxy
-        - name: chrome-static
-          emptyDir: {}
         - name: logs
           emptyDir: {}
         - name: nginx-tmp

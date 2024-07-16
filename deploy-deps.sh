@@ -42,7 +42,7 @@ deploy() {
     deploy_cert_manager
     kubectl apply -k "${script_path}/dependencies/cluster-issuer"
     deploy_tekton
-    deploy_keycloak
+    deploy_dex
     deploy_registry
 }
 
@@ -91,33 +91,15 @@ deploy_cert_manager() {
           "Cert manager did not become available within the allocated time"
 }
 
-deploy_keycloak() {
-    kubectl apply -k "${script_path}/dependencies/keycloak/crd"
-    sleep 2 # Give the api time to realize it support new CRDs
-    kubectl apply -k "${script_path}/dependencies/keycloak/deployment"
-    if ! kubectl get secret keycloak-db-secret -n keycloak; then
-        local db_password
-        db_password="$(openssl rand -base64 20)"
-        kubectl create secret generic keycloak-db-secret \
-            --namespace=keycloak \
-            --from-literal=POSTGRES_USER=postgres \
-            --from-literal=POSTGRES_PASSWORD="$db_password"
+deploy_dex() {
+    kubectl apply -k "${script_path}/dependencies/dex"
+    if ! kubectl get secret oauth2-proxy-client-secret -n dex; then
+        local client_secret
+        client_secret="$(openssl rand -base64 20)"
+        kubectl create secret generic oauth2-proxy-client-secret \
+            --namespace=dex \
+            --from-literal=client-secret="$client_secret"
     fi
-
-    local ret=0
-    retry "kubectl wait --for=condition=Ready --timeout=300s -n keycloak -l app.kubernetes.io/name=keycloak-operator pod" \
-          "Keycloack did not become available within the allocated time"
-    kubectl wait --for=condition=Ready --timeout=300s -n keycloak keycloak/keycloak || ret="$?"
-
-    if [[ ret -ne 0 ]]; then
-        kubectl get -o yaml keycloak/keycloak -n keycloak
-        kubectl get pod -n keycloak
-        kubectl logs -l app.kubernetes.io/name=keycloak-operator -n keycloak 
-        return "$ret"
-    fi
-
-    kubectl wait --for=condition=Ready --timeout=240s -l app=postgresql-db -n keycloak pod
-    kubectl wait --for=condition=Ready --timeout=300s -l app=keycloak -n keycloak pod
 }
 
 deploy_registry() {
