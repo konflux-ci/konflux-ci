@@ -110,6 +110,12 @@ spec:
             mountPath: /mnt/nginx-generated-config
           - name: openresty
             mountPath: /var/run/openresty
+          - name: pages
+            mountPath: /opt/app-root/src/login.html
+            subPath: login.html
+          - name: pages
+            mountPath: /opt/app-root/src/logout.html
+            subPath: logout.html
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
@@ -217,6 +223,14 @@ spec:
             secretName: proxy
         - name: openresty
           emptyDir: {}
+        - name: pages
+          configMap:
+            name: pages
+            items:
+              - key: login.html
+                path: login.html
+              - key: logout.html
+                path: logout.html
 ---
 apiVersion: v1
 kind: Service
