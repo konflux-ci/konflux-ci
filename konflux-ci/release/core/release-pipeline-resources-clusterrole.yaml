@@ -1,23 +1,34 @@
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: release-service-snapshot-editor-role
+  name: release-pipeline-resource-role
 rules:
 - apiGroups:
   - appstudio.redhat.com
   resources:
+  - releases
+  - releaseplans
+  - releaseplanadmissions
   - snapshots
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - internalrequests
   verbs:
   - create
   - delete
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - appstudio.redhat.com
   resources:
-  - snapshots/status
+  - releases/status
   verbs:
   - get
+  - patch

@@ -1,50 +1,64 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - admissionregistration.k8s.io_v1_mutatingwebhookconfiguration_release-service-mutating-webhook-configuration.yaml
-  - admissionregistration.k8s.io_v1_validatingwebhookconfiguration_release-service-validating-webhook-configuration.yaml
-  - apiextensions.k8s.io_v1_customresourcedefinition_releaseplanadmissions.appstudio.redhat.com.yaml
-  - apiextensions.k8s.io_v1_customresourcedefinition_releaseplans.appstudio.redhat.com.yaml
-  - apiextensions.k8s.io_v1_customresourcedefinition_releases.appstudio.redhat.com.yaml
-  - apiextensions.k8s.io_v1_customresourcedefinition_releaseserviceconfigs.appstudio.redhat.com.yaml
-  - apps_v1_deployment_release-service-controller-manager.yaml
-  - batch_v1_cronjob_remove-expired-releases.yaml
-  - rbac.authorization.k8s.io_v1_clusterrolebinding_release-service-application-role-binding.yaml
-  - rbac.authorization.k8s.io_v1_clusterrolebinding_release-service-component-role-binding.yaml
-  - rbac.authorization.k8s.io_v1_clusterrolebinding_release-service-environment-role-binding.yaml
-  - rbac.authorization.k8s.io_v1_clusterrolebinding_release-service-manager-rolebinding.yaml
-  - rbac.authorization.k8s.io_v1_clusterrolebinding_release-service-proxy-rolebinding.yaml
-  - rbac.authorization.k8s.io_v1_clusterrolebinding_release-service-releaseplanadmission-role-binding.yaml
-  - rbac.authorization.k8s.io_v1_clusterrolebinding_release-service-releaseplan-role-binding.yaml
-  - rbac.authorization.k8s.io_v1_clusterrolebinding_release-service-release-role-binding.yaml
-  - rbac.authorization.k8s.io_v1_clusterrolebinding_release-service-snapshotenvironmentbinding-role-binding.yaml
-  - rbac.authorization.k8s.io_v1_clusterrolebinding_release-service-snapshot-role-binding.yaml
-  - rbac.authorization.k8s.io_v1_clusterrolebinding_release-service-tekton-role-binding.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_release-pipeline-resource-role.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_release-service-application-role.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_release-service-component-role.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_releaseserviceconfig-role.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_release-service-environment-viewer-role.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_release-service-manager-role.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_release-service-proxy-role.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_release-service-release-editor-role.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_release-service-releaseplanadmission-editor-role.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_release-service-releaseplanadmission-viewer-role.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_release-service-releaseplan-editor-role.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_release-service-releaseplan-viewer-role.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_release-service-release-viewer-role.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_release-service-snapshot-editor-role.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_release-service-snapshotenvironmentbinding-editor-role.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_release-service-snapshot-viewer-role.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_release-service-tekton-role.yaml
-  - rbac.authorization.k8s.io_v1_rolebinding_releaseserviceconfigs-rolebinding.yaml
-  - rbac.authorization.k8s.io_v1_rolebinding_release-service-leader-election-rolebinding.yaml
-  - rbac.authorization.k8s.io_v1_role_release-service-leader-election-role.yaml
-  - v1_configmap_release-service-manager-config.yaml
-  - v1_configmap_release-service-manager-properties.yaml
-  - v1_namespace_release-service.yaml
-  - v1_serviceaccount_release-service-controller-manager.yaml
-  - v1_service_release-service-controller-manager-metrics-service.yaml
-  - v1_service_release-service-webhook-service.yaml
-  - release-service-config.yaml
+  - https://github.com/konflux-ci/release-service/config/default?ref=0b2badbef3eb6a31df27b324a15007949aa78354
   - https://github.com/redhat-appstudio/internal-services/config/crd?ref=b5a56d8813bb5ca186c0b7f2daf8f6de6119431d
+  - release-pipeline-resources-clusterrole.yaml
+  - release-service-config-rbac.yaml
+
+images:
+  - name: quay.io/konflux-ci/release-service
+    newName: quay.io/konflux-ci/release-service
+    newTag: 0b2badbef3eb6a31df27b324a15007949aa78354
+
+namespace: release-service
+
+patches:
+  - target:
+      group: monitoring.coreos.com
+      version: v1
+      kind: ServiceMonitor
+      name: release-service-controller-manager-metrics-monitor
+    path: remove-service-monitor.yaml
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRole
+      name: release-service-metrics-reader
+    path: remove-metrics-reader-cluster-role.yaml
+  - target:
+      group: ""
+      version: v1
+      kind: Secret
+      name: release-service-metrics-reader
+    path: remove-metrics-reader-secret.yaml
+  - target:
+      group: ""
+      version: v1
+      kind: ServiceAccount
+      name: release-service-metrics-reader
+    path: remove-metrics-reader-sa.yaml
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRoleBinding
+      name: release-service-prometheus-role-binding
+    path: remove-metrics-reader-cluster-role-binding.yaml
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRole
+      name: release-service-prometheus-viewer-role
+    path: remove-prometheus-viewer-cluster-role.yaml
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: NetworkPolicy
+      name: release-service-egress-controller-manager
+    path: remove-network-policy.yaml
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRoleBinding
+      name: release-service-prometheus-role-binding
+    path: remove-prometheus-cluster-role-binding.yaml
