@@ -8,4 +8,7 @@ configMapGenerator:
   - name: proxy
     files:
       - nginx.conf
-
+  - name: pages
+    files:
+      - login.html
+      - logout.html
