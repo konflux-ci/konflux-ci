@@ -6,11 +6,12 @@
       "customType": "regex",
       "fileMatch": ["(^|\/)kustomization\\.(yaml|yml)$"],
       "matchStrings": [
-        "- (?<packageName>https:\/\/github\\.com\/[^/]+\/[^/]+)\/.*\\?ref=(?<currentDigest>[a-f0-9]{40})",
+        "- (?<pName>https:\/\/github\\.com\/[^/]+\/[^/]+)\/.*\\?ref=(?<currentDigest>[a-f0-9]{40})",
         "newTag:\\s+(?<currentDigest>[a-f0-9]{40})"
       ],
       "datasourceTemplate": "git-refs",
-      "currentValueTemplate": "main"
+      "currentValueTemplate": "main",
+      "packageNameTemplate": "{{ pName }}"
     }
   ]
 }
