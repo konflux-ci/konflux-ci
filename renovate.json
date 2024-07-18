@@ -10,7 +10,8 @@
         "newTag:\\s+(?<currentDigest>[a-f0-9]{40})"
       ],
       "datasourceTemplate": "git-refs",
-      "currentValueTemplate": "main"
+      "currentValueTemplate": "main",
+      "packageNameTemplate": "{{{ packageName }}}"
     }
   ]
 }
