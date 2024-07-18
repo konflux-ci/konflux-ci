@@ -1,4 +1,4 @@
-apiVersion: appstudio.redhat.com/v1beta1
+apiVersion: appstudio.redhat.com/v1beta2
 kind: IntegrationTestScenario
 metadata:
   annotations:

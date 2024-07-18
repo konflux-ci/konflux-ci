@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - enterprise-contract-service_appstudio.redhat.com_v1alpha1_enterprisecontractpolicy_all.yaml
+  - enterprise-contract-service_appstudio.redhat.com_v1alpha1_enterprisecontractpolicy_default.yaml
+  - enterprise-contract-service_appstudio.redhat.com_v1alpha1_enterprisecontractpolicy_redhat-no-hermetic.yaml
+  - enterprise-contract-service_appstudio.redhat.com_v1alpha1_enterprisecontractpolicy_redhat-trusted-tasks.yaml
+  - enterprise-contract-service_appstudio.redhat.com_v1alpha1_enterprisecontractpolicy_redhat.yaml
+  - enterprise-contract-service_appstudio.redhat.com_v1alpha1_enterprisecontractpolicy_slsa3.yaml
+
+namespace: enterprise-contract-service

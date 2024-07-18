@@ -3,7 +3,3 @@ kind: Kustomization
 resources:
   - core
   - build-pipeline-config.yaml
-images:
-- name: quay.io/konflux-ci/build-service
-  newName: quay.io/konflux-ci/build-service
-  newTag: 632b0096f304baf3949cf58f066814d0dc19ae6c

@@ -1,0 +1,6 @@
+---
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
+metadata:
+  name: ecp-example
+$patch: delete

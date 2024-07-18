@@ -1,0 +1,5 @@
+- op: add
+  path: /spec/jobTemplate/spec/template/spec/containers/0/resources/requests
+  value:
+    cpu: 50m
+    memory: 64Mi
