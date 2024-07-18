@@ -15,7 +15,7 @@ main() {
         --from-literal github-private-key="$app_private_key" \
         --from-literal github-application-id="$app_id" \
         --from-literal webhook.secret="$app_webhook_secret"; done
-    sed -i '' -e "s/<smee-channel>/$smee_channel/g" smee/smee-client.yaml
+    sed -i "s/<smee-channel>/$smee_channel/g" smee/smee-client.yaml
     kubectl create -f ./smee/smee-client.yaml
 }
 
