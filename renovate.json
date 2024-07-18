@@ -1,0 +1,16 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "enabledManagers": ["regex"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["(^|\/)kustomization\\.(yaml|yml)$"],
+      "matchStrings": [
+        "- (?<packageName>https:\/\/github\\.com\/[^/]+\/[^/]+)\/.*\\?ref=(?<currentDigest>[a-f0-9]{40})",
+        "newTag:\\s+(?<currentDigest>[a-f0-9]{40})"
+      ],
+      "datasourceTemplate": "git-refs",
+      "currentValueTemplate": "main"
+    }
+  ]
+}
