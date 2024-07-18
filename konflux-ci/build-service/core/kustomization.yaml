@@ -8,7 +8,7 @@ namespace: build-service
 images:
   - name: quay.io/konflux-ci/build-service
     newName: quay.io/konflux-ci/build-service
-    newTag: 463f4e01eb8ab92cac71da97294072463b8ac49b
+    newTag: 2055ba3929cf2b700119b587f880115c856728e3
 
 patches:
   - target:
