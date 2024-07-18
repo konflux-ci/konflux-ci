@@ -46,6 +46,25 @@ jobs:
       - name: Deploy test resources
         run: |
           ./deploy-test-resources.sh
+
+      - name: Prepare resources for E2E tests
+        env:
+          APP_ID: ${{ secrets.APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+          APP_WEBHOOK_SECRET: ${{ secrets.APP_WEBHOOK_SECRET }}
+          QUAY_ORG: ${{ secrets.QUAY_ORG }}
+          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+          SMEE_CHANNEL: ${{ secrets.SMEE_CHANNEL }}
+        run: |
+          ./prepare-e2e.sh
+
+      - name: Run E2E tests
+        env:
+          GH_ORG: ${{ secrets.GH_ORG }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          QUAY_DOCKERCONFIGJSON: ${{ secrets.QUAY_DOCKERCONFIGJSON }}
+        run: |
+          ./run-e2e.sh
       
       - name: Generate error logs
         if: ${{ !cancelled() }}
