@@ -11,7 +11,9 @@ jobs:
         with:
           # this might remove tools that are actually needed,
           # if set to "true" but frees about 6 GB
-          tool-cache: true
+          tool-cache: false
+          
+          docker-images: false
       - name: Checkout Repository
         uses: actions/checkout@v3
   
