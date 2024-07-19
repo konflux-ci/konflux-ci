@@ -9,7 +9,6 @@ nodes:
     nodeRegistration:
       kubeletExtraArgs:
         node-labels: "ingress-ready=true"
-        system-reserved: memory=8Gi
   extraPortMappings:
   - containerPort: 30010
     hostPort: 8888

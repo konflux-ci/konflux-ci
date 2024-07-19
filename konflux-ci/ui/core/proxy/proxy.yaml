@@ -82,7 +82,7 @@ spec:
             cpu: 10m
             memory: 64Mi
       containers:
-      - image: openresty/openresty:1.25.3.1-0-jammy
+      - image: quay.io/psturc/openresty:1.25.3.1-0-jammy
         name: nginx-120
         command: 
           - "/usr/local/openresty/bin/openresty"

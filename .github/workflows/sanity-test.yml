@@ -74,7 +74,7 @@ jobs:
         run: |
           ./run-e2e.sh
       
-      - name: Generate error logs
-        if: ${{ !cancelled() }}
-        run: |
-          ./generate-err-logs.sh
+      # - name: Generate error logs
+      #   if: ${{ !cancelled() }}
+      #   run: |
+      #     ./generate-err-logs.sh
