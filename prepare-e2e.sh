@@ -21,5 +21,6 @@ main() {
 
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    kubectl run clair -n default --attach=true --restart=Never --image quay.io/redhat-appstudio/clair-in-ci:v1 --command -- "clair-action" "report" "--image-ref=quay.io/psturc_org/user-ns2/konflux-ci-upstream/konflux-ci-upstream@sha256:06ed74b1a0e4cce488ef5f831fcd403385bda21ad2ec27d034b8c1a54ed59fb2" "--db-path=/tmp/matcher.db" "--format=quay"
     main "$@"
 fi
