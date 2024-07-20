@@ -17,7 +17,6 @@ main() {
         kubectl get pods -n user-ns2 -o yaml
         kubectl get pr -A -o yaml
         kubectl get tr -A -o yaml
-        for pod in $(kubectl get pods -n user-ns2 -o name); do echo "Logs for $pod:" && kubectl logs "$pod" -n user-ns2 --all-containers=true; done
         kubectl get events -n user-ns2
     fi
 }
