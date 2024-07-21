@@ -18,6 +18,7 @@ main() {
         kubectl get pr -A -o yaml
         kubectl get tr -A -o yaml
         kubectl get events -n user-ns2
+        exit "$ret"
     fi
 }
 
