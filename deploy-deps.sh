@@ -40,6 +40,7 @@ check_req(){
 
 deploy() {
     deploy_cert_manager
+    deploy_trust_manager
     kubectl apply -k "${script_path}/dependencies/cluster-issuer"
     deploy_tekton
     deploy_keycloak
@@ -92,6 +93,13 @@ deploy_cert_manager() {
           "Cert manager did not become available within the allocated time"
 }
 
+deploy_trust_manager() {
+    kubectl apply -k "${script_path}/dependencies/trust-manager"
+    sleep 5
+    retry "kubectl wait --for=condition=Ready --timeout=60s -l app.kubernetes.io/instance=trust-manager -n cert-manager pod" \
+          "Trust manager did not become available within the allocated time"
+}
+
 deploy_keycloak() {
     kubectl apply -k "${script_path}/dependencies/keycloak/crd"
     sleep 2 # Give the api time to realize it support new CRDs
@@ -125,6 +133,11 @@ deploy_registry() {
     kubectl apply -k "${script_path}/dependencies/registry"
     retry "kubectl wait --for=condition=Ready --timeout=240s -n kind-registry -l run=registry pod" \
           "The local registry did not become available within the allocated time"
+    # Copy the registry secret to cert-manager ns so the ca cert can be distrubuted
+    kubectl delete secret -n cert-manager --ignore-not-found=true local-registry-tls
+    kubectl get secret local-registry-tls --namespace=kind-registry -o yaml \
+        | grep -v '^\s*namespace:\s' | kubectl apply --namespace=cert-manager -f -
+
 }
 
 retry() {
