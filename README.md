@@ -407,19 +407,32 @@ generate the command to pull the image.
 
 #### Local Registry
 
-:gear: If using a local registry, Port-forward the registry service, so you can reach it from
-outside of the cluster:
+:gear: If using a local registry, Port-forward the registry service, so you can reach it
+from outside of the cluster:
 
 ```bash
-kubectl port-forward -n kind-registry svc/registry-service 30001:80
+kubectl port-forward -n kind-registry svc/registry-service 30001:443
 ```
+
+The local registry is using a self-signed certificate that is being distributed to all
+namespaces. You can fetch the certificate from the cluster and use it on the `curl`
+calls below. This will look something like this:
+
+```bash
+kubectl get secrets -n kind-registry local-registry-tls \
+   -o jsonpath='{.data.ca\.crt}' | base64 -d > ca.crt
+
+curl --cacert ca.crt https://...
+```
+
+Instead, we're going to use the `-k` flag to skip the TLS verification.
 
 Leave the terminal hanging and on a new terminal window:
 
 :gear: List the repositories on the registry:
 
 ```bash
-curl http://localhost:30001/v2/_catalog
+curl -k https://localhost:30001/v2/_catalog
 ```
 
 The output should look like this:
@@ -432,7 +445,7 @@ The output should look like this:
 change the pipeline's output-image parameter):
 
 ```bash
-curl http://localhost:30001/v2/test-component/tags/list
+curl -k https://localhost:30001/v2/test-component/tags/list
 ```
 
 You should see a list of tags pushed to that repository. Take a note of that.
