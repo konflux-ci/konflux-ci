@@ -230,7 +230,7 @@ metadata:
     app: proxy
   name: proxy
 spec:
-  type: NodePort
+  type: ClusterIP
   internalTrafficPolicy: Cluster
   ipFamilies:
     - IPv4
@@ -238,12 +238,10 @@ spec:
   ports:
     - name: web
       port: 8888
-      nodePort: 30010
       protocol: TCP
       targetPort: web
     - name: web-tls
       port: 9443
-      nodePort: 30011
       protocol: TCP
       targetPort: web-tls
   selector:

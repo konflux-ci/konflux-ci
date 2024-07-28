@@ -3,3 +3,11 @@ kind: Kustomization
 resources:
   - core
   - certmanager
+
+patches:
+  - path: node-port-patch.yaml
+    target:
+      group: ""
+      version: v1
+      kind: Service
+      name: proxy
