@@ -43,7 +43,6 @@ spec:
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
-          runAsUser: 1001
         resources:
           limits:
             cpu: 50m
@@ -73,7 +72,6 @@ spec:
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
-          runAsUser: 1001
         resources:
           limits:
             cpu: 50m
@@ -136,7 +134,6 @@ spec:
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
-          runAsUser: 1001
       - image: quay.io/redhat-user-workloads/rhtap-o11y-tenant/workspace-manager/workspace-manager:06df38da81280ba2cf6b4a532d494f1ead8670fe
         name: workspace-manager
         ports:
@@ -153,7 +150,6 @@ spec:
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
-          runAsUser: 1001
       - image: quay.io/oauth2-proxy/oauth2-proxy@sha256:3da33b9670c67bd782277f99acadf7026f75b9507bfba2088eb2d497266ef7fc
         name: oauth2-proxy
         args:
@@ -195,7 +191,6 @@ spec:
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
-          runAsUser: 1001
       volumes:
         - configMap:
             defaultMode: 420

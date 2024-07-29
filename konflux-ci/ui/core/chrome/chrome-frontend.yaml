@@ -82,7 +82,6 @@ spec:
           securityContext:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
-            runAsUser: 1001
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
