@@ -1,5 +1,15 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "packageRules": [
+    {
+      "matchPackageNames": [
+        "https://github.com/redhat-appstudio/*",
+        "https://github.com/konflux-ci/*"
+      ],
+      "autoApprove": true,
+      "automerge": true
+    }
+  ],
   "enabledManagers": ["regex"],
   "customManagers": [
     {
