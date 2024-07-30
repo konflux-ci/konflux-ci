@@ -23,3 +23,16 @@ patches:
     target:
       kind: Deployment
       name: keycloak-operator
+  - patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: 200m
+            memory: 200Mi
+          limits:
+            cpu: 300m
+            memory: 300Mi
+    target:
+      kind: Deployment
+      name: keycloak-operator
