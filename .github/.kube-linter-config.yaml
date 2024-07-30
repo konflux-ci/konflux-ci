@@ -3,8 +3,6 @@ checks:
   include: [ ]
 
   exclude: 
-    - "unset-cpu-requirements"
-    - "unset-memory-requirements"
     - "env-var-secret"
     - "liveness-port"
     - "readiness-port"
