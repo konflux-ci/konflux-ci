@@ -7,7 +7,7 @@ spec:
   sources:
   - useDefaultCAs: true
   - secret:
-      name: "local-registry-tls"
+      name: "root-secret"
       key: "ca.crt"
   target:
     configMap:
