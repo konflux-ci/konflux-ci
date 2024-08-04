@@ -14,6 +14,6 @@ spec:
   - registry-service.kind-registry
   issuerRef:
     kind: ClusterIssuer
-    name: self-signed-cluster-issuer
+    name: ca-issuer
   secretName: local-registry-tls
   
