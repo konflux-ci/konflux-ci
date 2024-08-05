@@ -12,10 +12,11 @@ spec:
   selector:
     matchLabels:
       app: proxy
+  minReadySeconds: 30
   strategy:
     rollingUpdate:
       maxSurge: 25%
-      maxUnavailable: 25%
+      maxUnavailable: 0
   template:
     metadata:
       labels:
@@ -96,8 +97,18 @@ spec:
             path: /health
             port: 9443
             scheme: HTTPS
-          initialDelaySeconds: 10
+          initialDelaySeconds: 30
           periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 1
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health
+            port: 9443
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
           successThreshold: 1
           timeoutSeconds: 1
         ports:
