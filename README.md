@@ -223,8 +223,14 @@ kubectl create -f ./smee/smee-client.yaml
 
 The next step is to onboard an application to Konflux on behalf of `user2`.
 
-At this point, you have a choice between using the Konflux UI to onboard and using
-Kubernetes manifests.
+This section includes two options for onboarding an application to Konflux.
+
+The first option demonstrates using the Konflux UI to onboard an application and
+releases its builds to quay.io.
+
+The second option demonstrates using Kubernetes manifests to onboard, and releases
+the builds to a container registry deployed to the cluster. The idea behind this
+scenario is to simplify onboarding in order to demonstrate Konflux with greater ease.
 
 Both options will use an example repository containing a Dockerfile to be built by
 Konflux:
@@ -325,7 +331,7 @@ For the sake of simplicity, it's configured to use a registry deployed into the
 cluster during previous steps of this setup (when dependencies were installed).
 
 **Note:** The statement above is only true when not onboarding via the Konflux UI.
-Later in the process, you'll convert it to use a public image registry.
+You can convert it to use a public image registry later on.
 
 #### Creating a Pull Request
 
@@ -493,45 +499,22 @@ Once confirmed, skip to
 if you onboarded your application manually, you will now configure your application to
 trigger integration tests after each PR build is done.
 
-#### Push Builds to External Repository
+#### Create a Push Secret for the Local Registry
 
-**NOTE:** This section is only needed if you did not perform the Quay.io setup steps and
-image-controller deployment.
+The local registry is not configured to use authentication, so we need to create an
+empty push secret under namespace `user-ns2` that will be mounted to the different pods
+Konflux will create and will be used for authentication:
 
-Before you do that, you'll configure your application to use an external registry
-instead of the internal one used so far. In order to do that, you'd need to have a
-repository, on a public registry, in which you have push permissions.
-E.g. [Docker Hub](https://hub.docker.com/), [Quay.io](https://quay.io/repository/):
+:gear: Create the push secret and patch the service account used inside the pipelines:
 
-1. :gear: Create an account on a public registry (unless you have one already).
+```bash
+kubectl create -n user-ns2 secret generic regcred \
+ --from-literal .dockerconfigjson="{\"auths\":{\"x\":{\"email\":\"\"}}}" \
+ --type=kubernetes.io/dockerconfigjson
 
-2. :gear: Create a
-   [push secret](./docs/quay.md#configuring-a-push-secret-for-the-build-pipeline)
-   based on your login information and deploy it to namespace `user-ns2` on the cluster.
+kubectl patch -n user-ns2 serviceaccount appstudio-pipeline -p '{"secrets": [{"name": "regcred"}]}'
 
-3. :gear: Create a new repository on the registry to which your images will be pushed.
-   For example, in Quay.io, you'd need to click the
-   [Create New Repository](https://quay.io/new/) button and provide it with name and
-   location. Free accounts tend to have limits on private repositories, so for the
-   purpose of this example, you can make your repository public.
-
-4. Configure your build pipeline to use your new repository on the public registry
-   instead of the local registry:
-
-   :gear: Edit `.tekton/testrepo-pull-request.yaml` inside your `testrepo` fork
-   and replace the value of `output-image` to point to your repository. For example,
-   if using Quay.io and your username is `my-user` and you created a repository called
-   `my-konflux-component` under your own organization, then the configs should look like this:
-
-```yaml
-  - name: output-image
-    value: quay.io/my-user/my-konflux-component:on-pr-{{revision}}
 ```
-
-5. :gear: Push your changes to your `testrepo` fork, either as a new PR or as a change
-   to your previous PR. Observe the behavior as before, and verify that the build
-   pipeline finishes successfully, and that your public repository contains the images
-   pushed by the pipeline.
 
 #### Configure Integration Tests
 
@@ -578,6 +561,10 @@ You can click it and examine the logs to see the kind of things it verifies, and
 it passes successfully.
 
 #### Add Customized Integration Tests (Optional)
+
+**NOTE:** The custom integration test currently only supports testing images stored
+externally to the cluster. If using the local registry, skip to
+[Configure Releases](#configure-releases).
 
 The integration tests you added just now are relatively generic
 [Enterprise Contract](https://enterprisecontract.dev/) tests. The next step adds
@@ -787,6 +774,47 @@ passes and observe the behavior:
 
 Your released image should be available inside the repository pointed by your
 `ReleasePlanAdmission` resource.
+
+# TODO: MOVE EXTERNAL REPO TO LATER SECTIONS
+#### Push Builds to External Repository
+
+**NOTE:** This section is only needed if you did not perform the Quay.io setup steps and
+image-controller deployment.
+
+Before you do that, you'll configure your application to use an external registry
+instead of the internal one used so far. In order to do that, you'd need to have a
+repository, on a public registry, in which you have push permissions.
+E.g. [Docker Hub](https://hub.docker.com/), [Quay.io](https://quay.io/repository/):
+
+1. :gear: Create an account on a public registry (unless you have one already).
+
+2. :gear: Create a
+   [push secret](./docs/quay.md#configuring-a-push-secret-for-the-build-pipeline)
+   based on your login information and deploy it to namespace `user-ns2` on the cluster.
+
+3. :gear: Create a new repository on the registry to which your images will be pushed.
+   For example, in Quay.io, you'd need to click the
+   [Create New Repository](https://quay.io/new/) button and provide it with name and
+   location. Free accounts tend to have limits on private repositories, so for the
+   purpose of this example, you can make your repository public.
+
+4. Configure your build pipeline to use your new repository on the public registry
+   instead of the local registry:
+
+   :gear: Edit `.tekton/testrepo-pull-request.yaml` inside your `testrepo` fork
+   and replace the value of `output-image` to point to your repository. For example,
+   if using Quay.io and your username is `my-user` and you created a repository called
+   `my-konflux-component` under your own organization, then the configs should look like this:
+
+```yaml
+  - name: output-image
+    value: quay.io/my-user/my-konflux-component:on-pr-{{revision}}
+```
+
+5. :gear: Push your changes to your `testrepo` fork, either as a new PR or as a change
+   to your previous PR. Observe the behavior as before, and verify that the build
+   pipeline finishes successfully, and that your public repository contains the images
+   pushed by the pipeline.
 
 ## Namespace and User Management
 
