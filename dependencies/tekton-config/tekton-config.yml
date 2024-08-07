@@ -38,8 +38,7 @@ spec:
                   - name: tekton-chains-controller
                     volumeMounts:
                       - name: trusted-ca
-                        mountPath: /etc/ssl/certs/ca-custom-bundle.crt
-                        subPath: ca-bundle.crt
+                        mountPath: /etc/ssl/certs
                         readOnly: true
   pipeline:
     default-service-account: appstudio-pipeline
