@@ -14,6 +14,10 @@ spec:
   params:
     - name: PUBLIC_KEY
       value: "k8s://tekton-pipelines/public-key"
+    - name: CA_TRUST_CONFIGMAP_NAME
+      value: "trusted-ca"
+    - name: CA_TRUST_CONFIG_MAP_KEY
+      value: "ca-bundle.crt"
   resolverRef:
     params:
       - name: url
