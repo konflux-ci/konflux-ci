@@ -31,6 +31,27 @@ spec:
           matchLabels:
             app: proxy
       initContainers:
+      - name: copy-static-content
+        image: quay.io/konflux-ci/konflux-ui:b4f26d00ff6a793bfc12c2d78142b91bd6a87643
+        command:
+          - cp
+          - -R
+          - /opt/app-root/src/.
+          - /mnt/static-content/
+        volumeMounts:
+        - name: static-content
+          mountPath: /mnt/static-content
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+        resources:
+          limits:
+            cpu: 50m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
       - name: add-sva-token-to-nginx-config
         image: registry.access.redhat.com/ubi9/ubi@sha256:66233eebd72bb5baa25190d4f55e1dc3fff3a9b77186c1f91a0abdb274452072
         command:
@@ -121,12 +142,8 @@ spec:
             mountPath: /mnt/nginx-generated-config
           - name: openresty
             mountPath: /var/run/openresty
-          - name: pages
-            mountPath: /opt/app-root/src/login.html
-            subPath: login.html
-          - name: pages
-            mountPath: /opt/app-root/src/logout.html
-            subPath: logout.html
+          - name: static-content
+            mountPath: /opt/app-root/src/static-content
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
@@ -148,19 +165,6 @@ spec:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
           runAsUser: 1001
-      - image: kennethreitz/httpbin
-        name: httpbin
-        securityContext:
-          readOnlyRootFilesystem: true
-          runAsNonRoot: true
-          runAsUser: 1001
-        resources:
-          limits:
-            cpu: 300m
-            memory: 256Mi
-          requests:
-            cpu: 30m
-            memory: 128Mi
       - image: quay.io/oauth2-proxy/oauth2-proxy@sha256:3da33b9670c67bd782277f99acadf7026f75b9507bfba2088eb2d497266ef7fc
         name: oauth2-proxy
         env:
@@ -238,14 +242,9 @@ spec:
             secretName: proxy
         - name: openresty
           emptyDir: {}
-        - name: pages
-          configMap:
-            name: pages
-            items:
-              - key: login.html
-                path: login.html
-              - key: logout.html
-                path: logout.html
+        - name: static-content
+          emptyDir: {}
+
 ---
 apiVersion: v1
 kind: Service
