@@ -110,6 +110,13 @@ jobs:
           ./test/e2e/run-e2e.sh
       
       - name: Generate error logs
-        if: ${{ !cancelled() }}
+        #if: ${{ !cancelled() }}
         run: |
           ./generate-err-logs.sh
+
+      - name: Archive logs
+        #if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs
+          path: logs
