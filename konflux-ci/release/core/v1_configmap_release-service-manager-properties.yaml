@@ -1,9 +1,0 @@
-apiVersion: v1
-data:
-  DEFAULT_RELEASE_PVC: ""
-  DEFAULT_RELEASE_WORKSPACE_NAME: ""
-  DEFAULT_RELEASE_WORKSPACE_SIZE: ""
-kind: ConfigMap
-metadata:
-  name: release-service-manager-properties
-  namespace: release-service

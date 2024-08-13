@@ -8,6 +8,7 @@ Troubleshooting Common Issues
 - [Restarting the Cluster](#restarting-the-cluster)
 - [Unable to Create Application with Component Using the Konflux UI](#unable-to-create-application-with-component-using-the-konflux-ui)
 - [PR changes are not Triggering Pipelines](#pr-changes-are-not-triggering-pipelines)
+- [PR Fails when Webhook Secret was not Added](#pr-fails-when-webhook-secret-was-not-added)
 - [Setup Scripts Fail or Pipeline Execution Stuck or Fails](#setup-scripts-fail-or-pipeline-execution-stuck-or-fails)
   * [Running out of Resources](#running-out-of-resources)
   * [Unable to Bind PVCs](#unable-to-bind-pvcs)
@@ -138,6 +139,20 @@ kubectl delete secret pipelines-as-code-secret -n pipelines-as-code
 
 6. :gear: On the PR page, type `/retest` on the comment box and post the comment.
    Observe the behavior once more.
+
+# PR Fails when Webhook Secret was not Added
+
+If a webhook secret is not added when creating a Github App, PR pipelines will fail
+and the following error will show up in the PR logs:
+
+```
+There was an issue validating the commit: "could not validate payload, check your webhook secret?: no signature has been detected, for security reason we are not allowing webhooks that has no secret"
+```
+
+To resolve this issue, go to the Github App you created and check Webhook Secret is
+added there. Please refer to 
+[this document](https://pipelinesascode.com/docs/install/github_apps/#manual-setup)
+on how to create webhook secret.
 
 # Setup Scripts Fail or Pipeline Execution Stuck or Fails
 

@@ -4,4 +4,70 @@ kind: Kustomization
 resources:
   # Install Tekton pipelines, triggers and and Chains
   - https://storage.googleapis.com/tekton-releases/operator/previous/v0.70.0/release.yaml
-  
+patches:
+  - patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext
+        value:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+    target:
+      kind: Deployment
+      name: tekton-operator
+  - patch: |
+      - op: add
+        path: /spec/template/spec/containers/1/securityContext
+        value:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+    target:
+      kind: Deployment
+      name: tekton-operator
+  - patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext
+        value:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+    target:
+      kind: Deployment
+      name: tekton-operator-webhook
+  - patch: |
+     - op: add
+       path: /spec/template/spec/containers/0/resources
+       value:
+         requests:
+           cpu: 10m
+           memory: 10Mi
+         limits:
+           cpu: 100m
+           memory: 100Mi
+    target:
+      kind: Deployment
+      name: tekton-operator
+  - patch: |
+     - op: add
+       path: /spec/template/spec/containers/1/resources
+       value:
+         requests:
+           cpu: 10m
+           memory: 10Mi
+         limits:
+           cpu: 100m
+           memory: 100Mi
+    target:
+      kind: Deployment
+      name: tekton-operator
+  - patch: |
+     - op: add
+       path: /spec/template/spec/containers/0/resources
+       value:
+         requests:
+           cpu: 10m
+           memory: 10Mi
+         limits:
+           cpu: 100m
+           memory: 100Mi
+    target:
+      kind: Deployment
+      name: tekton-operator-webhook

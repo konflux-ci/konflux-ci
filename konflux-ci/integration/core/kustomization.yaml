@@ -1,24 +1,56 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - admissionregistration.k8s.io_v1_validatingwebhookconfiguration_integration-service-validating-webhook-configuration.yaml
-  - apiextensions.k8s.io_v1_customresourcedefinition_integrationtestscenarios.appstudio.redhat.com.yaml
-  - apps_v1_deployment_integration-service-controller-manager.yaml
-  - batch_v1_cronjob_integration-service-snapshot-garbage-collector.yaml
-  - rbac.authorization.k8s.io_v1_clusterrolebinding_integration-service-manager-rolebinding.yaml
-  - rbac.authorization.k8s.io_v1_clusterrolebinding_integration-service-proxy-rolebinding.yaml
-  - rbac.authorization.k8s.io_v1_clusterrolebinding_integration-service-snapshot-garbage-collector.yaml
-  - rbac.authorization.k8s.io_v1_clusterrolebinding_integration-service-tekton-role-binding.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_delete-snapshots.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_integration-service-manager-role.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_integration-service-proxy-role.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_integration-service-snapshot-garbage-collector.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_integration-service-tekton-editor-role.yaml
-  - rbac.authorization.k8s.io_v1_rolebinding_integration-service-leader-election-rolebinding.yaml
-  - rbac.authorization.k8s.io_v1_role_integration-service-leader-election-role.yaml
-  - v1_configmap_integration-service-manager-config.yaml
-  - v1_namespace_integration-service.yaml
-  - v1_serviceaccount_integration-service-controller-manager.yaml
-  - v1_serviceaccount_integration-service-snapshot-garbage-collector.yaml
-  - v1_service_integration-service-controller-manager-metrics-service.yaml
-  - v1_service_integration-service-webhook-service.yaml
+- https://github.com/konflux-ci/integration-service/config/default?ref=695c489487a0acb390f51495927c06126bf55fbb
+- https://github.com/konflux-ci/integration-service/config/snapshotgc?ref=695c489487a0acb390f51495927c06126bf55fbb
+
+namespace: integration-service
+
+images:
+- name: quay.io/redhat-appstudio/integration-service
+  newName: quay.io/redhat-appstudio/integration-service
+  newTag: 695c489487a0acb390f51495927c06126bf55fbb
+
+patches:
+  - target:
+      group: monitoring.coreos.com
+      version: v1
+      kind: ServiceMonitor
+      name: integration-service-controller-manager-metrics-monitor
+    path: remove-service-monitor.yaml
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRole
+      name: integration-service-metrics-reader
+    path: remove-metrics-reader-cluster-role.yaml
+  - target:
+      group: ""
+      version: v1
+      kind: Secret
+      name: integration-service-metrics-reader
+    path: remove-metrics-reader-secret.yaml
+  - target:
+      group: ""
+      version: v1
+      kind: ServiceAccount
+      name: integration-service-metrics-reader
+    path: remove-metrics-reader-sa.yaml
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRoleBinding
+      name: integration-service-prometheus-role-binding
+    path: remove-metrics-reader-cluster-role-binding.yaml
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRole
+      name: integration-service-prometheus-viewer-role
+    path: remove-prometheus-viewer-cluster-role.yaml
+  - target:
+      group: batch
+      version: v1
+      kind: CronJob
+      name: integration-service-snapshot-garbage-collector
+    path: snapshot-gc-resource-patch.yaml

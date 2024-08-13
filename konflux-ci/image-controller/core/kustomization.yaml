@@ -1,16 +1,25 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - apiextensions.k8s.io_v1_customresourcedefinition_imagerepositories.appstudio.redhat.com.yaml
-  - apps_v1_deployment_image-controller-controller-manager.yaml
-  - rbac.authorization.k8s.io_v1_clusterrolebinding_image-controller-manager-rolebinding.yaml
-  - rbac.authorization.k8s.io_v1_clusterrolebinding_image-controller-proxy-rolebinding.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_image-controller-manager-role.yaml
-  - rbac.authorization.k8s.io_v1_clusterrole_image-controller-proxy-role.yaml
-  - rbac.authorization.k8s.io_v1_rolebinding_image-controller-leader-election-rolebinding.yaml
-  - rbac.authorization.k8s.io_v1_role_image-controller-leader-election-role.yaml
-  - v1_configmap_image-controller-manager-config.yaml
-  - v1_namespace_image-controller.yaml
-  - v1_serviceaccount_image-controller-controller-manager.yaml
-  - v1_service_image-controller-controller-manager-metrics-service.yaml
+- https://github.com/konflux-ci/image-controller/config/default?ref=91ac5a1bc402d44a674b69251d0f2ac424e24e6e
 
+images:
+- name: quay.io/konflux-ci/image-controller
+  newName: quay.io/konflux-ci/image-controller
+  newTag: 91ac5a1bc402d44a674b69251d0f2ac424e24e6e
+
+namespace: image-controller
+
+patches:
+  - target:
+      group: monitoring.coreos.com
+      version: v1
+      kind: ServiceMonitor
+      name: image-controller-controller-manager-metrics-monitor
+    path: remove-service-monitor.yaml
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRole
+      name: image-controller-metrics-reader
+    path: remove-metrics-reader-cluster-role.yaml

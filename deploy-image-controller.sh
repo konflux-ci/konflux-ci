@@ -35,7 +35,7 @@ create_secret() {
 
 wait() {
     echo "Waiting for Image-Controller to be ready" >&2
-    retry "kubectl wait --for=condition=Ready --timeout=240s -l app=image-controller -n image-controller pod" \
+    retry "kubectl wait --for=condition=Ready --timeout=240s -l control-plane=controller-manager -n image-controller pod" \
           "Image-Controller did not become available within the allocated time"
 }
     
