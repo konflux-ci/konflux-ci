@@ -33,6 +33,7 @@ deploy() {
     retry kubectl apply -k "${script_path}/konflux-ci/integration"
 
     kubectl apply -k "${script_path}/konflux-ci/ui"
+    exit 1
 }
 
 
