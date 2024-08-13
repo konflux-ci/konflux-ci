@@ -1,6 +1,13 @@
 name: Check for README updates
 
-on: pull_request
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+  merge_group:
+    types: [checks_requested]
 
 jobs:
   check-toc:

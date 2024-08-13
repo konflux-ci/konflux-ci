@@ -22,7 +22,7 @@ deploy() {
 
     kubectl apply -k "${script_path}/konflux-ci/rbac"
 
-    retry kubectl apply -k "${script_path}/konflux-ci/enterprise-contract/core"
+    retry kubectl apply -k "${script_path}/konflux-ci/enterprise-contract"
 
     retry kubectl apply -k "${script_path}/konflux-ci/release"
 

@@ -11,6 +11,9 @@ metadata:
     run: registry
   name: registry
   namespace: kind-registry
+  annotations:
+    ignore-check.kube-linter.io/no-read-only-root-fs: "This component requires write permissions"
+    ignore-check.kube-linter.io/run-as-non-root: "This component requires root permissions"
 spec:
   replicas: 1
   selector:
@@ -24,6 +27,13 @@ spec:
       containers:
       - name: registry
         image: registry:2
+        resources:
+          requests:
+            cpu: 10m
+            memory: 50Mi
+          limits:
+            cpu: 100m
+            memory: 250Mi
         ports:
         - containerPort: 5000
 ---

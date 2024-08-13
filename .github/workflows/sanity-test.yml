@@ -1,13 +1,47 @@
 name: Sanity Test
 
-on: pull_request
-
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled]
+  merge_group:
+    types: [checks_requested]
 jobs:
+  check-org-membership:
+    runs-on: ubuntu-latest
+    outputs:
+      org-member: ${{ steps.org-check.outputs.org-member }}
+    steps:
+      - name: Check if PR author is a member of the organization
+        continue-on-error: true
+        id: org-check
+        run: |
+          ORG="${{ github.repository_owner }}"
+          AUTHOR="${{ github.event.pull_request.user.login }}"
+          if ! gh api /orgs/$ORG/members/$AUTHOR; then
+            echo '### ❌ PR author is not a member of GitHub organization' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          echo "org-member=true" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+
   sanity-test:
+    if: ${{ (needs.check-org-membership.outputs.org-member == 'true') || (github.event.pull_request.user.login == 'renovate[bot]') || contains(github.event.pull_request.labels.*.name, 'ok-to-test') }}
+    needs: check-org-membership
     runs-on: ubuntu-latest
     steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tool-cache: false
+          
+          docker-images: false
       - name: Checkout Repository
         uses: actions/checkout@v3
+        with:
+          ref: "${{ github.event.pull_request.head.sha }}"
   
       - name: Create k8s Kind Cluster
         uses: helm/kind-action@v1
@@ -35,6 +69,15 @@ jobs:
         run: |
           ./wait-for-all.sh
 
+      - name: WORKAROUND - Set up tkn cli for the following task
+        uses: tektoncd/actions/setup-tektoncd-cli@main
+        with:
+          version: latest
+
+      - name: WORKAROUND - Remove clair-scan task from docker-pipeline
+        run: |
+          ./test/e2e/customize-docker-pipeline.sh
+
       - name: Deploying Konflux
         run: |
           ./deploy-konflux.sh
@@ -46,6 +89,25 @@ jobs:
       - name: Deploy test resources
         run: |
           ./deploy-test-resources.sh
+
+      - name: Prepare resources for E2E tests
+        env:
+          APP_ID: ${{ secrets.APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+          APP_WEBHOOK_SECRET: ${{ secrets.APP_WEBHOOK_SECRET }}
+          QUAY_ORG: ${{ secrets.QUAY_ORG }}
+          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+          SMEE_CHANNEL: ${{ secrets.SMEE_CHANNEL }}
+        run: |
+          ./test/e2e/prepare-e2e.sh
+
+      - name: Run E2E tests
+        env:
+          GH_ORG: ${{ secrets.GH_ORG }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          QUAY_DOCKERCONFIGJSON: ${{ secrets.QUAY_DOCKERCONFIGJSON }}
+        run: |
+          ./test/e2e/run-e2e.sh
       
       - name: Generate error logs
         if: ${{ !cancelled() }}

@@ -157,7 +157,15 @@ and modify the `system-reserved` line under `kubeletExtraArgs`:
 ./deploy-test-resources.sh
 ```
 
-5. The UI will be available at https://localhost:9443. You can login using a test user.
+5. :gear: If Konflux was installed on a cluster hosted in a remote machine, SSH port-forwarding can 
+be used to access. Open an additional terminal and run the following command
+(make sure to add the details of your remote machine and user):
+
+```bash
+ssh -L 9443:localhost:9443 $USER@$VM_IP
+```
+
+6. The UI will be available at https://localhost:9443. You can login using a test user.
 
 `username:` `user2`
 

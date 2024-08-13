@@ -1,4 +1,4 @@
-apiVersion: appstudio.redhat.com/v1beta1
+apiVersion: appstudio.redhat.com/v1beta2
 kind: IntegrationTestScenario
 metadata:
   annotations:
@@ -17,9 +17,9 @@ spec:
   resolverRef:
     params:
       - name: url
-        value: 'https://github.com/gbenhaim/build-definitions'
+        value: 'https://github.com/konflux-ci/build-definitions'
       - name: revision
-        value: 997f4b966aae7d65e958e63ff5b1dbdd58e4dbc6
+        value: f3ac40bbc0230eccb8d98a4d54dabd55a4943c5d
       - name: pathInRepo
         value: pipelines/enterprise-contract.yaml
     resolver: git

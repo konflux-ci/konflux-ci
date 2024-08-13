@@ -16,14 +16,14 @@ spec:
     mapping:
       components:
         - name: sample-component
-          repository: "quay.io/gbenhaim0/managed/sample-component"
+          repository: <repository url>
   origin: user-ns1
   pipeline:
     pipelineRef:
       resolver: git
       params:
         - name: url
-          value: "https://github.com/gbenhaim/release-service-catalog.git"
+          value: "https://github.com/konflux-ci/release-service-catalog.git"
         - name: revision
           value: f345fc8dcb855666200c5f21d12a9e02fd7ab791
         - name: pathInRepo

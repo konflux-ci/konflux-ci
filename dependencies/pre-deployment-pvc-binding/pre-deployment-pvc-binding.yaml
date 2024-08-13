@@ -25,6 +25,16 @@ spec:
   containers:
   - name: test-pvc-consumer
     image: registry:2
+    resources:
+      requests:
+        cpu: 10m
+        memory: 50Mi
+      limits:
+        cpu: 50m
+        memory: 100Mi
+    securityContext:
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
     volumeMounts:
     - name: my-volume
       mountPath: /data

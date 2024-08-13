@@ -1,0 +1,229 @@
+# Give authenticated users read permission for tekton-chains public key
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-wave: "0"
+  name: tekton-chains-public-key-viewer
+rules:
+- apiGroups:
+  - ""
+  resourceNames:
+  - public-key
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-wave: "0"
+  name: tekton-chains-public-key-viewer
+  namespace: tekton-pipelines
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tekton-chains-public-key-viewer
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: system:authenticated
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-wave: "0"
+  name: chains-secrets-admin
+  namespace: tekton-pipelines
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-wave: "0"
+  name: chains-secret-admin
+  namespace: tekton-pipelines
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - list
+  - create
+  - get
+  - update
+  - patch
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-wave: "0"
+  name: chains-secret-admin
+  namespace: tekton-pipelines
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: chains-secret-admin
+subjects:
+- kind: ServiceAccount
+  name: chains-secrets-admin
+  namespace: tekton-pipelines
+---
+# We temporarily create the cosign public key in another namespace
+# For this we need to create ns, role and bindings
+# More details: https://github.com/konflux-ci/konflux-ci/issues/114
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openshift-pipelines
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-wave: "0"
+  name: tekton-chains-public-key-viewer
+  namespace: openshift-pipelines
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tekton-chains-public-key-viewer
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: system:authenticated
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-wave: "0"
+  name: chains-secret-admin
+  namespace: openshift-pipelines
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - list
+  - create
+  - get
+  - update
+  - patch
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-wave: "0"
+  name: chains-secret-admin
+  namespace: openshift-pipelines
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: chains-secret-admin
+subjects:
+- kind: ServiceAccount
+  name: chains-secrets-admin
+  namespace: tekton-pipelines
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations:
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-wave: "1"
+  name: tekton-chains-signing-secret
+  namespace: tekton-pipelines
+spec:
+  template:
+    metadata:
+      annotations:
+        argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    spec:
+      containers:
+      - command:
+        - /bin/bash
+        - -c
+        - |
+          set -o errexit
+          set -o nounset
+          set -o pipefail
+
+          namespace="tekton-pipelines"
+          secret="signing-secrets"
+
+          cd /tmp
+
+          if [ "$(kubectl get secret "$secret" -n "$namespace" -o jsonpath='{.data}' --ignore-not-found --allow-missing-template-keys)" != "" ]; then
+            echo "Signing secret exists and is non-empty."
+          else
+            # Delete secret/signing-secrets if already exists since by default cosign creates immutable secrets
+            kubectl delete secrets "$secret" -n "$namespace" --ignore-not-found=true
+
+            # To make this run conveniently without user input let's create a random password
+            RANDOM_PASS=$( openssl rand -base64 30 )
+
+            # Generate the key pair secret directly in the cluster.
+            # The secret should be created as immutable.
+            echo "Generating k8s secret/$secret in $namespace with key-pair"
+            env COSIGN_PASSWORD=$RANDOM_PASS cosign generate-key-pair "k8s://$namespace/$secret"
+          fi
+
+          echo "Generating/updating the secret with the public key"
+          kubectl create secret generic public-key \
+            --namespace "$namespace" \
+            --from-literal=cosign.pub="$(
+              cosign public-key --key "k8s://$namespace/$secret"
+            )" \
+            --dry-run=client \
+            -o yaml | kubectl apply -f -
+
+          # Temporarily creating the secret also on openshift-pipelines namespace
+          kubectl create secret generic public-key \
+            --namespace openshift-pipelines \
+            --from-literal=cosign.pub="$(
+              cosign public-key --key "k8s://$namespace/$secret"
+            )" \
+            --dry-run=client \
+            -o yaml | kubectl apply -f -
+        image: quay.io/konflux-ci/appstudio-utils:ab6b0b8e40e440158e7288c73aff1cf83a2cc8a9@sha256:24179f0efd06c65d16868c2d7eb82573cce8e43533de6cea14fec3b7446e0b14
+        imagePullPolicy: Always
+        name: chains-secret-generation
+        resources:
+          limits:
+            cpu: 100m
+            memory: 250Mi
+          requests:
+            cpu: 10m
+            memory: 10Mi
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsGroup: 1001
+          runAsUser: 1001
+      dnsPolicy: ClusterFirst
+      restartPolicy: OnFailure
+      serviceAccount: chains-secrets-admin
+      serviceAccountName: chains-secrets-admin
+      terminationGracePeriodSeconds: 30
