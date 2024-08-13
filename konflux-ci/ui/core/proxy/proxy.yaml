@@ -150,6 +150,10 @@ spec:
           runAsUser: 1001
       - image: kennethreitz/httpbin
         name: httpbin
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
         resources:
           limits:
             cpu: 300m
