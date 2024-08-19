@@ -640,6 +640,13 @@ spec:
           runAsNonRoot: true
           seccompProfile:
             type: RuntimeDefault
+        resources:
+          requests:
+            cpu: 10m
+            memory: 50Mi
+          limits:
+            cpu: 100m
+            memory: 250Mi
       containers:
       - name: trust-manager
         image: "quay.io/jetstack/trust-manager:v0.12.0"
@@ -676,7 +683,12 @@ spec:
           name: packages
           readOnly: true
         resources:
-            {}
+          requests:
+            cpu: 10m
+            memory: 50Mi
+          limits:
+            cpu: 100m
+            memory: 250Mi
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
