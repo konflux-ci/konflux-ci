@@ -32,6 +32,27 @@
       ],
       "datasourceTemplate": "git-refs",
       "currentValueTemplate": "main"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["konflux-ci/enterprise-contract/core/kustomization.yaml"],
+      "matchStrings": [
+        "- verify_ec_task_bundle=(?<depName>quay\\.io/enterprise-contract/ec-task-bundle)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "autoReplaceStringTemplate": "- verify_ec_task_bundle={{depName}}@{{newDigest}}",
+      "datasourceTemplate": "docker",
+      "currentValueTemplate": "snapshot"
+    },
+    {
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["konflux-ci/enterprise-contract/core/kustomization.yaml"],
+      "matchStrings": [
+        "- verify_ec_task_git_url=(?<packageName>https:\/\/github\\.com\/enterprise-contract\/ec-cli)\\.git",
+        "- verify_ec_task_git_revision=(?<currentDigest>[a-f0-9]{40})"
+      ],
+      "datasourceTemplate": "git-refs",
+      "currentValueTemplate": "main"
     }
   ]
 }
