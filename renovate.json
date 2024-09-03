@@ -11,7 +11,7 @@
       "automerge": true
     }
   ],
-  "enabledManagers": ["regex"],
+  "enabledManagers": ["regex", "kustomize"],
   "customManagers": [
     {
       "customType": "regex",
