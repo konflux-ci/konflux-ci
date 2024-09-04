@@ -53,6 +53,16 @@
       ],
       "datasourceTemplate": "git-refs",
       "currentValueTemplate": "main"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["konflux-ci/build-service/core/build-pipeline-config.yaml"],
+      "matchStrings": [
+        "bundle: (?<depName>quay\\.io/konflux-ci/tekton-catalog/pipeline-[^@]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "autoReplaceStringTemplate": "bundle: {{depName}}@{{currentDigest}}",
+      "datasourceTemplate": "docker",
+      "currentValueTemplate": "devel"
     }
   ]
 }
