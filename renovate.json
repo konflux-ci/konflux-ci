@@ -5,7 +5,8 @@
       "matchPackageNames": [
         "https://github.com/redhat-appstudio/*",
         "https://github.com/konflux-ci/*",
-        "https://github.com/enterprise-contract/*"
+        "https://github.com/enterprise-contract/*",
+        "quay.io/konflux-ci/*"
       ],
       "autoApprove": true,
       "automerge": true
