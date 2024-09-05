@@ -657,7 +657,7 @@ Let's focus on Tenant Release pipelines.
 ##### Setting up a Tenant Release Pipeline
 
 A `Tenant Release Pipeline` simply requires a `ReleasePlan` resource. The `ReleasePlan` resource includes a reference to the application
-that a development team wants to release, along with a specification of which `Pipeline` to execute. In addition, `Paramters` may be specified.
+that a development team wants to release, along with a specification of which `Pipeline` to execute. In addition, `Parameters` may be specified.
 
 The process also requires permissions to be granted to the development environment
 `appstudio-pipeline` service account on several resources.
