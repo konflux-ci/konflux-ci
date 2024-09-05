@@ -647,7 +647,7 @@ together with the snapshot for creating a new `Release` resource.
 There are 2 modes of processing Releases.
 
 * **Tenant Release Pipelines**
-  * These are Release pipelines that are executed within the user or development workspace that are meant to promote and artifacts.
+  * These are Release pipelines that are executed within the user or development workspace that are meant to promote artifacts.
 * **Managed Release Pipelines**
   * These are Release pipelines that are meant to be executed in a controlled or managed namespace where sensitive credentials are kept.
   * Consider a release process whereby images are published to a corporate registry to be exposed to the public.
