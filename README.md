@@ -670,7 +670,7 @@ verify that the `application` field contains the name of your application.
 2. Under the components mapping list, set the `name` field such that it matches the name of
    your component and replace `<repository url>` with the URL of the repository on the
    registry to which your released images are to be pushed. This is typically a
-   different repository comparing to the one builds are being pushed during tests.
+   different repository comparing to the one where builds are being pushed during tests.
 
    For example, if your component is called `test-component`, and you wish to release
    your images to a Quay.io repository called `my-user/my-konflux-component-release`,
