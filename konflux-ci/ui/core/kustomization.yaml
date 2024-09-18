@@ -24,7 +24,7 @@ images:
     newTag: abdc9f8
   # workspace-manager
   - name: quay.io/konflux-ci/workspace-manager
-    digest: sha256:67bf1d3191b7c2c9c8a49e4aa0940170a49e18ee6888436f754896b84e5a8032
+    digest: sha256:d2f8cbd40edf18b09f47adaa03d7042239e26b25f37306b2c837a06768f46861
 
 configMapGenerator:
   - name: fed-modules
