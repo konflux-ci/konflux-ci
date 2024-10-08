@@ -61,7 +61,7 @@
       "matchStrings": [
         "bundle: (?<depName>quay\\.io/konflux-ci/tekton-catalog/pipeline-[^@]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
       ],
-      "autoReplaceStringTemplate": "bundle: {{depName}}@{{currentDigest}}",
+      "autoReplaceStringTemplate": "bundle: {{depName}}@{{newDigest}}",
       "datasourceTemplate": "docker",
       "currentValueTemplate": "devel"
     }
