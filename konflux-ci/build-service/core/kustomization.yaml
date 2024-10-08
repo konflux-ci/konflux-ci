@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - https://github.com/konflux-ci/build-service/config/default?ref=21d434a3d205c3dc485d0136cd3816a4744d134b
+  - https://github.com/konflux-ci/build-service/config/default?ref=60481d90a4afaa039f0ea953b9de131ea387950e
   - build-pipeline-config.yaml
 
 namespace: build-service
@@ -9,7 +9,7 @@ namespace: build-service
 images:
   - name: quay.io/konflux-ci/build-service
     newName: quay.io/konflux-ci/build-service
-    newTag: 21d434a3d205c3dc485d0136cd3816a4744d134b
+    newTag: 60481d90a4afaa039f0ea953b9de131ea387950e
 
 patches:
   - target:
@@ -24,3 +24,9 @@ patches:
       kind: ClusterRole
       name: build-service-metrics-reader
     path: remove-metrics-reader-cluster-role.yaml
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: build-service-controller-manager
+    path: mount-custom-ca-bundle.yaml
