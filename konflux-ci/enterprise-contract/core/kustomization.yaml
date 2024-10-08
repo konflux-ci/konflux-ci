@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - https://github.com/enterprise-contract/enterprise-contract-controller/config/crd?ref=564d4fedc4af05657ae7a17ab79ddf574c757d16
+  - https://github.com/enterprise-contract/enterprise-contract-controller/config/crd?ref=1e8d6a079b53c46a1520ff462a25c98ba064471e
   - ns.yaml
   - public-ecp-rbac.yaml
 
@@ -13,9 +13,9 @@ configMapGenerator:
   - name: ec-defaults
     namespace: enterprise-contract-service
     literals:
-      - verify_ec_task_bundle=quay.io/enterprise-contract/ec-task-bundle:560f36913ccf39b31acf820bde38749fbad6f247@sha256:f990044ce173db9865dea5a83b8eb9480e1acdb696aa1d0a5e3e69a275b6f7ac
+      - verify_ec_task_bundle=quay.io/enterprise-contract/ec-task-bundle:2fdddbbfdf5f2ba251a70b6378847a2b3630da4b
       - verify_ec_task_git_url=https://github.com/enterprise-contract/ec-cli.git
-      - verify_ec_task_git_revision=560f36913ccf39b31acf820bde38749fbad6f247
+      - verify_ec_task_git_revision=c59440ad3f24b24fc70c15b583abbd91e93b7efd
       - verify_ec_task_git_pathInRepo=tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml
 
 patches:

@@ -172,7 +172,11 @@ The symptoms may include:
 * Setup scripts fail.
 * Pipelines are triggered, but seem stuck and listing the pods on the user namespace
   (e.g. running `kubectl get pods -n user-ns2`) shows pods stuck in pending for a long
-  time.
+  time. Checking the detailed output of pods with pending status `kubectl describe
+  pods/<pod name with pending status> -n user-ns2`, shows following error:
+  ```
+  Warning  FailedScheduling  5m59s  default-scheduler  running PreBind plugin "VolumeBinding": binding volumes: context deadline exceeded
+  ```
 * Pipelines fail at inconsistent stages.
 
 :gear: For mitigation steps, consult the notes at the top of the

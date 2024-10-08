@@ -40,6 +40,7 @@ check_req(){
 
 deploy() {
     deploy_cert_manager
+    deploy_trust_manager
     kubectl apply -k "${script_path}/dependencies/cluster-issuer"
     deploy_tekton
     deploy_dex
@@ -49,7 +50,8 @@ deploy() {
 test_pvc_binding(){
     local pvc_resources="${script_path}/dependencies/pre-deployment-pvc-binding"
     echo "Creating PVC from '$pvc_resources' using the cluster's default storage class"
-    kubectl apply -k "$pvc_resources"
+    sleep 10  # Retries are not enough to ensure the default SA is created, see https://github.com/konflux-ci/konflux-ci/issues/161
+    retry "kubectl apply -k ${pvc_resources}" "Error while creating pre-deployment-pvc-binding"
     retry "kubectl wait --for=jsonpath={status.phase}=Bound pvc/test-pvc -n test-pvc-ns --timeout=20s" \
           "Test PVC unable to bind on default storage class"
     kubectl delete -k "$pvc_resources"
@@ -100,6 +102,13 @@ deploy_dex() {
             --namespace=dex \
             --from-literal=client-secret="$client_secret"
     fi
+}
+
+deploy_trust_manager() {
+    kubectl apply -k "${script_path}/dependencies/trust-manager"
+    sleep 5
+    retry "kubectl wait --for=condition=Ready --timeout=60s -l app.kubernetes.io/instance=trust-manager -n cert-manager pod" \
+          "Trust manager did not become available within the allocated time"
 }
 
 deploy_registry() {
