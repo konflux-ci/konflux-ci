@@ -19,7 +19,7 @@ spec:
       - name: url
         value: 'https://github.com/konflux-ci/build-definitions'
       - name: revision
-        value: f3ac40bbc0230eccb8d98a4d54dabd55a4943c5d
+        value: 872d5a620a90fbec2210a24323554de7d26380a6
       - name: pathInRepo
         value: pipelines/enterprise-contract.yaml
     resolver: git

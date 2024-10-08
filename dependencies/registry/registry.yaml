@@ -36,6 +36,18 @@ spec:
             memory: 250Mi
         ports:
         - containerPort: 5000
+        env:
+        - name: REGISTRY_HTTP_TLS_CERTIFICATE
+          value: "/certs/tls.crt"
+        - name: REGISTRY_HTTP_TLS_KEY
+          value: "/certs/tls.key"
+        volumeMounts:
+        - name: certs
+          mountPath: /certs
+      volumes:
+        - name: certs
+          secret:
+            secretName: local-registry-tls
 ---
 apiVersion: v1
 kind: Service
@@ -49,5 +61,5 @@ spec:
   ports:
     - protocol: TCP
       nodePort: 30001
-      port: 80
+      port: 443
       targetPort: 5000

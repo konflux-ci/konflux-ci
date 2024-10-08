@@ -19,5 +19,26 @@ spec:
     artifacts.taskrun.format: in-toto
     artifacts.taskrun.storage: ""
     transparency.enabled: "false"
+    options:
+      disabled: false
+      deployments:
+        tekton-chains-controller:
+          spec:
+            template:
+              spec:
+                volumes:
+                  - name: trusted-ca
+                    configMap:
+                      name: trusted-ca
+                      items:
+                        - key: ca-bundle.crt
+                          path: ca-bundle.crt
+                      optional: true
+                containers:
+                  - name: tekton-chains-controller
+                    volumeMounts:
+                      - name: trusted-ca
+                        mountPath: /etc/ssl/certs
+                        readOnly: true
   pipeline:
     default-service-account: appstudio-pipeline

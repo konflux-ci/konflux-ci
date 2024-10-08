@@ -9,14 +9,12 @@ spec:
   applications:
     - test-component
   data:
-    images:
-      addGitShaTag: true
-      floatingTags:
-        - latest
     mapping:
       components:
         - name: test-component
-          repository: <repository url>
+          repository: registry-service.kind-registry/test-component-release
+          tags:
+            - latest
   origin: user-ns2
   pipeline:
     pipelineRef:
@@ -25,7 +23,7 @@ spec:
         - name: url
           value: "https://github.com/konflux-ci/release-service-catalog.git"
         - name: revision
-          value: 647155d2bea584e72190ee76ce7490ecf4e2066f
+          value: 806af0c14399c7b2b4ef357e884d6cbcb255e5f9
         - name: pathInRepo
           value: "pipelines/push-to-external-registry/push-to-external-registry.yaml"
     serviceAccountName: appstudio-pipeline
