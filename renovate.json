@@ -6,7 +6,9 @@
         "https://github.com/redhat-appstudio/*",
         "https://github.com/konflux-ci/*",
         "https://github.com/enterprise-contract/*",
-        "quay.io/konflux-ci/*"
+        "quay.io/konflux-ci/*",
+        "quay.io/enterprise-contract/*",
+        "quay.io/konflux-ci/tekton-catalog/*"
       ],
       "autoApprove": true,
       "automerge": true
