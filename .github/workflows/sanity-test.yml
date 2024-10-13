@@ -1,34 +1,11 @@
 name: Sanity Test
 
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened, labeled]
-  merge_group:
-    types: [checks_requested]
+  pull_request:
+    branches: [ "main" ]
 jobs:
-  check-org-membership:
-    runs-on: ubuntu-latest
-    outputs:
-      org-member: ${{ steps.org-check.outputs.org-member }}
-    steps:
-      - name: Check if PR author is a member of the organization
-        continue-on-error: true
-        id: org-check
-        run: |
-          ORG="${{ github.repository_owner }}"
-          AUTHOR="${{ github.event.pull_request.user.login }}"
-          if ! gh api /orgs/$ORG/members/$AUTHOR; then
-            echo '### ❌ PR author is not a member of GitHub organization' >> $GITHUB_STEP_SUMMARY
-            exit 1
-          fi
-          echo "org-member=true" >> $GITHUB_OUTPUT
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-
   sanity-test:
-    if: ${{ (needs.check-org-membership.outputs.org-member == 'true') || (github.event.pull_request.user.login == 'renovate[bot]') || contains(github.event.pull_request.labels.*.name, 'ok-to-test') }}
-    needs: check-org-membership
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
