@@ -7,7 +7,7 @@ on:
     types: [checks_requested]
 jobs:
   check-org-membership:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     outputs:
       org-member: ${{ steps.org-check.outputs.org-member }}
     steps:
@@ -28,7 +28,7 @@ jobs:
   sanity-test:
     if: ${{ (needs.check-org-membership.outputs.org-member == 'true') || (github.event.pull_request.user.login == 'renovate[bot]') || contains(github.event.pull_request.labels.*.name, 'ok-to-test') }}
     needs: check-org-membership
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
