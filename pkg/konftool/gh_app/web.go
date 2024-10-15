@@ -28,7 +28,7 @@ type GitHubApp struct {
 
 func (ghapp *GitHubApp) SetupRoutes(s webapps.Store, e webapps.EchoLike) {
 	var pageErrors weberrors.List
-	pageErrors.AddOnceIfNot(s.Get(ghAppStoreKey, ghapp), webapps.ErrKeyNotFound)
+	_ = pageErrors.AddOnceIfNot(s.Get(ghAppStoreKey, ghapp), webapps.ErrKeyNotFound)
 
 	e.GET("/", func(c echo.Context) error {
 		// TODO: Temp hack to get a proper configuration for GitHub, Provide UI
@@ -39,7 +39,7 @@ func (ghapp *GitHubApp) SetupRoutes(s webapps.Store, e webapps.EchoLike) {
 		ghapp.checkAppRegCodeStillValid()
 		if ghapp.hasAppRegCodeInQuery(c) {
 			err := ghapp.storeAppRegCode(s, c.QueryParam(ghAppRegCodeParam))
-			pageErrors.AddOnce(err)
+			_ = pageErrors.AddOnce(err)
 			return ghapp.redirectHome(c)
 		}
 
