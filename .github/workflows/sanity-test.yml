@@ -7,7 +7,7 @@ on:
     types: [checks_requested]
 jobs:
   check-org-membership:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     outputs:
       org-member: ${{ steps.org-check.outputs.org-member }}
     steps:
@@ -28,7 +28,7 @@ jobs:
   sanity-test:
     if: ${{ (needs.check-org-membership.outputs.org-member == 'true') || (github.event.pull_request.user.login == 'renovate[bot]') || contains(github.event.pull_request.labels.*.name, 'ok-to-test') }}
     needs: check-org-membership
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
@@ -43,6 +43,11 @@ jobs:
         with:
           ref: "${{ github.event.pull_request.head.sha }}"
   
+      - name: Disable AppArmor
+        # works around a change in ubuntu 24.04 that restricts Linux namespace access
+        # for unprivileged users
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - name: Create k8s Kind Cluster
         uses: helm/kind-action@v1
         with:
