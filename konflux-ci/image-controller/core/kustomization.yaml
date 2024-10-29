@@ -23,3 +23,9 @@ patches:
       kind: ClusterRole
       name: image-controller-metrics-reader
     path: remove-metrics-reader-cluster-role.yaml
+  - target:
+      group: batch
+      version: v1
+      kind: CronJob
+      name: image-controller-image-pruner-cronjob
+    path: replace-pruner-image.yaml
