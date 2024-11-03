@@ -88,7 +88,7 @@ Please follow the following steps for configuring it:
 
 2. :gear: [Create Quay Organization](https://docs.projectquay.io/use_quay.html#org-create)
 
-3. :gear: [Create Application and OAuth access token](https://docs.projectquay.io/use_quay.html#_create_oauth_access_token).
+3. :gear: [Create Application and OAuth access token](https://docs.projectquay.io/use_quay.html#creating-oauth-access-token).
    The application should have the following permissions:
    - Administer Organization
    - Administer Repositories
