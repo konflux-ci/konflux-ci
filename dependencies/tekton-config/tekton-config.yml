@@ -42,3 +42,45 @@ spec:
                         readOnly: true
   pipeline:
     default-service-account: appstudio-pipeline
+    options:
+      disabled: false
+      deployments:
+        tekton-pipelines-controller:
+          spec:
+            template:
+              spec:
+                volumes:
+                  - name: trusted-ca
+                    configMap:
+                      name: trusted-ca
+                      items:
+                        - key: ca-bundle.crt
+                          path: ca-bundle.crt
+                      optional: true
+                containers:
+                  - name: tekton-pipelines-controller
+                    env:
+                    - name: SSL_CERT_FILE
+                      value: /etc/ssl/certs/ca-bundle.crt
+                    volumeMounts:
+                      - name: trusted-ca
+                        mountPath: /etc/ssl/certs
+                        readOnly: true
+        tekton-pipelines-remote-resolvers:
+          spec:
+            template:
+              spec:
+                volumes:
+                  - name: trusted-ca
+                    configMap:
+                      name: trusted-ca
+                      items:
+                        - key: ca-bundle.crt
+                          path: ca-bundle.crt
+                      optional: true
+                containers:
+                  - name: controller
+                    volumeMounts:
+                      - name: trusted-ca
+                        mountPath: /etc/ssl/certs
+                        readOnly: true
