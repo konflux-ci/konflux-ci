@@ -24,9 +24,3 @@ patches:
       kind: ClusterRole
       name: build-service-metrics-reader
     path: remove-metrics-reader-cluster-role.yaml
-  - target:
-      group: apps
-      version: v1
-      kind: Deployment
-      name: build-service-controller-manager
-    path: mount-custom-ca-bundle.yaml
