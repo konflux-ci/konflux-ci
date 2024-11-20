@@ -13,7 +13,7 @@ images:
   # chrome service
   - name: quay.io/cloudservices/chrome-service
     newName: quay.io/cloudservices/chrome-service
-    newTag: b781410
+    newTag: 6f08f67
   # hac
   - name: quay.io/cloudservices/hac-core-frontend
     newName: quay.io/cloudservices/hac-core-frontend
@@ -21,7 +21,7 @@ images:
   # hac-dev
   - name: quay.io/cloudservices/hac-dev-frontend
     newName: quay.io/cloudservices/hac-dev-frontend
-    newTag: abdc9f8
+    newTag: 9522a36
   # workspace-manager
   - name: quay.io/konflux-ci/workspace-manager
     digest: sha256:a46d51b8a306f89eb36a63cb463b04324b3b59808361e10da3945a7ad961e0e6
