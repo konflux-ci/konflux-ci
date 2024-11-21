@@ -1,12 +1,12 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-- https://github.com/konflux-ci/image-controller/config/default?ref=3c98f2d567f39fc7f0cb21e209969f5966d0028f
+- https://github.com/konflux-ci/image-controller/config/default?ref=98d78b2e0f48aae3756c8a6811ccb5efa6528220
 
 images:
 - name: quay.io/konflux-ci/image-controller
   newName: quay.io/konflux-ci/image-controller
-  newTag: 3c98f2d567f39fc7f0cb21e209969f5966d0028f
+  newTag: 98d78b2e0f48aae3756c8a6811ccb5efa6528220
 
 namespace: image-controller
 
@@ -23,3 +23,9 @@ patches:
       kind: ClusterRole
       name: image-controller-metrics-reader
     path: remove-metrics-reader-cluster-role.yaml
+  - target:
+      group: batch
+      version: v1
+      kind: CronJob
+      name: image-controller-image-pruner-cronjob
+    path: replace-pruner-image.yaml

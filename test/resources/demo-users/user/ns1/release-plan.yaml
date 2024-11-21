@@ -21,7 +21,7 @@ metadata:
   namespace: user-ns1
 spec:
   application: sample-component
-  pipeline:
+  tenantPipeline:
     pipelineRef:
       resolver: git
       params:
