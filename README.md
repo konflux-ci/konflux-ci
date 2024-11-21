@@ -610,8 +610,7 @@ test being executed.
 
 ### Configure Releases
 
-You will now configure Konflux to release your application to the external registry
-configured in previous steps.
+You will now configure Konflux to release your application to the registry.
 
 This requires:
 

@@ -6,7 +6,9 @@
         "https://github.com/redhat-appstudio/*",
         "https://github.com/konflux-ci/*",
         "https://github.com/enterprise-contract/*",
-        "quay.io/konflux-ci/*"
+        "quay.io/konflux-ci/*",
+        "quay.io/enterprise-contract/*",
+        "quay.io/konflux-ci/tekton-catalog/*"
       ],
       "autoApprove": true,
       "automerge": true
@@ -61,7 +63,7 @@
       "matchStrings": [
         "bundle: (?<depName>quay\\.io/konflux-ci/tekton-catalog/pipeline-[^@]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
       ],
-      "autoReplaceStringTemplate": "bundle: {{depName}}@{{currentDigest}}",
+      "autoReplaceStringTemplate": "bundle: {{depName}}@{{newDigest}}",
       "datasourceTemplate": "docker",
       "currentValueTemplate": "devel"
     }
