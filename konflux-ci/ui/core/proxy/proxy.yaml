@@ -61,7 +61,8 @@ spec:
             set -e
             
             token=$(cat /mnt/api-token/token)
-            token64=$(cat /mnt/api-token/token | base64 -w 0 | head -c-1)
+            # for websocket connections padding should be removed from a base64 encoded token
+            token64=$(base64 -w 0 /mnt/api-token/token | sed -E  s,=+$,,g)
 
             echo "proxy_set_header Authorization \"Bearer $token\";" > /mnt/nginx-generated-config/bearer.conf
 
