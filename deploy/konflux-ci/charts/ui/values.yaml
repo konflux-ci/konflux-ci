@@ -1,0 +1,261 @@
+kubernetesClusterDomain: cluster.local
+nginxIdpLocationH959Ghd6Bh:
+  nginxIdpLocationConf: |-
+    location /idp/ {
+        # Identity Provider
+        proxy_set_header    Host               $host;
+        proxy_set_header    X-Real-IP          $remote_addr;
+        proxy_set_header    X-Forwarded-For    $proxy_add_x_forwarded_for;
+        proxy_set_header    X-Forwarded-Host   $host;
+        proxy_set_header    X-Forwarded-Server $host;
+        proxy_set_header    X-Forwarded-Port   9443;
+        proxy_set_header    X-Forwarded-Proto  $scheme;
+        proxy_pass https://dex.dex.svc.cluster.local:9443;
+    }
+proxy:
+  copyStaticContent:
+    containerSecurityContext:
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 1001
+    image:
+      repository: quay.io/konflux-ci/konflux-ui@sha256
+      tag: 6a8cebede851ea93d988d792abcbd1bdc4f6cd0e9a0209cbf528d62e70e2b1f4
+    resources:
+      limits:
+        cpu: 50m
+        memory: 128Mi
+      requests:
+        cpu: 10m
+        memory: 64Mi
+  generateNginxConfigs:
+    containerSecurityContext:
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 1001
+    image:
+      repository: registry.access.redhat.com/ubi9/ubi@sha256
+      tag: 66233eebd72bb5baa25190d4f55e1dc3fff3a9b77186c1f91a0abdb274452072
+    resources:
+      limits:
+        cpu: 50m
+        memory: 128Mi
+      requests:
+        cpu: 10m
+        memory: 64Mi
+  nginx:
+    containerSecurityContext:
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 1001
+    image:
+      repository: registry.access.redhat.com/ubi9/nginx-124@sha256
+      tag: b924363ff07ee0f8fd4f680497da774ac0721722a119665998ff5b2111098ad1
+    resources:
+      limits:
+        cpu: 300m
+        memory: 256Mi
+      requests:
+        cpu: 30m
+        memory: 128Mi
+  oauth2Proxy:
+    args:
+    - --provider
+    - oidc
+    - --provider-display-name
+    - Dex OIDC
+    - --client-id
+    - oauth2-proxy
+    - --http-address
+    - 127.0.0.1:6000
+    - --redirect-url
+    - https://localhost:9443/oauth2/callback
+    - --oidc-issuer-url
+    - https://localhost:9443/idp/
+    - --cookie-secure
+    - "true"
+    - --cookie-name
+    - __Host-konflux-ci-cookie
+    - --email-domain
+    - '*'
+    - --ssl-insecure-skip-verify
+    - "true"
+    - --set-xauthrequest
+    - "true"
+    - --whitelist-domain
+    - localhost:9443
+    containerSecurityContext:
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 1001
+    image:
+      repository: quay.io/oauth2-proxy/oauth2-proxy@sha256
+      tag: 3da33b9670c67bd782277f99acadf7026f75b9507bfba2088eb2d497266ef7fc
+    resources:
+      limits:
+        cpu: 300m
+        memory: 256Mi
+      requests:
+        cpu: 30m
+        memory: 128Mi
+  ports:
+  - name: web
+    nodePort: 30010
+    port: 8888
+    protocol: TCP
+    targetPort: web
+  - name: web-tls
+    nodePort: 30011
+    port: 9443
+    protocol: TCP
+    targetPort: web-tls
+  replicas: 1
+  serviceAccount:
+    annotations: {}
+  type: NodePort
+  workspaceManager:
+    containerSecurityContext:
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 1001
+    image:
+      repository: quay.io/konflux-ci/workspace-manager@sha256
+      tag: 2c212b4765dae9d44c0299d5ed7d4d35d4f4f83002f4b4167d2a84e98985bf00
+    resources:
+      limits:
+        cpu: 300m
+        memory: 256Mi
+      requests:
+        cpu: 30m
+        memory: 128Mi
+proxy76Kktct2F2:
+  nginxConf: |-
+    worker_processes auto;
+    error_log /var/log/nginx/error.log;
+    pid /run/nginx.pid;
+    # Load dynamic modules. See /usr/share/doc/nginx/README.dynamic.
+    include /usr/share/nginx/modules/*.conf;
+    events {
+        worker_connections 1024;
+    }
+    http {
+        log_format upstreamlog '[$time_local] $remote_addr - $remote_user - $server_name $host to: $proxy_host  $upstream_addr: $request $status upstream_response_time $upstream_response_time msec $msec request_time $request_time';
+        access_log /dev/stderr upstreamlog;
+        error_log /dev/stderr;
+        sendfile on;
+        tcp_nopush on;
+        tcp_nodelay on;
+        keepalive_timeout 65;
+        types_hash_max_size 4096;
+        default_type application/octet-stream;
+        include /etc/nginx/mime.types;
+        map $http_upgrade $connection_upgrade {
+            default upgrade;
+            '' close;
+        }
+        server {
+            listen 9443 ssl;
+            ssl_certificate /mnt/tls.crt;
+            ssl_certificate_key /mnt/tls.key;
+            server_name _;
+            root /opt/app-root/src;
+            location / {
+                alias /opt/app-root/src/static-content/;
+                try_files $uri /index.html;
+            }
+            location = /404.html {
+            }
+            location = /oauth2/auth {
+                internal;
+                proxy_pass       http://127.0.0.1:6000;
+                proxy_set_header Host             $host;
+                proxy_set_header X-Real-IP        $remote_addr;
+                proxy_set_header X-Scheme         $scheme;
+                # nginx auth_request includes headers but not body
+                proxy_set_header Content-Length   "";
+                proxy_pass_request_body           off;
+            }
+            location /oauth2/ {
+                proxy_pass       http://127.0.0.1:6000/oauth2/;
+                proxy_set_header Host             $host;
+                proxy_set_header X-Real-IP        $remote_addr;
+                proxy_set_header X-Scheme         $scheme;
+            }
+            location /api/k8s/registration/ {
+               # Registration Service registration endpoint
+                auth_request_set $email  $upstream_http_x_auth_request_email;
+                proxy_set_header X-Email $email;
+                auth_request_set $user  $upstream_http_x_auth_request_user;
+                proxy_set_header X-User  $user;
+                auth_request_set $username  $upstream_http_x_auth_request_preferred_username;
+                proxy_set_header X-Auth-Request-Preferred-Username $username;
+                auth_request_set $groups  $upstream_http_x_auth_request_groups;
+                proxy_set_header X-Auth-Request-Groups  $user;
+                auth_request /oauth2/auth;
+                proxy_pass http://127.0.0.1:5000/;
+            }
+            location /api/k8s/apis/toolchain.dev.openshift.com/v1alpha1/workspaces {
+               # Registration Service workspaces endpoint
+                auth_request_set $email  $upstream_http_x_auth_request_email;
+                proxy_set_header X-Email $email;
+                auth_request_set $user  $upstream_http_x_auth_request_user;
+                proxy_set_header X-User  $user;
+                auth_request_set $username  $upstream_http_x_auth_request_preferred_username;
+                proxy_set_header X-Auth-Request-Preferred-Username $username;
+                auth_request_set $groups  $upstream_http_x_auth_request_groups;
+                proxy_set_header X-Auth-Request-Groups  $user;
+                auth_request /oauth2/auth;
+                proxy_pass http://127.0.0.1:5000/workspaces;
+            }
+            location /api/k8s/workspaces/ {
+                # Kube-API
+                auth_request /oauth2/auth;
+                rewrite /api/k8s/workspaces/.+?/(.+) /$1 break;
+                proxy_pass https://kubernetes.default.svc;
+                proxy_read_timeout 30m;
+                include /mnt/nginx-generated-config/auth.conf;
+            }
+            location /wss/k8s/workspaces/ {
+                auth_request /oauth2/auth;
+                rewrite /wss/k8s/workspaces/.+?/(.+) /$1 break;
+                proxy_pass https://kubernetes.default.svc/;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection $connection_upgrade;
+                proxy_read_timeout 30m;
+                include /mnt/nginx-generated-config/auth.conf;
+            }
+            location /api/k8s/ {
+                # Kube-API
+                auth_request /oauth2/auth;
+                proxy_pass https://kubernetes.default.svc/;
+                proxy_read_timeout 30m;
+                include /mnt/nginx-generated-config/auth.conf;
+            }
+            location /wss/k8s/ {
+                auth_request /oauth2/auth;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection $connection_upgrade;
+                proxy_read_timeout 30m;
+                include /mnt/nginx-generated-config/auth.conf;
+            }
+            location /api/k8s/plugins/tekton-results/workspaces/ {
+                auth_request /oauth2/auth;
+                rewrite /api/k8s/plugins/tekton-results/workspaces/.+?/(.+) /$1 break;
+                proxy_read_timeout 30m;
+                include /mnt/nginx-generated-config/tekton-results.conf;
+                include /mnt/nginx-generated-config/auth.conf;
+            }
+            location /health {
+                # Used for liveness probes
+                return 200;
+            }
+            include /mnt/nginx-additional-location-configs/*.conf;
+        }
+    }
+proxyInitConfig6Hdcm74Fk2:
+  impersonate: "true"
+  tektonResultsUrl: https://tekton-results-api-service.tekton-pipelines.svc.cluster.local:8080
+UINamespace: konflux-ui
+DexNamespace: dex

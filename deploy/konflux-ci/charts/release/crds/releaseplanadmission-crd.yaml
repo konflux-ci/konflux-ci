@@ -1,0 +1,277 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: release-service/serving-cert
+    controller-gen.kubebuilder.io/version: v0.14.0
+  name: releaseplanadmissions.appstudio.redhat.com
+spec:
+  group: appstudio.redhat.com
+  names:
+    kind: ReleasePlanAdmission
+    listKind: ReleasePlanAdmissionList
+    plural: releaseplanadmissions
+    shortNames:
+    - rpa
+    singular: releaseplanadmission
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.environment
+      name: Environment
+      type: string
+    - jsonPath: .spec.origin
+      name: Origin
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ReleasePlanAdmission is the Schema for the ReleasePlanAdmissions
+          API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ReleasePlanAdmissionSpec defines the desired state of ReleasePlanAdmission.
+            properties:
+              applications:
+                description: Applications is a list of references to applications
+                  to be released in the managed namespace
+                items:
+                  type: string
+                type: array
+              collectors:
+                description: Collectors is a list of data collectors to be executed
+                  as part of the release process
+                items:
+                  description: Collector represents a reference to a Collector to
+                    be executed as part of the release workflow.
+                  properties:
+                    name:
+                      description: Name of the collector
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    params:
+                      description: Params is a slice of parameters for a given collector
+                      items:
+                        description: Param represents a parameter for a collector
+                        properties:
+                          name:
+                            description: Name is the name of the parameter
+                            type: string
+                          value:
+                            description: Value is the value of the parameter
+                            type: string
+                        required:
+                        - name
+                        - value
+                        type: object
+                      type: array
+                    timeout:
+                      description: Timeout in seconds for the collector to execute
+                      type: integer
+                    type:
+                      description: Type is the type of collector to be used
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                  required:
+                  - name
+                  - params
+                  - type
+                  type: object
+                type: array
+              data:
+                description: Data is an unstructured key used for providing data for
+                  the managed Release Pipeline
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              environment:
+                description: Environment defines which Environment will be used to
+                  release the Application
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                type: string
+              origin:
+                description: Origin references where the release requests should come
+                  from
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                type: string
+              pipeline:
+                description: Pipeline contains all the information about the managed
+                  Pipeline
+                properties:
+                  pipelineRef:
+                    description: PipelineRef is the reference to the Pipeline
+                    properties:
+                      params:
+                        description: Params is a slice of parameters for a given resolver
+                        items:
+                          description: Param defines the parameters for a given resolver
+                            in PipelineRef
+                          properties:
+                            name:
+                              description: Name is the name of the parameter
+                              type: string
+                            value:
+                              description: Value is the value of the parameter
+                              type: string
+                          required:
+                          - name
+                          - value
+                          type: object
+                        type: array
+                      resolver:
+                        description: Resolver is the name of a Tekton resolver to
+                          be used (e.g. git)
+                        type: string
+                    required:
+                    - params
+                    - resolver
+                    type: object
+                  serviceAccountName:
+                    description: ServiceAccountName is the ServiceAccount to use during
+                      the execution of the Pipeline
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                    type: string
+                  timeouts:
+                    description: Timeouts defines the different Timeouts to use in
+                      the PipelineRun execution
+                    properties:
+                      finally:
+                        description: Finally sets the maximum allowed duration of
+                          this pipeline's finally
+                        type: string
+                      pipeline:
+                        description: Pipeline sets the maximum allowed duration for
+                          execution of the entire pipeline. The sum of individual
+                          timeouts for tasks and finally must not exceed this value.
+                        type: string
+                      tasks:
+                        description: Tasks sets the maximum allowed duration of this
+                          pipeline's tasks
+                        type: string
+                    type: object
+                required:
+                - pipelineRef
+                type: object
+              policy:
+                description: Policy to validate before releasing an artifact
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                type: string
+            required:
+            - applications
+            - origin
+            - policy
+            type: object
+          status:
+            description: ReleasePlanAdmissionStatus defines the observed state of
+              ReleasePlanAdmission.
+            properties:
+              conditions:
+                description: Conditions represent the latest available observations
+                  for the releasePlanAdmission
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource.\n---\nThis struct is intended for
+                    direct use as an array at the field path .status.conditions.  For
+                    example,\n\n\n\ttype FooStatus struct{\n\t    // Represents the
+                    observations of a foo's current state.\n\t    // Known .status.conditions.type
+                    are: \"Available\", \"Progressing\", and \"Degraded\"\n\t    //
+                    +patchMergeKey=type\n\t    // +patchStrategy=merge\n\t    // +listType=map\n\t
+                    \   // +listMapKey=type\n\t    Conditions []metav1.Condition `json:\"conditions,omitempty\"
+                    patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`\n\n\n\t
+                    \   // other fields\n\t}"
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: |-
+                        type of condition in CamelCase or in foo.example.com/CamelCase.
+                        ---
+                        Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be
+                        useful (see .node.status.conditions), the ability to deconflict is important.
+                        The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              releasePlans:
+                description: ReleasePlan is a list of releasePlans matched to the
+                  ReleasePlanAdmission
+                items:
+                  description: MatchedReleasePlan defines the relevant information
+                    for a matched ReleasePlan.
+                  properties:
+                    active:
+                      description: Active indicates whether the ReleasePlan is set
+                        to auto-release or not
+                      type: boolean
+                    name:
+                      description: Name contains the namespaced name of the ReleasePlan
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?\/[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                  type: object
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

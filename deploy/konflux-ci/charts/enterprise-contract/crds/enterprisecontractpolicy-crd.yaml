@@ -1,0 +1,226 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: enterprisecontractpolicies.appstudio.redhat.com
+spec:
+  group: appstudio.redhat.com
+  names:
+    categories:
+    - all
+    kind: EnterpriseContractPolicy
+    listKind: EnterpriseContractPolicyList
+    plural: enterprisecontractpolicies
+    shortNames:
+    - ecp
+    singular: enterprisecontractpolicy
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: EnterpriseContractPolicy is the Schema for the enterprisecontractpolicies
+          API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: EnterpriseContractPolicySpec is used to configure the Enterprise
+              Contract Policy
+            properties:
+              configuration:
+                description: Configuration handles policy modification configuration
+                  (exclusions and inclusions)
+                properties:
+                  collections:
+                    description: |-
+                      Collections set of predefined rules.  DEPRECATED: Collections can be listed in include
+                      with the "@" prefix.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                  exclude:
+                    description: |-
+                      Exclude set of policy exclusions that, in case of failure, do not block
+                      the success of the outcome.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                  include:
+                    description: |-
+                      Include set of policy inclusions that are added to the policy evaluation.
+                      These override excluded rules.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                type: object
+              description:
+                description: Description of the policy or its intended use
+                type: string
+              identity:
+                description: Identity to be used for keyless verification. This is
+                  an experimental feature.
+                properties:
+                  issuer:
+                    description: Issuer is the URL of the certificate OIDC issuer
+                      for keyless verification.
+                    type: string
+                  issuerRegExp:
+                    description: |-
+                      IssuerRegExp is a regular expression to match the URL of the certificate OIDC issuer for
+                      keyless verification.
+                    type: string
+                  subject:
+                    description: Subject is the URL of the certificate identity for
+                      keyless verification.
+                    type: string
+                  subjectRegExp:
+                    description: |-
+                      SubjectRegExp is a regular expression to match the URL of the certificate identity for
+                      keyless verification.
+                    type: string
+                type: object
+              name:
+                description: Optional name of the policy
+                type: string
+              publicKey:
+                description: Public key used to validate the signature of images and
+                  attestations
+                type: string
+              rekorUrl:
+                description: URL of the Rekor instance. Empty string disables Rekor
+                  integration
+                type: string
+              sources:
+                description: One or more groups of policy rules
+                items:
+                  description: Source defines policies and data that are evaluated
+                    together
+                  properties:
+                    config:
+                      description: |-
+                        Config specifies which policy rules are included, or excluded, from the
+                        provided policy source urls.
+                      properties:
+                        exclude:
+                          description: |-
+                            Exclude is a set of policy exclusions that, in case of failure, do not block
+                            the success of the outcome.
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: set
+                        include:
+                          description: |-
+                            Include is a set of policy inclusions that are added to the policy evaluation.
+                            These take precedence over policy exclusions.
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: set
+                      type: object
+                    data:
+                      description: List of go-getter style policy data source urls
+                      items:
+                        type: string
+                      type: array
+                    name:
+                      description: Optional name for the source
+                      type: string
+                    policy:
+                      description: List of go-getter style policy source urls
+                      items:
+                        type: string
+                      minItems: 1
+                      type: array
+                    ruleData:
+                      description: Arbitrary rule data that will be visible to policy
+                        rules
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    volatileConfig:
+                      description: |-
+                        Specifies volatile configuration that can include or exclude policy rules
+                        based on effective time.
+                      properties:
+                        exclude:
+                          description: |-
+                            Exclude is a set of policy exclusions that, in case of failure, do not block
+                            the success of the outcome.
+                          items:
+                            description: VolatileCriteria includes or excludes a policy
+                              rule with effective dates as an option.
+                            properties:
+                              effectiveOn:
+                                format: date-time
+                                type: string
+                              effectiveUntil:
+                                format: date-time
+                                type: string
+                              imageRef:
+                                description: ImageRef is used to specify an image
+                                  by its digest.
+                                pattern: ^sha256:[a-fA-F0-9]{64}$
+                                type: string
+                              value:
+                                type: string
+                            required:
+                            - value
+                            type: object
+                          type: array
+                        include:
+                          description: |-
+                            Include is a set of policy inclusions that are added to the policy evaluation.
+                            These take precedence over policy exclusions.
+                          items:
+                            description: VolatileCriteria includes or excludes a policy
+                              rule with effective dates as an option.
+                            properties:
+                              effectiveOn:
+                                format: date-time
+                                type: string
+                              effectiveUntil:
+                                format: date-time
+                                type: string
+                              imageRef:
+                                description: ImageRef is used to specify an image
+                                  by its digest.
+                                pattern: ^sha256:[a-fA-F0-9]{64}$
+                                type: string
+                              value:
+                                type: string
+                            required:
+                            - value
+                            type: object
+                          type: array
+                      type: object
+                  type: object
+                minItems: 1
+                type: array
+            type: object
+          status:
+            description: EnterpriseContractPolicyStatus defines the observed state
+              of EnterpriseContractPolicy
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

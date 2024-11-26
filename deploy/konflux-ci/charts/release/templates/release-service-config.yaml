@@ -1,0 +1,9 @@
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ReleaseServiceConfig
+metadata:
+  name: release-service-config
+  namespace: release-service
+  labels:
+  {{- include "release.labels" . | nindent 4 }}
+spec:
+  debug: false
