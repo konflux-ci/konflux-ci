@@ -1,0 +1,218 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: proxy
+  namespace: {{ .Values.UINamespace }}
+  labels:
+    app: proxy
+  {{- include "ui.labels" . | nindent 4 }}
+  annotations:
+    ignore-check.kube-linter.io/no-anti-affinity: Using topologySpreadConstraints
+spec:
+  replicas: {{ .Values.proxy.replicas }}
+  selector:
+    matchLabels:
+      app: proxy
+    {{- include "ui.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: proxy
+      {{- include "ui.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - command:
+        - nginx
+        - -g
+        - daemon off;
+        - -c
+        - /etc/nginx/nginx.conf
+        env:
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: {{ quote .Values.kubernetesClusterDomain }}
+        image: {{ .Values.proxy.nginx.image.repository }}:{{ .Values.proxy.nginx.image.tag
+          | default .Chart.AppVersion }}
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health
+            port: 9443
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: nginx
+        ports:
+        - containerPort: 8080
+          name: web
+          protocol: TCP
+        - containerPort: 9443
+          name: web-tls
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health
+            port: 9443
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources: {{- toYaml .Values.proxy.nginx.resources | nindent 10 }}
+        securityContext: {{- toYaml .Values.proxy.nginx.containerSecurityContext | nindent
+          10 }}
+        volumeMounts:
+        - mountPath: /mnt/nginx-additional-location-configs
+          name: nginx-idp-location
+        - mountPath: /etc/nginx/nginx.conf
+          name: proxy
+          readOnly: true
+          subPath: nginx.conf
+        - mountPath: /var/log/nginx
+          name: logs
+        - mountPath: /var/lib/nginx/tmp
+          name: nginx-tmp
+        - mountPath: /run
+          name: run
+        - mountPath: /mnt
+          name: serving-cert
+        - mountPath: /mnt/nginx-generated-config
+          name: nginx-generated-config
+        - mountPath: /opt/app-root/src/static-content
+          name: static-content
+      - env:
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: {{ quote .Values.kubernetesClusterDomain }}
+        image: {{ .Values.proxy.workspaceManager.image.repository }}:{{ .Values.proxy.workspaceManager.image.tag
+          | default .Chart.AppVersion }}
+        name: workspace-manager
+        ports:
+        - containerPort: 5000
+          name: web
+          protocol: TCP
+        resources: {{- toYaml .Values.proxy.workspaceManager.resources | nindent 10 }}
+        securityContext: {{- toYaml .Values.proxy.workspaceManager.containerSecurityContext
+          | nindent 10 }}
+      - args: {{- toYaml .Values.proxy.oauth2Proxy.args | nindent 8 }}
+        env:
+        - name: OAUTH2_PROXY_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: client-secret
+              name: oauth2-proxy-client-secret
+        - name: OAUTH2_PROXY_COOKIE_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: cookie-secret
+              name: oauth2-proxy-cookie-secret
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: {{ quote .Values.kubernetesClusterDomain }}
+        image: {{ .Values.proxy.oauth2Proxy.image.repository }}:{{ .Values.proxy.oauth2Proxy.image.tag
+          | default .Chart.AppVersion }}
+        name: oauth2-proxy
+        ports:
+        - containerPort: 6000
+          name: web
+          protocol: TCP
+        resources: {{- toYaml .Values.proxy.oauth2Proxy.resources | nindent 10 }}
+        securityContext: {{- toYaml .Values.proxy.oauth2Proxy.containerSecurityContext
+          | nindent 10 }}
+      initContainers:
+      - command:
+        - cp
+        - -R
+        - /opt/app-root/src/.
+        - /mnt/static-content/
+        env:
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: {{ quote .Values.kubernetesClusterDomain }}
+        image: {{ .Values.proxy.copyStaticContent.image.repository }}:{{ .Values.proxy.copyStaticContent.image.tag
+          | default .Chart.AppVersion }}
+        name: copy-static-content
+        resources: {{- toYaml .Values.proxy.copyStaticContent.resources | nindent 10 }}
+        securityContext: {{- toYaml .Values.proxy.copyStaticContent.containerSecurityContext
+          | nindent 10 }}
+        volumeMounts:
+        - mountPath: /mnt/static-content
+          name: static-content
+      - command:
+        - sh
+        - -c
+        - |
+          set -e
+
+          auth_conf=/mnt/nginx-generated-config/auth.conf
+
+          if [[ "$IMPERSONATE" == "true" ]]; then
+            token=$(cat /mnt/api-token/token)
+            echo 'auth_request_set $user  $upstream_http_x_auth_request_email;' > "$auth_conf"
+            echo 'proxy_set_header Impersonate-User $user;' >> "$auth_conf"
+            echo "proxy_set_header Authorization \"Bearer $token\";" >> "$auth_conf"
+          else
+            echo "# impersonation was disabled by config" > "$auth_conf"
+          fi
+
+          chmod 640 "$auth_conf"
+
+          echo \
+            "proxy_pass ${TEKTON_RESULTS_URL:?tekton results url must be provided};" \
+            > /mnt/nginx-generated-config/tekton-results.conf
+        env:
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: {{ quote .Values.kubernetesClusterDomain }}
+        envFrom:
+        - configMapRef:
+            name: proxy-init-config-6hdcm74fk2
+        image: {{ .Values.proxy.generateNginxConfigs.image.repository }}:{{ .Values.proxy.generateNginxConfigs.image.tag
+          | default .Chart.AppVersion }}
+        name: generate-nginx-configs
+        resources: {{- toYaml .Values.proxy.generateNginxConfigs.resources | nindent 10
+          }}
+        securityContext: {{- toYaml .Values.proxy.generateNginxConfigs.containerSecurityContext
+          | nindent 10 }}
+        volumeMounts:
+        - mountPath: /mnt/nginx-generated-config
+          name: nginx-generated-config
+        - mountPath: /mnt/api-token
+          name: api-token
+      serviceAccountName: proxy
+      topologySpreadConstraints:
+      - labelSelector:
+          matchLabels:
+            app: proxy
+        maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+      volumes:
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: nginx-idp-location.conf
+            path: nginx-idp-location.conf
+          name: nginx-idp-location-h959ghd6bh
+        name: nginx-idp-location
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: nginx.conf
+            path: nginx.conf
+          name: proxy-76kktct2f2
+        name: proxy
+      - emptyDir: {}
+        name: logs
+      - emptyDir: {}
+        name: nginx-tmp
+      - emptyDir: {}
+        name: run
+      - name: serving-cert
+        secret:
+          secretName: serving-cert
+      - emptyDir: {}
+        name: nginx-generated-config
+      - name: api-token
+        secret:
+          secretName: proxy
+      - emptyDir: {}
+        name: static-content

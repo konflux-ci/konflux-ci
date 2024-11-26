@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: release-service-manager-config
+  namespace: {{ .Values.ReleaseServiceNamespace }}
+  labels:
+  {{- include "release.labels" . | nindent 4 }}
+data:
+  controller_manager_config.yaml: {{ .Values.releaseServiceManagerConfig.controllerManagerConfigYaml
+    | toYaml | indent 1 }}

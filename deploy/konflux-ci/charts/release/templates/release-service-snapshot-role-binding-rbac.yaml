@@ -1,0 +1,14 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: release-service-snapshot-role-binding
+  labels:
+  {{- include "release.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: release-service-snapshot-editor-role
+subjects:
+- kind: ServiceAccount
+  name: release-service-controller-manager
+  namespace: {{ .Values.ReleaseServiceNamespace }}

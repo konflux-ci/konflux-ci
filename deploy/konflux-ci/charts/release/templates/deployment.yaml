@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: release-service-controller-manager
+  namespace: {{ .Values.ReleaseServiceNamespace }}
+  labels:
+    control-plane: controller-manager
+  {{- include "release.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.releaseServiceControllerManager.replicas }}
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+    {{- include "release.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+      {{- include "release.selectorLabels" . | nindent 8 }}
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+    spec:
+      containers:
+      - args: {{- toYaml .Values.releaseServiceControllerManager.manager.args | nindent
+          8 }}
+        command:
+        - /manager
+        env:
+        - name: DEFAULT_RELEASE_PVC
+          valueFrom:
+            configMapKeyRef:
+              key: DEFAULT_RELEASE_PVC
+              name: release-service-manager-properties
+              optional: true
+        - name: DEFAULT_RELEASE_WORKSPACE_NAME
+          valueFrom:
+            configMapKeyRef:
+              key: DEFAULT_RELEASE_WORKSPACE_NAME
+              name: release-service-manager-properties
+              optional: true
+        - name: DEFAULT_RELEASE_WORKSPACE_SIZE
+          valueFrom:
+            configMapKeyRef:
+              key: DEFAULT_RELEASE_WORKSPACE_SIZE
+              name: release-service-manager-properties
+              optional: true
+        - name: SERVICE_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: {{ quote .Values.kubernetesClusterDomain }}
+        image: '{{ .Values.releaseServiceControllerManager.manager.image.repository }}:{{
+          .Values.releaseServiceControllerManager.manager.image.tag | default .Chart.AppVersion
+          }}'
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: manager
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources: {{- toYaml .Values.releaseServiceControllerManager.manager.resources
+          | nindent 10 }}
+        securityContext: {{- toYaml .Values.releaseServiceControllerManager.manager.containerSecurityContext
+          | nindent 10 }}
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: cert
+          readOnly: true
+      - args: {{- toYaml .Values.releaseServiceControllerManager.kubeRbacProxy.args | nindent
+          8 }}
+        env:
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: {{ quote .Values.kubernetesClusterDomain }}
+        image: '{{ .Values.releaseServiceControllerManager.kubeRbacProxy.image.repository
+          }}:{{ .Values.releaseServiceControllerManager.kubeRbacProxy.image.tag | default
+          .Chart.AppVersion }}'
+        name: kube-rbac-proxy
+        ports:
+        - containerPort: 8443
+          name: https
+          protocol: TCP
+        resources: {{- toYaml .Values.releaseServiceControllerManager.kubeRbacProxy.resources
+          | nindent 10 }}
+        securityContext: {{- toYaml .Values.releaseServiceControllerManager.kubeRbacProxy.containerSecurityContext
+          | nindent 10 }}
+      securityContext: {{- toYaml .Values.releaseServiceControllerManager.podSecurityContext
+        | nindent 8 }}
+      serviceAccountName: release-service-controller-manager
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: webhook-server-cert

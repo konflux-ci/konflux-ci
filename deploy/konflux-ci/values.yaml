@@ -1,0 +1,4 @@
+image-controller:
+  enabled: false
+  # QuayOrg: false
+  # QuayToken: false

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ec-defaults
+  namespace: {{ .Values.enterpriseContractServiceNamespace }}
+  labels:
+  {{- include "enterprise-contract.labels" . | nindent 4 }}
+data:
+  verify_ec_task_bundle: {{ .Values.ecDefaults.verifyEcTaskBundle | quote }}
+  verify_ec_task_git_pathInRepo: {{ .Values.ecDefaults.verifyEcTaskGitPathInRepo
+    | quote }}
+  verify_ec_task_git_revision: {{ .Values.ecDefaults.verifyEcTaskGitRevision | quote
+    }}
+  verify_ec_task_git_url: {{ .Values.ecDefaults.verifyEcTaskGitUrl | quote }}

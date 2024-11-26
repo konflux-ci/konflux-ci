@@ -1,7 +1,7 @@
 name: Sanity Test
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize, reopened, labeled]
   merge_group:
     types: [checks_requested]
@@ -43,6 +43,11 @@ jobs:
         with:
           ref: "${{ github.event.pull_request.head.sha }}"
   
+      - name: DELETEME
+        # works around a change in ubuntu 24.04 that restricts Linux namespace access
+        # for unprivileged users
+        run: echo "do not merge"
+
       - name: Disable AppArmor
         # works around a change in ubuntu 24.04 that restricts Linux namespace access
         # for unprivileged users
@@ -85,7 +90,10 @@ jobs:
 
       - name: Deploying Konflux
         run: |
-          ./deploy-konflux.sh
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          helm install konflux-ci deploy/konflux-ci
+          sleep 120
+          ./wait-for-all.sh
 
       - name: List namespaces
         run: |

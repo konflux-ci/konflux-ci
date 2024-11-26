@@ -1,0 +1,63 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.10.0
+  creationTimestamp: null
+  name: deploymenttargetclasses.appstudio.redhat.com
+spec:
+  group: appstudio.redhat.com
+  names:
+    kind: DeploymentTargetClass
+    listKind: DeploymentTargetClassList
+    plural: deploymenttargetclasses
+    singular: deploymenttargetclass
+  scope: Cluster
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: DeploymentTargetClass is the Schema for the deploymenttargetclasses
+          API. Defines DeploymentTarget properties that should be abstracted from
+          the controller/user that creates a DTC and wants a DT to be provisioned
+          automatically for it.
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: DeploymentTargetClassSpec defines the desired state of DeploymentTargetClass
+            properties:
+              parameters:
+                description: Parameters are used to forward additional information
+                  to the provisioner.
+                type: object
+              provisioner:
+                type: string
+              reclaimPolicy:
+                description: The reclaimPolicy field will tell the provisioner what
+                  to do with the DT once its corresponding DTC is deleted, the values
+                  can be Retain or Delete.
+                type: string
+            required:
+            - provisioner
+            - reclaimPolicy
+            type: object
+          status:
+            description: DeploymentTargetClassStatus defines the observed state of
+              DeploymentTargetClass
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

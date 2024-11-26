@@ -1,0 +1,77 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: release-service/serving-cert
+    controller-gen.kubebuilder.io/version: v0.10.0
+  creationTimestamp: null
+  name: internalservicesconfigs.appstudio.redhat.com
+spec:
+  group: appstudio.redhat.com
+  names:
+    kind: InternalServicesConfig
+    listKind: InternalServicesConfigList
+    plural: internalservicesconfigs
+    singular: internalservicesconfig
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: InternalServicesConfig is the Schema for the internalservicesconfigs
+          API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: InternalServicesConfigSpec defines the desired state of InternalServicesConfig.
+            properties:
+              allowList:
+                description: AllowList is the list of remote namespaces that are allowed
+                  to execute InternalRequests
+                items:
+                  type: string
+                type: array
+              debug:
+                description: Debug sets the operator to run in debug mode. In this
+                  mode, PipelineRuns and PVCs will not be removed
+                type: boolean
+              volumeClaim:
+                default:
+                  name: workspace
+                  size: 1Gi
+                description: VolumeClaim holds information about the volume to request
+                  for Pipelines requiring a workspace
+                properties:
+                  name:
+                    default: workspace
+                    description: Name is the workspace name
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                    type: string
+                  size:
+                    default: 1Gi
+                    description: Size is the size that will be requested when a workspace
+                      is required by a Pipeline
+                    pattern: ^[1-9][0-9]*(K|M|G)i$
+                    type: string
+                type: object
+            type: object
+          status:
+            description: InternalServicesConfigStatus defines the observed state of
+              InternalServicesConfig.
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

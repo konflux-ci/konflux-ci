@@ -1,0 +1,7 @@
+ecDefaults:
+  verifyEcTaskBundle: quay.io/enterprise-contract/ec-task-bundle@sha256:f6fb0800d707b7eb6f3ccfc0026c39bb3a5b944aa1ecacc7d8de6cb2fa1a67a6
+  verifyEcTaskGitPathInRepo: tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml
+  verifyEcTaskGitRevision: 27b87f93279421947087bb94406ccfc9b6c7bc7c
+  verifyEcTaskGitUrl: https://github.com/enterprise-contract/ec-cli.git
+kubernetesClusterDomain: cluster.local
+enterpriseContractServiceNamespace: enterprise-contract-service

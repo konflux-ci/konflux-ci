@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: proxy
+  namespace: {{ .Values.UINamespace }}
+  labels:
+  {{- include "ui.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/service-account.name: proxy
+type: kubernetes.io/service-account-token
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: proxy
+  namespace: {{ .Values.UINamespace }}
+  labels:
+    app: proxy
+  {{- include "ui.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.proxy.type }}
+  selector:
+    app: proxy
+    {{- include "ui.selectorLabels" . | nindent 4 }}
+  ports:
+  {{- .Values.proxy.ports | toYaml | nindent 2 }}

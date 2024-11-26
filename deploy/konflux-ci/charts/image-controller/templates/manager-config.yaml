@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: manager-config
+  namespace: {{ .Values.ImageControllerNamespace }}
+  labels:
+  {{- include "image-controller.labels" . | nindent 4 }}
+data:
+  controller_manager_config.yaml: {{ .Values.managerConfig.controllerManagerConfigYaml
+    | toYaml | indent 1 }}

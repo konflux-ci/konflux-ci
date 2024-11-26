@@ -1,0 +1,88 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: release-service-mutating-webhook-configuration
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Values.ReleaseServiceNamespace }}/serving-cert
+    service.beta.openshift.io/inject-cabundle: "true"
+  labels:
+  {{- include "release.labels" . | nindent 4 }}
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: release-service-webhook-service
+      namespace: {{ .Values.ReleaseServiceNamespace }}
+      path: /mutate-appstudio-redhat-com-v1alpha1-author
+  failurePolicy: Fail
+  name: mauthor.kb.io
+  rules:
+  - apiGroups:
+    - appstudio.redhat.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - releases
+    - releaseplans
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: release-service-webhook-service
+      namespace: {{ .Values.ReleaseServiceNamespace }}
+      path: /mutate-appstudio-redhat-com-v1alpha1-release
+  failurePolicy: Fail
+  name: mrelease.kb.io
+  rules:
+  - apiGroups:
+    - appstudio.redhat.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    resources:
+    - releases
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: release-service-webhook-service
+      namespace: {{ .Values.ReleaseServiceNamespace }}
+      path: /mutate-appstudio-redhat-com-v1alpha1-releaseplan
+  failurePolicy: Fail
+  name: mreleaseplan.kb.io
+  rules:
+  - apiGroups:
+    - appstudio.redhat.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    resources:
+    - releaseplans
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: release-service-webhook-service
+      namespace: {{ .Values.ReleaseServiceNamespace }}
+      path: /mutate-appstudio-redhat-com-v1alpha1-releaseplanadmission
+  failurePolicy: Fail
+  name: mreleaseplanadmission.kb.io
+  rules:
+  - apiGroups:
+    - appstudio.redhat.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    resources:
+    - releaseplanadmissions
+  sideEffects: None

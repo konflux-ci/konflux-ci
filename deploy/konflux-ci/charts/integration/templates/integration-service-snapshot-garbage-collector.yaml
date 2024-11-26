@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: integration-service-snapshot-garbage-collector
+  namespace: {{ .Values.IntegrationServiceNamespace }}
+  labels:
+  {{- include "integration.labels" . | nindent 4 }}
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - command:
+            - /snapshotgc
+            - --zap-log-level=debug
+            - --pr-snapshots-to-keep=100
+            - --non-pr-snapshots-to-keep=700
+            env:
+            - name: KUBERNETES_CLUSTER_DOMAIN
+              value: {{ quote .Values.kubernetesClusterDomain }}
+            image: {{ .Values.integrationServiceSnapshotGarbageCollector.testGc.image.repository
+              }}:{{ .Values.integrationServiceSnapshotGarbageCollector.testGc.image.tag
+              | default .Chart.AppVersion }}
+            imagePullPolicy: {{ .Values.integrationServiceSnapshotGarbageCollector.testGc.imagePullPolicy
+              }}
+            name: test-gc
+            resources: {{- toYaml .Values.integrationServiceSnapshotGarbageCollector.testGc.resources
+              | nindent 10 }}
+            securityContext: {{- toYaml .Values.integrationServiceSnapshotGarbageCollector.testGc.containerSecurityContext
+              | nindent 10 }}
+          restartPolicy: Never
+          serviceAccountName: integration-service-snapshot-garbage-collector
+  schedule: {{ .Values.integrationServiceSnapshotGarbageCollector.schedule | quote
+    }}

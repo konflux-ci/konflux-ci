@@ -1,0 +1,22 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: release-service-release-viewer-role
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+  {{- include "release.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - releases
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - releases/status
+  verbs:
+  - get

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: release-service-controller-manager-metrics-service
+  namespace: {{ .Values.ReleaseServiceNamespace }}
+  labels:
+    control-plane: controller-manager
+  {{- include "release.labels" . | nindent 4 }}
+spec:
+  selector:
+    control-plane: controller-manager
+    {{- include "release.selectorLabels" . | nindent 4 }}
+  ports:
+  {{- .Values.releaseServiceControllerManagerMetricsService.ports | toYaml | nindent 2 }}

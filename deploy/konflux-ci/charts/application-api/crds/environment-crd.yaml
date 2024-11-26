@@ -1,0 +1,256 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.10.0
+  creationTimestamp: null
+  name: environments.appstudio.redhat.com
+spec:
+  group: appstudio.redhat.com
+  names:
+    kind: Environment
+    listKind: EnvironmentList
+    plural: environments
+    shortNames:
+    - env
+    singular: environment
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Environment is the Schema for the environments API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: EnvironmentSpec defines the desired state of Environment
+            properties:
+              configuration:
+                description: Configuration contains environment-specific details for
+                  Applications/Components that are deployed to the Environment.
+                properties:
+                  env:
+                    description: Env is an array of standard environment vairables
+                    items:
+                      description: EnvVarPair describes environment variables to use
+                        for the component
+                      properties:
+                        name:
+                          description: Name is the environment variable name
+                          type: string
+                        value:
+                          description: Value is the environment variable value
+                          type: string
+                      required:
+                      - name
+                      - value
+                      type: object
+                    type: array
+                  target:
+                    description: Target is used to reference a DeploymentTargetClaim
+                      for a target Environment. The Environment controller uses the
+                      referenced DeploymentTargetClaim to access its bounded DeploymentTarget
+                      with cluster credential secret.
+                    properties:
+                      deploymentTargetClaim:
+                        description: DeploymentTargetClaimConfig specifies the DeploymentTargetClaim
+                          details for a given Environment.
+                        properties:
+                          claimName:
+                            type: string
+                        required:
+                        - claimName
+                        type: object
+                    required:
+                    - deploymentTargetClaim
+                    type: object
+                type: object
+              deploymentStrategy:
+                description: DeploymentStrategy is the promotion strategy for the
+                  Environment See Environment API doc for details.
+                type: string
+              displayName:
+                description: DisplayName is the user-visible, user-definable name
+                  for the environment (but not used for functional requirements)
+                type: string
+              parentEnvironment:
+                description: 'ParentEnvironment references another Environment defined
+                  in the namespace: when automated promotion is enabled, promotions
+                  to the parent environment will cause this environment to be promoted
+                  to. See Environment API doc for details.'
+                type: string
+              tags:
+                description: Tags are a user-visisble, user-definable set of tags
+                  that can be applied to the environment
+                items:
+                  type: string
+                type: array
+              type:
+                description: 'DEPRECATED: Type is whether the Environment is a POC
+                  or non-POC environment - This field is deprecated, and should not
+                  be used.'
+                type: string
+              unstableConfigurationFields:
+                description: 'UnstableConfigurationFields are experimental/prototype:
+                  the API has not been finalized here, and is subject to breaking
+                  changes. See comment on UnstableEnvironmentConfiguration for details.'
+                properties:
+                  clusterType:
+                    description: ClusterType indicates whether the target environment
+                      is Kubernetes or OpenShift
+                    type: string
+                  kubernetesCredentials:
+                    description: KubernetesClusterCredentials contains cluster credentials
+                      for a target Kubernetes/OpenShift cluster.
+                    properties:
+                      allowInsecureSkipTLSVerify:
+                        description: Indicates that ArgoCD/GitOps Service should not
+                          check the TLS certificate.
+                        type: boolean
+                      apiURL:
+                        description: APIURL is a reference to a cluster API url defined
+                          within the kube config file of the cluster credentials secret.
+                        type: string
+                      clusterCredentialsSecret:
+                        description: "ClusterCredentialsSecret is a reference to the
+                          name of k8s Secret, defined within the same namespace as
+                          the Environment resource, that contains a kubeconfig. The
+                          Secret must be of type 'managed-gitops.redhat.com/managed-environment'
+                          \n See this temporary URL for details: https://github.com/redhat-appstudio/managed-gitops/tree/main/examples/m6-demo#gitopsdeploymentmanagedenvironment-resource"
+                        type: string
+                      clusterResources:
+                        description: "ClusterResources is used in conjuction with
+                          the Namespace field. If the Namespaces field is non-empty,
+                          this field will be used to determine whether Argo CD should
+                          attempt to manage cluster-scoped resources. - If Namespaces
+                          field is empty, this field is not used. - If you are familiar
+                          with Argo CD: this field is equivalent to the field of the
+                          same name in the Argo CD Cluster Secret. \n Optional, default
+                          to false."
+                        type: boolean
+                      ingressDomain:
+                        description: IngressDomain is the cluster's ingress domain.
+                          For example, in minikube it would be $(minikube ip).nip.io
+                          and in OCP it would look like apps.xyz.rhcloud.com. If clusterType
+                          == "Kubernetes", ingressDomain is mandatory and is enforced
+                          by the webhook validation
+                        type: string
+                      namespaces:
+                        description: "Namespaces allows one to indicate which Namespaces
+                          the Secret's ServiceAccount has access to. \n Optional,
+                          defaults to empty. If empty, it is assumed that the ServiceAccount
+                          has access to all Namespaces. \n The ServiceAccount that
+                          GitOps Service/Argo CD uses to deploy may not have access
+                          to all of the Namespaces on a cluster. If not specified,
+                          it is assumed that the Argo CD ServiceAccount has read/write
+                          at cluster-scope. - If you are familiar with Argo CD: this
+                          field is equivalent to the field of the same name in the
+                          Argo CD Cluster Secret."
+                        items:
+                          type: string
+                        type: array
+                      targetNamespace:
+                        description: TargetNamespace is the default destination target
+                          on the cluster for deployments. This Namespace will be used
+                          for any GitOps repository K8s resources where the `.metadata.Namespace`
+                          field is not specified.
+                        type: string
+                    required:
+                    - allowInsecureSkipTLSVerify
+                    - apiURL
+                    - clusterCredentialsSecret
+                    - targetNamespace
+                    type: object
+                type: object
+            required:
+            - deploymentStrategy
+            - displayName
+            type: object
+          status:
+            description: EnvironmentStatus defines the observed state of Environment
+            properties:
+              conditions:
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource. --- This struct is intended for direct
+                    use as an array at the field path .status.conditions.  For example,
+                    type FooStatus struct{ // Represents the observations of a foo's
+                    current state. // Known .status.conditions.type are: \"Available\",
+                    \"Progressing\", and \"Degraded\" // +patchMergeKey=type // +patchStrategy=merge
+                    // +listType=map // +listMapKey=type Conditions []metav1.Condition
+                    `json:\"conditions,omitempty\" patchStrategy:\"merge\" patchMergeKey:\"type\"
+                    protobuf:\"bytes,1,rep,name=conditions\"` \n // other fields }"
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition
+                        transitioned from one status to another. This should be when
+                        the underlying condition changed.  If that is not known, then
+                        using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating
+                        details about the transition. This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation
+                        that the condition was set based upon. For instance, if .metadata.generation
+                        is currently 12, but the .status.conditions[x].observedGeneration
+                        is 9, the condition is out of date with respect to the current
+                        state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating
+                        the reason for the condition's last transition. Producers
+                        of specific condition types may define expected values and
+                        meanings for this field, and whether the values are considered
+                        a guaranteed API. The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                        --- Many .condition.type values are consistent across resources
+                        like Available, but because arbitrary conditions can be useful
+                        (see .node.status.conditions), the ability to deconflict is
+                        important. The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

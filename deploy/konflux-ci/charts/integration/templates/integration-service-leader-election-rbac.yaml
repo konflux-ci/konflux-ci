@@ -1,0 +1,55 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: integration-service-leader-election-role
+  namespace: {{ .Values.IntegrationServiceNamespace }}
+  labels:
+  {{- include "integration.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: integration-service-leader-election-rolebinding
+  namespace: {{ .Values.IntegrationServiceNamespace }}
+  labels:
+  {{- include "integration.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: integration-service-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: integration-service-controller-manager
+  namespace: {{ .Values.IntegrationServiceNamespace }}
