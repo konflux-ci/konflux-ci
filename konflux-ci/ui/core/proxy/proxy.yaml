@@ -61,12 +61,7 @@ spec:
             set -e
             
             token=$(cat /mnt/api-token/token)
-            # for websocket connections padding should be removed from a base64 encoded token
-            token64=$(base64 -w 0 /mnt/api-token/token | sed -E  s,=+$,,g)
-
             echo "proxy_set_header Authorization \"Bearer $token\";" > /mnt/nginx-generated-config/bearer.conf
-
-            echo "proxy_set_header Sec-WebSocket-Protocol \"base64url.bearer.authorization.k8s.io.${token64}, base64.binary.k8s.io\";" > /mnt/nginx-generated-config/websocket.conf
         volumeMounts:
         - name: nginx-generated-config
           mountPath: /mnt/nginx-generated-config
