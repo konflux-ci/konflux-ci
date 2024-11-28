@@ -168,7 +168,7 @@ ssh -L 9443:localhost:9443 $USER@$VM_IP
 
 6. The UI will be available at https://localhost:9443. You can login using a test user.
 
-`username:` `user2`
+`username:` `user2@konflux.dev`
 
 `password:` `password`
 
