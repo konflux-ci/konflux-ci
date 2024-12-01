@@ -79,10 +79,10 @@ spec:
             cpu: 10m
             memory: 64Mi
       containers:
-      - image: openresty/openresty:1.25.3.1-0-jammy
-        name: nginx-120
+      - image: registry.access.redhat.com/ubi9/nginx-124@sha256:b924363ff07ee0f8fd4f680497da774ac0721722a119665998ff5b2111098ad1
+        name: nginx
         command: 
-          - "/usr/local/openresty/bin/openresty"
+          - nginx
           - "-g"
           - "daemon off;"
           - -c
@@ -136,8 +136,6 @@ spec:
             mountPath: /mnt
           - name: nginx-generated-config
             mountPath: /mnt/nginx-generated-config
-          - name: openresty
-            mountPath: /var/run/openresty
           - name: static-content
             mountPath: /opt/app-root/src/static-content
         securityContext:
@@ -236,8 +234,6 @@ spec:
         - name: api-token
           secret:
             secretName: proxy
-        - name: openresty
-          emptyDir: {}
         - name: static-content
           emptyDir: {}
 
