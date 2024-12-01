@@ -13,3 +13,6 @@ configMapGenerator:
   - name: proxy
     files:
       - nginx.conf
+  - name: proxy-init-config
+    literals:
+      - IMPERSONATE=true

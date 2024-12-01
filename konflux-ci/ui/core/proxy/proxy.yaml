@@ -52,16 +52,30 @@ spec:
           requests:
             cpu: 10m
             memory: 64Mi
-      - name: add-sva-token-to-nginx-config
+      - name: generate-nginx-configs
         image: registry.access.redhat.com/ubi9/ubi@sha256:66233eebd72bb5baa25190d4f55e1dc3fff3a9b77186c1f91a0abdb274452072
+        envFrom:
+          - configMapRef:
+              name: proxy-init-config
         command:
           - sh
           - -c
           - |
             set -e
+
+            auth_conf=/mnt/nginx-generated-config/auth.conf
             
-            token=$(cat /mnt/api-token/token)
-            echo "proxy_set_header Authorization \"Bearer $token\";" > /mnt/nginx-generated-config/bearer.conf
+            if [[ "$IMPERSONATE" == "true" ]]; then
+              token=$(cat /mnt/api-token/token)
+              echo 'auth_request_set $user  $upstream_http_x_auth_request_email;' > "$auth_conf"
+              echo 'proxy_set_header Impersonate-User $user;' >> "$auth_conf"
+              echo "proxy_set_header Authorization \"Bearer $token\";" >> "$auth_conf"
+            else
+              echo "# impersonation was disabled by config" > "$auth_conf"
+            fi
+
+            chmod 640 "$auth_conf"
+
         volumeMounts:
         - name: nginx-generated-config
           mountPath: /mnt/nginx-generated-config
