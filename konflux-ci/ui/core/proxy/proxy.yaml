@@ -76,6 +76,10 @@ spec:
 
             chmod 640 "$auth_conf"
 
+            echo \
+              "proxy_pass ${TEKTON_RESULTS_URL:?tekton results url must be provided};" \
+              > /mnt/nginx-generated-config/tekton-results.conf
+
         volumeMounts:
         - name: nginx-generated-config
           mountPath: /mnt/nginx-generated-config
