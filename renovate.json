@@ -8,7 +8,8 @@
         "https://github.com/enterprise-contract/*",
         "quay.io/konflux-ci/*",
         "quay.io/enterprise-contract/*",
-        "quay.io/konflux-ci/tekton-catalog/*"
+        "quay.io/konflux-ci/tekton-catalog/*",
+        "registry.access.redhat.com/*"
       ],
       "autoApprove": true,
       "automerge": true
