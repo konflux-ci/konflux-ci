@@ -7,8 +7,8 @@ resources:
 namespace: integration-service
 
 images:
-- name: quay.io/redhat-appstudio/integration-service
-  newName: quay.io/redhat-appstudio/integration-service
+- name: quay.io/konflux-ci/integration-service
+  newName: quay.io/konflux-ci/integration-service
   newTag: f3668b96c999ad3487c103940f45e94b6d2e976b
 
 patches:
