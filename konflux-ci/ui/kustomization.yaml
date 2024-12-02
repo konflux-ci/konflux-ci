@@ -4,6 +4,11 @@ resources:
   - core
   - certmanager
 
+configMapGenerator:
+  - name: nginx-idp-location
+    files:
+      - nginx-idp-location.conf
+
 patches:
   - path: node-port-patch.yaml
     target:
@@ -11,3 +16,11 @@ patches:
       version: v1
       kind: Service
       name: proxy
+  - path: nginx-idp-location-patch.yaml
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: proxy
+
+namespace: konflux-ui

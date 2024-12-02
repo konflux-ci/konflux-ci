@@ -1,0 +1,21 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: proxy
+spec:
+  template:
+    spec:
+      containers:
+        - name: nginx
+          volumeMounts:
+            - name: nginx-idp-location
+              mountPath: /mnt/nginx-additional-location-configs
+      volumes:
+        - name: nginx-idp-location
+          configMap:
+            defaultMode: 420
+            name: nginx-idp-location
+            items:
+              - key: nginx-idp-location.conf
+                path: nginx-idp-location.conf
