@@ -1,0 +1,16 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: build-service-build-pipeline-config-read-only
+  namespace: {{ .Values.BuildServiceNamespace }}
+  labels:
+  {{- include "build-service.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resourceNames:
+  - build-pipeline-config
+  resources:
+  - configmaps
+  verbs:
+  - get

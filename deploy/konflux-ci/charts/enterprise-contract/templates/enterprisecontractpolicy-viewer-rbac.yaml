@@ -1,0 +1,22 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: enterprisecontractpolicy-viewer-role
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+  {{- include "enterprise-contract.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - enterprisecontractpolicies
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - enterprisecontractpolicies/status
+  verbs:
+  - get
