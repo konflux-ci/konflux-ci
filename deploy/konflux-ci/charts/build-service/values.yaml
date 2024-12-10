@@ -1,0 +1,81 @@
+kubernetesClusterDomain: cluster.local
+pipelineConfig:
+  configYaml: |-
+    default-pipeline-name: docker-build-oci-ta
+    pipelines:
+    - name: fbc-builder
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-fbc-builder@sha256:fcb6a5cc63ac53c7937f1f283be6525d35aebe368032947e1cde6488b830c1f5
+    - name: docker-build
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build@sha256:d51f5f0dd703fdcb7b4f9786ca9c204b0cdddd033c2516a80d55155527db89a6
+    - name: docker-build-oci-ta
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta@sha256:dcb93058f7ca1e44e22fa3428a971a9b63cc69ce3accef620bc84417f9094698
+serviceControllerManager:
+  kubeRbacProxy:
+    args:
+    - --http2-disable
+    - --secure-listen-address=0.0.0.0:8443
+    - --upstream=http://127.0.0.1:8080/
+    - --logtostderr=true
+    - --v=0
+    containerSecurityContext:
+      readOnlyRootFilesystem: true
+    image:
+      repository: gcr.io/kubebuilder/kube-rbac-proxy
+      tag: v0.15.0
+    resources:
+      limits:
+        cpu: 500m
+        memory: 128Mi
+      requests:
+        cpu: 5m
+        memory: 64Mi
+  manager:
+    args:
+    - --health-probe-bind-address=:8081
+    - --metrics-bind-address=127.0.0.1:8080
+    - --leader-elect
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      privileged: false
+      readOnlyRootFilesystem: true
+    image:
+      repository: quay.io/konflux-ci/build-service
+      tag: 55c26e6ca271d0d8e423d57175dbd6c08730f43c
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1Gi
+      requests:
+        cpu: 10m
+        memory: 64Mi
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  replicas: 1
+  serviceAccount:
+    annotations: {}
+serviceControllerManagerMetricsService:
+  ports:
+  - name: https
+    port: 8443
+    protocol: TCP
+    targetPort: https
+  type: ClusterIP
+serviceManagerConfig:
+  controllerManagerConfigYaml: |-
+    apiVersion: controller-runtime.sigs.k8s.io/v1alpha1
+    kind: ControllerManagerConfig
+    health:
+      healthProbeBindAddress: :8081
+    metrics:
+      bindAddress: 127.0.0.1:8080
+    webhook:
+      port: 9443
+    leaderElection:
+      leaderElect: true
+      resourceName: 5483be8f.redhat.com
+BuildServiceNamespace: build-service
