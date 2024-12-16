@@ -222,7 +222,7 @@ kubectl create -f ./smee/smee-client.yaml
 
 ## Onboard a new Application
 
-The next step is to onboard an application to Konflux on behalf of `user2`.
+The next step is to onboard an application to Konflux on behalf of user2.
 
 This section includes two options for onboarding an application to Konflux.
 
@@ -268,7 +268,8 @@ to configure a Quay.io application and deploy `image-controller`.
 
 :gear: Follow these steps to onboard your application:
 
-1. Login to [Konflux](https://localhost:9443) as `user2` (password: `password`).
+1. Login to [Konflux](https://localhost:9443) as `user2@konflux.dev` (password:
+   `password`).
 2. Click `Create application`
 3. Verify the workspace is set to `user-ns2` (notice the `ws` breadcrumb trail just
    above `Create an application` and click the `...` to switch workspaces as needed).
@@ -320,7 +321,8 @@ To do that:
 ```bash
 kubectl create -f ./test/resources/demo-users/user/ns2/application-and-component.yaml
 ```
-2. :gear: Log into the Konflux UI as `user2` (password: `password`). You should be able
+2. :gear: Log into the Konflux UI as `user2@konflux.dev` (password: `password`). You
+   should be able
    to see your new Application and Component by clicking "View my applications".
 
 #### Image Registry
@@ -384,7 +386,7 @@ Your GitHub App should now send PR events to your smee channel. Navigate to your
 channel's web page. You should see a couple of events were sent just after your PR was
 created. E.g. `check_run`, `pull_request`.
 
-:gear: Log into the Konflux UI as `user2` and check your applications. Select the
+:gear: Log into the Konflux UI as user2 and check your applications. Select the
 application you created earlier, click on `Activity` and `Pipeline runs`. A build
 should've been triggered a few seconds after the PR was created.
 
