@@ -11,15 +11,12 @@ The same secret described there, should be deployed to the `build-service` and
 
 ```bash
 kubectl -n pipelines-as-code create secret generic pipelines-as-code-secret \
-...
 ```
 
 ```bash
 kubectl -n build-service create secret generic pipelines-as-code-secret \
-...
 ```
 
 ```bash
 kubectl -n integration-service create secret generic pipelines-as-code-secret \
-...
 ```
