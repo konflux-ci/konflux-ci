@@ -172,6 +172,9 @@ ssh -L 9443:localhost:9443 $USER@$VM_IP
 
 `password:` `password`
 
+In order to build images you need to configure quay.io repository, This step is mandatory step for importing components using the UI.
+[https://github.com/konflux-ci/konflux-ci/blob/main/docs/quay.md#automatically-provision-quay-repositories-for-container-images]
+
 We now have Konflux up and running. Next, we shall configure Konflux to respond
 to Pull Request webhooks, build a user application and push it to a registry.
 
