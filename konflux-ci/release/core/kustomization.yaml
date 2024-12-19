@@ -1,14 +1,14 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - https://github.com/konflux-ci/release-service/config/default?ref=b7891437c8e5f74a6735937c52f5df26af3e473c
+  - https://github.com/konflux-ci/release-service/config/default?ref=410a451cbdd2b21279674d8953130b1b3b78c491
   - release-pipeline-resources-clusterrole.yaml
   - release-service-config-rbac.yaml
 
 images:
   - name: quay.io/konflux-ci/release-service
     newName: quay.io/konflux-ci/release-service
-    newTag: b7891437c8e5f74a6735937c52f5df26af3e473c
+    newTag: 410a451cbdd2b21279674d8953130b1b3b78c491
 
 namespace: release-service
 
