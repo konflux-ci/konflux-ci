@@ -1,0 +1,463 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.10.0
+  creationTimestamp: null
+  name: snapshotenvironmentbindings.appstudio.redhat.com
+spec:
+  group: appstudio.redhat.com
+  names:
+    kind: SnapshotEnvironmentBinding
+    listKind: SnapshotEnvironmentBindingList
+    plural: snapshotenvironmentbindings
+    shortNames:
+    - aseb
+    - binding
+    singular: snapshotenvironmentbinding
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: "The `SnapshotEnvironmentBinding` resource specifies the deployment
+          relationship between (a single application, a single environment, and a
+          single snapshot) combination. \n It can be thought of as a 3-tuple that
+          defines what Application should be deployed to what Environment, and which
+          Snapshot should be deployed (Snapshot being the specific component container
+          image versions of that Aplication that should be deployed to that Environment).
+          \n **Note**: There should not exist multiple SnapshotEnvironmentBinding
+          CRs in a Namespace that share the same Application and Environment value.
+          For example: - Good: - SnapshotEnvironmentBinding A: (application=appA,
+          environment=dev, snapshot=my-snapshot) - SnapshotEnvironmentBinding B: (application=appA,
+          environment=staging, snapshot=my-snapshot) \n - Bad: - SnapshotEnvironmentBinding
+          A: (application=*appA*, environment=*staging*, snapshot=my-snapshot) - SnapshotEnvironmentBinding
+          B: (application=*appA*, environment=*staging*, snapshot=second-snapshot)"
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: See 'SnapshotEnvironmentBinding' resource for details of
+              this resource. SnapshotEnvironmentBindingSpec defines the desired state
+              of SnapshotEnvironmentBinding.
+            properties:
+              application:
+                description: Application is a reference to the Application resource
+                  (defined in the same namespace) that we are deploying as part of
+                  this SnapshotEnvironmentBinding. Required
+                type: string
+              components:
+                description: Component-specific configuration information, used when
+                  generating GitOps repository resources. Required.
+                items:
+                  description: BindingComponent contains individual component data
+                  properties:
+                    configuration:
+                      description: Configuration describes GitOps repository customizations
+                        that are specific to the the component-application-environment
+                        combination. - Values defined in this struct will overwrite
+                        values from Application/Environment/Component. Optional
+                      properties:
+                        env:
+                          description: Env describes environment variables to use
+                            for the component. Optional.
+                          items:
+                            description: EnvVarPair describes environment variables
+                              to use for the component
+                            properties:
+                              name:
+                                description: Name is the environment variable name
+                                type: string
+                              value:
+                                description: Value is the environment variable value
+                                type: string
+                            required:
+                            - name
+                            - value
+                            type: object
+                          type: array
+                        replicas:
+                          description: Replicas defines the number of replicas to
+                            use for the component Optional
+                          type: integer
+                        resources:
+                          description: Resources defines the Compute Resources required
+                            by the component. Optional.
+                          properties:
+                            limits:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              description: 'Limits describes the maximum amount of
+                                compute resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                              type: object
+                            requests:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              description: 'Requests describes the minimum amount
+                                of compute resources required. If Requests is omitted
+                                for a container, it defaults to Limits if that is
+                                explicitly specified, otherwise to an implementation-defined
+                                value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                              type: object
+                          type: object
+                      type: object
+                    name:
+                      description: Name is the name of the component.
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+              environment:
+                description: Environment is the environment resource (defined in the
+                  namespace) that the binding will deploy to. Required
+                type: string
+              snapshot:
+                description: Snapshot is the Snapshot resource (defined in the namespace)
+                  that contains the container image versions for the components of
+                  the Application. Required
+                type: string
+            required:
+            - application
+            - components
+            - environment
+            - snapshot
+            type: object
+          status:
+            description: SnapshotEnvironmentBindingStatus defines the observed state
+              of SnapshotEnvironmentBinding
+            properties:
+              bindingConditions:
+                description: BindingConditions will contain user-oriented error messages
+                  from the SnapshotEnvironmentBinding reconciler.
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource. --- This struct is intended for direct
+                    use as an array at the field path .status.conditions.  For example,
+                    type FooStatus struct{ // Represents the observations of a foo's
+                    current state. // Known .status.conditions.type are: \"Available\",
+                    \"Progressing\", and \"Degraded\" // +patchMergeKey=type // +patchStrategy=merge
+                    // +listType=map // +listMapKey=type Conditions []metav1.Condition
+                    `json:\"conditions,omitempty\" patchStrategy:\"merge\" patchMergeKey:\"type\"
+                    protobuf:\"bytes,1,rep,name=conditions\"` \n // other fields }"
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition
+                        transitioned from one status to another. This should be when
+                        the underlying condition changed.  If that is not known, then
+                        using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating
+                        details about the transition. This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation
+                        that the condition was set based upon. For instance, if .metadata.generation
+                        is currently 12, but the .status.conditions[x].observedGeneration
+                        is 9, the condition is out of date with respect to the current
+                        state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating
+                        the reason for the condition's last transition. Producers
+                        of specific condition types may define expected values and
+                        meanings for this field, and whether the values are considered
+                        a guaranteed API. The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                        --- Many .condition.type values are consistent across resources
+                        like Available, but because arbitrary conditions can be useful
+                        (see .node.status.conditions), the ability to deconflict is
+                        important. The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              componentDeploymentConditions:
+                description: ComponentDeploymentConditions describes the deployment
+                  status of all of the Components of the Application. This status
+                  is updated by the Gitops Service's SnapshotEnvironmentBinding controller
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource. --- This struct is intended for direct
+                    use as an array at the field path .status.conditions.  For example,
+                    type FooStatus struct{ // Represents the observations of a foo's
+                    current state. // Known .status.conditions.type are: \"Available\",
+                    \"Progressing\", and \"Degraded\" // +patchMergeKey=type // +patchStrategy=merge
+                    // +listType=map // +listMapKey=type Conditions []metav1.Condition
+                    `json:\"conditions,omitempty\" patchStrategy:\"merge\" patchMergeKey:\"type\"
+                    protobuf:\"bytes,1,rep,name=conditions\"` \n // other fields }"
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition
+                        transitioned from one status to another. This should be when
+                        the underlying condition changed.  If that is not known, then
+                        using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating
+                        details about the transition. This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation
+                        that the condition was set based upon. For instance, if .metadata.generation
+                        is currently 12, but the .status.conditions[x].observedGeneration
+                        is 9, the condition is out of date with respect to the current
+                        state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating
+                        the reason for the condition's last transition. Producers
+                        of specific condition types may define expected values and
+                        meanings for this field, and whether the values are considered
+                        a guaranteed API. The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                        --- Many .condition.type values are consistent across resources
+                        like Available, but because arbitrary conditions can be useful
+                        (see .node.status.conditions), the ability to deconflict is
+                        important. The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              components:
+                description: Components describes a component's GitOps repository
+                  information. This status is updated by the Application Service controller.
+                items:
+                  description: BindingComponentStatus contains the status of the components
+                  properties:
+                    generatedRouteName:
+                      description: GeneratedRouteName is the name of the route that
+                        was generated for the Component, if a Route was generated.
+                      type: string
+                    gitopsRepository:
+                      description: GitOpsRepository contains the Git URL, path, branch,
+                        and most recent commit id for the component
+                      properties:
+                        branch:
+                          description: Branch is the branch to use when accessing
+                            the GitOps repository
+                          type: string
+                        commitID:
+                          description: CommitID contains the most recent commit ID
+                            for which the Kubernetes resources of the Component were
+                            modified.
+                          type: string
+                        generatedResources:
+                          description: GeneratedResources contains the list of GitOps
+                            repository resources generated by the application service
+                            controller in the overlays/<environment> dir, for example,
+                            'deployment-patch.yaml'. This is stored to differentiate
+                            between application-service controller generated resources
+                            vs resources added by a user
+                          items:
+                            type: string
+                          type: array
+                        path:
+                          description: 'Path is a pointer to a folder in the GitOps
+                            repo, containing a kustomization.yaml NOTE: Each component-env
+                            combination must have it''s own separate path'
+                          type: string
+                        url:
+                          description: URL is the Git repository URL e.g. The Git
+                            repository that contains the K8s resources to deployment
+                            for the component of the application.
+                          type: string
+                      required:
+                      - branch
+                      - commitID
+                      - generatedResources
+                      - path
+                      - url
+                      type: object
+                    name:
+                      description: Name is the name of the component.
+                      type: string
+                  required:
+                  - gitopsRepository
+                  - name
+                  type: object
+                type: array
+              gitopsDeployments:
+                description: GitOpsDeployments describes the set of GitOpsDeployment
+                  resources that are owned by the SnapshotEnvironmentBinding, and
+                  are deploying the Components of the Application to the target Environment.
+                  To determine the health/sync status of a binding, you can look at
+                  the GitOpsDeployments decribed here.
+                items:
+                  description: "BindingStatusGitOpsDeployment describes an individual
+                    reference to a GitOpsDeployment resources that is used to deploy
+                    this binding. \n To determine the health/sync status of a binding,
+                    you can look at the GitOpsDeployments decribed here."
+                  properties:
+                    commitID:
+                      description: GitOpsDeploymentCommitID is the commit ID of the
+                        GitOpsDeployment
+                      type: string
+                    componentName:
+                      description: ComponentName is the name of the component in the
+                        (component, gitopsdeployment) pair
+                      type: string
+                    gitopsDeployment:
+                      description: GitOpsDeployment is a reference to the name of
+                        a GitOpsDeployment resource which is used to deploy the binding.
+                        The Health/sync status for the binding can thus be read from
+                        the references GitOpsDeployment
+                      type: string
+                    health:
+                      description: GitOpsDeploymentHealthStatus is the health status
+                        of the deployment owned by the binding
+                      type: string
+                    syncStatus:
+                      description: GitOpsDeploymentSyncStatus is the sync status of
+                        the deployment owned by the binding
+                      type: string
+                  required:
+                  - componentName
+                  type: object
+                type: array
+              gitopsRepoConditions:
+                description: Condition describes operations on the GitOps repository,
+                  for example, if there were issues with generating/processing the
+                  repository. This status is updated by the Application Service controller.
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource. --- This struct is intended for direct
+                    use as an array at the field path .status.conditions.  For example,
+                    type FooStatus struct{ // Represents the observations of a foo's
+                    current state. // Known .status.conditions.type are: \"Available\",
+                    \"Progressing\", and \"Degraded\" // +patchMergeKey=type // +patchStrategy=merge
+                    // +listType=map // +listMapKey=type Conditions []metav1.Condition
+                    `json:\"conditions,omitempty\" patchStrategy:\"merge\" patchMergeKey:\"type\"
+                    protobuf:\"bytes,1,rep,name=conditions\"` \n // other fields }"
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition
+                        transitioned from one status to another. This should be when
+                        the underlying condition changed.  If that is not known, then
+                        using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating
+                        details about the transition. This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation
+                        that the condition was set based upon. For instance, if .metadata.generation
+                        is currently 12, but the .status.conditions[x].observedGeneration
+                        is 9, the condition is out of date with respect to the current
+                        state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating
+                        the reason for the condition's last transition. Producers
+                        of specific condition types may define expected values and
+                        meanings for this field, and whether the values are considered
+                        a guaranteed API. The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                        --- Many .condition.type values are consistent across resources
+                        like Available, but because arbitrary conditions can be useful
+                        (see .node.status.conditions), the ability to deconflict is
+                        important. The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

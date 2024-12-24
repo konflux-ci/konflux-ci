@@ -1,0 +1,78 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: release-service/serving-cert
+    controller-gen.kubebuilder.io/version: v0.14.0
+  name: releaseserviceconfigs.appstudio.redhat.com
+spec:
+  group: appstudio.redhat.com
+  names:
+    kind: ReleaseServiceConfig
+    listKind: ReleaseServiceConfigList
+    plural: releaseserviceconfigs
+    shortNames:
+    - rsc
+    singular: releaseserviceconfig
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ReleaseServiceConfig is the Schema for the releaseserviceconfigs
+          API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ReleaseServiceConfigSpec defines the desired state of ReleaseServiceConfig.
+            properties:
+              debug:
+                description: |-
+                  Debug is the boolean that specifies whether or not the Release Service should run
+                  in debug mode
+                type: boolean
+              defaultTimeouts:
+                description: |-
+                  DefaultTimeouts contain the default Tekton timeouts to be used in case they are
+                  not specified in the ReleasePlanAdmission resource.
+                properties:
+                  finally:
+                    description: Finally sets the maximum allowed duration of this
+                      pipeline's finally
+                    type: string
+                  pipeline:
+                    description: Pipeline sets the maximum allowed duration for execution
+                      of the entire pipeline. The sum of individual timeouts for tasks
+                      and finally must not exceed this value.
+                    type: string
+                  tasks:
+                    description: Tasks sets the maximum allowed duration of this pipeline's
+                      tasks
+                    type: string
+                type: object
+            type: object
+          status:
+            description: ReleaseServiceConfigStatus defines the observed state of
+              ReleaseServiceConfig.
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
