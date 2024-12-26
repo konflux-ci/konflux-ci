@@ -9,8 +9,16 @@ main() {
     echo "Waiting for Konflux to be ready" >&2
     local ret=0
     "${script_path}/wait-for-all.sh" || ret="$?"
-    kubectl describe deployment proxy -n konflux-ui
-    kubectl logs deployment/proxy -n konflux-ui --all-containers=true --tail=10
+    if [ $ret -ne 0 ]; then
+        echo "Deployment failed"
+        ./generate-err-logs.sh
+    else
+        echo -e "
+        ***************************
+         Konflux is up and running
+        ***************************
+        "
+    fi
     exit "$ret"
 }
 
