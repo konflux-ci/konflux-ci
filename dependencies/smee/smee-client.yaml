@@ -29,7 +29,8 @@ spec:
             - "http://pipelines-as-code-controller.pipelines-as-code:8080"
           securityContext:
             readOnlyRootFilesystem: true
-            runAsNonRoot: false
+            runAsNonRoot: true
+            runAsUser: 1001
           resources:
             limits:
               cpu: 100m

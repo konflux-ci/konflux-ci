@@ -190,8 +190,19 @@ events to a channel we create on a public `smee` server, and we deploy a client
 within the cluster to listen to those events. The client will relay those events to
 pipelines-as-code (Tekton) inside the cluster.
 
-1. :gear: Start a new channel in [smee](https://smee.io/), and take a note of the webhook
-   proxy URL.
+When the dependencies were deployed, a smee channel was created for you, a client was
+deployed to listen to it, and the channel's webhook Proxy URL was stored in a patch
+file.
+
+1. :gear: Take note of the smee channel's webhook Proxy URL created for you:
+
+```
+grep value dependencies/smee/smee-channel-id.yaml
+```
+
+**NOTE:** if you already have a channel that you'd like to keep using, copy its URL to
+the `value` field inside the `smee-channel-id.yaml` file and rerun `deploy-deps.sh`.
+The script will not recreate the patch file if it already exists.
 
 2. :gear: Create a GitHub app following
    [Pipelines-as-Code documentation](https://pipelinesascode.com/docs/install/github_apps/#manual-setup).
@@ -208,17 +219,6 @@ pipelines-as-code (Tekton) inside the cluster.
    should be created inside the `build-service` and the `integration-service`
    namespaces. See additional details under
    [Configuring GitHub Application Secrets](./docs/github-secrets.md).
-
-4. :gear: Deploy the smee-client on the cluster:
-
-   Edit the [smee-client manifest](./smee/smee-client.yaml), replacing `<smee-channel>`
-   with the webhook proxy URL generated when creating the channel.
-
-   Deploy the manifest:
-
-```bash
-kubectl create -f ./smee/smee-client.yaml
-```
 
 ## Onboard a new Application
 

@@ -17,8 +17,10 @@ main() {
         --from-literal github-private-key="$app_private_key" \
         --from-literal github-application-id="$app_id" \
         --from-literal webhook.secret="$app_webhook_secret"; done
-    sed -i "s|<smee-channel>|$smee_channel|g" "${script_path}/../../smee/smee-client.yaml"
-    kubectl create -f "${script_path}/../../smee/smee-client.yaml"
+    sed "s|https://smee.io/CHANNELID|$smee_channel|g" \
+        "${script_path}/../../dependencies/smee/smee-channel-id.tpl" \
+        > "${script_path}/../../dependencies/smee/smee-channel-id.yaml"
+    kubectl apply -k "${script_path}/../../dependencies/smee"
 }
 
 

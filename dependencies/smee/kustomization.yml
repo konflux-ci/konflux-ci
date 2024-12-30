@@ -1,0 +1,10 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - smee-client.yaml
+patches:
+  - path: smee-channel-id.yaml
+    target:
+      kind: Deployment
+      name: gosmee-client
