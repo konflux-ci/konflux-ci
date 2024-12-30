@@ -45,6 +45,7 @@ deploy() {
     deploy_tekton
     deploy_dex
     deploy_registry
+    deploy_smee
 }
 
 test_pvc_binding(){
@@ -115,6 +116,19 @@ deploy_registry() {
     kubectl apply -k "${script_path}/dependencies/registry"
     retry "kubectl wait --for=condition=Ready --timeout=240s -n kind-registry -l run=registry pod" \
           "The local registry did not become available within the allocated time"
+}
+
+deploy_smee() {
+    local patch="${script_path}/dependencies/smee/smee-channel-id.yaml"
+    if [ ! -f "$patch" ]; then
+        echo "Randomizing smee-channel ID"
+        local channel_id
+        local placeholder=CHANNELID
+        local template="${script_path}/dependencies/smee/smee-channel-id.tpl"
+        channel_id="$(head -c 30 /dev/random | base64 | tr -dc 'a-zA-Z0-9')"
+        sed "s/$placeholder/$channel_id/g" "$template" > "$patch"
+    fi
+    kubectl apply -k "${script_path}/dependencies/smee"
 }
 
 retry() {

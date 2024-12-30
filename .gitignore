@@ -1,3 +1,4 @@
 logs/
 .vscode/
 __debug_bin*
+dependencies/smee/smee-channel-id.yaml

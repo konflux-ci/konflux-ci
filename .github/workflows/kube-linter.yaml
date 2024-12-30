@@ -19,6 +19,7 @@ jobs:
       - name: Generate default configuration
         shell: bash
         run: |
+          cp dependencies/smee/smee-channel-id.tpl dependencies/smee/smee-channel-id.yaml
           find . -name "kustomization.yaml" -o -name "kustomization.yml" | while read -r file; do
             dir=$(dirname "$file")
             dir=${dir#./}
