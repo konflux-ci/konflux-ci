@@ -17,3 +17,5 @@ configMapGenerator:
     literals:
       - IMPERSONATE=true
       - TEKTON_RESULTS_URL=https://tekton-results-api-service.tekton-pipelines.svc.cluster.local:8080
+
+namespace: konflux-ui

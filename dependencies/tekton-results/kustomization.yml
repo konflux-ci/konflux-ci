@@ -27,6 +27,27 @@ patches:
       kind: StatefulSet
       name: tekton-results-postgres
   - patch: |
+      - op: add
+        path: /metadata/annotations/ignore-check.kube-linter.io~1liveness-port
+        value: "Keeping upstream configs"
+    target:
+      kind: Deployment
+      name: tekton-results-api
+  - patch: |
+      - op: add
+        path: /metadata/annotations/ignore-check.kube-linter.io~1readiness-port
+        value: "Keeping upstream configs"
+    target:
+      kind: Deployment
+      name: tekton-results-api
+  - patch: |
+      - op: add
+        path: /metadata/annotations/ignore-check.kube-linter.io~1startup-port
+        value: "Keeping upstream configs"
+    target:
+      kind: Deployment
+      name: tekton-results-api
+  - patch: |
        - op: add
          path: /spec/template/spec/containers/0/resources
          value:
