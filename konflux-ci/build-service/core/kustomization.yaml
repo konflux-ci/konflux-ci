@@ -24,3 +24,17 @@ patches:
       kind: ClusterRole
       name: build-service-metrics-reader
     path: remove-metrics-reader-cluster-role.yaml
+  - patch: |
+      - op: add
+        path: /metadata/annotations/ignore-check.kube-linter.io~1liveness-port
+        value: "Keeping upstream configs"
+    target:
+      kind: Deployment
+      name: build-service-controller-manager
+  - patch: |
+      - op: add
+        path: /metadata/annotations/ignore-check.kube-linter.io~1readiness-port
+        value: "Keeping upstream configs"
+    target:
+      kind: Deployment
+      name: build-service-controller-manager

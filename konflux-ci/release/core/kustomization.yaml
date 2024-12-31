@@ -61,3 +61,17 @@ patches:
       kind: ClusterRoleBinding
       name: release-service-prometheus-role-binding
     path: remove-prometheus-cluster-role-binding.yaml
+  - patch: |
+      - op: add
+        path: /metadata/annotations/ignore-check.kube-linter.io~1liveness-port
+        value: "Keeping upstream configs"
+    target:
+      kind: Deployment
+      name: release-service-controller-manager
+  - patch: |
+      - op: add
+        path: /metadata/annotations/ignore-check.kube-linter.io~1readiness-port
+        value: "Keeping upstream configs"
+    target:
+      kind: Deployment
+      name: release-service-controller-manager

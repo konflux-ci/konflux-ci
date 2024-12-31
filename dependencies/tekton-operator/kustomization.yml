@@ -71,3 +71,10 @@ patches:
     target:
       kind: Deployment
       name: tekton-operator-webhook
+  - patch: |
+      - op: add
+        path: /metadata/annotations/ignore-check.kube-linter.io~1env-var-secret
+        value: "This is the name of the secret rather than the secret"
+    target:
+      kind: Deployment
+      name: tekton-operator-webhook
