@@ -1,0 +1,20 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: serving-cert
+  namespace: {{ .Values.ReleaseServiceNamespace }}
+  labels:
+    app.kubernetes.io/component: certificate
+    app.kubernetes.io/instance: serving-cert
+    app.kubernetes.io/name: certificate
+  {{- include "release.labels" . | nindent 4 }}
+spec:
+  dnsNames:
+  - '{{ .Values.ReleaseServiceNamespace }}-webhook-service.{{
+    .Values.ReleaseServiceNamespace }}.svc'
+  - '{{ .Values.ReleaseServiceNamespace }}-webhook-service.{{
+    .Values.ReleaseServiceNamespace }}.svc.{{ .Values.kubernetesClusterDomain }}'
+  issuerRef:
+    kind: Issuer
+    name: selfsigned-issuer
+  secretName: webhook-server-cert

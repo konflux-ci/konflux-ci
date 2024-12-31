@@ -15,6 +15,7 @@ main() {
     local tmp_pipeline_path="/tmp/customized-docker-pipeline.yaml"
     local tmp_build_task_path="/tmp/customized-build-container-task.yaml"
     # Pull the required Pipeline and Task bundles
+    # TODO: take value from values file
     original_docker_build_bundle_ref=$(yq ".data[\"config.yaml\"]" konflux-ci/build-service/core/build-pipeline-config.yaml | yq ".pipelines[] | select(.name == \"docker-build\").bundle")
     tkn bundle list --remote-skip-tls "$original_docker_build_bundle_ref" -o yaml > $tmp_pipeline_path
     original_build_task_bundle_ref=$(yq "(.spec.tasks[] | select(.name == \"build-container\").taskRef.params[] | select(.name == \"bundle\").value)" $tmp_pipeline_path)
@@ -35,7 +36,7 @@ main() {
     tkn bundle push --remote-skip-tls "$CUSTOMIZED_BUILD_TASK_IMAGE_REF_LOCALHOST" \
         -f $tmp_build_task_path
     # Update the bundle ref in build-service pipeline configmap
-    sed -i "s|bundle:.*docker-build.*|bundle: ${CUSTOMIZED_DOCKER_PIPELINE_IMAGE_REF_CLUSTER}|g" konflux-ci/build-service/core/build-pipeline-config.yaml
+    sed -i "s|bundle:.*docker-build.*|bundle: ${CUSTOMIZED_DOCKER_PIPELINE_IMAGE_REF_CLUSTER}|g" deploy/konflux-ci/charts/build-service/values.yaml
 }
 
 

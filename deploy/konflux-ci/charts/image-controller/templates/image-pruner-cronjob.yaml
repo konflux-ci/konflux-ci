@@ -1,0 +1,55 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: image-pruner-cronjob
+  namespace: {{ .Values.ImageControllerNamespace }}
+  labels:
+  {{- include "image-controller.labels" . | nindent 4 }}
+spec:
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          volumes:
+          - configMap:
+              name: image-controller-image-pruner-configmap-cbd96747df
+            name: image-pruner-volume
+          - name: quaytoken
+            secret:
+              secretName: quaytoken
+          containers:
+          - command:
+            - /bin/bash
+            - -c
+            - python /image-pruner/prune_images.py --namespace $(NAMESPACE)
+            volumeMounts:
+            - mountPath: /image-pruner
+              name: image-pruner-volume
+            env:
+            - name: QUAY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  key: quaytoken
+                  name: quaytoken
+            - name: NAMESPACE
+              valueFrom:
+                secretKeyRef:
+                  key: organization
+                  name: quaytoken
+            - name: KUBERNETES_CLUSTER_DOMAIN
+              value: {{ quote .Values.kubernetesClusterDomain }}
+            image: {{ .Values.imagePrunerCronjob.imagePruner.image.repository }}:{{
+              .Values.imagePrunerCronjob.imagePruner.image.tag | default .Chart.AppVersion
+              }}
+            imagePullPolicy: {{ .Values.imagePrunerCronjob.imagePruner.imagePullPolicy
+              }}
+            name: image-pruner
+            resources: {{- toYaml .Values.imagePrunerCronjob.imagePruner.resources
+              | nindent 10 }}
+            securityContext: {{- toYaml .Values.imagePrunerCronjob.imagePruner.containerSecurityContext
+              | nindent 10 }}
+          restartPolicy: OnFailure
+          securityContext: {{- toYaml .Values.imagePrunerCronjob.podSecurityContext
+            | nindent 8 }}
+  schedule: {{ .Values.imagePrunerCronjob.schedule | quote }}

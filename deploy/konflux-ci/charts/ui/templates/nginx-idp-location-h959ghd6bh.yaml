@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-idp-location-h959ghd6bh
+  namespace: {{ .Values.UINamespace }}
+  labels:
+  {{- include "ui.labels" . | nindent 4 }}
+data:
+  nginx-idp-location.conf: {{ .Values.nginxIdpLocationH959Ghd6Bh.nginxIdpLocationConf
+    | toYaml | indent 1 }}

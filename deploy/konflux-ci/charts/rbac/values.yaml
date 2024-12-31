@@ -1,0 +1,26 @@
+chainsSecretsAdmin:
+  serviceAccount:
+    annotations:
+      argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+      argocd.argoproj.io/sync-wave: "0"
+kubernetesClusterDomain: cluster.local
+tektonChainsSigningSecret:
+  chainsSecretGeneration:
+    containerSecurityContext:
+      readOnlyRootFilesystem: true
+      runAsGroup: 1001
+      runAsNonRoot: true
+      runAsUser: 1001
+    image:
+      repository: quay.io/konflux-ci/appstudio-utils
+      tag: ab6b0b8e40e440158e7288c73aff1cf83a2cc8a9@sha256:24179f0efd06c65d16868c2d7eb82573cce8e43533de6cea14fec3b7446e0b14
+    imagePullPolicy: Always
+    resources:
+      limits:
+        cpu: 100m
+        memory: 250Mi
+      requests:
+        cpu: 10m
+        memory: 10Mi
+OpenshiftPipelinesNamespace: openshift-pipelines
+TektonPipelinesNamespace: tekton-pipelines

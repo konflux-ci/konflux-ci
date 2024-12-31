@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: image-controller-controller-manager
+  namespace: {{ .Values.ImageControllerNamespace }}
+  labels:
+    control-plane: controller-manager
+  {{- include "image-controller.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.controllerManager.replicas }}
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+    {{- include "image-controller.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+      {{- include "image-controller.selectorLabels" . | nindent 8 }}
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+    spec:
+      containers:
+      - args: {{- toYaml .Values.controllerManager.kubeRbacProxy.args | nindent 8 }}
+        env:
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: {{ quote .Values.kubernetesClusterDomain }}
+        image: {{ .Values.controllerManager.kubeRbacProxy.image.repository }}:{{ .Values.controllerManager.kubeRbacProxy.image.tag
+          | default .Chart.AppVersion }}
+        name: kube-rbac-proxy
+        ports:
+        - containerPort: 8443
+          name: https
+          protocol: TCP
+        resources: {{- toYaml .Values.controllerManager.kubeRbacProxy.resources | nindent
+          10 }}
+        securityContext: {{- toYaml .Values.controllerManager.kubeRbacProxy.containerSecurityContext
+          | nindent 10 }}
+      - args: {{- toYaml .Values.controllerManager.manager.args | nindent 8 }}
+        command:
+        - /manager
+        env:
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: {{ quote .Values.kubernetesClusterDomain }}
+        image: {{ .Values.controllerManager.manager.image.repository }}:{{ .Values.controllerManager.manager.image.tag
+          | default .Chart.AppVersion }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: manager
+        ports:
+        - containerPort: 8081
+          name: probes
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources: {{- toYaml .Values.controllerManager.manager.resources | nindent 10
+          }}
+        securityContext: {{- toYaml .Values.controllerManager.manager.containerSecurityContext
+          | nindent 10 }}
+        volumeMounts:
+        - mountPath: /workspace
+          name: quaytoken
+          readOnly: true
+      securityContext: {{- toYaml .Values.controllerManager.podSecurityContext | nindent
+        8 }}
+      serviceAccountName: image-controller-controller-manager
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: quaytoken
+        secret:
+          secretName: quaytoken

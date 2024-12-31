@@ -1,0 +1,92 @@
+integrationServiceControllerManager:
+  kubeRbacProxy:
+    args:
+    - --secure-listen-address=0.0.0.0:8443
+    - --upstream=http://127.0.0.1:8080/
+    - --logtostderr=true
+    - --http2-disable
+    - --v=0
+    containerSecurityContext:
+      readOnlyRootFilesystem: true
+    image:
+      repository: gcr.io/kubebuilder/kube-rbac-proxy
+      tag: v0.15.0
+    resources:
+      limits:
+        cpu: 500m
+        memory: 128Mi
+      requests:
+        cpu: 5m
+        memory: 64Mi
+  manager:
+    args:
+    - --health-probe-bind-address=:8081
+    - --metrics-bind-address=127.0.0.1:8080
+    - --leader-elect
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+    image:
+      repository: quay.io/konflux-ci/integration-service
+      tag: 719e750310d87e2e0b72a774f885119d44304947
+    resources:
+      limits:
+        cpu: 500m
+        memory: 128Mi
+      requests:
+        cpu: 10m
+        memory: 64Mi
+  podSecurityContext:
+    runAsNonRoot: true
+  replicas: 1
+  serviceAccount:
+    annotations: {}
+integrationServiceControllerManagerMetricsService:
+  ports:
+  - name: https
+    port: 8443
+    protocol: TCP
+    targetPort: https
+  type: ClusterIP
+integrationServiceManagerConfig:
+  controllerManagerConfigYaml: |-
+    apiVersion: controller-runtime.sigs.k8s.io/v1alpha1
+    kind: ControllerManagerConfig
+    health:
+      healthProbeBindAddress: :8081
+    metrics:
+      bindAddress: 127.0.0.1:8080
+    webhook:
+      port: 9443
+    leaderElection:
+      leaderElect: true
+      resourceName: f1944211.redhat.com
+integrationServiceSnapshotGarbageCollector:
+  schedule: 0 5 * * *
+  serviceAccount:
+    annotations: {}
+  testGc:
+    containerSecurityContext:
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+    image:
+      repository: quay.io/konflux-ci/integration-service
+      tag: 719e750310d87e2e0b72a774f885119d44304947
+    imagePullPolicy: Always
+    resources:
+      limits:
+        cpu: "1"
+        memory: 500Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
+integrationServiceWebhookService:
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 9443
+  type: ClusterIP
+kubernetesClusterDomain: cluster.local
+# TODO: The CRD has this value hard coded and cannot directly be templated.
+# To make this truly configurable, we need to find a solution to that.
+IntegrationServiceNamespace: integration-service

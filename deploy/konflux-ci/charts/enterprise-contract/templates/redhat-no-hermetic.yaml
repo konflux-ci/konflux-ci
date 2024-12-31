@@ -1,0 +1,28 @@
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: EnterpriseContractPolicy
+metadata:
+  name: redhat-no-hermetic
+  namespace: {{ .Values.enterpriseContractServiceNamespace }}
+  labels:
+  {{- include "enterprise-contract.labels" . | nindent 4 }}
+spec:
+  description: Includes most of the rules and policies required internally by Red
+    Hat when building Red Hat products. It excludes the requirement of hermetic builds.
+    Available collections are defined in https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/release_policy.html#_available_rule_collections.
+    If a different policy configuration is desired, this resource can serve as a starting
+    point. See the docs on how to include and exclude rules https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/policy_configuration.html#_including_and_excluding_rules.
+  name: Red Hat (non hermetic)
+  publicKey: k8s://openshift-pipelines/public-key
+  sources:
+  - config:
+      exclude:
+      - hermetic_build_task
+      - tasks.required_tasks_found:prefetch-dependencies
+      include:
+      - '@redhat'
+    data:
+    - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest
+    - github.com/release-engineering/rhtap-ec-policy//data
+    name: Default
+    policy:
+    - oci::quay.io/enterprise-contract/ec-release-policy:git-fe45153@sha256:94b62b263b947a762b08d5aa2715f37ff3ba25ff7462850dba9d9a8eec1b4c49
