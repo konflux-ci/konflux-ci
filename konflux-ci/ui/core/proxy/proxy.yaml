@@ -215,6 +215,7 @@ spec:
           - "true"
           - --whitelist-domain
           - localhost:9443
+          - --skip-jwt-bearer-tokens
         ports:
           - containerPort: 6000
             name: web

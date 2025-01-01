@@ -95,6 +95,10 @@ jobs:
         run: |
           ./deploy-test-resources.sh
 
+      - name: Run Go Tests
+        run: |
+          go test ./test/go-tests/
+
       - name: Prepare resources for E2E tests
         env:
           APP_ID: ${{ secrets.APP_ID }}
@@ -113,7 +117,7 @@ jobs:
           QUAY_DOCKERCONFIGJSON: ${{ secrets.QUAY_DOCKERCONFIGJSON }}
         run: |
           ./test/e2e/run-e2e.sh
-      
+
       - name: Generate error logs
         if: ${{ !cancelled() }}
         run: |

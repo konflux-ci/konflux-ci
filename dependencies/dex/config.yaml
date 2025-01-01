@@ -9,6 +9,7 @@ web:
   tlsKey: /etc/dex/tls/tls.key
 oauth2:
   skipApprovalScreen: true
+  passwordConnector: local
 staticClients:
 - id: oauth2-proxy
   redirectURIs:
