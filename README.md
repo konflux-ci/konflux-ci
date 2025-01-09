@@ -87,10 +87,11 @@ additional resources.
 
 :gear: Verify that the applications below are installed on the host machine:
 
-* [Kind and kubectl](https://kind.sigs.k8s.io/docs/user/quick-start/#installation)
-  along with `podman` or `docker`
-* `git`
-* `openssl`
+* [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) (`v0.22.0` or
+  newer) along with `podman` (`v5.3.1` or newer) or `docker` (`v27.0.1` or newer)
+* `kubectl` (`v1.26.1` or newer)
+* `git` (`v2.46` or newer)
+* `openssl` (`v3.2.2` or newer)
 
 ## Bootstrapping the Cluster
 :gear: Clone this repository:
