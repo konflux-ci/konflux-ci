@@ -40,6 +40,8 @@ deploy() {
     # The integration-service depends on CRDs from the release-service
     retry kubectl apply -k "${script_path}/konflux-ci/integration"
 
+    retry kubectl apply -k "${script_path}/konflux-ci/namespace-lister"
+
     kubectl apply -k "${script_path}/konflux-ci/ui"
     if ! kubectl get secret oauth2-proxy-client-secret -n konflux-ui; then
         kubectl get secret oauth2-proxy-client-secret --namespace=dex \
