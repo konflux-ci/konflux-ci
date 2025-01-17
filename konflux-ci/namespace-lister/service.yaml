@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: namespace-lister
+  namespace: namespace-lister
+spec:
+  selector:
+    apps: namespace-lister
+  type: ClusterIP
+  ports:
+  - name: http
+    targetPort: 8080
+    port: 8080

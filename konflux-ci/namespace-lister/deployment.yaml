@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: namespace-lister
+  namespace: namespace-lister
+  labels:
+    apps: namespace-lister
+  annotations:
+    ignore-check.kube-linter.io/no-anti-affinity: "Using topologySpreadConstraints"
+spec:
+  selector:
+    matchLabels:
+      apps: namespace-lister
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        apps: namespace-lister
+    spec:
+      serviceAccountName: namespace-lister
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            apps: namespace-lister
+      containers:
+      - image: namespace-lister:foo
+        name: namespace-lister
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: LOG_LEVEL
+          value: "0"
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        ports:
+        - containerPort: 8080
+          name: http
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - "ALL"
+      terminationGracePeriodSeconds: 60
