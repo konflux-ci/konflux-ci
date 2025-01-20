@@ -6,28 +6,49 @@ on:
   merge_group:
     types: [checks_requested]
 jobs:
-  check-org-membership:
+  check-prerequisites:
     runs-on: ubuntu-latest
-    outputs:
-      org-member: ${{ steps.org-check.outputs.org-member }}
     steps:
-      - name: Check if PR author is a member of the organization
-        continue-on-error: true
-        id: org-check
-        run: |
-          ORG="${{ github.repository_owner }}"
-          AUTHOR="${{ github.event.pull_request.user.login }}"
-          if ! gh api /orgs/$ORG/members/$AUTHOR; then
-            echo '### ❌ PR author is not a member of GitHub organization' >> $GITHUB_STEP_SUMMARY
-            exit 1
-          fi
-          echo "org-member=true" >> $GITHUB_OUTPUT
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+    - run: |
+        WHITELISTED_BOT_NAME="renovate[bot]"
+        REQUIRED_LABEL_NAME="ok-to-test"
+
+        ORG="${{ github.repository_owner }}"
+        PR_AUTHOR=$(jq --raw-output .pull_request.user.login $GITHUB_EVENT_PATH)
+        PR_LABELS=$(jq --raw-output .pull_request.labels[].name $GITHUB_EVENT_PATH)
+
+        if [ "$PR_AUTHOR" == "$WHITELISTED_BOT_NAME" ]; then
+          echo "PR author is "$WHITELISTED_BOT_NAME", skipping further checks."
+          exit 0
+        fi
+
+        if [[ "$PR_LABELS" == *$REQUIRED_LABEL_NAME* ]]; then
+          echo "PR has '$REQUIRED_LABEL_NAME' label, skipping further checks."
+          exit 0
+        fi
+
+        if gh api "/orgs/$ORG/members/$PR_AUTHOR"; then
+          echo "PR author is a member of $ORG GitHub organization, skipping further checks"
+          exit 0
+        fi
+
+        ERROR_SUMMARY=$(cat <<EOF
+
+        ### ❌ Cannot run Sanity test - at least one of the following conditions must be met:
+        * PR author is '$WHITELISTED_BOT_NAME'
+        * PR has label '$REQUIRED_LABEL_NAME'
+        * PR author is a public member of '$ORG' GitHub organization
+        EOF
+        )
+        echo "$ERROR_SUMMARY" >> $GITHUB_STEP_SUMMARY
+        echo "$ERROR_SUMMARY"
+
+        exit 1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
 
   sanity-test:
-    if: ${{ (needs.check-org-membership.outputs.org-member == 'true') || (github.event.pull_request.user.login == 'renovate[bot]') || contains(github.event.pull_request.labels.*.name, 'ok-to-test') }}
-    needs: check-org-membership
+    needs: check-prerequisites
     runs-on: ubuntu-latest
     steps:
       - name: Free Disk Space (Ubuntu)
