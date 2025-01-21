@@ -17,12 +17,15 @@ func TestGoTests(t *testing.T) {
 
 // Create a new Kubernetes client using local config file
 func CreateK8sClient() (*kubernetes.Clientset, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
+	kubeconfig := os.Getenv("KUBECONFIG")
+	if kubeconfig == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return nil, err
+		}
+		kubeconfig = homeDir + "/.kube/config"
 	}
 
-	kubeconfig := homeDir + "/.kube/config"
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
 		return nil, err
