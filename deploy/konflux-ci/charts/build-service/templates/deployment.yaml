@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: build-service-controller-manager
+  namespace: {{ .Values.BuildServiceNamespace }}
+  labels:
+    control-plane: controller-manager
+  {{- include "build-service.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.serviceControllerManager.replicas }}
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+    {{- include "build-service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+      {{- include "build-service.selectorLabels" . | nindent 8 }}
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+    spec:
+      containers:
+      - args: {{- toYaml .Values.serviceControllerManager.manager.args | nindent 8 }}
+        command:
+        - /manager
+        env:
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: {{ quote .Values.kubernetesClusterDomain }}
+        image: {{ .Values.serviceControllerManager.manager.image.repository }}:{{ .Values.serviceControllerManager.manager.image.tag
+          | default .Chart.AppVersion }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: manager
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources: {{- toYaml .Values.serviceControllerManager.manager.resources | nindent
+          10 }}
+        securityContext: {{- toYaml .Values.serviceControllerManager.manager.containerSecurityContext
+          | nindent 10 }}
+        volumeMounts:
+        - mountPath: /etc/ssl/certs/ca-custom-bundle.crt
+          name: trusted-ca
+          readOnly: true
+          subPath: ca-bundle.crt
+      - args: {{- toYaml .Values.serviceControllerManager.kubeRbacProxy.args | nindent
+          8 }}
+        env:
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: {{ quote .Values.kubernetesClusterDomain }}
+        image: '{{ .Values.serviceControllerManager.kubeRbacProxy.image.repository }}:{{
+          .Values.serviceControllerManager.kubeRbacProxy.image.tag | default .Chart.AppVersion
+          }}'
+        name: kube-rbac-proxy
+        ports:
+        - containerPort: 8443
+          name: https
+          protocol: TCP
+        resources: {{- toYaml .Values.serviceControllerManager.kubeRbacProxy.resources
+          | nindent 10 }}
+        securityContext: {{- toYaml .Values.serviceControllerManager.kubeRbacProxy.containerSecurityContext
+          | nindent 10 }}
+      securityContext: {{- toYaml .Values.serviceControllerManager.podSecurityContext |
+        nindent 8 }}
+      serviceAccountName: build-service-controller-manager
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - configMap:
+          items:
+          - key: ca-bundle.crt
+            path: ca-bundle.crt
+          name: trusted-ca
+        name: trusted-ca

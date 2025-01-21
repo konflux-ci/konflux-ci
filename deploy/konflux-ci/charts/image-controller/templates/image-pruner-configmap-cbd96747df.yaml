@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: image-controller-image-pruner-configmap-cbd96747df
+  namespace: {{ .Values.ImageControllerNamespace }}
+  labels:
+  {{- include "image-controller.labels" . | nindent 4 }}
+data:
+  prune_images.py: {{ .Values.imagePrunerConfigmapCbd96747Df.pruneImagesPy | toYaml
+    | indent 1 }}

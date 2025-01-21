@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: proxy-76kktct2f2
+  namespace: {{ .Values.UINamespace }}
+  labels:
+  {{- include "ui.labels" . | nindent 4 }}
+data:
+  nginx.conf: {{ .Values.proxy76Kktct2F2.nginxConf | toYaml | indent 1 }}

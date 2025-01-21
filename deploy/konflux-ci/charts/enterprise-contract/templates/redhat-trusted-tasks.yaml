@@ -1,0 +1,20 @@
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: EnterpriseContractPolicy
+metadata:
+  name: redhat-trusted-tasks
+  namespace: {{ .Values.enterpriseContractServiceNamespace }}
+  labels:
+  {{- include "enterprise-contract.labels" . | nindent 4 }}
+spec:
+  description: Rules used to verify Tekton Task definitions comply to Red Hat's standards.
+  name: Red Hat Trusted Tasks
+  sources:
+  - config:
+      exclude: []
+      include:
+      - kind
+    data:
+    - github.com/release-engineering/rhtap-ec-policy//data
+    name: Default
+    policy:
+    - oci::quay.io/enterprise-contract/ec-task-policy:git-fe45153@sha256:0ec4be1ec7c841af09e7b368ff1978d271d7a426946846c9fb38ef9be17f9616

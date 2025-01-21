@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: integration-service-controller-manager
+  namespace: {{ .Values.IntegrationServiceNamespace }}
+  labels:
+    control-plane: controller-manager
+  {{- include "integration.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.integrationServiceControllerManager.replicas }}
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+    {{- include "integration.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+      {{- include "integration.selectorLabels" . | nindent 8 }}
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+    spec:
+      containers:
+      - args: {{- toYaml .Values.integrationServiceControllerManager.manager.args | nindent
+          8 }}
+        command:
+        - /manager
+        env:
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: {{ quote .Values.kubernetesClusterDomain }}
+        image: '{{ .Values.integrationServiceControllerManager.manager.image.repository
+          }}:{{ .Values.integrationServiceControllerManager.manager.image.tag | default
+          .Chart.AppVersion }}'
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: manager
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
+        - containerPort: 8081
+          name: probes
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources: {{- toYaml .Values.integrationServiceControllerManager.manager.resources
+          | nindent 10 }}
+        securityContext: {{- toYaml .Values.integrationServiceControllerManager.manager.containerSecurityContext
+          | nindent 10 }}
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: cert
+          readOnly: true
+      - args: {{- toYaml .Values.integrationServiceControllerManager.kubeRbacProxy.args
+          | nindent 8 }}
+        env:
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: {{ quote .Values.kubernetesClusterDomain }}
+        image: '{{ .Values.integrationServiceControllerManager.kubeRbacProxy.image.repository
+          }}:{{ .Values.integrationServiceControllerManager.kubeRbacProxy.image.tag | default
+          .Chart.AppVersion }}'
+        name: kube-rbac-proxy
+        ports:
+        - containerPort: 8443
+          name: https
+          protocol: TCP
+        resources: {{- toYaml .Values.integrationServiceControllerManager.kubeRbacProxy.resources
+          | nindent 10 }}
+        securityContext: {{- toYaml .Values.integrationServiceControllerManager.kubeRbacProxy.containerSecurityContext
+          | nindent 10 }}
+      securityContext: {{- toYaml .Values.integrationServiceControllerManager.podSecurityContext
+        | nindent 8 }}
+      serviceAccountName: integration-service-controller-manager
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: webhook-server-cert

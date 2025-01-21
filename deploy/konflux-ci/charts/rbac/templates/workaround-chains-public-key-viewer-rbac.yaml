@@ -1,0 +1,22 @@
+{{- /*
+needed to work around https://github.com/konflux-ci/konflux-ci/issues/114
+*/}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tekton-chains-public-key-viewer
+  namespace: {{ .Values.OpenshiftPipelinesNamespace }}
+  labels:
+  {{- include "rbac.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-wave: "0"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tekton-chains-public-key-viewer
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: system:authenticated
+  namespace: {{ .Values.TektonPipelinesNamespace }}

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: release-service-manager-properties
+  namespace: {{ .Values.ReleaseServiceNamespace }}
+  labels:
+  {{- include "release.labels" . | nindent 4 }}
+data:
+  DEFAULT_RELEASE_PVC: {{ .Values.releaseServiceManagerProperties.defaultReleasePvc
+    | quote }}
+  DEFAULT_RELEASE_WORKSPACE_NAME: {{ .Values.releaseServiceManagerProperties.defaultReleaseWorkspaceName
+    | quote }}
+  DEFAULT_RELEASE_WORKSPACE_SIZE: {{ .Values.releaseServiceManagerProperties.defaultReleaseWorkspaceSize
+    | quote }}

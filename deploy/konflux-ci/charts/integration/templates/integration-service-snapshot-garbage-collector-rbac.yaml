@@ -1,0 +1,43 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: integration-service-snapshot-garbage-collector
+  labels:
+  {{- include "integration.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - releases
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - snapshots
+  verbs:
+  - get
+  - list
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: integration-service-snapshot-garbage-collector
+  labels:
+  {{- include "integration.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: integration-service-snapshot-garbage-collector
+subjects:
+- kind: ServiceAccount
+  name: integration-service-snapshot-garbage-collector
+  namespace: {{ .Values.IntegrationServiceNamespace }}

@@ -1,0 +1,35 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: konflux-proxy
+  labels:
+  {{- include "ui.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - users
+  - groups
+  verbs:
+  - impersonate
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - localsubjectaccessreviews
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: konflux-proxy
+  labels:
+  {{- include "ui.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: konflux-proxy
+subjects:
+- kind: ServiceAccount
+  name: proxy
+  namespace: {{ .Values.UINamespace }}

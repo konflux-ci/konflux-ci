@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: build-service-manager-config
+  namespace: {{ .Values.BuildServiceNamespace }}
+  labels:
+  {{- include "build-service.labels" . | nindent 4 }}
+data:
+  controller_manager_config.yaml: {{ .Values.serviceManagerConfig.controllerManagerConfigYaml
+    | toYaml | indent 1 }}

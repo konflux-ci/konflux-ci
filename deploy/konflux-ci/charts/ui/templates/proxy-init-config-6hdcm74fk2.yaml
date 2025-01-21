@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: proxy-init-config-6hdcm74fk2
+  namespace: {{ .Values.UINamespace }}
+  labels:
+  {{- include "ui.labels" . | nindent 4 }}
+data:
+  IMPERSONATE: {{ .Values.proxyInitConfig6Hdcm74Fk2.impersonate | quote }}
+  TEKTON_RESULTS_URL: {{ .Values.proxyInitConfig6Hdcm74Fk2.tektonResultsUrl | quote
+    }}
