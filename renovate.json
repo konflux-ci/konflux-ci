@@ -9,6 +9,7 @@
         "quay.io/konflux-ci/*",
         "quay.io/enterprise-contract/*",
         "quay.io/konflux-ci/tekton-catalog/*",
+        "quay.io/redhat-user-workloads/konflux-qe-team-tenant/konflux-e2e/konflux-e2e-tests*",
         "registry.access.redhat.com/*"
       ],
       "autoApprove": true,
@@ -67,6 +68,16 @@
       "autoReplaceStringTemplate": "bundle: {{depName}}@{{newDigest}}",
       "datasourceTemplate": "docker",
       "currentValueTemplate": "devel"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["test/e2e/vars.sh"],
+      "matchStrings": [
+        "E2E_TEST_IMAGE=(?<depName>quay\\.io/redhat-user-workloads/konflux-qe-team-tenant/konflux-e2e/konflux-e2e-tests)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "autoReplaceStringTemplate": "E2E_TEST_IMAGE={{depName}}@{{newDigest}}",
+      "datasourceTemplate": "docker",
+      "currentValueTemplate": "latest"
     }
   ]
 }
