@@ -41,7 +41,7 @@ spec:
     spec:
       serviceAccountName: dex # This is created below
       containers:
-      - image: ghcr.io/dexidp/dex:v2.32.0
+      - image: ghcr.io/dexidp/dex:latest
         name: dex
         command: ["/usr/local/bin/dex", "serve", "/etc/dex/cfg/config.yaml"]
         securityContext:
