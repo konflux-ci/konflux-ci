@@ -228,7 +228,6 @@ rules:
       - projectdevelopmentstreamtemplates
   - verbs:
       - get
-      - watch
     apiGroups:
       - ""
     resources:
