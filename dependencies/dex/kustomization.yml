@@ -6,6 +6,11 @@ resources:
 
 namespace: dex
 
+images:
+  - name: ghcr.io/dexidp/dex
+    newName: ghcr.io/dexidp/dex
+    newTag: v2.32.0
+
 configMapGenerator:
   - name: dex
     files:
