@@ -105,7 +105,7 @@ deploy_dex() {
     kubectl apply -k "${script_path}/dependencies/dex"
     if ! kubectl get secret oauth2-proxy-client-secret -n dex; then
         local client_secret
-        client_secret="$(openssl rand -base64 20)"
+        client_secret="$(openssl rand -base64 20 | tr '+/' '-_' | tr -d '\n' | tr -d '=')"
         kubectl create secret generic oauth2-proxy-client-secret \
             --namespace=dex \
             --from-literal=client-secret="$client_secret"

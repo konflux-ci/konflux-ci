@@ -55,12 +55,12 @@ var _ = Describe("Test Proxy endpoints", func() {
 	k8sClient, err := CreateK8sClient()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
-	token, err := ExtractToken(k8sClient)
-	Expect(err).NotTo(HaveOccurred())
-	Expect(token).ToNot(BeEmpty())
 
 	DescribeTable("Test endpoints with token",
 		func(url string, expectedStatus int) {
+			token, err := ExtractToken(k8sClient)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(token).ToNot(BeEmpty())
 			// Create a Get request
 			request, err := http.NewRequest("GET", url, nil)
 			Expect(err).NotTo(HaveOccurred())
@@ -109,7 +109,6 @@ func CreateHeaderFromSecret(secret *v1.Secret) (string, error) {
 
 // Retrieve the id_token from the tokenUrl using the provided username, password, and header.
 func GetIdToken(header string) (string, error) {
-	var tokenResp TokenResponse
 	// Build the Post request to retrieve the id_token
 	formData := url.Values{}
 	formData.Add("grant_type", "password")
@@ -136,7 +135,12 @@ func GetIdToken(header string) (string, error) {
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return " ", err
+	}
+
 	// Unmarshal the response body and send the id_token
+	var tokenResp TokenResponse
 	err = json.Unmarshal(body, &tokenResp)
 	if err != nil {
 		return " ", err
@@ -157,6 +161,7 @@ func ExtractToken(k8sClient *kubernetes.Clientset) (string, error) {
 	}
 	// Get the id_token to use in our requests
 	token, err := GetIdToken(header)
+
 	if err != nil {
 		return "", err
 	}
