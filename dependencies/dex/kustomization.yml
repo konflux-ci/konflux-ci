@@ -9,7 +9,7 @@ namespace: dex
 images:
   - name: ghcr.io/dexidp/dex
     newName: ghcr.io/dexidp/dex
-    newTag: v2.32.0
+    newTag: v2.41.1
 
 configMapGenerator:
   - name: dex
