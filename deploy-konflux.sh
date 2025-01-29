@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-script_path="$(dirname -- "${BASH_SOURCE[0]}")" 
+script_path="$(dirname -- "${BASH_SOURCE[0]}")"
 
 main() {
     echo "Deploying Konflux" >&2
@@ -38,7 +38,17 @@ deploy() {
     retry kubectl apply -k "${script_path}/konflux-ci/build-service"
 
     # The integration-service depends on CRDs from the release-service
-    retry kubectl apply -k "${script_path}/konflux-ci/integration"
+    # retry kubectl apply -k "${script_path}/konflux-ci/integration"
+    echo "installing packages with Helm: $(
+        helm show chart deploy/konflux-ci/ |
+        grep -A 1 "dependencies:" |
+        tail -n +2 |
+        cut -d ':' -f 2 |
+        tr -d '[:space:]' |
+        paste -sd ', '
+    )" >&2
+    helm dependency update deploy/konflux-ci
+    retry helm upgrade --install konflux-ci deploy/konflux-ci
 
     retry kubectl apply -k "${script_path}/konflux-ci/namespace-lister"
 

@@ -1,0 +1,6 @@
+dependencies:
+- name: integration-service
+  repository: oci://quay.io/yftacherzog/yftacherzog-konflux-integration-service
+  version: 0.1.0
+digest: sha256:bd62e1984832e76b3ad3425d7600faac4c54a0f423ea88e40c3637f8b61a8e19
+generated: "2025-01-29T16:20:25.349854492+02:00"
