@@ -19,9 +19,6 @@ main() {
     tkn bundle list --remote-skip-tls "$original_docker_build_bundle_ref" -o yaml > $tmp_pipeline_path
     original_build_task_bundle_ref=$(yq "(.spec.tasks[] | select(.name == \"build-container\").taskRef.params[] | select(.name == \"bundle\").value)" $tmp_pipeline_path)
     tkn bundle list --remote-skip-tls "$original_build_task_bundle_ref" -o yaml > $tmp_build_task_path
-    # Workaround 1
-    # Remove the problematic "clair-scan" task from the docker pipeline
-    yq e -i 'del(.spec.tasks[] | select(.name == "clair-scan"))' $tmp_pipeline_path
     # Workaround 2
     # CPU and memory requests are too high for the build-container Task's "build" step to run in GitHub actions
     # Thus this workaround lowers ".computeResources.requests" from the "build" step and updates the build Pipeline that is used in CI to reference the updated Task
