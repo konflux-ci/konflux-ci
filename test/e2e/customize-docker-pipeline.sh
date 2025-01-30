@@ -4,7 +4,7 @@ set -x
 script_path="$(dirname -- "${BASH_SOURCE[0]}")"
 
 main() {
-    echo "Updating docker-build pipeline to workaround the issues with clair-scan task and cpu/mem requests for build task" >&2
+    echo "Updating docker-build pipeline to workaround the issues with and cpu/mem requests for build task" >&2
     # shellcheck disable=SC1091
     source "${script_path}/vars.sh"
 
@@ -19,10 +19,7 @@ main() {
     tkn bundle list --remote-skip-tls "$original_docker_build_bundle_ref" -o yaml > $tmp_pipeline_path
     original_build_task_bundle_ref=$(yq "(.spec.tasks[] | select(.name == \"build-container\").taskRef.params[] | select(.name == \"bundle\").value)" $tmp_pipeline_path)
     tkn bundle list --remote-skip-tls "$original_build_task_bundle_ref" -o yaml > $tmp_build_task_path
-    # Workaround 1
-    # Remove the problematic "clair-scan" task from the docker pipeline
-    yq e -i 'del(.spec.tasks[] | select(.name == "clair-scan"))' $tmp_pipeline_path
-    # Workaround 2
+    # Workaround
     # CPU and memory requests are too high for the build-container Task's "build" step to run in GitHub actions
     # Thus this workaround lowers ".computeResources.requests" from the "build" step and updates the build Pipeline that is used in CI to reference the updated Task
     yq e -i "(.spec.steps[].computeResources.requests.cpu) |= \"100m\"" $tmp_build_task_path
