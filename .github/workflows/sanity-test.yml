@@ -106,7 +106,7 @@ jobs:
         with:
           version: latest
 
-      - name: WORKAROUND - Remove clair-scan task from docker-pipeline
+      - name: WORKAROUND - Remove reduce CPU/Memory requirements in build pipeline
         run: |
           ./test/e2e/customize-docker-pipeline.sh
 
