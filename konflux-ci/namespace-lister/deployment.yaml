@@ -39,11 +39,11 @@ spec:
           value: 10m
         resources:
           limits:
-            cpu: 500m
+            cpu: 200m
             memory: 256Mi
           requests:
-            cpu: 500m
-            memory: 256Mi
+            cpu: 20m
+            memory: 64Mi
         ports:
         - containerPort: 8080
           name: http
