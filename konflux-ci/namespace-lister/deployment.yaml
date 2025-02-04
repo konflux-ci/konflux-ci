@@ -26,19 +26,24 @@ spec:
           matchLabels:
             apps: namespace-lister
       containers:
-      - image: namespace-lister:foo
+      - args:
+        - -enable-tls
+        - -cert-path=/var/tls/tls.crt
+        - -key-path=/var/tls/tls.key
         name: namespace-lister
-        imagePullPolicy: IfNotPresent
+        image: namespace-lister:foo
         env:
         - name: LOG_LEVEL
           value: "0"
+        - name: CACHE_RESYNC_PERIOD
+          value: 10m
         resources:
           limits:
             cpu: 500m
-            memory: 128Mi
+            memory: 256Mi
           requests:
-            cpu: 10m
-            memory: 64Mi
+            cpu: 500m
+            memory: 256Mi
         ports:
         - containerPort: 8080
           name: http
@@ -49,4 +54,12 @@ spec:
           capabilities:
             drop:
             - "ALL"
+        volumeMounts:
+        - name: tls
+          mountPath: /var/tls
+          readOnly: true
+      volumes:
+      - name: tls
+        secret:
+          secretName: namespace-lister-tls
       terminationGracePeriodSeconds: 60
