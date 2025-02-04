@@ -1,0 +1,18 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: namespace-lister
+  namespace: namespace-lister
+spec:
+  isCA: true
+  subject:
+    organizations:
+      - konflux
+  dnsNames:
+  - localhost
+  - namespace-lister.namespace-lister
+  issuerRef:
+    kind: ClusterIssuer
+    name: ca-issuer
+  secretName: namespace-lister-tls
