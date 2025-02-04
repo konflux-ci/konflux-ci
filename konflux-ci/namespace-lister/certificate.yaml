@@ -5,13 +5,9 @@ metadata:
   name: namespace-lister
   namespace: namespace-lister
 spec:
-  isCA: true
-  subject:
-    organizations:
-      - konflux
   dnsNames:
-  - localhost
-  - namespace-lister.namespace-lister
+  - namespace-lister.namespace-lister.svc
+  - namespace-lister.namespace-lister.svc.cluster.local
   issuerRef:
     kind: ClusterIssuer
     name: ca-issuer
