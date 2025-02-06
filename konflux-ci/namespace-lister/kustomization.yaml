@@ -11,7 +11,7 @@ namespace: namespace-lister
 images:
 - name: namespace-lister
   newName: quay.io/konflux-ci/namespace-lister
-  newTag: 3a25aa9a18c3f9ddff8cfaf4119d1d8e45ebd5fb
+  newTag: 3f758b0f004adb5c7b94d079ddc485573d9c6823
 patches:
 - path: ./patches/with-header-auth-email.yaml
   target:
