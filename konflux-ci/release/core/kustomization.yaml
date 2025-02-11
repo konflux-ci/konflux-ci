@@ -4,6 +4,7 @@ resources:
   - https://github.com/konflux-ci/release-service/config/default?ref=16708e80c55513d5f74b93991c5c71980da555fa
   - release-pipeline-resources-clusterrole.yaml
   - release-service-config-rbac.yaml
+  - release-service-config.yaml
 
 images:
   - name: quay.io/konflux-ci/release-service
