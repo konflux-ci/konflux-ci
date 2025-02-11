@@ -1,0 +1,6 @@
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ReleaseServiceConfig
+metadata:
+  name: release-service-config
+spec:
+  debug: false
