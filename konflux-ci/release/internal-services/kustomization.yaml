@@ -1,6 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - https://github.com/redhat-appstudio/internal-services/config/crd?ref=ee55aa9132366f8a371de2d3342f6618d7b52d84
+  - https://github.com/redhat-appstudio/internal-services/config/crd?ref=feebe20f948157d1b4fe8d77b3751eecd56201cd
 
 namespace: release-service
