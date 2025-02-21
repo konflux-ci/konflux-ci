@@ -14,6 +14,7 @@ spec:
     schedule: "0 8 * * *"
   chain:
     artifacts.oci.storage: oci
+    artifacts.pipelinerun.enable-deep-inspection: "true"
     artifacts.pipelinerun.format: in-toto
     artifacts.pipelinerun.storage: oci
     artifacts.taskrun.format: in-toto
