@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - https://github.com/enterprise-contract/enterprise-contract-controller/config/crd?ref=be8b79936ed88b2ef4f3301f4f2792b21f6c26de
+  - https://github.com/enterprise-contract/enterprise-contract-controller/config/crd?ref=31a4d8c217d26492c0e50a7d8228895f2a8f52bd
   - ns.yaml
   - public-ecp-rbac.yaml
 
