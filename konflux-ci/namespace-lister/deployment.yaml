@@ -31,7 +31,7 @@ spec:
         - -cert-path=/var/tls/tls.crt
         - -key-path=/var/tls/tls.key
         name: namespace-lister
-        image: namespace-lister:foo
+        image: quay.io/konflux-ci/namespace-lister:foo
         env:
         - name: LOG_LEVEL
           value: "0"
