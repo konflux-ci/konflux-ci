@@ -9,9 +9,9 @@ resources:
 - certificate.yaml
 namespace: namespace-lister
 images:
-- name: namespace-lister
+- name: quay.io/konflux-ci/namespace-lister
   newName: quay.io/konflux-ci/namespace-lister
-  newTag: 3f758b0f004adb5c7b94d079ddc485573d9c6823
+  digest: sha256:4f33da08444567b757e140e7cc532cbe347b9d796c487c4526a2aabc28135eed
 patches:
 - path: ./patches/with-header-auth-email.yaml
   target:
