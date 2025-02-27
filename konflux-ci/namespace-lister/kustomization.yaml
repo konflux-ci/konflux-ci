@@ -11,7 +11,7 @@ namespace: namespace-lister
 images:
 - name: quay.io/konflux-ci/namespace-lister
   newName: quay.io/konflux-ci/namespace-lister
-  digest: sha256:4f33da08444567b757e140e7cc532cbe347b9d796c487c4526a2aabc28135eed
+  digest: sha256:c9bac58f3e52ae13e329f59d32646bed619e91be184d100354cac1feeea99d52
 patches:
 - path: ./patches/with-header-auth-email.yaml
   target:
