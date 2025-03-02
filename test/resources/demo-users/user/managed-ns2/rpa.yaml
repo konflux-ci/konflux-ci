@@ -23,8 +23,8 @@ spec:
         - name: url
           value: "https://github.com/konflux-ci/release-service-catalog.git"
         - name: revision
-          value: 806af0c14399c7b2b4ef357e884d6cbcb255e5f9
+          value: b0586bdee6e5721d773f4b5be6ca8cd8f70ddd32
         - name: pathInRepo
-          value: "pipelines/push-to-external-registry/push-to-external-registry.yaml"
+          value: "pipelines/managed/push-to-external-registry/push-to-external-registry.yaml"
     serviceAccountName: appstudio-pipeline
   policy: default
