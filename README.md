@@ -33,7 +33,7 @@ Konflux-CI
   * [Namespace and User Management](#namespace-and-user-management)
     + [Creating a new Namespace](#creating-a-new-namespace)
     + [Granting a User Access to a Namespace](#granting-a-user-access-to-a-namespace)
-    + [Add a new User](#add-a-new-user)
+    + [Users Management](#users-management)
   * [Repository Links](#repository-links)
 
 <!-- tocstop -->
@@ -836,30 +836,19 @@ Example:
 kubectl create rolebinding user1-konflux --clusterrole konflux-admin-user-actions --user user1@konflux.dev -n user-ns3
 ```
 
-### Add a new User
+### Users Management
 
-Konflux is using [Keycloak](https://www.keycloak.org/) for managing users and
-authentication.
-The administration console for Keycloak is exposed at
-https://localhost:9443/idp/admin/master/console/#/redhat-external
+[Dex](https://dexidp.io/) is used for integrating identity providers into Konflux.
+Together with [oauth2-proxy](https://github.com/oauth2-proxy/oauth2-proxy), it allows
+for offloading authentication to different identity providers per the requirement
+of the environment or organization where Konflux is installed.
 
-For getting the username and password for the console run:
+For the simple standalone deployment, however, Dex is configured with static passwords
+defined as part of
+[Dex configurations](https://github.com/konflux-ci/konflux-ci/blob/main/dependencies/dex/config.yaml).
 
-```bash
-# USERNAME
-
-kubectl get -n keycloak secrets/keycloak-initial-admin --template={{.data.username}} | base64 -d
-
-# PASSWORD
-
-kubectl get -n keycloak secrets/keycloak-initial-admin --template={{.data.password}} | base64 -d
-```
-
-After login into the console, click on the `Users` tab
-on the left for adding a user.
-
-In addition, you can configure additional `Identity providers` such as `Github`,
-`Google`, etc.. by clicking on the `Identity providers` tab on the left.
+See Dex documentation for both [OAuth 2.0](https://dexidp.io/docs/connectors/oauth/) and
+the [builtin connector](https://dexidp.io/docs/connectors/local/).
 
 ## Repository Links
 
