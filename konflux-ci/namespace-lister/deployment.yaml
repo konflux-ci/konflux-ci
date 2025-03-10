@@ -37,6 +37,18 @@ spec:
           value: "0"
         - name: CACHE_RESYNC_PERIOD
           value: 10m
+        livenessProbe:
+          initialDelaySeconds: 1
+          httpGet:
+            path: /healthz
+            port: 8080
+            scheme: HTTPS
+        readinessProbe:
+          initialDelaySeconds: 1
+          httpGet:
+            path: /readyz
+            port: 8080
+            scheme: HTTPS
         resources:
           limits:
             cpu: 200m
