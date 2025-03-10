@@ -5,13 +5,14 @@ resources:
 - namespace.yaml
 - rbac.yaml
 - service.yaml
-- network_policy.yaml
 - certificate.yaml
+- network_policy_allow_to_apiserver.yaml
+- network_policy_allow_from_konfluxui.yaml
 namespace: namespace-lister
 images:
-- name: quay.io/konflux-ci/namespace-lister
+- digest: sha256:f624cce3cdaf10856dbdcc27715425590087cf13a95e2313280db2e986166e7a
+  name: quay.io/konflux-ci/namespace-lister
   newName: quay.io/konflux-ci/namespace-lister
-  digest: sha256:f624cce3cdaf10856dbdcc27715425590087cf13a95e2313280db2e986166e7a
 patches:
 - path: ./patches/with-header-auth-email.yaml
   target:
