@@ -1,7 +1,7 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: namespace-lister
+  name: namespace-lister-allow-from-konfluxui
   namespace: namespace-lister
 spec:
   podSelector:
