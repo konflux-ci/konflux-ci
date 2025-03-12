@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-script_path="$(dirname -- "${BASH_SOURCE[0]}")" 
+script_path="$(dirname -- "${BASH_SOURCE[0]}")"
 
 main() {
     echo "Deploying Konflux" >&2

@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: build-service-controller-manager
+spec:
+  template:
+    spec:
+      containers:
+        - name: manager
+          env:
+            - name: PAC_WEBHOOK_URL
+              value: http://pipelines-as-code-controller.pipelines-as-code.svc.cluster.local:8080
