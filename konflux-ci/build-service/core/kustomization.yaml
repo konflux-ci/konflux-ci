@@ -38,3 +38,7 @@ patches:
     target:
       kind: Deployment
       name: build-service-controller-manager
+  - target:
+      kind: Deployment
+      name: build-service-controller-manager
+    path: build-service-env-patch.yaml
