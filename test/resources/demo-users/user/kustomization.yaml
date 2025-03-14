@@ -3,4 +3,6 @@ kind: Kustomization
 resources:
   - ns1
   - ns2
+  - managed-ns1
+  - managed-ns2
   - cluster-rbac.yaml
