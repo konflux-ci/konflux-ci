@@ -32,7 +32,7 @@ deploy() {
 
     retry kubectl apply -k "${script_path}/konflux-ci/enterprise-contract"
 
-    retry kubectl apply -k "${script_path}/konflux-ci/release"
+    retry kubectl apply -k "${script_path}/konflux-ci/release" --server-side
 
     # The build-service depends on CRDs from the release-service
     retry kubectl apply -k "${script_path}/konflux-ci/build-service"
