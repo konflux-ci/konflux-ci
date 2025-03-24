@@ -278,7 +278,7 @@ to configure a Quay.io application and deploy `image-controller`.
 5. Under `Git repository url`, copy the **https** link to your fork. This should
    be something similar to `https://github.com/<your-name>/testrepo.git`.
 6. Leave `Docker file` blank. The default value of `Dockerfile` will be used.
-7. Under the Pipeline drop-down list, select `docker-build`.
+7. Under the Pipeline drop-down list, select `docker-build-oci-ta`.
 8. Click `Create application`.
 
 **NOTE:** If you encounter `404 Not Found` error, refer to the
