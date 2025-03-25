@@ -5,10 +5,12 @@ resources:
 - https://github.com/konflux-ci/integration-service/config/snapshotgc?ref=5c63f666a3d35ab93f47cabf5e460a3deaa9ab17
 
 namespace: integration-service
+
 images:
 - name: quay.io/konflux-ci/integration-service
   newName: quay.io/konflux-ci/integration-service
   newTag: 5c63f666a3d35ab93f47cabf5e460a3deaa9ab17
+
 
 patches:
   - target:

@@ -6,9 +6,10 @@ resources:
   - release-service-config-rbac.yaml
   - release-service-config.yaml
 images:
-  - name: quay.io/redhat-user-workloads/rhtap-release-2-tenant/release-service/release-service
-    newName: quay.io/redhat-user-workloads/rhtap-release-2-tenant/release-service/release-service
-    newTag: on-pr-3ceed7374f6d2a9c567e134bd9848aefe01ba216.sealights
+  - name: quay.io/konflux-ci/release-service
+    newName: quay.io/konflux-ci/release-service
+    newTag: 3ceed7374f6d2a9c567e134bd9848aefe01ba216
+
 namespace: release-service
 patches:
   - target:
