@@ -61,7 +61,7 @@ for service_entry in "${SERVICES_ENTRIES[@]}"; do
 
   echo "[INFO] Updating kustomization file: $kustomization_file"
 
-  yq -i ".images[0].name = \"$SL_IMAGE_NAME\" | .images[0].newName = \"$SL_IMAGE_NAME\" | .images[0].newTag = \"$SL_IMAGE_TAG\"" "$kustomization_file"
+  yq -i ".images[0].newName = \"$SL_IMAGE_NAME\" | .images[0].newTag = \"$SL_IMAGE_TAG\"" "$kustomization_file"
 
   echo "[INFO] Updated kustomization file: $kustomization_file"
 
