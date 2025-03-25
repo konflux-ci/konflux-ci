@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: integration-service-controller-manager
+  name: release-service-controller-manager
 spec:
   template:
     spec:
@@ -9,4 +9,6 @@ spec:
       - name: manager
         env:
           - name: SEALIGHTS_LAB_ID
+            value: ""
+          - name: SEALIGHTS_TOKEN
             value: ""

@@ -1,16 +1,13 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-- https://github.com/konflux-ci/integration-service/config/default?ref=cf24b223f4e92293134ec2626773d66b8b76af90
-- https://github.com/konflux-ci/integration-service/config/snapshotgc?ref=cf24b223f4e92293134ec2626773d66b8b76af90
-
+  - https://github.com/konflux-ci/integration-service/config/default?ref=cf24b223f4e92293134ec2626773d66b8b76af90
+  - https://github.com/konflux-ci/integration-service/config/snapshotgc?ref=cf24b223f4e92293134ec2626773d66b8b76af90
 namespace: integration-service
-
 images:
-- name: quay.io/konflux-ci/integration-service
-  newName: quay.io/konflux-ci/integration-service
-  newTag: cf24b223f4e92293134ec2626773d66b8b76af90
-
+  - name: quay.io/redhat-user-workloads/rhtap-integration-tenant/integration-service/integration-service
+    newName: quay.io/redhat-user-workloads/rhtap-integration-tenant/integration-service/integration-service
+    newTag: cf24b223f4e92293134ec2626773d66b8b76af90.sealights
 patches:
   - target:
       group: monitoring.coreos.com
@@ -54,3 +51,9 @@ patches:
       kind: CronJob
       name: integration-service-snapshot-garbage-collector
     path: snapshot-gc-resource-patch.yaml
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: integration-service-controller-manager
+    path: sealights-envs.yaml

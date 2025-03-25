@@ -1,5 +1,8 @@
 #!/bin/bash
 
+export SEALIGHTS_TOKEN="${SEALIGHTS_TOKEN:-""}"
+export SEALIGHTS_LAB_ID="${SEALIGHTS_LAB_ID:-""}"
+
 # Define array with core components and the path in the root repo
 SERVICES_ENTRIES=(
   "integration:konflux-ci/integration/core/kustomization.yaml"
@@ -61,8 +64,9 @@ for service_entry in "${SERVICES_ENTRIES[@]}"; do
   yq -i ".images[0].name = \"$SL_IMAGE_NAME\" | .images[0].newName = \"$SL_IMAGE_NAME\" | .images[0].newTag = \"$SL_IMAGE_TAG\"" "$kustomization_file"
 
   echo "[INFO] Updated kustomization file: $kustomization_file"
+
+  yq e "
+  (.spec.template.spec.containers[].env[] | select(.name == \"SEALIGHTS_LAB_ID\")).value = \"${SEALIGHTS_LAB_ID}\" |
+  (.spec.template.spec.containers[].env[] | select(.name == \"SEALIGHTS_TOKEN\")).value = \"${SEALIGHTS_TOKEN}\"
+" -i konflux-ci/"$component_name"/core/sealights-envs.yaml
 done
-
-exit 1
-
-# I dont have yet the token in GITHUB actions

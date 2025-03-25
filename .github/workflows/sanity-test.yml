@@ -115,6 +115,9 @@ jobs:
           ./test/e2e/customize-docker-pipeline.sh
 
       - name: Prepare Sealights Images to get Coverage numbers
+        env:
+          SEALIGHTS_TOKEN: ${{ secrets.SEALIGHTS_TOKEN }}
+          SEALIGHTS_LAB_ID: ${{ secrets.SEALIGHTS_LAB_ID }}
         run: |
           ./test/e2e/prepare-sl-images.sh
 
