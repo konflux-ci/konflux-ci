@@ -5,9 +5,9 @@ resources:
   - build-pipeline-config.yaml
 namespace: build-service
 images:
-  - name: quay.io/redhat-user-workloads/rhtap-build-tenant/build-service/build-service
-    newName: quay.io/redhat-user-workloads/rhtap-build-tenant/build-service/build-service
-    newTag: 8549f4726af8c71cf0c9154bffad87953a4af2b7.sealights
+  - name: quay.io/konflux-ci/build-service
+    newName: quay.io/konflux-ci/build-service
+    newTag: 8549f4726af8c71cf0c9154bffad87953a4af2b7
 patches:
   - target:
       group: monitoring.coreos.com
