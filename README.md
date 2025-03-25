@@ -87,9 +87,9 @@ additional resources.
 
 :gear: Verify that the applications below are installed on the host machine:
 
-* [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) (`v0.22.0` or
+* [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) (`v0.26.0` or
   newer) along with `podman` (`v5.3.1` or newer) or `docker` (`v27.0.1` or newer)
-* `kubectl` (`v1.26.1` or newer)
+* `kubectl` (`v1.31.1` or newer)
 * `git` (`v2.46` or newer)
 * `openssl` (`v3.2.2` or newer)
 
@@ -278,7 +278,7 @@ to configure a Quay.io application and deploy `image-controller`.
 5. Under `Git repository url`, copy the **https** link to your fork. This should
    be something similar to `https://github.com/<your-name>/testrepo.git`.
 6. Leave `Docker file` blank. The default value of `Dockerfile` will be used.
-7. Under the Pipeline drop-down list, select `docker-build`.
+7. Under the Pipeline drop-down list, select `docker-build-oci-ta`.
 8. Click `Create application`.
 
 **NOTE:** If you encounter `404 Not Found` error, refer to the
