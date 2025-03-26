@@ -10,7 +10,7 @@ data:
     - name: fbc-builder
       bundle: quay.io/konflux-ci/tekton-catalog/pipeline-fbc-builder@sha256:03b89fdad7fdd7bf23379d1d4a707f250d8fec5d6c52d90e1490c67d16046c7e
     - name: docker-build
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build@sha256:7ece5c16d520939538f60f97cbbe19d9ebb73c9b7928a7f5a4c625299c9f386f
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build@sha256:4291360c666e16b502b77f5019a6c5cbb11ca2ac93f0421a1dd9ba65b00387cf
     - name: docker-build-oci-ta
       bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta@sha256:e763a8535eeb18a8b930e4f3ad2be38d49961fa2ca2c1e1b2ddc2f7963747550
     - name: tekton-bundle-builder
