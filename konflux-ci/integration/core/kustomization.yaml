@@ -5,7 +5,6 @@ resources:
 - https://github.com/konflux-ci/integration-service/config/snapshotgc?ref=5c63f666a3d35ab93f47cabf5e460a3deaa9ab17
 
 namespace: integration-service
-
 images:
 - name: quay.io/konflux-ci/integration-service
   newName: quay.io/konflux-ci/integration-service
@@ -54,3 +53,9 @@ patches:
       kind: CronJob
       name: integration-service-snapshot-garbage-collector
     path: snapshot-gc-resource-patch.yaml
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: integration-service-controller-manager
+    path: sealights-envs.yaml

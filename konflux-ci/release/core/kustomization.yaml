@@ -5,14 +5,11 @@ resources:
   - release-pipeline-resources-clusterrole.yaml
   - release-service-config-rbac.yaml
   - release-service-config.yaml
-
 images:
-  - name: quay.io/konflux-ci/release-service
-    newName: quay.io/konflux-ci/release-service
-    newTag: 3ceed7374f6d2a9c567e134bd9848aefe01ba216
-
+  - name: quay.io/redhat-user-workloads/rhtap-release-2-tenant/release-service/release-service
+    newName: quay.io/redhat-user-workloads/rhtap-release-2-tenant/release-service/release-service
+    newTag: on-pr-3ceed7374f6d2a9c567e134bd9848aefe01ba216.sealights
 namespace: release-service
-
 patches:
   - target:
       group: monitoring.coreos.com
@@ -76,3 +73,9 @@ patches:
     target:
       kind: Deployment
       name: release-service-controller-manager
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: release-service-controller-manager
+    path: sealights-envs.yaml

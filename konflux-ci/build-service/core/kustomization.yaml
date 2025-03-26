@@ -3,14 +3,11 @@ kind: Kustomization
 resources:
   - https://github.com/konflux-ci/build-service/config/default?ref=8549f4726af8c71cf0c9154bffad87953a4af2b7
   - build-pipeline-config.yaml
-
 namespace: build-service
-
 images:
-  - name: quay.io/konflux-ci/build-service
-    newName: quay.io/konflux-ci/build-service
-    newTag: 8549f4726af8c71cf0c9154bffad87953a4af2b7
-
+  - name: quay.io/redhat-user-workloads/rhtap-build-tenant/build-service/build-service
+    newName: quay.io/redhat-user-workloads/rhtap-build-tenant/build-service/build-service
+    newTag: 8549f4726af8c71cf0c9154bffad87953a4af2b7.sealights
 patches:
   - target:
       group: monitoring.coreos.com
@@ -42,3 +39,9 @@ patches:
       kind: Deployment
       name: build-service-controller-manager
     path: build-service-env-patch.yaml
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: build-service-controller-manager
+    path: sealights-envs.yaml

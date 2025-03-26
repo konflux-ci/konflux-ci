@@ -63,13 +63,17 @@ jobs:
           # this might remove tools that are actually needed,
           # if set to "true" but frees about 6 GB
           tool-cache: false
-          
+
           docker-images: false
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3.8.1
+
       - name: Checkout Repository
         uses: actions/checkout@v3
         with:
           ref: "${{ github.event.pull_request.head.sha }}"
-  
+
       - name: Disable AppArmor
         # works around a change in ubuntu 24.04 that restricts Linux namespace access
         # for unprivileged users
@@ -79,7 +83,7 @@ jobs:
         uses: helm/kind-action@v1
         with:
           config: kind-config.yaml
-      
+
       - name: Show version information
         run: |
           kubectl version
@@ -109,6 +113,13 @@ jobs:
       - name: WORKAROUND - Remove reduce CPU/Memory requirements in build pipeline
         run: |
           ./test/e2e/customize-docker-pipeline.sh
+
+      - name: Prepare Sealights Images to get Coverage numbers
+        env:
+          SEALIGHTS_TOKEN: ${{ secrets.SEALIGHTS_TOKEN }}
+          SEALIGHTS_LAB_ID: ${{ secrets.SEALIGHTS_LAB_ID }}
+        run: |
+          ./test/e2e/prepare-sl-images.sh
 
       - name: Deploying Konflux
         run: |

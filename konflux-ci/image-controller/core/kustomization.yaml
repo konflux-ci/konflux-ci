@@ -1,15 +1,12 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-- https://github.com/konflux-ci/image-controller/config/default?ref=8f87a8d81c0de68779e38538336da6f164b855de
-
+  - https://github.com/konflux-ci/image-controller/config/default?ref=8f87a8d81c0de68779e38538336da6f164b855de
 images:
-- name: quay.io/konflux-ci/image-controller
-  newName: quay.io/konflux-ci/image-controller
-  newTag: 8f87a8d81c0de68779e38538336da6f164b855de
-
+  - name: quay.io/redhat-user-workloads/rhtap-build-tenant/image-controller/image-controller
+    newName: quay.io/redhat-user-workloads/rhtap-build-tenant/image-controller/image-controller
+    newTag: 8f87a8d81c0de68779e38538336da6f164b855de.sealights
 namespace: image-controller
-
 patches:
   - target:
       group: monitoring.coreos.com
@@ -29,3 +26,9 @@ patches:
       kind: CronJob
       name: image-controller-image-pruner-cronjob
     path: replace-pruner-image.yaml
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: controller-manager
+    path: sealights-envs.yaml
