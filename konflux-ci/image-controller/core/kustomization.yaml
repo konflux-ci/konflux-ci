@@ -32,5 +32,5 @@ patches:
       group: apps
       version: v1
       kind: Deployment
-      name: controller-manager
+      name: image-controller-controller-manager
     path: sealights-envs.yaml
