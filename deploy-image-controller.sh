@@ -38,8 +38,6 @@ wait() {
     retry "kubectl wait --for=condition=Ready --timeout=240s -l control-plane=controller-manager -n image-controller pod" \
           "Image-Controller did not become available within the allocated time"
 }
-    
-
 
 retry() {
     for _ in {1..3}; do
