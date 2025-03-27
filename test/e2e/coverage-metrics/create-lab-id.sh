@@ -30,7 +30,8 @@ RESPONSE=$(curl --silent --show-error --write-out "%{http_code}" --location "$SE
 HTTP_STATUS="${RESPONSE: -3}"
 HTTP_BODY="${RESPONSE::-3}"
 
-if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 400 ]]; then
+if [[ "$HTTP_STATUS" -ne 201 ]]; then
+  echo "HTTP $HTTP_STATUS"
   echo "$HTTP_BODY"
   exit 1
 fi
