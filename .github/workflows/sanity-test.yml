@@ -57,6 +57,25 @@ jobs:
     needs: check-prerequisites
     runs-on: ubuntu-latest
     steps:
+
+      - name: Create Sealights LabId
+        env:
+          SEALIGHTS_TOKEN: ${{ secrets.SEALIGHTS_TOKEN }}
+          APPLICATION_NAME: "konflux-ci"
+          SEALIGHTS_DOMAIN: ${{ secrets.SEALIGHTS_DOMAIN }}
+          LAB_ID_FILE_PATH: "/tmp/konflux-ci/sealights/lab-id"
+        run: |
+          ./test/e2e/coverage-metrics/create-lab-id.sh
+
+      - name: Create Sealights LabId
+        env:
+          SEALIGHTS_TOKEN: ${{ secrets.SEALIGHTS_TOKEN }}
+          APPLICATION_NAME: "konflux-ci"
+          SEALIGHTS_DOMAIN: ${{ secrets.SEALIGHTS_DOMAIN }}
+          LAB_ID_FILE_PATH: "/tmp/konflux-ci/sealights/lab-id"
+        run: |
+          cat "${LAB_ID_FILE_PATH}"
+
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
         with:
