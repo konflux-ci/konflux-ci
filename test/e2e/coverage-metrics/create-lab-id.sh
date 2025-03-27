@@ -24,6 +24,7 @@ fi
 
 # Make the API request and capture HTTP response code
 HTTP_RESPONSE=$(curl --silent --show-error --write-out "HTTPSTATUS:%{http_code}" --location "$SEALIGHTS_DOMAIN/sl-api/v1/agent-apis/lab-ids" \
+  -H "Authorization: Bearer $SEALIGHTS_TOKEN" \
   --header "Content-Type: application/json" \
   --data '{
     "appName": "'${APPLICATION_NAME}'",
