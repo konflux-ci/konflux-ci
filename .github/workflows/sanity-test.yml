@@ -58,6 +58,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          ref: "${{ github.event.pull_request.head.sha }}"
+
       - name: Create Sealights LabId
         env:
           SEALIGHTS_TOKEN: ${{ secrets.SEALIGHTS_TOKEN }}
@@ -87,11 +92,6 @@ jobs:
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3.8.1
-
-      - name: Checkout Repository
-        uses: actions/checkout@v3
-        with:
-          ref: "${{ github.event.pull_request.head.sha }}"
 
       - name: Disable AppArmor
         # works around a change in ubuntu 24.04 that restricts Linux namespace access
