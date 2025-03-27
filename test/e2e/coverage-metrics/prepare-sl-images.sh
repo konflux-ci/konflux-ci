@@ -2,6 +2,7 @@
 
 export SEALIGHTS_TOKEN="${SEALIGHTS_TOKEN:-""}"
 export SEALIGHTS_LAB_ID="${SEALIGHTS_LAB_ID:-""}"
+export TMP_FOLDER="$(mktemp -d)"
 
 # Define array with core components and the path in the root repo
 SERVICES_ENTRIES=(
@@ -27,13 +28,14 @@ for service_entry in "${SERVICES_ENTRIES[@]}"; do
   echo "[INFO] Current pristine image: $PRISTINE_IMAGE"
 
   # Download the image and fetch attestation using cosign
-  cosign download attestation "$PRISTINE_IMAGE" > "cosign_${component_name}_metadata.json"
+  cosign download attestation "$PRISTINE_IMAGE" > "$TMP_FOLDER/cosign_${component_name}_metadata.json"
++
 
   # Extract SOURCE_ARTIFACT from attestation metadata
   SL_SOURCE_ARTIFACT=$(jq -r '
     .payload | @base64d | fromjson | .predicate.buildConfig.tasks[] |
     select(.invocation.environment.labels."konflux-ci/sealights" == "true") |
-    .results[] | select(.name == "SOURCE_ARTIFACT") | .value' "cosign_${component_name}_metadata.json")
+    .results[] | select(.name == "SOURCE_ARTIFACT") | .value' "$TMP_FOLDER/cosign_${component_name}_metadata.json")
 
   if [ -z "$SL_SOURCE_ARTIFACT" ]; then
     echo "[ERROR] No SOURCE_ARTIFACT found, skipping..."
@@ -45,7 +47,7 @@ for service_entry in "${SERVICES_ENTRIES[@]}"; do
     .payload | @base64d | fromjson | .predicate.buildConfig.tasks[] |
     select(.invocation.parameters.SOURCE_ARTIFACT == $sl_source_artifact) |
     select(.ref.params[].value == "buildah-oci-ta") | .results[] | select(.name == "IMAGE_REF") |
-    .value' "cosign_${component_name}_metadata.json")
+    .value' "$TMP_FOLDER/cosign_${component_name}_metadata.json")
 
   if [ -z "$SL_CONTAINER_IMAGE" ]; then
     echo "[ERROR] No IMAGE_REF found in attestation, skipping..."
