@@ -9,7 +9,7 @@ export SEALIGHTS_BUILD_NAME="$(date +"%Y.%m.%d.%H.%M.%S")"
 
 HTTP_RESPONSE=$(curl --write-out "%{http_code}" --silent --output /dev/null \
   --location "${SEALIGHTS_DOMAIN}/sl-api/v1/agent-apis/lab-ids/${SEALIGHTS_LAB_ID}/integration-build" \
-  --header "Authorization: Bearer ${SL_AGENT_TOKEN}" \
+  --header "Authorization: Bearer ${SEALIGHTS_TOKEN}" \
   --header 'Content-Type: application/json' \
   --data "{ \"buildName\": \"${SEALIGHTS_BUILD_NAME}\" }")
 
