@@ -22,8 +22,8 @@ if [[ ${#MISSING_VARS[@]} -gt 0 ]]; then
   exit 1
 fi
 
-# Make the API request
-RESPONSE=$(curl --silent --fail --location "$SEALIGHTS_DOMAIN/sl-api/v1/agent-apis/lab-ids" \
+# Make the API request and capture HTTP response code
+HTTP_RESPONSE=$(curl --silent --show-error --write-out "HTTPSTATUS:%{http_code}" --location "$SEALIGHTS_DOMAIN/sl-api/v1/agent-apis/lab-ids" \
   --header "Content-Type: application/json" \
   --data '{
     "appName": "'${APPLICATION_NAME}'",
@@ -32,9 +32,15 @@ RESPONSE=$(curl --silent --fail --location "$SEALIGHTS_DOMAIN/sl-api/v1/agent-ap
     "isHidden": false
   }')
 
-# Check if curl succeeded
-if [[ $? -ne 0 ]]; then
-  echo "[ERROR] Failed to reach Sealights API."
+# Extract body message... TODO!: find a better way to get http status and more simple
+HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed -e 's/HTTPSTATUS\:.*//g')
+HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+
+# Handle errors
+if [[ "$HTTP_STATUS" -ne 200 ]]; then
+  echo "[ERROR] Sealights API request failed with status code $HTTP_STATUS"
+  echo "[ERROR] Response body:"
+  echo "$HTTP_BODY"
   exit 1
 fi
 
