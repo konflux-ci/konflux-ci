@@ -22,26 +22,23 @@ if [[ ${#MISSING_VARS[@]} -gt 0 ]]; then
   exit 1
 fi
 
-# Make the API request and capture HTTP response code
-HTTP_RESPONSE=$(curl --silent --show-error --write-out "HTTPSTATUS:%{http_code}" --location "$SEALIGHTS_DOMAIN/sl-api/v1/agent-apis/lab-ids" \
+response=$(curl --silent --show-error --write-out "%{http_code}" --location "$SEALIGHTS_DOMAIN/sl-api/v1/agent-apis/lab-ids" \
   -H "Authorization: Bearer $SEALIGHTS_TOKEN" \
-  --header "Content-Type: application/json" \
+  -H "Content-Type: application/json" \
   --data '{
-    "appName": "'${APPLICATION_NAME}'",
-    "branchName": "'${BRANCH_NAME}'",
+    "appName": "'"${APPLICATION_NAME}"'",
+    "branchName": "'"${BRANCH_NAME}"'",
     "type": "integration",
     "isHidden": false
   }')
 
-# Extract body message... TODO!: find a better way to get http status and more simple
-HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed -e 's/HTTPSTATUS\:.*//g')
-HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+# Extract HTTP status (last 3 characters) and body
+http_status="${response: -3}"
+http_body="${response::-3}"
 
-# Handle errors
-if [[ "$HTTP_STATUS" -ne 200 ]]; then
-  echo "[ERROR] Sealights API request failed with status code $HTTP_STATUS"
-  echo "[ERROR] Response body:"
-  echo "$HTTP_BODY"
+if [[ "$http_status" -lt 200 || "$http_status" -ge 400 ]]; then
+  echo "[ERROR] Sealights API request failed with HTTP status $http_status"
+  echo "$http_body"
   exit 1
 fi
 
