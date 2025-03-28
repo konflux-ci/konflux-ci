@@ -160,23 +160,6 @@ spec:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
           runAsUser: 1001
-      - image: quay.io/konflux-ci/workspace-manager@sha256:6b7bfcf197cbff2ae9b1d84abd73636ce5733921524fb550438d8a8143a536b5
-        name: workspace-manager
-        ports:
-          - containerPort: 5000
-            name: web
-            protocol: TCP
-        resources:
-          limits:
-            cpu: 300m
-            memory: 256Mi
-          requests:
-            cpu: 30m
-            memory: 128Mi
-        securityContext:
-          readOnlyRootFilesystem: true
-          runAsNonRoot: true
-          runAsUser: 1001
       - image: quay.io/oauth2-proxy/oauth2-proxy@sha256:3da33b9670c67bd782277f99acadf7026f75b9507bfba2088eb2d497266ef7fc
         name: oauth2-proxy
         env:
