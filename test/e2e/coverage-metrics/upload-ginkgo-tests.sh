@@ -45,6 +45,7 @@ if [[ -z "$TEST_SESSION_ID" && -n "$TEST_SESSION_ID_FILE" && -f "$TEST_SESSION_I
   if [[ ! -s "$TEST_SESSION_ID_FILE" ]]; then
     echo "[INFO] File '$TEST_SESSION_ID_FILE' exists but is empty"
     exit 1
+  fi
 fi
 
 export TEST_SESSION_ID=$(cat $TEST_SESSION_ID_FILE)
