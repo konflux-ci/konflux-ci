@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-
 	"net/http"
 	"net/url"
 
@@ -19,9 +18,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-var tokenUrl = "https://localhost:9443/idp/token"
-var userName = "user2@konflux.dev"
-var password = "password"
+var (
+	tokenUrl = "https://localhost:9443/idp/token"
+	userName = "user2@konflux.dev"
+	password = "password"
+)
 
 var _ = Describe("Test Proxy endpoints", func() {
 	// Create insecure http client (skip TLS verification)
@@ -31,7 +32,7 @@ var _ = Describe("Test Proxy endpoints", func() {
 	client := &http.Client{
 		Transport: customTransport,
 	}
-	var home = "https://localhost:9443"
+	home := "https://localhost:9443"
 	DescribeTable("Test endpoints without token", func(url string, expectedStatus int) {
 		// Create a GET request
 		request, err := http.NewRequest("GET", url, nil)
@@ -44,13 +45,13 @@ var _ = Describe("Test Proxy endpoints", func() {
 		Entry("Home", home, 200),
 		Entry("Health", home+"/health", 200),
 		Entry("Secrets",
-			home+"/api/k8s/workspaces/user-ns2/api/v1/namespaces/user-ns2/secrets", 401),
+			home+"/api/k8s/ns/user-ns2/api/v1/namespaces/user-ns2/secrets", 401),
 		Entry("Release",
-			home+"/api/k8s/workspaces/user-ns2/apis/appstudio.redhat.com/v1alpha1/namespaces/user-ns2/releaseplans", 401),
+			home+"/api/k8s/ns/user-ns2/apis/appstudio.redhat.com/v1alpha1/namespaces/user-ns2/releaseplans", 401),
 		Entry("Applications",
-			home+"/api/k8s/workspaces/user-ns2/apis/appstudio.redhat.com/v1alpha1/namespaces/user-ns2/applications", 401),
-		Entry("Workspaces",
-			home+"/api/k8s/apis/toolchain.dev.openshift.com/v1alpha1/workspaces", 401),
+			home+"/api/k8s/ns/user-ns2/apis/appstudio.redhat.com/v1alpha1/namespaces/user-ns2/applications", 401),
+		Entry("Namespaces",
+			home+"/api/k8s/api/v1/namespaces", 401),
 	)
 	k8sClient, err := CreateK8sClient()
 	Expect(err).NotTo(HaveOccurred())
@@ -69,19 +70,23 @@ var _ = Describe("Test Proxy endpoints", func() {
 			// Send the request
 			response, err := client.Do(request)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(response.StatusCode).To(Equal(expectedStatus))
+
+			defer response.Body.Close()
+			rbody, err := io.ReadAll(response.Body)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(response.StatusCode).To(Equal(expectedStatus), string(rbody))
 		},
 
 		Entry("Home", home, 200),
 		Entry("Health", home+"/health", 200),
 		Entry("Secrets",
-			home+"/api/k8s/workspaces/user-ns2/api/v1/namespaces/user-ns2/secrets", 200),
+			home+"/api/k8s/api/v1/namespaces/user-ns2/secrets", 200),
 		Entry("Release",
-			home+"/api/k8s/workspaces/user-ns2/apis/appstudio.redhat.com/v1alpha1/namespaces/user-ns2/releaseplans", 200),
+			home+"/api/k8s/apis/appstudio.redhat.com/v1alpha1/namespaces/user-ns2/releaseplans", 200),
 		Entry("Applications",
-			home+"/api/k8s/workspaces/user-ns2/apis/appstudio.redhat.com/v1alpha1/namespaces/user-ns2/applications", 200),
-		Entry("Workspaces",
-			home+"/api/k8s/apis/toolchain.dev.openshift.com/v1alpha1/workspaces", 200),
+			home+"/api/k8s/apis/appstudio.redhat.com/v1alpha1/namespaces/user-ns2/applications", 200),
+		Entry("Namespaces",
+			home+"/api/k8s/api/v1/namespaces", 200),
 	)
 })
 
@@ -97,7 +102,6 @@ type TokenResponse struct {
 // It takes a pointer to a Kubernetes Secret as input and returns a string representing the header.
 // If the client-secret is not found in the secret, it returns an error
 func CreateHeaderFromSecret(secret *v1.Secret) (string, error) {
-
 	encodedSecret, exists := secret.Data["client-secret"]
 	if !exists {
 		return "", fmt.Errorf("client-secret not found in secret")
@@ -161,7 +165,6 @@ func ExtractToken(k8sClient *kubernetes.Clientset) (string, error) {
 	}
 	// Get the id_token to use in our requests
 	token, err := GetIdToken(header)
-
 	if err != nil {
 		return "", err
 	}

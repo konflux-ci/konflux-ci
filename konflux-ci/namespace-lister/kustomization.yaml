@@ -14,7 +14,7 @@ images:
   name: quay.io/konflux-ci/namespace-lister
   newName: quay.io/konflux-ci/namespace-lister
 patches:
-- path: ./patches/with-header-auth-email.yaml
+- path: ./patches/with-header-auth-impersonate-user.yaml
   target:
     group: apps
     kind: Deployment
