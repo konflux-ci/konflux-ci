@@ -54,7 +54,7 @@ if [[ -z "$TEST_SESSION_ID" ]]; then
   TEST_SESSION_ID=$(curl -s -X POST "$SEALIGHTS_DOMAIN/sl-api/v1/test-sessions" \
     -H "Authorization: Bearer $SEALIGHTS_TOKEN" \
     -H "Content-Type: application/json" \
-    -d "{\"labId\":\"$SEALIGHTS_BSID\",\"testStage\":\"$SEALIGHTS_TEST_STAGE\",\"bsid\":\"\",\"sessionTimeout\":10000}" | jq -r '.data.testSessionId')
+    -d "{\"labId\":\"$SEALIGHTS_LAB_ID\",\"testStage\":\"$SEALIGHTS_TEST_STAGE\",\"bsid\":\"\",\"sessionTimeout\":10000}" | jq -r '.data.testSessionId')
 
   if [[ -z "$TEST_SESSION_ID" || "$TEST_SESSION_ID" == "null" ]]; then
     echo "[ERROR] Failed to retrieve test session ID"
