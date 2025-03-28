@@ -39,14 +39,15 @@ cleanup() {
 
 trap cleanup EXIT
 
-# Load test session ID from file if present. Sealights recommendation is to open session before executing ginkgo code...
 if [[ -z "$TEST_SESSION_ID" && -n "$TEST_SESSION_ID_FILE" && -f "$TEST_SESSION_ID_FILE" ]]; then
-  FILE_CONTENT=$(<"$TEST_SESSION_ID_FILE")
-  if [[ -n "$FILE_CONTENT" ]]; then
-    TEST_SESSION_ID="$FILE_CONTENT"
+  if [[ ! -s "$TEST_SESSION_ID_FILE" ]]; then
+    echo "[INFO] File '$TEST_SESSION_ID_FILE' exists but is empty"
+  else
+    TEST_SESSION_ID=$(cat $TEST_SESSION_ID_FILE)
     echo "[INFO] Loaded test session ID from file: $TEST_SESSION_ID_FILE"
   fi
 fi
+
 
 # TODO: Save session id to file if more complex cases comes
 if [[ -z "$TEST_SESSION_ID" ]]; then
@@ -91,3 +92,5 @@ curl -s -X POST "https://$SEALIGHTS_DOMAIN/sl-api/v2/test-sessions/$TEST_SESSION
   -H "Authorization: Bearer $SEALIGHTS_TOKEN" \
   -H "Content-Type: application/json" \
   -d "$PROCESSED_JSON"
+
+echo "[INFO] Test Results upload succeeded!"
