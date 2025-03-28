@@ -5,7 +5,7 @@ export SEALIGHTS_TOKEN="${SEALIGHTS_TOKEN:-""}"
 export SEALIGHTS_LAB_ID="${SEALIGHTS_LAB_ID:-""}"
 export SEALIGHTS_DOMAIN="${SEALIGHTS_DOMAIN:-""}"
 export SEALIGHTS_TEST_STAGE="${SEALIGHTS_TEST_STAGE:-""}"
-export SEALIGHTS_TOKEN="${SEALIGHTS_TOKEN:-""}"
+export TEST_SESSION_ID_FILE="${TEST_SESSION_ID_FILE:-"/tmp/test_session_id"}"
 
 export MISSING_VARS=()
 
@@ -34,3 +34,9 @@ if [[ -z "$TEST_SESSION_ID" || "$TEST_SESSION_ID" == "null" ]]; then
 fi
 
 echo "[INFO] Test session ID: $TEST_SESSION_ID"
+
+if [[ -n "$TEST_SESSION_ID_FILE" ]]; then
+  mkdir -p "$(dirname "$TEST_SESSION_ID_FILE")"
+fi
+
+echo "$LAB_ID" > "$TEST_SESSION_ID_FILE"
