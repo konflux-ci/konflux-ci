@@ -43,7 +43,7 @@ if [[ -z "$TEST_SESSION_ID" && -n "$TEST_SESSION_ID_FILE" && -f "$TEST_SESSION_I
   if [[ ! -s "$TEST_SESSION_ID_FILE" ]]; then
     echo "[INFO] File '$TEST_SESSION_ID_FILE' exists but is empty"
   else
-    TEST_SESSION_ID=$(cat $TEST_SESSION_ID_FILE)
+    export TEST_SESSION_ID=$(cat $TEST_SESSION_ID_FILE)
     echo "[INFO] Loaded test session ID from file: $TEST_SESSION_ID_FILE"
   fi
 fi
