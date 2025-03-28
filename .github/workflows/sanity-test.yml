@@ -134,14 +134,6 @@ jobs:
         run: |
           ./deploy-test-resources.sh
 
-      - name: Prepare Sealights Images to get Coverage numbers
-        env:
-          SEALIGHTS_TOKEN: ${{ secrets.SEALIGHTS_TOKEN }}
-          SEALIGHTS_LAB_ID: ${{ secrets.SEALIGHTS_LAB_ID }}
-          SEALIGHTS_DOMAIN: ${{ secrets.SEALIGHTS_DOMAIN }}
-        run: |
-          ./test/e2e/coverage-metrics/sealights-deploy-ready.sh
-
       - name: Run Go Tests
         run: |
           go test ./test/go-tests/
@@ -156,6 +148,14 @@ jobs:
           SMEE_CHANNEL: ${{ secrets.SMEE_CHANNEL }}
         run: |
           ./test/e2e/prepare-e2e.sh
+
+      - name: Comunicate with Sealights to make Konflux deployed
+        env:
+          SEALIGHTS_TOKEN: ${{ secrets.SEALIGHTS_TOKEN }}
+          SEALIGHTS_LAB_ID: ${{ secrets.SEALIGHTS_LAB_ID }}
+          SEALIGHTS_DOMAIN: ${{ secrets.SEALIGHTS_DOMAIN }}
+        run: |
+          ./test/e2e/coverage-metrics/sealights-deploy-ready.sh
 
       - name: Create Test Session ID
         env:
