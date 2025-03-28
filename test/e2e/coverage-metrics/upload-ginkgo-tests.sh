@@ -39,6 +39,8 @@ cleanup() {
 
 trap cleanup EXIT
 
+ls -larth /tmp
+
 if [[ -z "$TEST_SESSION_ID" && -n "$TEST_SESSION_ID_FILE" && -f "$TEST_SESSION_ID_FILE" ]]; then
   if [[ ! -s "$TEST_SESSION_ID_FILE" ]]; then
     echo "[INFO] File '$TEST_SESSION_ID_FILE' exists but is empty"

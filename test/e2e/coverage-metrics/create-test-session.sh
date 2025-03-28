@@ -40,3 +40,5 @@ if [[ -n "$TEST_SESSION_ID_FILE" ]]; then
 fi
 
 echo "$LAB_ID" > "$TEST_SESSION_ID_FILE"
+
+cat "$TEST_SESSION_ID_FILE"
