@@ -71,7 +71,7 @@ echo "[INFO] Test report processed successfully"
 echo "$PROCESSED_JSON" | jq .
 
 echo "[INFO] Sending test results to Sealights..."
-curl -s -X POST "https://$SEALIGHTS_DOMAIN/sl-api/v2/test-sessions/$TEST_SESSION_ID" \
+curl -s -X POST "$SEALIGHTS_DOMAIN/sl-api/v2/test-sessions/$TEST_SESSION_ID" \
   -H "Authorization: Bearer $SEALIGHTS_TOKEN" \
   -H "Content-Type: application/json" \
   -d "$PROCESSED_JSON"
