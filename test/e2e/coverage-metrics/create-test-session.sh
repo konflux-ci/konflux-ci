@@ -39,6 +39,6 @@ if [[ -n "$TEST_SESSION_ID_FILE" ]]; then
   mkdir -p "$(dirname "$TEST_SESSION_ID_FILE")"
 fi
 
-echo "$LAB_ID" > "$TEST_SESSION_ID_FILE"
+echo "$TEST_SESSION_ID" > "$TEST_SESSION_ID_FILE"
 
 cat "$TEST_SESSION_ID_FILE"
