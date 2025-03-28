@@ -42,28 +42,11 @@ trap cleanup EXIT
 if [[ -z "$TEST_SESSION_ID" && -n "$TEST_SESSION_ID_FILE" && -f "$TEST_SESSION_ID_FILE" ]]; then
   if [[ ! -s "$TEST_SESSION_ID_FILE" ]]; then
     echo "[INFO] File '$TEST_SESSION_ID_FILE' exists but is empty"
-  else
-    export TEST_SESSION_ID=$(cat $TEST_SESSION_ID_FILE)
-    echo "[INFO] Loaded test session ID from file: $TEST_SESSION_ID_FILE"
-  fi
-fi
-
-
-# TODO: Save session id to file if more complex cases comes
-if [[ -z "$TEST_SESSION_ID" ]]; then
-  echo "[INFO] Creating Sealights test session..."
-  TEST_SESSION_ID=$(curl -s -X POST "$SEALIGHTS_DOMAIN/sl-api/v1/test-sessions" \
-    -H "Authorization: Bearer $SEALIGHTS_TOKEN" \
-    -H "Content-Type: application/json" \
-    -d "{\"labId\":\"$SEALIGHTS_LAB_ID\",\"testStage\":\"$SEALIGHTS_TEST_STAGE\",\"bsid\":\"\",\"sessionTimeout\":10000}" | jq -r '.data.testSessionId')
-
-  if [[ -z "$TEST_SESSION_ID" || "$TEST_SESSION_ID" == "null" ]]; then
-    echo "[ERROR] Failed to retrieve test session ID"
     exit 1
-  fi
 fi
 
-echo "[INFO] Using test session ID: $TEST_SESSION_ID"
+export TEST_SESSION_ID=$(cat $TEST_SESSION_ID_FILE)
+echo "[INFO] Loaded test session ID from file: $TEST_SESSION_ID_FILE: $TEST_SESSION_ID"
 
 # Function to process test report
 process_test_report() {
