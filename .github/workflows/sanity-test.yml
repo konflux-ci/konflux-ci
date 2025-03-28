@@ -175,6 +175,7 @@ jobs:
           ./test/e2e/run-e2e.sh
 
       - name: Upload ginkgo results to Sealights
+        if: always()
         env:
           SEALIGHTS_TOKEN: ${{ secrets.SEALIGHTS_TOKEN }}
           SEALIGHTS_LAB_ID: ${{ secrets.SEALIGHTS_LAB_ID }}
