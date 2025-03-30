@@ -1,5 +1,7 @@
 #!/bin/bash -e
 
+set -ex
+
 script_path="$(dirname -- "${BASH_SOURCE[0]}")"
 
 main() {
