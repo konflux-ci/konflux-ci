@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # Ensure necessary environment variables are set
 export SEALIGHTS_TOKEN="${SEALIGHTS_TOKEN:-""}"

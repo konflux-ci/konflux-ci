@@ -39,8 +39,11 @@ cleanup() {
 
 trap cleanup EXIT
 
+<<<<<<< HEAD
 ls -larth /tmp
 
+=======
+>>>>>>> ea44b6f (feat: add sealights integration to get coverage numbers about konflux and all core products)
 if [[ -z "$TEST_SESSION_ID" && -n "$TEST_SESSION_ID_FILE" && -f "$TEST_SESSION_ID_FILE" ]]; then
   if [[ ! -s "$TEST_SESSION_ID_FILE" ]]; then
     echo "[INFO] File '$TEST_SESSION_ID_FILE' exists but is empty"
@@ -48,7 +51,12 @@ if [[ -z "$TEST_SESSION_ID" && -n "$TEST_SESSION_ID_FILE" && -f "$TEST_SESSION_I
   fi
 fi
 
+<<<<<<< HEAD
 export TEST_SESSION_ID=$(cat $TEST_SESSION_ID_FILE)
+=======
+TEST_SESSION_ID="$(cat "$TEST_SESSION_ID_FILE")"
+export TEST_SESSION_ID
+>>>>>>> ea44b6f (feat: add sealights integration to get coverage numbers about konflux and all core products)
 echo "[INFO] Loaded test session ID from file: $TEST_SESSION_ID_FILE: $TEST_SESSION_ID"
 
 # Function to process test report
@@ -60,7 +68,15 @@ process_test_report() {
     status=$(echo "$line" | jq -r '.State')
 
     start=$(date --date="$start_raw" +%s%3N)
+<<<<<<< HEAD
     end=$( [[ -z "$end_raw" || "$end_raw" == "0001-01-01T00:00:00Z" ]] && date +%s%3N || date --date="$end_raw" +%s%3N )
+=======
+    if [[ -z "$end_raw" || "$end_raw" == "0001-01-01T00:00:00Z" ]]; then
+      end=$(date +%s%3N)
+    else
+      end=$(date --date="$end_raw" +%s%3N)
+    fi
+>>>>>>> ea44b6f (feat: add sealights integration to get coverage numbers about konflux and all core products)
 
     if [[ "$status" == "passed" || "$status" == "failed" ]]; then
       echo "{\"name\": \"$name\", \"start\": $start, \"end\": $end, \"status\": \"$status\"}"

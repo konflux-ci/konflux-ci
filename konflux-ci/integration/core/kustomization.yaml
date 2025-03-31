@@ -1,16 +1,15 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-- https://github.com/konflux-ci/integration-service/config/default?ref=5c63f666a3d35ab93f47cabf5e460a3deaa9ab17
-- https://github.com/konflux-ci/integration-service/config/snapshotgc?ref=5c63f666a3d35ab93f47cabf5e460a3deaa9ab17
+- https://github.com/konflux-ci/integration-service/config/default?ref=a67271ff0371b211560bff89d4236f9a0f7c10f8
+- https://github.com/konflux-ci/integration-service/config/snapshotgc?ref=a67271ff0371b211560bff89d4236f9a0f7c10f8
 
 namespace: integration-service
 
 images:
 - name: quay.io/konflux-ci/integration-service
   newName: quay.io/konflux-ci/integration-service
-  newTag: 5c63f666a3d35ab93f47cabf5e460a3deaa9ab17
-
+  newTag: a67271ff0371b211560bff89d4236f9a0f7c10f8
 
 patches:
   - target:

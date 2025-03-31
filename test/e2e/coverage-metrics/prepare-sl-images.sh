@@ -1,8 +1,12 @@
 #!/bin/bash
 
+set -euo pipefail
+
 export SEALIGHTS_TOKEN="${SEALIGHTS_TOKEN:-""}"
 export SEALIGHTS_LAB_ID="${SEALIGHTS_LAB_ID:-""}"
-export TMP_FOLDER="$(mktemp -d)"
+
+TMP_FOLDER="$(mktemp -d)"
+export TMP_FOLDER
 
 # Define array with core components and the path in the root repo
 SERVICES_ENTRIES=(
