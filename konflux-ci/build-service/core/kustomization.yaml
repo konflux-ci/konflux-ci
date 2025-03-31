@@ -42,3 +42,9 @@ patches:
       kind: Deployment
       name: build-service-controller-manager
     path: build-service-env-patch.yaml
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: build-service-controller-manager
+    path: sealights-envs.yaml

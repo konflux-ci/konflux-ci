@@ -76,3 +76,9 @@ patches:
     target:
       kind: Deployment
       name: release-service-controller-manager
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: release-service-controller-manager
+    path: sealights-envs.yaml
