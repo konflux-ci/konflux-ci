@@ -54,3 +54,9 @@ patches:
       kind: CronJob
       name: integration-service-snapshot-garbage-collector
     path: snapshot-gc-resource-patch.yaml
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: integration-service-controller-manager
+    path: sealights-envs.yaml
