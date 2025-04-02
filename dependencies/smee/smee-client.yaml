@@ -27,6 +27,14 @@ spec:
             - "client"
             - <smee-channel>
             - "http://pipelines-as-code-controller.pipelines-as-code:8080"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 3
           securityContext:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
