@@ -23,10 +23,20 @@ spec:
         - image: "ghcr.io/chmouel/gosmee:v0.21.0"
           imagePullPolicy: Always
           name: gosmee
+          ports:
+           - containerPort: 8080
           args:
             - "client"
             - <smee-channel>
             - "http://pipelines-as-code-controller.pipelines-as-code:8080"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
           securityContext:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
