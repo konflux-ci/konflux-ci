@@ -1,0 +1,59 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- https://github.com/kyverno/kyverno/releases/download/v1.11.1/install.yaml
+
+patches:
+- patch: |
+    - op: add
+      path: /rules/-
+      value:
+        apiGroups:
+        - ""
+        resources:
+        - pods
+        verbs:
+        - create
+        - update
+        - patch
+        - delete
+  target:
+    kind: ClusterRole
+    name: kyverno:background-controller:core
+- patch: |-
+    - op: replace
+      path: /spec/replicas
+      value: 0
+  target:
+    kind: Deployment
+    name: kyverno-background-controller
+    namespace: kyverno
+- patch: |-
+    - op: replace
+      path: /spec/replicas
+      value: 0
+  target:
+    kind: Deployment
+    name: kyverno-cleanup-controller
+    namespace: kyverno
+- patch: |-
+    - op: replace
+      path: /spec/replicas
+      value: 0
+  target:
+    kind: Deployment
+    name: kyverno-reports-controller
+    namespace: kyverno
+- patch: |-
+    - op: add
+      path: /spec/jobTemplate/spec/template/spec/containers/0/resources
+      value:
+        limits:
+          cpu: 100m
+          memory: 384Mi
+        requests:
+          cpu: 10m
+          memory: 10Mi
+  target:
+    kind: CronJob
+    namespace: kyverno

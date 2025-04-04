@@ -1,0 +1,24 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: remove-tekton-taskrun-resource-requests
+spec:
+  rules:
+  - name: remove-resource-requests-for-tekton-taskrun-pods
+    match:
+      any:
+      - resources:
+          kinds:
+          - Pod
+          selector:
+            matchLabels:
+              tekton.dev/task: verify-enterprise-contract
+    mutate:
+      foreach:
+      - list: "request.object.spec.containers"
+        patchesJson6902: |-
+          - op: replace
+            path: /spec/containers/{{elementIndex}}/resources/requests
+            value:
+              memory: 1Mi
+              cpu: 1m

@@ -46,6 +46,7 @@ deploy() {
     deploy_dex
     deploy_registry
     deploy_smee
+    deploy_kyverno
 }
 
 test_pvc_binding(){
@@ -129,6 +130,15 @@ deploy_smee() {
         sed "s/$placeholder/$channel_id/g" "$template" > "$patch"
     fi
     kubectl apply -k "${script_path}/dependencies/smee"
+}
+
+deploy_kyverno() {
+    kubectl apply -k "${script_path}/dependencies/kyverno" --server-side
+    # retry "kubectl wait --for=condition=Ready --timeout=120s -l app.kubernetes.io/instance=kyverno -n kyverno pod" \
+    #       "Kyverno did not become available within the allocated time"
+    # Wait for policy CRD to be installed. Don't need to wait for everything to be up
+    sleep 5
+    kubectl apply -k "${script_path}/dependencies/kyverno/policy"
 }
 
 retry() {

@@ -4,7 +4,7 @@
 main() {
     echo "Generating error logs" >&2
     generate_logs
-    echo "Generated logs sucessfully" >&2
+    echo "Generated logs successfully" >&2
 }
 
 generate_logs() {
@@ -12,6 +12,8 @@ generate_logs() {
     local pod_definitions_file="$logs_dir/failed-pods-definitions.yaml"
     local pod_logs_file="$logs_dir/failed-pods-logs.log"
     local event_messages_file="$logs_dir/failed-deployment-event-log.log"
+    local pipelinerun_res_file="$logs_dir/pipelinerun-res.log"
+    local taskrun_res_file="$logs_dir/taskrun-res.log"
 
     rm -rf "$logs_dir"
     mkdir -p "$logs_dir"
@@ -20,7 +22,7 @@ generate_logs() {
     namespaces=$(kubectl get namespaces -o name | xargs -n1 basename)
 
     for namespace in $namespaces; do
-        # Get all 'Warning' type events that occured on the namespace and extract the relevant fields from it as variables.
+        # Get all 'Warning' type events that occurred on the namespace and extract the relevant fields from it as variables.
         echo -e "----------\nnamespace '$namespace'\n----------"
         local events
         events=$(kubectl get events -n "$namespace" \
@@ -40,9 +42,12 @@ generate_logs() {
                 echo "Pod '$name' under namespace '$namespace':" | tee -a "$pod_logs_file" | tee -a "$event_messages_file"
                 echo "$kind $name $message $reason" | tee -a "$event_messages_file"
                 echo "$pod_logs" | tee -a "$pod_logs_file"
-        fi
+            fi
+        done
     done
-done
+
+    kubectl get -A -o yaml pipelineruns | tee "$pipelinerun_res_file"
+    kubectl get -A -o yaml taskruns | tee "$taskrun_res_file"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
