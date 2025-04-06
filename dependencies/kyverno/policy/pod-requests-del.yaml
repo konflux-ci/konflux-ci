@@ -2,7 +2,18 @@ apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
   name: remove-tekton-taskrun-resource-requests
+  annotations:
+    policies.kyverno.io/description: >-
+      This policy applies to pods created for the verify-enterprise-contract task.
+      It will reduce the requested cpu and memory resources for all containers created
+      by the task to a minimum.
+      This is to address a change in the task definition in which the task steps were
+      provided with resource requests. This task has many steps, and adding even
+      relatively-modest resource requests prevents it from running on setups with
+      limited resources, as Tekton creates pods for all steps in a task at the same
+      time.
 spec:
+  background: false
   rules:
   - name: remove-resource-requests-for-tekton-taskrun-pods
     match:
@@ -10,6 +21,8 @@ spec:
       - resources:
           kinds:
           - Pod
+          operations:
+          - CREATE
           selector:
             matchLabels:
               tekton.dev/task: verify-enterprise-contract

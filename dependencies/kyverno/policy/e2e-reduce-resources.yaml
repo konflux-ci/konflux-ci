@@ -1,0 +1,41 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: reduce-tekton-pr-taskrun-resource-requests
+  annotations:
+    policies.kyverno.io/description: >-
+      This policy applies to pods created for the on-push pipeline running for the e2e
+      tests. It will apply a small set value for CPU requests whenever memory is defined
+      and vice versa (the underlying assumption is that either both are defined or
+      neither are).
+spec:
+  background: false
+  rules:
+  - name: reduce-tekton-pr-taskrun-resource-requests
+    match:
+      any:
+      - resources:
+          kinds:
+          - Pod
+          operations:
+          - CREATE
+          selector:
+            matchLabels:
+              pipelinesascode.tekton.dev/original-prname: "konflux-ci-upstream-*-on-push"
+    mutate:
+      foreach:
+      - list: "request.object.spec.containers"
+        preconditions:
+          any:
+          - key: "{{ element.resources.requests.memory || '' }}"
+            operator: NotEquals
+            value: ""
+          - key: "{{ element.resources.requests.cpu || '' }}"
+            operator: NotEquals
+            value: ""
+        patchesJson6902: |-
+          - op: add
+            path: /spec/containers/{{elementIndex}}/resources/requests
+            value:
+              memory: 256Mi
+              cpu: 100m
