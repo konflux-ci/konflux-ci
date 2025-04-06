@@ -44,6 +44,16 @@ patches:
     kind: Deployment
     name: kyverno-reports-controller
     namespace: kyverno
+# Reserving more CPU resources comparing to the default 100m seems to provide shorter
+# overall execution time for the e2e tests.
+- patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/cpu
+      value: 200m
+  target:
+    kind: Deployment
+    name: kyverno-admission-controller
+    namespace: kyverno
 - patch: |-
     - op: add
       path: /spec/jobTemplate/spec/template/spec/containers/0/resources
