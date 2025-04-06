@@ -17,7 +17,7 @@ spec:
       foreach:
       - list: "request.object.spec.containers"
         patchesJson6902: |-
-          - op: replace
+          - op: add
             path: /spec/containers/{{elementIndex}}/resources/requests
             value:
               memory: 1Mi
