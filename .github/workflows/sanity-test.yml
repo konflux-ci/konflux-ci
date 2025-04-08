@@ -101,14 +101,9 @@ jobs:
         run: |
           ./wait-for-all.sh
 
-      - name: WORKAROUND - Set up tkn cli for the following task
-        uses: tektoncd/actions/setup-tektoncd-cli@main
-        with:
-          version: latest
-
-      - name: WORKAROUND - Remove reduce CPU/Memory requirements in build pipeline
+      - name: WORKAROUND - Reduce CPU/Memory requirements in build pipeline
         run: |
-          ./test/e2e/customize-docker-pipeline.sh
+          kubectl create -f  ./dependencies/kyverno/policy/e2e-reduce-resources.yaml
 
       - name: Deploying Konflux
         run: |
