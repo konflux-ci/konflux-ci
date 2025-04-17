@@ -30,7 +30,8 @@ spec:
           livenessProbe:
             exec:
               command:
-                - echo "Service up"
+                - echo
+                - "Hello smee client"
             initialDelaySeconds: 30
             periodSeconds: 5
             timeoutSeconds: 2
