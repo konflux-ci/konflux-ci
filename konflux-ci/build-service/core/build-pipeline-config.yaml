@@ -12,7 +12,7 @@ data:
     - name: docker-build
       bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build@sha256:5c71ff6ea0415e8e563be17ffbb983d5c9366066b1b3a48693bbd047655370d5
     - name: docker-build-oci-ta
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta@sha256:d182ae89142c634b4174f4ef2a83ef6333c541ae8aa2f694f56d54d1e60f6ceb
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta@sha256:7f6a3254dc9ea0b9600b3c5e5d65982a9444eb1c31672121f8f0df462a20184a
     - name: tekton-bundle-builder
       bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder@sha256:1eda18063c0c7673a55ac06917b61b001909961886d052e76152460417e80397
     - name: tekton-bundle-builder-oci-ta
