@@ -4,4 +4,4 @@ kind: Namespace
 metadata:
   name: user-ns1
   labels:
-    konflux.ci/type: user
+    konflux-ci.dev/type: tenant
