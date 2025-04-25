@@ -4,4 +4,4 @@ kind: Namespace
 metadata:
   name: managed-ns2
   labels:
-    konflux.ci/type: user
+    konflux-ci.dev/type: tenant
