@@ -27,15 +27,6 @@ spec:
             - "client"
             - <smee-channel>
             - "http://pipelines-as-code-controller.pipelines-as-code:8080"
-          livenessProbe:
-            exec:
-              command:
-                - echo
-                - "Hello smee client"
-            initialDelaySeconds: 30
-            periodSeconds: 5
-            timeoutSeconds: 2
-            failureThreshold: 3
           securityContext:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
