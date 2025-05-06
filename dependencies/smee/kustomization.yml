@@ -1,8 +1,15 @@
 ---
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+
 resources:
   - smee-client.yaml
+
+images:
+  - name: ghcr.io/chmouel/gosmee
+    newName: ghcr.io/chmouel/gosmee
+    newTag: v0.21.0
+
 patches:
   - path: smee-channel-id.yaml
     target:

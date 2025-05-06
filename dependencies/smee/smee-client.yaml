@@ -20,7 +20,7 @@ spec:
         app: gosmee-client
     spec:
       containers:
-        - image: "ghcr.io/chmouel/gosmee:v0.21.0"
+        - image: ghcr.io/chmouel/gosmee:latest
           imagePullPolicy: Always
           name: gosmee
           args:
