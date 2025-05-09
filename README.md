@@ -864,7 +864,7 @@ according to our needs and limitations.
 # Replace $NS with the name of the new namespace
 
 kubectl create namespace $NS
-kubectl label namespace "$NS konflux.ci/type=user
+kubectl label namespace "$NS konflux-ci.dev/type=tenant
 kubectl create serviceaccount appstudio-pipeline -n $NS
 ```
 
@@ -872,7 +872,7 @@ Example:
 
 ```bash
 kubectl create namespace user-ns3
-kubectl label namespace user-ns3 konflux.ci/type=user
+kubectl label namespace user-ns3 konflux-ci.dev/type=tenant
 kubectl create serviceaccount appstudio-pipeline -n user-ns3
 ```
 
