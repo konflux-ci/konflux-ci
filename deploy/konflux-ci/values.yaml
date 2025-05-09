@@ -1,0 +1,22 @@
+integration-service:
+  certmanager:
+    enable: true
+  namespace: integration-service
+  controllerManager:
+    container:
+      image:
+        repository: quay.io/konflux-ci/integration-service
+        tag: caf6fe676510074c37338b26d69570247f7fa162
+  snapshotgc:
+    image:
+      repository: quay.io/konflux-ci/integration-service
+      tag: caf6fe676510074c37338b26d69570247f7fa162
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 1000m
+        memory: 500Mi
+  prometheus:
+    enable: false
