@@ -4,6 +4,7 @@ resources:
   - https://github.com/konflux-ci/build-service/config/default?ref=9bf819f025fdddd2fef7abd020979af294b425b2
   - build-pipeline-config.yaml
   - build-config-rolebinding.yaml
+  - appstudio-pipelines-runner.yaml
 
 namespace: build-service
 
