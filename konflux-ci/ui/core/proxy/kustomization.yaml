@@ -8,6 +8,9 @@ images:
 - name: quay.io/konflux-ci/konflux-ui
   newName: quay.io/konflux-ci/konflux-ui
   newTag: 76c3a63732a385eb5a717c96ba6a623472edc9ef
+- name: quay.io/oauth2-proxy/oauth2-proxy
+  newName: quay.io/oauth2-proxy/oauth2-proxy
+  newTag: latest@sha256:3da33b9670c67bd782277f99acadf7026f75b9507bfba2088eb2d497266ef7fc
 
 configMapGenerator:
   - name: proxy
