@@ -8,7 +8,7 @@ data:
     default-pipeline-name: docker-build-oci-ta
     pipelines:
     - name: fbc-builder
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-fbc-builder@sha256:61aab0f5b017c9c0e9b1ed01857cdc8b901b2e9b64135c767d0beaf6ab613154
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-fbc-builder@sha256:d4c2332dfdd1aeeba3417e704d3e47d474d1b7be7d64df5714345534f4e332f4
     - name: docker-build
       bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build@sha256:455e5cbe74cd07110093520068b41dfc6110eed7e25293f3924125c971870920
     - name: docker-build-oci-ta
