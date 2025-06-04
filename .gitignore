@@ -3,3 +3,4 @@ logs/
 __debug_bin*
 dependencies/smee/smee-channel-id.yaml
 .kube-linter/
+deploy/konflux-ci/charts/*
