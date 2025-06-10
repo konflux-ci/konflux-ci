@@ -1,12 +1,12 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-- https://github.com/konflux-ci/image-controller/config/default?ref=b54f99a76900c9e89f4a6c7713b581f4b7afda27
+- https://github.com/konflux-ci/image-controller/config/default?ref=1a7e09992a138775cce5f1542a03b9e764bf35e5
 
 images:
 - name: quay.io/konflux-ci/image-controller
   newName: quay.io/konflux-ci/image-controller
-  newTag: b54f99a76900c9e89f4a6c7713b581f4b7afda27
+  newTag: 1a7e09992a138775cce5f1542a03b9e764bf35e5
 
 namespace: image-controller
 
