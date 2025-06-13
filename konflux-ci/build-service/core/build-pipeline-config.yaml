@@ -16,4 +16,4 @@ data:
     - name: tekton-bundle-builder
       bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder@sha256:71d9e84103beb736cecfa237e3c3414afc429ad1f2464fdfa74fa7137f920379
     - name: tekton-bundle-builder-oci-ta
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder-oci-ta@sha256:21e7340dd8907e08125192d1ab23d90cf0f8ac7181f929304dac0d5ef8220bf2
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder-oci-ta@sha256:ab3c18bcc8a1a7dee64311d42c5786238feb3c42f974607fcfe07fb24ffb6e3a
