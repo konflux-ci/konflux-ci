@@ -20,7 +20,7 @@ deploy() {
 
 create_secret() {
     local token="${1:?A token for quay should be provided}"
-    local org=${2:?Quay organization name should be provided}"
+    local org=${2:?Quay organization name should be provided}
     local ns=image-controller
     local secret=quaytoken
 
