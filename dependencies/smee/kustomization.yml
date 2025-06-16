@@ -8,7 +8,7 @@ resources:
 images:
   - name: ghcr.io/chmouel/gosmee
     newName: ghcr.io/chmouel/gosmee
-    newTag: v0.26.0
+    newTag: v0.26.1
 
 patches:
   - path: smee-channel-id.yaml
