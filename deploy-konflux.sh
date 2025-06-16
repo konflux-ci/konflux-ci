@@ -25,30 +25,40 @@ main() {
 deploy() {
     # The order is important
 
+    echo "🚀 Deploying Application API CRDs..." >&2
     # This will deploy the commos CRDs used in Konflux
     kubectl apply -k "${script_path}/konflux-ci/application-api"
 
+    echo "👥 Setting up RBAC permissions..." >&2
     kubectl apply -k "${script_path}/konflux-ci/rbac"
 
+    echo "📜 Deploying Enterprise Contract..." >&2
     retry kubectl apply -k "${script_path}/konflux-ci/enterprise-contract"
 
+    echo "🎯 Deploying Release Service..." >&2
     retry kubectl apply -k "${script_path}/konflux-ci/release" --server-side
 
     # The build-service depends on CRDs from the release-service
+    echo "🏗️  Deploying Build Service..." >&2
     retry kubectl apply -k "${script_path}/konflux-ci/build-service"
 
     # The integration-service depends on CRDs from the release-service
+    echo "🔄 Deploying Integration Service..." >&2
     retry kubectl apply -k "${script_path}/konflux-ci/integration"
 
+    echo "📋 Setting up Namespace Lister..." >&2
     retry kubectl apply -k "${script_path}/konflux-ci/namespace-lister"
 
+    echo "🎨 Deploying UI components..." >&2
     kubectl apply -k "${script_path}/konflux-ci/ui"
     if ! kubectl get secret oauth2-proxy-client-secret -n konflux-ui; then
+        echo "🔑 Setting up OAuth2 proxy client secret..." >&2
         kubectl get secret oauth2-proxy-client-secret --namespace=dex \
             -o yaml | grep -v '^\s*namespace:\s' \
             | kubectl apply --namespace=konflux-ui -f -
     fi
     if ! kubectl get secret oauth2-proxy-cookie-secret -n konflux-ui; then
+        echo "🍪 Creating OAuth2 proxy cookie secret..." >&2
         local cookie_secret
         # The cookie secret needs to be 16, 24, or 32 bytes long.
         # kubectl is re-encoding the value of cookie_secret, so when it's being served

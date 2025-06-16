@@ -3,13 +3,13 @@
 script_path="$(dirname -- "${BASH_SOURCE[0]}")"
 
 main() {
-    echo "Checking requirements" >&2
+    echo "🔍 Checking requirements" >&2
     check_req
-    echo "Testing PVC creation for default storage class" >&2
+    echo "🧪 Testing PVC creation for default storage class" >&2
     test_pvc_binding
-    echo "Deploying Konflux Dependencies" >&2
+    echo "🌊 Deploying Konflux Dependencies" >&2
     deploy
-    echo "Waiting for the dependencies to be ready" >&2
+    echo "⏳ Waiting for the dependencies to be ready" >&2
     "${script_path}/wait-for-all.sh"
 }
 
@@ -39,13 +39,21 @@ check_req(){
 }
 
 deploy() {
+    echo "🔐 Deploying Cert Manager..." >&2
     deploy_cert_manager
+    echo "🤝 Deploying Trust Manager..." >&2
     deploy_trust_manager
+    echo "📜 Setting up Cluster Issuer..." >&2
     kubectl apply -k "${script_path}/dependencies/cluster-issuer"
+    echo "🐱 Deploying Tekton..." >&2
     deploy_tekton
+    echo "🔑 Deploying Dex..." >&2
     deploy_dex
+    echo "📦 Deploying Registry..." >&2
     deploy_registry
+    echo "🔄 Deploying Smee..." >&2
     deploy_smee
+    echo "🛡️  Deploying Kyverno..." >&2
     deploy_kyverno
 }
 
@@ -61,22 +69,24 @@ test_pvc_binding(){
 }
 
 deploy_tekton() {
+    echo "  🐱 Installing Tekton Operator..." >&2
     # Operator
     kubectl apply -k "${script_path}/dependencies/tekton-operator"
     retry "kubectl wait --for=condition=Ready -l app=tekton-operator -n tekton-operator pod --timeout=240s" \
           "Tekton Operator did not become available within the allocated time"
     # Wait for the operator to create configs for the first time before applying configs
     kubectl wait --for=condition=Ready tektonconfig/config --timeout=360s
+    echo "  ⚙️  Configuring Tekton..." >&2
     retry "kubectl apply -k ${script_path}/dependencies/tekton-config" \
           "The Tekton Config resource was not updated within the allocated time"
 
-    # Pipeline As Code
+    echo "  🔄 Setting up Pipeline As Code..." >&2
     kubectl apply -k "${script_path}/dependencies/pipelines-as-code"
 
     # Wait for the operator to reconcile after applying the configs
     kubectl wait --for=condition=Ready tektonconfig/config --timeout=60s
 
-    # Tekton Results
+    echo "  📊 Setting up Tekton Results..." >&2
     if ! kubectl get secret tekton-results-postgres -n tekton-pipelines; then
         local db_password
         db_password="$(openssl rand -base64 20)"
