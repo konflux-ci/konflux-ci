@@ -5,28 +5,31 @@ script_path="$(dirname -- "${BASH_SOURCE[0]}")"
 main() {
     local token="${1:?A token for quay should be provided}"
     local org=${2:?Quay organization name should be provided}
+    echo "💧 Starting Image Controller deployment..." >&2
     deploy
+    echo "🔑 Setting up Quay credentials..." >&2
     create_secret "$token" "$org"
+    echo "⏳ Waiting for Image Controller to be ready..." >&2
     wait
 }
 
 deploy() {
-    echo "Deploying Image-Controller" >&2
+    echo "🌊 Deploying Image Controller components..." >&2
     kubectl apply -k "${script_path}/konflux-ci/image-controller"
 }
 
 create_secret() {
     local token="${1:?A token for quay should be provided}"
-    local org=${2:?Quay organization name should be provided}
+    local org=${2:?Quay organization name should be provided}"
     local ns=image-controller
     local secret=quaytoken
 
     if kubectl get secret "$secret" -n "$ns" &> /dev/null; then
-        echo "Image controller quay secret already exists" >&2
+        echo "🔒 Image controller quay secret already exists" >&2
         return
     fi
 
-    echo "Creating secret $secret"
+    echo "🔑 Creating new Quay secret..." >&2
     kubectl create secret generic "$secret" \
         --namespace="$ns" \
         --from-literal=quaytoken="$token" \
@@ -34,7 +37,7 @@ create_secret() {
 }
 
 wait() {
-    echo "Waiting for Image-Controller to be ready" >&2
+    echo "⏳ Waiting for Image Controller pods to be ready..." >&2
     retry "kubectl wait --for=condition=Ready --timeout=240s -l control-plane=controller-manager -n image-controller pod" \
           "Image-Controller did not become available within the allocated time"
 }
