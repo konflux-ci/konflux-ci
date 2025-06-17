@@ -10,7 +10,7 @@
   value: 'https://localhost:9443'
 - op: add
   path: /data/custom-console-url-pr-details
-  value: 'https://localhost:9443/application-pipeline/ns/{{ namespace }}/pipelinerun/{{ pr }}'
+  value: 'https://localhost:9443/ns/{{ namespace }}/pipelinerun/{{ pr }}'
 - op: add
   path: /data/custom-console-url-pr-tasklog
-  value: 'https://localhost:9443/application-pipeline/ns/{{ namespace }}/pipelinerun/{{ pr }}/logs/{{ task }}'
+  value: 'https://localhost:9443/ns/{{ namespace }}/pipelinerun/{{ pr }}/logs/{{ task }}'
