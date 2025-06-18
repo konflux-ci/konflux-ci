@@ -9,6 +9,8 @@ kind: Deployment
 metadata:
   name: gosmee-client
   namespace: smee-client
+  annotations:
+    ignore-check.kube-linter.io/liveness-port: "gosmee probes sidecar port"
 spec:
   replicas: 1
   selector:
@@ -26,11 +28,53 @@ spec:
           args:
             - "client"
             - <smee-channel>
-            - "http://pipelines-as-code-controller.pipelines-as-code:8080"
+            - "http://localhost:8080"
           securityContext:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
             runAsUser: 1001
+          resources:
+            limits:
+              cpu: 100m
+              memory: 32Mi
+            requests:
+              cpu: 10m
+              memory: 32Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9100
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 25 # Must be > the healthz handler's timeout
+            failureThreshold: 2
+        - name: health-check-sidecar
+          image: quay.io/konflux-ci/smee-sidecar:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: metrics
+              containerPort: 9100
+          env:
+          - name: DOWNSTREAM_SERVICE_URL
+            value: "http://pipelines-as-code-controller.pipelines-as-code:8080"
+          - name: SMEE_CHANNEL_URL
+            value: "<smee-channel>"
+          - name: INSECURE_SKIP_VERIFY
+            value: "true"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9100
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 25 # Must be > the healthz handler's timeout
+            failureThreshold: 2
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
           resources:
             limits:
               cpu: 100m
