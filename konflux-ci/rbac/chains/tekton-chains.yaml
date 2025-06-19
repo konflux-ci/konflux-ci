@@ -156,6 +156,7 @@ metadata:
   name: tekton-chains-signing-secret
   namespace: tekton-pipelines
 spec:
+  ttlSecondsAfterFinished: 7200
   template:
     metadata:
       annotations:
