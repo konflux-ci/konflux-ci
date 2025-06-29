@@ -9,8 +9,6 @@ kind: Deployment
 metadata:
   name: gosmee-client
   namespace: smee-client
-  annotations:
-    ignore-check.kube-linter.io/liveness-port: "gosmee probes sidecar port"
 spec:
   replicas: 1
   selector:
@@ -21,6 +19,11 @@ spec:
       labels:
         app: gosmee-client
     spec:
+      volumes:
+        - name: shared-health
+          emptyDir: {}
+      securityContext:
+        fsGroup: 65532
       containers:
         - image: ghcr.io/chmouel/gosmee:latest
           imagePullPolicy: Always
@@ -29,10 +32,13 @@ spec:
             - "client"
             - <smee-channel>
             - "http://localhost:8080"
+          volumeMounts:
+            - name: shared-health
+              mountPath: /shared
           securityContext:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
-            runAsUser: 1001
+            runAsUser: 65532
           resources:
             limits:
               cpu: 100m
@@ -41,21 +47,24 @@ spec:
               cpu: 10m
               memory: 32Mi
           livenessProbe:
-            httpGet:
-              path: /healthz
-              port: 9100
-            initialDelaySeconds: 30
+            exec:
+              command:
+                - /shared/check-smee-health.sh
+            initialDelaySeconds: 20
             periodSeconds: 30
-            timeoutSeconds: 25 # Must be > the healthz handler's timeout
+            timeoutSeconds: 10
             failureThreshold: 2
         - name: health-check-sidecar
           image: quay.io/konflux-ci/smee-sidecar:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 8080
             - name: metrics
               containerPort: 9100
+          volumeMounts:
+            - name: shared-health
+              mountPath: /shared
           env:
           - name: DOWNSTREAM_SERVICE_URL
             value: "http://pipelines-as-code-controller.pipelines-as-code:8080"
@@ -63,13 +72,15 @@ spec:
             value: "<smee-channel>"
           - name: INSECURE_SKIP_VERIFY
             value: "true"
+          - name: HEALTH_CHECK_TIMEOUT_SECONDS
+            value: "20"
           livenessProbe:
-            httpGet:
-              path: /healthz
-              port: 9100
-            initialDelaySeconds: 30
+            exec:
+              command:
+                - /shared/check-sidecar-health.sh
+            initialDelaySeconds: 10
             periodSeconds: 30
-            timeoutSeconds: 25 # Must be > the healthz handler's timeout
+            timeoutSeconds: 10
             failureThreshold: 2
           securityContext:
             readOnlyRootFilesystem: true
