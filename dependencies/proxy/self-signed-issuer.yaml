@@ -1,0 +1,44 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: proxy-selfsigned-issuer
+  namespace: cert-manager
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: proxy-certificate
+  namespace: cert-manager
+spec:
+  # The name of the Kubernetes Secret to store the TLS certificate and key.
+  secretName: proxy-tls
+  
+  # The duration and renewal time for the certificate.
+  duration: 2160h # 90 days
+  renewBefore: 360h # 15 days
+  
+  # Common Name for the certificate.
+  commonName: proxy.proxy.svc
+  
+  # List of DNS names the certificate will be valid for.
+  dnsNames:
+  - localhost
+  isCA: true
+  
+  # Reference to the Issuer that will sign this certificate.
+  issuerRef:
+    name: proxy-selfsigned-issuer
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: proxy-ca-issuer
+  namespace: cert-manager
+spec:
+  ca:
+    secretName: proxy-tls

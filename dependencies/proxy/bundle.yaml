@@ -1,0 +1,24 @@
+---
+apiVersion: trust.cert-manager.io/v1alpha1
+kind: Bundle
+metadata:
+  name: proxy-ca-bundle
+spec:
+  sources:
+    # Source 1: The CA from the secret created by our service certificate.
+    - secret:
+        name: "proxy-tls"
+        key: "ca.crt"
+    # Source 2: The default trust store of the cluster nodes.
+    - useDefaultCAs: true
+  
+  # Target: Where to write the combined bundle.
+  target:
+    configMap:
+      # The key within the ConfigMap where the bundle will be stored.
+      key: "ca-bundle.crt"
+    # Distribute to proxy namespace where proxy will use it
+    namespaceSelector:
+      matchLabels:
+        app.kubernetes.io/name: proxy
+        app.kubernetes.io/part-of: konflux
