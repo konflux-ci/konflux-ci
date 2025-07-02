@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - https://github.com/konflux-ci/build-service/config/default?ref=a031ceddffa861f0863488662ca1f90840c3ef7c
+  - https://github.com/konflux-ci/build-service/config/default?ref=953fdcfce024627f71cf54fce4c75f359b64478f
   - build-pipeline-config.yaml
   - build-config-rolebinding.yaml
   - appstudio-pipelines-runner.yaml
@@ -12,7 +12,7 @@ namespace: build-service
 images:
   - name: quay.io/konflux-ci/build-service
     newName: quay.io/konflux-ci/build-service
-    newTag: a031ceddffa861f0863488662ca1f90840c3ef7c
+    newTag: 953fdcfce024627f71cf54fce4c75f359b64478f
 
 patches:
   - target:
