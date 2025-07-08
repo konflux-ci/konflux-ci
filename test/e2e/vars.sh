@@ -1,4 +1,4 @@
 #!/bin/bash -e
 export E2E_TEST_IMAGE
 # https://github.com/konflux-ci/e2e-tests/commit/<COMMIT>
-E2E_TEST_IMAGE=quay.io/redhat-user-workloads/konflux-qe-team-tenant/konflux-e2e/konflux-e2e-tests@sha256:3705de3f248ba7244f849fd92db6b0a298372eb9141227a193a5a48f25292cd0
+E2E_TEST_IMAGE=quay.io/redhat-user-workloads/konflux-qe-team-tenant/konflux-e2e/konflux-e2e-tests@sha256:933da9b203fcf51ccb3fc360d1de6d5ef3ac4733dd7f9ea61440eb0e659b7206
