@@ -54,35 +54,22 @@ spec:
             memory: 64Mi
       - name: generate-nginx-configs
         image: registry.access.redhat.com/ubi9/ubi@sha256:66233eebd72bb5baa25190d4f55e1dc3fff3a9b77186c1f91a0abdb274452072
-        envFrom:
-          - configMapRef:
-              name: proxy-init-config
         command:
           - sh
           - -c
           - |
             set -e
-
-            auth_conf=/mnt/nginx-generated-config/auth.conf
             
-            if [[ "$IMPERSONATE" == "true" ]]; then
-              token=$(cat /mnt/api-token/token)
-              echo 'auth_request_set $user  $upstream_http_x_auth_request_email;' > "$auth_conf"
-              echo 'proxy_set_header Impersonate-User $user;' >> "$auth_conf"
-              echo "proxy_set_header Authorization \"Bearer $token\";" >> "$auth_conf"
-            else
-              echo "# impersonation was disabled by config" > "$auth_conf"
-            fi
-
-            chmod 640 "$auth_conf"
-
-            echo \
-              "proxy_pass ${TEKTON_RESULTS_URL:?tekton results url must be provided};" \
-              > /mnt/nginx-generated-config/tekton-results.conf
-
+            # Copy the auth.conf template and replace the bearer token
+            token=$(cat /mnt/api-token/token)
+            sed "s/__BEARER_TOKEN__/$token/" /mnt/nginx-templates/auth.conf > /mnt/nginx-generated-config/auth.conf
+            chmod 640 /mnt/nginx-generated-config/auth.conf
+            
         volumeMounts:
         - name: nginx-generated-config
           mountPath: /mnt/nginx-generated-config
+        - name: nginx-templates
+          mountPath: /mnt/nginx-templates
         - name: api-token
           mountPath: /mnt/api-token
         securityContext:
@@ -154,6 +141,8 @@ spec:
             mountPath: /mnt
           - name: nginx-generated-config
             mountPath: /mnt/nginx-generated-config
+          - name: nginx-static
+            mountPath: /mnt/nginx-additional-location-configs
           - name: static-content
             mountPath: /opt/app-root/src/static-content
         securityContext:
@@ -229,6 +218,16 @@ spec:
               - key: nginx.conf
                 path: nginx.conf 
           name: proxy
+        - configMap:
+            defaultMode: 420
+            name: proxy-nginx-templates
+          name: nginx-templates
+        - name: nginx-static
+          projected:
+            defaultMode: 420
+            sources:
+            - configMap:
+                name: proxy-nginx-static
         - name: logs
           emptyDir: {}
         - name: nginx-tmp
