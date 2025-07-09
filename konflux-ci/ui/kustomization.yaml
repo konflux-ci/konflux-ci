@@ -16,11 +16,16 @@ patches:
       version: v1
       kind: Service
       name: proxy
-  - path: nginx-idp-location-patch.yaml
-    target:
+  - target:
       group: apps
       version: v1
       kind: Deployment
       name: proxy
+    patch: |
+      - op: add 
+        path: /spec/template/spec/volumes/2/projected/sources/- 
+        value:
+          configMap:
+            name: nginx-idp-location
 
 namespace: konflux-ui
