@@ -16,9 +16,11 @@ configMapGenerator:
   - name: proxy
     files:
       - nginx.conf
-  - name: proxy-init-config
-    literals:
-      - IMPERSONATE=true
-      - TEKTON_RESULTS_URL=https://tekton-results-api-service.tekton-pipelines.svc.cluster.local:8080
+  - name: proxy-nginx-templates
+    files:
+      - auth.conf
+  - name: proxy-nginx-static
+    files:
+      - tekton-results.conf
 
 namespace: konflux-ui
