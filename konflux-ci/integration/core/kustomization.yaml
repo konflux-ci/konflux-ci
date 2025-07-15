@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
 - https://github.com/konflux-ci/integration-service/config/default?ref=ae5e2d25d629410705f5adddcdb44df27758a804
 - https://github.com/konflux-ci/integration-service/config/snapshotgc?ref=ae5e2d25d629410705f5adddcdb44df27758a804
+- konflux-integration-runner.yaml
 
 namespace: integration-service
 
