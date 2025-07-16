@@ -14,6 +14,11 @@ nodes:
   - containerPort: 30010
     hostPort: 8888
     protocol: TCP
+    # UI
   - containerPort: 30011
     hostPort: 9443
+    protocol: TCP
+    # PaC
+  - containerPort: 30012
+    hostPort: 8080
     protocol: TCP
