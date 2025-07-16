@@ -186,6 +186,13 @@ spec:
           - https://localhost:9443/oauth2/callback
           - --oidc-issuer-url
           - https://localhost:9443/idp/
+          - --skip-oidc-discovery
+          - --login-url
+          - https://localhost:9443/idp/auth
+          - --redeem-url
+          - https://dex.dex.svc.cluster.local:9443/idp/token
+          - --oidc-jwks-url
+          - https://dex.dex.svc.cluster.local:9443/idp/keys
           - --cookie-secure
           - "true"
           - --cookie-name
