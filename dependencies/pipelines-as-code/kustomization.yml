@@ -89,3 +89,16 @@ patches:
     target:
       kind: Deployment
       name: pipelines-as-code-webhook
+  - patch: |
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30012
+      - op: add
+        path: /spec/ports/0/port
+        value: 8080
+      - op: replace
+        path: /spec/type
+        value: NodePort
+    target:
+      kind: Service
+      name: pipelines-as-code-controller
