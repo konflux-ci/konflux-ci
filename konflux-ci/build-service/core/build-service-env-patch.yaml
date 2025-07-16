@@ -9,4 +9,4 @@ spec:
         - name: manager
           env:
             - name: PAC_WEBHOOK_URL
-              value: http://pipelines-as-code-controller.pipelines-as-code.svc.cluster.local:8080
+              value: http://pipelines-as-code-controller.pipelines-as-code.svc.cluster.local:8180

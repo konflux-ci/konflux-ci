@@ -20,5 +20,5 @@ nodes:
     protocol: TCP
     # PaC
   - containerPort: 30012
-    hostPort: 8080
+    hostPort: 8180
     protocol: TCP

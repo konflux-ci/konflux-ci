@@ -95,7 +95,7 @@ patches:
         value: 30012
       - op: add
         path: /spec/ports/0/port
-        value: 8080
+        value: 8180
       - op: replace
         path: /spec/type
         value: NodePort
