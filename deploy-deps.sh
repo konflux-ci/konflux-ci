@@ -1,10 +1,12 @@
 #!/bin/bash -e
 
 script_path="$(dirname -- "${BASH_SOURCE[0]}")"
+IS_OPENSHIFT=false
 
 main() {
     echo "🔍 Checking requirements" >&2
     check_req
+    detect_platform
     echo "🧪 Testing PVC creation for default storage class" >&2
     test_pvc_binding
     echo "🌊 Deploying Konflux Dependencies" >&2
@@ -14,16 +16,14 @@ main() {
 }
 
 check_req(){
-    # declare the requirements
     local requirements=(kubectl openssl)
     local uninstalled_requirements=()
 
-    # check if requirements are installed
     for i in "${requirements[@]}"; do
         if ! command -v "$i" &> /dev/null; then
-                uninstalled_requirements+=("$i")
+            uninstalled_requirements+=("$i")
         else
-                echo -e "$i is installed"
+            echo -e "$i is installed"
         fi  
     done
 
@@ -32,9 +32,29 @@ check_req(){
     else
         echo -e "\nSome requirements are missing, please install the following requirements first:"
         for req in "${uninstalled_requirements[@]}"; do
-                echo "$req"
+            echo "$req"
         done
         exit 1
+    fi
+}
+
+detect_platform() {
+    if kubectl get clusterversion version &> /dev/null; then
+        echo "🎯 Detected OpenShift environment"
+        IS_OPENSHIFT=true
+    else
+        echo "🎯 Detected Kubernetes environment"
+        IS_OPENSHIFT=false
+    fi
+}
+
+sanitize_for_openshift() {
+    local dir="$1"
+    if [ "$IS_OPENSHIFT" = true ]; then
+        echo "🔧 Sanitizing manifests for OpenShift in: $dir"
+        find "$dir" -type f -name '*.yaml' -o -name '*.yml' | while read -r file; do
+            sed -i '/runAsUser:/d;/runAsGroup:/d;/securityContext: *{ *}/d' "$file"
+        done
     fi
 }
 
@@ -44,6 +64,7 @@ deploy() {
     echo "🤝 Deploying Trust Manager..." >&2
     deploy_trust_manager
     echo "📜 Setting up Cluster Issuer..." >&2
+    sanitize_for_openshift "${script_path}/dependencies/cluster-issuer"
     kubectl apply -k "${script_path}/dependencies/cluster-issuer"
     echo "🐱 Deploying Tekton..." >&2
     deploy_tekton
@@ -60,30 +81,52 @@ deploy() {
 test_pvc_binding(){
     local pvc_resources="${script_path}/dependencies/pre-deployment-pvc-binding"
     echo "Creating PVC from '$pvc_resources' using the cluster's default storage class"
-    sleep 10  # Retries are not enough to ensure the default SA is created, see https://github.com/konflux-ci/konflux-ci/issues/161
+    sleep 10
     retry "kubectl apply -k ${pvc_resources}" "Error while creating pre-deployment-pvc-binding"
     retry "kubectl wait --for=jsonpath={status.phase}=Bound pvc/test-pvc -n test-pvc-ns --timeout=20s" \
           "Test PVC unable to bind on default storage class"
     kubectl delete -k "$pvc_resources"
-    echo "PVC binding successfull"
+    echo "PVC binding successful"
+}
+
+deploy_cert_manager() {
+    local dir="${script_path}/dependencies/cert-manager"
+    sanitize_for_openshift "$dir"
+    kubectl apply -k "$dir"
+    sleep 5
+    retry "kubectl wait --for=condition=Ready --timeout=120s -l app.kubernetes.io/instance=cert-manager -n cert-manager pod" \
+          "Cert manager did not become available within the allocated time"
+}
+
+deploy_trust_manager() {
+    local dir="${script_path}/dependencies/trust-manager"
+    sanitize_for_openshift "$dir"
+    kubectl apply -k "$dir"
+    sleep 5
+    retry "kubectl wait --for=condition=Ready --timeout=60s -l app.kubernetes.io/instance=trust-manager -n cert-manager pod" \
+          "Trust manager did not become available within the allocated time"
 }
 
 deploy_tekton() {
     echo "  🐱 Installing Tekton Operator..." >&2
-    # Operator
-    kubectl apply -k "${script_path}/dependencies/tekton-operator"
+    local operator_dir="${script_path}/dependencies/tekton-operator"
+    sanitize_for_openshift "$operator_dir"
+    kubectl apply -k "$operator_dir"
     retry "kubectl wait --for=condition=Ready -l app=tekton-operator -n tekton-operator pod --timeout=240s" \
           "Tekton Operator did not become available within the allocated time"
-    # Wait for the operator to create configs for the first time before applying configs
+
     kubectl wait --for=condition=Ready tektonconfig/config --timeout=360s
+
     echo "  ⚙️  Configuring Tekton..." >&2
-    retry "kubectl apply -k ${script_path}/dependencies/tekton-config" \
-          "The Tekton Config resource was not updated within the allocated time"
+    local config_dir="${script_path}/dependencies/tekton-config"
+    sanitize_for_openshift "$config_dir"
+    retry "kubectl apply -k $config_dir" "The Tekton Config resource was not updated"
 
     echo "  🔄 Setting up Pipeline As Code..." >&2
-    kubectl apply -k "${script_path}/dependencies/pipelines-as-code"
+    local pac_dir="${script_path}/dependencies/pipelines-as-code"
+    sanitize_for_openshift "$pac_dir"
+    kubectl apply -k "$pac_dir"
 
-    # Wait for the operator to reconcile after applying the configs
     kubectl wait --for=condition=Ready tektonconfig/config --timeout=60s
 
     echo "  📊 Setting up Tekton Results..." >&2
@@ -95,25 +138,15 @@ deploy_tekton() {
             --from-literal=POSTGRES_USER=postgres \
             --from-literal=POSTGRES_PASSWORD="$db_password"
     fi
-    kubectl apply -k "${script_path}/dependencies/tekton-results"
-}
-
-deploy_cert_manager() {
-    kubectl apply -k "${script_path}/dependencies/cert-manager"
-    sleep 5
-    retry "kubectl wait --for=condition=Ready --timeout=120s -l app.kubernetes.io/instance=cert-manager -n cert-manager pod" \
-          "Cert manager did not become available within the allocated time"
-}
-
-deploy_trust_manager() {
-    kubectl apply -k "${script_path}/dependencies/trust-manager"
-    sleep 5
-    retry "kubectl wait --for=condition=Ready --timeout=60s -l app.kubernetes.io/instance=trust-manager -n cert-manager pod" \
-          "Trust manager did not become available within the allocated time"
+    local results_dir="${script_path}/dependencies/tekton-results"
+    sanitize_for_openshift "$results_dir"
+    kubectl apply -k "$results_dir"
 }
 
 deploy_dex() {
-    kubectl apply -k "${script_path}/dependencies/dex"
+    local dir="${script_path}/dependencies/dex"
+    sanitize_for_openshift "$dir"
+    kubectl apply -k "$dir"
     if ! kubectl get secret oauth2-proxy-client-secret -n dex; then
         local client_secret
         client_secret="$(openssl rand -base64 20 | tr '+/' '-_' | tr -d '\n' | tr -d '=')"
@@ -124,7 +157,9 @@ deploy_dex() {
 }
 
 deploy_registry() {
-    kubectl apply -k "${script_path}/dependencies/registry"
+    local dir="${script_path}/dependencies/registry"
+    sanitize_for_openshift "$dir"
+    kubectl apply -k "$dir"
     retry "kubectl wait --for=condition=Ready --timeout=240s -n kind-registry -l run=registry pod" \
           "The local registry did not become available within the allocated time"
 }
@@ -139,16 +174,19 @@ deploy_smee() {
         channel_id="$(head -c 30 /dev/random | base64 | tr -dc 'a-zA-Z0-9')"
         sed "s/$placeholder/$channel_id/g" "$template" > "$patch"
     fi
-    kubectl apply -k "${script_path}/dependencies/smee"
+    local dir="${script_path}/dependencies/smee"
+    sanitize_for_openshift "$dir"
+    kubectl apply -k "$dir"
 }
 
 deploy_kyverno() {
-    kubectl apply -k "${script_path}/dependencies/kyverno" --server-side
-    # retry "kubectl wait --for=condition=Ready --timeout=120s -l app.kubernetes.io/instance=kyverno -n kyverno pod" \
-    #       "Kyverno did not become available within the allocated time"
-    # Wait for policy CRD to be installed. Don't need to wait for everything to be up
+    local base="${script_path}/dependencies/kyverno"
+    local policy="${script_path}/dependencies/kyverno/policy"
+    sanitize_for_openshift "$base"
+    sanitize_for_openshift "$policy"
+    kubectl apply -k "$base" --server-side
     sleep 5
-    kubectl apply -k "${script_path}/dependencies/kyverno/policy"
+    kubectl apply -k "$policy"
 }
 
 retry() {
@@ -160,7 +198,6 @@ retry() {
         fi
         sleep 3
     done
-
     echo "$1": "$2."
     return "$ret"
 }
