@@ -88,6 +88,7 @@ deploy_tekton() {
 
     echo "  📊 Setting up Tekton Results..." >&2
     if ! kubectl get secret tekton-results-postgres -n tekton-pipelines; then
+        echo "🔑 Creating secret tekton-results-postgres" >&2
         local db_password
         db_password="$(openssl rand -base64 20)"
         kubectl create secret generic tekton-results-postgres \
@@ -115,6 +116,7 @@ deploy_trust_manager() {
 deploy_dex() {
     kubectl apply -k "${script_path}/dependencies/dex"
     if ! kubectl get secret oauth2-proxy-client-secret -n dex; then
+        echo "🔑 Creating secret oauth2-proxy-client-secret" >&2
         local client_secret
         client_secret="$(openssl rand -base64 20 | tr '+/' '-_' | tr -d '\n' | tr -d '=')"
         kubectl create secret generic oauth2-proxy-client-secret \
@@ -144,21 +146,22 @@ deploy_smee() {
 
 deploy_kyverno() {
     kubectl apply -k "${script_path}/dependencies/kyverno" --server-side
-    # retry "kubectl wait --for=condition=Ready --timeout=120s -l app.kubernetes.io/instance=kyverno -n kyverno pod" \
-    #       "Kyverno did not become available within the allocated time"
     # Wait for policy CRD to be installed. Don't need to wait for everything to be up
     sleep 5
     kubectl apply -k "${script_path}/dependencies/kyverno/policy"
 }
 
 retry() {
-    for _ in {1..3}; do
+    for i in {1..3}; do
         local ret=0
         $1 || ret="$?"
         if [[ "$ret" -eq 0 ]]; then
             return 0
         fi
-        sleep 3
+        if [[ "$i" -lt 3 ]]; then
+            echo "🔄 Retrying command (attempt $((i+1))/3)..." >&2
+            sleep 3
+        fi
     done
 
     echo "$1": "$2."

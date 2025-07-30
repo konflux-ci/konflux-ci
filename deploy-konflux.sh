@@ -74,13 +74,16 @@ deploy() {
 
 
 retry() {
-    for _ in {1..3}; do
+    for i in {1..3}; do
         local ret=0
         "$@" || ret="$?"
         if [[ "$ret" -eq 0 ]]; then
             return 0
         fi
-        sleep 3
+        if [[ "$i" -lt 3 ]]; then
+            echo "🔄 Retrying command (attempt $((i+1))/3)..." >&2
+            sleep 3
+        fi
     done
 
     return "$ret"
