@@ -55,6 +55,8 @@ deploy() {
     deploy_smee
     echo "🛡️  Deploying Kyverno..." >&2
     deploy_kyverno
+    echo "🌐 Deploying Proxy..." >&2
+    deploy_proxy
 }
 
 test_pvc_binding(){
@@ -149,6 +151,12 @@ deploy_kyverno() {
     # Wait for policy CRD to be installed. Don't need to wait for everything to be up
     sleep 5
     kubectl apply -k "${script_path}/dependencies/kyverno/policy"
+}
+
+deploy_proxy() {
+    kubectl apply -k "${script_path}/dependencies/proxy"
+    retry "kubectl wait --for=condition=Synced --timeout=120s bundle/proxy-ca-bundle -n proxy" \
+          "Proxy CA bundle did not become synced within the allocated time"
 }
 
 retry() {
