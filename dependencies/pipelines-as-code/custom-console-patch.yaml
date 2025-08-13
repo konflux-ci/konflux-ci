@@ -9,6 +9,9 @@
   path: /data/custom-console-url
   value: 'https://localhost:9443'
 - op: add
+  path: /data/custom-console-url-namespace
+  value: 'https://localhost:9443/ns/{{ namespace }}'
+- op: add
   path: /data/custom-console-url-pr-details
   value: 'https://localhost:9443/ns/{{ namespace }}/pipelinerun/{{ pr }}'
 - op: add
