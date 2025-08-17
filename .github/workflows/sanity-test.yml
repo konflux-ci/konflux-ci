@@ -63,13 +63,13 @@ jobs:
           # this might remove tools that are actually needed,
           # if set to "true" but frees about 6 GB
           tool-cache: false
-          
+
           docker-images: false
       - name: Checkout Repository
         uses: actions/checkout@v3
         with:
           ref: "${{ github.event.pull_request.head.sha }}"
-  
+
       - name: Disable AppArmor
         # works around a change in ubuntu 24.04 that restricts Linux namespace access
         # for unprivileged users
@@ -79,7 +79,7 @@ jobs:
         uses: helm/kind-action@v1
         with:
           config: kind-config.yaml
-      
+
       - name: Show version information
         run: |
           kubectl version
@@ -137,6 +137,7 @@ jobs:
           GH_ORG: ${{ secrets.GH_ORG }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           QUAY_DOCKERCONFIGJSON: ${{ secrets.QUAY_DOCKERCONFIGJSON }}
+          RELEASE_SERVICE_CATALOG_REVISION: ${{ secrets.RELEASE_SERVICE_CATALOG_REVISION }}
         run: |
           ./test/e2e/run-e2e.sh
 
