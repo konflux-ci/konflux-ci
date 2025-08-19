@@ -15,4 +15,4 @@ spec:
     - github.com/release-engineering/rhtap-ec-policy//data
     name: Default
     policy:
-    - oci::quay.io/enterprise-contract/ec-task-policy:git-fe45153@sha256:0ec4be1ec7c841af09e7b368ff1978d271d7a426946846c9fb38ef9be17f9616
+    - oci::quay.io/conforma/task-policy@sha256:5eedaf38feae3b899163a568dd0d382b8d32183d6851949aef5e8d9dcf6e5c8b
