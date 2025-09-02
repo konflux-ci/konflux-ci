@@ -30,6 +30,8 @@ spec:
           name: gosmee
           args:
             - "client"
+            - "--sse-buffer-size"
+            - "2097152"
             - <smee-channel>
             - "http://localhost:8080"
           volumeMounts:
