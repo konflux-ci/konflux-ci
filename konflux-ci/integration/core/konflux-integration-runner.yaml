@@ -1,6 +1,29 @@
 ---
+# Based on https://raw.githubusercontent.com/redhat-appstudio/infra-deployments/main/components/konflux-rbac/base/konflux-integration-runner.yaml
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: konflux-integration-runner
-rules: []
+rules:
+  - verbs:
+      - get
+      - list
+    apiGroups:
+      - ''
+    resources:
+      - secrets
+  - verbs:
+      - get
+      - list
+    apiGroups:
+      - appstudio.redhat.com
+    resources:
+      - enterprisecontractpolicies
+  - verbs:
+      - get
+      - list
+    apiGroups:
+      - tekton.dev
+    resources:
+      - pipelineruns
+      - taskruns
