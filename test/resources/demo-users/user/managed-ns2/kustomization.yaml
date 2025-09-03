@@ -4,7 +4,6 @@ resources:
   - ns.yaml
   - ../../../../../konflux-ci/enterprise-contract/policies
   - appstudio-pipeline-sa.yaml
-  - konflux-integration-runner-sa.yaml
   - rbac.yaml
   - role-binding.yaml
   - rpa.yaml
