@@ -12,18 +12,37 @@ patches:
         - ""
         resources:
         - pods
+        - serviceaccounts
         verbs:
         - create
         - update
         - patch
         - delete
+        - get
+        - list
+        - watch
+    - op: add
+      path: /rules/-
+      value:
+        apiGroups:
+        - rbac.authorization.k8s.io
+        resources:
+        - rolebindings
+        verbs:
+        - create
+        - update
+        - patch
+        - delete
+        - get
+        - list
+        - watch
   target:
     kind: ClusterRole
     name: kyverno:background-controller:core
 - patch: |-
     - op: replace
       path: /spec/replicas
-      value: 0
+      value: 1
   target:
     kind: Deployment
     name: kyverno-background-controller

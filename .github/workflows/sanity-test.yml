@@ -101,10 +101,6 @@ jobs:
         run: |
           ./wait-for-all.sh
 
-      - name: WORKAROUND - Reduce CPU/Memory requirements in build pipeline
-        run: |
-          kubectl create -f  ./dependencies/kyverno/policy/e2e-reduce-resources.yaml
-
       - name: Deploying Konflux
         run: |
           ./deploy-konflux.sh

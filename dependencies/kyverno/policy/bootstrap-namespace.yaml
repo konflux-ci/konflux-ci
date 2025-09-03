@@ -1,0 +1,58 @@
+# Copied from https://github.com/redhat-appstudio/infra-deployments/tree/da73b82a53bf491f178c06d87c1071d712f64105/components/policies/development/integration/bootstrap-namespace
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: init-ns-integration
+  annotations:
+    policies.kyverno.io/description: |
+      This policy creates a service account named konflux-integration-runner and
+      binds it to the konflux-integration-runner cluster role in tenant namespaces.
+spec:
+  background: false
+  rules:
+  - name: create-konflux-integration-runner-serviceaccount
+    match:
+      any:
+      - resources:
+          kinds:
+          - Namespace
+          selector:
+            matchLabels:
+              konflux-ci.dev/type: tenant
+    celPreconditions:
+    - name: "on update, oldObject had no konflux-ci.dev/type=tenant label"
+      expression: "request.operation != UPDATE || ! (has(oldObject.metadata.labels) && 'konflux-ci.dev/type' in oldObject.metadata.labels && oldObject.metadata.labels['konflux-ci.dev/type] == 'tenant')"
+    generate:
+      synchronize: false
+      apiVersion: v1
+      kind: ServiceAccount
+      name: konflux-integration-runner
+      namespace: '{{request.object.metadata.name}}'
+  - name: create-konflux-integration-runner-rolebinding
+    match:
+      any:
+      - resources:
+          kinds:
+          - Namespace
+          selector:
+            matchLabels:
+              konflux-ci.dev/type: tenant
+    celPreconditions:
+    - name: "on update, oldObject had no konflux-ci.dev/type=tenant label"
+      expression: "request.operation != UPDATE || ! (has(oldObject.metadata.labels) && 'konflux-ci.dev/type' in oldObject.metadata.labels && oldObject.metadata.labels['konflux-ci.dev/type] == 'tenant')"
+    generate:
+      synchronize: false
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      name: konflux-integration-runner-rolebinding
+      namespace: '{{request.object.metadata.name}}'
+      data:
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: konflux-integration-runner
+        subjects:
+        - kind: ServiceAccount
+          namespace: '{{request.object.metadata.name}}'
+          name: konflux-integration-runner
