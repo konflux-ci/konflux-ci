@@ -1,0 +1,61 @@
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  annotations:
+    policies.kyverno.io/description: This policy applies to pods created for the build and EC
+      pipelines running for the e2e tests. It will apply a small set value for CPU
+      requests whenever memory is defined and vice versa (the underlying assumption
+      is that either both are defined or neither are). It will also update the imagePullPolicy
+      of all containers to IfNotPresent.
+  name: reduce-tekton-pr-taskrun-resource-requests
+spec:
+  background: false
+  rules:
+  - match:
+      any:
+      - resources:
+          kinds:
+          - Pod
+          names:
+          - '*-pod'
+          operations:
+          - CREATE
+          selector:
+            matchLabels:
+              pipelines.appstudio.openshift.io/type: build
+      - resources:
+          kinds:
+          - Pod
+          names:
+          - '*-pod'
+          operations:
+          - CREATE
+          selector:
+            matchLabels:
+              tekton.dev/task: verify-enterprise-contract
+    mutate:
+      foreach:
+      - list: request.object.spec.containers
+        patchesJson6902: |-
+          - op: add
+            path: /spec/containers/{{elementIndex}}/resources/requests
+            value:
+              memory: 1Mi
+              cpu: 1m
+        preconditions:
+          any:
+          - key: '{{ element.resources.requests.memory || '''' }}'
+            operator: NotEquals
+            value: ""
+          - key: '{{ element.resources.requests.cpu || '''' }}'
+            operator: NotEquals
+            value: ""
+      - list: request.object.spec.containers
+        patchesJson6902: |-
+          - op: remove
+            path: /spec/containers/{{elementIndex}}/imagePullPolicy
+          - op: add
+            path: /spec/containers/{{elementIndex}}/imagePullPolicy
+            value: IfNotPresent
+    name: reduce-tekton-pr-taskrun-resource-requests
