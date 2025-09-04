@@ -10,9 +10,14 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - pods
+  - secrets
   - serviceaccounts
   verbs:
   - create
+  - update
+  - patch
+  - delete
   - get
   - list
   - watch
@@ -22,6 +27,9 @@ rules:
   - rolebindings
   verbs:
   - create
+  - update
+  - patch
+  - delete
   - get
   - list
   - watch
