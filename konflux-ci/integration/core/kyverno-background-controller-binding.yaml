@@ -1,0 +1,15 @@
+---
+# This allows the background controller to have all the permissions needed to create
+# RoleBindings that grant the konflux-integration-runner role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kyverno-background-controller-konflux-integration-runner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: konflux-integration-runner
+subjects:
+- kind: ServiceAccount
+  name: kyverno-background-controller
+  namespace: kyverno
