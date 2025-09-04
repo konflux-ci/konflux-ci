@@ -4,6 +4,7 @@ resources:
 - https://github.com/konflux-ci/integration-service/config/default?ref=99a35464054dee6370d24fe350c5f541c5cdc02e
 - https://github.com/konflux-ci/integration-service/config/snapshotgc?ref=99a35464054dee6370d24fe350c5f541c5cdc02e
 - konflux-integration-runner.yaml
+- bootstrap-namespace.yaml
 
 namespace: integration-service
 
