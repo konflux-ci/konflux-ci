@@ -4,4 +4,3 @@ kind: Kustomization
 resources:
   - kyverno-rbac.yaml
   - reduce-tekton-pr-taskrun-resource-requests.yaml
-  - bootstrap-namespace.yaml
