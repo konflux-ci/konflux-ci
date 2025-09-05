@@ -1,4 +1,5 @@
 # Copied from https://github.com/redhat-appstudio/infra-deployments/tree/da73b82a53bf491f178c06d87c1071d712f64105/components/policies/development/integration/bootstrap-namespace
+# and added rule for managing secrets.
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -10,14 +11,10 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - pods
   - secrets
   - serviceaccounts
   verbs:
   - create
-  - update
-  - patch
-  - delete
   - get
   - list
   - watch
@@ -27,9 +24,6 @@ rules:
   - rolebindings
   verbs:
   - create
-  - update
-  - patch
-  - delete
   - get
   - list
   - watch
