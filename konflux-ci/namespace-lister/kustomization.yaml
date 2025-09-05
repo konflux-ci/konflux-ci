@@ -8,6 +8,7 @@ resources:
 - certificate.yaml
 - network_policy_allow_to_apiserver.yaml
 - network_policy_allow_from_konfluxui.yaml
+- deny-virtual-domain.yaml
 namespace: namespace-lister
 images:
 - digest: sha256:51006f28b9c3c615a52437472fb043cadb7049d683415112fbc5802bd71e2bf7
