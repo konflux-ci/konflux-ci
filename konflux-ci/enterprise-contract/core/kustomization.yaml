@@ -13,7 +13,7 @@ configMapGenerator:
   - name: ec-defaults
     namespace: enterprise-contract-service
     literals:
-      - verify_ec_task_bundle=quay.io/enterprise-contract/ec-task-bundle@sha256:a89182f4569f4b2a5ecb3a2441d45ca84a2920e4aa71eab2ab51eef302afa2ea
+      - verify_ec_task_bundle=quay.io/enterprise-contract/ec-task-bundle@sha256:394569cdc34997674b010763ee0961589451cf86e152445cc45d2b63f15ac264
       - verify_ec_task_git_url=https://github.com/enterprise-contract/ec-cli.git
       - verify_ec_task_git_revision=9708f5b8ac2bafaa8bf9c2dea839d13b79565a80
       - verify_ec_task_git_pathInRepo=tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml
