@@ -15,6 +15,20 @@
       ],
       "autoApprove": true,
       "automerge": true
+    },
+    {
+      "matchPackageNames": ["https://github.com/cert-manager/cert-manager"],
+      "enabled": false,
+      "description": "Disable until we're able to auto-update trust-manager as well"
+    },
+    {
+      "groupName": "tekton-core",
+      "matchPackageNames": [
+        "https://github.com/tektoncd/operator",
+        "https://github.com/tektoncd/pipeline",
+        "https://github.com/tektoncd/results"
+      ],
+      "description": "Group core Tekton components for coordinated updates"
     }
   ],
   "enabledManagers": ["regex", "kustomize"],
@@ -79,6 +93,28 @@
       "autoReplaceStringTemplate": "E2E_TEST_IMAGE={{depName}}@{{newDigest}}",
       "datasourceTemplate": "docker",
       "currentValueTemplate": "latest"
+    },
+    {
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["(^|\/)kustomization\\.(yaml|yml)$"],
+      "matchStrings": [
+        "# renovate: datasource=git-refs depName=(?<packageName>https:\\/\\/github\\.com\\/[^\\s]+)",
+        "- https:\\/\\/github\\.com\\/[^/]+\\/[^/]+\\/releases\\/download\\/v(?<currentValue>[^/]+)\\/"
+      ],
+      "datasourceTemplate": "git-refs",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["(^|\/)kustomization\\.(yaml|yml)$"],
+      "matchStrings": [
+        "# renovate: datasource=git-refs depName=(?<packageName>https:\\/\\/github\\.com\\/[^\\s]+)",
+        "- https:\\/\\/storage\\.googleapis\\.com\\/tekton-releases\\/[^/]+\\/previous\\/v(?<currentValue>[^/]+)\\/"
+      ],
+      "datasourceTemplate": "git-refs",
+      "versioningTemplate": "semver"
     }
   ]
 }
