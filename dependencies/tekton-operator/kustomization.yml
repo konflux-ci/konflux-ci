@@ -4,7 +4,7 @@ kind: Kustomization
 resources:
   # Install Tekton pipelines, triggers and and Chains
   # renovate: datasource=git-refs depName=https://github.com/tektoncd/operator versioning=semver
-  - https://storage.googleapis.com/tekton-releases/operator/previous/v0.75.0/release.yaml
+  - https://storage.googleapis.com/tekton-releases/operator/previous/v0.77.0/release.yaml
 patches:
   - patch: |
       - op: add
