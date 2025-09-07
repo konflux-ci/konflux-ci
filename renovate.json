@@ -115,6 +115,18 @@
       ],
       "datasourceTemplate": "git-refs",
       "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["konflux-ci/enterprise-contract/policies/.*\\.yaml$"],
+      "matchStrings": [
+        "# renovate: datasource=docker depName=(?<depName>quay\\.io/conforma/[^\\s]+)",
+        "- oci::quay\\.io/conforma/[^:]+:konflux@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "autoReplaceStringTemplate": "# renovate: datasource=docker depName={{depName}}\n    - oci::{{depName}}:konflux@{{newDigest}}",
+      "datasourceTemplate": "docker",
+      "currentValueTemplate": "konflux"
     }
   ]
 }

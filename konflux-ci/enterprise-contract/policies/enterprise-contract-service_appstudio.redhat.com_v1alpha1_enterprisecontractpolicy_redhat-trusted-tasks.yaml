@@ -15,4 +15,5 @@ spec:
     - github.com/release-engineering/rhtap-ec-policy//data
     name: Default
     policy:
-    - oci::quay.io/conforma/task-policy@sha256:5eedaf38feae3b899163a568dd0d382b8d32183d6851949aef5e8d9dcf6e5c8b
+    # renovate: datasource=docker depName=quay.io/conforma/task-policy
+    - oci::quay.io/conforma/task-policy:konflux@sha256:5eedaf38feae3b899163a568dd0d382b8d32183d6851949aef5e8d9dcf6e5c8b
