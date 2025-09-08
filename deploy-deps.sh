@@ -24,7 +24,7 @@ check_req(){
                 uninstalled_requirements+=("$i")
         else
                 echo -e "$i is installed"
-        fi  
+        fi
     done
 
     if (( ${#uninstalled_requirements[@]} == 0 )); then
@@ -75,7 +75,8 @@ deploy_tekton() {
     retry "kubectl wait --for=condition=Ready -l app=tekton-operator -n tekton-operator pod --timeout=240s" \
           "Tekton Operator did not become available within the allocated time"
     # Wait for the operator to create configs for the first time before applying configs
-    kubectl wait --for=condition=Ready tektonconfig/config --timeout=360s
+    retry "kubectl wait --for=condition=Ready tektonconfig/config --timeout=360s" \
+          "Tekton Config resource was not created within the allocated time"
     echo "  ⚙️  Configuring Tekton..." >&2
     retry "kubectl apply -k ${script_path}/dependencies/tekton-config" \
           "The Tekton Config resource was not updated within the allocated time"
