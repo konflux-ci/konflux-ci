@@ -22,5 +22,4 @@ spec:
     - github.com/release-engineering/rhtap-ec-policy//data
     name: Default
     policy:
-    # renovate: datasource=docker depName=quay.io/conforma/release-policy
     - oci::quay.io/conforma/release-policy:konflux@sha256:1fc38e278963af0f7b8a0f43944b60e64e00464177508457d0dbe20a9243deee
