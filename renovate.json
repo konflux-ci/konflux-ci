@@ -31,7 +31,7 @@
       "description": "Group core Tekton components for coordinated updates"
     }
   ],
-  "enabledManagers": ["regex", "kustomize"],
+  "enabledManagers": ["regex", "kustomize", "github-actions"],
   "customManagers": [
     {
       "customType": "regex",
