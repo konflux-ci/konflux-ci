@@ -60,6 +60,9 @@ spec:
                       optional: true
                 containers:
                   - name: controller
+                    env:
+                      - name: GIT_SSL_CAINFO
+                        value: /etc/ssl/certs/ca-bundle.crt
                     volumeMounts:
                       - name: trusted-ca
                         mountPath: /etc/ssl/certs
