@@ -33,16 +33,16 @@ jobs:
           PR_NUMBER=${{ github.event.issue.number }}
           echo "Extracting PR information for PR #$PR_NUMBER"
           PR_DATA=$(gh api repos/${{ github.repository }}/pulls/$PR_NUMBER)
-          
+
           HEAD_REF=$(echo "$PR_DATA" | jq -r '.head.ref')
           HEAD_REPO=$(echo "$PR_DATA" | jq -r '.head.repo.full_name')
           BASE_REF=$(echo "$PR_DATA" | jq -r '.base.ref')
-          
+
           echo "head_ref=$HEAD_REF" >> $GITHUB_OUTPUT
           echo "head_repo=$HEAD_REPO" >> $GITHUB_OUTPUT
           echo "base_ref=$BASE_REF" >> $GITHUB_OUTPUT
           echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
-          
+
           echo "PR info extracted: #$PR_NUMBER, base: $BASE_REF, head: $HEAD_REF"
 
       - name: Checkout PR Code
@@ -94,7 +94,7 @@ jobs:
           echo "Issue number from event: '${{ github.event.issue.number }}'"
           echo "Event type: '${{ github.event_name }}'"
           echo "============================================================"
-          
+
           # Explicitly set PR_NUMBER if it's empty
           if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
             echo "WARNING: PR_NUMBER is empty or null, setting to issue number"
