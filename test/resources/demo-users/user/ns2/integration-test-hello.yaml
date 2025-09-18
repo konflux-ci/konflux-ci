@@ -13,7 +13,7 @@ spec:
       - name: url
         value: 'https://github.com/konflux-ci/testrepo'
       - name: revision
-        value: ba3f8828d061a539ef774229d2f5c8651d854d7e
+        value: 47517b7ad6a09ada952f3de7eb8da729ffbf3d6d
       - name: pathInRepo
         value: integration-tests/testrepo-integration.yaml
     resolver: git
