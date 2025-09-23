@@ -8,6 +8,10 @@ rules:
   - verbs:
       - get
       - list
+      - create
+      - watch
+      - update
+      - patch
     apiGroups:
       - ''
     resources:
@@ -22,6 +26,10 @@ rules:
   - verbs:
       - get
       - list
+      - create
+      - watch
+      - update
+      - patch
     apiGroups:
       - tekton.dev
     resources:
