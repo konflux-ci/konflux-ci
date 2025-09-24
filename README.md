@@ -590,6 +590,10 @@ Once you have your pull request documented and configured the way you want,
 click the **Create pull request** button. We will merge your pull request in
 the [Trigger the Release](#trigger-the-release) section.
 
+
+
+
+
 ### Observe the Behavior
 
 **Note**: If the behavior you see is not as described below, consult the
