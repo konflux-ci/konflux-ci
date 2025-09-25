@@ -183,6 +183,35 @@ nodes:
 ./deploy-konflux.sh
 ```
 
+**Note**: If you get an error about "accumulating resources" during the `Deploying Release Service`
+portion of this script, it is due to a bug in some versions of **kustomize**. To fix the issue:
+
+    1. Uninstall your current version of **kustomize** and install version 5.7.1 or later.
+
+    2. Clone the `https://github.com/konflux-ci/release-service` to your local machine (place it
+    in the same directory you cloned `konflux-ci` into so both projects are side by side
+    in the same parent directory).
+
+    3. Go into the `release-service` directory and checkout the following branch:
+
+        `git checkout d2012b5b0bab0d88408176903351d8909f93b3aa`
+
+    4. Go into the `konflux-ci` directory and edit the
+       `./konflux-ci/release/core/kustomize.yaml` file. Change this line:
+
+       `- https://github.com/konflux-ci/release-service/config/default?ref=d2012b5b0bab0d88408176903351d8909f93b3aa`
+
+       to this:
+
+       `- ../../../../release-service/config/default`
+
+       If your `konflux-ui` and `release-services` are not in the same directory, you'll
+       need to adjust the relative path to accurately point to your local
+       `release-service`'s `./config/default` directory.
+
+    5. From the root of the `konflux-ci` directory, run the `./deploy-konflux.sh` script
+    again. It should work without error this time.
+
 4. :gear: Deploy demo users
 
 ```bash
