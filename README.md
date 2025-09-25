@@ -106,10 +106,14 @@ or **docker** (v27.0.1 or newer)
 ## Bootstrapping the Cluster
 
 :gear: Before you can bootstrap and configure your cluster, you will need to clone the Konflux
-repository and enter the project directory by typing these commands in your terminal:
+repository and enter the project directory by typing these commands in your terminal (from this point
+on, the documentation will assume that you've cloned this project into your home directory):
 
 ```bash
+cd ~
+
 git clone https://github.com/konflux-ci/konflux-ci.git
+
 cd konflux-ci
 ```
 
@@ -120,6 +124,7 @@ To increase the limits temporarily, run the following commands:
 
 ```bash
 sudo sysctl fs.inotify.max_user_watches=524288
+
 sudo sysctl fs.inotify.max_user_instances=512
 ```
 
@@ -128,112 +133,178 @@ these steps:
 
 1. :gear: Create a cluster
 
-```bash
-kind create cluster --name konflux --config kind-config.yaml
-```
+    ```bash
+    kind create cluster --name konflux --config kind-config.yaml
+    ```
 
-**Note:** When using Podman, we recommend increasing the PID limit of the container running the cluster,
-as the default setting may not be sufficient when the cluster becomes busy.
+    **Note:** When using Podman, we recommend increasing the PID limit of the container running the cluster,
+    as the default setting may not be sufficient when the cluster becomes busy.
 
-```bash
-podman update --pids-limit 4096 konflux-control-plane
-```
+    ```bash
+    podman update --pids-limit 4096 konflux-control-plane
+    ```
 
-**Note:** If your pods still fail to start due to missing resources, you may need to reserve additional
-resources for the [Kind](https://kind.sigs.k8s.io) cluster. To do so, edit the
-[kind-config.yaml](./kind-config.yaml) file in the root directory of the `konflux-ci` project
-(you should currently be here) and modify the `system-reserved` line under `kubeletExtraArgs`.
+    **Note:** If your pods still fail to start due to missing resources, you may need to reserve additional
+    resources for the [Kind](https://kind.sigs.k8s.io) cluster. To do so, edit the
+    [kind-config.yaml](./kind-config.yaml) file in the root directory of the `konflux-ci` project
+    (you should currently be here) and modify the `system-reserved` line under `kubeletExtraArgs`.
 
-```yaml
----
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-nodes:
-- role: control-plane
-  kubeadmConfigPatches:
-  - |
-    kind: InitConfiguration
-    nodeRegistration:
-      kubeletExtraArgs:
-        node-labels: "ingress-ready=true"
-        system-reserved: memory=12Gi        <--- Edit this line (the default is 8Gi)
-  extraPortMappings:
-  - containerPort: 30010
-    hostPort: 8888
-    protocol: TCP
-    # UI
-  - containerPort: 30011
-    hostPort: 9443
-    protocol: TCP
-    # PaC
-  - containerPort: 30012
-    hostPort: 8180
-    protocol: TCP
-```
+    ```yaml
+    ---
+    kind: Cluster
+    apiVersion: kind.x-k8s.io/v1alpha4
+    nodes:
+    - role: control-plane
+      kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+            system-reserved: memory=12Gi        <--- Edit this line (the default is 8Gi)
+      extraPortMappings:
+      - containerPort: 30010
+        hostPort: 8888
+        protocol: TCP
+        # UI
+      - containerPort: 30011
+        hostPort: 9443
+        protocol: TCP
+        # PaC
+      - containerPort: 30012
+        hostPort: 8180
+        protocol: TCP
+    ```
 
 2. :gear: Deploy the dependencies
 
-```bash
-./deploy-deps.sh
-```
+    ```bash
+    ./deploy-deps.sh
+    ```
 
 3. :gear: Deploy Konflux
 
-```bash
-./deploy-konflux.sh
-```
+    ```bash
+    ./deploy-konflux.sh
+    ```
 
-**Note**: If you get an error about "accumulating resources" during the `Deploying Release Service`
-portion of this script, it is due to a bug in some versions of **kustomize**. To fix the issue:
+    **Note**: If you get an error about "accumulating resources" during the `Deploying Release Service`
+    portion of this script, it is due to a bug in some versions of **kustomize**. To fix the issue:
 
     1. Uninstall your current version of **kustomize** and install version 5.7.1 or later.
 
-    2. Clone the `https://github.com/konflux-ci/release-service` to your local machine (place it
-    in the same directory you cloned `konflux-ci` into so both projects are side by side
-    in the same parent directory).
+    2. Clone the following git repositories to your local machine, placing them all in your `$HOME`
+    directory where you cloned `konflux-ci`:
 
-    3. Go into the `release-service` directory and checkout the following branch:
+        ```bash
+        https://github.com/konflux-ci/release-service
+        https://github.com/konflux-ci/integration-service
+        https://github.com/konflux-ci/build-service
+        ```
 
-        `git checkout d2012b5b0bab0d88408176903351d8909f93b3aa`
+    3. Go into the `release-service` directory and checkout this specific branch:
 
-    4. Go into the `konflux-ci` directory and edit the
-       `./konflux-ci/release/core/kustomize.yaml` file. Change this line:
+        ```bash
+        git checkout d2012b5b0bab0d88408176903351d8909f93b3aa
+        ```
 
-       `- https://github.com/konflux-ci/release-service/config/default?ref=d2012b5b0bab0d88408176903351d8909f93b3aa`
+    4. Go into the `integration-service` directory and checkout this specific branch:
 
-       to this:
+        ```bash
+        git checkout cec5d540d177c5cbe73f58d1628684fa78d35199
+        ```
 
-       `- ../../../../release-service/config/default`
+    5. Go into the `build-service` directory and checkout this specific branch:
 
-       If your `konflux-ui` and `release-services` are not in the same directory, you'll
-       need to adjust the relative path to accurately point to your local
-       `release-service`'s `./config/default` directory.
+        ```bash
+        git chekcout 3c62370e82ccdacd32e4da335b215b6f88703df3
+        ```
 
-    5. From the root of the `konflux-ci` directory, run the `./deploy-konflux.sh` script
+    6. Edit the `~konflux-ci/konflux-ci/release/core/kustomization.yaml` file. Change this line:
+
+       ```bash
+       - https://github.com/konflux-ci/release-service/config/default?ref=d2012b5b0bab0d88408176903351d8909f93b3aa
+       ```
+
+       To this:
+
+       ```bash
+       - ../../../../release-service/config/default
+       ```
+
+    7. Edit the `~/konflux-ci/konflux-ci/integration/core/kustomization.yaml` file. Change these two lines:
+
+        ```bash
+        - https://github.com/konflux-ci/integration-service/config/default?ref=cec5d540d177c5cbe73f58d1628684fa78d35199
+        - https://github.com/konflux-ci/integration-service/config/snapshotgc?ref=cec5d540d177c5cbe73f58d1628684fa78d35199
+        ```
+
+        To this:
+
+        ```
+        - ../../../../integration-service/config/default
+        - ../../../../integration-service/config/snapshotgc
+        ```
+
+    8. Edit the `~/konflux-ci/konflux-ci/build/core/kustomization.yaml` file. Change this line:
+
+        ```bash
+        - https://github.com/konflux-ci/build-service/config/default?ref=3c62370e82ccdacd32e4da335b215b6f88703df3
+        ```
+
+        To this:
+
+        ```bash
+        - ../../../build-service/config/default
+        ```
+
+    9. Edit the `~/konflux-ci/deploy-konflux.sh` file and replace these three lines to ensure
+    the script is calling the right version of `kustomize` (these three lines are in
+    different areas of the file, not together):
+
+        ```bash
+        retry kubectl apply -k "${script_path}/konflux-ci/release"
+
+        retry kubectl apply -k "${script_path}/konflux-ci/integration"
+
+        retry kubectl apply -k "${script_path}/konflux-ci/build-service"
+        ```
+
+        With these three lines:
+
+        ```bash
+        kustomize build ./konflux-ci/release/ | kubectl apply -f - --server-side --force-conflicts
+
+        kustomize build ./konflux-ci/integration/ | kubectl apply -f - --server-side --force-conflicts
+
+        kustomize build ./konflux-ci/build-service/ | kubectl apply -f - --server-side --force-conflicts
+        ```
+
+    10. From the root of the `konflux-ci` directory, run the `./deploy-konflux.sh` script
     again. It should work without error this time.
 
 4. :gear: Deploy demo users
 
-```bash
-./deploy-test-resources.sh
-```
+    ```bash
+    ./deploy-test-resources.sh
+    ```
 
 5. :gear: As a reminder, if you've installed Konflux on a remote host, you will need to configure SSH port
 forwarding to access your cluster. To do this, open an additional terminal and run the following command
 (make sure to add the details for your remote user and IP address):
 
-```bash
-ssh -L 9443:localhost:9443 <remote_host_user_name>@<remote_host_ip_address>
-```
+    ```bash
+    ssh -L 9443:localhost:9443 <remote_host_user_name>@<remote_host_ip_address>
+    ```
 
 6. Once you've set up port forwarding, your cluster's UI will be available at https://localhost:9443.
 You can log in using the test user's account.
 
-**username**: **user@konflux.dev**
-**password**: **password**
+    **username**: **user@konflux.dev**
+    **password**: **password**
 
-You now have Konflux up and running. Next, we'll configure Konflux to respond to pull request webhooks,
-build a user application, and push it to a registry.
+    You now have Konflux up and running. Next, we'll configure Konflux to respond to pull request webhooks,
+    build a user application, and push it to a registry.
 
 ## Enable Pipelines Triggering via Webhooks
 
@@ -256,34 +327,33 @@ When you deployed dependencies earlier, the process created a [smee](https://sme
 channel for you, deployed a client to listen to that channel, and stored the
 channel's **Webhook Proxy URL** in a patch file.
 
-1. :gear: Take note of the smee channel's **Webhook Proxy URL** created for you:
-
-```
-grep value dependencies/smee/smee-channel-id.yaml
-```
-
-**NOTE**: If you already have a channel that you'd like to keep using, copy
+1. :gear: Take note of the smee channel's **Webhook Proxy URL** created for you.
+If you already have a channel that you'd like to keep using, copy
 its URL to the `value` field inside the `smee-channel-id.yaml` file and rerun
 `deploy-deps.sh`. The script will not recreate the patch file if it already exists.
 
+    To retrieve the auto-generated [smee](https://smee.io) file:
+
+    `grep value dependencies/smee/smee-channel-id.yaml`
+
 2. :gear: Create a GitHub app following the
-   [Create a Pipelines-as-Code GitHub App](https://pipelinesascode.com/docs/install/github_apps/#manual-setup)
-   documentation.
+[Create a Pipelines-as-Code GitHub App](https://pipelinesascode.com/docs/install/github_apps/#manual-setup)
+documentation.
 
-   For `Homepage URL` you can insert `https://localhost:9443/` (it doesn't matter).
+    - For `Homepage URL` you can insert `https://localhost:9443/` (it doesn't matter).
 
-   For the `Webhook URL` insert the [smee](https://smee.io) client's **Webhook
-   Proxy URL** from earlier in this document.
+    - For the `Webhook URL` insert the [smee](https://smee.io) client's **Webhook
+    Proxy URL** from the previous step.
 
-   As per the [Pipelines as Code](https://pipelinesascode.com/docs/install/github_apps/#manual-setup)
-   link above, generate and download the private key and create a secret on the
-   cluster, providing the location of the private key, the App ID, and the
-   openssl-generated secret created during the process.
+As per the [Pipelines as Code](https://pipelinesascode.com/docs/install/github_apps/#manual-setup)
+link above, generate and download the private key and create a secret on the
+cluster, providing the location of the private key, the App ID, and the
+openssl-generated secret created during the process.
 
-3. :gear: To allow Konflux to send pull requests to your application repositories,
-   the same secret should be created inside the build-service and the integration-service
-   namespaces. For additional details, refer to the
-   [Configuring GitHub Application Secrets](./docs/github-secrets.md) documentation.
+To allow Konflux to send pull requests to your application repositories,
+the same secret should be created inside the build-service and the integration-service
+namespaces. For additional details, refer to the
+[Configuring GitHub Application Secrets](./docs/github-secrets.md) documentation.
 
 ## Onboard a new Application
 
@@ -406,7 +476,7 @@ document for more information.
     kubectl create secret generic quay-robot-secret \
             --from-literal=username=<your-org>+<robot-account-name> \
             --from-literal=password=<robot-account-token> \
-            -n <image-controller-namespace>
+            -n user-ns2
     ```
 
 2. :gear: Create an Organization on [Quay.io](https://quay.io).
@@ -466,11 +536,11 @@ document for more information.
     image: controller:latest
     env:
     - name: QUAY_ORGANIZATION
-      value: "sample_org"
+      value: "<your-organization>"
     - name: QUAY_API_TOKEN_SECRET_NAME
-      value: "sample_org+simpleton"
+      value: "<your-api-token-secret-name>"
     - name: QUAY_API_TOKEN_SECRET_KEY
-      value: "6620177NDK7XVSADZQPGOD1UP62LT9GYR7SE14P3P2KKVYK8QMTP10GVEXZZCVHS"
+      value: "<your-api-token-secret-key>"
     ...
     ```
 
