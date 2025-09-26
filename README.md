@@ -97,7 +97,7 @@ The deployment requires the following **free** resources:
 
 - **git** (v2.46 or newer)
 - **golang** (v1.24.6 or newer)
-- **[Kind](https://kind.sigs.k8s.io)** (v0.26.0 or newer) along with **podman** (v5.3.1 or newer)
+- **[Kind](https://kind.sigs.k8s.io/docs/user/quick-start)** (v0.26.0 or newer) along with **podman** (v5.3.1 or newer)
 or **docker** (v27.0.1 or newer)
 - **kubectl** (v1.31.1 or newer)
 - **make** (v4.4.1 or newer)
@@ -298,7 +298,7 @@ forwarding to access your cluster. To do this, open an additional terminal and r
     ```
 
 6. Once you've set up port forwarding, your cluster's UI will be available at https://localhost:9443.
-You can log in using the test user's account.
+   You can log in using the test user's account.
 
     **username**: **user@konflux.dev**
     **password**: **password**
@@ -332,13 +332,13 @@ If you already have a channel that you'd like to keep using, copy
 its URL to the `value` field inside the `smee-channel-id.yaml` file and rerun
 `deploy-deps.sh`. The script will not recreate the patch file if it already exists.
 
-    To retrieve the auto-generated [smee](https://smee.io) file:
+    To retrieve the auto-generated [smee](https://smee.io) URL:
 
     `grep value dependencies/smee/smee-channel-id.yaml`
 
 2. :gear: Create a GitHub app following the
-[Create a Pipelines-as-Code GitHub App](https://pipelinesascode.com/docs/install/github_apps/#manual-setup)
-documentation.
+   [Create a Pipelines-as-Code GitHub App](https://pipelinesascode.com/docs/install/github_apps/#manual-setup)
+   documentation.
 
     - For `Homepage URL` you can insert `https://localhost:9443/` (it doesn't matter).
 
@@ -444,7 +444,7 @@ repositories for your applications. To do that, follow the steps below.
 [Quay.io Configurations](https://github.com/konflux-ci/konflux-ci/blob/main/docs/quay.md#automatically-provision-quay-repositories-for-container-images)
 document for more information.
 
-1. :gear: Log into or create a user account on [Quay.io](https://quay.io).
+1. :gear: Log in to or create a user account on [Quay.io](https://quay.io).
 
     1. Go to [Quay.io](https://quay.io).
 
@@ -469,15 +469,6 @@ document for more information.
     9. Copy the file to the proper location by typing
     `mv <your-account-name>-auth.json ~/.docker/config.json`
     in the terminal of your Konflux server.
-
-    10. Create the secret containing your [Quay.io](https://quay.io) Robot Account credentials
-    in the pipeline's `user-ns2` namespace using this command:
-    ```
-    kubectl create secret generic quay-robot-secret \
-            --from-literal=username=<your-org>+<robot-account-name> \
-            --from-literal=password=<robot-account-token> \
-            -n user-ns2
-    ```
 
 2. :gear: Create an Organization on [Quay.io](https://quay.io).
 
@@ -505,7 +496,16 @@ document for more information.
     kubectl create namespace image-controller-system
     ```
 
-    11. Add your Robot Account credentials to the `image-controller-system` namespace.
+    11. Create the secret containing your [Quay.io](https://quay.io) Robot Account credentials
+    in the pipeline's `user-ns2` namespace using this command:
+    ```
+    kubectl create secret generic quay-robot-secret \
+            --from-literal=username=<your-org>+<robot-name> \
+            --from-literal=password=<robot-token> \
+            -n user-ns2
+    ```
+
+    12. Add your Robot Account credentials to the `image-controller-system` namespace.
 
     ```
     kubectl create secret generic quay-robot-secret \
@@ -531,65 +531,87 @@ document for more information.
     code beneath it. The `env:` key should be at the same indentation
     level as `image: controller:latest`.
 
-    ```
-    ...
-    image: controller:latest
-    env:
-    - name: QUAY_ORGANIZATION
-      value: "<your-organization>"
-    - name: QUAY_API_TOKEN_SECRET_NAME
-      value: "<your-api-token-secret-name>"
-    - name: QUAY_API_TOKEN_SECRET_KEY
-      value: "<your-api-token-secret-key>"
-    ...
-    ```
+        You can get this information by:
+
+        1. Going to [Organizations](https://quay.io/organizations).
+
+        2. Clicking on your organizations name.
+
+        3. Clicking on the **Robot Accounts** icon.
+
+        4. Clicking on your organizations robot name.
+
+        5. Clicking on the **Robot Account** tab at the top of the overlay dialog.
+
+        ```
+        ...
+        image: controller:latest
+        env:
+        - name: QUAY_ORGANIZATION
+          value: "<your-org-name>"
+        - name: QUAY_API_TOKEN_SECRET_NAME
+          value: "<your-org-robot-name>"
+        - name: QUAY_API_TOKEN_SECRET_KEY
+          value: "<your-org-robot-secret-key>"
+        ...
+        ```
 
     3. Change directories into your `image-controller` project directory
     and run `make deploy`.
 
 4. :gear: Create an Application and a Component via the Konflux UI.
 
-    1. Log in to [Konflux](https://localhost:9443) as `user2@konflux.dev`
-    (password: `password`).
+    1. :gear: Go to your [Konflux](https://localhost:9443) web console.
 
-    2. Clickd the **View my namespaces** button.
+    2. :gear: Click on the `Sign in with Dex OIDC` button.
 
-    3. Click the **user-ns2** link.
+        ![OAuth2 Proxy screen](./docs/images/oauth2-proxy.png)
 
-    4. Click on the **Create application** button.
+    3. :gear: Log in using these credentials:
 
-    5. Enter an application name (we'll use the name `my-app-one` in
+        **Username**: `user2@konflux.dev`
+        **Password**: `password`
+
+    4. :gear: Click on the `Grant Access` button to access the web console.
+
+        ![OAuth2 Grant Access](./docs/images/grant-access.png)
+
+    5. :gear: Click the **View my namespaces** button.
+
+    6. :gear: Click the **user-ns2** link.
+
+    7. :gear: Click on the **Create application** button.
+
+    8. :gear: Enter an application name (we'll use the name `my-app-one` in
     this documentation, but you can use any name you prefer).
 
-    6. Click the **Create application** button.
+    9. :gear: Click the **Create application** button.
 
-    7. On the `my-app-one` application screen, click on the **Components** tab.
+    10. :gear: On the `my-app-one` application screen, click on the **Components** tab.
 
-    8. Click on the **Add component** button.
+    11. :gear: Click on the **Add component** button.
 
-    9. In a separate browser tab, go to the Git repository you
+    12. :gear: In a separate browser tab, go to the Git repository you
     forked from `https://github.com/konflux-ci/testrepo`.
 
-    10. Click on the **Code** button.
+    13. :gear: Click on the **Code** button.
 
-    11. Click on HTTPS.
+    14. :gear: Click on HTTPS and copy the URL (it should end in `.git`).
 
-    12. Copy the git URL (it should end in `.git`).
-
-    13. Go back to your Konflux browser tab and paste the Git
+    15. :gear: Go back to your Konflux browser tab and paste the Git
     URL into the **Get repository URL** field.
 
-    14. Change the component name in the **Component name**
+    16. :gear: Change the component name in the **Component name**
     field if you wish, or you can accept the default name.
 
-    15. Set the **Pipeline** drop-down list to `docker-build-oci-ta`
+    17. :gear: Set the **Pipeline** drop-down list to `docker-build-oci-ta`
     if it isn't already.
 
-    16. Leave all other fields blank or set to their default settings.
+    18. :gear: Leave all other fields blank or set to their default settings.
 
-    17. Click the **Add component** button.
+    19. :gear: Click the **Add component** button.
 
-    **Note**: If you encounter 404 Not Found error, refer to the
+    **Note**: If you encounter a `404 Not Found` error, refer to the
     [troubleshooting guide](https://github.com/konflux-ci/konflux-ci/blob/main/docs/troubleshooting.md#unable-to-create-application-with-component-using-the-konflux-ui).
 
 Now, if you click on the **Components** tab in the Konflux UI, you
@@ -615,12 +637,16 @@ request to configure and run the pipelines using Konflux.
 
 Let's step through the process of deploying a manifest via the terminal.
 
-1. :gear: Use your text editor of choice to edit your local copy of the
-[example application manifests](https://github.com/konflux-ci/konflux-ci/blob/main/test/resources/demo-users/user/ns2/application-and-component.yaml).
+1. :gear: Edit the `application-and-component.yaml` for the `user-ns2`
+namespace, which is located here:
+
+    ```bash
+    ~/konflux-ci/test/resources/demo-users/user/ns2/application-and-component.yaml
+    ```
 
 2. :gear: Under the `Component` and `Repository` sections, change
-the URL fields so they point to the fork you created from this Git
-repository: `https://github.com/konflux-ci/testrepo`.
+the URL fields so they point to the fork you created from the `testrepo` Git
+repository: `https://github.com/<your-github-username>/testrepo`.
 
 **Note**: There is a subtle difference between the formatting of the two fields.
 The `Component` URL has a `.git` suffix and is not surrounded by quotes,
@@ -634,9 +660,15 @@ run the following command to deploy it.
 kubectl create -f ./test/resources/demo-users/user/ns2/application-and-component.yaml
 ```
 
-Now, log into the Konflux UI as `user2@konflux.dev` (password: `password`).
+Now, log in to the Konflux web console if you aren't already.
+
+**Username**: `user2@konflux.dev`
+**Password**: `password`
+
 You should be able to see your new Application and Component by clicking
-"View my applications".
+on the **Applications** tab. Both the Application and Component should be
+called `test-component`. You should also see the Application and Component
+you created in the previous section, for a total of two of each.
 
 #### Image Registry
 
@@ -644,8 +676,7 @@ The build pipeline that you're about to run pushes the images it builds
 to an image registry.
 
 For the sake of simplicity, it's configured to use a registry deployed
-into the cluster during the previous steps of this setup, when we
-installed all the dependencies.
+into the cluster when we installed all the dependencies.
 
 **Note**: The statement above is only true when not onboarding via
 the Konflux UI. You can convert it to use a public image registry later on.
@@ -689,25 +720,26 @@ Once you have your pull request documented and configured the way you want,
 click the **Create pull request** button. We will merge your pull request in
 the [Trigger the Release](#trigger-the-release) section.
 
-
-
-
-
 ### Observe the Behavior
 
-**Note**: If the behavior you see is not as described below, consult the
-[troubleshooting document](./docs/troubleshooting.md#pr-changes-are-not-triggering-pipelines).
+If you have everything set up correctly, when you create your pull request, you should
+see a green checkbox showing that GitHub can merge the pull request and that
+your GitHub App ran successfully.
 
-Once your PR is created, you should see a status is being reported at the bottom of the
-PR's comments section (just above the "Add a comment" box).
+![Successful checks on a GitHub pull request](./docs/images/successful-pull-request.png)
 
-Your GitHub App should now send PR events to your smee channel. Navigate to your smee
-channel's web page. You should see a couple of events were sent just after your PR was
-created. E.g. `check_run`, `pull_request`.
+You can also check your [smee](https://smee.io) URL to see if it is processing
+Webhook Deliveries.
 
-:gear: Log into the Konflux UI as user2 and check your applications. Select the
+![Smee events](./docs/images/smee-work-deliveries.png)
+
+**Note**: If you don't see these items or see a pipeline error, please consult the
+[Troubleshooting Common Issues](./docs/troubleshooting.md#pr-changes-are-not-triggering-pipelines)
+guide.
+
+:gear: Log in to the Konflux UI as user2 and check your applications. Select the
 application you created earlier, click on `Activity` and `Pipeline runs`. A build
-should've been triggered a few seconds after the PR was created.
+should've been triggered a few seconds after the pull request was created.
 
 Follow the build progress. Depending on your system's load and network connection (the
 build process involves pulling images), it might take a few minutes for the build to
@@ -819,7 +851,7 @@ Once confirmed, skip to
 [adding customized integration tests](#add-customized-integration-tests-optional).
 
 if you onboarded your application manually, you will now configure your application to
-trigger integration tests after each PR build is done.
+trigger integration tests after each pull request build is done.
 
 #### Configure Integration Tests
 
@@ -856,7 +888,7 @@ Our integration test is using a pipeline residing in the location defined under 
 `resolverRef` field on the YAML mentioned above. From now on, after the build pipeline
 runs, the pipeline mentioned on the integration test will also be triggered.
 
-:gear: To verify that, go back to your GitHub PR and add a comment: `/retest`.
+:gear: To verify that, go back to your GitHub pull request and add a comment: `/retest`.
 
 On the Konflux UI, under your component `Activity` tab, you should now see the build
 pipeline running again (`test-component-on-pull-request-...`), and when it's done, you
@@ -922,7 +954,7 @@ Alternatively, you can create it using `kubectl`. The manifest is stored in
 kubectl create -f ./test/resources/demo-users/user/ns2/integration-test-hello.yaml
 ```
 
-:gear: Post a `/retest` comment on your GitHub PR, and once the `pull-request`
+:gear: Post a `/retest` comment on your GitHub pull request, and once the `pull-request`
 pipeline is done, you should see your new integration test being triggered alongside
 the one you had before.
 
@@ -945,11 +977,11 @@ If onboarded using the Konflux UI, the pipeline was already created and configur
 you.
 
 If onboarded using Kubernetes manifests then you should have copied the pipeline to the
-`.tekton` directory before [creating your initial PR](#creating-a-pull-request).
+`.tekton` directory before [creating your initial pull request](#creating-a-pull-request).
 
 #### Create ReleasePlan and ReleasePlanAdmission Resources
 
-Once you merge a PR, the on-push pipeline will be triggered and once it completes, a
+Once you merge a pull request, the on-push pipeline will be triggered and once it completes, a
 snapshot will be created and the integration tests will run against the container images
 built on the on-push pipeline.
 
@@ -1038,9 +1070,9 @@ for namespace `managed-ns2`.
 
 #### Trigger the Release
 
-You can now merge your PR and observe the behavior:
+You can now merge your pull request and observe the behavior:
 
-1. Merge the PR in GitHub.
+1. Merge the pull request in GitHub.
 
 2. On the Konflux UI, you should now see your on-push pipeline being triggered.
 
@@ -1093,8 +1125,8 @@ E.g. [Docker Hub](https://hub.docker.com/), [Quay.io](https://quay.io/repository
     value: quay.io/my-user/my-konflux-component:on-pr-{{revision}}
 ```
 
-5. :gear: Push your changes to your `testrepo` fork, either as a new PR or as a change
-   to an existing PR. Observe the behavior as before, and verify that the build
+5. :gear: Push your changes to your `testrepo` fork, either as a new pull request or as a change
+   to an existing pull request. Observe the behavior as before, and verify that the build
    pipeline finishes successfully, and that your public repository contains the images
    pushed by the pipeline.
 
