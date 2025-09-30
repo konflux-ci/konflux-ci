@@ -38,5 +38,5 @@ roleRef:
   name: release-pipeline-resource-role
 subjects:
   - kind: ServiceAccount
-    name: appstudio-pipeline
+    name: release-pipeline
     namespace: user-ns1

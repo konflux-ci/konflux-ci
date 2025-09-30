@@ -19,8 +19,8 @@ running should be configured with a push secret for the registry.
 Tekton provides a way to inject push secrets into pipelines by attaching them to a
 service account.
 
-The service account used for running the pipelines is the namespace's
-`appstudio-pipeline` service account.
+The service account used for running the pipelines is created by Build Service operator
+and named `build-pipeline-<component-name>`.
 
 1. :gear: Create the secret in the pipeline's namespace (see the
    [example below](#example---extract-quay-push-secret) for extracting the
@@ -38,10 +38,10 @@ kubectl create -n $NS secret generic regcred \
  --type=kubernetes.io/dockerconfigjson
 ```
 
-2. :gear: Add the secret to the namespace's appstudio-pipeline service account
+2. :gear: Add the secret to the component's `build-pipeline-<component-name>` service account:
 
 ```bash
-kubectl patch -n $NS serviceaccount appstudio-pipeline -p '{"secrets": [{"name": "regcred"}]}'
+kubectl patch -n $NS serviceaccount "build-pipeline-${COMPONENT_NAME}" -p '{"secrets": [{"name": "regcred"}]}'
 ```
 
 ## Example - Extract Quay Push Secret:

@@ -162,7 +162,7 @@ and modify the `system-reserved` line under `kubeletExtraArgs`:
 ./deploy-test-resources.sh
 ```
 
-5. :gear: If Konflux was installed on a cluster hosted in a remote machine, SSH port-forwarding can 
+5. :gear: If Konflux was installed on a cluster hosted in a remote machine, SSH port-forwarding can
 be used to access. Open an additional terminal and run the following command
 (make sure to add the details of your remote machine and user):
 
@@ -652,9 +652,6 @@ team (the team that supports the deployments of that application).
 The `ReleasePlanAdmission` resource makes use of an Enterprise Contract (EC) policy,
 which defines criteria for gating releases.
 
-Lastly, the process also requires permissions to be granted to the managed environment
-`appstudio-pipeline` service account on several resources.
-
 For more details you can examine the manifests under the
 [managed-ns2 directory](./test/resources/demo-users/user/managed-ns2/).
 
@@ -865,7 +862,6 @@ according to our needs and limitations.
 
 kubectl create namespace $NS
 kubectl label namespace "$NS konflux-ci.dev/type=tenant
-kubectl create serviceaccount appstudio-pipeline -n $NS
 ```
 
 Example:
@@ -873,7 +869,6 @@ Example:
 ```bash
 kubectl create namespace user-ns3
 kubectl label namespace user-ns3 konflux-ci.dev/type=tenant
-kubectl create serviceaccount appstudio-pipeline -n user-ns3
 ```
 
 ### Granting a User Access to a Namespace
