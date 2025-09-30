@@ -3,7 +3,7 @@ kind: Kustomization
 resources:
   - ns.yaml
   - ../../../../../konflux-ci/enterprise-contract/policies
-  - appstudio-pipeline-sa.yaml
+  - release-pipeline-sa.yaml
   - pvc.yaml
   - rbac.yaml
   - role-binding.yaml
