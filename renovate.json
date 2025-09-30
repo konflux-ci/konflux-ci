@@ -5,6 +5,7 @@
       "matchPackageNames": [
         "ghcr.io/chmouel/gosmee",
         "https://github.com/enterprise-contract/*",
+        "https://github.com/conforma/*",
         "https://github.com/konflux-ci/*",
         "https://github.com/redhat-appstudio/*",
         "quay.io/enterprise-contract/*",
