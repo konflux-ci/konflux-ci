@@ -9,7 +9,7 @@ metadata:
   namespace: user-ns1
 spec:
   application: sample-component
-  target: managed-ns1
+  target: user-ns1
 ---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ReleasePlan
@@ -31,7 +31,7 @@ spec:
           value: 105efb845cf6a87891a1392a3a61764e20bc8498
         - name: pathInRepo
           value: "pipelines/tenant-push-to-external-registry/tenant-push-to-external-registry.yaml"
-    serviceAccountName: appstudio-pipeline
+    serviceAccountName: release-pipeline
   data:
     images:
       addGitShaTag: true
