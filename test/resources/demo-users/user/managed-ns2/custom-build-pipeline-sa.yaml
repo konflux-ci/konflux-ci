@@ -3,7 +3,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: regcred-empty
-  namespace: user-ns2
+  namespace: managed-ns2
 type: kubernetes.io/dockerconfigjson
 data:
   .dockerconfigjson: eyJhdXRocyI6eyJ4Ijp7ImVtYWlsIjoiIn19fQ==
@@ -11,7 +11,7 @@ data:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: appstudio-pipeline
-  namespace: user-ns2
+  name: build-pipeline
+  namespace: managed-ns2
 secrets:
 - name: regcred-empty
