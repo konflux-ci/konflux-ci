@@ -11,7 +11,7 @@ resources:
 - deny-virtual-domain.yaml
 namespace: namespace-lister
 images:
-- digest: sha256:a0e2a527cc1d1be096a4b958fa07fd172ae2a8403b8991f0883323d076cd9134
+- digest: sha256:d123011aebc91a046c0eb9f557e6447047ab3c9a782359363d2799fff140c4bd
   name: quay.io/konflux-ci/namespace-lister
   newName: quay.io/konflux-ci/namespace-lister
 patches:
