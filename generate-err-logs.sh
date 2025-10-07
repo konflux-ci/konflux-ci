@@ -128,6 +128,10 @@ generate_logs() {
         docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}" 2>&1 || echo "Failed to list containers"
     } > "$logs_dir/container-resources.log"
 
+echo "logs from all pods from user-ns2 namespace"
+kubectl get pods -n user-ns2 -o name \
+  | xargs -I {} kubectl logs -n user-ns2 --all-containers {}
+
     local namespaces
     namespaces=$(kubectl get namespaces -o name | xargs -n1 basename)
 
