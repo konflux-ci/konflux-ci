@@ -2,7 +2,7 @@ apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
   annotations:
-    build.appstudio.openshift.io/repo: 
+    build.appstudio.openshift.io/repo:
     build.appstudio.redhat.com/commit_sha: main
     build.appstudio.redhat.com/target_branch: main
     pipelinesascode.tekton.dev/max-keep-runs: "3"
@@ -362,7 +362,8 @@ spec:
     - name: workspace
     - name: git-auth
       optional: true
-  taskRunTemplate: {}
+  taskRunTemplate:
+    serviceAccountName: build-pipeline-sample-component
   workspaces:
   - name: workspace
     volumeClaimTemplate:

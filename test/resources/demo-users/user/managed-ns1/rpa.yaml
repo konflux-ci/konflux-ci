@@ -28,5 +28,5 @@ spec:
           value: 0cbe8aebf8b85763b724dc292641d2c587f13b6e
         - name: pathInRepo
           value: "pipelines/managed/push-to-external-registry/push-to-external-registry.yaml"
-    serviceAccountName: appstudio-pipeline
+    serviceAccountName: release-pipeline
   policy: default
