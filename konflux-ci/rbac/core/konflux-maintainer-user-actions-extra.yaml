@@ -1,7 +1,7 @@
 ---
 # Deprecated
 #
-# This ClusterRole extends `konflux-viewer-user-actions` with permissions
+# This ClusterRole extends `konflux-maintainer-user-actions` with permissions
 # on `projctl` resources.
 #
 # As these CustomResources are not installed as part of `konflux-ci/konflux-ci`,
@@ -11,9 +11,9 @@
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: konflux-viewer-user-actions-extra
+  name: konflux-maintainer-user-actions-extra
   labels:
-    rbac.konflux-ci.dev/aggregate-to-viewer: "true"
+    rbac.konflux-ci.dev/aggregate-to-maintainer: "true"
 rules:
   - verbs:
       - get

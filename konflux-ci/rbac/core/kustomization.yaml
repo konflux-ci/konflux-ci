@@ -3,10 +3,16 @@ kind: Kustomization
 resources:
 - konflux-admin-user-actions.yaml
 - konflux-admin-user-actions-core.yaml
+- konflux-contributor-user-actions.yaml
+- konflux-contributor-user-actions-core.yaml
+- konflux-maintainer-user-actions.yaml
+- konflux-maintainer-user-actions-core.yaml
 - konflux-self-access-reviewer.yaml
 - konflux-viewer-user-actions.yaml
 - konflux-viewer-user-actions-core.yaml
 # Deprecated
 # These ClusterRoles will be removed eventually
 - konflux-admin-user-actions-extra.yaml
+- konflux-contributor-user-actions-extra.yaml
+- konflux-maintainer-user-actions-extra.yaml
 - konflux-viewer-user-actions-extra.yaml
