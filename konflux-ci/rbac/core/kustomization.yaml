@@ -6,3 +6,7 @@ resources:
 - konflux-self-access-reviewer.yaml
 - konflux-viewer-user-actions.yaml
 - konflux-viewer-user-actions-core.yaml
+# Deprecated
+# These ClusterRoles will be removed eventually
+- konflux-admin-user-actions-extra.yaml
+- konflux-viewer-user-actions-extra.yaml
