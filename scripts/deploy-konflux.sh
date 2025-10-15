@@ -1,6 +1,7 @@
 #!/bin/bash -e
 
 script_path="$(dirname -- "${BASH_SOURCE[0]}")"
+repo_root="$(dirname -- "${script_path}")"
 
 main() {
     echo "Deploying Konflux" >&2
@@ -11,7 +12,7 @@ main() {
     "${script_path}/wait-for-all.sh" || ret="$?"
     if [ $ret -ne 0 ]; then
         echo "Deployment failed"
-        ./generate-err-logs.sh
+        "${script_path}/generate-err-logs.sh"
     else
         echo -e "
         ***************************
@@ -27,30 +28,30 @@ deploy() {
 
     echo "🚀 Deploying Application API CRDs..." >&2
     # This will deploy the commos CRDs used in Konflux
-    kubectl apply -k "${script_path}/konflux-ci/application-api"
+    kubectl apply -k "${repo_root}/konflux-ci/application-api"
 
     echo "👥 Setting up RBAC permissions..." >&2
-    kubectl apply -k "${script_path}/konflux-ci/rbac"
+    kubectl apply -k "${repo_root}/konflux-ci/rbac"
 
     echo "📜 Deploying Enterprise Contract..." >&2
-    retry kubectl apply -k "${script_path}/konflux-ci/enterprise-contract"
+    retry kubectl apply -k "${repo_root}/konflux-ci/enterprise-contract"
 
     echo "🎯 Deploying Release Service..." >&2
-    retry kubectl apply -k "${script_path}/konflux-ci/release" --server-side
+    retry kubectl apply -k "${repo_root}/konflux-ci/release" --server-side
 
     # The build-service depends on CRDs from the release-service
     echo "🏗️  Deploying Build Service..." >&2
-    retry kubectl apply -k "${script_path}/konflux-ci/build-service"
+    retry kubectl apply -k "${repo_root}/konflux-ci/build-service"
 
     # The integration-service depends on CRDs from the release-service
     echo "🔄 Deploying Integration Service..." >&2
-    retry kubectl apply -k "${script_path}/konflux-ci/integration"
+    retry kubectl apply -k "${repo_root}/konflux-ci/integration"
 
     echo "📋 Setting up Namespace Lister..." >&2
-    retry kubectl apply -k "${script_path}/konflux-ci/namespace-lister"
+    retry kubectl apply -k "${repo_root}/konflux-ci/namespace-lister"
 
     echo "🎨 Deploying UI components..." >&2
-    kubectl apply -k "${script_path}/konflux-ci/ui"
+    kubectl apply -k "${repo_root}/konflux-ci/ui"
     if ! kubectl get secret oauth2-proxy-client-secret -n konflux-ui; then
         echo "🔑 Setting up OAuth2 proxy client secret..." >&2
         kubectl get secret oauth2-proxy-client-secret --namespace=dex \
