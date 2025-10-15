@@ -8,6 +8,11 @@ Konflux-CI
   * [Machine Minimum Requirements](#machine-minimum-requirements)
   * [Installing Software Dependencies](#installing-software-dependencies)
   * [Bootstrapping the Cluster](#bootstrapping-the-cluster)
+    + [1. Prerequisites](#1-prerequisites)
+      - [A. Configure Smee for GitHub Webhooks](#a-configure-smee-for-github-webhooks)
+      - [B. Create a GitHub App and Configure Environment](#b-create-a-github-app-and-configure-environment)
+    + [2. Run the Deployment](#2-run-the-deployment)
+    + [3. Access the UI](#3-access-the-ui)
   * [Enable Pipelines Triggering via Webhooks](#enable-pipelines-triggering-via-webhooks)
   * [Onboard a new Application](#onboard-a-new-application)
     + [Option 1: Onboard Application with the Konflux UI](#option-1-onboard-application-with-the-konflux-ui)
@@ -104,78 +109,79 @@ git clone https://github.com/konflux-ci/konflux-ci.git
 cd konflux-ci
 ```
 
-**Note:** It is recommended that you increase the `inotify` resource limits in order to
-avoid issues related to
-[too many open files](https://kind.sigs.k8s.io/docs/user/known-issues/#pod-errors-due-to-too-many-open-files). To increase the limits temporarily, run the
-following commands:
+### 1. Prerequisites
+Before running the deployment script, you must configure your environment. The script will exit with an error if these steps are not completed.
 
+#### A. Configure Smee for GitHub Webhooks
+
+Since GitHub cannot reach services inside your local Kind cluster, we use [smee.io](https://smee.io) as a webhook proxy to relay GitHub events to your cluster.
+
+:gear: **Create and configure your Smee channel:**
+
+1. Visit https://smee.io and click "Start a new channel"
+2. Copy your unique channel URL (e.g., `https://smee.io/AbCdEfGhIjK`)
+3. Create the configuration file from the template:
+   ```bash
+   cp scripts/smee-channel-id.tpl scripts/smee-channel-id.yaml
+   ```
+4. Edit `scripts/smee-channel-id.yaml` and replace **both** occurrences of `https://smee.io/CHANNELID` with your actual Smee channel URL
+
+**Save this Smee URL** - you'll need it when creating your GitHub App in the next step.
+
+#### B. Create a GitHub App and Configure Environment
+
+:gear: **Follow the GitHub App creation process:**
+
+1. Create a GitHub App following the [Pipelines-as-Code manual setup guide](https://pipelinesascode.com/docs/install/github_apps/#manual-setup), with these **Konflux-specific modifications**:
+
+   - **Homepage URL**: Use `https://localhost:9443` (the local Konflux UI)
+   - **Webhook URL**: Use your **Smee channel URL** from Step A (not a cluster route)
+
+2. After creating the app, **collect the following information**:
+   - App ID (shown on the app settings page)
+   - Private key file (generate and download via "Generate a private key" button)
+   - Webhook secret (the random value you generated during app creation)
+
+:gear: **Configure the deployment environment file:**
+
+1. Copy the environment template:
+   ```bash
+   cp scripts/deploy-e2e.env.template scripts/deploy-e2e.env
+   ```
+
+2. Edit `scripts/deploy-e2e.env` and fill in the required values:
+   ```bash
+   # REQUIRED: Absolute path to your GitHub App private key
+   GITHUB_PRIVATE_KEY_PATH="/path/to/your-app.2025-10-15.private-key.pem"
+
+   # REQUIRED: Your GitHub App ID
+   GITHUB_APP_ID="123456"
+
+   # OPTIONAL: Quay.io token (leave empty to use in-cluster registry)
+   QUAY_TOKEN=""
+   ```
+
+See the [template file](scripts/deploy-e2e.env.template) comments for additional optional configuration parameters.
+
+### 2. Run the Deployment
+:gear: Once the prerequisites are configured, you can create the cluster and deploy all services with a single command:
 ```bash
-sudo sysctl fs.inotify.max_user_watches=524288
-sudo sysctl fs.inotify.max_user_instances=512
+./scripts/deploy-e2e.sh
 ```
+This script automates the entire process. Below are some important notes on what it does automatically.
 
-From the root of this repository, run the setup scripts:
+- **Note on System Limits (Linux Only)**: To prevent issues with `too many open files` on Linux, the script will attempt to increase `inotify` resource limits by running `sudo sysctl`. The script will explain this and you may be prompted for your password.
 
-1. :gear: Create a cluster
+- **Note on Podman**: When using Podman as the container runtime, the script will automatically increase the PID limit on the control-plane container to `8192`. This is recommended to prevent resource issues. You can disable this by editing `scripts/deploy-e2e.env` and setting `INCREASE_PODMAN_PIDS_LIMIT=0`.
 
-```bash
-kind create cluster --name konflux --config kind-config.yaml
-```
-
-**Note:** When using Podman, it is recommended that you increase the PID limit on the
-container running the cluster, as the default might not be enough when the cluster
-becomes busy:
-
-```bash
-podman update --pids-limit 4096 konflux-control-plane
-```
-
-**Note:** If pods still fail to start due to missing resources, you may need to reserve
-additional resources to the Kind cluster. Edit [kind-config.yaml](./kind-config.yaml)
-and modify the `system-reserved` line under `kubeletExtraArgs`:
-
-```yaml
-  kubeadmConfigPatches:
-  - |
-    kind: InitConfiguration
-    nodeRegistration:
-      kubeletExtraArgs:
-        node-labels: "ingress-ready=true"
-        system-reserved: memory=12Gi
-```
-
-2. :gear: Deploy the dependencies
-
-```bash
-./deploy-deps.sh
-```
-
-> [!NOTE]
-> If you are testing the Konflux Operator and want it to manage the Dex installation
-(e.g. for the UI component), you can skip the manual Dex deployment by setting
-`SKIP_DEX=true ./deploy-deps.sh`.
-
-
-**Note:** If you encounter Docker Hub rate limiting failures during deployment,
+- **Note on Docker Hub** If you encounter Docker Hub rate limiting failures during deployment,
 see
 [docs/troubleshooting-docker-rate-limits.md](docs/troubleshooting-docker-rate-limits.md).
 
-3. :gear: Deploy Konflux
+- **Note on Cluster Resources**: If you find that pods are failing to start due to a lack of resources, you can enable a temporary memory increase for the Kind cluster. To do this, edit `scripts/deploy-e2e.env` and set `INCREASE_KIND_RESOURCES=1`. For permanent changes, you can directly edit `kind-config.yaml`.
 
-```bash
-./deploy-konflux.sh
-```
-
-4. :gear: Deploy demo users
-
-```bash
-./deploy-test-resources.sh
-```
-
-5. :gear: If Konflux was installed on a cluster hosted in a remote machine, SSH port-forwarding can
-be used to access. Open an additional terminal and run the following command
-(make sure to add the details of your remote machine and user):
-
+### 3. Access the UI
+If Konflux was installed on a cluster hosted in a remote machine, SSH port-forwarding can be used to access it. Open an additional terminal and run the following command (make sure to add the details of your remote machine and user):
 ```bash
 ssh -L 9443:localhost:9443 $USER@$VM_IP
 ```
@@ -191,48 +197,23 @@ to Pull Request webhooks, build a user application and push it to a registry.
 
 ## Enable Pipelines Triggering via Webhooks
 
-Pipelines Can be triggered by Pull Request activities, and their outcomes will be
-reported back to the PR page in GitHub.
+If you completed the prerequisites correctly, your GitHub App and Smee proxy are already configured and deployed to the cluster. The deployment script automatically created the necessary secrets in the `pipelines-as-code`, `build-service`, and `integration-service` namespaces.
 
-A GitHub app is required for creating webhooks that Tekton will listen on. When deployed
-in a local environment like Kind, GitHub will not be able to reach a service within the
-cluster. For that reason, we need to use a proxy that will listen on such events
-from within the cluster and will relay those events internally.
+Now you just need to install your GitHub App on the repositories you want to build with Konflux.
 
-To do that, we rely on [smee](https://smee.io/): We configure a GitHub app to send
-events to a channel we create on a public `smee` server, and we deploy a client
-within the cluster to listen to those events. The client will relay those events to
-pipelines-as-code (Tekton) inside the cluster.
+:gear: **Install the GitHub App on your repositories:**
 
-When the dependencies were deployed, a smee channel was created for you, a client was
-deployed to listen to it, and the channel's webhook Proxy URL was stored in a patch
-file.
+1. Navigate to your GitHub App settings page at `https://github.com/settings/apps`
+2. Click on your app name
+3. Click "Install App" in the left sidebar
+4. Select your account or organization
+5. Choose either:
+   - "All repositories" to enable Konflux for all your repos, OR
+   - "Only select repositories" and choose specific repos to use with Konflux
 
-1. :gear: Take note of the smee channel's webhook Proxy URL created for you:
+Once installed, your repositories will send webhook events through your Smee channel to the Pipelines-as-Code controller in your cluster, which will trigger builds when you create or update Pull Requests.
 
-```
-grep value dependencies/smee/smee-channel-id.yaml
-```
-
-**NOTE:** if you already have a channel that you'd like to keep using, copy its URL to
-the `value` field inside the `smee-channel-id.yaml` file and rerun `deploy-deps.sh`.
-The script will not recreate the patch file if it already exists.
-
-2. :gear: Create a GitHub app following
-   [Pipelines-as-Code documentation](https://pipelinesascode.com/docs/install/github_apps/#manual-setup).
-
-   For `Homepage URL` you can insert `https://localhost:9443/` (it doesn't matter).
-
-   For `Webhook URL` insert the smee client's webhook proxy URL from previous steps.
-
-   :gear: Per the instructions on the link, generate and download the private key and create a
-   secret on the cluster providing the location of the private key, the App ID, and the
-   openssl-generated secret created during the process.
-
-3. :gear: To allow Konflux to send PRs to your application repositories, the same secret
-   should be created inside the `build-service` and the `integration-service`
-   namespaces. See additional details under
-   [Configuring GitHub Application Secrets](./docs/github-secrets.md).
+**Note:** If you need to manually verify or troubleshoot the GitHub App secrets, see [Configuring GitHub Application Secrets](./docs/github-secrets.md) for details on the secret structure.
 
 ## Onboard a new Application
 

@@ -1,0 +1,1 @@
+../dependencies/smee/smee-channel-id.tpl

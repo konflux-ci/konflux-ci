@@ -2,6 +2,13 @@
 
 script_path="$(dirname -- "${BASH_SOURCE[0]}")"
 
+# Source the environment file if it exists, allowing for user-specific overrides.
+# The e2e.env file is intentionally not checked in, so we disable the shellcheck warning.
+# shellcheck disable=SC1091
+if [ -f "${script_path}/run-e2e.env" ]; then
+    source "${script_path}/run-e2e.env"
+fi
+
 main() {
     echo "Running E2E tests" >&2
     # shellcheck disable=SC1091
