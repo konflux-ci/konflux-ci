@@ -91,7 +91,7 @@ jobs:
 
       - name: Deploying Dependencies
         run: |
-          ./deploy-deps.sh
+          ./scripts/deploy-deps.sh
 
       - name: List namespaces
         run: |
@@ -99,11 +99,11 @@ jobs:
 
       - name: Wait for the dependencies to be ready
         run: |
-          ./wait-for-all.sh
+          ./scripts/wait-for-all.sh
 
       - name: Deploying Konflux
         run: |
-          ./deploy-konflux.sh
+          ./scripts/deploy-konflux.sh
 
       - name: List namespaces
         run: |
@@ -111,7 +111,7 @@ jobs:
 
       - name: Deploy test resources
         run: |
-          ./deploy-test-resources.sh
+          ./scripts/deploy-test-resources.sh
 
       - name: Run Go Tests
         run: |
@@ -140,7 +140,7 @@ jobs:
       - name: Generate error logs
         if: ${{ !cancelled() }}
         run: |
-          ./generate-err-logs.sh
+          ./scripts/generate-err-logs.sh
 
       - name: Archive logs
         if: ${{ !cancelled() }}

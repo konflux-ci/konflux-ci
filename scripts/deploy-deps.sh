@@ -1,6 +1,7 @@
 #!/bin/bash -e
 
 script_path="$(dirname -- "${BASH_SOURCE[0]}")"
+repo_root="$(dirname -- "${script_path}")"
 
 main() {
     echo "🔍 Checking requirements" >&2
@@ -44,7 +45,7 @@ deploy() {
     echo "🤝 Deploying Trust Manager..." >&2
     deploy_trust_manager
     echo "📜 Setting up Cluster Issuer..." >&2
-    kubectl apply -k "${script_path}/dependencies/cluster-issuer"
+    kubectl apply -k "${repo_root}/dependencies/cluster-issuer"
     echo "🐱 Deploying Tekton..." >&2
     deploy_tekton
     echo "🔑 Deploying Dex..." >&2
@@ -58,7 +59,7 @@ deploy() {
 }
 
 test_pvc_binding(){
-    local pvc_resources="${script_path}/dependencies/pre-deployment-pvc-binding"
+    local pvc_resources="${repo_root}/dependencies/pre-deployment-pvc-binding"
     echo "Creating PVC from '$pvc_resources' using the cluster's default storage class"
     sleep 10  # Retries are not enough to ensure the default SA is created, see https://github.com/konflux-ci/konflux-ci/issues/161
     retry "kubectl apply -k ${pvc_resources}" "Error while creating pre-deployment-pvc-binding"
@@ -71,18 +72,18 @@ test_pvc_binding(){
 deploy_tekton() {
     echo "  🐱 Installing Tekton Operator..." >&2
     # Operator
-    kubectl apply -k "${script_path}/dependencies/tekton-operator"
+    kubectl apply -k "${repo_root}/dependencies/tekton-operator"
     retry "kubectl wait --for=condition=Ready -l app=tekton-operator -n tekton-operator pod --timeout=240s" \
           "Tekton Operator did not become available within the allocated time"
     # Wait for the operator to create configs for the first time before applying configs
     retry "kubectl wait --for=condition=Ready tektonconfig/config --timeout=360s" \
           "Tekton Config resource was not created within the allocated time"
     echo "  ⚙️  Configuring Tekton..." >&2
-    retry "kubectl apply -k ${script_path}/dependencies/tekton-config" \
+    retry "kubectl apply -k ${repo_root}/dependencies/tekton-config" \
           "The Tekton Config resource was not updated within the allocated time"
 
     echo "  🔄 Setting up Pipeline As Code..." >&2
-    kubectl apply -k "${script_path}/dependencies/pipelines-as-code"
+    kubectl apply -k "${repo_root}/dependencies/pipelines-as-code"
 
     # Wait for the operator to reconcile after applying the configs
     kubectl wait --for=condition=Ready tektonconfig/config --timeout=60s
@@ -97,25 +98,31 @@ deploy_tekton() {
             --from-literal=POSTGRES_USER=postgres \
             --from-literal=POSTGRES_PASSWORD="$db_password"
     fi
-    kubectl apply -k "${script_path}/dependencies/tekton-results"
+    kubectl apply -k "${repo_root}/dependencies/tekton-results"
+
+    # Wait for tekton-results-api to be ready before the watcher starts connecting
+    # This prevents a race condition where the watcher crashes if the API isn't ready yet
+    echo "  ⏳ Waiting for tekton-results-api to be ready..." >&2
+    retry "kubectl wait --for=condition=Available --timeout=120s deployment/tekton-results-api -n tekton-pipelines" \
+          "tekton-results-api did not become available within the allocated time"
 }
 
 deploy_cert_manager() {
-    kubectl apply -k "${script_path}/dependencies/cert-manager"
+    kubectl apply -k "${repo_root}/dependencies/cert-manager"
     sleep 5
     retry "kubectl wait --for=condition=Ready --timeout=120s -l app.kubernetes.io/instance=cert-manager -n cert-manager pod" \
           "Cert manager did not become available within the allocated time"
 }
 
 deploy_trust_manager() {
-    kubectl apply -k "${script_path}/dependencies/trust-manager"
+    kubectl apply -k "${repo_root}/dependencies/trust-manager"
     sleep 5
     retry "kubectl wait --for=condition=Ready --timeout=60s -l app.kubernetes.io/instance=trust-manager -n cert-manager pod" \
           "Trust manager did not become available within the allocated time"
 }
 
 deploy_dex() {
-    kubectl apply -k "${script_path}/dependencies/dex"
+    kubectl apply -k "${repo_root}/dependencies/dex"
     if ! kubectl get secret oauth2-proxy-client-secret -n dex; then
         echo "🔑 Creating secret oauth2-proxy-client-secret" >&2
         local client_secret
@@ -127,29 +134,29 @@ deploy_dex() {
 }
 
 deploy_registry() {
-    kubectl apply -k "${script_path}/dependencies/registry"
+    kubectl apply -k "${repo_root}/dependencies/registry"
     retry "kubectl wait --for=condition=Ready --timeout=240s -n kind-registry -l run=registry pod" \
           "The local registry did not become available within the allocated time"
 }
 
 deploy_smee() {
-    local patch="${script_path}/dependencies/smee/smee-channel-id.yaml"
+    local patch="${repo_root}/dependencies/smee/smee-channel-id.yaml"
     if [ ! -f "$patch" ]; then
         echo "Randomizing smee-channel ID"
         local channel_id
         local placeholder=CHANNELID
-        local template="${script_path}/dependencies/smee/smee-channel-id.tpl"
+        local template="${repo_root}/dependencies/smee/smee-channel-id.tpl"
         channel_id="$(head -c 30 /dev/random | base64 | tr -dc 'a-zA-Z0-9')"
         sed "s/$placeholder/$channel_id/g" "$template" > "$patch"
     fi
-    kubectl apply -k "${script_path}/dependencies/smee"
+    kubectl apply -k "${repo_root}/dependencies/smee"
 }
 
 deploy_kyverno() {
-    kubectl apply -k "${script_path}/dependencies/kyverno" --server-side
+    kubectl apply -k "${repo_root}/dependencies/kyverno" --server-side
     # Wait for policy CRD to be installed. Don't need to wait for everything to be up
     sleep 5
-    kubectl apply -k "${script_path}/dependencies/kyverno/policy"
+    kubectl apply -k "${repo_root}/dependencies/kyverno/policy"
 }
 
 retry() {

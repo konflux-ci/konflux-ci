@@ -6,9 +6,9 @@ Contributing Guidelines
 - [Editing Markdown Files](#editing-markdown-files)
 - [Using KubeLinter](#using-kubelinter)
 - [Running E2E test](#running-e2e-test)
-  * [Prerequisites](#prerequisites)
-  * [Setup](#setup)
-  * [Running the test](#running-the-test)
+  * [Step 1: Deploy the Konflux Environment](#step-1-deploy-the-konflux-environment)
+  * [Step 2: Configure the E2E Test Runner](#step-2-configure-the-e2e-test-runner)
+  * [Step 3: Run the Test](#step-3-run-the-test)
 
 <!-- tocstop -->
 
@@ -48,48 +48,32 @@ It may be also recommended to create a configuration file. To do so please check
 this file will allow you to ignore or include specific KubeLinter checks.
 
 # Running E2E test
-In order to validate changes quicker, it is possible to run E2E test, which validates that:
-* Application and Component can be created
-* Build PipelineRun is triggered and can finish successfully
-* Integration test gets triggered and finishes successfully
-* Application Snapshot can be released successfully
+To validate changes, you can run the end-to-end (E2E) test suite which validates the core Konflux user journey, from creating an application to releasing it.
 
-## Prerequisites
-* Fork of https://github.com/konflux-ci/testrepo is created and your GitHub App is installed there
-* Konflux is deployed on `kind` cluster (follow the guide in README)
-* quay.io organization that has `test-images` repository created, with robot account that has admin access to that repo
+## Step 1: Deploy the Konflux Environment
+This is the most important prerequisite. The test suite runs against a live, deployed Konflux instance.
 
-## Setup
-Export following environment variables
-```
-# quay.io org where the built and released image will be pushed to
-export QUAY_ORG="" \
-# quay.io org OAuth access token
-QUAY_TOKEN="" \
-# Content of quay.io credentials config generated (ideally) for the robot account 
-# that has access to $QUAY_ORG/test-images repository
-QUAY_DOCKERCONFIGJSON="$(< /path/to/docker/config.json)" \
-# Your GitHub App's ID
-APP_ID="" \
-# Your GitHub App's private key
-APP_PRIVATE_KEY="" \
-# Your GitHub App's webhook secret
-APP_WEBHOOK_SECRET="" \
-# URL of the smee.io channel you created
-SMEE_CHANNEL="" \
-# Name of the GitHub org/username where the https://github.com/konflux-ci/testrepo is forked
-GH_ORG="" \
-# GitHub token with permissions to merge PRs in your GH_ORG
-GH_TOKEN=""
-```
+:gear: **Follow the complete `Bootstrapping the Cluster` guide in the `README.md` file.**
 
-## Running the test
+This includes:
+- Configuring your `dependencies/smee/smee-channel-id.yaml`.
+- Configuring your main deployment environment file at `scripts/deploy-e2e.env` with your GitHub App secrets and Quay token.
+- Running `./scripts/deploy-e2e.sh` to bring the entire environment online.
 
-Run (from the root of the repository directory):
-```
-./deploy-test-resources.sh
-./test/e2e/prepare-e2e.sh
+## Step 2: Configure the E2E Test Runner
+The test runner script needs its own configuration to know how to interact with your deployed environment (e.g., which GitHub repository to open a PR against). This configuration is kept separate from the main deployment secrets.
+
+:gear: **Create and fill out the test environment file**:
+  - Copy the template: `cp test/e2e/run-e2e.env.template test/e2e/run-e2e.env`
+  - Edit `test/e2e/run-e2e.env` and provide the required values.
+
+*(Alternative)*: You can also `export` these variables into your shell. The script will use exported variables before falling back to the `.env` file.
+
+## Step 3: Run the Test
+Once your environment is deployed and your test runner is configured, you can execute the test suite.
+
+:gear: **From the root of the repository, run the command**:
+```bash
 ./test/e2e/run-e2e.sh
 ```
-
-The source code of the test is located [.](https://github.com/konflux-ci/e2e-tests/tree/main/tests/konflux-demo)
+The source code for the test is located at https://github.com/konflux-ci/e2e-tests/tree/main/tests/konflux-demo.
