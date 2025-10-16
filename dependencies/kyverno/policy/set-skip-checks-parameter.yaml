@@ -1,0 +1,37 @@
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  annotations:
+    policies.kyverno.io/description: This policy changes the default value of the skip-checks
+      parameter to true in the pipelineSpec for Tekton PipelineRuns with the label
+      pipelines.appstudio.openshift.io/type=build. This skips security scanning tasks
+      including clair-scan, which is useful for CI environments where these steps
+      consume excessive resources and frequently timeout.
+  name: set-skip-checks-parameter
+spec:
+  background: false
+  rules:
+  - match:
+      any:
+      - resources:
+          kinds:
+          - PipelineRun
+          operations:
+          - CREATE
+          selector:
+            matchLabels:
+              pipelinesascode.tekton.dev/original-prname: "konflux-ci-upstream-*-on-push"
+    mutate:
+      foreach:
+      - list: request.object.spec.pipelineSpec.params
+        preconditions:
+          any:
+          - key: '{{ element.name }}'
+            operator: Equals
+            value: "skip-checks"
+        patchesJson6902: |-
+          - path: /spec/pipelineSpec/params/{{elementIndex}}/default
+            op: replace
+            value: "true"
+    name: change-skip-checks-default
