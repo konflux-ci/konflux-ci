@@ -2,25 +2,21 @@
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: konflux-viewer-user-actions
+  name: konflux-maintainer-user-actions
 rules:
   - verbs:
       - get
       - list
       - watch
+      - create
+      - update
+      - patch
     apiGroups:
       - appstudio.redhat.com
     resources:
       - applications
       - components
       - imagerepositories
-  - verbs:
-      - get
-      - list
-      - watch
-    apiGroups:
-      - appstudio.redhat.com
-    resources:
       - snapshots
   - verbs:
       - get
@@ -44,6 +40,10 @@ rules:
       - get
       - list
       - watch
+      - create
+      - update
+      - patch
+      - delete
     apiGroups:
       - appstudio.redhat.com
     resources:
@@ -60,6 +60,10 @@ rules:
       - get
       - list
       - watch
+      - create
+      - update
+      - patch
+      - delete
     apiGroups:
       - appstudio.redhat.com
     resources:
@@ -69,6 +73,10 @@ rules:
       - get
       - list
       - watch
+      - create
+      - update
+      - patch
+      - delete
     apiGroups:
       - appstudio.redhat.com
     resources:
@@ -89,3 +97,9 @@ rules:
       - ''
     resources:
       - namespaces
+  - verbs:
+      - list
+    apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - rolebindings
