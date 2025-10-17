@@ -42,7 +42,7 @@ spec:
                         mountPath: /etc/ssl/certs
                         readOnly: true
   pipeline:
-    default-service-account: appstudio-pipeline
+    default-service-account: default
     options:
       disabled: false
       deployments:
