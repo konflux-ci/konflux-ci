@@ -111,7 +111,7 @@
       "fileMatch": ["(^|\/)kustomization\\.(yaml|yml)$"],
       "matchStrings": [
         "# renovate: datasource=git-refs depName=(?<packageName>https:\\/\\/github\\.com\\/[^\\s]+)",
-        "- https:\\/\\/storage\\.googleapis\\.com\\/tekton-releases\\/[^/]+\\/previous\\/v(?<currentValue>[^/]+)\\/"
+        "- https:\\/\\/infra\\.tekton\\.dev\\/tekton-releases\\/[^/]+\\/previous\\/v(?<currentValue>[^/]+)\\/"
       ],
       "datasourceTemplate": "git-refs",
       "versioningTemplate": "semver"
