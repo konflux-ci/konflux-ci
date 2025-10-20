@@ -150,6 +150,10 @@ and modify the `system-reserved` line under `kubeletExtraArgs`:
 ./deploy-deps.sh
 ```
 
+**Note:** If you encounter Docker Hub rate limiting failures during deployment,
+see
+[docs/troubleshooting-docker-rate-limits.md](docs/troubleshooting-docker-rate-limits.md).
+
 3. :gear: Deploy Konflux
 
 ```bash
