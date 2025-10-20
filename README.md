@@ -150,6 +150,10 @@ and modify the `system-reserved` line under `kubeletExtraArgs`:
 ./deploy-deps.sh
 ```
 
+**Note:** If you encounter Docker Hub rate limiting failures during deployment,
+see
+[docs/troubleshooting-docker-rate-limits.md](docs/troubleshooting-docker-rate-limits.md).
+
 3. :gear: Deploy Konflux
 
 ```bash
@@ -162,7 +166,7 @@ and modify the `system-reserved` line under `kubeletExtraArgs`:
 ./deploy-test-resources.sh
 ```
 
-5. :gear: If Konflux was installed on a cluster hosted in a remote machine, SSH port-forwarding can 
+5. :gear: If Konflux was installed on a cluster hosted in a remote machine, SSH port-forwarding can
 be used to access. Open an additional terminal and run the following command
 (make sure to add the details of your remote machine and user):
 
