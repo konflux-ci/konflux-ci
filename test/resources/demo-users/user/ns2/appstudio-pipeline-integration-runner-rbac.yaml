@@ -18,12 +18,6 @@ rules:
     - pods/log
   verbs: ["get", "list"]
 ---
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: konflux-integration-runner
-  namespace: user-ns2
----
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
