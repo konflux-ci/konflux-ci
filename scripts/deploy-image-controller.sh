@@ -1,6 +1,7 @@
 #!/bin/bash -e
 
-script_path="$(dirname -- "${BASH_SOURCE[0]}")" 
+script_path="$(dirname -- "${BASH_SOURCE[0]}")"
+repo_root="$(dirname -- "${script_path}")"
 
 main() {
     local token="${1:?A token for quay should be provided}"
@@ -15,7 +16,7 @@ main() {
 
 deploy() {
     echo "🌊 Deploying Image Controller components..." >&2
-    kubectl apply -k "${script_path}/konflux-ci/image-controller"
+    kubectl apply -k "${repo_root}/konflux-ci/image-controller"
 }
 
 create_secret() {
