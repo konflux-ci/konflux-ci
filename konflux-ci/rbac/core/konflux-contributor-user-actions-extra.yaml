@@ -1,0 +1,27 @@
+---
+# Deprecated
+#
+# This ClusterRole extends `konflux-contributor-user-actions` with permissions
+# on `projctl` resources.
+#
+# As these CustomResources are not installed as part of `konflux-ci/konflux-ci`,
+# this ClusterRole will be eventually removed.
+# The only purpose of this ClusterRole is to allow anyone relying on these
+# permissions to migrate.
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: konflux-contributor-user-actions-extra
+  labels:
+    rbac.konflux-ci.dev/aggregate-to-contributor: "true"
+rules:
+  - verbs:
+      - get
+      - list
+      - watch
+    apiGroups:
+      - projctl.konflux.dev
+    resources:
+      - projects
+      - projectdevelopmentstreams
+      - projectdevelopmentstreamtemplates
