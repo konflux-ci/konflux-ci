@@ -87,6 +87,9 @@ deploy_tekton() {
     # Wait for the operator to reconcile after applying the configs
     kubectl wait --for=condition=Ready tektonconfig/config --timeout=60s
 
+    echo "  🔐 Setting up Tekton Chains RBAC..." >&2
+    kubectl apply -k "${script_path}/dependencies/tekton-chains-rbac"
+
     echo "  📊 Setting up Tekton Results..." >&2
     if ! kubectl get secret tekton-results-postgres -n tekton-pipelines; then
         echo "🔑 Creating secret tekton-results-postgres" >&2
