@@ -8,6 +8,7 @@
         "https://github.com/conforma/*",
         "https://github.com/konflux-ci/*",
         "https://github.com/redhat-appstudio/*",
+        "quay.io/conforma/*",
         "quay.io/enterprise-contract/*",
         "quay.io/konflux-ci/*",
         "quay.io/konflux-ci/tekton-catalog/*",
