@@ -3,6 +3,8 @@ kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: konflux-admin-user-actions
+  annotations:
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
 aggregationRule:
   clusterRoleSelectors:
   - matchLabels:
