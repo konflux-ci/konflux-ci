@@ -9,6 +9,6 @@ images:
   - name: quay.io/konflux-ci/workspace-manager
     digest: sha256:d72968158bec10442236d4f84a904beeff5a022f3e032ecdd2d421651c01f8d3
   - name: quay.io/konflux-ci/konflux-ui
-    digest: sha256:4df0751a3ce5689112e30d9e621a3c626cbee62d595a076b4b331c048933a536
+    digest: sha256:94611101d6dcd4cfa4ccc4563133b1e1241b746ecf53f058fd227462b4c71c15
 
 namespace: konflux-ui
