@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
 - konflux-admin-user-actions.yaml
 - konflux-admin-user-actions-core.yaml
+- konflux-admin-user-actions-batch.yaml
 - konflux-contributor-user-actions.yaml
 - konflux-contributor-user-actions-core.yaml
 - konflux-maintainer-user-actions.yaml
