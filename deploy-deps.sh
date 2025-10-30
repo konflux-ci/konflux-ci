@@ -21,11 +21,25 @@ check_req(){
     # check if requirements are installed
     for i in "${requirements[@]}"; do
         if ! command -v "$i" &> /dev/null; then
-                uninstalled_requirements+=("$i")
+                if [ "$i" == "kubectl" ]; then
+                    uninstalled_requirements+=("kubectl (server-side support required - v1.31.1 or newer)")
+                else
+                    uninstalled_requirements+=("$i")
+                fi
         else
                 echo -e "$i is installed"
         fi
     done
+
+    # check if kubectl has server-side support
+    if command -v kubectl &> /dev/null; then
+        echo -e "Checking if kubectl has server-side support"
+        if ! kubectl apply --help | grep -q -- --server-side; then
+            uninstalled_requirements+=("kubectl (server-side support required - v1.31.1 or newer)")
+        else
+            echo -e "kubectl supports server-side apply"
+        fi
+    fi
 
     if (( ${#uninstalled_requirements[@]} == 0 )); then
         echo -e "\nAll requirements are met\nContinue"
