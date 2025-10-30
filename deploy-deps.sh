@@ -13,28 +13,152 @@ main() {
     "${script_path}/wait-for-all.sh"
 }
 
-check_req(){
-    # declare the requirements
-    local requirements=(kubectl openssl)
-    local uninstalled_requirements=()
+# get installed version of a tool
+# each tool has its own way of getting the version
+get_installed_version() {
+    local tool_name="$1"
+    local version=""
+    if ! command -v "$tool_name" &> /dev/null; then
+        echo "NOT_INSTALLED"
+        return
+    fi
 
-    # check if requirements are installed
-    for i in "${requirements[@]}"; do
-        if ! command -v "$i" &> /dev/null; then
-                uninstalled_requirements+=("$i")
+    case "$tool_name" in
+        kubectl)
+            # Method 1: Try JSON output
+            version=$(kubectl version --client -o json 2>/dev/null | grep '"gitVersion"' 2>/dev/null | sed 's/.*"gitVersion": "\([^"]*\)".*/\1/' 2>/dev/null | sed 's/v//' 2>/dev/null)
+
+            # Method 2: Try client version output
+            if [ -z "$version" ]; then
+                version=$(kubectl version --client 2>/dev/null | grep 'Client Version:' 2>/dev/null | awk '{print $3}' 2>/dev/null | sed 's/^v//' 2>/dev/null)
+            fi
+            ;;
+        openssl)
+            version=$(openssl version 2>/dev/null | awk '{print $2}' 2>/dev/null)
+            ;;
+        *)
+            echo "UNKNOWN_TOOL"
+            return
+            ;;
+    esac
+
+    if [ -z "$version" ]; then
+        echo "PARSE_ERROR"
+    else
+        # Remove any non-numeric suffix (e.g., "3.2.2-beta" -> "3.2.2")
+        version=${version%%[^0-9.]*}
+        echo "$version"
+    fi
+}
+
+# Checks if an actual, installed version is sufficient to meet a minimum requirement.
+# Returns 0 (true) if actual_version >= min_required_version
+# Returns 1 (false) if actual_version < min_required_version
+#
+is_version_sufficient () {
+    local actual_version=$1
+    local min_required_version=$2
+
+    # Split version strings into arrays based on the '.' delimiter
+    local OLD_IFS="$IFS"
+    IFS='.'
+    local actual_parts=()
+    local min_parts=()
+    read -ra actual_parts <<< "$actual_version"
+    read -ra min_parts <<< "$min_required_version"
+    IFS="$OLD_IFS"
+
+    # Get the length of the longest version string
+    local actual_len=${#actual_parts[@]}
+    local min_len=${#min_parts[@]}
+    local max_len=$((actual_len > min_len ? actual_len : min_len))
+
+    # Loop through each part (major, minor, patch, etc.)
+    for ((i=0; i<max_len; i++)); do
+        # Get the numeric value for each part, defaulting to 0 if it doesn't exist
+        # (e.g., comparing "1.2" with "1.2.1")
+        local actual_part=${actual_parts[i]:-0}
+        local min_part=${min_parts[i]:-0}
+
+        # Force base-10 to prevent errors with leading zeros (e.g., "08")
+        local actual_num=$((10#$actual_part))
+        local min_num=$((10#$min_part))
+
+        if ((actual_num > min_num)); then
+            return 0 # Sufficient (e.g., 2 > 1)
+        fi
+        if ((actual_num < min_num)); then
+            return 1 # Insufficient (e.g., 1 < 2)
+        fi
+        # If parts are equal (e.g., 1 == 1), continue to the next part
+    done
+
+    # If the loop finishes, the versions are identical, which is sufficient.
+    return 0
+}
+
+check_req(){
+    local REQUIREMENTS=(
+        "kubectl:1.31.1"
+        "openssl:3.0.13"
+    )
+
+    local all_ok=true
+    local error_messages=()
+
+    echo "Checking system requirements..."
+
+    # Loop through each "tool:version" pair in the array
+    for req in "${REQUIREMENTS[@]}"; do
+        # Split the string on the colon ":"
+        local tool="${req%%:*}"
+        local min_ver="${req##*:}"
+
+        echo -n "  Checking $tool... "
+
+        local actual_ver
+        actual_ver=$(get_installed_version "$tool")
+        echo "actual_ver: $actual_ver"
+        echo "min_ver: $min_ver"
+        # Handle cases where getting the version failed
+        if [[ "$actual_ver" == "NOT_INSTALLED" ]]; then
+            echo "FAIL"
+            error_messages+=("  - $tool: NOT installed (required >= $min_ver)")
+            all_ok=false
+            continue
+        fi
+        if [[ "$actual_ver" == "PARSE_ERROR" ]]; then
+            echo "FAIL"
+            error_messages+=("  - $tool: Could not parse installed version.")
+            all_ok=false
+            continue
+        fi
+        if [[ "$actual_ver" == "UNKNOWN_TOOL" ]]; then
+            echo "FAIL"
+            error_messages+=("  - $tool: Version extraction not implemented for this tool.")
+            all_ok=false
+            continue
+        fi
+        if is_version_sufficient "$actual_ver" "$min_ver"; then
+            # Success: The function returned 0 (true)
+            echo "OK (Installed: $actual_ver, Required: >= $min_ver)"
         else
-                echo -e "$i is installed"
+            # Failure: The function returned 1 (false)
+            echo "FAIL"
+            error_messages+=("  - $tool: Version too old (Installed: $actual_ver, Required: >= $min_ver)")
+            all_ok=false
         fi
     done
 
-    if (( ${#uninstalled_requirements[@]} == 0 )); then
-        echo -e "\nAll requirements are met\nContinue"
-    else
-        echo -e "\nSome requirements are missing, please install the following requirements first:"
-        for req in "${uninstalled_requirements[@]}"; do
-                echo "$req"
-        done
+    if [ "$all_ok" = false ]; then
+        echo
+        echo "❌ Error: One or more system requirements are not met."
+        printf "  %s\n" "${error_messages[@]}"
+        echo
         exit 1
+    else
+        echo
+        echo "✅ All system requirements are met. Continuing..."
     fi
 }
 

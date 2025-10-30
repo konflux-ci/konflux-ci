@@ -94,7 +94,7 @@ additional resources.
   newer) along with `podman` (`v5.3.1` or newer) or `docker` (`v27.0.1` or newer)
 * `kubectl` (`v1.31.1` or newer)
 * `git` (`v2.46` or newer)
-* `openssl` (`v3.2.2` or newer)
+* `openssl` (`v3.0.13` or newer)
 
 ## Bootstrapping the Cluster
 :gear: Clone this repository:
