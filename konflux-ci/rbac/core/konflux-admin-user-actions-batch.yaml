@@ -1,0 +1,23 @@
+---
+# Allow triggering periodic pipelines as documented in
+# https://konflux-ci.dev/docs/testing/integration/periodic-integration-tests/
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: konflux-admin-user-actions-batch
+  labels:
+    rbac.konflux-ci.dev/aggregate-to-admin: "true"
+rules:
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    apiGroups:
+      - batch
+    resources:
+      - cronjobs
+      - jobs
