@@ -1,0 +1,3 @@
+# Only the first banner will be displayed. Put the one to display at the top and remove any which are no longer relevant
+- summary: "Welcome to Konflux-CI! This is a development environment for testing and development purposes."
+  type: "info"

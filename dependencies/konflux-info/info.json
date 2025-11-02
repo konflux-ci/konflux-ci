@@ -1,0 +1,33 @@
+{
+    "environment": "development",
+    "rbac": [
+        {
+            "displayName": "admin",
+            "description": "Full access to Konflux resources including secrets",
+            "roleRef": {
+                "apiGroup": "rbac.authorization.k8s.io",
+                "kind": "ClusterRole",
+                "name": "konflux-admin-user-actions"
+            }
+        },
+        {
+            "displayName": "maintainer",
+            "description": "Partial access to Konflux resources without access to secrets",
+            "roleRef": {
+                "apiGroup": "rbac.authorization.k8s.io",
+                "kind": "ClusterRole",
+                "name": "konflux-maintainer-user-actions"
+            }
+        },
+        {
+            "displayName": "contributor",
+            "description": "View access to Konflux resources without access to secrets",
+            "roleRef": {
+                "apiGroup": "rbac.authorization.k8s.io",
+                "kind": "ClusterRole",
+                "name": "konflux-contributor-user-actions"
+            }
+        }
+    ],
+    "visibility": "public"
+}

@@ -69,6 +69,8 @@ deploy() {
     deploy_smee
     echo "🛡️  Deploying Kyverno..." >&2
     deploy_kyverno
+    echo "📋 Deploying Konflux Info..." >&2
+    deploy_konflux_info
 }
 
 test_pvc_binding(){
@@ -167,6 +169,10 @@ deploy_kyverno() {
     # Wait for policy CRD to be installed. Don't need to wait for everything to be up
     sleep 5
     kubectl apply -k "${script_path}/dependencies/kyverno/policy"
+}
+
+deploy_konflux_info() {
+    kubectl apply -k "${script_path}/dependencies/konflux-info"
 }
 
 retry() {
