@@ -4,4 +4,5 @@ resources:
   - ns.yaml
   - rbac.yaml
   - release-pipeline-sa.yaml
+  - regcred-empty.yaml
   - appstudio-pipeline-integration-runner-rbac.yaml
