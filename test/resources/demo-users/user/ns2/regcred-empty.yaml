@@ -1,0 +1,21 @@
+# Empty secret for registry that does not use authentication
+# This secret is required by tasks like ecosystem-cert-preflight-checks
+# which expect a Docker config file even when working with registries
+# that don't require authentication.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: regcred-empty
+  namespace: user-ns2
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: eyJhdXRocyI6eyJ4Ijp7ImVtYWlsIjoiIn19fQ==
+---
+# Add regcred-empty to default ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: default
+  namespace: user-ns2
+secrets:
+- name: regcred-empty
