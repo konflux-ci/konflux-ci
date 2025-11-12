@@ -1,8 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-- https://github.com/konflux-ci/integration-service/config/default?ref=8f674dba6a95b25c4ba881b4f5e61e77442a0fb5
-- https://github.com/konflux-ci/integration-service/config/snapshotgc?ref=8f674dba6a95b25c4ba881b4f5e61e77442a0fb5
+- https://github.com/konflux-ci/integration-service/config/default?ref=064e652ec496ff9e711d91563ee0dae2a971ef67
+- https://github.com/konflux-ci/integration-service/config/snapshotgc?ref=064e652ec496ff9e711d91563ee0dae2a971ef67
 - konflux-integration-runner.yaml
 - kyverno-background-controller-binding.yaml
 - bootstrap-namespace.yaml
@@ -12,7 +12,7 @@ namespace: integration-service
 images:
 - name: quay.io/konflux-ci/integration-service
   newName: quay.io/konflux-ci/integration-service
-  newTag: 8f674dba6a95b25c4ba881b4f5e61e77442a0fb5
+  newTag: 064e652ec496ff9e711d91563ee0dae2a971ef67
 
 patches:
   - target:
