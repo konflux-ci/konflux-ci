@@ -105,7 +105,7 @@ deploy_tekton() {
     kubectl wait --for=condition=Ready tektonconfig/config --timeout=60s
 
     echo "  🔐 Setting up Tekton Chains RBAC..." >&2
-    kubectl apply -k "${script_path}/dependencies/tekton-chains-rbac"
+    kubectl apply -k "${repo_root}/dependencies/tekton-chains-rbac"
 
     echo "  📊 Setting up Tekton Results..." >&2
     if ! kubectl get secret tekton-results-postgres -n tekton-pipelines; then
@@ -179,7 +179,7 @@ deploy_kyverno() {
 }
 
 deploy_konflux_info() {
-    kubectl apply -k "${script_path}/dependencies/konflux-info"
+    kubectl apply -k "${repo_root}/dependencies/konflux-info"
 }
 
 retry() {

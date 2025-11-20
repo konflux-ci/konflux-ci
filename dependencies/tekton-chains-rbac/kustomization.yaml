@@ -2,3 +2,8 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - tekton-chains.yaml
+
+images:
+  - name: quay.io/konflux-ci/appstudio-utils
+    newName: quay.io/konflux-ci/appstudio-utils
+    newTag: 3d9c8b0012a9b59e43acf6d6eae043dcff49c624@sha256:dbf10f993308f3a0a789332d33b6bd6d30c1f7565547dd730f0f6f41eb068e5d
