@@ -174,6 +174,8 @@ This script automates the entire process. Below are some important notes on what
 
 - **Note on Podman**: When using Podman as the container runtime, the script will automatically increase the PID limit on the control-plane container to `8192`. This is recommended to prevent resource issues. You can disable this by editing `scripts/deploy-e2e.env` and setting `INCREASE_PODMAN_PIDS_LIMIT=0`.
 
+- **Note on Registry Port**: By default, the in-cluster container registry is exposed on host port `5001` (to avoid conflicts with macOS AirPlay Receiver on port 5000). You can access it at `localhost:5001`. To use a different port, edit `scripts/deploy-e2e.env` and set `REGISTRY_HOST_PORT` to your preferred port. To disable external registry access entirely, set `ENABLE_REGISTRY_PORT=0`.
+
 - **Note on Docker Hub** If you encounter Docker Hub rate limiting failures during deployment,
 see
 [docs/troubleshooting-docker-rate-limits.md](docs/troubleshooting-docker-rate-limits.md).
@@ -411,12 +413,7 @@ generate the command to pull the image.
 
 #### Local Registry
 
-:gear: If using a local registry, Port-forward the registry service, so you can reach it
-from outside of the cluster:
-
-```bash
-kubectl port-forward -n kind-registry svc/registry-service 30001:443
-```
+The local registry is exposed on your host at `localhost:5001` by default (configurable via `REGISTRY_HOST_PORT` in `scripts/deploy-e2e.env`).
 
 The local registry is using a self-signed certificate that is being distributed to all
 namespaces. You can fetch the certificate from the cluster and use it on the `curl`
@@ -431,12 +428,10 @@ curl --cacert ca.crt https://...
 
 Instead, we're going to use the `-k` flag to skip the TLS verification.
 
-Leave the terminal hanging and on a new terminal window:
-
 :gear: List the repositories on the registry:
 
 ```bash
-curl -k https://localhost:30001/v2/_catalog
+curl -k https://localhost:5001/v2/_catalog
 ```
 
 The output should look like this:
@@ -449,7 +444,7 @@ The output should look like this:
 change the pipeline's output-image parameter):
 
 ```bash
-curl -k https://localhost:30001/v2/test-component/tags/list
+curl -k https://localhost:5001/v2/test-component/tags/list
 ```
 
 You should see a list of tags pushed to that repository. Take a note of that.
@@ -462,8 +457,8 @@ You should see a list of tags pushed to that repository. Take a note of that.
 should be similar on `docker`):
 
 ```bash
-podman pull --tls-verify=false localhost:30001/test-component:on-pr-1ab9e6d756fbe84aa727fc8bb27c7362d40eb3a4
-Trying to pull localhost:30001/test-component:on-pr-1ab9e6d756fbe84aa727fc8bb27c7362d40eb3a4...
+podman pull --tls-verify=false localhost:5001/test-component:on-pr-1ab9e6d756fbe84aa727fc8bb27c7362d40eb3a4
+Trying to pull localhost:5001/test-component:on-pr-1ab9e6d756fbe84aa727fc8bb27c7362d40eb3a4...
 Getting image source signatures
 Copying blob cde118a3f567 done   |
 Copying blob 2efec45cd878 done   |

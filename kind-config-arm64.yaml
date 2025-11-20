@@ -9,7 +9,15 @@ nodes:
     nodeRegistration:
       kubeletExtraArgs:
         node-labels: "ingress-ready=true"
-        system-reserved: memory=8Gi
+        system-reserved: memory=16Gi
+  extraMounts:
+  # Mount QEMU static binaries for cross-architecture support (ARM64 Mac)
+  - hostPath: /usr/bin/qemu-x86_64-static
+    containerPath: /usr/bin/qemu-x86_64-static
+    readOnly: true
+  - hostPath: /usr/bin/qemu-i386-static
+    containerPath: /usr/bin/qemu-i386-static
+    readOnly: true
   extraPortMappings:
   - containerPort: 30010
     hostPort: 8888
