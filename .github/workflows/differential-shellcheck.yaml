@@ -24,7 +24,7 @@ jobs:
 
     steps:
       - name: Repository checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           # Differential ShellCheck requires full git history
           fetch-depth: 0
