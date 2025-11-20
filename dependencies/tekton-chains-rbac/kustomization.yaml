@@ -2,3 +2,8 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - tekton-chains.yaml
+
+images:
+  - name: quay.io/konflux-ci/appstudio-utils
+    newName: quay.io/konflux-ci/task-runner
+    digest: sha256:ba65585f5c8b0a74dc51590e95961765322427d1d62ccd4eb742ff0442291985

@@ -69,6 +69,8 @@ KIND_MEMORY_GB="${KIND_MEMORY_GB:-8}"
 PODMAN_MACHINE_NAME="${PODMAN_MACHINE_NAME:-}"
 INCREASE_PODMAN_PIDS_LIMIT="${INCREASE_PODMAN_PIDS_LIMIT:-1}"
 QUAY_TOKEN="${QUAY_TOKEN:-}"
+ENABLE_REGISTRY_PORT="${ENABLE_REGISTRY_PORT:-1}"
+REGISTRY_HOST_PORT="${REGISTRY_HOST_PORT:-5001}"
 
 # Validate that the required variables are set
 if [ -z "${GITHUB_PRIVATE_KEY_PATH}" ] || [ -z "${GITHUB_APP_ID}" ] || [ -z "${WEBHOOK_SECRET}" ]; then
@@ -105,8 +107,8 @@ if [[ "$(uname)" == "Darwin" ]] && command -v podman &> /dev/null; then
         # Set trap to restore default on exit (success or failure)
         trap restore_podman_default EXIT
 
-        # Ensure the machine exists
-        if ! podman machine list --format "{{.Name}}" | grep -q "^${PODMAN_MACHINE_NAME}$"; then
+        # Ensure the machine exists (strip asterisk for default machine)
+        if ! podman machine list --format "{{.Name}}" | sed 's/\*$//' | grep -q "^${PODMAN_MACHINE_NAME}$"; then
             echo "ERROR: Podman machine '${PODMAN_MACHINE_NAME}' does not exist."
             echo "Create it with:"
             echo "  podman machine init --memory $((KIND_MEMORY_GB * 1024 + 4096)) --cpus 6 --disk-size 100 --rootful ${PODMAN_MACHINE_NAME}"
@@ -159,17 +161,99 @@ fi
 
 kind delete cluster --name konflux || echo ok.
 
-# Update kind-config.yaml with configured memory
+# Check for port conflicts if registry port binding is enabled
+# This check happens AFTER cluster deletion to ensure any previous deployment ports are freed
+if [[ "${ENABLE_REGISTRY_PORT}" -eq 1 ]]; then
+    echo "Registry port binding is enabled. Checking if port ${REGISTRY_HOST_PORT} is available..."
+
+    # Check if the port is in use (works on both Linux and macOS)
+    if command -v lsof &> /dev/null; then
+        # Use lsof if available (macOS and most Linux)
+        if lsof -i ":${REGISTRY_HOST_PORT}" >/dev/null 2>&1; then
+            echo "ERROR: Port ${REGISTRY_HOST_PORT} is already in use."
+            echo ""
+            echo "Port ${REGISTRY_HOST_PORT} is currently bound by another process:"
+            lsof -i ":${REGISTRY_HOST_PORT}"
+            echo ""
+            echo "To resolve this issue, you have several options:"
+            echo "  1. Stop the service using port ${REGISTRY_HOST_PORT}"
+            echo "  2. Choose a different port by setting REGISTRY_HOST_PORT in scripts/deploy-e2e.env"
+            echo "  3. Disable registry port binding by setting ENABLE_REGISTRY_PORT=0 in scripts/deploy-e2e.env"
+            echo ""
+            echo "Note: On macOS, port 5000 is often used by AirPlay Receiver (ControlCenter)."
+            echo "      You can disable it in System Settings > General > AirDrop & Handoff > AirPlay Receiver"
+            exit 1
+        fi
+    elif command -v ss &> /dev/null; then
+        # Use ss on Linux systems without lsof
+        if ss -ltn "sport = :${REGISTRY_HOST_PORT}" | grep -q ":${REGISTRY_HOST_PORT}"; then
+            echo "ERROR: Port ${REGISTRY_HOST_PORT} is already in use."
+            echo ""
+            echo "To resolve this issue, you have several options:"
+            echo "  1. Stop the service using port ${REGISTRY_HOST_PORT}"
+            echo "  2. Choose a different port by setting REGISTRY_HOST_PORT in scripts/deploy-e2e.env"
+            echo "  3. Disable registry port binding by setting ENABLE_REGISTRY_PORT=0 in scripts/deploy-e2e.env"
+            exit 1
+        fi
+    elif command -v netstat &> /dev/null; then
+        # Fallback to netstat (widely available but deprecated on many systems)
+        if netstat -an | grep -q "[:.]${REGISTRY_HOST_PORT}.*LISTEN"; then
+            echo "ERROR: Port ${REGISTRY_HOST_PORT} is already in use."
+            echo ""
+            echo "To resolve this issue, you have several options:"
+            echo "  1. Stop the service using port ${REGISTRY_HOST_PORT}"
+            echo "  2. Choose a different port by setting REGISTRY_HOST_PORT in scripts/deploy-e2e.env"
+            echo "  3. Disable registry port binding by setting ENABLE_REGISTRY_PORT=0 in scripts/deploy-e2e.env"
+            exit 1
+        fi
+    else
+        echo "WARNING: Unable to check port availability (lsof, ss, and netstat not found)."
+        echo "         Proceeding anyway, but cluster creation may fail if port ${REGISTRY_HOST_PORT} is in use."
+    fi
+
+    echo "Port ${REGISTRY_HOST_PORT} is available."
+fi
+
+# Select appropriate kind config based on architecture
+HOST_ARCH=$(uname -m)
+if [[ "$HOST_ARCH" == "arm64" ]] || [[ "$HOST_ARCH" == "aarch64" ]]; then
+    echo "Detected ARM64 architecture - using kind-config-arm64.yaml with QEMU support..."
+    KIND_CONFIG="${REPO_ROOT}/kind-config-arm64.yaml"
+else
+    KIND_CONFIG="${REPO_ROOT}/kind-config.yaml"
+fi
+
+# Update kind config with configured memory
 echo "Configuring Kind cluster with ${KIND_MEMORY_GB}Gi memory..."
-sed -i.bak "s/system-reserved: memory=.*/system-reserved: memory=${KIND_MEMORY_GB}Gi/" "${REPO_ROOT}/kind-config.yaml" && rm "${REPO_ROOT}/kind-config.yaml.bak"
+sed -i.bak "s/system-reserved: memory=.*/system-reserved: memory=${KIND_MEMORY_GB}Gi/" "${KIND_CONFIG}" && rm "${KIND_CONFIG}.bak"
 
-kind create cluster --name konflux --config "${REPO_ROOT}/kind-config.yaml"
+# Configure registry port mapping
+if [[ "${ENABLE_REGISTRY_PORT}" -eq 1 ]]; then
+    # Update the registry port if different from default 5001
+    if [[ "${REGISTRY_HOST_PORT}" != "5001" ]]; then
+        echo "Configuring registry port mapping to host port ${REGISTRY_HOST_PORT}..."
+        sed -i.bak "s/hostPort: 5001/hostPort: ${REGISTRY_HOST_PORT}/" "${KIND_CONFIG}" && rm "${KIND_CONFIG}.bak"
+    else
+        echo "Using default registry port mapping (host port 5001)..."
+    fi
+else
+    echo "Registry port binding is disabled. Removing registry port mapping from kind config..."
+    # Remove the registry port mapping section (lines from "# Registry" comment through the TCP protocol line)
+    sed -i.bak '/# Registry/,+3d' "${KIND_CONFIG}" && rm "${KIND_CONFIG}.bak"
+fi
 
-# Revert kind-config.yaml changes
-echo "Reverting kind-config.yaml to original state..."
-(cd "${REPO_ROOT}" && git checkout kind-config.yaml)
+kind create cluster --name konflux --config "${KIND_CONFIG}"
+
+# Revert kind config changes
+echo "Reverting kind config to original state..."
+(cd "${REPO_ROOT}" && git checkout kind-config.yaml kind-config-arm64.yaml 2>/dev/null || true)
 
 sleep 2
+
+# Setup QEMU emulation for ARM64 Macs
+if [[ "$HOST_ARCH" == "arm64" ]] || [[ "$HOST_ARCH" == "aarch64" ]]; then
+    "${SCRIPT_DIR}/setup-qemu-kind.sh" konflux
+fi
 
 # Optionally increase the Podman PID limit if the feature is enabled and Podman is the active runtime.
 if [[ "${INCREASE_PODMAN_PIDS_LIMIT}" -eq 1 ]] && \
