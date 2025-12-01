@@ -27,10 +27,9 @@
       "groupName": "tekton-core",
       "matchPackageNames": [
         "https://github.com/tektoncd/operator",
-        "https://github.com/tektoncd/pipeline",
-        "https://github.com/tektoncd/results"
+        "https://github.com/tektoncd/pipeline"
       ],
-      "description": "Group core Tekton components for coordinated updates"
+      "description": "Group core Tekton components for coordinated updates. Note: tektoncd/results is managed by the operator and its version is determined by the operator version."
     }
   ],
   "enabledManagers": ["regex", "kustomize", "github-actions"],
