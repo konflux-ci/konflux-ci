@@ -41,6 +41,8 @@ spec:
                       - name: trusted-ca
                         mountPath: /etc/ssl/certs
                         readOnly: true
+  result:
+    disabled: false
   pipeline:
     default-service-account: default
     options:
