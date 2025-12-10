@@ -1,4 +1,4 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-- https://github.com/redhat-appstudio/application-api/config/crd?ref=d24742e8b02624911fa4c67c9e7ea02e7c572e66
+- https://github.com/redhat-appstudio/application-api/config/crd?ref=555a927cf6d921497f3f5685b86c8b2f2da9d550
