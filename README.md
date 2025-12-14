@@ -92,7 +92,7 @@ additional resources.
 
 * [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) (`v0.26.0` or
   newer) along with `podman` (`v5.3.1` or newer) or `docker` (`v27.0.1` or newer)
-* `kubectl` (`v1.31.1` or newer -- server-side apply support is required)
+* `kubectl` (`v1.31.4` or newer)
 * `git` (`v2.46` or newer)
 * `openssl` (`v3.0.13` or newer)
 

@@ -17,12 +17,13 @@ check_req(){
     # declare the requirements
     local requirements=(kubectl openssl)
     local uninstalled_requirements=()
+    local min_kubectl_version="v1.31.4"
 
     # check if requirements are installed
     for i in "${requirements[@]}"; do
         if ! command -v "$i" &> /dev/null; then
                 if [ "$i" == "kubectl" ]; then
-                    uninstalled_requirements+=("kubectl (server-side support required - v1.31.1 or newer)")
+                    uninstalled_requirements+=("kubectl (${min_kubectl_version} or newer)")
                 else
                     uninstalled_requirements+=("$i")
                 fi
@@ -31,13 +32,28 @@ check_req(){
         fi
     done
 
-    # check if kubectl has server-side support
+    # check kubectl version
     if command -v kubectl &> /dev/null; then
-        echo -e "Checking if kubectl has server-side support"
-        if ! kubectl apply --help | grep -q -- --server-side; then
-            uninstalled_requirements+=("kubectl (server-side support required - v1.31.1 or newer)")
+        echo -e "Checking kubectl version"
+        local kubectl_version
+        kubectl_version=$(kubectl version --client 2>&1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+
+        if [[ -z "$kubectl_version" ]]; then
+            uninstalled_requirements+=("kubectl (${min_kubectl_version} or newer, found unknown)")
         else
-            echo -e "kubectl supports server-side apply"
+            # Parse version components
+            local min_major min_minor min_patch cur_major cur_minor cur_patch
+            IFS='.' read -r min_major min_minor min_patch <<< "${min_kubectl_version#v}"
+            IFS='.' read -r cur_major cur_minor cur_patch <<< "${kubectl_version#v}"
+
+            # Compare using arithmetic
+            if (( cur_major > min_major )) || \
+               (( cur_major == min_major && cur_minor > min_minor )) || \
+               (( cur_major == min_major && cur_minor == min_minor && cur_patch >= min_patch )); then
+                echo -e "kubectl version ${kubectl_version} meets minimum requirement (${min_kubectl_version})"
+            else
+                uninstalled_requirements+=("kubectl (${min_kubectl_version} or newer, found ${kubectl_version})")
+            fi
         fi
     fi
 
