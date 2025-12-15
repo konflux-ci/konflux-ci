@@ -1,0 +1,41 @@
+# Build the manager binary
+FROM registry.access.redhat.com/ubi10/go-toolset@sha256:e7eef486a8102183260fb36bc429528865f4f590401576e0e8ed947f3c578cc1 AS builder
+ARG TARGETOS
+ARG TARGETARCH
+
+ENV GOTOOLCHAIN=auto
+WORKDIR /workspace
+
+COPY --chmod=644 go.mod go.mod
+COPY --chmod=644 go.sum go.sum
+
+RUN go mod download
+
+COPY --chmod=644 cmd/main.go cmd/main.go
+COPY --chmod=755 api/ api/
+COPY --chmod=755 internal/ internal/
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o /opt/app-root/manager cmd/main.go
+
+# Use UBI minimal as base image
+FROM registry.access.redhat.com/ubi10/ubi-minimal@sha256:a13cec4e2e30fa2ca6468d474d02eb349200dc4a831c8c93f05a2154c559f09b
+WORKDIR /
+
+COPY --from=builder /opt/app-root/manager .
+COPY LICENSE /licenses/
+USER 65532:65532
+
+LABEL name="Konflux Operator"
+LABEL description="Kubernetes operator for managing Konflux installations"
+LABEL summary="Kubernetes operator for managing Konflux installations"
+LABEL io.k8s.description="Kubernetes operator for managing Konflux installations"
+LABEL io.k8s.display-name="konflux-operator"
+LABEL version="0.1"
+LABEL release="1"
+LABEL vendor="Konflux CI"
+LABEL distribution-scope="public"
+LABEL url="https://github.com/konflux-ci/konflux-ci/operator"
+LABEL maintainer="Konflux CI"
+
+ENTRYPOINT ["/manager"]
+

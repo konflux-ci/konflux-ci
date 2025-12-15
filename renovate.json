@@ -32,7 +32,7 @@
       "description": "Group core Tekton components for coordinated updates. Note: tektoncd/results is managed by the operator and its version is determined by the operator version."
     }
   ],
-  "enabledManagers": ["regex", "kustomize", "github-actions"],
+  "enabledManagers": ["regex", "kustomize", "github-actions", "gomod"],
   "customManagers": [
     {
       "customType": "regex",
@@ -125,6 +125,31 @@
       ],
       "datasourceTemplate": "docker",
       "currentValueTemplate": "konflux"
+    },
+    {
+      "description": "Track kind version in GitHub Actions workflows",
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["^\\.github/workflows/.*\\.ya?ml$"],
+      "matchStrings": [
+        "# renovate: datasource=github-releases depName=kubernetes-sigs/kind",
+        "KIND_VERSION:\\s*\"(?<currentValue>v?[^\"]+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "kubernetes-sigs/kind",
+      "extractVersionTemplate": "^v?(?<version>.*)$"
+    },
+    {
+      "description": "Track curl image version in e2e tests",
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["operator/test/e2e/.*\\.go$"],
+      "matchStrings": [
+        "// renovate: datasource=docker depName=curlimages/curl",
+        "const curlImageVersion = \"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "curlimages/curl"
     }
   ]
 }
