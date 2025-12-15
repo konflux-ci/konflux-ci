@@ -1,0 +1,36 @@
+name: Operator Lint
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'operator/**'
+      - '.github/workflows/operator-lint.yaml'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'operator/**'
+      - '.github/workflows/operator-lint.yaml'
+  merge_group:
+    types: [checks_requested]
+
+jobs:
+  lint:
+    name: Run Operator Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: operator
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: operator/go.mod
+
+      - name: Run linter
+        uses: golangci/golangci-lint-action@v8
+        with:
+          working-directory: operator

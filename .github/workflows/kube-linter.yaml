@@ -22,7 +22,8 @@ jobs:
           # workaround: create dummy patch for building the manifests for kube-linter
           cp dependencies/smee/smee-channel-id.tpl dependencies/smee/smee-channel-id.yaml
 
-          find . -name "kustomization.yaml" -o -name "kustomization.yml" | while read -r file; do
+          # Exclude operator/config/manifests as it requires generated files from 'make bundle'
+          find . -name "kustomization.yaml" -o -name "kustomization.yml" | grep -v "operator/config/manifests" | while read -r file; do
             dir=$(dirname "$file")
             dir=${dir#./}
             output_file=$(echo "out-$dir" | tr "/" "-")
