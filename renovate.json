@@ -133,7 +133,7 @@
       "fileMatch": ["^\\.github/workflows/.*\\.ya?ml$"],
       "matchStrings": [
         "# renovate: datasource=github-releases depName=kubernetes-sigs/kind",
-        "KIND_VERSION:\\s*\"(?<currentValue>v?[^\"]+)\""
+        "KIND_VERSION:\\s*\"(?<currentValue>[^\"]+)\""
       ],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "kubernetes-sigs/kind",
