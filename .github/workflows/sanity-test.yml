@@ -16,15 +16,24 @@ jobs:
           exit 0
         fi
 
-        WHITELISTED_BOT_NAME="renovate[bot]"
+        WHITELISTED_BOT_NAMES=("renovate[bot]" "red-hat-konflux")
         REQUIRED_LABEL_NAME="ok-to-test"
 
         ORG="${{ github.repository_owner }}"
         PR_AUTHOR=$(jq --raw-output .pull_request.user.login $GITHUB_EVENT_PATH)
         PR_LABELS=$(jq --raw-output .pull_request.labels[].name $GITHUB_EVENT_PATH)
 
-        if [ "$PR_AUTHOR" == "$WHITELISTED_BOT_NAME" ]; then
-          echo "PR author is "$WHITELISTED_BOT_NAME", skipping further checks."
+        # Check if PR author is in the whitelisted bots list
+        BOT_WHITELISTED=false
+        for BOT_NAME in "${WHITELISTED_BOT_NAMES[@]}"; do
+          if [ "$PR_AUTHOR" == "$BOT_NAME" ]; then
+            BOT_WHITELISTED=true
+            echo "PR author is $BOT_NAME, skipping further checks."
+            break
+          fi
+        done
+
+        if [ "$BOT_WHITELISTED" == "true" ]; then
           exit 0
         fi
 
@@ -38,10 +47,13 @@ jobs:
           exit 0
         fi
 
+        # Create comma-separated list for error message
+        BOT_LIST=$(IFS=','; echo "${WHITELISTED_BOT_NAMES[*]}")
+
         ERROR_SUMMARY=$(cat <<EOF
 
         ### ❌ Cannot run Sanity test - at least one of the following conditions must be met:
-        * PR author is '$WHITELISTED_BOT_NAME'
+        * PR author is one of: $BOT_LIST
         * PR has label '$REQUIRED_LABEL_NAME'
         * PR author is a public member of '$ORG' GitHub organization
         EOF
