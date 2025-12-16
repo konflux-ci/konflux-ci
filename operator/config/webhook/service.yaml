@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/name: konflux-operator
+    app.kubernetes.io/instance: webhook-service
+    app.kubernetes.io/component: webhook
+    app.kubernetes.io/created-by: konflux-operator
+    app.kubernetes.io/part-of: konflux-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: webhook-service
+  namespace: konflux-operator
+spec:
+  ports:
+    - port: 443
+      protocol: TCP
+      targetPort: 9443
+  selector:
+    control-plane: controller-manager
+

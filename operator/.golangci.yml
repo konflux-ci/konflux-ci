@@ -1,4 +1,3 @@
-version: "2"
 run:
   allow-parallel-runners: true
 linters:
@@ -36,6 +35,12 @@ linters:
           - dupl
           - lll
         path: internal/*
+      # Allow dot imports in test utils (common pattern for Ginkgo)
+      - linters:
+          - staticcheck
+          - revive
+        path: test/utils/utils.go
+        text: "should not use dot imports"
     paths:
       - third_party$
       - builtin$

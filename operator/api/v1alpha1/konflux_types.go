@@ -37,6 +37,7 @@ type KonfluxStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
 
 // Konflux is the Schema for the konfluxes API.
 type Konflux struct {

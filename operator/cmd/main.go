@@ -39,6 +39,7 @@ import (
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller"
+	webhookv1alpha1 "github.com/konflux-ci/konflux-ci/operator/internal/webhook/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -207,6 +208,12 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Konflux")
+		os.Exit(1)
+	}
+
+	// Setup webhook for Konflux CR
+	if err := webhookv1alpha1.SetupKonfluxWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Konflux")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

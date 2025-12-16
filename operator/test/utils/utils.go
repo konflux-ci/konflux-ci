@@ -23,8 +23,9 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
-	. "github.com/onsi/ginkgo/v2" // nolint:revive,staticcheck
+	. "github.com/onsi/ginkgo/v2"
 )
 
 const (
@@ -129,8 +130,26 @@ func InstallCertManager() error {
 		"--timeout", "5m",
 	)
 
-	_, err := Run(cmd)
-	return err
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	// Wait for cert-manager webhook's CA bundle to be injected into ValidatingWebhookConfiguration.
+	// This is required to avoid TLS verification errors when creating Certificate/Issuer resources.
+	// We check that the webhook configuration has a CA bundle set.
+	maxRetries := 30
+	for i := 0; i < maxRetries; i++ {
+		checkCmd := exec.Command("kubectl", "get", "validatingwebhookconfiguration", "cert-manager-webhook",
+			"-o", "jsonpath={.webhooks[0].clientConfig.caBundle}")
+		output, err := Run(checkCmd)
+		if err == nil && len(strings.TrimSpace(output)) > 0 {
+			// CA bundle is present, webhook is ready
+			return nil
+		}
+		// Wait 2 seconds before retrying
+		time.Sleep(2 * time.Second)
+	}
+	return fmt.Errorf("cert-manager webhook CA bundle was not injected within timeout")
 }
 
 // IsCertManagerCRDsInstalled checks if any Cert Manager CRDs are installed
