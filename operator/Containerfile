@@ -32,10 +32,12 @@ LABEL io.k8s.description="Kubernetes operator for managing Konflux installations
 LABEL io.k8s.display-name="konflux-operator"
 LABEL version="0.1"
 LABEL release="1"
-LABEL vendor="Konflux CI"
+LABEL vendor="Red Hat, Inc."
+# vendor label should be solved in conforma
 LABEL distribution-scope="public"
 LABEL url="https://github.com/konflux-ci/konflux-ci/operator"
 LABEL maintainer="Konflux CI"
+LABEL com.redhat.component="konflux-operator"
+# com.redhat.component label should be solved in conforma
 
 ENTRYPOINT ["/manager"]
-
