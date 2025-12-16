@@ -43,7 +43,7 @@ const metricsRoleBindingName = "konflux-operator-metrics-binding"
 
 // curlImageVersion is the version of the curl image used for metrics testing.
 // renovate: datasource=docker depName=curlimages/curl
-const curlImageVersion = "8.8.0"
+const curlImageVersion = "8.17.0"
 
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
