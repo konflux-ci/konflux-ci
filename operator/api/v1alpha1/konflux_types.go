@@ -37,6 +37,8 @@ type KonfluxStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'konflux'",message="Konflux CR must be named 'konflux'. Only one instance is allowed per cluster."
 
 // Konflux is the Schema for the konfluxes API.
 type Konflux struct {

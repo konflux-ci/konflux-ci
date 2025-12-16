@@ -12,7 +12,7 @@ spec:
     listKind: KonfluxList
     plural: konfluxes
     singular: konflux
-  scope: Namespaced
+  scope: Cluster
   versions:
   - name: v1alpha1
     schema:
@@ -43,6 +43,10 @@ spec:
             description: KonfluxStatus defines the observed state of Konflux.
             type: object
         type: object
+        x-kubernetes-validations:
+        - message: Konflux CR must be named 'konflux'. Only one instance is allowed
+            per cluster.
+          rule: self.metadata.name == 'konflux'
     served: true
     storage: true
     subresources:

@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -32,13 +33,12 @@ import (
 
 var _ = Describe("Konflux Controller", func() {
 	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+		const resourceName = "konflux"
 
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Name: resourceName,
 		}
 		konflux := &konfluxv1alpha1.Konflux{}
 
@@ -48,8 +48,7 @@ var _ = Describe("Konflux Controller", func() {
 			if err != nil && errors.IsNotFound(err) {
 				resource := &konfluxv1alpha1.Konflux{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
+						Name: resourceName,
 					},
 					// TODO(user): Specify other spec details if needed.
 				}
@@ -58,13 +57,12 @@ var _ = Describe("Konflux Controller", func() {
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			resource := &konfluxv1alpha1.Konflux{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the specific resource instance Konflux")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			if err == nil {
+				By("Cleanup the specific resource instance Konflux")
+				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			}
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
@@ -79,6 +77,84 @@ var _ = Describe("Konflux Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
 			// Example: If you expect a certain status condition after reconciliation, verify it here.
+		})
+	})
+
+	Context("Konflux Name Validation (CEL)", func() {
+		const requiredKonfluxName = "konflux"
+
+		AfterEach(func(ctx context.Context) {
+			// Clean up any Konflux instances created during tests
+			konfluxList := &konfluxv1alpha1.KonfluxList{}
+			if err := k8sClient.List(ctx, konfluxList); err == nil {
+				for _, item := range konfluxList.Items {
+					if err := k8sClient.Delete(ctx, &item); err != nil && !errors.IsNotFound(err) {
+						_, _ = fmt.Fprintf(
+							GinkgoWriter,
+							"Failed to delete Konflux %q: %v\n",
+							item.GetName(),
+							err,
+						)
+					}
+				}
+			}
+		})
+
+		It("Should allow creation with the required name 'konflux'", func(ctx context.Context) {
+			By("creating a Konflux instance with the required name")
+			konflux := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: requiredKonfluxName,
+				},
+				Spec: konfluxv1alpha1.KonfluxSpec{},
+			}
+			err := k8sClient.Create(ctx, konflux)
+			Expect(err).NotTo(HaveOccurred(), "Creation with required name should be allowed")
+
+			By("verifying the instance was created")
+			created := &konfluxv1alpha1.Konflux{}
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: requiredKonfluxName}, created)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(created.GetName()).To(Equal(requiredKonfluxName))
+		})
+
+		It("Should deny creation with a different name", func(ctx context.Context) {
+			By("attempting to create a Konflux instance with a different name")
+			konflux := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "my-konflux",
+				},
+				Spec: konfluxv1alpha1.KonfluxSpec{},
+			}
+			err := k8sClient.Create(ctx, konflux)
+			Expect(err).To(HaveOccurred(), "Creation with different name should be rejected")
+			Expect(err.Error()).To(ContainSubstring("konflux"), "Error message should mention 'konflux'")
+		})
+
+		It("Should allow updates to the instance with the required name", func(ctx context.Context) {
+			By("creating a Konflux instance with the required name")
+			konflux := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: requiredKonfluxName,
+				},
+				Spec: konfluxv1alpha1.KonfluxSpec{},
+			}
+			err := k8sClient.Create(ctx, konflux)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create Konflux instance")
+
+			By("updating the instance")
+			// Get the latest version
+			updated := &konfluxv1alpha1.Konflux{}
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: requiredKonfluxName}, updated)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Add a label
+			if updated.Labels == nil {
+				updated.Labels = make(map[string]string)
+			}
+			updated.Labels["test"] = "value"
+			err = k8sClient.Update(ctx, updated)
+			Expect(err).NotTo(HaveOccurred(), "Updates should be allowed")
 		})
 	})
 })
