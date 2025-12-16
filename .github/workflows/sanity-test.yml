@@ -16,11 +16,12 @@ jobs:
           exit 0
         fi
 
-        WHITELISTED_BOT_NAMES=("renovate[bot]" "red-hat-konflux")
+        WHITELISTED_BOT_NAMES=("renovate[bot]" "red-hat-konflux[bot]")
         REQUIRED_LABEL_NAME="ok-to-test"
 
         ORG="${{ github.repository_owner }}"
         PR_AUTHOR=$(jq --raw-output .pull_request.user.login $GITHUB_EVENT_PATH)
+        echo "PR author: $PR_AUTHOR"
         PR_LABELS=$(jq --raw-output .pull_request.labels[].name $GITHUB_EVENT_PATH)
 
         # Check if PR author is in the whitelisted bots list
