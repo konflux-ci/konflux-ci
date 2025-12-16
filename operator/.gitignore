@@ -11,9 +11,6 @@ Dockerfile.cross
 bundle/
 bundle.Dockerfile
 
-# Temporary LICENSE copy (copied from root before build)
-LICENSE
-
 # Test binary, built with `go test -c`
 *.test
 

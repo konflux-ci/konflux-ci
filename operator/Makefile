@@ -174,9 +174,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-	@cp ../LICENSE LICENSE || (echo "Error: Could not copy LICENSE from parent directory" && exit 1)
-	@$(CONTAINER_TOOL) build -f Containerfile -t ${IMG} . || (rm -f LICENSE && exit 1)
-	@rm -f LICENSE
+	$(CONTAINER_TOOL) build -f Containerfile -t ${IMG} .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
