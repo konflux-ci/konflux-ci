@@ -19,6 +19,7 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -39,6 +40,7 @@ import (
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -54,8 +56,33 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
+// runDumpManifests dumps all embedded manifests to stdout.
+func runDumpManifests() {
+	allManifests, err := manifests.GetAllManifests()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting manifests: %v\n", err)
+		os.Exit(1)
+	}
+
+	for component, content := range allManifests {
+		fmt.Printf("# Component: %s\n", component)
+		fmt.Printf("---\n")
+		fmt.Print(string(content))
+		fmt.Printf("\n")
+	}
+}
+
 // nolint:gocyclo
 func main() {
+	// Handle subcommands
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "dump-manifests":
+			runDumpManifests()
+			return
+		}
+	}
+
 	var metricsAddr string
 	var metricsCertPath, metricsCertName, metricsCertKey string
 	var webhookCertPath, webhookCertName, webhookCertKey string
