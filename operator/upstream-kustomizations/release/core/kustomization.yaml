@@ -1,0 +1,78 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - https://github.com/konflux-ci/release-service/config/default?ref=90fbc527e88e78719934dc7db2f69e14efcbab14
+  - release-pipeline-resources-clusterrole.yaml
+  - release-service-config-rbac.yaml
+  - release-service-config.yaml
+
+images:
+  - name: quay.io/konflux-ci/release-service
+    newName: quay.io/konflux-ci/release-service
+    newTag: 90fbc527e88e78719934dc7db2f69e14efcbab14
+
+namespace: release-service
+
+patches:
+  - target:
+      group: monitoring.coreos.com
+      version: v1
+      kind: ServiceMonitor
+      name: release-service-controller-manager-metrics-monitor
+    path: remove-service-monitor.yaml
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRole
+      name: release-service-metrics-reader
+    path: remove-metrics-reader-cluster-role.yaml
+  - target:
+      group: ""
+      version: v1
+      kind: Secret
+      name: release-service-metrics-reader
+    path: remove-metrics-reader-secret.yaml
+  - target:
+      group: ""
+      version: v1
+      kind: ServiceAccount
+      name: release-service-metrics-reader
+    path: remove-metrics-reader-sa.yaml
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRoleBinding
+      name: release-service-prometheus-role-binding
+    path: remove-metrics-reader-cluster-role-binding.yaml
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRole
+      name: release-service-prometheus-viewer-role
+    path: remove-prometheus-viewer-cluster-role.yaml
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: NetworkPolicy
+      name: release-service-egress-controller-manager
+    path: remove-network-policy.yaml
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRoleBinding
+      name: release-service-prometheus-role-binding
+    path: remove-prometheus-cluster-role-binding.yaml
+  - patch: |
+      - op: add
+        path: /metadata/annotations/ignore-check.kube-linter.io~1liveness-port
+        value: "Keeping upstream configs"
+    target:
+      kind: Deployment
+      name: release-service-controller-manager
+  - patch: |
+      - op: add
+        path: /metadata/annotations/ignore-check.kube-linter.io~1readiness-port
+        value: "Keeping upstream configs"
+    target:
+      kind: Deployment
+      name: release-service-controller-manager

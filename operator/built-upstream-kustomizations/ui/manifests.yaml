@@ -1,0 +1,465 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: konflux-ui
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: proxy
+  namespace: konflux-ui
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: konflux-proxy
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - users
+  - groups
+  verbs:
+  - impersonate
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - localsubjectaccessreviews
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: konflux-proxy-namespace-lister
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - list
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: konflux-proxy
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: konflux-proxy
+subjects:
+- kind: ServiceAccount
+  name: proxy
+  namespace: konflux-ui
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: konflux-proxy-namespace-lister
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: konflux-proxy-namespace-lister
+subjects:
+- kind: ServiceAccount
+  name: proxy
+  namespace: konflux-ui
+---
+apiVersion: v1
+data:
+  nginx-idp-location.conf: |
+    location /idp/ {
+        # Identity Provider
+        proxy_set_header    Host               $host;
+        proxy_set_header    X-Real-IP          $remote_addr;
+        proxy_set_header    X-Forwarded-For    $proxy_add_x_forwarded_for;
+        proxy_set_header    X-Forwarded-Host   $host;
+        proxy_set_header    X-Forwarded-Server $host;
+        proxy_set_header    X-Forwarded-Port   9443;
+        proxy_set_header    X-Forwarded-Proto  $scheme;
+        proxy_pass https://dex.dex.svc.cluster.local:9443;
+    }
+kind: ConfigMap
+metadata:
+  name: nginx-idp-location-h959ghd6bh
+  namespace: konflux-ui
+---
+apiVersion: v1
+data:
+  nginx.conf: "worker_processes auto;\nerror_log /var/log/nginx/error.log;\npid /run/nginx.pid;\n\n#
+    Load dynamic modules. See /usr/share/doc/nginx/README.dynamic.\ninclude /usr/share/nginx/modules/*.conf;\n\nevents
+    {\n    worker_connections 1024;\n}\n\nhttp {\n    log_format upstreamlog '[$time_local]
+    $remote_addr - $remote_user - $server_name $host to: $proxy_host  $upstream_addr:
+    $request $status upstream_response_time $upstream_response_time msec $msec request_time
+    $request_time';\n    access_log /dev/stderr upstreamlog;\n    error_log /dev/stderr;\n\n
+    \   sendfile on;\n    tcp_nopush on;\n    tcp_nodelay on;\n    keepalive_timeout
+    65;\n    types_hash_max_size 4096;\n\n    default_type application/octet-stream;\n
+    \   include /etc/nginx/mime.types;\n\n    map $http_upgrade $connection_upgrade
+    {\n        default upgrade;\n        '' close;\n    }\n\n    map $request_method
+    $ns_target {\n        GET     @namespacelister;\n        default @kubeapi;\n    }\n\n
+    \   server {\n        listen 9443 ssl;\n        ssl_certificate /mnt/tls.crt;\n
+    \       ssl_certificate_key /mnt/tls.key;\n        server_name _;\n        root
+    /opt/app-root/src;\n\n        location / {\n            alias /opt/app-root/src/static-content/;\n
+    \           try_files $uri /index.html;\n        }\n\n        location = /404.html
+    {\n        }\n\n        location = /oauth2/auth {\n            internal; \n            proxy_pass
+    \      http://127.0.0.1:6000;\n            proxy_set_header Host             $host;\n
+    \           proxy_set_header X-Real-IP        $remote_addr;\n            proxy_set_header
+    X-Scheme         $scheme;\n            # nginx auth_request includes headers but
+    not body\n            proxy_set_header Content-Length   \"\";\n            proxy_pass_request_body
+    \          off;\n        }\n\n        location /oauth2/ {\n            proxy_pass
+    \      http://127.0.0.1:6000/oauth2/;\n            proxy_set_header Host             $host;\n
+    \           proxy_set_header X-Real-IP        $remote_addr;\n            proxy_set_header
+    X-Scheme         $scheme;\n        }\n\n        location /api/k8s/ {\n            #
+    Kube-API\n            auth_request /oauth2/auth;\n\n            proxy_pass https://kubernetes.default.svc/;\n
+    \           proxy_read_timeout 30m;\n            include /mnt/nginx-generated-config/auth.conf;\n
+    \       }\n\n        location /wss/k8s/ {\n            auth_request /oauth2/auth;\n\n
+    \           proxy_http_version 1.1;\n            proxy_set_header Upgrade $http_upgrade;\n
+    \           proxy_set_header Connection $connection_upgrade;\n            proxy_read_timeout
+    30m;\n            include /mnt/nginx-generated-config/auth.conf;\n        }\n\n
+    \       location /health {\n            # Used for liveness probes\n            return
+    200;\n        }\n\n        # GET requests to /api/k8s/api/v1/namespaces and /api/k8s/api/v1/namespaces/\n
+    \       # are handled from the namespace-lister.\n        # Requests with other
+    methods are handled by the Kube-API\n        location = /api/k8s/api/v1/namespaces
+    {\n            try_files /dev/null $ns_target;\n        }\n        location =
+    /api/k8s/api/v1/namespaces/ {\n            try_files /dev/null $ns_target;\n        }\n\n
+    \       location @namespacelister {\n            auth_request /oauth2/auth;\n
+    \           proxy_read_timeout 30m;\n\n            rewrite ^.*$ /api/v1/namespaces
+    break;\n\n            proxy_pass https://namespace-lister.namespace-lister.svc.cluster.local:8080;\n
+    \           include /mnt/nginx-generated-config/auth.conf;\n        }\n\n        location
+    @kubeapi {\n            auth_request /oauth2/auth;\n            proxy_read_timeout
+    30m;\n\n            rewrite ^/api/k8s/(.*)/$ /$1 break;\n\n            proxy_pass
+    https://kubernetes.default.svc;\n            include /mnt/nginx-generated-config/auth.conf;\n
+    \       }\n\n        include /mnt/nginx-additional-location-configs/*.conf;\n
+    \   }\n}\n"
+kind: ConfigMap
+metadata:
+  name: proxy-cb8kd95k47
+  namespace: konflux-ui
+---
+apiVersion: v1
+data:
+  tekton-results.conf: |
+    location /api/k8s/plugins/tekton-results/ {
+        auth_request /oauth2/auth;
+
+        rewrite /api/k8s/plugins/tekton-results/(.+) /$1 break;
+        proxy_read_timeout 30m;
+        proxy_pass https://tekton-results-api-service.tekton-pipelines.svc.cluster.local:8080;
+        include /mnt/nginx-generated-config/auth.conf;
+    }
+kind: ConfigMap
+metadata:
+  name: proxy-nginx-static-fmmfg7d22f
+  namespace: konflux-ui
+---
+apiVersion: v1
+data:
+  auth.conf: |
+    # Auth configuration with impersonate headers
+    auth_request_set $user  $upstream_http_x_auth_request_email;
+    proxy_set_header Impersonate-User $user;
+    proxy_set_header Impersonate-Group system:authenticated;
+    proxy_set_header Authorization "Bearer __BEARER_TOKEN__";
+kind: ConfigMap
+metadata:
+  name: proxy-nginx-templates-4m8fgtf4m9
+  namespace: konflux-ui
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  annotations:
+    kubernetes.io/service-account.name: proxy
+  name: proxy
+  namespace: konflux-ui
+type: kubernetes.io/service-account-token
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: proxy
+  name: proxy
+  namespace: konflux-ui
+spec:
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: web
+    nodePort: 30010
+    port: 8888
+    protocol: TCP
+    targetPort: web
+  - name: web-tls
+    nodePort: 30011
+    port: 9443
+    protocol: TCP
+    targetPort: web-tls
+  selector:
+    app: proxy
+  type: NodePort
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    ignore-check.kube-linter.io/no-anti-affinity: Using topologySpreadConstraints
+  labels:
+    app: proxy
+  name: proxy
+  namespace: konflux-ui
+spec:
+  minReadySeconds: 30
+  replicas: 1
+  selector:
+    matchLabels:
+      app: proxy
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: proxy
+    spec:
+      containers:
+      - command:
+        - nginx
+        - -g
+        - daemon off;
+        - -c
+        - /etc/nginx/nginx.conf
+        image: registry.access.redhat.com/ubi9/nginx-124@sha256:b924363ff07ee0f8fd4f680497da774ac0721722a119665998ff5b2111098ad1
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health
+            port: 9443
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: nginx
+        ports:
+        - containerPort: 8080
+          name: web
+          protocol: TCP
+        - containerPort: 9443
+          name: web-tls
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health
+            port: 9443
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: 300m
+            memory: 256Mi
+          requests:
+            cpu: 30m
+            memory: 128Mi
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+        volumeMounts:
+        - mountPath: /etc/nginx/nginx.conf
+          name: proxy
+          readOnly: true
+          subPath: nginx.conf
+        - mountPath: /var/log/nginx
+          name: logs
+        - mountPath: /var/lib/nginx/tmp
+          name: nginx-tmp
+        - mountPath: /run
+          name: run
+        - mountPath: /mnt
+          name: serving-cert
+        - mountPath: /mnt/nginx-generated-config
+          name: nginx-generated-config
+        - mountPath: /mnt/nginx-additional-location-configs
+          name: nginx-static
+        - mountPath: /opt/app-root/src/static-content
+          name: static-content
+      - args:
+        - --provider
+        - oidc
+        - --provider-display-name
+        - Dex OIDC
+        - --client-id
+        - oauth2-proxy
+        - --http-address
+        - 127.0.0.1:6000
+        - --redirect-url
+        - https://localhost:9443/oauth2/callback
+        - --oidc-issuer-url
+        - https://localhost:9443/idp/
+        - --skip-oidc-discovery
+        - --login-url
+        - https://localhost:9443/idp/auth
+        - --redeem-url
+        - https://dex.dex.svc.cluster.local:9443/idp/token
+        - --oidc-jwks-url
+        - https://dex.dex.svc.cluster.local:9443/idp/keys
+        - --cookie-secure
+        - "true"
+        - --cookie-name
+        - __Host-konflux-ci-cookie
+        - --email-domain
+        - '*'
+        - --ssl-insecure-skip-verify
+        - "true"
+        - --set-xauthrequest
+        - "true"
+        - --whitelist-domain
+        - localhost:9443
+        - --skip-jwt-bearer-tokens
+        env:
+        - name: OAUTH2_PROXY_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: client-secret
+              name: oauth2-proxy-client-secret
+        - name: OAUTH2_PROXY_COOKIE_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: cookie-secret
+              name: oauth2-proxy-cookie-secret
+        image: quay.io/oauth2-proxy/oauth2-proxy:latest@sha256:56e3daedf765c7a1eea6e366fbe684be7d3084830ade14b6174570d3c7960954
+        name: oauth2-proxy
+        ports:
+        - containerPort: 6000
+          name: web
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 300m
+            memory: 256Mi
+          requests:
+            cpu: 30m
+            memory: 128Mi
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+      initContainers:
+      - command:
+        - cp
+        - -R
+        - /opt/app-root/src/.
+        - /mnt/static-content/
+        image: quay.io/konflux-ci/konflux-ui@sha256:225ca976849e9a165aca248cd3d3f6eda3bd053adfddb7bb96d021ed0f760273
+        name: copy-static-content
+        resources:
+          limits:
+            cpu: 50m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+        volumeMounts:
+        - mountPath: /mnt/static-content
+          name: static-content
+      - command:
+        - sh
+        - -c
+        - |
+          set -e
+
+          # Copy the auth.conf template and replace the bearer token
+          token=$(cat /mnt/api-token/token)
+          sed "s/__BEARER_TOKEN__/$token/" /mnt/nginx-templates/auth.conf > /mnt/nginx-generated-config/auth.conf
+          chmod 640 /mnt/nginx-generated-config/auth.conf
+        image: registry.access.redhat.com/ubi9/ubi@sha256:66233eebd72bb5baa25190d4f55e1dc3fff3a9b77186c1f91a0abdb274452072
+        name: generate-nginx-configs
+        resources:
+          limits:
+            cpu: 50m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+        volumeMounts:
+        - mountPath: /mnt/nginx-generated-config
+          name: nginx-generated-config
+        - mountPath: /mnt/nginx-templates
+          name: nginx-templates
+        - mountPath: /mnt/api-token
+          name: api-token
+      serviceAccountName: proxy
+      topologySpreadConstraints:
+      - labelSelector:
+          matchLabels:
+            app: proxy
+        maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+      volumes:
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: nginx.conf
+            path: nginx.conf
+          name: proxy-cb8kd95k47
+        name: proxy
+      - configMap:
+          defaultMode: 420
+          name: proxy-nginx-templates-4m8fgtf4m9
+        name: nginx-templates
+      - name: nginx-static
+        projected:
+          defaultMode: 420
+          sources:
+          - configMap:
+              name: proxy-nginx-static-fmmfg7d22f
+          - configMap:
+              name: nginx-idp-location-h959ghd6bh
+      - emptyDir: {}
+        name: logs
+      - emptyDir: {}
+        name: nginx-tmp
+      - emptyDir: {}
+        name: run
+      - name: serving-cert
+        secret:
+          secretName: serving-cert
+      - emptyDir: {}
+        name: nginx-generated-config
+      - name: api-token
+        secret:
+          secretName: proxy
+      - emptyDir: {}
+        name: static-content
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: serving-cert
+  namespace: konflux-ui
+spec:
+  dnsNames:
+  - localhost
+  issuerRef:
+    kind: ClusterIssuer
+    name: self-signed-cluster-issuer
+  secretName: serving-cert

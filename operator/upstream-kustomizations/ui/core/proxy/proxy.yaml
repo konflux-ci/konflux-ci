@@ -1,0 +1,271 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: proxy
+  name: proxy
+  annotations:
+    ignore-check.kube-linter.io/no-anti-affinity: "Using topologySpreadConstraints"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: proxy
+  minReadySeconds: 30
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: proxy
+    spec:
+      serviceAccountName: proxy
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: proxy
+      initContainers:
+      - name: copy-static-content
+        image: quay.io/konflux-ci/konflux-ui
+        command:
+          - cp
+          - -R
+          - /opt/app-root/src/.
+          - /mnt/static-content/
+        volumeMounts:
+        - name: static-content
+          mountPath: /mnt/static-content
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+        resources:
+          limits:
+            cpu: 50m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+      - name: generate-nginx-configs
+        image: registry.access.redhat.com/ubi9/ubi@sha256:66233eebd72bb5baa25190d4f55e1dc3fff3a9b77186c1f91a0abdb274452072
+        command:
+          - sh
+          - -c
+          - |
+            set -e
+            
+            # Copy the auth.conf template and replace the bearer token
+            token=$(cat /mnt/api-token/token)
+            sed "s/__BEARER_TOKEN__/$token/" /mnt/nginx-templates/auth.conf > /mnt/nginx-generated-config/auth.conf
+            chmod 640 /mnt/nginx-generated-config/auth.conf
+            
+        volumeMounts:
+        - name: nginx-generated-config
+          mountPath: /mnt/nginx-generated-config
+        - name: nginx-templates
+          mountPath: /mnt/nginx-templates
+        - name: api-token
+          mountPath: /mnt/api-token
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+        resources:
+          limits:
+            cpu: 50m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+      containers:
+      - image: registry.access.redhat.com/ubi9/nginx-124@sha256:b924363ff07ee0f8fd4f680497da774ac0721722a119665998ff5b2111098ad1
+        name: nginx
+        command: 
+          - nginx
+          - "-g"
+          - "daemon off;"
+          - -c
+          - /etc/nginx/nginx.conf
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health
+            port: 9443
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 1
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health
+            port: 9443
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 1
+        ports:
+        - containerPort: 8080
+          name: web
+          protocol: TCP
+        - containerPort: 9443
+          name: web-tls
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 300m
+            memory: 256Mi
+          requests:
+            cpu: 30m
+            memory: 128Mi
+        volumeMounts:
+          - mountPath: /etc/nginx/nginx.conf
+            subPath: nginx.conf
+            name: proxy
+            readOnly: true
+          - name: logs
+            mountPath: /var/log/nginx
+          - name: nginx-tmp
+            mountPath: /var/lib/nginx/tmp
+          - name: run
+            mountPath: /run
+          - name: serving-cert
+            mountPath: /mnt
+          - name: nginx-generated-config
+            mountPath: /mnt/nginx-generated-config
+          - name: nginx-static
+            mountPath: /mnt/nginx-additional-location-configs
+          - name: static-content
+            mountPath: /opt/app-root/src/static-content
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+      - image: quay.io/oauth2-proxy/oauth2-proxy@sha256:latest
+        name: oauth2-proxy
+        env:
+        - name: OAUTH2_PROXY_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: oauth2-proxy-client-secret
+              key: client-secret
+        - name: OAUTH2_PROXY_COOKIE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: oauth2-proxy-cookie-secret
+              key: cookie-secret
+        args:
+          - --provider
+          - oidc
+          - --provider-display-name
+          - "Dex OIDC"
+          - --client-id
+          - oauth2-proxy
+          - --http-address
+          - "127.0.0.1:6000"
+          - --redirect-url
+          - https://localhost:9443/oauth2/callback
+          - --oidc-issuer-url
+          - https://localhost:9443/idp/
+          - --skip-oidc-discovery
+          - --login-url
+          - https://localhost:9443/idp/auth
+          - --redeem-url
+          - https://dex.dex.svc.cluster.local:9443/idp/token
+          - --oidc-jwks-url
+          - https://dex.dex.svc.cluster.local:9443/idp/keys
+          - --cookie-secure
+          - "true"
+          - --cookie-name
+          - __Host-konflux-ci-cookie
+          - --email-domain
+          - "*"
+          - --ssl-insecure-skip-verify
+          - "true"
+          - --set-xauthrequest
+          - "true"
+          - --whitelist-domain
+          - localhost:9443
+          - --skip-jwt-bearer-tokens
+        ports:
+          - containerPort: 6000
+            name: web
+            protocol: TCP
+        resources:
+          limits:
+            cpu: 300m
+            memory: 256Mi
+          requests:
+            cpu: 30m
+            memory: 128Mi
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+      volumes:
+        - configMap:
+            defaultMode: 420
+            name: proxy
+            items:
+              - key: nginx.conf
+                path: nginx.conf 
+          name: proxy
+        - configMap:
+            defaultMode: 420
+            name: proxy-nginx-templates
+          name: nginx-templates
+        - name: nginx-static
+          projected:
+            defaultMode: 420
+            sources:
+            - configMap:
+                name: proxy-nginx-static
+        - name: logs
+          emptyDir: {}
+        - name: nginx-tmp
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
+        - name: serving-cert
+          secret:
+            secretName: serving-cert
+        - name: nginx-generated-config
+          emptyDir: {}
+        - name: api-token
+          secret:
+            secretName: proxy
+        - name: static-content
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: proxy
+  name: proxy
+spec:
+  type: ClusterIP
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+    - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+    - name: web
+      port: 8888
+      protocol: TCP
+      targetPort: web
+    - name: web-tls
+      port: 9443
+      protocol: TCP
+      targetPort: web-tls
+  selector:
+    app: proxy

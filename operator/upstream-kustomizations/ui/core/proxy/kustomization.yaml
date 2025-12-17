@@ -1,0 +1,26 @@
+kind: Kustomization
+apiVersion: kustomize.config.k8s.io/v1beta1
+resources:
+  - proxy.yaml
+  - rbac.yaml
+
+images:
+- name: quay.io/konflux-ci/konflux-ui
+  newName: quay.io/konflux-ci/konflux-ui
+  newTag: 76c3a63732a385eb5a717c96ba6a623472edc9ef
+- name: quay.io/oauth2-proxy/oauth2-proxy
+  newName: quay.io/oauth2-proxy/oauth2-proxy
+  newTag: latest@sha256:56e3daedf765c7a1eea6e366fbe684be7d3084830ade14b6174570d3c7960954
+
+configMapGenerator:
+  - name: proxy
+    files:
+      - nginx.conf
+  - name: proxy-nginx-templates
+    files:
+      - auth.conf
+  - name: proxy-nginx-static
+    files:
+      - tekton-results.conf
+
+namespace: konflux-ui

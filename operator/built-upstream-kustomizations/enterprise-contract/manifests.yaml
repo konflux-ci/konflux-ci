@@ -1,0 +1,526 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: enterprise-contract-service
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: enterprisecontractpolicies.appstudio.redhat.com
+spec:
+  group: appstudio.redhat.com
+  names:
+    categories:
+    - all
+    kind: EnterpriseContractPolicy
+    listKind: EnterpriseContractPolicyList
+    plural: enterprisecontractpolicies
+    shortNames:
+    - ecp
+    singular: enterprisecontractpolicy
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: EnterpriseContractPolicy is the Schema for the enterprisecontractpolicies
+          API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: EnterpriseContractPolicySpec is used to configure the Enterprise
+              Contract Policy
+            properties:
+              configuration:
+                description: Configuration handles policy modification configuration
+                  (exclusions and inclusions)
+                properties:
+                  collections:
+                    description: |-
+                      Collections set of predefined rules.  DEPRECATED: Collections can be listed in include
+                      with the "@" prefix.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                  exclude:
+                    description: |-
+                      Exclude set of policy exclusions that, in case of failure, do not block
+                      the success of the outcome.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                  include:
+                    description: |-
+                      Include set of policy inclusions that are added to the policy evaluation.
+                      These override excluded rules.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                type: object
+              description:
+                description: Description of the policy or its intended use
+                type: string
+              identity:
+                description: Identity to be used for keyless verification. This is
+                  an experimental feature.
+                properties:
+                  issuer:
+                    description: Issuer is the URL of the certificate OIDC issuer
+                      for keyless verification.
+                    type: string
+                  issuerRegExp:
+                    description: |-
+                      IssuerRegExp is a regular expression to match the URL of the certificate OIDC issuer for
+                      keyless verification.
+                    type: string
+                  subject:
+                    description: Subject is the URL of the certificate identity for
+                      keyless verification.
+                    type: string
+                  subjectRegExp:
+                    description: |-
+                      SubjectRegExp is a regular expression to match the URL of the certificate identity for
+                      keyless verification.
+                    type: string
+                type: object
+              name:
+                description: Optional name of the policy
+                type: string
+              publicKey:
+                description: Public key used to validate the signature of images and
+                  attestations
+                type: string
+              rekorUrl:
+                description: URL of the Rekor instance. Empty string disables Rekor
+                  integration
+                type: string
+              sources:
+                description: One or more groups of policy rules
+                items:
+                  description: Source defines policies and data that are evaluated
+                    together
+                  properties:
+                    config:
+                      description: |-
+                        Config specifies which policy rules are included, or excluded, from the
+                        provided policy source urls.
+                      properties:
+                        exclude:
+                          description: |-
+                            Exclude is a set of policy exclusions that, in case of failure, do not block
+                            the success of the outcome.
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: set
+                        include:
+                          description: |-
+                            Include is a set of policy inclusions that are added to the policy evaluation.
+                            These take precedence over policy exclusions.
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: set
+                      type: object
+                    data:
+                      description: List of go-getter style policy data source urls
+                      items:
+                        type: string
+                      type: array
+                    name:
+                      description: Optional name for the source
+                      type: string
+                    policy:
+                      description: List of go-getter style policy source urls
+                      items:
+                        type: string
+                      minItems: 1
+                      type: array
+                    ruleData:
+                      description: Arbitrary rule data that will be visible to policy
+                        rules
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    volatileConfig:
+                      description: |-
+                        Specifies volatile configuration that can include or exclude policy rules
+                        based on effective time.
+                      properties:
+                        exclude:
+                          description: |-
+                            Exclude is a set of policy exclusions that, in case of failure, do not block
+                            the success of the outcome.
+                          items:
+                            description: VolatileCriteria includes or excludes a policy
+                              rule with effective dates as an option.
+                            properties:
+                              componentNames:
+                                description: |-
+                                  ComponentNames is used to specify component names from
+                                  ApplicationSnapshot. This allows filtering in scenarios where
+                                  multiple components share the same image repository.
+                                items:
+                                  minLength: 1
+                                  type: string
+                                type: array
+                                x-kubernetes-list-type: set
+                              effectiveOn:
+                                format: date-time
+                                type: string
+                              effectiveUntil:
+                                format: date-time
+                                type: string
+                              imageDigest:
+                                description: ImageDigest is used to specify an image
+                                  by its digest.
+                                pattern: ^sha256:[a-fA-F0-9]{64}$
+                                type: string
+                              imageRef:
+                                description: |-
+                                  DEPRECATED: Use ImageDigest instead
+                                  ImageRef is used to specify an image by its digest.
+                                pattern: ^sha256:[a-fA-F0-9]{64}$
+                                type: string
+                              imageUrl:
+                                description: ImageUrl is used to specify an image
+                                  by its URL without a tag.
+                                pattern: ^[a-z0-9][a-z0-9.-]*[a-z0-9](?:\/[a-z0-9][a-z0-9-]*[a-z0-9]){2,}$
+                                type: string
+                              reference:
+                                description: Reference is used to include a link to
+                                  related information such as a Jira issue URL.
+                                type: string
+                              value:
+                                type: string
+                            required:
+                            - value
+                            type: object
+                            x-kubernetes-validations:
+                            - message: only one of imageUrl, imageDigest, imageRef,
+                                or componentNames may be set
+                              rule: '(has(self.imageUrl) ? 1 : 0) + (has(self.imageDigest)
+                                ? 1 : 0) + (has(self.imageRef) ? 1 : 0) + (has(self.componentNames)
+                                ? 1 : 0) <= 1'
+                          type: array
+                        include:
+                          description: |-
+                            Include is a set of policy inclusions that are added to the policy evaluation.
+                            These take precedence over policy exclusions.
+                          items:
+                            description: VolatileCriteria includes or excludes a policy
+                              rule with effective dates as an option.
+                            properties:
+                              componentNames:
+                                description: |-
+                                  ComponentNames is used to specify component names from
+                                  ApplicationSnapshot. This allows filtering in scenarios where
+                                  multiple components share the same image repository.
+                                items:
+                                  minLength: 1
+                                  type: string
+                                type: array
+                                x-kubernetes-list-type: set
+                              effectiveOn:
+                                format: date-time
+                                type: string
+                              effectiveUntil:
+                                format: date-time
+                                type: string
+                              imageDigest:
+                                description: ImageDigest is used to specify an image
+                                  by its digest.
+                                pattern: ^sha256:[a-fA-F0-9]{64}$
+                                type: string
+                              imageRef:
+                                description: |-
+                                  DEPRECATED: Use ImageDigest instead
+                                  ImageRef is used to specify an image by its digest.
+                                pattern: ^sha256:[a-fA-F0-9]{64}$
+                                type: string
+                              imageUrl:
+                                description: ImageUrl is used to specify an image
+                                  by its URL without a tag.
+                                pattern: ^[a-z0-9][a-z0-9.-]*[a-z0-9](?:\/[a-z0-9][a-z0-9-]*[a-z0-9]){2,}$
+                                type: string
+                              reference:
+                                description: Reference is used to include a link to
+                                  related information such as a Jira issue URL.
+                                type: string
+                              value:
+                                type: string
+                            required:
+                            - value
+                            type: object
+                            x-kubernetes-validations:
+                            - message: only one of imageUrl, imageDigest, imageRef,
+                                or componentNames may be set
+                              rule: '(has(self.imageUrl) ? 1 : 0) + (has(self.imageDigest)
+                                ? 1 : 0) + (has(self.imageRef) ? 1 : 0) + (has(self.componentNames)
+                                ? 1 : 0) <= 1'
+                          type: array
+                      type: object
+                  type: object
+                minItems: 1
+                type: array
+            type: object
+          status:
+            description: EnterpriseContractPolicyStatus defines the observed state
+              of EnterpriseContractPolicy
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+  name: enterprisecontractpolicy-editor-role
+rules:
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - enterprisecontractpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - enterprisecontractpolicies/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+  name: enterprisecontractpolicy-viewer-role
+rules:
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - enterprisecontractpolicies
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - enterprisecontractpolicies/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: public-ec-cm
+  namespace: enterprise-contract-service
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: enterprisecontract-configmap-viewer-role
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: system:authenticated
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: public-ecp
+  namespace: enterprise-contract-service
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: enterprisecontractpolicy-viewer-role
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: system:authenticated
+---
+apiVersion: v1
+data:
+  verify_ec_task_bundle: quay.io/enterprise-contract/ec-task-bundle@sha256:e9603dd71bbf08b1b0cf0db433d632fe9551d937dc449583a3611e847b32d4df
+  verify_ec_task_git_pathInRepo: tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml
+  verify_ec_task_git_revision: e64009ce16a033d1a321b994ce8eb644874f0d9f
+  verify_ec_task_git_url: https://github.com/enterprise-contract/ec-cli.git
+kind: ConfigMap
+metadata:
+  name: ec-defaults
+  namespace: enterprise-contract-service
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: EnterpriseContractPolicy
+metadata:
+  name: all
+  namespace: enterprise-contract-service
+spec:
+  description: Include every rule in the default policy source. For experiments only.
+    This is not expected to pass for Konflux builds without excluding some rules.
+    Available collections are defined in https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/release_policy.html#_available_rule_collections.
+    If a different policy configuration is desired, this resource can serve as a starting
+    point. See the docs on how to include and exclude rules https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/policy_configuration.html#_including_and_excluding_rules.
+  name: Everything (experimental)
+  publicKey: k8s://openshift-pipelines/public-key
+  sources:
+  - config:
+      exclude: []
+      include:
+      - '*'
+    data:
+    - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest
+    - github.com/release-engineering/rhtap-ec-policy//data
+    name: Default
+    policy:
+    - oci::quay.io/conforma/release-policy:konflux@sha256:f05b175644ac6e32f018da06491cf032ff3fccaf17878beb6403f392f04f4705
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: EnterpriseContractPolicy
+metadata:
+  name: default
+  namespace: enterprise-contract-service
+spec:
+  description: Includes rules for levels 1, 2 & 3 of SLSA v0.1. This is the default
+    config used for new Konflux applications. Available collections are defined in
+    https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/release_policy.html#_available_rule_collections.
+    If a different policy configuration is desired, this resource can serve as a starting
+    point. See the docs on how to include and exclude rules https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/policy_configuration.html#_including_and_excluding_rules.
+  name: Default
+  publicKey: k8s://openshift-pipelines/public-key
+  sources:
+  - config:
+      exclude: []
+      include:
+      - '@slsa3'
+    data:
+    - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest
+    - github.com/release-engineering/rhtap-ec-policy//data
+    name: Default
+    policy:
+    - oci::quay.io/conforma/release-policy:konflux@sha256:f05b175644ac6e32f018da06491cf032ff3fccaf17878beb6403f392f04f4705
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: EnterpriseContractPolicy
+metadata:
+  name: redhat
+  namespace: enterprise-contract-service
+spec:
+  description: Includes the full set of rules and policies required internally by
+    Red Hat when building Red Hat products. Available collections are defined in https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/release_policy.html#_available_rule_collections.
+    If a different policy configuration is desired, this resource can serve as a starting
+    point. See the docs on how to include and exclude rules https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/policy_configuration.html#_including_and_excluding_rules.
+  name: Red Hat
+  publicKey: k8s://openshift-pipelines/public-key
+  sources:
+  - config:
+      exclude: []
+      include:
+      - '@redhat'
+    data:
+    - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest
+    - github.com/release-engineering/rhtap-ec-policy//data
+    name: Default
+    policy:
+    - oci::quay.io/conforma/release-policy:konflux@sha256:f05b175644ac6e32f018da06491cf032ff3fccaf17878beb6403f392f04f4705
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: EnterpriseContractPolicy
+metadata:
+  name: redhat-no-hermetic
+  namespace: enterprise-contract-service
+spec:
+  description: Includes most of the rules and policies required internally by Red
+    Hat when building Red Hat products. It excludes the requirement of hermetic builds.
+    Available collections are defined in https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/release_policy.html#_available_rule_collections.
+    If a different policy configuration is desired, this resource can serve as a starting
+    point. See the docs on how to include and exclude rules https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/policy_configuration.html#_including_and_excluding_rules.
+  name: Red Hat (non hermetic)
+  publicKey: k8s://openshift-pipelines/public-key
+  sources:
+  - config:
+      exclude:
+      - hermetic_build_task
+      - tasks.required_tasks_found:prefetch-dependencies
+      include:
+      - '@redhat'
+    data:
+    - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest
+    - github.com/release-engineering/rhtap-ec-policy//data
+    name: Default
+    policy:
+    - oci::quay.io/conforma/release-policy:konflux@sha256:f05b175644ac6e32f018da06491cf032ff3fccaf17878beb6403f392f04f4705
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: EnterpriseContractPolicy
+metadata:
+  name: redhat-trusted-tasks
+  namespace: enterprise-contract-service
+spec:
+  description: Rules used to verify Tekton Task definitions comply to Red Hat's standards.
+  name: Red Hat Trusted Tasks
+  sources:
+  - config:
+      exclude: []
+      include:
+      - kind
+    data:
+    - github.com/release-engineering/rhtap-ec-policy//data
+    name: Default
+    policy:
+    - oci::quay.io/conforma/task-policy:konflux@sha256:6f7eb1ac981b31864ec91959127cfb19b5a14bd3f0fa14e123b466cc9a40bd81
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: EnterpriseContractPolicy
+metadata:
+  name: slsa3
+  namespace: enterprise-contract-service
+spec:
+  description: Rules specifically related to levels 1, 2 & 3 of SLSA v0.1, plus a
+    set of basic checks that are expected to pass for all Konflux builds. Available
+    collections are defined in https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/release_policy.html#_available_rule_collections.
+    If a different policy configuration is desired, this resource can serve as a starting
+    point. See the docs on how to include and exclude rules https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/policy_configuration.html#_including_and_excluding_rules.
+  name: SLSA3
+  publicKey: k8s://openshift-pipelines/public-key
+  sources:
+  - config:
+      exclude: []
+      include:
+      - '@minimal'
+      - '@slsa3'
+    data:
+    - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest
+    - github.com/release-engineering/rhtap-ec-policy//data
+    name: Default
+    policy:
+    - oci::quay.io/conforma/release-policy:konflux@sha256:f05b175644ac6e32f018da06491cf032ff3fccaf17878beb6403f392f04f4705

@@ -1,0 +1,236 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: namespace-lister
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: namespace-lister
+  namespace: namespace-lister
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: namespace-lister-authorizer
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterroles
+  - clusterrolebindings
+  - roles
+  - rolebindings
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: namespace-lister-authorizer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: namespace-lister-authorizer
+subjects:
+- apiGroup: ""
+  kind: ServiceAccount
+  name: namespace-lister
+  namespace: namespace-lister
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: namespace-lister
+  namespace: namespace-lister
+spec:
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  selector:
+    apps: namespace-lister
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    ignore-check.kube-linter.io/no-anti-affinity: Using topologySpreadConstraints
+  labels:
+    apps: namespace-lister
+  name: namespace-lister
+  namespace: namespace-lister
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      apps: namespace-lister
+  template:
+    metadata:
+      labels:
+        apps: namespace-lister
+    spec:
+      containers:
+      - args:
+        - -enable-tls
+        - -cert-path=/var/tls/tls.crt
+        - -key-path=/var/tls/tls.key
+        env:
+        - name: LOG_LEVEL
+          value: "0"
+        - name: CACHE_RESYNC_PERIOD
+          value: 10m
+        - name: CACHE_NAMESPACE_LABELSELECTOR
+          value: konflux-ci.dev/type=tenant
+        - name: AUTH_USERNAME_HEADER
+          value: Impersonate-User
+        image: quay.io/konflux-ci/namespace-lister@sha256:f706a18ab4d33c9d0749c5768c41052831805467aca1e46bcf109a5fa3144e80
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+            scheme: HTTPS
+          initialDelaySeconds: 1
+        name: namespace-lister
+        ports:
+        - containerPort: 8080
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8080
+            scheme: HTTPS
+          initialDelaySeconds: 1
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 20m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+        volumeMounts:
+        - mountPath: /var/tls
+          name: tls
+          readOnly: true
+      serviceAccountName: namespace-lister
+      terminationGracePeriodSeconds: 60
+      topologySpreadConstraints:
+      - labelSelector:
+          matchLabels:
+            apps: namespace-lister
+        maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+      volumes:
+      - name: tls
+        secret:
+          secretName: namespace-lister-tls
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: namespace-lister
+  namespace: namespace-lister
+spec:
+  dnsNames:
+  - namespace-lister.namespace-lister.svc
+  - namespace-lister.namespace-lister.svc.cluster.local
+  issuerRef:
+    kind: ClusterIssuer
+    name: ca-issuer
+  secretName: namespace-lister-tls
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: deny-virtual-domain
+  namespace: namespace-lister
+spec:
+  rules:
+  - match:
+      any:
+      - resources:
+          kinds:
+          - /v1/Namespace
+          operations:
+          - CREATE
+          - UPDATE
+          selector:
+            matchLabels:
+              konflux-ci.dev/type: tenant
+    name: deny-virtual-domain-labels-annotations
+    skipBackgroundRequests: true
+    validate:
+      allowExistingViolations: true
+      cel:
+        expressions:
+        - expression: '!object.metadata.labels.exists(key, key.startsWith("virtual.konflux-ci.dev/"))'
+          message: Tenant namespaces can not have labels with domain 'virtual.konflux-ci.dev'
+        - expression: '!has(object.metadata.annotations) || !object.metadata.annotations.exists(key,
+            key.startsWith("virtual.konflux-ci.dev/"))'
+          message: Tenant namespaces can not have annotations with domain 'virtual.konflux-ci.dev'
+  validationFailureAction: Enforce
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: namespace-lister-allow-from-konfluxui
+  namespace: namespace-lister
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: konflux-ui
+    - podSelector:
+        matchLabels:
+          app: proxy
+    ports:
+    - port: 8080
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      apps: namespace-lister
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: namespace-lister-allow-to-apiserver
+  namespace: namespace-lister
+spec:
+  egress:
+  - ports:
+    - port: 6443
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          component: kube-apiserver
+  podSelector:
+    matchLabels:
+      apps: namespace-lister
+  policyTypes:
+  - Egress

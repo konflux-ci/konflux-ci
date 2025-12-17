@@ -1,0 +1,14 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: namespace-lister
+  namespace: namespace-lister
+spec:
+  dnsNames:
+  - namespace-lister.namespace-lister.svc
+  - namespace-lister.namespace-lister.svc.cluster.local
+  issuerRef:
+    kind: ClusterIssuer
+    name: ca-issuer
+  secretName: namespace-lister-tls

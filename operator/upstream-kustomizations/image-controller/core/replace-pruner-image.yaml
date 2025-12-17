@@ -1,0 +1,4 @@
+---
+- op: replace
+  path: /spec/jobTemplate/spec/template/spec/containers/0/image
+  value: registry.access.redhat.com/ubi8/python-39:1-201.1729679484

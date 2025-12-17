@@ -1,0 +1,59 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- https://github.com/konflux-ci/integration-service/config/default?ref=2fc3af73319771804f7afd112c8871f38c7c3be4
+- https://github.com/konflux-ci/integration-service/config/snapshotgc?ref=2fc3af73319771804f7afd112c8871f38c7c3be4
+- konflux-integration-runner.yaml
+- kyverno-background-controller-binding.yaml
+- bootstrap-namespace.yaml
+
+namespace: integration-service
+
+images:
+- name: quay.io/konflux-ci/integration-service
+  newName: quay.io/konflux-ci/integration-service
+  newTag: 2fc3af73319771804f7afd112c8871f38c7c3be4
+
+patches:
+  - target:
+      group: monitoring.coreos.com
+      version: v1
+      kind: ServiceMonitor
+      name: integration-service-controller-manager-metrics-monitor
+    path: remove-service-monitor.yaml
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRole
+      name: integration-service-metrics-reader
+    path: remove-metrics-reader-cluster-role.yaml
+  - target:
+      group: ""
+      version: v1
+      kind: Secret
+      name: integration-service-metrics-reader
+    path: remove-metrics-reader-secret.yaml
+  - target:
+      group: ""
+      version: v1
+      kind: ServiceAccount
+      name: integration-service-metrics-reader
+    path: remove-metrics-reader-sa.yaml
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRoleBinding
+      name: integration-service-prometheus-role-binding
+    path: remove-metrics-reader-cluster-role-binding.yaml
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRole
+      name: integration-service-prometheus-viewer-role
+    path: remove-prometheus-viewer-cluster-role.yaml
+  - target:
+      group: batch
+      version: v1
+      kind: CronJob
+      name: integration-service-snapshot-garbage-collector
+    path: snapshot-gc-resource-patch.yaml
