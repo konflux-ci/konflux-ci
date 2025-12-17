@@ -68,4 +68,4 @@ jobs:
       - name: Running Test e2e
         run: |
           go mod tidy
-          make test-e2e
+          SKIP_PRE_CLEANUP=true make test-e2e
