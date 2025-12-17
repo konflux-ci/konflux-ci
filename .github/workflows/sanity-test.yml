@@ -128,7 +128,8 @@ jobs:
 
       - name: Run Go Tests
         run: |
-          go test ./test/go-tests/
+          cd test/go-tests
+          go test ./...
 
       - name: Prepare resources for E2E tests
         env:
