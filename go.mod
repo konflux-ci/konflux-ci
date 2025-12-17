@@ -7,7 +7,7 @@ toolchain go1.23.4
 require (
 	github.com/google/go-github/scrape v0.0.0-20240617200734-91449217b725
 	github.com/google/go-github/v61 v61.0.0
-	github.com/labstack/echo/v4 v4.12.0
+	github.com/labstack/echo/v4 v4.14.0
 	github.com/onsi/ginkgo/v2 v2.21.0
 	github.com/onsi/gomega v1.35.1
 	github.com/spf13/cobra v1.8.1
