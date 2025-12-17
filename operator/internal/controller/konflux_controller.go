@@ -19,13 +19,16 @@ package controller
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -201,7 +204,22 @@ func (r *KonfluxReconciler) applyObject(ctx context.Context, obj *unstructured.U
 	)
 
 	// Use server-side apply with the field manager "konflux-operator"
-	return r.Patch(ctx, obj, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+	err := r.Patch(ctx, obj, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+	if err != nil {
+		// Skip resources whose CRDs are not installed (e.g., cert-manager Certificate)
+		var noKindMatchErr *meta.NoKindMatchError
+		if errors.As(err, &noKindMatchErr) {
+			log.Info("Skipping resource: CRD not installed",
+				"kind", obj.GetKind(),
+				"apiVersion", obj.GetAPIVersion(),
+				"namespace", obj.GetNamespace(),
+				"name", obj.GetName(),
+			)
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -218,5 +236,7 @@ func (r *KonfluxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&rbacv1.ClusterRole{}).
 		Owns(&rbacv1.ClusterRoleBinding{}).
 		Owns(&apiextensionsv1.CustomResourceDefinition{}).
+		Owns(&certmanagerv1.Certificate{}).
+		Owns(&certmanagerv1.Issuer{}).
 		Complete(r)
 }

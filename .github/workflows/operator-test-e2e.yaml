@@ -56,6 +56,11 @@ jobs:
       - name: Verify kind installation
         run: kind version
 
+      - name: Deploying Dependencies
+        working-directory: ${{ github.workspace }}
+        run: |
+          ./deploy-deps.sh
+
       - name: Running Test e2e
         run: |
           go mod tidy
