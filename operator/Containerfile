@@ -14,6 +14,7 @@ RUN go mod download
 COPY --chmod=644 cmd/main.go cmd/main.go
 COPY --chmod=755 api/ api/
 COPY --chmod=755 internal/ internal/
+COPY --chmod=755 pkg/ pkg/
 
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o /opt/app-root/manager cmd/main.go
 
