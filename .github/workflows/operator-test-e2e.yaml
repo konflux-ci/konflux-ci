@@ -34,7 +34,7 @@ jobs:
     if: needs.check-changes.outputs.operator == 'true'
     env:
       # renovate: datasource=github-releases depName=kubernetes-sigs/kind
-      KIND_VERSION: "0.29.0"
+      KIND_VERSION: "0.30.0"
     defaults:
       run:
         working-directory: operator
