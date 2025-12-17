@@ -31,8 +31,9 @@ type KonfluxSpec struct {
 
 // KonfluxStatus defines the observed state of Konflux.
 type KonfluxStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Conditions represent the latest available observations of the Konflux state
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
