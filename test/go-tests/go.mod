@@ -2,7 +2,7 @@ module github.com/konflux-ci/konflux-ci/test/go-tests
 
 go 1.23.0
 
-toolchain go1.23.4
+toolchain go1.25.5
 
 require (
 	github.com/onsi/ginkgo/v2 v2.21.0
