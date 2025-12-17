@@ -31,14 +31,14 @@ const (
 func AllComponents() []Component {
 	return []Component{
 		ApplicationAPI,
-		BuildService,
+		RBAC,
 		EnterpriseContract,
-		ImageController,
+		Release,
+		BuildService,
 		Integration,
 		NamespaceLister,
-		RBAC,
-		Release,
 		UI,
+		ImageController,
 	}
 }
 
