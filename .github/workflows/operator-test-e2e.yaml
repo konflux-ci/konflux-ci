@@ -56,6 +56,10 @@ jobs:
       - name: Verify kind installation
         run: kind version
 
+      - name: Deploy kind cluster
+        run: |
+          make setup-test-e2e
+
       - name: Deploying Dependencies
         working-directory: ${{ github.workspace }}
         run: |
