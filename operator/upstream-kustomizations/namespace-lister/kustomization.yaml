@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- deployment.yaml
+- namespace.yaml
+- rbac.yaml
+- service.yaml
+- certificate.yaml
+- network_policy_allow_to_apiserver.yaml
+- network_policy_allow_from_konfluxui.yaml
+- deny-virtual-domain.yaml
+namespace: namespace-lister
+images:
+- digest: sha256:f706a18ab4d33c9d0749c5768c41052831805467aca1e46bcf109a5fa3144e80
+  name: quay.io/konflux-ci/namespace-lister
+  newName: quay.io/konflux-ci/namespace-lister
+patches:
+- path: ./patches/with-header-auth-impersonate-user.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: namespace-lister
+    namespace: namespace-lister

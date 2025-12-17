@@ -1,0 +1,158 @@
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: konflux-admin-user-actions-core
+  labels:
+    rbac.konflux-ci.dev/aggregate-to-admin: "true"
+rules:
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+      - deletecollection
+    apiGroups:
+      - appstudio.redhat.com
+    resources:
+      - applications
+      - components
+      - imagerepositories
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    apiGroups:
+      - appstudio.redhat.com
+    resources:
+      - snapshots
+  - verbs:
+      - get
+      - list
+      - watch
+    apiGroups:
+      - tekton.dev
+    resources:
+      - taskruns
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    apiGroups:
+      - tekton.dev
+    resources:
+      - pipelineruns
+  - verbs:
+      - get
+      - list
+    apiGroups:
+      - results.tekton.dev
+    resources:
+      - results
+      - records
+      - logs
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    apiGroups:
+      - appstudio.redhat.com
+    resources:
+      - enterprisecontractpolicies
+      - integrationtestscenarios
+      - releases
+      - releaseplans
+      - releaseplanadmissions
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    apiGroups:
+      - ''
+    resources:
+      - secrets
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    apiGroups:
+      - ''
+    resources:
+      - configmaps
+  - verbs:
+      - get
+      - list
+      - watch
+    apiGroups:
+      - ''
+    resources:
+      - pods
+      - pods/log
+  - verbs:
+      - get
+    apiGroups:
+      - ''
+    resources:
+      - namespaces
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - roles
+      - rolebindings
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    apiGroups:
+      - ""
+    resources:
+      - serviceaccounts
+  - verbs:
+      - create
+    apiGroups:
+      - ""
+    resources:
+      - serviceaccounts/token
+  - verbs:
+    - get
+    - list
+    - watch
+    apiGroups:
+      - pipelinesascode.tekton.dev
+    resources:
+      - repositories

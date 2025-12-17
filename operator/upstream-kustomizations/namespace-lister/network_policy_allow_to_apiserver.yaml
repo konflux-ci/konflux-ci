@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: namespace-lister-allow-to-apiserver
+  namespace: namespace-lister
+spec:
+  podSelector:
+    matchLabels:
+      apps: namespace-lister
+  policyTypes:
+  - Egress
+  egress:
+  - ports:
+    - port: 6443
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          component: kube-apiserver
+      namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system

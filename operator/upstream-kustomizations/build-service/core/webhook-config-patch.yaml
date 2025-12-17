@@ -1,0 +1,23 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: build-service-controller-manager
+spec:
+  template:
+    spec:
+      containers:
+      - name: manager
+        args:
+        - -webhook-config-path=/mnt/webhook-config.json
+        volumeMounts:
+        - name: webhook-config
+          mountPath: /mnt
+          readOnly: true
+      volumes:
+      - name: webhook-config
+        configMap:
+          name: webhook-config
+          items:
+          - key: webhook-config.json
+            path: webhook-config.json

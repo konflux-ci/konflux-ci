@@ -1,0 +1,55 @@
+# Copied from https://github.com/redhat-appstudio/infra-deployments/blob/53c2620f55a9ec321e8ef539f4ce8d71c6273dee/components/policies/production/base/integration/bootstrap-namespace/bootstrap-namespace.yaml
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: init-ns-integration
+  annotations:
+    policies.kyverno.io/description: |
+      This policy creates a service account named konflux-integration-runner and
+      binds it to the konflux-integration-runner cluster role in tenant namespaces.
+spec:
+  rules:
+  - name: create-konflux-integration-runner-serviceaccount
+    skipBackgroundRequests: true
+    match:
+      any:
+      - resources:
+          kinds:
+          - Namespace
+          selector:
+            matchLabels:
+              konflux-ci.dev/type: tenant
+    generate:
+      generateExisting: true
+      synchronize: false
+      apiVersion: v1
+      kind: ServiceAccount
+      name: konflux-integration-runner
+      namespace: '{{request.object.metadata.name}}'
+  - name: create-konflux-integration-runner-rolebinding
+    skipBackgroundRequests: true
+    match:
+      any:
+      - resources:
+          kinds:
+          - Namespace
+          selector:
+            matchLabels:
+              konflux-ci.dev/type: tenant
+    generate:
+      generateExisting: true
+      synchronize: false
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      name: konflux-integration-runner-rolebinding
+      namespace: '{{request.object.metadata.name}}'
+      data:
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: konflux-integration-runner
+        subjects:
+        - kind: ServiceAccount
+          namespace: '{{request.object.metadata.name}}'
+          name: konflux-integration-runner

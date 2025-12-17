@@ -1,0 +1,47 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - https://github.com/konflux-ci/build-service/config/default?ref=affd5b51b3d597ae73a84702e82da7df215915db
+  - build-pipeline-config.yaml
+  - build-config-rolebinding.yaml
+  - appstudio-pipelines-runner.yaml
+  - build-pipeline-runner-rolebinding.yaml
+
+namespace: build-service
+
+images:
+  - name: quay.io/konflux-ci/build-service
+    newName: quay.io/konflux-ci/build-service
+    newTag: affd5b51b3d597ae73a84702e82da7df215915db
+
+patches:
+  - target:
+      group: monitoring.coreos.com
+      version: v1
+      kind: ServiceMonitor
+      name: build-service-controller-manager-metrics-monitor
+    path: remove-service-monitor.yaml
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRole
+      name: build-service-metrics-reader
+    path: remove-metrics-reader-cluster-role.yaml
+  - patch: |
+      - op: add
+        path: /metadata/annotations/ignore-check.kube-linter.io~1liveness-port
+        value: "Keeping upstream configs"
+    target:
+      kind: Deployment
+      name: build-service-controller-manager
+  - patch: |
+      - op: add
+        path: /metadata/annotations/ignore-check.kube-linter.io~1readiness-port
+        value: "Keeping upstream configs"
+    target:
+      kind: Deployment
+      name: build-service-controller-manager
+  - target:
+      kind: Deployment
+      name: build-service-controller-manager
+    path: build-service-env-patch.yaml

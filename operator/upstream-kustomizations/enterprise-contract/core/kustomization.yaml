@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - https://github.com/conforma/crds/config/crd?ref=b5b198bc1aebea6ceab9c311afca11ab07f60835
+  - ns.yaml
+  - public-ecp-rbac.yaml
+
+namespace: enterprise-contract-service
+
+generatorOptions:
+  disableNameSuffixHash: true
+configMapGenerator:
+  - name: ec-defaults
+    namespace: enterprise-contract-service
+    literals:
+      - verify_ec_task_bundle=quay.io/enterprise-contract/ec-task-bundle@sha256:e9603dd71bbf08b1b0cf0db433d632fe9551d937dc449583a3611e847b32d4df
+      - verify_ec_task_git_url=https://github.com/enterprise-contract/ec-cli.git
+      - verify_ec_task_git_revision=e64009ce16a033d1a321b994ce8eb644874f0d9f
+      - verify_ec_task_git_pathInRepo=tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml
+
+patches:
+  - target:
+      group: console.openshift.io
+      version: v1
+      kind: ConsoleYAMLSample
+      name: ecp-example
+    path: remove-ecp-example.yaml
