@@ -161,6 +161,19 @@
         "KUBE_LINTER_VERSION=\"(?<currentValue>[^\"]+)\""
       ],
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "description": "Track kustomize version in GitHub Actions workflows",
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["^\\.github/workflows/.*\\.ya?ml$"],
+      "matchStrings": [
+        "# renovate: datasource=github-releases depName=kubernetes-sigs/kustomize",
+        "KUSTOMIZE_VERSION:\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "kubernetes-sigs/kustomize",
+      "extractVersionTemplate": "^v?(?<version>.*)$"
     }
   ]
 }
