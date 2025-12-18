@@ -126,8 +126,9 @@ func (r *KonfluxReconciler) applyAllManifests(ctx context.Context, owner *konflu
 			}
 
 			if err := r.applyObject(ctx, obj); err != nil {
-				if obj.GroupVersionKind().Group == "cert-manager.io" {
+				if obj.GroupVersionKind().Group == "cert-manager.io" || obj.GroupVersionKind().Group == "kyverno.io" {
 					// TODO: Remove this once we decide how to install cert-manager crds in envtest
+					// TODO: Remove this once we decide if we want to have a dependency on Kyverno
 					log.Info("Skipping resource: CRD not installed",
 						"kind", obj.GetKind(),
 						"apiVersion", obj.GetAPIVersion(),
