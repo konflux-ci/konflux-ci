@@ -1,0 +1,250 @@
+name: Update Upstream Manifests
+
+env:
+  # renovate: datasource=github-releases depName=kubernetes-sigs/kustomize
+  KUSTOMIZE_VERSION: "5.4.1"
+
+on:
+  # Run on a schedule (daily at 2 AM UTC)
+  schedule:
+    - cron: '0 2 * * *'
+  # Allow manual triggering
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  update-manifests:
+    name: Build and Update Upstream Manifests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        # Default to operator/ directory for most steps, but some steps explicitly
+        # change to repo root (for git commands) or pkg/manifests (for scripts)
+        working-directory: operator
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Kustomize
+        run: |
+          KUSTOMIZE_VERSION="${{ env.KUSTOMIZE_VERSION }}"
+          ARCH="linux_amd64"
+
+          echo "Installing kustomize v${KUSTOMIZE_VERSION}..."
+
+          # Download and install kustomize
+          # Kustomize release tags use format: kustomize/v{VERSION}
+          # Download URL format: .../kustomize/v{VERSION}/kustomize_v{VERSION}_{ARCH}.tar.gz
+          RELEASE_TAG="kustomize/v${KUSTOMIZE_VERSION}"
+          DOWNLOAD_URL="https://github.com/kubernetes-sigs/kustomize/releases/download/${RELEASE_TAG}/kustomize_v${KUSTOMIZE_VERSION}_${ARCH}.tar.gz"
+
+          echo "Downloading from: ${DOWNLOAD_URL}"
+          curl -L -f -o kustomize.tar.gz "${DOWNLOAD_URL}"
+          tar -xzf kustomize.tar.gz
+          chmod +x kustomize
+          sudo mv kustomize /usr/local/bin/kustomize
+
+          # Verify installation
+          kustomize version
+          rm -f kustomize.tar.gz
+
+      - name: Update upstream references to latest commits
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd pkg/manifests
+          bash update-upstream-refs.sh
+
+      - name: Build upstream kustomizations
+        run: |
+          cd pkg/manifests
+          bash build-upstream-kustomizations.sh
+
+      - name: Check for changes
+        id: check-changes
+        run: |
+          # Check for changes in both upstream-kustomizations (updated refs) and generated manifests
+          # Git commands need to run from repo root, not from operator/ directory
+          cd "${{ github.workspace }}"
+          if [ -n "$(git status --porcelain operator/upstream-kustomizations operator/pkg/manifests)" ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "Changes detected"
+            echo "Upstream kustomization changes:"
+            git diff --stat operator/upstream-kustomizations || true
+            echo "Generated manifest changes:"
+            git diff --stat operator/pkg/manifests || true
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "No changes detected"
+          fi
+
+      - name: Configure Git
+        if: steps.check-changes.outputs.has_changes == 'true'
+        run: |
+          cd "${{ github.workspace }}"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+      - name: Create branch and commit changes
+        if: steps.check-changes.outputs.has_changes == 'true'
+        run: |
+          cd "${{ github.workspace }}"
+          BRANCH_NAME="update-upstream-manifests"
+
+          # Ensure we're on main branch first
+          git checkout main
+          # Ensure main is up to date
+          git fetch origin main
+
+          # Delete local branch if it exists (we'll recreate it)
+          if git show-ref --verify --quiet refs/heads/"${BRANCH_NAME}"; then
+            echo "Deleting existing local branch ${BRANCH_NAME}..."
+            git branch -D "${BRANCH_NAME}"
+          fi
+
+          # Check if branch exists remotely without fetching all branches
+          if git ls-remote --heads origin "${BRANCH_NAME}" | grep -q .; then
+            echo "Branch ${BRANCH_NAME} exists remotely, recreating from main..."
+            git checkout -b "${BRANCH_NAME}" main
+          else
+            echo "Creating new branch ${BRANCH_NAME}..."
+            git checkout -b "${BRANCH_NAME}" main
+          fi
+
+          # Add and commit changes (both updated kustomization refs and generated manifests)
+          git add operator/upstream-kustomizations/ operator/pkg/manifests/
+          git commit -m "chore: update upstream manifests
+
+          Updated upstream kustomization references to latest commits and rebuilt manifests.
+
+          This PR was automatically created by the Update Upstream Manifests workflow." || echo "No changes to commit"
+
+          # Push the branch
+          git push origin "${BRANCH_NAME}" --force
+
+      - name: Create or update Pull Request
+        if: steps.check-changes.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH_NAME="update-upstream-manifests"
+          PR_TITLE="chore: update upstream manifests"
+          PR_BODY="## Upstream Manifests Update
+
+          This PR updates upstream kustomization references to the latest commits and rebuilds the generated manifests.
+
+          ### What changed?
+          - Updated upstream repository references in \`operator/upstream-kustomizations/\` to latest commits on default branches
+          - Rebuilt all kustomizations using \`build-upstream-kustomizations.sh\`
+          - Updated manifest files in \`operator/pkg/manifests/\`
+
+          ### How to review
+          - Review the updated commit refs in \`operator/upstream-kustomizations/**/kustomization.yaml\` files
+          - Review the generated manifest changes in \`operator/pkg/manifests/\` directory
+
+          ---
+          *This PR was automatically created by the [Update Upstream Manifests workflow](.github/workflows/update-upstream-manifests.yaml)*"
+
+          # Check if PR already exists
+          EXISTING_PR=$(gh pr view "${BRANCH_NAME}" --json number --jq .number 2>/dev/null || echo "")
+
+          if [ -n "${EXISTING_PR}" ]; then
+            echo "PR #${EXISTING_PR} already exists, updating..."
+            gh pr edit "${EXISTING_PR}" --title "${PR_TITLE}" --body "${PR_BODY}"
+            echo "Updated existing PR #${EXISTING_PR}"
+          else
+            echo "Creating new PR..."
+            # Create PR without labels first (labels may not exist in forks)
+            # Extract PR number from the output URL (format: https://github.com/owner/repo/pull/123)
+            # Temporarily disable exit-on-error to capture both output and exit code
+            set +e
+            PR_OUTPUT=$(gh pr create \
+              --title "${PR_TITLE}" \
+              --body "${PR_BODY}" \
+              --base main \
+              --head "${BRANCH_NAME}" 2>&1)
+            PR_EXIT_CODE=$?
+            set -e
+
+            if [ ${PR_EXIT_CODE} -eq 0 ]; then
+              # Extract PR number from URL in output (more portable regex)
+              # Try multiple patterns: pull/123 or /pull/123 or just the number
+              PR_NUMBER=$(echo "${PR_OUTPUT}" | sed -n 's|.*pull/\([0-9]\+\).*|\1|p' | head -1)
+
+              # If that didn't work, try to get it from the branch name
+              if [ -z "${PR_NUMBER}" ]; then
+                PR_NUMBER=$(gh pr view "${BRANCH_NAME}" --json number --jq .number 2>/dev/null || echo "")
+              fi
+
+              if [ -n "${PR_NUMBER}" ]; then
+                echo "Created new PR #${PR_NUMBER}"
+                # Try to add labels if they exist (don't fail if they don't)
+                gh pr edit "${PR_NUMBER}" --add-label "automated,dependencies" 2>/dev/null || echo "Note: Could not add labels (they may not exist in this repository)"
+              else
+                echo "Warning: Created PR but could not extract PR number from output: ${PR_OUTPUT}"
+                echo "PR may have been created successfully. Check: gh pr view ${BRANCH_NAME}"
+              fi
+            else
+              echo "Error: Failed to create PR (exit code: ${PR_EXIT_CODE})"
+              echo "Output: ${PR_OUTPUT}"
+              exit 1
+            fi
+          fi
+
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const workflowUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const triggerType = context.eventName === 'schedule' ? 'Scheduled (cron)' : context.eventName;
+
+            // Create an issue to notify about the failure
+            const title = `⚠️ Upstream Manifests Update Workflow Failed`;
+            const body = `The scheduled workflow to update upstream manifests has failed.
+
+            **Workflow Run:** ${workflowUrl}
+            **Run ID:** ${context.runId}
+            **Trigger:** ${triggerType}
+
+            Please check the workflow logs to identify and fix the issue.
+
+            ---
+            *This issue was automatically created by the Update Upstream Manifests workflow*`;
+
+            // Check if an open issue with this title already exists
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'automated,workflow-failure'
+            });
+
+            const existingIssue = issues.find(issue => issue.title === title);
+
+            if (existingIssue) {
+              // Add a comment to the existing issue
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: `Workflow failed again on ${new Date().toISOString()}\n\n${workflowUrl}`
+              });
+            } else {
+              // Create a new issue
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['automated', 'workflow-failure']
+              });
+            }
+

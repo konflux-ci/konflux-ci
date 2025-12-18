@@ -16,7 +16,7 @@ jobs:
           exit 0
         fi
 
-        WHITELISTED_BOT_NAMES=("renovate[bot]" "red-hat-konflux[bot]")
+        WHITELISTED_BOT_NAMES=("renovate[bot]" "red-hat-konflux[bot]" "github-actions[bot]")
         REQUIRED_LABEL_NAME="ok-to-test"
 
         ORG="${{ github.repository_owner }}"
