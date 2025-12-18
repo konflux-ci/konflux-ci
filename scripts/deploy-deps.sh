@@ -122,24 +122,6 @@ deploy_tekton() {
 
     echo "  🔐 Setting up Tekton Chains RBAC..." >&2
     kubectl apply -k "${repo_root}/dependencies/tekton-chains-rbac"
-
-    echo "  📊 Setting up Tekton Results..." >&2
-    if ! kubectl get secret tekton-results-postgres -n tekton-pipelines; then
-        echo "🔑 Creating secret tekton-results-postgres" >&2
-        local db_password
-        db_password="$(openssl rand -base64 20)"
-        kubectl create secret generic tekton-results-postgres \
-            --namespace="tekton-pipelines" \
-            --from-literal=POSTGRES_USER=postgres \
-            --from-literal=POSTGRES_PASSWORD="$db_password"
-    fi
-    kubectl apply -k "${repo_root}/dependencies/tekton-results"
-
-    # Wait for tekton-results-api to be ready before the watcher starts connecting
-    # This prevents a race condition where the watcher crashes if the API isn't ready yet
-    echo "  ⏳ Waiting for tekton-results-api to be ready..." >&2
-    retry "kubectl wait --for=condition=Available --timeout=120s deployment/tekton-results-api -n tekton-pipelines" \
-          "tekton-results-api did not become available within the allocated time"
 }
 
 deploy_cert_manager() {
