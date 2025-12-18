@@ -150,6 +150,17 @@
       ],
       "datasourceTemplate": "docker",
       "depNameTemplate": "curlimages/curl"
+    },
+    {
+      "description": "Track kube-linter version in shell scripts",
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["\\.github/scripts/.*\\.sh$"],
+      "matchStrings": [
+        "# renovate: datasource=github-releases depName=(?<depName>[^\\s]+)",
+        "KUBE_LINTER_VERSION=\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "github-releases"
     }
   ]
 }
