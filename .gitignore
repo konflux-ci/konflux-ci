@@ -3,3 +3,8 @@ logs/
 __debug_bin*
 dependencies/smee/smee-channel-id.yaml
 .kube-linter/
+
+# Kube-linter binaries and archives
+kube-linter
+kube-linter-*.tar.gz
+kubelinter.log
