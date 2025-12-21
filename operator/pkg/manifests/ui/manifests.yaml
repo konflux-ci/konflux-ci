@@ -6,8 +6,34 @@ metadata:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
+  labels:
+    app: dex
+  name: dex
+  namespace: konflux-ui
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
   name: proxy
   namespace: konflux-ui
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dex
+rules:
+- apiGroups:
+  - dex.coreos.com
+  resources:
+  - '*'
+  verbs:
+  - '*'
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - create
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -44,6 +70,19 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
+  name: dex
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dex
+subjects:
+- kind: ServiceAccount
+  name: dex
+  namespace: konflux-ui
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
   name: konflux-proxy
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -69,6 +108,46 @@ subjects:
 ---
 apiVersion: v1
 data:
+  config.yaml: |
+    issuer: https://localhost:9443/idp/
+    storage:
+      type: kubernetes
+      config:
+        inCluster: true
+    web:
+      https: 0.0.0.0:9443
+      tlsCert: /etc/dex/tls/tls.crt
+      tlsKey: /etc/dex/tls/tls.key
+    oauth2:
+      skipApprovalScreen: true
+      passwordConnector: local
+    staticClients:
+    - id: oauth2-proxy
+      redirectURIs:
+      - 'https://localhost:9443/oauth2/callback'
+      name: 'oauth2-proxy'
+      secretEnv: 'CLIENT_SECRET'
+    enablePasswordDB: true
+    staticPasswords:
+    - email: "user1@konflux.dev"
+      # bcrypt hash of the string "password": $(echo password | htpasswd -BinC 10 admin | cut -d: -f2)
+      hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" # notsecret
+      username: "user1"
+      userID: "7138d2fe-724e-4e86-af8a-db7c4b080e20"
+    - email: "user2@konflux.dev"
+      # bcrypt hash of the string "password": $(echo password | htpasswd -BinC 10 admin | cut -d: -f2)
+      hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" # notsecret
+      username: "user2"
+      userID: "ea8e8ee1-2283-4e03-83d4-b00f8b821b64"
+    telemetry:
+      http: 0.0.0.0:5558
+kind: ConfigMap
+metadata:
+  name: dex-7k8k4df5b5
+  namespace: konflux-ui
+---
+apiVersion: v1
+data:
   nginx-idp-location.conf: |
     location /idp/ {
         # Identity Provider
@@ -79,11 +158,13 @@ data:
         proxy_set_header    X-Forwarded-Server $host;
         proxy_set_header    X-Forwarded-Port   9443;
         proxy_set_header    X-Forwarded-Proto  $scheme;
-        proxy_pass https://dex.dex.svc.cluster.local:9443;
+        proxy_pass https://dex.konflux-ui.svc.cluster.local:9443;
     }
+
+        # Test comment - this will change the hash
 kind: ConfigMap
 metadata:
-  name: nginx-idp-location-h959ghd6bh
+  name: nginx-idp-location-k2ct986kg7
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -179,6 +260,21 @@ type: kubernetes.io/service-account-token
 apiVersion: v1
 kind: Service
 metadata:
+  name: dex
+  namespace: konflux-ui
+spec:
+  ports:
+  - name: dex
+    port: 9443
+    protocol: TCP
+    targetPort: 9443
+  selector:
+    app: dex
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
   labels:
     app: proxy
   name: proxy
@@ -202,6 +298,75 @@ spec:
   selector:
     app: proxy
   type: NodePort
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: dex
+  name: dex
+  namespace: konflux-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dex
+  template:
+    metadata:
+      labels:
+        app: dex
+    spec:
+      containers:
+      - command:
+        - /usr/local/bin/dex
+        - serve
+        - /etc/dex/cfg/config.yaml
+        env:
+        - name: CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: client-secret
+              name: oauth2-proxy-client-secret
+        image: ghcr.io/dexidp/dex:v2.44.0
+        name: dex
+        ports:
+        - containerPort: 9443
+          name: https
+        - containerPort: 5558
+          name: telemetry
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /healthz/ready
+            port: telemetry
+        resources:
+          limits:
+            cpu: 50m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+        volumeMounts:
+        - mountPath: /etc/dex/cfg
+          name: dex
+        - mountPath: /etc/dex/tls
+          name: tls
+      serviceAccountName: dex
+      volumes:
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: config.yaml
+            path: config.yaml
+          name: dex-7k8k4df5b5
+        name: dex
+      - name: tls
+        secret:
+          secretName: dex-cert
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -310,9 +475,9 @@ spec:
         - --login-url
         - https://localhost:9443/idp/auth
         - --redeem-url
-        - https://dex.dex.svc.cluster.local:9443/idp/token
+        - https://dex.konflux-ui.svc.cluster.local:9443/idp/token
         - --oidc-jwks-url
-        - https://dex.dex.svc.cluster.local:9443/idp/keys
+        - https://dex.konflux-ui.svc.cluster.local:9443/idp/keys
         - --cookie-secure
         - "true"
         - --cookie-name
@@ -360,7 +525,7 @@ spec:
         - -R
         - /opt/app-root/src/.
         - /mnt/static-content/
-        image: quay.io/konflux-ci/konflux-ui@sha256:225ca976849e9a165aca248cd3d3f6eda3bd053adfddb7bb96d021ed0f760273
+        image: quay.io/konflux-ci/konflux-ui@sha256:8a99a673ab73461ba9a29b69579aa462bd04bbc06cda46a44229612420e583aa
         name: copy-static-content
         resources:
           limits:
@@ -433,7 +598,7 @@ spec:
           - configMap:
               name: proxy-nginx-static-fmmfg7d22f
           - configMap:
-              name: nginx-idp-location-h959ghd6bh
+              name: nginx-idp-location-k2ct986kg7
       - emptyDir: {}
         name: logs
       - emptyDir: {}
@@ -450,6 +615,24 @@ spec:
           secretName: proxy
       - emptyDir: {}
         name: static-content
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: dex-cert
+  namespace: konflux-ui
+spec:
+  dnsNames:
+  - localhost
+  - dex.konflux-ui
+  isCA: true
+  issuerRef:
+    kind: ClusterIssuer
+    name: self-signed-cluster-issuer
+  secretName: dex-cert
+  subject:
+    organizations:
+    - konflux
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
