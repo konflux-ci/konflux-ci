@@ -18,29 +18,43 @@ fi
 get_latest_commit() {
     local repo_url="$1"
     local owner_repo
+    local default_branch
+    local latest_commit
+    local exit_code
 
     # Extract owner/repo from URL (e.g., https://github.com/owner/repo/path -> owner/repo)
     # URLs can have paths after the repo name, so we extract just owner/repo
-    if [[ "${repo_url}" =~ https://github\.com/([^/]+/[^/?]+) ]]; then
-        owner_repo="${BASH_REMATCH[1]}"
-    else
+    if [[ ! "${repo_url}" =~ https://github\.com/([^/]+/[^/?]+) ]]; then
         echo "Error: Invalid GitHub URL format: ${repo_url}" >&2
         return 1
     fi
+    owner_repo="${BASH_REMATCH[1]}"
 
-    # Get default branch and latest commit SHA
-    local default_branch
-    default_branch=$(gh api "repos/${owner_repo}" --jq .default_branch 2>/dev/null || echo "main")
+    # Get default branch - temporarily disable set -e to handle failure gracefully
+    set +e
+    default_branch=$(gh api "repos/${owner_repo}" --jq .default_branch 2>/dev/null)
+    exit_code=$?
+    set -e
 
-    local latest_commit
+    # If we couldn't get the default branch, fall back to "main"
+    if [[ ${exit_code} -ne 0 ]] || [[ -z "${default_branch}" ]]; then
+        default_branch="main"
+    fi
+
+    # Get latest commit SHA - temporarily disable set -e to handle failure gracefully
+    set +e
     latest_commit=$(gh api "repos/${owner_repo}/commits/${default_branch}" --jq .sha 2>/dev/null)
+    exit_code=$?
+    set -e
 
-    if [[ -z "${latest_commit}" ]]; then
-        echo "Error: Failed to get latest commit for ${owner_repo}" >&2
+    # Check if we successfully got a commit SHA
+    if [[ ${exit_code} -ne 0 ]] || [[ -z "${latest_commit}" ]]; then
+        echo "Error: Failed to get latest commit for ${owner_repo} (branch: ${default_branch})" >&2
         return 1
     fi
 
     echo "${latest_commit}"
+    return 0
 }
 
 # Function to update refs in a kustomization file
@@ -59,17 +73,29 @@ update_kustomization_file() {
 }
 
 # Find all kustomization.yaml files
+# If COMPONENT_FILTER is set, only process files for that component
 echo "Scanning for kustomization files..."
-kustomization_files=$(find "${SOURCE_DIR}" -name "kustomization.yaml" -type f)
+if [[ -n "${COMPONENT_FILTER:-}" ]]; then
+    echo "Filtering for component: ${COMPONENT_FILTER}"
+    kustomization_files=$(find "${SOURCE_DIR}/${COMPONENT_FILTER}" -name "kustomization.yaml" -type f 2>/dev/null || true)
+else
+    kustomization_files=$(find "${SOURCE_DIR}" -name "kustomization.yaml" -type f)
+fi
 
 if [[ -z "${kustomization_files}" ]]; then
-    echo "No kustomization.yaml files found in ${SOURCE_DIR}" >&2
-    exit 1
+    if [[ -n "${COMPONENT_FILTER:-}" ]]; then
+        echo "No kustomization.yaml files found for component ${COMPONENT_FILTER} in ${SOURCE_DIR}" >&2
+        exit 0  # Not an error if component doesn't have upstream refs
+    else
+        echo "No kustomization.yaml files found in ${SOURCE_DIR}" >&2
+        exit 1
+    fi
 fi
 
 # Extract all unique GitHub repo URLs with their current refs
 declare -A repo_refs
 declare -A repo_urls
+ref_count=0
 
 while IFS= read -r file; do
     # Extract GitHub URLs with ?ref= parameters
@@ -82,16 +108,18 @@ while IFS= read -r file; do
             # Store the repo URL and current ref
             repo_refs["${repo_url}"]="${current_ref}"
             repo_urls["${repo_url}"]="${repo_url}"
+            ((ref_count++)) || true
         fi
     done < <(grep -E "https://github\.com/[^?]+\?ref=[a-f0-9]{40}" "${file}" || true)
 done <<< "${kustomization_files}"
 
-if [[ ${#repo_urls[@]} -eq 0 ]]; then
+# Check if any refs were found (use count to avoid unbound variable with set -u)
+if [[ ${ref_count} -eq 0 ]]; then
     echo "No GitHub repo references found to update"
     exit 0
 fi
 
-echo "Found ${#repo_urls[@]} unique upstream repositories to check"
+echo "Found ${ref_count} unique upstream repositories to check"
 echo ""
 
 # Get latest commits for each unique repo

@@ -55,147 +55,36 @@ jobs:
           kustomize version
           rm -f kustomize.tar.gz
 
-      - name: Update upstream references to latest commits
+      - name: Process all components
+        id: process
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cd pkg/manifests
-          bash update-upstream-refs.sh
-
-      - name: Build upstream kustomizations
-        run: |
-          cd pkg/manifests
-          bash build-upstream-kustomizations.sh
-
-      - name: Check for changes
-        id: check-changes
-        run: |
-          # Check for changes in both upstream-kustomizations (updated refs) and generated manifests
-          # Git commands need to run from repo root, not from operator/ directory
           cd "${{ github.workspace }}"
-          if [ -n "$(git status --porcelain operator/upstream-kustomizations operator/pkg/manifests)" ]; then
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-            echo "Changes detected"
-            echo "Upstream kustomization changes:"
-            git diff --stat operator/upstream-kustomizations || true
-            echo "Generated manifest changes:"
-            git diff --stat operator/pkg/manifests || true
-          else
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-            echo "No changes detected"
-          fi
 
-      - name: Configure Git
-        if: steps.check-changes.outputs.has_changes == 'true'
-        run: |
-          cd "${{ github.workspace }}"
+          # Configure Git
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
-      - name: Create branch and commit changes
-        if: steps.check-changes.outputs.has_changes == 'true'
-        run: |
-          cd "${{ github.workspace }}"
-          BRANCH_NAME="update-upstream-manifests"
-
-          # Ensure we're on main branch first
+          # Ensure we're on main branch and up to date
           git checkout main
-          # Ensure main is up to date
           git fetch origin main
 
-          # Delete local branch if it exists (we'll recreate it)
-          if git show-ref --verify --quiet refs/heads/"${BRANCH_NAME}"; then
-            echo "Deleting existing local branch ${BRANCH_NAME}..."
-            git branch -D "${BRANCH_NAME}"
-          fi
+          # Process all components (script handles loop, processing, and JSON output)
+          bash operator/pkg/manifests/process-all-components.sh "${{ github.workspace }}"
 
-          # Check if branch exists remotely without fetching all branches
-          if git ls-remote --heads origin "${BRANCH_NAME}" | grep -q .; then
-            echo "Branch ${BRANCH_NAME} exists remotely, recreating from main..."
-            git checkout -b "${BRANCH_NAME}" main
-          else
-            echo "Creating new branch ${BRANCH_NAME}..."
-            git checkout -b "${BRANCH_NAME}" main
-          fi
-
-          # Add and commit changes (both updated kustomization refs and generated manifests)
-          git add operator/upstream-kustomizations/ operator/pkg/manifests/
-          git commit -m "chore: update upstream manifests
-
-          Updated upstream kustomization references to latest commits and rebuilt manifests.
-
-          This PR was automatically created by the Update Upstream Manifests workflow." || echo "No changes to commit"
-
-          # Push the branch
-          git push origin "${BRANCH_NAME}" --force
-
-      - name: Create or update Pull Request
-        if: steps.check-changes.outputs.has_changes == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Read component results
+        id: results
+        if: always()
         run: |
-          BRANCH_NAME="update-upstream-manifests"
-          PR_TITLE="chore: update upstream manifests"
-          PR_BODY="## Upstream Manifests Update
-
-          This PR updates upstream kustomization references to the latest commits and rebuilds the generated manifests.
-
-          ### What changed?
-          - Updated upstream repository references in \`operator/upstream-kustomizations/\` to latest commits on default branches
-          - Rebuilt all kustomizations using \`build-upstream-kustomizations.sh\`
-          - Updated manifest files in \`operator/pkg/manifests/\`
-
-          ### How to review
-          - Review the updated commit refs in \`operator/upstream-kustomizations/**/kustomization.yaml\` files
-          - Review the generated manifest changes in \`operator/pkg/manifests/\` directory
-
-          ---
-          *This PR was automatically created by the [Update Upstream Manifests workflow](.github/workflows/update-upstream-manifests.yaml)*"
-
-          # Check if PR already exists
-          EXISTING_PR=$(gh pr view "${BRANCH_NAME}" --json number --jq .number 2>/dev/null || echo "")
-
-          if [ -n "${EXISTING_PR}" ]; then
-            echo "PR #${EXISTING_PR} already exists, updating..."
-            gh pr edit "${EXISTING_PR}" --title "${PR_TITLE}" --body "${PR_BODY}"
-            echo "Updated existing PR #${EXISTING_PR}"
+          # Read JSON results file if it exists
+          if [ -f /tmp/component-results.json ]; then
+            echo "Component results file found"
+            cat /tmp/component-results.json
           else
-            echo "Creating new PR..."
-            # Create PR without labels first (labels may not exist in forks)
-            # Extract PR number from the output URL (format: https://github.com/owner/repo/pull/123)
-            # Temporarily disable exit-on-error to capture both output and exit code
-            set +e
-            PR_OUTPUT=$(gh pr create \
-              --title "${PR_TITLE}" \
-              --body "${PR_BODY}" \
-              --base main \
-              --head "${BRANCH_NAME}" 2>&1)
-            PR_EXIT_CODE=$?
-            set -e
-
-            if [ ${PR_EXIT_CODE} -eq 0 ]; then
-              # Extract PR number from URL in output (more portable regex)
-              # Try multiple patterns: pull/123 or /pull/123 or just the number
-              PR_NUMBER=$(echo "${PR_OUTPUT}" | sed -n 's|.*pull/\([0-9]\+\).*|\1|p' | head -1)
-
-              # If that didn't work, try to get it from the branch name
-              if [ -z "${PR_NUMBER}" ]; then
-                PR_NUMBER=$(gh pr view "${BRANCH_NAME}" --json number --jq .number 2>/dev/null || echo "")
-              fi
-
-              if [ -n "${PR_NUMBER}" ]; then
-                echo "Created new PR #${PR_NUMBER}"
-                # Try to add labels if they exist (don't fail if they don't)
-                gh pr edit "${PR_NUMBER}" --add-label "automated,dependencies" 2>/dev/null || echo "Note: Could not add labels (they may not exist in this repository)"
-              else
-                echo "Warning: Created PR but could not extract PR number from output: ${PR_OUTPUT}"
-                echo "PR may have been created successfully. Check: gh pr view ${BRANCH_NAME}"
-              fi
-            else
-              echo "Error: Failed to create PR (exit code: ${PR_EXIT_CODE})"
-              echo "Output: ${PR_OUTPUT}"
-              exit 1
-            fi
+            echo "Component results file not found, workflow may have failed before completion"
+            # Create empty JSON structure
+            echo '{"failed":[],"successful":[],"up_to_date":[]}' > /tmp/component-results.json
           fi
 
       - name: Notify on failure
@@ -203,8 +92,33 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const fs = require('fs');
             const workflowUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const triggerType = context.eventName === 'schedule' ? 'Scheduled (cron)' : context.eventName;
+
+            // Read component results from JSON file
+            let failedComponentsList = '';
+            let successfulComponentsList = '';
+            let upToDateComponentsList = '';
+
+            try {
+              const results = JSON.parse(fs.readFileSync('/tmp/component-results.json', 'utf8'));
+
+              if (results.failed && results.failed.length > 0) {
+                failedComponentsList = `\n\n**Failed Components:**\n${results.failed.map(c => `- ${c.component}: ${c.message}`).join('\n')}`;
+              }
+
+              if (results.successful && results.successful.length > 0) {
+                successfulComponentsList = `\n\n**Successfully Processed Components:**\n${results.successful.map(c => `- ${c.component}: ${c.message}`).join('\n')}`;
+              }
+
+              if (results.up_to_date && results.up_to_date.length > 0) {
+                upToDateComponentsList = `\n\n**Up-to-date Components:**\n${results.up_to_date.map(c => `- ${c.component}`).join('\n')}`;
+              }
+            } catch (e) {
+              console.log(`Error reading component results: ${e.message}`);
+              // Continue with empty lists if file doesn't exist or is invalid
+            }
 
             // Create an issue to notify about the failure
             const title = `⚠️ Upstream Manifests Update Workflow Failed`;
@@ -212,7 +126,7 @@ jobs:
 
             **Workflow Run:** ${workflowUrl}
             **Run ID:** ${context.runId}
-            **Trigger:** ${triggerType}
+            **Trigger:** ${triggerType}${failedComponentsList}${successfulComponentsList}${upToDateComponentsList}
 
             Please check the workflow logs to identify and fix the issue.
 
@@ -230,12 +144,13 @@ jobs:
             const existingIssue = issues.find(issue => issue.title === title);
 
             if (existingIssue) {
-              // Add a comment to the existing issue
+              // Add a comment to the existing issue with component information
+              const commentBody = `Workflow failed again on ${new Date().toISOString()}\n\n**Workflow Run:** ${workflowUrl}\n**Run ID:** ${context.runId}\n**Trigger:** ${triggerType}${failedComponentsList}${successfulComponentsList}${upToDateComponentsList}\n\nPlease check the workflow logs to identify and fix the issue.`;
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: existingIssue.number,
-                body: `Workflow failed again on ${new Date().toISOString()}\n\n${workflowUrl}`
+                body: commentBody
               });
             } else {
               // Create a new issue
@@ -247,4 +162,3 @@ jobs:
                 labels: ['automated', 'workflow-failure']
               });
             }
-
