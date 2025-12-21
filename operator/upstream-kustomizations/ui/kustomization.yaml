@@ -1,8 +1,10 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+namespace: konflux-ui
 resources:
   - core
   - certmanager
+  - dex
 
 configMapGenerator:
   - name: nginx-idp-location
@@ -22,10 +24,8 @@ patches:
       kind: Deployment
       name: proxy
     patch: |
-      - op: add 
-        path: /spec/template/spec/volumes/2/projected/sources/- 
+      - op: add
+        path: /spec/template/spec/volumes/2/projected/sources/-
         value:
           configMap:
             name: nginx-idp-location
-
-namespace: konflux-ui

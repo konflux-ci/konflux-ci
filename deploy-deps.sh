@@ -138,6 +138,11 @@ deploy_trust_manager() {
 }
 
 deploy_dex() {
+    : "${SKIP_DEX:=false}"
+    if [[ "${SKIP_DEX}" == "true" ]]; then
+        echo "⏭️  Skipping Dex deployment (managed by operator)" >&2
+        return 0
+    fi
     kubectl apply -k "${script_path}/dependencies/dex"
     if ! kubectl get secret oauth2-proxy-client-secret -n dex; then
         echo "🔑 Creating secret oauth2-proxy-client-secret" >&2

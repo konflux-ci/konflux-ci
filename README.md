@@ -150,6 +150,12 @@ and modify the `system-reserved` line under `kubeletExtraArgs`:
 ./deploy-deps.sh
 ```
 
+> [!NOTE]
+> If you are testing the Konflux Operator and want it to manage the Dex installation
+(e.g. for the UI component), you can skip the manual Dex deployment by setting
+`SKIP_DEX=true ./deploy-deps.sh`.
+
+
 **Note:** If you encounter Docker Hub rate limiting failures during deployment,
 see
 [docs/troubleshooting-docker-rate-limits.md](docs/troubleshooting-docker-rate-limits.md).

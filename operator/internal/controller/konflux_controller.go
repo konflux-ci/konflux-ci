@@ -19,6 +19,8 @@ package controller
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"reflect"
@@ -55,6 +57,8 @@ const (
 	ConditionTypeReady = "Ready"
 	// KonfluxBuildServiceCRName is the name for the KonfluxBuildService CR.
 	KonfluxBuildServiceCRName = "konflux-build-service"
+	// uiNamespace is the namespace for UI resources
+	uiNamespace = "konflux-ui"
 )
 
 // KonfluxReconciler reconciles a Konflux object
@@ -95,6 +99,12 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Apply the KonfluxBuildService CR
 	if err := r.applyKonfluxBuildService(ctx, konflux); err != nil {
 		r.setFailedToApplyCondition(ctx, konflux, err, log)
+		return ctrl.Result{}, err
+	}
+
+	// Ensure UI secrets are created
+	if err := r.ensureUISecrets(ctx, konflux); err != nil {
+		log.Error(err, "Failed to ensure UI secrets")
 		return ctrl.Result{}, err
 	}
 
@@ -301,7 +311,7 @@ func parseManifests(content []byte) ([]*unstructured.Unstructured, error) {
 }
 
 // setOwnership sets owner reference and labels on the object to establish ownership.
-func setOwnership(obj *unstructured.Unstructured, owner client.Object, component string, scheme *runtime.Scheme) error {
+func setOwnership(obj client.Object, owner client.Object, component string, scheme *runtime.Scheme) error {
 	// Set ownership labels
 	labels := obj.GetLabels()
 	if labels == nil {
@@ -318,6 +328,60 @@ func setOwnership(obj *unstructured.Unstructured, owner client.Object, component
 	}
 
 	return nil
+}
+
+// ensureUISecrets ensures that UI secrets exist and are properly configured.
+// Only generates secret values if they don't already exist (preserves existing secrets).
+func (r *KonfluxReconciler) ensureUISecrets(ctx context.Context, konflux *konfluxv1alpha1.Konflux) error {
+	// Helper for the actual reconciliation logic
+	ensureSecret := func(name, key string, length int, urlSafe bool) error {
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: uiNamespace,
+			},
+		}
+
+		_, err := controllerutil.CreateOrUpdate(ctx, r.Client, secret, func() error {
+			// 1. Ensure Ownership/Labels (Updates if missing)
+			if err := setOwnership(secret, konflux, "ui", r.Scheme); err != nil {
+				return err
+			}
+
+			// 2. Only generate data if it doesn't already exist
+			if secret.Data == nil {
+				secret.Data = make(map[string][]byte)
+			}
+
+			if len(secret.Data[key]) == 0 {
+				val, err := r.generateRandomBytes(length, urlSafe)
+				if err != nil {
+					return err
+				}
+				secret.Data[key] = val
+			}
+			return nil
+		})
+		return err
+	}
+
+	// Execute for both secrets
+	if err := ensureSecret("oauth2-proxy-client-secret", "client-secret", 20, true); err != nil {
+		return fmt.Errorf("client-secret: %w", err)
+	}
+	return ensureSecret("oauth2-proxy-cookie-secret", "cookie-secret", 16, false)
+}
+
+// generateRandomBytes generates a random secret value with the specified encoding.
+func (r *KonfluxReconciler) generateRandomBytes(length int, urlSafe bool) ([]byte, error) {
+	b := make([]byte, length)
+	if _, err := rand.Read(b); err != nil {
+		return nil, err
+	}
+	if urlSafe {
+		return []byte(base64.RawURLEncoding.EncodeToString(b)), nil
+	}
+	return []byte(base64.StdEncoding.EncodeToString(b)), nil
 }
 
 // applyObject applies a single unstructured object to the cluster using server-side apply.
