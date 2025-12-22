@@ -17,7 +17,17 @@ if [[ -z "${WORKSPACE_ROOT}" ]]; then
     exit 1
 fi
 
+# Resolve workspace root to absolute path
+WORKSPACE_ROOT="$(cd "${WORKSPACE_ROOT}" && pwd)"
+
 cd "${WORKSPACE_ROOT}"
+
+# Detect if running in GitHub Actions
+LOCAL_MODE=false
+if [[ "${GITHUB_ACTIONS:-}" != "true" ]]; then
+    LOCAL_MODE=true
+    echo "Running in local mode (skipping git operations)"
+fi
 
 # List of components to process
 COMPONENTS=(
@@ -45,10 +55,12 @@ for component in "${COMPONENTS[@]}"; do
     echo "Processing component: ${component}"
     echo "========================================="
 
-    # Ensure we're on main branch and clean before each component
-    git checkout main
-    git reset --hard origin/main
-    git clean -fd
+    # Ensure we're on main branch and clean before each component (only in CI)
+    if [[ "${LOCAL_MODE}" != "true" ]]; then
+        git checkout main
+        git reset --hard origin/main
+        git clean -fd
+    fi
 
     # Run the component processing script
     set +e
@@ -139,6 +151,9 @@ echo "Up-to-date components: ${up_to_date_count}"
 for comp in "${up_to_date_components[@]}"; do
     echo "  ○ ${comp}: ${component_messages[$comp]}"
 done
+
+echo ""
+echo "Results JSON: /tmp/component-results.json"
 
 # Exit with error if any component failed
 if [ "${failed_count}" -gt 0 ]; then

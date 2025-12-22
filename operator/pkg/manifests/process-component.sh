@@ -25,13 +25,25 @@ if [[ -z "${WORKSPACE_ROOT}" ]]; then
     exit 1
 fi
 
+# Resolve workspace root to absolute path
+WORKSPACE_ROOT="$(cd "${WORKSPACE_ROOT}" && pwd)"
+
+# Detect if running in GitHub Actions
+LOCAL_MODE=false
+if [[ "${GITHUB_ACTIONS:-}" != "true" ]]; then
+    LOCAL_MODE=true
+    echo "Running in local mode (skipping git and PR operations)"
+fi
+
 # Change to workspace root for git operations
 cd "${WORKSPACE_ROOT}"
 
-# Ensure we're on main branch and clean
-git checkout main
-git reset --hard origin/main
-git clean -fd
+# Ensure we're on main branch and clean (only in CI)
+if [[ "${LOCAL_MODE}" != "true" ]]; then
+    git checkout main
+    git reset --hard origin/main
+    git clean -fd
+fi
 
 # Step 1: Update upstream references for this component (if it has any)
 echo "Step 1: Checking for upstream ref updates for ${COMPONENT}..."
@@ -87,6 +99,19 @@ else
     component_changes=true
 fi
 
+# In local mode, just report changes and exit
+if [[ "${LOCAL_MODE}" == "true" ]]; then
+    if [ "${component_changes}" = "false" ]; then
+        echo "  ✓ ${COMPONENT} is up to date"
+        echo "${COMPONENT}:up-to-date:"
+    else
+        echo "  ✓ ${COMPONENT} has been updated locally"
+        echo "${COMPONENT}:success:updated locally"
+    fi
+    exit 0
+fi
+
+# In CI mode, continue with PR creation
 if [ "${component_changes}" = "false" ]; then
     echo "  ✓ ${COMPONENT} is up to date, skipping PR creation"
     echo "${COMPONENT}:up-to-date:"
