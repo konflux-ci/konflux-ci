@@ -58,7 +58,8 @@ jobs:
       - name: Process all components
         id: process
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use GH_TOKEN if available, otherwise fall back to GITHUB_TOKEN
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           cd "${{ github.workspace }}"
 
