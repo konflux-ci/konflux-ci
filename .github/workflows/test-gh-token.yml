@@ -1,0 +1,161 @@
+name: Test GH_TOKEN Permissions
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  test-token:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+      - name: Test PR Creation
+        id: test_pr
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          echo "=== Testing PR Creation ==="
+
+          # Create a test branch
+          TEST_BRANCH="test-gh-token-$(date +%s)"
+          git checkout -b "${TEST_BRANCH}"
+
+          # Make a small change
+          echo "# Test" > test-file.txt
+          git add test-file.txt
+          git commit -m "test: verify GH_TOKEN permissions"
+          git push origin "${TEST_BRANCH}"
+
+          # Try to create a PR
+          set +e
+          PR_OUTPUT=$(gh pr create \
+            --title "Test: GH_TOKEN Permissions Check" \
+            --body "This is a test PR to verify GH_TOKEN has PR creation permissions. Safe to close/delete." \
+            --base main \
+            --head "${TEST_BRANCH}" 2>&1)
+          PR_EXIT_CODE=$?
+          set -e
+
+          if [ ${PR_EXIT_CODE} -eq 0 ]; then
+            PR_NUMBER=$(echo "${PR_OUTPUT}" | sed -n 's|.*pull/\([0-9]\+\).*|\1|p' | head -1)
+            if [ -z "${PR_NUMBER}" ]; then
+              PR_NUMBER=$(gh pr view "${TEST_BRANCH}" --json number --jq .number 2>/dev/null || echo "")
+            fi
+            echo "✅ PR creation SUCCESSFUL - PR #${PR_NUMBER}"
+            echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
+            echo "pr_created=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ PR creation FAILED"
+            echo "${PR_OUTPUT}"
+            echo "pr_created=false" >> $GITHUB_OUTPUT
+            echo "pr_error=${PR_OUTPUT}" >> $GITHUB_OUTPUT
+          fi
+
+          # Clean up branch (we'll keep PR for inspection)
+          git checkout main
+          git branch -D "${TEST_BRANCH}" || true
+
+      - name: Test PR Update
+        if: steps.test_pr.outputs.pr_created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          echo "=== Testing PR Update ==="
+          PR_NUMBER="${{ steps.test_pr.outputs.pr_number }}"
+
+          set +e
+          if gh pr edit "${PR_NUMBER}" \
+            --body "Updated: GH_TOKEN can also update PRs. Original test successful." 2>&1; then
+            echo "✅ PR update SUCCESSFUL"
+          else
+            echo "❌ PR update FAILED"
+            exit 1
+          fi
+          set -e
+
+      - name: Test Issue Creation
+        id: test_issue
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          echo "=== Testing Issue Creation ==="
+
+          set +e
+          ISSUE_OUTPUT=$(gh issue create \
+            --title "Test: GH_TOKEN Permissions Check" \
+            --body "This is a test issue to verify GH_TOKEN has issue creation permissions. Safe to close/delete." \
+            --label "automated" 2>&1)
+          ISSUE_EXIT_CODE=$?
+          set -e
+
+          if [ ${ISSUE_EXIT_CODE} -eq 0 ]; then
+            ISSUE_NUMBER=$(echo "${ISSUE_OUTPUT}" | sed -n 's|.*issues/\([0-9]\+\).*|\1|p' | head -1)
+            if [ -z "${ISSUE_NUMBER}" ]; then
+              # Try to get it from the issue list
+              ISSUE_NUMBER=$(gh issue list --limit 1 --json number --jq '.[0].number' 2>/dev/null || echo "")
+            fi
+            echo "✅ Issue creation SUCCESSFUL - Issue #${ISSUE_NUMBER}"
+            echo "issue_number=${ISSUE_NUMBER}" >> $GITHUB_OUTPUT
+            echo "issue_created=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Issue creation FAILED"
+            echo "${ISSUE_OUTPUT}"
+            echo "issue_created=false" >> $GITHUB_OUTPUT
+            echo "issue_error=${ISSUE_OUTPUT}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Test Issue Update
+        if: steps.test_issue.outputs.issue_created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          echo "=== Testing Issue Update ==="
+          ISSUE_NUMBER="${{ steps.test_issue.outputs.issue_number }}"
+
+          set +e
+          if gh issue comment "${ISSUE_NUMBER}" \
+            --body "Updated: GH_TOKEN can also update issues. Original test successful." 2>&1; then
+            echo "✅ Issue update (comment) SUCCESSFUL"
+          else
+            echo "❌ Issue update FAILED"
+            exit 1
+          fi
+          set -e
+
+      - name: Summary
+        run: |
+          echo ""
+          echo "========================================="
+          echo "Test Summary"
+          echo "========================================="
+          echo "PR Creation: ${{ steps.test_pr.outputs.pr_created }}"
+          if [ "${{ steps.test_pr.outputs.pr_created }}" == "true" ]; then
+            echo "  PR #${{ steps.test_pr.outputs.pr_number }}"
+          fi
+          echo ""
+          echo "Issue Creation: ${{ steps.test_issue.outputs.issue_created }}"
+          if [ "${{ steps.test_issue.outputs.issue_created }}" == "true" ]; then
+            echo "  Issue #${{ steps.test_issue.outputs.issue_number }}"
+          fi
+          echo ""
+          if [ "${{ steps.test_pr.outputs.pr_created }}" == "true" ] && [ "${{ steps.test_issue.outputs.issue_created }}" == "true" ]; then
+            echo "✅ GH_TOKEN has all required permissions!"
+          else
+            echo "❌ GH_TOKEN is missing some permissions"
+            exit 1
+          fi
+
