@@ -153,8 +153,18 @@ func GetIdToken(header string) (string, error) {
 }
 
 func ExtractToken(k8sClient *kubernetes.Clientset) (string, error) {
+	// Determine the namespace for the oauth2-proxy-client-secret
+	// In script-based deployment, dex is in the "dex" namespace
+	// In operator-based deployment, dex is in the "konflux-ui" namespace
+	namespace := "dex"
+	_, err := k8sClient.CoreV1().Namespaces().Get(context.TODO(), "dex", metav1.GetOptions{})
+	if err != nil {
+		// If dex namespace doesn't exist, use konflux-ui namespace
+		namespace = "konflux-ui"
+	}
+
 	// Fetch the secret from k8s
-	secret, err := k8sClient.CoreV1().Secrets("dex").Get(context.TODO(), "oauth2-proxy-client-secret", metav1.GetOptions{})
+	secret, err := k8sClient.CoreV1().Secrets(namespace).Get(context.TODO(), "oauth2-proxy-client-secret", metav1.GetOptions{})
 	if err != nil {
 		return "", err
 	}
