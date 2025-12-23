@@ -360,7 +360,7 @@ spec:
         - -R
         - /opt/app-root/src/.
         - /mnt/static-content/
-        image: quay.io/konflux-ci/konflux-ui@sha256:225ca976849e9a165aca248cd3d3f6eda3bd053adfddb7bb96d021ed0f760273
+        image: quay.io/konflux-ci/konflux-ui@sha256:8a99a673ab73461ba9a29b69579aa462bd04bbc06cda46a44229612420e583aa
         name: copy-static-content
         resources:
           limits:
