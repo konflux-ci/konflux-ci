@@ -62,6 +62,16 @@ type KonfluxBuildServiceList struct {
 	Items           []KonfluxBuildService `json:"items"`
 }
 
+// GetConditions returns the conditions from the KonfluxBuildService status.
+func (k *KonfluxBuildService) GetConditions() []metav1.Condition {
+	return k.Status.Conditions
+}
+
+// SetConditions sets the conditions on the KonfluxBuildService status.
+func (k *KonfluxBuildService) SetConditions(conditions []metav1.Condition) {
+	k.Status.Conditions = conditions
+}
+
 func init() {
 	SchemeBuilder.Register(&KonfluxBuildService{}, &KonfluxBuildServiceList{})
 }

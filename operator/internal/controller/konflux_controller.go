@@ -41,7 +41,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	"github.com/go-logr/logr"
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
@@ -92,13 +91,21 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// Apply all embedded manifests
 	if err := r.applyAllManifests(ctx, konflux); err != nil {
-		r.setFailedToApplyCondition(ctx, konflux, err, log)
+		log.Error(err, "Failed to apply manifests")
+		SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
 		return ctrl.Result{}, err
 	}
 
 	// Apply the KonfluxBuildService CR
 	if err := r.applyKonfluxBuildService(ctx, konflux); err != nil {
-		r.setFailedToApplyCondition(ctx, konflux, err, log)
+		log.Error(err, "Failed to apply KonfluxBuildService")
+		SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -108,17 +115,39 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
-	// Check the status of owned deployments and update Konflux status
-	if err := r.updateComponentStatuses(ctx, konflux); err != nil {
+	// Check the status of owned deployments (doesn't set overall Ready yet)
+	deploymentSummary, err := r.updateComponentStatuses(ctx, konflux)
+	if err != nil {
 		log.Error(err, "Failed to update component statuses")
+		SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetDeploymentStatus", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
 		return ctrl.Result{}, err
 	}
 
-	// Copy status from the KonfluxBuildService CR to the Konflux CR
-	if err := r.copyBuildServiceStatusToKonflux(ctx, konflux); err != nil {
-		r.setFailedToApplyCondition(ctx, konflux, err, log)
+	// Collect status from all sub-CRs
+	var subCRStatuses []SubCRStatus
+
+	// Get and copy status from the KonfluxBuildService CR
+	buildService := &konfluxv1alpha1.KonfluxBuildService{}
+	if err := r.Get(ctx, client.ObjectKey{Name: KonfluxBuildServiceCRName}, buildService); err != nil {
+		log.Error(err, "Failed to get KonfluxBuildService")
+		SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetBuildServiceStatus", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
 		return ctrl.Result{}, err
 	}
+	subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, buildService, "build-service"))
+
+	// Add more sub-CRs here as they are created:
+	// integrationService := &konfluxv1alpha1.KonfluxIntegrationService{}
+	// if err := r.Get(ctx, client.ObjectKey{Name: "konflux-integration-service"}, integrationService); err != nil { ... }
+	// subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, integrationService, "integration-service"))
+
+	// Set overall Ready condition considering deployments and all sub-CRs
+	SetAggregatedReadyCondition(konflux, ConditionTypeReady, deploymentSummary, subCRStatuses)
 
 	// Update the status subresource with all collected conditions
 	if err := r.Status().Update(ctx, konflux); err != nil {
@@ -128,22 +157,6 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	log.Info("Successfully reconciled Konflux")
 	return ctrl.Result{}, nil
-}
-
-// setFailedToApplyCondition sets the FailedToApply condition and updates the Konflux status.
-func (r *KonfluxReconciler) setFailedToApplyCondition(ctx context.Context, konflux *konfluxv1alpha1.Konflux, err error, log logr.Logger) {
-	log.Error(err, "Failed to apply manifests")
-	// Update status to reflect the error
-	r.setCondition(konflux, metav1.Condition{
-		Type:    ConditionTypeReady,
-		Status:  metav1.ConditionFalse,
-		Reason:  "ApplyFailed",
-		Message: err.Error(),
-	})
-	if err := r.Status().Update(ctx, konflux); err != nil {
-		log.Error(err, "Failed to update Konflux status")
-		return
-	}
 }
 
 // applyAllManifests loads and applies all embedded manifests to the cluster.
@@ -215,47 +228,6 @@ func (r *KonfluxReconciler) applyKonfluxBuildService(ctx context.Context, owner 
 
 	log.Info("Applying KonfluxBuildService CR", "name", buildService.Name)
 	return r.Patch(ctx, buildService, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
-}
-
-// copyBuildServiceStatusToKonflux copies the status from KonfluxBuildService CR to the Konflux CR
-// TODO: check if this method can be generic
-func (r *KonfluxReconciler) copyBuildServiceStatusToKonflux(ctx context.Context, konflux *konfluxv1alpha1.Konflux) error {
-	log := logf.FromContext(ctx)
-
-	buildService := &konfluxv1alpha1.KonfluxBuildService{}
-	if err := r.Get(ctx, client.ObjectKey{Name: KonfluxBuildServiceCRName}, buildService); err != nil {
-		return fmt.Errorf("failed to get KonfluxBuildService CR: %w", err)
-	}
-
-	// First, remove all existing build-service. conditions to sync cleanly
-	var newConditions []metav1.Condition
-	for _, cond := range konflux.Status.Conditions {
-		if !strings.HasPrefix(cond.Type, "build-service.") {
-			newConditions = append(newConditions, cond)
-		}
-	}
-	konflux.Status.Conditions = newConditions
-
-	// Copy conditions from KonfluxBuildService to Konflux, prefixing with "build-service."
-	// The prefix must be lowercase to match the Kubernetes condition type regex:
-	// ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
-	// We use dots to separate parts since slashes are only allowed once in condition types.
-	for _, cond := range buildService.Status.Conditions {
-		// Replace slashes with dots in the condition type to avoid multiple slashes
-		sanitizedType := strings.ReplaceAll(cond.Type, "/", ".")
-		// Prefix the condition type to namespace it under build-service
-		prefixedType := fmt.Sprintf("build-service.%s", sanitizedType)
-		r.setCondition(konflux, metav1.Condition{
-			Type:               prefixedType,
-			Status:             cond.Status,
-			Reason:             cond.Reason,
-			Message:            cond.Message,
-			ObservedGeneration: cond.ObservedGeneration,
-		})
-	}
-
-	log.V(1).Info("Copied KonfluxBuildService status to Konflux", "name", buildService.Name, "conditionCount", len(buildService.Status.Conditions))
-	return nil
 }
 
 func transformObjectsForComponent(objects []*unstructured.Unstructured, component manifests.Component, konflux *konfluxv1alpha1.Konflux) []*unstructured.Unstructured {
@@ -391,121 +363,26 @@ func applyObject(ctx context.Context, k8sClient client.Client, obj *unstructured
 	return k8sClient.Patch(ctx, obj, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
 }
 
-// updateComponentStatuses checks the status of all owned Deployments and updates the Konflux status.
-func (r *KonfluxReconciler) updateComponentStatuses(ctx context.Context, konflux *konfluxv1alpha1.Konflux) error {
+// updateComponentStatuses checks the status of all owned Deployments and updates conditions on Konflux.
+// It returns the deployment status summary for use in computing the overall Ready condition.
+func (r *KonfluxReconciler) updateComponentStatuses(ctx context.Context, konflux *konfluxv1alpha1.Konflux) (DeploymentStatusSummary, error) {
 	// List all deployments owned by this Konflux instance
 	deploymentList := &appsv1.DeploymentList{}
 	if err := r.List(ctx, deploymentList, client.MatchingLabels{
 		KonfluxOwnerLabel: konflux.Name,
 	}); err != nil {
-		return fmt.Errorf("failed to list owned deployments: %w", err)
+		return DeploymentStatusSummary{}, fmt.Errorf("failed to list owned deployments: %w", err)
 	}
 
-	// Track which deployment conditions we've seen (for cleanup)
-	seenConditionTypes := make(map[string]bool)
-	allReady := true
-	var notReadyNames []string
-
-	for _, deployment := range deploymentList.Items {
-		// Create a condition type for this deployment
-		conditionType := fmt.Sprintf("%s/%s", deployment.Namespace, deployment.Name)
-		seenConditionTypes[conditionType] = true
-
-		ready := deployment.Status.ReadyReplicas == deployment.Status.Replicas &&
-			deployment.Status.Replicas > 0 &&
-			deployment.Status.UpdatedReplicas == deployment.Status.Replicas
-
-		if ready {
-			r.setCondition(konflux, metav1.Condition{
-				Type:    conditionType,
-				Status:  metav1.ConditionTrue,
-				Reason:  "DeploymentReady",
-				Message: fmt.Sprintf("Deployment has %d/%d replicas ready", deployment.Status.ReadyReplicas, deployment.Status.Replicas),
-			})
-		} else {
-			allReady = false
-			notReadyNames = append(notReadyNames, deployment.Name)
-
-			message := fmt.Sprintf("Ready: %d/%d, Updated: %d/%d",
-				deployment.Status.ReadyReplicas, deployment.Status.Replicas,
-				deployment.Status.UpdatedReplicas, deployment.Status.Replicas)
-
-			// Check for specific conditions that indicate problems
-			for _, cond := range deployment.Status.Conditions {
-				if cond.Type == appsv1.DeploymentProgressing && cond.Status == corev1.ConditionFalse {
-					message = fmt.Sprintf("%s - %s: %s", message, cond.Reason, cond.Message)
-				}
-				if cond.Type == appsv1.DeploymentReplicaFailure && cond.Status == corev1.ConditionTrue {
-					message = fmt.Sprintf("%s - ReplicaFailure: %s", message, cond.Message)
-				}
-			}
-
-			r.setCondition(konflux, metav1.Condition{
-				Type:    conditionType,
-				Status:  metav1.ConditionFalse,
-				Reason:  "DeploymentNotReady",
-				Message: message,
-			})
-		}
-	}
+	// Set conditions for each deployment and get summary
+	summary := SetDeploymentConditions(konflux, deploymentList.Items)
 
 	// Remove conditions for deployments that no longer exist
-	r.cleanupStaleConditions(konflux, seenConditionTypes)
+	CleanupStaleConditions(konflux, func(cond metav1.Condition) bool {
+		return cond.Type == ConditionTypeReady || summary.SeenConditionTypes[cond.Type] || strings.HasPrefix(cond.Type, "build-service.")
+	})
 
-	// Set the overall Ready condition
-	if allReady {
-		r.setCondition(konflux, metav1.Condition{
-			Type:    ConditionTypeReady,
-			Status:  metav1.ConditionTrue,
-			Reason:  "AllComponentsReady",
-			Message: fmt.Sprintf("All %d deployments are ready", len(deploymentList.Items)),
-		})
-	} else {
-		r.setCondition(konflux, metav1.Condition{
-			Type:    ConditionTypeReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "ComponentsNotReady",
-			Message: fmt.Sprintf("Deployments not ready: %v", notReadyNames),
-		})
-	}
-
-	return nil
-}
-
-// cleanupStaleConditions removes conditions for deployments that no longer exist.
-func (r *KonfluxReconciler) cleanupStaleConditions(konflux *konfluxv1alpha1.Konflux, seenConditionTypes map[string]bool) {
-	// Keep the Ready condition, conditions for existing deployments, and build-service conditions
-	var newConditions []metav1.Condition
-	for _, cond := range konflux.Status.Conditions {
-		if cond.Type == ConditionTypeReady || seenConditionTypes[cond.Type] || strings.HasPrefix(cond.Type, "build-service.") {
-			newConditions = append(newConditions, cond)
-		}
-	}
-	konflux.Status.Conditions = newConditions
-}
-
-// setCondition updates or adds a condition to the Konflux status.
-// TODO: check if we can make this function generic for all CRs
-func (r *KonfluxReconciler) setCondition(konflux *konfluxv1alpha1.Konflux, condition metav1.Condition) {
-	condition.LastTransitionTime = metav1.Now()
-	condition.ObservedGeneration = konflux.Generation
-
-	// Find and update existing condition or append new one
-	found := false
-	for i, existing := range konflux.Status.Conditions {
-		if existing.Type == condition.Type {
-			// Only update LastTransitionTime if status changed
-			if existing.Status == condition.Status {
-				condition.LastTransitionTime = existing.LastTransitionTime
-			}
-			konflux.Status.Conditions[i] = condition
-			found = true
-			break
-		}
-	}
-	if !found {
-		konflux.Status.Conditions = append(konflux.Status.Conditions, condition)
-	}
+	return summary, nil
 }
 
 // generationChangedPredicate filters out events where the generation hasn't changed
