@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -38,6 +39,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	"github.com/go-logr/logr"
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
@@ -51,6 +53,8 @@ const (
 	KonfluxCRName = "konflux"
 	// ConditionTypeReady is the condition type for overall readiness
 	ConditionTypeReady = "Ready"
+	// KonfluxBuildServiceCRName is the name for the KonfluxBuildService CR.
+	KonfluxBuildServiceCRName = "konflux-build-service"
 )
 
 // KonfluxReconciler reconciles a Konflux object
@@ -84,15 +88,13 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// Apply all embedded manifests
 	if err := r.applyAllManifests(ctx, konflux); err != nil {
-		log.Error(err, "Failed to apply manifests")
-		// Update status to reflect the error
-		r.setCondition(konflux, metav1.Condition{
-			Type:    ConditionTypeReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "ApplyFailed",
-			Message: err.Error(),
-		})
-		_ = r.Status().Update(ctx, konflux)
+		r.setFailedToApplyCondition(ctx, konflux, err, log)
+		return ctrl.Result{}, err
+	}
+
+	// Apply the KonfluxBuildService CR
+	if err := r.applyKonfluxBuildService(ctx, konflux); err != nil {
+		r.setFailedToApplyCondition(ctx, konflux, err, log)
 		return ctrl.Result{}, err
 	}
 
@@ -102,8 +104,36 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
+	// Copy status from the KonfluxBuildService CR to the Konflux CR
+	if err := r.copyBuildServiceStatusToKonflux(ctx, konflux); err != nil {
+		r.setFailedToApplyCondition(ctx, konflux, err, log)
+		return ctrl.Result{}, err
+	}
+
+	// Update the status subresource with all collected conditions
+	if err := r.Status().Update(ctx, konflux); err != nil {
+		log.Error(err, "Failed to update Konflux status")
+		return ctrl.Result{}, err
+	}
+
 	log.Info("Successfully reconciled Konflux")
 	return ctrl.Result{}, nil
+}
+
+// setFailedToApplyCondition sets the FailedToApply condition and updates the Konflux status.
+func (r *KonfluxReconciler) setFailedToApplyCondition(ctx context.Context, konflux *konfluxv1alpha1.Konflux, err error, log logr.Logger) {
+	log.Error(err, "Failed to apply manifests")
+	// Update status to reflect the error
+	r.setCondition(konflux, metav1.Condition{
+		Type:    ConditionTypeReady,
+		Status:  metav1.ConditionFalse,
+		Reason:  "ApplyFailed",
+		Message: err.Error(),
+	})
+	if err := r.Status().Update(ctx, konflux); err != nil {
+		log.Error(err, "Failed to update Konflux status")
+		return
+	}
 }
 
 // applyAllManifests loads and applies all embedded manifests to the cluster.
@@ -111,6 +141,10 @@ func (r *KonfluxReconciler) applyAllManifests(ctx context.Context, owner *konflu
 	log := logf.FromContext(ctx)
 
 	return manifests.WalkManifests(func(info manifests.ManifestInfo) error {
+		if info.Component == manifests.BuildService {
+			log.Info("Skipping BuildService manifest, differing to its own reconciler")
+			return nil
+		}
 
 		objects, err := parseManifests(info.Content)
 		if err != nil {
@@ -120,12 +154,12 @@ func (r *KonfluxReconciler) applyAllManifests(ctx context.Context, owner *konflu
 		for _, obj := range objects {
 			// Set ownership labels and owner reference
 
-			if err := r.setOwnership(obj, owner, string(info.Component)); err != nil {
+			if err := setOwnership(obj, owner, string(info.Component), r.Scheme); err != nil {
 				return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
 					obj.GetNamespace(), obj.GetName(), obj.GetKind(), info.Component, err)
 			}
 
-			if err := r.applyObject(ctx, obj); err != nil {
+			if err := applyObject(ctx, r.Client, obj); err != nil {
 				if obj.GroupVersionKind().Group == "cert-manager.io" || obj.GroupVersionKind().Group == "kyverno.io" {
 					// TODO: Remove this once we decide how to install cert-manager crds in envtest
 					// TODO: Remove this once we decide if we want to have a dependency on Kyverno
@@ -146,11 +180,77 @@ func (r *KonfluxReconciler) applyAllManifests(ctx context.Context, owner *konflu
 	})
 }
 
+// applyKonfluxBuildService creates or updates the KonfluxBuildService CR.
+func (r *KonfluxReconciler) applyKonfluxBuildService(ctx context.Context, owner *konfluxv1alpha1.Konflux) error {
+	log := logf.FromContext(ctx)
+
+	buildService := &konfluxv1alpha1.KonfluxBuildService{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: konfluxv1alpha1.GroupVersion.String(),
+			Kind:       "KonfluxBuildService",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: KonfluxBuildServiceCRName,
+			Labels: map[string]string{
+				KonfluxOwnerLabel:     owner.Name,
+				KonfluxComponentLabel: string(manifests.BuildService),
+			},
+		},
+	}
+
+	// Set owner reference for garbage collection
+	if err := controllerutil.SetControllerReference(owner, buildService, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for KonfluxBuildService: %w", err)
+	}
+
+	log.Info("Applying KonfluxBuildService CR", "name", buildService.Name)
+	return r.Patch(ctx, buildService, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+}
+
+// copyBuildServiceStatusToKonflux copies the status from KonfluxBuildService CR to the Konflux CR
+// TODO: check if this method can be generic
+func (r *KonfluxReconciler) copyBuildServiceStatusToKonflux(ctx context.Context, konflux *konfluxv1alpha1.Konflux) error {
+	log := logf.FromContext(ctx)
+
+	buildService := &konfluxv1alpha1.KonfluxBuildService{}
+	if err := r.Get(ctx, client.ObjectKey{Name: KonfluxBuildServiceCRName}, buildService); err != nil {
+		return fmt.Errorf("failed to get KonfluxBuildService CR: %w", err)
+	}
+
+	// First, remove all existing build-service. conditions to sync cleanly
+	var newConditions []metav1.Condition
+	for _, cond := range konflux.Status.Conditions {
+		if !strings.HasPrefix(cond.Type, "build-service.") {
+			newConditions = append(newConditions, cond)
+		}
+	}
+	konflux.Status.Conditions = newConditions
+
+	// Copy conditions from KonfluxBuildService to Konflux, prefixing with "build-service."
+	// The prefix must be lowercase to match the Kubernetes condition type regex:
+	// ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+	// We use dots to separate parts since slashes are only allowed once in condition types.
+	for _, cond := range buildService.Status.Conditions {
+		// Replace slashes with dots in the condition type to avoid multiple slashes
+		sanitizedType := strings.ReplaceAll(cond.Type, "/", ".")
+		// Prefix the condition type to namespace it under build-service
+		prefixedType := fmt.Sprintf("build-service.%s", sanitizedType)
+		r.setCondition(konflux, metav1.Condition{
+			Type:               prefixedType,
+			Status:             cond.Status,
+			Reason:             cond.Reason,
+			Message:            cond.Message,
+			ObservedGeneration: cond.ObservedGeneration,
+		})
+	}
+
+	log.V(1).Info("Copied KonfluxBuildService status to Konflux", "name", buildService.Name, "conditionCount", len(buildService.Status.Conditions))
+	return nil
+}
+
 func transformObjectsForComponent(objects []*unstructured.Unstructured, component manifests.Component, konflux *konfluxv1alpha1.Konflux) []*unstructured.Unstructured {
 	switch component {
 	case manifests.ApplicationAPI:
-		return objects
-	case manifests.BuildService:
 		return objects
 	case manifests.EnterpriseContract:
 		return objects
@@ -201,19 +301,19 @@ func parseManifests(content []byte) ([]*unstructured.Unstructured, error) {
 }
 
 // setOwnership sets owner reference and labels on the object to establish ownership.
-func (r *KonfluxReconciler) setOwnership(obj *unstructured.Unstructured, owner *konfluxv1alpha1.Konflux, component string) error {
+func setOwnership(obj *unstructured.Unstructured, owner client.Object, component string, scheme *runtime.Scheme) error {
 	// Set ownership labels
 	labels := obj.GetLabels()
 	if labels == nil {
 		labels = make(map[string]string)
 	}
-	labels[KonfluxOwnerLabel] = owner.Name
+	labels[KonfluxOwnerLabel] = owner.GetName()
 	labels[KonfluxComponentLabel] = component
 	obj.SetLabels(labels)
 
 	// Set owner reference for garbage collection and watch triggers
 	// Since Konflux CR is cluster-scoped, it can own both cluster-scoped and namespaced resources
-	if err := controllerutil.SetControllerReference(owner, obj, r.Scheme); err != nil {
+	if err := controllerutil.SetControllerReference(owner, obj, scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference: %w", err)
 	}
 
@@ -223,14 +323,12 @@ func (r *KonfluxReconciler) setOwnership(obj *unstructured.Unstructured, owner *
 // applyObject applies a single unstructured object to the cluster using server-side apply.
 // Server-side apply is idempotent and only triggers updates when there are actual changes,
 // preventing reconcile loops when watching owned resources.
-func (r *KonfluxReconciler) applyObject(ctx context.Context, obj *unstructured.Unstructured) error {
-	return r.Patch(ctx, obj, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+func applyObject(ctx context.Context, k8sClient client.Client, obj *unstructured.Unstructured) error {
+	return k8sClient.Patch(ctx, obj, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
 }
 
 // updateComponentStatuses checks the status of all owned Deployments and updates the Konflux status.
 func (r *KonfluxReconciler) updateComponentStatuses(ctx context.Context, konflux *konfluxv1alpha1.Konflux) error {
-	log := logf.FromContext(ctx)
-
 	// List all deployments owned by this Konflux instance
 	deploymentList := &appsv1.DeploymentList{}
 	if err := r.List(ctx, deploymentList, client.MatchingLabels{
@@ -307,21 +405,15 @@ func (r *KonfluxReconciler) updateComponentStatuses(ctx context.Context, konflux
 		})
 	}
 
-	// Update the status subresource
-	if err := r.Status().Update(ctx, konflux); err != nil {
-		log.Error(err, "Failed to update Konflux status")
-		return err
-	}
-
 	return nil
 }
 
 // cleanupStaleConditions removes conditions for deployments that no longer exist.
 func (r *KonfluxReconciler) cleanupStaleConditions(konflux *konfluxv1alpha1.Konflux, seenConditionTypes map[string]bool) {
-	// Keep only the Ready condition and conditions for existing deployments
+	// Keep the Ready condition, conditions for existing deployments, and build-service conditions
 	var newConditions []metav1.Condition
 	for _, cond := range konflux.Status.Conditions {
-		if cond.Type == ConditionTypeReady || seenConditionTypes[cond.Type] {
+		if cond.Type == ConditionTypeReady || seenConditionTypes[cond.Type] || strings.HasPrefix(cond.Type, "build-service.") {
 			newConditions = append(newConditions, cond)
 		}
 	}
@@ -329,6 +421,7 @@ func (r *KonfluxReconciler) cleanupStaleConditions(konflux *konfluxv1alpha1.Konf
 }
 
 // setCondition updates or adds a condition to the Konflux status.
+// TODO: check if we can make this function generic for all CRs
 func (r *KonfluxReconciler) setCondition(konflux *konfluxv1alpha1.Konflux, condition metav1.Condition) {
 	condition.LastTransitionTime = metav1.Now()
 	condition.ObservedGeneration = konflux.Generation
@@ -452,5 +545,8 @@ func (r *KonfluxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&rbacv1.RoleBinding{}, builder.WithPredicates(generationChangedPredicate)).
 		Owns(&rbacv1.ClusterRole{}, builder.WithPredicates(generationChangedPredicate)).
 		Owns(&rbacv1.ClusterRoleBinding{}, builder.WithPredicates(generationChangedPredicate)).
+		// Watch KonfluxBuildService for any changes to copy conditions to Konflux CR
+		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
+		Owns(&konfluxv1alpha1.KonfluxBuildService{}).
 		Complete(r)
 }

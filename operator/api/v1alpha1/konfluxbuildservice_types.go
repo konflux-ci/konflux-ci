@@ -23,57 +23,45 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// KonfluxSpec defines the desired state of Konflux.
-type KonfluxSpec struct {
+// KonfluxBuildServiceSpec defines the desired state of KonfluxBuildService
+type KonfluxBuildServiceSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// Foo is an example field of KonfluxBuildService. Edit konfluxbuildservice_types.go to remove/update
+	Foo string `json:"foo,omitempty"`
 }
 
-// ComponentStatus represents the status of a Konflux component.
-type ComponentStatus struct {
-	// Name of the component
-	Name string `json:"name"`
-	// Ready indicates if the component is ready
-	Ready bool `json:"ready"`
-	// Message provides additional information about the component status
-	// +optional
-	Message string `json:"message,omitempty"`
-}
-
-// KonfluxStatus defines the observed state of Konflux.
-type KonfluxStatus struct {
-	// Conditions represent the latest available observations of the Konflux state
+// KonfluxBuildServiceStatus defines the observed state of KonfluxBuildService
+type KonfluxBuildServiceStatus struct {
+	// Conditions represent the latest available observations of the KonfluxBuildService state
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-
-	// Components shows the status of individual Konflux components
-	// +optional
-	Components []ComponentStatus `json:"components,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
-// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'konflux'",message="Konflux CR must be named 'konflux'. Only one instance is allowed per cluster."
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'konflux-build-service'",message="KonfluxBuildService CR must be named 'konflux-build-service'. Only one instance is allowed per cluster."
 
-// Konflux is the Schema for the konfluxes API.
-type Konflux struct {
+// KonfluxBuildService is the Schema for the konfluxbuildservices API
+type KonfluxBuildService struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   KonfluxSpec   `json:"spec,omitempty"`
-	Status KonfluxStatus `json:"status,omitempty"`
+	Spec   KonfluxBuildServiceSpec   `json:"spec,omitempty"`
+	Status KonfluxBuildServiceStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// KonfluxList contains a list of Konflux.
-type KonfluxList struct {
+// KonfluxBuildServiceList contains a list of KonfluxBuildService
+type KonfluxBuildServiceList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Konflux `json:"items"`
+	Items           []KonfluxBuildService `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&Konflux{}, &KonfluxList{})
+	SchemeBuilder.Register(&KonfluxBuildService{}, &KonfluxBuildServiceList{})
 }
