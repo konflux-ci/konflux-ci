@@ -1,10 +1,8 @@
 name: Operator E2E Tests
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   merge_group:
     types: [checks_requested]
 
@@ -35,12 +33,23 @@ jobs:
     env:
       # renovate: datasource=github-releases depName=kubernetes-sigs/kind
       KIND_VERSION: "0.31.0"
+      # renovate: datasource=github-releases depName=kubernetes/kubernetes
+      KUBECTL_VERSION: "1.34.0"
+      OPERATOR_IMAGE: example.com/konflux-operator:v0.0.1
+      KIND_CLUSTER: konflux-operator-test-e2e
     defaults:
       run:
         working-directory: operator
     steps:
       - name: Clone the code
         uses: actions/checkout@v6
+        with:
+          ref: "${{ github.event.pull_request.head.sha }}"
+
+      - name: Disable AppArmor
+        # works around a change in ubuntu 24.04 that restricts Linux namespace access
+        # for unprivileged users
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -53,12 +62,23 @@ jobs:
           chmod +x ./kind
           sudo mv ./kind /usr/local/bin/kind
 
+      - name: Install kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/kubectl
+
       - name: Verify kind installation
         run: kind version
 
       - name: Deploy kind cluster
         run: |
           make setup-test-e2e
+
+      - name: Show version information
+        run: |
+          kubectl version
+          kind version
 
       - name: Deploying Dependencies
         working-directory: ${{ github.workspace }}
@@ -67,7 +87,86 @@ jobs:
         run: |
           ./deploy-deps.sh
 
-      - name: Running Test e2e
+      - name: Build Operator Image
         run: |
-          go mod tidy
-          SKIP_PRE_CLEANUP=true make test-e2e
+          make docker-build IMG=$OPERATOR_IMAGE
+
+      - name: Load Operator Image to Kind
+        run: |
+          kind load docker-image $OPERATOR_IMAGE --name $KIND_CLUSTER
+
+      - name: Install Operator CRDs
+        run: make install
+
+      - name: Deploy Operator Controller
+        run: |
+          make deploy IMG=$OPERATOR_IMAGE
+
+      - name: Wait for Operator to be Ready
+        run: |
+          kubectl wait --for=condition=Available deployment/konflux-operator-controller-manager -n konflux-operator --timeout=5m
+
+      - name: Create Konflux CR Instance
+        working-directory: ${{ github.workspace }}
+        run: |
+          kubectl apply -f operator/config/samples/konflux_v1alpha1_konflux.yaml
+
+      - name: Wait for Konflux CR to be Ready
+        run: |
+          # Wait for the Konflux CR to be ready
+          # If the operator deployment is ready and the CR is ready, the operator should have
+          # ensured all underlying services (webhooks, CRDs, etc.) are ready
+          echo "Waiting for Konflux CR to be ready..."
+          kubectl wait --for=jsonpath='{.status.conditions[?(@.type=="Ready")].status}'=True \
+            konflux/konflux --timeout=15m
+          echo "Konflux CR is ready!"
+
+      - name: List namespaces
+        run: |
+          kubectl get namespace
+
+      - name: Deploy Test Resources
+        working-directory: ${{ github.workspace }}
+        run: |
+          ./deploy-test-resources.sh
+
+      - name: Run Konflux Integration Tests
+        working-directory: ${{ github.workspace }}
+        run: |
+          cd test/go-tests
+          go test ./...
+
+      - name: Prepare resources for E2E tests
+        working-directory: ${{ github.workspace }}
+        env:
+          APP_ID: ${{ secrets.APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+          APP_WEBHOOK_SECRET: ${{ secrets.APP_WEBHOOK_SECRET }}
+          QUAY_ORG: ${{ secrets.QUAY_ORG }}
+          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+          SMEE_CHANNEL: ${{ secrets.SMEE_CHANNEL }}
+        run: |
+          ./test/e2e/prepare-e2e.sh
+
+      - name: Run E2E tests
+        working-directory: ${{ github.workspace }}
+        env:
+          GH_ORG: ${{ secrets.GH_ORG }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          QUAY_DOCKERCONFIGJSON: ${{ secrets.QUAY_DOCKERCONFIGJSON }}
+          RELEASE_SERVICE_CATALOG_REVISION: ${{ secrets.RELEASE_SERVICE_CATALOG_REVISION }}
+        run: |
+          ./test/e2e/run-e2e.sh
+
+      - name: Generate error logs
+        if: ${{ !cancelled() }}
+        working-directory: ${{ github.workspace }}
+        run: |
+          ./generate-err-logs.sh
+
+      - name: Archive logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: logs
+          path: logs
