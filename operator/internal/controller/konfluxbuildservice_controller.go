@@ -30,7 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/go-logr/logr"
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
@@ -72,13 +71,21 @@ func (r *KonfluxBuildServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	// Apply all embedded manifests
 	if err := r.applyManifests(ctx, buildService); err != nil {
-		r.setFailedToApplyCondition(ctx, buildService, err, log)
+		log.Error(err, "Failed to apply manifests")
+		SetFailedCondition(buildService, BuildServiceConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, buildService); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
 		return ctrl.Result{}, err
 	}
 
 	// Check the status of owned deployments and update KonfluxBuildService status
 	if err := r.updateComponentStatuses(ctx, buildService); err != nil {
 		log.Error(err, "Failed to update component statuses")
+		SetFailedCondition(buildService, BuildServiceConditionTypeReady, "FailedToGetDeploymentStatus", err)
+		if updateErr := r.Status().Update(ctx, buildService); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -138,73 +145,16 @@ func (r *KonfluxBuildServiceReconciler) updateComponentStatuses(ctx context.Cont
 		return fmt.Errorf("failed to list owned deployments: %w", err)
 	}
 
-	// Track which deployment conditions we've seen (for cleanup)
-	seenConditionTypes := make(map[string]bool)
-	allReady := true
-	var notReadyNames []string
-
-	for _, deployment := range deploymentList.Items {
-		// Create a condition type for this deployment
-		conditionType := fmt.Sprintf("%s/%s", deployment.Namespace, deployment.Name)
-		seenConditionTypes[conditionType] = true
-
-		ready := deployment.Status.ReadyReplicas == deployment.Status.Replicas &&
-			deployment.Status.Replicas > 0 &&
-			deployment.Status.UpdatedReplicas == deployment.Status.Replicas
-
-		if ready {
-			r.setCondition(buildService, metav1.Condition{
-				Type:    conditionType,
-				Status:  metav1.ConditionTrue,
-				Reason:  "DeploymentReady",
-				Message: fmt.Sprintf("Deployment has %d/%d replicas ready", deployment.Status.ReadyReplicas, deployment.Status.Replicas),
-			})
-		} else {
-			allReady = false
-			notReadyNames = append(notReadyNames, deployment.Name)
-
-			message := fmt.Sprintf("Ready: %d/%d, Updated: %d/%d",
-				deployment.Status.ReadyReplicas, deployment.Status.Replicas,
-				deployment.Status.UpdatedReplicas, deployment.Status.Replicas)
-
-			// Check for specific conditions that indicate problems
-			for _, cond := range deployment.Status.Conditions {
-				if cond.Type == appsv1.DeploymentProgressing && cond.Status == corev1.ConditionFalse {
-					message = fmt.Sprintf("%s - %s: %s", message, cond.Reason, cond.Message)
-				}
-				if cond.Type == appsv1.DeploymentReplicaFailure && cond.Status == corev1.ConditionTrue {
-					message = fmt.Sprintf("%s - ReplicaFailure: %s", message, cond.Message)
-				}
-			}
-
-			r.setCondition(buildService, metav1.Condition{
-				Type:    conditionType,
-				Status:  metav1.ConditionFalse,
-				Reason:  "DeploymentNotReady",
-				Message: message,
-			})
-		}
-	}
+	// Set conditions for each deployment and get summary
+	summary := SetDeploymentConditions(buildService, deploymentList.Items)
 
 	// Remove conditions for deployments that no longer exist
-	r.cleanupStaleConditions(buildService, seenConditionTypes)
+	CleanupStaleConditions(buildService, func(cond metav1.Condition) bool {
+		return cond.Type == BuildServiceConditionTypeReady || summary.SeenConditionTypes[cond.Type]
+	})
 
 	// Set the overall Ready condition
-	if allReady {
-		r.setCondition(buildService, metav1.Condition{
-			Type:    BuildServiceConditionTypeReady,
-			Status:  metav1.ConditionTrue,
-			Reason:  "AllComponentsReady",
-			Message: fmt.Sprintf("All %d deployments are ready", len(deploymentList.Items)),
-		})
-	} else {
-		r.setCondition(buildService, metav1.Condition{
-			Type:    BuildServiceConditionTypeReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "ComponentsNotReady",
-			Message: fmt.Sprintf("Deployments not ready: %v", notReadyNames),
-		})
-	}
+	SetOverallReadyCondition(buildService, BuildServiceConditionTypeReady, summary)
 
 	// Update the status subresource
 	if err := r.Status().Update(ctx, buildService); err != nil {
@@ -213,56 +163,6 @@ func (r *KonfluxBuildServiceReconciler) updateComponentStatuses(ctx context.Cont
 	}
 
 	return nil
-}
-
-// cleanupStaleConditions removes conditions for deployments that no longer exist.
-func (r *KonfluxBuildServiceReconciler) cleanupStaleConditions(buildService *konfluxv1alpha1.KonfluxBuildService, seenConditionTypes map[string]bool) {
-	// Keep only the Ready condition and conditions for existing deployments
-	var newConditions []metav1.Condition
-	for _, cond := range buildService.Status.Conditions {
-		if cond.Type == BuildServiceConditionTypeReady || seenConditionTypes[cond.Type] {
-			newConditions = append(newConditions, cond)
-		}
-	}
-	buildService.Status.Conditions = newConditions
-}
-
-// setFailedToApplyCondition sets the FailedToApply condition and updates the KonfluxBuildService status.
-func (r *KonfluxBuildServiceReconciler) setFailedToApplyCondition(ctx context.Context, buildService *konfluxv1alpha1.KonfluxBuildService, err error, log logr.Logger) {
-	log.Error(err, "Failed to apply manifests")
-	// Update status to reflect the error
-	r.setCondition(buildService, metav1.Condition{
-		Type:    BuildServiceConditionTypeReady,
-		Status:  metav1.ConditionFalse,
-		Reason:  "ApplyFailed",
-		Message: err.Error(),
-	})
-	if updateErr := r.Status().Update(ctx, buildService); updateErr != nil {
-		log.Error(updateErr, "Failed to update KonfluxBuildService status")
-	}
-}
-
-// setCondition updates or adds a condition to the KonfluxBuildService status.
-func (r *KonfluxBuildServiceReconciler) setCondition(buildService *konfluxv1alpha1.KonfluxBuildService, condition metav1.Condition) {
-	condition.LastTransitionTime = metav1.Now()
-	condition.ObservedGeneration = buildService.Generation
-
-	// Find and update existing condition or append new one
-	found := false
-	for i, existing := range buildService.Status.Conditions {
-		if existing.Type == condition.Type {
-			// Only update LastTransitionTime if status changed
-			if existing.Status == condition.Status {
-				condition.LastTransitionTime = existing.LastTransitionTime
-			}
-			buildService.Status.Conditions[i] = condition
-			found = true
-			break
-		}
-	}
-	if !found {
-		buildService.Status.Conditions = append(buildService.Status.Conditions, condition)
-	}
 }
 
 // SetupWithManager sets up the controller with the Manager.

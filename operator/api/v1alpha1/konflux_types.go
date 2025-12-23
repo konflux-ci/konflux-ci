@@ -74,6 +74,16 @@ type KonfluxList struct {
 	Items           []Konflux `json:"items"`
 }
 
+// GetConditions returns the conditions from the Konflux status.
+func (k *Konflux) GetConditions() []metav1.Condition {
+	return k.Status.Conditions
+}
+
+// SetConditions sets the conditions on the Konflux status.
+func (k *Konflux) SetConditions(conditions []metav1.Condition) {
+	k.Status.Conditions = conditions
+}
+
 func init() {
 	SchemeBuilder.Register(&Konflux{}, &KonfluxList{})
 }
