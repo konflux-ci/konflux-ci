@@ -4,20 +4,21 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: konfluxes.konflux.konflux-ci.dev
+  name: konfluxbuildservices.konflux.konflux-ci.dev
 spec:
   group: konflux.konflux-ci.dev
   names:
-    kind: Konflux
-    listKind: KonfluxList
-    plural: konfluxes
-    singular: konflux
+    kind: KonfluxBuildService
+    listKind: KonfluxBuildServiceList
+    plural: konfluxbuildservices
+    singular: konfluxbuildservice
   scope: Cluster
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Konflux is the Schema for the konfluxes API.
+        description: KonfluxBuildService is the Schema for the konfluxbuildservices
+          API
         properties:
           apiVersion:
             description: |-
@@ -37,35 +38,19 @@ spec:
           metadata:
             type: object
           spec:
-            description: KonfluxSpec defines the desired state of Konflux.
+            description: KonfluxBuildServiceSpec defines the desired state of KonfluxBuildService
+            properties:
+              foo:
+                description: Foo is an example field of KonfluxBuildService. Edit
+                  konfluxbuildservice_types.go to remove/update
+                type: string
             type: object
           status:
-            description: KonfluxStatus defines the observed state of Konflux.
+            description: KonfluxBuildServiceStatus defines the observed state of KonfluxBuildService
             properties:
-              components:
-                description: Components shows the status of individual Konflux components
-                items:
-                  description: ComponentStatus represents the status of a Konflux
-                    component.
-                  properties:
-                    message:
-                      description: Message provides additional information about the
-                        component status
-                      type: string
-                    name:
-                      description: Name of the component
-                      type: string
-                    ready:
-                      description: Ready indicates if the component is ready
-                      type: boolean
-                  required:
-                  - name
-                  - ready
-                  type: object
-                type: array
               conditions:
                 description: Conditions represent the latest available observations
-                  of the Konflux state
+                  of the KonfluxBuildService state
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -124,9 +109,9 @@ spec:
             type: object
         type: object
         x-kubernetes-validations:
-        - message: Konflux CR must be named 'konflux'. Only one instance is allowed
-            per cluster.
-          rule: self.metadata.name == 'konflux'
+        - message: KonfluxBuildService CR must be named 'konflux-build-service'. Only
+            one instance is allowed per cluster.
+          rule: self.metadata.name == 'konflux-build-service'
     served: true
     storage: true
     subresources:

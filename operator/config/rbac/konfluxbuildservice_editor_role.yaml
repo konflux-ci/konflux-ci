@@ -1,20 +1,16 @@
----
+# permissions for end users to edit konfluxbuildservices.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: manager-role
+  labels:
+    app.kubernetes.io/name: konflux-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: konfluxbuildservice-editor-role
 rules:
-- apiGroups:
-  - '*'
-  resources:
-  - '*'
-  verbs:
-  - '*'
 - apiGroups:
   - konflux.konflux-ci.dev
   resources:
   - konfluxbuildservices
-  - konfluxes
   verbs:
   - create
   - delete
@@ -26,16 +22,6 @@ rules:
 - apiGroups:
   - konflux.konflux-ci.dev
   resources:
-  - konfluxbuildservices/finalizers
-  - konfluxes/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - konflux.konflux-ci.dev
-  resources:
   - konfluxbuildservices/status
-  - konfluxes/status
   verbs:
   - get
-  - patch
-  - update
