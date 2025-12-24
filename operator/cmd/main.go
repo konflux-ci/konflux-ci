@@ -234,37 +234,49 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Parse all embedded manifests into an ObjectStore
+	objectStore, err := manifests.NewObjectStore(scheme)
+	if err != nil {
+		setupLog.Error(err, "unable to parse embedded manifests")
+		os.Exit(1)
+	}
+
 	if err := (&controller.KonfluxReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		ObjectStore: objectStore,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Konflux")
 		os.Exit(1)
 	}
 	if err = (&controller.KonfluxBuildServiceReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		ObjectStore: objectStore,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxBuildService")
 		os.Exit(1)
 	}
 	if err = (&controller.KonfluxIntegrationServiceReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		ObjectStore: objectStore,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxIntegrationService")
 		os.Exit(1)
 	}
 	if err = (&controller.KonfluxReleaseServiceReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		ObjectStore: objectStore,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxReleaseService")
 		os.Exit(1)
 	}
 	if err = (&controller.KonfluxUIReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		ObjectStore: objectStore,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxUI")
 		os.Exit(1)

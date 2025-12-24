@@ -17,10 +17,8 @@ limitations under the License.
 package controller
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"reflect"
 	"strings"
 
@@ -30,7 +28,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/yaml"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -69,7 +66,8 @@ const (
 // KonfluxReconciler reconciles a Konflux object
 type KonfluxReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme      *runtime.Scheme
+	ObjectStore *manifests.ObjectStore
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxes,verbs=get;list;watch;create;update;patch;delete
@@ -221,10 +219,11 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 }
 
 // applyAllManifests loads and applies all embedded manifests to the cluster.
+// Manifests are parsed once and cached; deep copies are used during reconciliation.
 func (r *KonfluxReconciler) applyAllManifests(ctx context.Context, owner *konfluxv1alpha1.Konflux) error {
 	log := logf.FromContext(ctx)
 
-	return manifests.WalkManifests(func(info manifests.ManifestInfo) error {
+	return r.ObjectStore.Walk(func(info manifests.ParsedManifestInfo) error {
 		if info.Component == manifests.BuildService {
 			log.Info("Skipping BuildService manifest, deferring to its own reconciler")
 			return nil
@@ -242,33 +241,30 @@ func (r *KonfluxReconciler) applyAllManifests(ctx context.Context, owner *konflu
 			return nil
 		}
 
-		objects, err := parseManifests(info.Content)
-		if err != nil {
-			return fmt.Errorf("failed to parse manifests for %s: %w", info.Component, err)
-		}
-		objects = transformObjectsForComponent(objects, info.Component, owner)
+		objects := transformObjectsForComponent(info.Objects, info.Component, owner)
 		for _, obj := range objects {
 			// Set ownership labels and owner reference
 
 			if err := setOwnership(obj, owner, string(info.Component), r.Scheme); err != nil {
 				return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
-					obj.GetNamespace(), obj.GetName(), obj.GetKind(), info.Component, err)
+					obj.GetNamespace(), obj.GetName(), getKind(obj), info.Component, err)
 			}
 
 			if err := applyObject(ctx, r.Client, obj); err != nil {
-				if obj.GroupVersionKind().Group == certManagerGroup || obj.GroupVersionKind().Group == kyvernoGroup {
+				gvk := obj.GetObjectKind().GroupVersionKind()
+				if gvk.Group == certManagerGroup || gvk.Group == kyvernoGroup {
 					// TODO: Remove this once we decide how to install cert-manager crds in envtest
 					// TODO: Remove this once we decide if we want to have a dependency on Kyverno
 					log.Info("Skipping resource: CRD not installed",
-						"kind", obj.GetKind(),
-						"apiVersion", obj.GetAPIVersion(),
+						"kind", gvk.Kind,
+						"apiVersion", gvk.GroupVersion().String(),
 						"namespace", obj.GetNamespace(),
 						"name", obj.GetName(),
 					)
 					continue
 				}
 				return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
-					obj.GetNamespace(), obj.GetName(), obj.GetKind(), info.Component, err)
+					obj.GetNamespace(), obj.GetName(), getKind(obj), info.Component, err)
 			}
 		}
 
@@ -384,7 +380,7 @@ func (r *KonfluxReconciler) applyKonfluxUI(ctx context.Context, owner *konfluxv1
 	return r.Patch(ctx, ui, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
 }
 
-func transformObjectsForComponent(objects []*unstructured.Unstructured, component manifests.Component, konflux *konfluxv1alpha1.Konflux) []*unstructured.Unstructured {
+func transformObjectsForComponent(objects []client.Object, component manifests.Component, konflux *konfluxv1alpha1.Konflux) []client.Object {
 	switch component {
 	case manifests.ApplicationAPI:
 		return objects
@@ -407,33 +403,18 @@ func transformObjectsForComponent(objects []*unstructured.Unstructured, componen
 	}
 }
 
-func transformObjectsForImageController(_ []*unstructured.Unstructured, _ *konfluxv1alpha1.Konflux) []*unstructured.Unstructured {
-	return []*unstructured.Unstructured{}
+func transformObjectsForImageController(_ []client.Object, _ *konfluxv1alpha1.Konflux) []client.Object {
+	return []client.Object{}
 }
 
-// parseManifests parses YAML content into a slice of unstructured objects.
-func parseManifests(content []byte) ([]*unstructured.Unstructured, error) {
-	var objects []*unstructured.Unstructured
-
-	decoder := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(content), 4096)
-	for {
-		obj := &unstructured.Unstructured{}
-		if err := decoder.Decode(obj); err != nil {
-			if err == io.EOF {
-				break
-			}
-			return nil, fmt.Errorf("failed to decode manifest: %w", err)
-		}
-
-		// Skip empty documents
-		if len(obj.Object) == 0 {
-			continue
-		}
-
-		objects = append(objects, obj)
+// getKind returns the Kind of a client.Object.
+// For unstructured objects, it uses the GVK directly.
+// For typed objects, it uses the GVK from the object's metadata.
+func getKind(obj client.Object) string {
+	if u, ok := obj.(*unstructured.Unstructured); ok {
+		return u.GetKind()
 	}
-
-	return objects, nil
+	return obj.GetObjectKind().GroupVersionKind().Kind
 }
 
 // setOwnership sets owner reference and labels on the object to establish ownership.
@@ -456,10 +437,10 @@ func setOwnership(obj client.Object, owner client.Object, component string, sche
 	return nil
 }
 
-// applyObject applies a single unstructured object to the cluster using server-side apply.
+// applyObject applies a single object to the cluster using server-side apply.
 // Server-side apply is idempotent and only triggers updates when there are actual changes,
 // preventing reconcile loops when watching owned resources.
-func applyObject(ctx context.Context, k8sClient client.Client, obj *unstructured.Unstructured) error {
+func applyObject(ctx context.Context, k8sClient client.Client, obj client.Object) error {
 	return k8sClient.Patch(ctx, obj, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
 }
 

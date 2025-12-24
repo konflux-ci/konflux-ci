@@ -67,8 +67,9 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &KonfluxIntegrationServiceReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ObjectStore: objectStore,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{

@@ -72,8 +72,9 @@ var _ = Describe("KonfluxUI Controller", func() {
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &KonfluxUIReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ObjectStore: objectStore,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -116,8 +117,9 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
 
 			reconciler = &KonfluxUIReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ObjectStore: objectStore,
 			}
 
 			By("creating the UI namespace")

@@ -41,7 +41,8 @@ const (
 // KonfluxBuildServiceReconciler reconciles a KonfluxBuildService object
 type KonfluxBuildServiceReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme      *runtime.Scheme
+	ObjectStore *manifests.ObjectStore
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxbuildservices,verbs=get;list;watch;create;update;patch;delete
@@ -93,40 +94,37 @@ func (r *KonfluxBuildServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 }
 
 // applyManifests loads and applies all embedded manifests to the cluster.
+// Manifests are parsed once and cached; deep copies are used during reconciliation.
 func (r *KonfluxBuildServiceReconciler) applyManifests(ctx context.Context, owner *konfluxv1alpha1.KonfluxBuildService) error {
 	log := logf.FromContext(ctx)
 
-	buildServiceManifest, err := manifests.GetManifest(manifests.BuildService)
+	objects, err := r.ObjectStore.GetForComponent(manifests.BuildService)
 	if err != nil {
-		return fmt.Errorf("failed to get manifests for BuildService: %w", err)
-	}
-
-	objects, err := parseManifests(buildServiceManifest)
-	if err != nil {
-		return fmt.Errorf("failed to parse manifests for BuildService: %w", err)
+		return fmt.Errorf("failed to get parsed manifests for BuildService: %w", err)
 	}
 
 	for _, obj := range objects {
 		// Set ownership labels and owner reference
 		if err := setOwnership(obj, owner, string(manifests.BuildService), r.Scheme); err != nil {
 			return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), obj.GetKind(), manifests.BuildService, err)
+				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.BuildService, err)
 		}
 
 		if err := applyObject(ctx, r.Client, obj); err != nil {
-			if obj.GroupVersionKind().Group == certManagerGroup || obj.GroupVersionKind().Group == kyvernoGroup {
+			gvk := obj.GetObjectKind().GroupVersionKind()
+			if gvk.Group == certManagerGroup || gvk.Group == kyvernoGroup {
 				// TODO: Remove this once we decide how to install cert-manager crds in envtest
 				// TODO: Remove this once we decide if we want to have a dependency on Kyverno
 				log.Info("Skipping resource: CRD not installed",
-					"kind", obj.GetKind(),
-					"apiVersion", obj.GetAPIVersion(),
+					"kind", gvk.Kind,
+					"apiVersion", gvk.GroupVersion().String(),
 					"namespace", obj.GetNamespace(),
 					"name", obj.GetName(),
 				)
 				continue
 			}
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), obj.GetKind(), manifests.BuildService, err)
+				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.BuildService, err)
 		}
 	}
 	return nil

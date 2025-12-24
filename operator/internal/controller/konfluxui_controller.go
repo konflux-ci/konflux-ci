@@ -47,7 +47,8 @@ const (
 // KonfluxUIReconciler reconciles a KonfluxUI object
 type KonfluxUIReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme      *runtime.Scheme
+	ObjectStore *manifests.ObjectStore
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxuis,verbs=get;list;watch;create;update;patch;delete
@@ -105,40 +106,37 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 }
 
 // applyManifests loads and applies all embedded manifests to the cluster.
+// Manifests are parsed once and cached; deep copies are used during reconciliation.
 func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, owner *konfluxv1alpha1.KonfluxUI) error {
 	log := logf.FromContext(ctx)
 
-	uiManifest, err := manifests.GetManifest(manifests.UI)
+	objects, err := r.ObjectStore.GetForComponent(manifests.UI)
 	if err != nil {
-		return fmt.Errorf("failed to get manifests for UI: %w", err)
-	}
-
-	objects, err := parseManifests(uiManifest)
-	if err != nil {
-		return fmt.Errorf("failed to parse manifests for UI: %w", err)
+		return fmt.Errorf("failed to get parsed manifests for UI: %w", err)
 	}
 
 	for _, obj := range objects {
 		// Set ownership labels and owner reference
 		if err := setOwnership(obj, owner, string(manifests.UI), r.Scheme); err != nil {
 			return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), obj.GetKind(), manifests.UI, err)
+				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.UI, err)
 		}
 
 		if err := applyObject(ctx, r.Client, obj); err != nil {
-			if obj.GroupVersionKind().Group == certManagerGroup || obj.GroupVersionKind().Group == kyvernoGroup {
+			gvk := obj.GetObjectKind().GroupVersionKind()
+			if gvk.Group == certManagerGroup || gvk.Group == kyvernoGroup {
 				// TODO: Remove this once we decide how to install cert-manager crds in envtest
 				// TODO: Remove this once we decide if we want to have a dependency on Kyverno
 				log.Info("Skipping resource: CRD not installed",
-					"kind", obj.GetKind(),
-					"apiVersion", obj.GetAPIVersion(),
+					"kind", gvk.Kind,
+					"apiVersion", gvk.GroupVersion().String(),
 					"namespace", obj.GetNamespace(),
 					"name", obj.GetName(),
 				)
 				continue
 			}
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), obj.GetKind(), manifests.UI, err)
+				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.UI, err)
 		}
 	}
 	return nil
