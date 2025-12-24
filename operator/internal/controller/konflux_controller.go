@@ -19,8 +19,6 @@ package controller
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"reflect"
@@ -60,8 +58,8 @@ const (
 	KonfluxIntegrationServiceCRName = "konflux-integration-service"
 	// KonfluxReleaseServiceCRName is the name for the KonfluxReleaseService CR.
 	KonfluxReleaseServiceCRName = "konflux-release-service"
-	// uiNamespace is the namespace for UI resources
-	uiNamespace = "konflux-ui"
+	// KonfluxUICRName is the name for the KonfluxUI CR.
+	KonfluxUICRName = "konflux-ui"
 	// certManagerGroup is the API group for cert-manager resources
 	certManagerGroup = "cert-manager.io"
 	// kyvernoGroup is the API group for Kyverno resources
@@ -137,9 +135,13 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
-	// Ensure UI secrets are created
-	if err := r.ensureUISecrets(ctx, konflux); err != nil {
-		log.Error(err, "Failed to ensure UI secrets")
+	// Apply the KonfluxUI CR
+	if err := r.applyKonfluxUI(ctx, konflux); err != nil {
+		log.Error(err, "Failed to apply KonfluxUI")
+		SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -193,6 +195,18 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, releaseService, "release-service"))
 
+	// Get and copy status from the KonfluxUI CR
+	ui := &konfluxv1alpha1.KonfluxUI{}
+	if err := r.Get(ctx, client.ObjectKey{Name: KonfluxUICRName}, ui); err != nil {
+		log.Error(err, "Failed to get KonfluxUI")
+		SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetUIStatus", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+	subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, ui, "ui"))
+
 	// Set overall Ready condition considering deployments and all sub-CRs
 	SetAggregatedReadyCondition(konflux, ConditionTypeReady, deploymentSummary, subCRStatuses)
 
@@ -221,6 +235,10 @@ func (r *KonfluxReconciler) applyAllManifests(ctx context.Context, owner *konflu
 		}
 		if info.Component == manifests.Release {
 			log.Info("Skipping Release manifest, deferring to its own reconciler")
+			return nil
+		}
+		if info.Component == manifests.UI {
+			log.Info("Skipping UI manifest, deferring to its own reconciler")
 			return nil
 		}
 
@@ -339,6 +357,33 @@ func (r *KonfluxReconciler) applyKonfluxReleaseService(ctx context.Context, owne
 	return r.Patch(ctx, releaseService, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
 }
 
+// applyKonfluxUI creates or updates the KonfluxUI CR.
+func (r *KonfluxReconciler) applyKonfluxUI(ctx context.Context, owner *konfluxv1alpha1.Konflux) error {
+	log := logf.FromContext(ctx)
+
+	ui := &konfluxv1alpha1.KonfluxUI{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: konfluxv1alpha1.GroupVersion.String(),
+			Kind:       "KonfluxUI",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: KonfluxUICRName,
+			Labels: map[string]string{
+				KonfluxOwnerLabel:     owner.Name,
+				KonfluxComponentLabel: string(manifests.UI),
+			},
+		},
+	}
+
+	// Set owner reference for garbage collection
+	if err := controllerutil.SetControllerReference(owner, ui, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for KonfluxUI: %w", err)
+	}
+
+	log.Info("Applying KonfluxUI CR", "name", ui.Name)
+	return r.Patch(ctx, ui, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+}
+
 func transformObjectsForComponent(objects []*unstructured.Unstructured, component manifests.Component, konflux *konfluxv1alpha1.Konflux) []*unstructured.Unstructured {
 	switch component {
 	case manifests.ApplicationAPI:
@@ -411,60 +456,6 @@ func setOwnership(obj client.Object, owner client.Object, component string, sche
 	return nil
 }
 
-// ensureUISecrets ensures that UI secrets exist and are properly configured.
-// Only generates secret values if they don't already exist (preserves existing secrets).
-func (r *KonfluxReconciler) ensureUISecrets(ctx context.Context, konflux *konfluxv1alpha1.Konflux) error {
-	// Helper for the actual reconciliation logic
-	ensureSecret := func(name, key string, length int, urlSafe bool) error {
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: uiNamespace,
-			},
-		}
-
-		_, err := controllerutil.CreateOrUpdate(ctx, r.Client, secret, func() error {
-			// 1. Ensure Ownership/Labels (Updates if missing)
-			if err := setOwnership(secret, konflux, "ui", r.Scheme); err != nil {
-				return err
-			}
-
-			// 2. Only generate data if it doesn't already exist
-			if secret.Data == nil {
-				secret.Data = make(map[string][]byte)
-			}
-
-			if len(secret.Data[key]) == 0 {
-				val, err := r.generateRandomBytes(length, urlSafe)
-				if err != nil {
-					return err
-				}
-				secret.Data[key] = val
-			}
-			return nil
-		})
-		return err
-	}
-
-	// Execute for both secrets
-	if err := ensureSecret("oauth2-proxy-client-secret", "client-secret", 20, true); err != nil {
-		return fmt.Errorf("client-secret: %w", err)
-	}
-	return ensureSecret("oauth2-proxy-cookie-secret", "cookie-secret", 16, false)
-}
-
-// generateRandomBytes generates a random secret value with the specified encoding.
-func (r *KonfluxReconciler) generateRandomBytes(length int, urlSafe bool) ([]byte, error) {
-	b := make([]byte, length)
-	if _, err := rand.Read(b); err != nil {
-		return nil, err
-	}
-	if urlSafe {
-		return []byte(base64.RawURLEncoding.EncodeToString(b)), nil
-	}
-	return []byte(base64.StdEncoding.EncodeToString(b)), nil
-}
-
 // applyObject applies a single unstructured object to the cluster using server-side apply.
 // Server-side apply is idempotent and only triggers updates when there are actual changes,
 // preventing reconcile loops when watching owned resources.
@@ -492,7 +483,8 @@ func (r *KonfluxReconciler) updateComponentStatuses(ctx context.Context, konflux
 			summary.SeenConditionTypes[cond.Type] ||
 			strings.HasPrefix(cond.Type, "build-service.") ||
 			strings.HasPrefix(cond.Type, "integration-service.") ||
-			strings.HasPrefix(cond.Type, "release-service.")
+			strings.HasPrefix(cond.Type, "release-service.") ||
+			strings.HasPrefix(cond.Type, "ui.")
 	})
 
 	return summary, nil
@@ -606,5 +598,7 @@ func (r *KonfluxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&konfluxv1alpha1.KonfluxIntegrationService{}).
 		// Watch KonfluxReleaseService for any changes to copy conditions to Konflux CR
 		Owns(&konfluxv1alpha1.KonfluxReleaseService{}).
+		// Watch KonfluxUI for any changes to copy conditions to Konflux CR
+		Owns(&konfluxv1alpha1.KonfluxUI{}).
 		Complete(r)
 }
