@@ -1,0 +1,23 @@
+# permissions for end users to view konfluxuis.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: konflux-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: konfluxui-viewer-role
+rules:
+- apiGroups:
+  - konflux.konflux-ci.dev
+  resources:
+  - konfluxuis
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - konflux.konflux-ci.dev
+  resources:
+  - konfluxuis/status
+  verbs:
+  - get

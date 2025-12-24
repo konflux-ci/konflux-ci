@@ -1,0 +1,27 @@
+# permissions for end users to edit konfluxuis.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: konflux-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: konfluxui-editor-role
+rules:
+- apiGroups:
+  - konflux.konflux-ci.dev
+  resources:
+  - konfluxuis
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - konflux.konflux-ci.dev
+  resources:
+  - konfluxuis/status
+  verbs:
+  - get

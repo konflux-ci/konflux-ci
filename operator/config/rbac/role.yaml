@@ -17,6 +17,7 @@ rules:
   - konfluxes
   - konfluxintegrationservices
   - konfluxreleaseservices
+  - konfluxuis
   verbs:
   - create
   - delete
@@ -32,6 +33,7 @@ rules:
   - konfluxes/finalizers
   - konfluxintegrationservices/finalizers
   - konfluxreleaseservices/finalizers
+  - konfluxuis/finalizers
   verbs:
   - update
 - apiGroups:
@@ -41,6 +43,7 @@ rules:
   - konfluxes/status
   - konfluxintegrationservices/status
   - konfluxreleaseservices/status
+  - konfluxuis/status
   verbs:
   - get
   - patch
