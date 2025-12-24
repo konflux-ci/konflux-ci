@@ -26,6 +26,16 @@ jobs:
         # change to repo root (for git commands) or pkg/manifests (for scripts)
         working-directory: operator
     steps:
+      - name: Generate GitHub App token
+        id: app-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.UPDATE_BOT_APP_ID }}
+          private-key: ${{ secrets.UPDATE_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
@@ -58,7 +68,7 @@ jobs:
       - name: Process all components
         id: process
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
         run: |
           cd "${{ github.workspace }}"
 
