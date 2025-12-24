@@ -58,6 +58,8 @@ const (
 	KonfluxBuildServiceCRName = "konflux-build-service"
 	// KonfluxIntegrationServiceCRName is the name for the KonfluxIntegrationService CR.
 	KonfluxIntegrationServiceCRName = "konflux-integration-service"
+	// KonfluxReleaseServiceCRName is the name for the KonfluxReleaseService CR.
+	KonfluxReleaseServiceCRName = "konflux-release-service"
 	// uiNamespace is the namespace for UI resources
 	uiNamespace = "konflux-ui"
 	// certManagerGroup is the API group for cert-manager resources
@@ -125,6 +127,16 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
+	// Apply the KonfluxReleaseService CR
+	if err := r.applyKonfluxReleaseService(ctx, konflux); err != nil {
+		log.Error(err, "Failed to apply KonfluxReleaseService")
+		SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
 	// Ensure UI secrets are created
 	if err := r.ensureUISecrets(ctx, konflux); err != nil {
 		log.Error(err, "Failed to ensure UI secrets")
@@ -169,6 +181,18 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, integrationService, "integration-service"))
 
+	// Get and copy status from the KonfluxReleaseService CR
+	releaseService := &konfluxv1alpha1.KonfluxReleaseService{}
+	if err := r.Get(ctx, client.ObjectKey{Name: KonfluxReleaseServiceCRName}, releaseService); err != nil {
+		log.Error(err, "Failed to get KonfluxReleaseService")
+		SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetReleaseServiceStatus", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+	subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, releaseService, "release-service"))
+
 	// Set overall Ready condition considering deployments and all sub-CRs
 	SetAggregatedReadyCondition(konflux, ConditionTypeReady, deploymentSummary, subCRStatuses)
 
@@ -193,6 +217,10 @@ func (r *KonfluxReconciler) applyAllManifests(ctx context.Context, owner *konflu
 		}
 		if info.Component == manifests.Integration {
 			log.Info("Skipping Integration manifest, deferring to its own reconciler")
+			return nil
+		}
+		if info.Component == manifests.Release {
+			log.Info("Skipping Release manifest, deferring to its own reconciler")
 			return nil
 		}
 
@@ -282,6 +310,33 @@ func (r *KonfluxReconciler) applyKonfluxIntegrationService(ctx context.Context, 
 
 	log.Info("Applying KonfluxIntegrationService CR", "name", integrationService.Name)
 	return r.Patch(ctx, integrationService, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+}
+
+// applyKonfluxReleaseService creates or updates the KonfluxReleaseService CR.
+func (r *KonfluxReconciler) applyKonfluxReleaseService(ctx context.Context, owner *konfluxv1alpha1.Konflux) error {
+	log := logf.FromContext(ctx)
+
+	releaseService := &konfluxv1alpha1.KonfluxReleaseService{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: konfluxv1alpha1.GroupVersion.String(),
+			Kind:       "KonfluxReleaseService",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: KonfluxReleaseServiceCRName,
+			Labels: map[string]string{
+				KonfluxOwnerLabel:     owner.Name,
+				KonfluxComponentLabel: string(manifests.Release),
+			},
+		},
+	}
+
+	// Set owner reference for garbage collection
+	if err := controllerutil.SetControllerReference(owner, releaseService, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for KonfluxReleaseService: %w", err)
+	}
+
+	log.Info("Applying KonfluxReleaseService CR", "name", releaseService.Name)
+	return r.Patch(ctx, releaseService, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
 }
 
 func transformObjectsForComponent(objects []*unstructured.Unstructured, component manifests.Component, konflux *konfluxv1alpha1.Konflux) []*unstructured.Unstructured {
@@ -436,7 +491,8 @@ func (r *KonfluxReconciler) updateComponentStatuses(ctx context.Context, konflux
 		return cond.Type == ConditionTypeReady ||
 			summary.SeenConditionTypes[cond.Type] ||
 			strings.HasPrefix(cond.Type, "build-service.") ||
-			strings.HasPrefix(cond.Type, "integration-service.")
+			strings.HasPrefix(cond.Type, "integration-service.") ||
+			strings.HasPrefix(cond.Type, "release-service.")
 	})
 
 	return summary, nil
@@ -548,5 +604,7 @@ func (r *KonfluxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&konfluxv1alpha1.KonfluxBuildService{}).
 		// Watch KonfluxIntegrationService for any changes to copy conditions to Konflux CR
 		Owns(&konfluxv1alpha1.KonfluxIntegrationService{}).
+		// Watch KonfluxReleaseService for any changes to copy conditions to Konflux CR
+		Owns(&konfluxv1alpha1.KonfluxReleaseService{}).
 		Complete(r)
 }

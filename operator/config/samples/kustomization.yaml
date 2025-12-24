@@ -3,4 +3,5 @@ resources:
 - konflux_v1alpha1_konflux.yaml
 - konflux_v1alpha1_konfluxbuildservice.yaml
 - konflux_v1alpha1_konfluxintegrationservice.yaml
+- konflux_v1alpha1_konfluxreleaseservice.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples
