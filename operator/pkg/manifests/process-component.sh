@@ -192,26 +192,40 @@ This PR updates upstream kustomization references and rebuilds manifests for the
 *This PR was automatically created by the [Update Upstream Manifests workflow](.github/workflows/update-upstream-manifests.yaml)*"
 
 set +e
-EXISTING_PR=$(gh pr view "${BRANCH_NAME}" --json number --jq .number 2>/dev/null || echo "")
+EXISTING_PR=$(gh pr view "${BRANCH_NAME}" \
+    --json number,state \
+    --jq 'if .number then "\(.number)|\(.state)" else empty end' \
+    2>/dev/null || echo "")
 set -e
 
 if [ -n "${EXISTING_PR}" ]; then
-    echo "  PR #${EXISTING_PR} already exists, updating..."
-    set +e
-    if gh pr edit "${EXISTING_PR}" --title "${PR_TITLE}" --body "${PR_BODY}" 2>&1; then
-        echo "  ✓ Updated existing PR #${EXISTING_PR} for ${COMPONENT}"
-        echo "${COMPONENT}:success:updated: PR #${EXISTING_PR}"
-        git checkout main
-        set -e
-        exit 0
+    PR_NUMBER=$(echo "${EXISTING_PR}" | cut -d'|' -f1)
+    PR_STATE=$(echo "${EXISTING_PR}" | cut -d'|' -f2)
+
+    if [ "${PR_STATE}" = "CLOSED" ] || [ "${PR_STATE}" = "MERGED" ]; then
+        echo "  PR #${PR_NUMBER} exists but is ${PR_STATE}, creating new PR..."
+        # Fall through to create new PR below
     else
-        echo "  ✗ Failed to update PR #${EXISTING_PR} for ${COMPONENT}" >&2
-        echo "${COMPONENT}:failed:PR update error"
-        git checkout main
-        set -e
-        exit 1
+        echo "  PR #${PR_NUMBER} already exists and is ${PR_STATE}, updating..."
+        set +e
+        if gh pr edit "${PR_NUMBER}" --title "${PR_TITLE}" --body "${PR_BODY}" 2>&1; then
+            echo "  ✓ Updated existing PR #${PR_NUMBER} for ${COMPONENT}"
+            echo "${COMPONENT}:success:updated: PR #${PR_NUMBER}"
+            git checkout main
+            set -e
+            exit 0
+        else
+            echo "  ✗ Failed to update PR #${PR_NUMBER} for ${COMPONENT}" >&2
+            echo "${COMPONENT}:failed:PR update error"
+            git checkout main
+            set -e
+            exit 1
+        fi
     fi
-else
+fi
+
+# Create new PR (either no existing PR, or existing PR is closed/merged)
+if [ -z "${EXISTING_PR}" ] || [ "${PR_STATE:-}" = "CLOSED" ] || [ "${PR_STATE:-}" = "MERGED" ]; then
     echo "  Creating new PR for ${COMPONENT}..."
     set +e
     PR_OUTPUT=$(gh pr create \
