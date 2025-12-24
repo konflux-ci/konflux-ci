@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -40,11 +41,12 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var (
-	ctx       context.Context
-	cancel    context.CancelFunc
-	testEnv   *envtest.Environment
-	cfg       *rest.Config
-	k8sClient client.Client
+	ctx         context.Context
+	cancel      context.CancelFunc
+	testEnv     *envtest.Environment
+	cfg         *rest.Config
+	k8sClient   client.Client
+	objectStore *manifests.ObjectStore
 )
 
 func TestControllers(t *testing.T) {
@@ -63,6 +65,10 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:scheme
+
+	// Parse all embedded manifests into an ObjectStore
+	objectStore, err = manifests.NewObjectStore(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
