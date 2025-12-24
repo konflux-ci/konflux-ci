@@ -7,6 +7,66 @@ on:
     types: [checks_requested]
 
 jobs:
+  check-prerequisites:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check prerequisites for running Operator E2E test
+      run: |
+        if [ "${{ github.event_name }}" != 'pull_request_target' ]; then
+          echo "The workflow is not triggered from PR, but ${{ github.event_name }} - skipping further checks."
+          exit 0
+        fi
+
+        WHITELISTED_BOT_NAMES=("renovate[bot]" "red-hat-konflux[bot]" "github-actions[bot]")
+        REQUIRED_LABEL_NAME="ok-to-test"
+
+        ORG="${{ github.repository_owner }}"
+        PR_AUTHOR=$(jq --raw-output .pull_request.user.login $GITHUB_EVENT_PATH)
+        echo "PR author: $PR_AUTHOR"
+        PR_LABELS=$(jq --raw-output .pull_request.labels[].name $GITHUB_EVENT_PATH)
+
+        # Check if PR author is in the whitelisted bots list
+        BOT_WHITELISTED=false
+        for BOT_NAME in "${WHITELISTED_BOT_NAMES[@]}"; do
+          if [ "$PR_AUTHOR" == "$BOT_NAME" ]; then
+            BOT_WHITELISTED=true
+            echo "PR author is $BOT_NAME, skipping further checks."
+            break
+          fi
+        done
+
+        if [ "$BOT_WHITELISTED" == "true" ]; then
+          exit 0
+        fi
+
+        if [[ "$PR_LABELS" == *$REQUIRED_LABEL_NAME* ]]; then
+          echo "PR has '$REQUIRED_LABEL_NAME' label, skipping further checks."
+          exit 0
+        fi
+
+        if gh api "/orgs/$ORG/members/$PR_AUTHOR"; then
+          echo "PR author is a member of $ORG GitHub organization, skipping further checks"
+          exit 0
+        fi
+
+        # Create comma-separated list for error message
+        BOT_LIST=$(IFS=','; echo "${WHITELISTED_BOT_NAMES[*]}")
+
+        ERROR_SUMMARY=$(cat <<EOF
+
+        ### ❌ Cannot run Operator E2E test - at least one of the following conditions must be met:
+        * PR author is one of: $BOT_LIST
+        * PR has label '$REQUIRED_LABEL_NAME'
+        * PR author is a public member of '$ORG' GitHub organization
+        EOF
+        )
+        echo "$ERROR_SUMMARY" >> $GITHUB_STEP_SUMMARY
+        echo "$ERROR_SUMMARY"
+
+        exit 1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+
   check-changes:
     name: Check for relevant changes
     runs-on: ubuntu-slim
@@ -29,7 +89,7 @@ jobs:
   test-e2e:
     name: Run Operator E2E Tests
     runs-on: ubuntu-latest
-    needs: check-changes
+    needs: [check-prerequisites, check-changes]
     if: needs.check-changes.outputs.operator == 'true'
     env:
       # renovate: datasource=github-releases depName=kubernetes-sigs/kind
@@ -62,6 +122,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: operator/go.mod
+          cache-dependency-path: operator/go.sum
 
       - name: Install kind
         run: |
