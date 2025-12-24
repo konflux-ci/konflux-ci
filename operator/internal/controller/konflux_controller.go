@@ -56,8 +56,14 @@ const (
 	ConditionTypeReady = "Ready"
 	// KonfluxBuildServiceCRName is the name for the KonfluxBuildService CR.
 	KonfluxBuildServiceCRName = "konflux-build-service"
+	// KonfluxIntegrationServiceCRName is the name for the KonfluxIntegrationService CR.
+	KonfluxIntegrationServiceCRName = "konflux-integration-service"
 	// uiNamespace is the namespace for UI resources
 	uiNamespace = "konflux-ui"
+	// certManagerGroup is the API group for cert-manager resources
+	certManagerGroup = "cert-manager.io"
+	// kyvernoGroup is the API group for Kyverno resources
+	kyvernoGroup = "kyverno.io"
 )
 
 // KonfluxReconciler reconciles a Konflux object
@@ -109,6 +115,16 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
+	// Apply the KonfluxIntegrationService CR
+	if err := r.applyKonfluxIntegrationService(ctx, konflux); err != nil {
+		log.Error(err, "Failed to apply KonfluxIntegrationService")
+		SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
 	// Ensure UI secrets are created
 	if err := r.ensureUISecrets(ctx, konflux); err != nil {
 		log.Error(err, "Failed to ensure UI secrets")
@@ -141,10 +157,17 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, buildService, "build-service"))
 
-	// Add more sub-CRs here as they are created:
-	// integrationService := &konfluxv1alpha1.KonfluxIntegrationService{}
-	// if err := r.Get(ctx, client.ObjectKey{Name: "konflux-integration-service"}, integrationService); err != nil { ... }
-	// subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, integrationService, "integration-service"))
+	// Get and copy status from the KonfluxIntegrationService CR
+	integrationService := &konfluxv1alpha1.KonfluxIntegrationService{}
+	if err := r.Get(ctx, client.ObjectKey{Name: KonfluxIntegrationServiceCRName}, integrationService); err != nil {
+		log.Error(err, "Failed to get KonfluxIntegrationService")
+		SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetIntegrationServiceStatus", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+	subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, integrationService, "integration-service"))
 
 	// Set overall Ready condition considering deployments and all sub-CRs
 	SetAggregatedReadyCondition(konflux, ConditionTypeReady, deploymentSummary, subCRStatuses)
@@ -165,7 +188,11 @@ func (r *KonfluxReconciler) applyAllManifests(ctx context.Context, owner *konflu
 
 	return manifests.WalkManifests(func(info manifests.ManifestInfo) error {
 		if info.Component == manifests.BuildService {
-			log.Info("Skipping BuildService manifest, differing to its own reconciler")
+			log.Info("Skipping BuildService manifest, deferring to its own reconciler")
+			return nil
+		}
+		if info.Component == manifests.Integration {
+			log.Info("Skipping Integration manifest, deferring to its own reconciler")
 			return nil
 		}
 
@@ -183,7 +210,7 @@ func (r *KonfluxReconciler) applyAllManifests(ctx context.Context, owner *konflu
 			}
 
 			if err := applyObject(ctx, r.Client, obj); err != nil {
-				if obj.GroupVersionKind().Group == "cert-manager.io" || obj.GroupVersionKind().Group == "kyverno.io" {
+				if obj.GroupVersionKind().Group == certManagerGroup || obj.GroupVersionKind().Group == kyvernoGroup {
 					// TODO: Remove this once we decide how to install cert-manager crds in envtest
 					// TODO: Remove this once we decide if we want to have a dependency on Kyverno
 					log.Info("Skipping resource: CRD not installed",
@@ -228,6 +255,33 @@ func (r *KonfluxReconciler) applyKonfluxBuildService(ctx context.Context, owner 
 
 	log.Info("Applying KonfluxBuildService CR", "name", buildService.Name)
 	return r.Patch(ctx, buildService, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+}
+
+// applyKonfluxIntegrationService creates or updates the KonfluxIntegrationService CR.
+func (r *KonfluxReconciler) applyKonfluxIntegrationService(ctx context.Context, owner *konfluxv1alpha1.Konflux) error {
+	log := logf.FromContext(ctx)
+
+	integrationService := &konfluxv1alpha1.KonfluxIntegrationService{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: konfluxv1alpha1.GroupVersion.String(),
+			Kind:       "KonfluxIntegrationService",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: KonfluxIntegrationServiceCRName,
+			Labels: map[string]string{
+				KonfluxOwnerLabel:     owner.Name,
+				KonfluxComponentLabel: string(manifests.Integration),
+			},
+		},
+	}
+
+	// Set owner reference for garbage collection
+	if err := controllerutil.SetControllerReference(owner, integrationService, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for KonfluxIntegrationService: %w", err)
+	}
+
+	log.Info("Applying KonfluxIntegrationService CR", "name", integrationService.Name)
+	return r.Patch(ctx, integrationService, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
 }
 
 func transformObjectsForComponent(objects []*unstructured.Unstructured, component manifests.Component, konflux *konfluxv1alpha1.Konflux) []*unstructured.Unstructured {
@@ -379,7 +433,10 @@ func (r *KonfluxReconciler) updateComponentStatuses(ctx context.Context, konflux
 
 	// Remove conditions for deployments that no longer exist
 	CleanupStaleConditions(konflux, func(cond metav1.Condition) bool {
-		return cond.Type == ConditionTypeReady || summary.SeenConditionTypes[cond.Type] || strings.HasPrefix(cond.Type, "build-service.")
+		return cond.Type == ConditionTypeReady ||
+			summary.SeenConditionTypes[cond.Type] ||
+			strings.HasPrefix(cond.Type, "build-service.") ||
+			strings.HasPrefix(cond.Type, "integration-service.")
 	})
 
 	return summary, nil
@@ -489,5 +546,7 @@ func (r *KonfluxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// Watch KonfluxBuildService for any changes to copy conditions to Konflux CR
 		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
 		Owns(&konfluxv1alpha1.KonfluxBuildService{}).
+		// Watch KonfluxIntegrationService for any changes to copy conditions to Konflux CR
+		Owns(&konfluxv1alpha1.KonfluxIntegrationService{}).
 		Complete(r)
 }

@@ -34,83 +34,79 @@ import (
 )
 
 const (
-	// BuildServiceConditionTypeReady is the condition type for overall readiness
-	BuildServiceConditionTypeReady = "Ready"
+	// IntegrationServiceConditionTypeReady is the condition type for overall readiness
+	IntegrationServiceConditionTypeReady = "Ready"
 )
 
-// KonfluxBuildServiceReconciler reconciles a KonfluxBuildService object
-type KonfluxBuildServiceReconciler struct {
+// KonfluxIntegrationServiceReconciler reconciles a KonfluxIntegrationService object
+type KonfluxIntegrationServiceReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxbuildservices,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxbuildservices/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxbuildservices/finalizers,verbs=update
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxintegrationservices,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxintegrationservices/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxintegrationservices/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the KonfluxBuildService object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/reconcile
-func (r *KonfluxBuildServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *KonfluxIntegrationServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
-	// Fetch the KonfluxBuildService instance
-	buildService := &konfluxv1alpha1.KonfluxBuildService{}
-	if err := r.Get(ctx, req.NamespacedName, buildService); err != nil {
+	// Fetch the KonfluxIntegrationService instance
+	integrationService := &konfluxv1alpha1.KonfluxIntegrationService{}
+	if err := r.Get(ctx, req.NamespacedName, integrationService); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	log.Info("Reconciling KonfluxBuildService", "name", buildService.Name)
+	log.Info("Reconciling KonfluxIntegrationService", "name", integrationService.Name)
 
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, buildService); err != nil {
+	if err := r.applyManifests(ctx, integrationService); err != nil {
 		log.Error(err, "Failed to apply manifests")
-		SetFailedCondition(buildService, BuildServiceConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, buildService); updateErr != nil {
+		SetFailedCondition(integrationService, IntegrationServiceConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, integrationService); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
 		return ctrl.Result{}, err
 	}
 
-	// Check the status of owned deployments and update KonfluxBuildService status
-	if err := UpdateComponentStatuses(ctx, r.Client, buildService, BuildServiceConditionTypeReady); err != nil {
+	// Check the status of owned deployments and update KonfluxIntegrationService status
+	if err := UpdateComponentStatuses(ctx, r.Client, integrationService, IntegrationServiceConditionTypeReady); err != nil {
 		log.Error(err, "Failed to update component statuses")
-		SetFailedCondition(buildService, BuildServiceConditionTypeReady, "FailedToGetDeploymentStatus", err)
-		if updateErr := r.Status().Update(ctx, buildService); updateErr != nil {
+		SetFailedCondition(integrationService, IntegrationServiceConditionTypeReady, "FailedToGetDeploymentStatus", err)
+		if updateErr := r.Status().Update(ctx, integrationService); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
 		return ctrl.Result{}, err
 	}
 
-	log.Info("Successfully reconciled KonfluxBuildService")
+	log.Info("Successfully reconciled KonfluxIntegrationService")
 	return ctrl.Result{}, nil
 }
 
 // applyManifests loads and applies all embedded manifests to the cluster.
-func (r *KonfluxBuildServiceReconciler) applyManifests(ctx context.Context, owner *konfluxv1alpha1.KonfluxBuildService) error {
+func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context, owner *konfluxv1alpha1.KonfluxIntegrationService) error {
 	log := logf.FromContext(ctx)
 
-	buildServiceManifest, err := manifests.GetManifest(manifests.BuildService)
+	integrationServiceManifest, err := manifests.GetManifest(manifests.Integration)
 	if err != nil {
-		return fmt.Errorf("failed to get manifests for BuildService: %w", err)
+		return fmt.Errorf("failed to get manifests for Integration: %w", err)
 	}
 
-	objects, err := parseManifests(buildServiceManifest)
+	objects, err := parseManifests(integrationServiceManifest)
 	if err != nil {
-		return fmt.Errorf("failed to parse manifests for BuildService: %w", err)
+		return fmt.Errorf("failed to parse manifests for Integration: %w", err)
 	}
 
 	for _, obj := range objects {
 		// Set ownership labels and owner reference
-		if err := setOwnership(obj, owner, string(manifests.BuildService), r.Scheme); err != nil {
+		if err := setOwnership(obj, owner, string(manifests.Integration), r.Scheme); err != nil {
 			return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), obj.GetKind(), manifests.BuildService, err)
+				obj.GetNamespace(), obj.GetName(), obj.GetKind(), manifests.Integration, err)
 		}
 
 		if err := applyObject(ctx, r.Client, obj); err != nil {
@@ -126,17 +122,17 @@ func (r *KonfluxBuildServiceReconciler) applyManifests(ctx context.Context, owne
 				continue
 			}
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), obj.GetKind(), manifests.BuildService, err)
+				obj.GetNamespace(), obj.GetName(), obj.GetKind(), manifests.Integration, err)
 		}
 	}
 	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *KonfluxBuildServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *KonfluxIntegrationServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&konfluxv1alpha1.KonfluxBuildService{}).
-		Named("konfluxbuildservice").
+		For(&konfluxv1alpha1.KonfluxIntegrationService{}).
+		Named("konfluxintegrationservice").
 		// Use predicates to filter out unnecessary updates and prevent reconcile loops
 		// Deployments: watch spec changes AND readiness status changes
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(deploymentReadinessPredicate)).

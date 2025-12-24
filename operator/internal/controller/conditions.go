@@ -17,6 +17,7 @@ limitations under the License.
 package controller
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -24,6 +25,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 )
@@ -260,4 +263,49 @@ func CopySubCRStatus(
 		Name:  conditionPrefix,
 		Ready: IsConditionTrue(subCR, "Ready"),
 	}
+}
+
+// UpdateComponentStatuses is a generic helper that checks the status of all owned Deployments
+// and updates the CR's status conditions. It can be used by any controller that manages
+// deployments and implements ConditionAccessor.
+//
+// Parameters:
+//   - ctx: The context for the operation
+//   - k8sClient: The Kubernetes client for listing deployments and updating status
+//   - cr: The custom resource that implements ConditionAccessor (e.g., KonfluxBuildService, KonfluxIntegrationService)
+//   - readyConditionType: The condition type to use for the overall Ready condition (e.g., "Ready")
+func UpdateComponentStatuses(
+	ctx context.Context,
+	k8sClient client.Client,
+	cr konfluxv1alpha1.ConditionAccessor,
+	readyConditionType string,
+) error {
+	log := logf.FromContext(ctx)
+
+	// List all deployments owned by this CR instance
+	deploymentList := &appsv1.DeploymentList{}
+	if err := k8sClient.List(ctx, deploymentList, client.MatchingLabels{
+		KonfluxOwnerLabel: cr.GetName(),
+	}); err != nil {
+		return fmt.Errorf("failed to list owned deployments: %w", err)
+	}
+
+	// Set conditions for each deployment and get summary
+	summary := SetDeploymentConditions(cr, deploymentList.Items)
+
+	// Remove conditions for deployments that no longer exist
+	CleanupStaleConditions(cr, func(cond metav1.Condition) bool {
+		return cond.Type == readyConditionType || summary.SeenConditionTypes[cond.Type]
+	})
+
+	// Set the overall Ready condition
+	SetOverallReadyCondition(cr, readyConditionType, summary)
+
+	// Update the status subresource
+	if err := k8sClient.Status().Update(ctx, cr); err != nil {
+		log.Error(err, "Failed to update status")
+		return err
+	}
+
+	return nil
 }
