@@ -16,6 +16,7 @@ rules:
   - konfluxbuildservices
   - konfluxes
   - konfluxintegrationservices
+  - konfluxrbacs
   - konfluxreleaseservices
   - konfluxuis
   verbs:
@@ -32,6 +33,7 @@ rules:
   - konfluxbuildservices/finalizers
   - konfluxes/finalizers
   - konfluxintegrationservices/finalizers
+  - konfluxrbacs/finalizers
   - konfluxreleaseservices/finalizers
   - konfluxuis/finalizers
   verbs:
@@ -42,6 +44,7 @@ rules:
   - konfluxbuildservices/status
   - konfluxes/status
   - konfluxintegrationservices/status
+  - konfluxrbacs/status
   - konfluxreleaseservices/status
   - konfluxuis/status
   verbs:

@@ -57,10 +57,12 @@ const (
 	KonfluxReleaseServiceCRName = "konflux-release-service"
 	// KonfluxUICRName is the name for the KonfluxUI CR.
 	KonfluxUICRName = "konflux-ui"
-	// certManagerGroup is the API group for cert-manager resources
-	certManagerGroup = "cert-manager.io"
-	// kyvernoGroup is the API group for Kyverno resources
-	kyvernoGroup = "kyverno.io"
+	// KonfluxRBACCRName is the name for the KonfluxRBAC CR.
+	KonfluxRBACCRName = "konflux-rbac"
+	// CertManagerGroup is the API group for cert-manager resources
+	CertManagerGroup = "cert-manager.io"
+	// KyvernoGroup is the API group for Kyverno resources
+	KyvernoGroup = "kyverno.io"
 )
 
 // KonfluxReconciler reconciles a Konflux object
@@ -143,6 +145,16 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
+	// Apply the KonfluxRBAC CR
+	if err := r.applyKonfluxRBAC(ctx, konflux); err != nil {
+		log.Error(err, "Failed to apply KonfluxRBAC")
+		SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
 	// Check the status of owned deployments (doesn't set overall Ready yet)
 	deploymentSummary, err := r.updateComponentStatuses(ctx, konflux)
 	if err != nil {
@@ -205,6 +217,18 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, ui, "ui"))
 
+	// Get and copy status from the KonfluxRBAC CR
+	konfluxRBAC := &konfluxv1alpha1.KonfluxRBAC{}
+	if err := r.Get(ctx, client.ObjectKey{Name: KonfluxRBACCRName}, konfluxRBAC); err != nil {
+		log.Error(err, "Failed to get KonfluxRBAC")
+		SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetRBACStatus", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+	subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, konfluxRBAC, "rbac"))
+
 	// Set overall Ready condition considering deployments and all sub-CRs
 	SetAggregatedReadyCondition(konflux, ConditionTypeReady, deploymentSummary, subCRStatuses)
 
@@ -240,6 +264,10 @@ func (r *KonfluxReconciler) applyAllManifests(ctx context.Context, owner *konflu
 			log.Info("Skipping UI manifest, deferring to its own reconciler")
 			return nil
 		}
+		if info.Component == manifests.RBAC {
+			log.Info("Skipping RBAC manifest, differing to its own reconciler")
+			return nil
+		}
 
 		objects := transformObjectsForComponent(info.Objects, info.Component, owner)
 		for _, obj := range objects {
@@ -252,7 +280,7 @@ func (r *KonfluxReconciler) applyAllManifests(ctx context.Context, owner *konflu
 
 			if err := applyObject(ctx, r.Client, obj); err != nil {
 				gvk := obj.GetObjectKind().GroupVersionKind()
-				if gvk.Group == certManagerGroup || gvk.Group == kyvernoGroup {
+				if gvk.Group == CertManagerGroup || gvk.Group == KyvernoGroup {
 					// TODO: Remove this once we decide how to install cert-manager crds in envtest
 					// TODO: Remove this once we decide if we want to have a dependency on Kyverno
 					log.Info("Skipping resource: CRD not installed",
@@ -380,6 +408,33 @@ func (r *KonfluxReconciler) applyKonfluxUI(ctx context.Context, owner *konfluxv1
 	return r.Patch(ctx, ui, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
 }
 
+// applyKonfluxRBAC creates or updates the KonfluxRBAC CR.
+func (r *KonfluxReconciler) applyKonfluxRBAC(ctx context.Context, owner *konfluxv1alpha1.Konflux) error {
+	log := logf.FromContext(ctx)
+
+	konfluxRBAC := &konfluxv1alpha1.KonfluxRBAC{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: konfluxv1alpha1.GroupVersion.String(),
+			Kind:       "KonfluxRBAC",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: KonfluxRBACCRName,
+			Labels: map[string]string{
+				KonfluxOwnerLabel:     owner.Name,
+				KonfluxComponentLabel: string(manifests.RBAC),
+			},
+		},
+	}
+
+	// Set owner reference for garbage collection
+	if err := controllerutil.SetControllerReference(owner, konfluxRBAC, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for KonfluxRBAC: %w", err)
+	}
+
+	log.Info("Applying KonfluxRBAC CR", "name", konfluxRBAC.Name)
+	return r.Patch(ctx, konfluxRBAC, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+}
+
 func transformObjectsForComponent(objects []client.Object, component manifests.Component, konflux *konfluxv1alpha1.Konflux) []client.Object {
 	switch component {
 	case manifests.ApplicationAPI:
@@ -465,7 +520,8 @@ func (r *KonfluxReconciler) updateComponentStatuses(ctx context.Context, konflux
 			strings.HasPrefix(cond.Type, "build-service.") ||
 			strings.HasPrefix(cond.Type, "integration-service.") ||
 			strings.HasPrefix(cond.Type, "release-service.") ||
-			strings.HasPrefix(cond.Type, "ui.")
+			strings.HasPrefix(cond.Type, "ui.") ||
+			strings.HasPrefix(cond.Type, "rbac.")
 	})
 
 	return summary, nil
@@ -581,5 +637,8 @@ func (r *KonfluxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&konfluxv1alpha1.KonfluxReleaseService{}).
 		// Watch KonfluxUI for any changes to copy conditions to Konflux CR
 		Owns(&konfluxv1alpha1.KonfluxUI{}).
+		// Watch KonfluxRBAC for any changes to copy conditions to Konflux CR
+		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
+		Owns(&konfluxv1alpha1.KonfluxRBAC{}).
 		Complete(r)
 }

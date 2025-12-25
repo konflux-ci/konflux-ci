@@ -108,7 +108,7 @@ func (r *KonfluxReleaseServiceReconciler) applyManifests(ctx context.Context, ow
 
 		if err := applyObject(ctx, r.Client, obj); err != nil {
 			gvk := obj.GetObjectKind().GroupVersionKind()
-			if gvk.Group == certManagerGroup || gvk.Group == kyvernoGroup {
+			if gvk.Group == CertManagerGroup || gvk.Group == KyvernoGroup {
 				// TODO: Remove this once we decide how to install cert-manager crds in envtest
 				// TODO: Remove this once we decide if we want to have a dependency on Kyverno
 				log.Info("Skipping resource: CRD not installed",
