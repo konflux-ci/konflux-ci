@@ -43,6 +43,7 @@ import (
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	// +kubebuilder:scaffold:imports
 )
@@ -210,7 +211,9 @@ func main() {
 		})
 	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	cfg := ctrl.GetConfigOrDie()
+
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
 		WebhookServer:          webhookServer,
@@ -240,6 +243,16 @@ func main() {
 		setupLog.Error(err, "unable to parse embedded manifests")
 		os.Exit(1)
 	}
+	// Detect cluster information (platform, version, capabilities)
+	clusterInfo, err := clusterinfo.Detect(cfg)
+	if err != nil {
+		setupLog.Error(err, "unable to detect cluster info")
+		os.Exit(1)
+	}
+	setupLog.Info("Detected cluster info",
+		"platform", clusterInfo.Platform(),
+		"k8sVersion", clusterInfo.K8sVersion().GitVersion,
+	)
 
 	if err := (&controller.KonfluxReconciler{
 		Client:      mgr.GetClient(),
