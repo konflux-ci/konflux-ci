@@ -31,8 +31,26 @@ echo "Generating Kubernetes manifests..."
 echo "Creating temporary smee-channel-id.yaml for manifest generation..."
 cp dependencies/smee/smee-channel-id.tpl dependencies/smee/smee-channel-id.yaml
 
-# Exclude operator directory from kustomize builds
-find . \( -name "kustomization.yaml" -o -name "kustomization.yml" \) ! -path "*/operator/*" | while read -r file; do
+# Generate operator CSV file (required for config/manifests)
+echo "Generating operator CSV file for config/manifests..."
+cd operator
+# Install operator-sdk using Makefile (requires Go to be set up)
+# The Makefile will use system operator-sdk if available, otherwise installs to bin/
+make operator-sdk
+# Determine operator-sdk path: use bin/operator-sdk if it exists, otherwise use system one
+if [ -f "bin/operator-sdk" ]; then
+  OPERATOR_SDK="./bin/operator-sdk"
+else
+  OPERATOR_SDK="operator-sdk"
+fi
+# Generate the CSV file needed by config/manifests/kustomization.yaml
+# Use --interactive=false for CI (non-interactive mode)
+$OPERATOR_SDK generate kustomize manifests -q --interactive=false
+cd ..
+
+# Build kustomizations (excluding operator/upstream-kustomizations)
+find . \( -name "kustomization.yaml" -o -name "kustomization.yml" \) \
+  ! -path "*/operator/upstream-kustomizations/*" | while read -r file; do
   dir=$(dirname "$file")
   dir=${dir#./}
   output_file=$(echo "out-$dir" | tr "/" "-")
