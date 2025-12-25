@@ -7,4 +7,5 @@ resources:
 - konflux_v1alpha1_konfluxui.yaml
 - konflux_v1alpha1_konfluxrbac.yaml
 - konflux_v1alpha1_konfluxnamespacelister.yaml
+- konflux_v1alpha1_konfluxenterprisecontract.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

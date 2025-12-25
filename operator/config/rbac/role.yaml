@@ -14,6 +14,7 @@ rules:
   - konflux.konflux-ci.dev
   resources:
   - konfluxbuildservices
+  - konfluxenterprisecontracts
   - konfluxes
   - konfluxintegrationservices
   - konfluxnamespacelisters
@@ -32,6 +33,7 @@ rules:
   - konflux.konflux-ci.dev
   resources:
   - konfluxbuildservices/finalizers
+  - konfluxenterprisecontracts/finalizers
   - konfluxes/finalizers
   - konfluxintegrationservices/finalizers
   - konfluxnamespacelisters/finalizers
@@ -44,6 +46,7 @@ rules:
   - konflux.konflux-ci.dev
   resources:
   - konfluxbuildservices/status
+  - konfluxenterprisecontracts/status
   - konfluxes/status
   - konfluxintegrationservices/status
   - konfluxnamespacelisters/status
