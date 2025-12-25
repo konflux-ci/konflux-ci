@@ -8,6 +8,7 @@ resources:
 - bases/konflux.konflux-ci.dev_konfluxreleaseservices.yaml
 - bases/konflux.konflux-ci.dev_konfluxuis.yaml
 - bases/konflux.konflux-ci.dev_konfluxrbacs.yaml
+- bases/konflux.konflux-ci.dev_konfluxnamespacelisters.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
