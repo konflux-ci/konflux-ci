@@ -5,4 +5,5 @@ resources:
 - konflux_v1alpha1_konfluxintegrationservice.yaml
 - konflux_v1alpha1_konfluxreleaseservice.yaml
 - konflux_v1alpha1_konfluxui.yaml
+- konflux_v1alpha1_konfluxrbac.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

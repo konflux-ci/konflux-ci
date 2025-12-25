@@ -34,83 +34,86 @@ import (
 )
 
 const (
-	// IntegrationServiceConditionTypeReady is the condition type for overall readiness
-	IntegrationServiceConditionTypeReady = "Ready"
+	// RBACConditionTypeReady is the condition type for overall readiness
+	RBACConditionTypeReady = "Ready"
 )
 
-// KonfluxIntegrationServiceReconciler reconciles a KonfluxIntegrationService object
-type KonfluxIntegrationServiceReconciler struct {
+// KonfluxRBACReconciler reconciles a KonfluxRBAC object
+type KonfluxRBACReconciler struct {
 	client.Client
 	Scheme      *runtime.Scheme
 	ObjectStore *manifests.ObjectStore
 }
 
-// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxintegrationservices,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxintegrationservices/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxintegrationservices/finalizers,verbs=update
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxrbacs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxrbacs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxrbacs/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
+// TODO(user): Modify the Reconcile function to compare the state specified by
+// the KonfluxRBAC object against the actual cluster state, and then
+// perform operations to make the cluster state reflect the state specified by
+// the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/reconcile
-func (r *KonfluxIntegrationServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *KonfluxRBACReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
-	// Fetch the KonfluxIntegrationService instance
-	integrationService := &konfluxv1alpha1.KonfluxIntegrationService{}
-	if err := r.Get(ctx, req.NamespacedName, integrationService); err != nil {
+	// Fetch the KonfluxRBAC instance
+	konfluxRBAC := &konfluxv1alpha1.KonfluxRBAC{}
+	if err := r.Get(ctx, req.NamespacedName, konfluxRBAC); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	log.Info("Reconciling KonfluxIntegrationService", "name", integrationService.Name)
+	log.Info("Reconciling KonfluxRBAC", "name", konfluxRBAC.Name)
 
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, integrationService); err != nil {
+	if err := r.applyManifests(ctx, konfluxRBAC); err != nil {
 		log.Error(err, "Failed to apply manifests")
-		SetFailedCondition(integrationService, IntegrationServiceConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, integrationService); updateErr != nil {
+		SetFailedCondition(konfluxRBAC, RBACConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, konfluxRBAC); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
 		return ctrl.Result{}, err
 	}
 
-	// Check the status of owned deployments and update KonfluxIntegrationService status
-	if err := UpdateComponentStatuses(ctx, r.Client, integrationService, IntegrationServiceConditionTypeReady); err != nil {
+	// Check the status of owned deployments and update KonfluxRBAC status
+	if err := UpdateComponentStatuses(ctx, r.Client, konfluxRBAC, RBACConditionTypeReady); err != nil {
 		log.Error(err, "Failed to update component statuses")
-		SetFailedCondition(integrationService, IntegrationServiceConditionTypeReady, "FailedToGetDeploymentStatus", err)
-		if updateErr := r.Status().Update(ctx, integrationService); updateErr != nil {
+		SetFailedCondition(konfluxRBAC, RBACConditionTypeReady, "FailedToGetDeploymentStatus", err)
+		if updateErr := r.Status().Update(ctx, konfluxRBAC); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
 		return ctrl.Result{}, err
 	}
 
-	log.Info("Successfully reconciled KonfluxIntegrationService")
+	log.Info("Successfully reconciled KonfluxRBAC")
 	return ctrl.Result{}, nil
 }
 
 // applyManifests loads and applies all embedded manifests to the cluster.
-// Manifests are parsed once and cached; deep copies are used during reconciliation.
-func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context, owner *konfluxv1alpha1.KonfluxIntegrationService) error {
+func (r *KonfluxRBACReconciler) applyManifests(ctx context.Context, owner *konfluxv1alpha1.KonfluxRBAC) error {
 	log := logf.FromContext(ctx)
 
-	objects, err := r.ObjectStore.GetForComponent(manifests.Integration)
+	objects, err := r.ObjectStore.GetForComponent(manifests.RBAC)
 	if err != nil {
-		return fmt.Errorf("failed to get parsed manifests for Integration: %w", err)
+		return fmt.Errorf("failed to get manifests for RBAC: %w", err)
 	}
 
 	for _, obj := range objects {
 		// Set ownership labels and owner reference
-		if err := setOwnership(obj, owner, string(manifests.Integration), r.Scheme); err != nil {
+		if err := setOwnership(obj, owner, string(manifests.RBAC), r.Scheme); err != nil {
 			return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.Integration, err)
+				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.RBAC, err)
 		}
 
 		if err := applyObject(ctx, r.Client, obj); err != nil {
 			gvk := obj.GetObjectKind().GroupVersionKind()
+			// TODO: Remove this once we decide how to install cert-manager crds in envtest
+			// TODO: Remove this once we decide if we want to have a dependency on Kyverno
 			if gvk.Group == CertManagerGroup || gvk.Group == KyvernoGroup {
-				// TODO: Remove this once we decide how to install cert-manager crds in envtest
-				// TODO: Remove this once we decide if we want to have a dependency on Kyverno
 				log.Info("Skipping resource: CRD not installed",
 					"kind", gvk.Kind,
 					"apiVersion", gvk.GroupVersion().String(),
@@ -120,17 +123,17 @@ func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context
 				continue
 			}
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.Integration, err)
+				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.RBAC, err)
 		}
 	}
 	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *KonfluxIntegrationServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *KonfluxRBACReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&konfluxv1alpha1.KonfluxIntegrationService{}).
-		Named("konfluxintegrationservice").
+		For(&konfluxv1alpha1.KonfluxRBAC{}).
+		Named("konfluxrbac").
 		// Use predicates to filter out unnecessary updates and prevent reconcile loops
 		// Deployments: watch spec changes AND readiness status changes
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(deploymentReadinessPredicate)).
