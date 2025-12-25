@@ -61,6 +61,8 @@ const (
 	KonfluxRBACCRName = "konflux-rbac"
 	// KonfluxNamespaceListerCRName is the name for the KonfluxNamespaceLister CR.
 	KonfluxNamespaceListerCRName = "konflux-namespace-lister"
+	// KonfluxEnterpriseContractCRName is the name for the KonfluxEnterpriseContract CR.
+	KonfluxEnterpriseContractCRName = "konflux-enterprise-contract"
 	// CertManagerGroup is the API group for cert-manager resources
 	CertManagerGroup = "cert-manager.io"
 	// KyvernoGroup is the API group for Kyverno resources
@@ -169,6 +171,16 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
+	// Apply the KonfluxEnterpriseContract CR
+	if err := r.applyKonfluxEnterpriseContract(ctx, konflux); err != nil {
+		log.Error(err, "Failed to apply KonfluxEnterpriseContract")
+		SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
 	// Check the status of owned deployments (doesn't set overall Ready yet)
 	deploymentSummary, err := r.updateComponentStatuses(ctx, konflux)
 	if err != nil {
@@ -255,6 +267,18 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, konfluxNamespaceLister, "namespace-lister"))
 
+	// Get and copy status from the KonfluxEnterpriseContract CR
+	konfluxEnterpriseContract := &konfluxv1alpha1.KonfluxEnterpriseContract{}
+	if err := r.Get(ctx, client.ObjectKey{Name: KonfluxEnterpriseContractCRName}, konfluxEnterpriseContract); err != nil {
+		log.Error(err, "Failed to get KonfluxEnterpriseContract")
+		SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetEnterpriseContractStatus", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+	subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, konfluxEnterpriseContract, "enterprise-contract"))
+
 	// Set overall Ready condition considering deployments and all sub-CRs
 	SetAggregatedReadyCondition(konflux, ConditionTypeReady, deploymentSummary, subCRStatuses)
 
@@ -294,12 +318,12 @@ func (r *KonfluxReconciler) applyAllManifests(ctx context.Context, owner *konflu
 			log.Info("Skipping RBAC manifest, differing to its own reconciler")
 			return nil
 		}
-		if info.Component == manifests.RBAC {
-			log.Info("Skipping RBAC manifest, differing to its own reconciler")
-			return nil
-		}
 		if info.Component == manifests.NamespaceLister {
 			log.Info("Skipping NamespaceLister manifest, differing to its own reconciler")
+			return nil
+		}
+		if info.Component == manifests.EnterpriseContract {
+			log.Info("Skipping EnterpriseContract manifest, differing to its own reconciler")
 			return nil
 		}
 
@@ -496,6 +520,33 @@ func (r *KonfluxReconciler) applyKonfluxNamespaceLister(ctx context.Context, own
 	return r.Patch(ctx, konfluxNamespaceLister, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
 }
 
+// applyKonfluxEnterpriseContract creates or updates the KonfluxEnterpriseContract CR.
+func (r *KonfluxReconciler) applyKonfluxEnterpriseContract(ctx context.Context, owner *konfluxv1alpha1.Konflux) error {
+	log := logf.FromContext(ctx)
+
+	konfluxEnterpriseContract := &konfluxv1alpha1.KonfluxEnterpriseContract{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: konfluxv1alpha1.GroupVersion.String(),
+			Kind:       "KonfluxEnterpriseContract",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: KonfluxEnterpriseContractCRName,
+			Labels: map[string]string{
+				KonfluxOwnerLabel:     owner.Name,
+				KonfluxComponentLabel: string(manifests.EnterpriseContract),
+			},
+		},
+	}
+
+	// Set owner reference for garbage collection
+	if err := controllerutil.SetControllerReference(owner, konfluxEnterpriseContract, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for KonfluxEnterpriseContract: %w", err)
+	}
+
+	log.Info("Applying KonfluxEnterpriseContract CR", "name", konfluxEnterpriseContract.Name)
+	return r.Patch(ctx, konfluxEnterpriseContract, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+}
+
 func transformObjectsForComponent(objects []client.Object, component manifests.Component, konflux *konfluxv1alpha1.Konflux) []client.Object {
 	switch component {
 	case manifests.ApplicationAPI:
@@ -583,7 +634,8 @@ func (r *KonfluxReconciler) updateComponentStatuses(ctx context.Context, konflux
 			strings.HasPrefix(cond.Type, "release-service.") ||
 			strings.HasPrefix(cond.Type, "ui.") ||
 			strings.HasPrefix(cond.Type, "rbac.") ||
-			strings.HasPrefix(cond.Type, "namespace-lister.")
+			strings.HasPrefix(cond.Type, "namespace-lister.") ||
+			strings.HasPrefix(cond.Type, "enterprise-contract.")
 	})
 
 	return summary, nil
@@ -705,5 +757,8 @@ func (r *KonfluxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// Watch KonfluxNamespaceLister for any changes to copy conditions to Konflux CR
 		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
 		Owns(&konfluxv1alpha1.KonfluxNamespaceLister{}).
+		// Watch KonfluxEnterpriseContract for any changes to copy conditions to Konflux CR
+		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
+		Owns(&konfluxv1alpha1.KonfluxEnterpriseContract{}).
 		Complete(r)
 }
