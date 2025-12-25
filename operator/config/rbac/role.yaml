@@ -16,6 +16,7 @@ rules:
   - konfluxbuildservices
   - konfluxes
   - konfluxintegrationservices
+  - konfluxnamespacelisters
   - konfluxrbacs
   - konfluxreleaseservices
   - konfluxuis
@@ -33,6 +34,7 @@ rules:
   - konfluxbuildservices/finalizers
   - konfluxes/finalizers
   - konfluxintegrationservices/finalizers
+  - konfluxnamespacelisters/finalizers
   - konfluxrbacs/finalizers
   - konfluxreleaseservices/finalizers
   - konfluxuis/finalizers
@@ -44,6 +46,7 @@ rules:
   - konfluxbuildservices/status
   - konfluxes/status
   - konfluxintegrationservices/status
+  - konfluxnamespacelisters/status
   - konfluxrbacs/status
   - konfluxreleaseservices/status
   - konfluxuis/status

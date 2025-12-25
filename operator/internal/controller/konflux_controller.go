@@ -55,10 +55,12 @@ const (
 	KonfluxIntegrationServiceCRName = "konflux-integration-service"
 	// KonfluxReleaseServiceCRName is the name for the KonfluxReleaseService CR.
 	KonfluxReleaseServiceCRName = "konflux-release-service"
-	// KonfluxUICRName is the name for the KonfluxUI CR.
+	// KonfluxUICRName is the namespace for UI resources
 	KonfluxUICRName = "konflux-ui"
 	// KonfluxRBACCRName is the name for the KonfluxRBAC CR.
 	KonfluxRBACCRName = "konflux-rbac"
+	// KonfluxNamespaceListerCRName is the name for the KonfluxNamespaceLister CR.
+	KonfluxNamespaceListerCRName = "konflux-namespace-lister"
 	// CertManagerGroup is the API group for cert-manager resources
 	CertManagerGroup = "cert-manager.io"
 	// KyvernoGroup is the API group for Kyverno resources
@@ -84,6 +86,8 @@ type KonfluxReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
+//
+//nolint:gocyclo // High complexity is acceptable here due to multiple sub-CR reconciliations
 func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
@@ -148,6 +152,16 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Apply the KonfluxRBAC CR
 	if err := r.applyKonfluxRBAC(ctx, konflux); err != nil {
 		log.Error(err, "Failed to apply KonfluxRBAC")
+		SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Apply the KonfluxNamespaceLister CR
+	if err := r.applyKonfluxNamespaceLister(ctx, konflux); err != nil {
+		log.Error(err, "Failed to apply KonfluxNamespaceLister")
 		SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
 		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
@@ -229,6 +243,18 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, konfluxRBAC, "rbac"))
 
+	// Get and copy status from the KonfluxNamespaceLister CR
+	konfluxNamespaceLister := &konfluxv1alpha1.KonfluxNamespaceLister{}
+	if err := r.Get(ctx, client.ObjectKey{Name: KonfluxNamespaceListerCRName}, konfluxNamespaceLister); err != nil {
+		log.Error(err, "Failed to get KonfluxNamespaceLister")
+		SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetNamespaceListerStatus", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+	subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, konfluxNamespaceLister, "namespace-lister"))
+
 	// Set overall Ready condition considering deployments and all sub-CRs
 	SetAggregatedReadyCondition(konflux, ConditionTypeReady, deploymentSummary, subCRStatuses)
 
@@ -266,6 +292,14 @@ func (r *KonfluxReconciler) applyAllManifests(ctx context.Context, owner *konflu
 		}
 		if info.Component == manifests.RBAC {
 			log.Info("Skipping RBAC manifest, differing to its own reconciler")
+			return nil
+		}
+		if info.Component == manifests.RBAC {
+			log.Info("Skipping RBAC manifest, differing to its own reconciler")
+			return nil
+		}
+		if info.Component == manifests.NamespaceLister {
+			log.Info("Skipping NamespaceLister manifest, differing to its own reconciler")
 			return nil
 		}
 
@@ -435,6 +469,33 @@ func (r *KonfluxReconciler) applyKonfluxRBAC(ctx context.Context, owner *konflux
 	return r.Patch(ctx, konfluxRBAC, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
 }
 
+// applyKonfluxNamespaceLister creates or updates the KonfluxNamespaceLister CR.
+func (r *KonfluxReconciler) applyKonfluxNamespaceLister(ctx context.Context, owner *konfluxv1alpha1.Konflux) error {
+	log := logf.FromContext(ctx)
+
+	konfluxNamespaceLister := &konfluxv1alpha1.KonfluxNamespaceLister{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: konfluxv1alpha1.GroupVersion.String(),
+			Kind:       "KonfluxNamespaceLister",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: KonfluxNamespaceListerCRName,
+			Labels: map[string]string{
+				KonfluxOwnerLabel:     owner.Name,
+				KonfluxComponentLabel: string(manifests.NamespaceLister),
+			},
+		},
+	}
+
+	// Set owner reference for garbage collection
+	if err := controllerutil.SetControllerReference(owner, konfluxNamespaceLister, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for KonfluxNamespaceLister: %w", err)
+	}
+
+	log.Info("Applying KonfluxNamespaceLister CR", "name", konfluxNamespaceLister.Name)
+	return r.Patch(ctx, konfluxNamespaceLister, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+}
+
 func transformObjectsForComponent(objects []client.Object, component manifests.Component, konflux *konfluxv1alpha1.Konflux) []client.Object {
 	switch component {
 	case manifests.ApplicationAPI:
@@ -521,7 +582,8 @@ func (r *KonfluxReconciler) updateComponentStatuses(ctx context.Context, konflux
 			strings.HasPrefix(cond.Type, "integration-service.") ||
 			strings.HasPrefix(cond.Type, "release-service.") ||
 			strings.HasPrefix(cond.Type, "ui.") ||
-			strings.HasPrefix(cond.Type, "rbac.")
+			strings.HasPrefix(cond.Type, "rbac.") ||
+			strings.HasPrefix(cond.Type, "namespace-lister.")
 	})
 
 	return summary, nil
@@ -640,5 +702,8 @@ func (r *KonfluxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// Watch KonfluxRBAC for any changes to copy conditions to Konflux CR
 		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
 		Owns(&konfluxv1alpha1.KonfluxRBAC{}).
+		// Watch KonfluxNamespaceLister for any changes to copy conditions to Konflux CR
+		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
+		Owns(&konfluxv1alpha1.KonfluxNamespaceLister{}).
 		Complete(r)
 }
