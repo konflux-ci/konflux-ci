@@ -4,20 +4,21 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: konfluxes.konflux.konflux-ci.dev
+  name: konfluximagecontrollers.konflux.konflux-ci.dev
 spec:
   group: konflux.konflux-ci.dev
   names:
-    kind: Konflux
-    listKind: KonfluxList
-    plural: konfluxes
-    singular: konflux
+    kind: KonfluxImageController
+    listKind: KonfluxImageControllerList
+    plural: konfluximagecontrollers
+    singular: konfluximagecontroller
   scope: Cluster
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Konflux is the Schema for the konfluxes API.
+        description: KonfluxImageController is the Schema for the konfluximagecontrollers
+          API.
         properties:
           apiVersion:
             description: |-
@@ -37,47 +38,15 @@ spec:
           metadata:
             type: object
           spec:
-            description: KonfluxSpec defines the desired state of Konflux.
-            properties:
-              imageController:
-                description: |-
-                  ImageController configures the image-controller component.
-                  The runtime configuration is copied to the KonfluxImageController CR by the operator.
-                properties:
-                  enabled:
-                    description: |-
-                      Enabled indicates whether image-controller should be deployed.
-                      If false or unset, the component CR will not be created.
-                    type: boolean
-                type: object
+            description: KonfluxImageControllerSpec defines the desired state of KonfluxImageController.
             type: object
           status:
-            description: KonfluxStatus defines the observed state of Konflux.
+            description: KonfluxImageControllerStatus defines the observed state of
+              KonfluxImageController.
             properties:
-              components:
-                description: Components shows the status of individual Konflux components
-                items:
-                  description: ComponentStatus represents the status of a Konflux
-                    component.
-                  properties:
-                    message:
-                      description: Message provides additional information about the
-                        component status
-                      type: string
-                    name:
-                      description: Name of the component
-                      type: string
-                    ready:
-                      description: Ready indicates if the component is ready
-                      type: boolean
-                  required:
-                  - name
-                  - ready
-                  type: object
-                type: array
               conditions:
                 description: Conditions represent the latest available observations
-                  of the Konflux state
+                  of the KonfluxImageController state
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -136,9 +105,9 @@ spec:
             type: object
         type: object
         x-kubernetes-validations:
-        - message: Konflux CR must be named 'konflux'. Only one instance is allowed
-            per cluster.
-          rule: self.metadata.name == 'konflux'
+        - message: KonfluxImageController CR must be named 'konflux-image-controller'.
+            Only one instance is allowed per cluster.
+          rule: self.metadata.name == 'konflux-image-controller'
     served: true
     storage: true
     subresources:

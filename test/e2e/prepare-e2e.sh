@@ -11,8 +11,16 @@ main() {
     local app_webhook_secret=${APP_WEBHOOK_SECRET:?GitHub App webhook secret should be provided}
     local smee_channel=${SMEE_CHANNEL:?Link to the smee.io channel should be provided}
 
+    # Enable image-controller in the Konflux CR before deploying (if operator is present)
+    if kubectl get konflux konflux &>/dev/null; then
+        echo "Enabling image-controller in Konflux CR..." >&2
+        kubectl patch konflux konflux --type=merge -p '{"spec":{"imageController":{"enabled":true}}}'
+    else
+        echo "Konflux CR not found, skipping operator-managed image-controller setup..." >&2
+    fi
+
     "${script_path}/../../deploy-image-controller.sh" "$quay_token" "$quay_org"
-    for ns in pipelines-as-code build-service integration-service; do 
+    for ns in pipelines-as-code build-service integration-service; do
         kubectl -n $ns create secret generic pipelines-as-code-secret \
         --from-literal github-private-key="$app_private_key" \
         --from-literal github-application-id="$app_id" \

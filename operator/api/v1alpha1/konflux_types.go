@@ -27,6 +27,21 @@ import (
 type KonfluxSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// ImageController configures the image-controller component.
+	// The runtime configuration is copied to the KonfluxImageController CR by the operator.
+	// +optional
+	ImageController *ImageControllerConfig `json:"imageController,omitempty"`
+}
+
+// ImageControllerConfig defines the configuration for the image-controller component.
+// The Enabled field controls whether the component is deployed (top-level concern).
+// Other fields are runtime configuration passed to the component.
+type ImageControllerConfig struct {
+	// Enabled indicates whether image-controller should be deployed.
+	// If false or unset, the component CR will not be created.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
 }
 
 // ComponentStatus represents the status of a Konflux component.
@@ -82,6 +97,15 @@ func (k *Konflux) GetConditions() []metav1.Condition {
 // SetConditions sets the conditions on the Konflux status.
 func (k *Konflux) SetConditions(conditions []metav1.Condition) {
 	k.Status.Conditions = conditions
+}
+
+// IsImageControllerEnabled returns true if image-controller is enabled.
+// Defaults to false if not specified.
+func (k *KonfluxSpec) IsImageControllerEnabled() bool {
+	if k.ImageController == nil || k.ImageController.Enabled == nil {
+		return false
+	}
+	return *k.ImageController.Enabled
 }
 
 func init() {
