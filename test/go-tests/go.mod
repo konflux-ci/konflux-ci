@@ -1,8 +1,6 @@
 module github.com/konflux-ci/konflux-ci/test/go-tests
 
-go 1.23.0
-
-toolchain go1.23.4
+go 1.24.9
 
 require (
 	github.com/onsi/ginkgo/v2 v2.27.3
@@ -27,7 +25,7 @@ require (
 	github.com/google/gnostic-models v0.6.8 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
-	github.com/google/pprof v0.0.0-20250403155104-27863c87afa6 // indirect
+	github.com/google/pprof v0.0.0-20251213031049-b05bdaca462f // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
