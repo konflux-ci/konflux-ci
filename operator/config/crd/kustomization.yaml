@@ -10,6 +10,7 @@ resources:
 - bases/konflux.konflux-ci.dev_konfluxrbacs.yaml
 - bases/konflux.konflux-ci.dev_konfluxnamespacelisters.yaml
 - bases/konflux.konflux-ci.dev_konfluxenterprisecontracts.yaml
+- bases/konflux.konflux-ci.dev_konfluximagecontrollers.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

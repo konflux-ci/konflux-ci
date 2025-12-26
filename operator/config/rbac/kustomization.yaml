@@ -28,6 +28,9 @@ resources:
 - konfluxnamespacelister_admin_role.yaml
 - konfluxnamespacelister_editor_role.yaml
 - konfluxnamespacelister_viewer_role.yaml
+- konfluximagecontroller_admin_role.yaml
+- konfluximagecontroller_editor_role.yaml
+- konfluximagecontroller_viewer_role.yaml
 - konfluxrbac_admin_role.yaml
 - konfluxrbac_editor_role.yaml
 - konfluxrbac_viewer_role.yaml

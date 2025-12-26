@@ -63,6 +63,8 @@ const (
 	KonfluxNamespaceListerCRName = "konflux-namespace-lister"
 	// KonfluxEnterpriseContractCRName is the name for the KonfluxEnterpriseContract CR.
 	KonfluxEnterpriseContractCRName = "konflux-enterprise-contract"
+	// KonfluxImageControllerCRName is the name for the KonfluxImageController CR.
+	KonfluxImageControllerCRName = "konflux-image-controller"
 	// CertManagerGroup is the API group for cert-manager resources
 	CertManagerGroup = "cert-manager.io"
 	// KyvernoGroup is the API group for Kyverno resources
@@ -181,6 +183,16 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
+	// Apply the KonfluxImageController CR (if enabled)
+	if err := r.applyKonfluxImageController(ctx, konflux); err != nil {
+		log.Error(err, "Failed to apply KonfluxImageController")
+		SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
 	// Check the status of owned deployments (doesn't set overall Ready yet)
 	deploymentSummary, err := r.updateComponentStatuses(ctx, konflux)
 	if err != nil {
@@ -279,6 +291,20 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, konfluxEnterpriseContract, "enterprise-contract"))
 
+	// Get and copy status from the KonfluxImageController CR (if enabled)
+	if konflux.Spec.IsImageControllerEnabled() {
+		imageController := &konfluxv1alpha1.KonfluxImageController{}
+		if err := r.Get(ctx, client.ObjectKey{Name: KonfluxImageControllerCRName}, imageController); err != nil {
+			log.Error(err, "Failed to get KonfluxImageController")
+			SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetImageControllerStatus", err)
+			if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+				log.Error(updateErr, "Failed to update status")
+			}
+			return ctrl.Result{}, err
+		}
+		subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, imageController, "image-controller"))
+	}
+
 	// Set overall Ready condition considering deployments and all sub-CRs
 	SetAggregatedReadyCondition(konflux, ConditionTypeReady, deploymentSummary, subCRStatuses)
 
@@ -326,8 +352,12 @@ func (r *KonfluxReconciler) applyAllManifests(ctx context.Context, owner *konflu
 			log.Info("Skipping EnterpriseContract manifest, differing to its own reconciler")
 			return nil
 		}
+		if info.Component == manifests.ImageController {
+			log.Info("Skipping ImageController manifest, deferring to its own reconciler")
+			return nil
+		}
 
-		objects := transformObjectsForComponent(info.Objects, info.Component, owner)
+		objects := transformObjectsForComponent(info.Objects, info.Component)
 		for _, obj := range objects {
 			// Set ownership labels and owner reference
 
@@ -547,14 +577,58 @@ func (r *KonfluxReconciler) applyKonfluxEnterpriseContract(ctx context.Context, 
 	return r.Patch(ctx, konfluxEnterpriseContract, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
 }
 
-func transformObjectsForComponent(objects []client.Object, component manifests.Component, konflux *konfluxv1alpha1.Konflux) []client.Object {
+// applyKonfluxImageController creates or updates the KonfluxImageController CR if enabled,
+// or deletes it if disabled.
+func (r *KonfluxReconciler) applyKonfluxImageController(ctx context.Context, owner *konfluxv1alpha1.Konflux) error {
+	log := logf.FromContext(ctx)
+
+	// Check if image-controller is enabled
+	if !owner.Spec.IsImageControllerEnabled() {
+		// Delete the CR if it exists (idempotent - NotFound is ignored)
+		imageController := &konfluxv1alpha1.KonfluxImageController{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: KonfluxImageControllerCRName,
+			},
+		}
+		if err := r.Delete(ctx, imageController); err != nil {
+			return client.IgnoreNotFound(err)
+		}
+		log.Info("Image-controller disabled, deleted KonfluxImageController CR", "name", KonfluxImageControllerCRName)
+		return nil
+	}
+
+	// Create or update the CR
+	imageController := &konfluxv1alpha1.KonfluxImageController{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: konfluxv1alpha1.GroupVersion.String(),
+			Kind:       "KonfluxImageController",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: KonfluxImageControllerCRName,
+			Labels: map[string]string{
+				KonfluxOwnerLabel:     owner.Name,
+				KonfluxComponentLabel: string(manifests.ImageController),
+			},
+		},
+	}
+
+	// Set owner reference for garbage collection
+	if err := controllerutil.SetControllerReference(owner, imageController, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for KonfluxImageController: %w", err)
+	}
+
+	log.Info("Applying KonfluxImageController CR", "name", imageController.Name)
+	return r.Patch(ctx, imageController, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+}
+
+func transformObjectsForComponent(objects []client.Object, component manifests.Component) []client.Object {
 	switch component {
 	case manifests.ApplicationAPI:
 		return objects
 	case manifests.EnterpriseContract:
 		return objects
 	case manifests.ImageController:
-		return transformObjectsForImageController(objects, konflux)
+		return objects
 	case manifests.Integration:
 		return objects
 	case manifests.NamespaceLister:
@@ -568,10 +642,6 @@ func transformObjectsForComponent(objects []client.Object, component manifests.C
 	default:
 		return objects
 	}
-}
-
-func transformObjectsForImageController(_ []client.Object, _ *konfluxv1alpha1.Konflux) []client.Object {
-	return []client.Object{}
 }
 
 // getKind returns the Kind of a client.Object.
@@ -635,7 +705,8 @@ func (r *KonfluxReconciler) updateComponentStatuses(ctx context.Context, konflux
 			strings.HasPrefix(cond.Type, "ui.") ||
 			strings.HasPrefix(cond.Type, "rbac.") ||
 			strings.HasPrefix(cond.Type, "namespace-lister.") ||
-			strings.HasPrefix(cond.Type, "enterprise-contract.")
+			strings.HasPrefix(cond.Type, "enterprise-contract.") ||
+			strings.HasPrefix(cond.Type, "image-controller.")
 	})
 
 	return summary, nil
@@ -760,5 +831,8 @@ func (r *KonfluxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// Watch KonfluxEnterpriseContract for any changes to copy conditions to Konflux CR
 		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
 		Owns(&konfluxv1alpha1.KonfluxEnterpriseContract{}).
+		// Watch KonfluxImageController for any changes to copy conditions to Konflux CR
+		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
+		Owns(&konfluxv1alpha1.KonfluxImageController{}).
 		Complete(r)
 }
