@@ -9,4 +9,5 @@ resources:
 - konflux_v1alpha1_konfluxnamespacelister.yaml
 - konflux_v1alpha1_konfluxenterprisecontract.yaml
 - konflux_v1alpha1_konfluximagecontroller.yaml
+- konflux_v1alpha1_konfluxapplicationapi.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

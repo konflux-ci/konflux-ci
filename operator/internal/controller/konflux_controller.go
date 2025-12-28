@@ -65,6 +65,8 @@ const (
 	KonfluxEnterpriseContractCRName = "konflux-enterprise-contract"
 	// KonfluxImageControllerCRName is the name for the KonfluxImageController CR.
 	KonfluxImageControllerCRName = "konflux-image-controller"
+	// KonfluxApplicationAPICRName is the name for the KonfluxApplicationAPI CR.
+	KonfluxApplicationAPICRName = "konflux-application-api"
 	// CertManagerGroup is the API group for cert-manager resources
 	CertManagerGroup = "cert-manager.io"
 	// KyvernoGroup is the API group for Kyverno resources
@@ -106,6 +108,16 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Apply all embedded manifests
 	if err := r.applyAllManifests(ctx, konflux); err != nil {
 		log.Error(err, "Failed to apply manifests")
+		SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Apply the KonfluxApplicationAPI CR
+	if err := r.applyKonfluxApplicationAPI(ctx, konflux); err != nil {
+		log.Error(err, "Failed to apply KonfluxApplicationAPI")
 		SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
 		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
@@ -291,6 +303,18 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, konfluxEnterpriseContract, "enterprise-contract"))
 
+	// Get and copy status from the KonfluxApplicationAPI CR
+	applicationAPI := &konfluxv1alpha1.KonfluxApplicationAPI{}
+	if err := r.Get(ctx, client.ObjectKey{Name: KonfluxApplicationAPICRName}, applicationAPI); err != nil {
+		log.Error(err, "Failed to get KonfluxApplicationAPI")
+		SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetApplicationAPIStatus", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+	subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, applicationAPI, "application-api"))
+
 	// Get and copy status from the KonfluxImageController CR (if enabled)
 	if konflux.Spec.IsImageControllerEnabled() {
 		imageController := &konfluxv1alpha1.KonfluxImageController{}
@@ -324,6 +348,10 @@ func (r *KonfluxReconciler) applyAllManifests(ctx context.Context, owner *konflu
 	log := logf.FromContext(ctx)
 
 	return r.ObjectStore.Walk(func(info manifests.ParsedManifestInfo) error {
+		if info.Component == manifests.ApplicationAPI {
+			log.Info("Skipping ApplicationAPI manifest, deferring to its own reconciler")
+			return nil
+		}
 		if info.Component == manifests.BuildService {
 			log.Info("Skipping BuildService manifest, deferring to its own reconciler")
 			return nil
@@ -575,6 +603,33 @@ func (r *KonfluxReconciler) applyKonfluxEnterpriseContract(ctx context.Context, 
 
 	log.Info("Applying KonfluxEnterpriseContract CR", "name", konfluxEnterpriseContract.Name)
 	return r.Patch(ctx, konfluxEnterpriseContract, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+}
+
+// applyKonfluxApplicationAPI creates or updates the KonfluxApplicationAPI CR.
+func (r *KonfluxReconciler) applyKonfluxApplicationAPI(ctx context.Context, owner *konfluxv1alpha1.Konflux) error {
+	log := logf.FromContext(ctx)
+
+	applicationAPI := &konfluxv1alpha1.KonfluxApplicationAPI{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: konfluxv1alpha1.GroupVersion.String(),
+			Kind:       "KonfluxApplicationAPI",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: KonfluxApplicationAPICRName,
+			Labels: map[string]string{
+				KonfluxOwnerLabel:     owner.Name,
+				KonfluxComponentLabel: string(manifests.ApplicationAPI),
+			},
+		},
+	}
+
+	// Set owner reference for garbage collection
+	if err := controllerutil.SetControllerReference(owner, applicationAPI, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for KonfluxApplicationAPI: %w", err)
+	}
+
+	log.Info("Applying KonfluxApplicationAPI CR", "name", applicationAPI.Name)
+	return r.Patch(ctx, applicationAPI, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
 }
 
 // applyKonfluxImageController creates or updates the KonfluxImageController CR if enabled,
@@ -831,6 +886,9 @@ func (r *KonfluxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// Watch KonfluxEnterpriseContract for any changes to copy conditions to Konflux CR
 		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
 		Owns(&konfluxv1alpha1.KonfluxEnterpriseContract{}).
+		// Watch KonfluxApplicationAPI for any changes to copy conditions to Konflux CR
+		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
+		Owns(&konfluxv1alpha1.KonfluxApplicationAPI{}).
 		// Watch KonfluxImageController for any changes to copy conditions to Konflux CR
 		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
 		Owns(&konfluxv1alpha1.KonfluxImageController{}).

@@ -13,6 +13,7 @@ rules:
 - apiGroups:
   - konflux.konflux-ci.dev
   resources:
+  - konfluxapplicationapis
   - konfluxbuildservices
   - konfluxenterprisecontracts
   - konfluxes
@@ -33,6 +34,7 @@ rules:
 - apiGroups:
   - konflux.konflux-ci.dev
   resources:
+  - konfluxapplicationapis/finalizers
   - konfluxbuildservices/finalizers
   - konfluxenterprisecontracts/finalizers
   - konfluxes/finalizers
@@ -47,6 +49,7 @@ rules:
 - apiGroups:
   - konflux.konflux-ci.dev
   resources:
+  - konfluxapplicationapis/status
   - konfluxbuildservices/status
   - konfluxenterprisecontracts/status
   - konfluxes/status
