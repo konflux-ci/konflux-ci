@@ -181,6 +181,11 @@ deploy_kyverno() {
 }
 
 deploy_konflux_info() {
+    : "${SKIP_KONFLUX_INFO:=false}"
+    if [[ "${SKIP_KONFLUX_INFO}" == "true" ]]; then
+        echo "⏭️  Skipping Konflux Info deployment (managed by operator)" >&2
+        return 0
+    fi
     kubectl apply -k "${script_path}/dependencies/konflux-info"
 }
 

@@ -81,3 +81,28 @@ spec:
             limits:
               cpu: 500m
               memory: 256Mi
+  info:
+    spec:
+      publicInfo:
+        environment: development
+        visibility: public
+        integrations:
+          image_controller:
+            enabled: true
+            notifications:
+              # Example webhook notification
+              - title: "Build Notification"
+                event: "build_complete"
+                method: "webhook"
+                config:
+                  url: "https://webhook.example.com/build"
+              # Example email notification
+              - title: "Email Notification"
+                event: "repo_push"
+                method: "email"
+                config:
+                  email: "team@example.com"
+      banner:
+        items:
+          - summary: "Welcome to Konflux-CI! This is a development environment for testing and development purposes."
+            type: info

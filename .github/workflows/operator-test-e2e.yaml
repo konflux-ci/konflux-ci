@@ -157,6 +157,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           SKIP_DEX: "true"
+          SKIP_KONFLUX_INFO: "true"
         run: |
           ./deploy-deps.sh
 

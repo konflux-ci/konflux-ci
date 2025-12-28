@@ -61,6 +61,8 @@ const (
 	KonfluxImageControllerCRName = "konflux-image-controller"
 	// KonfluxApplicationAPICRName is the name for the KonfluxApplicationAPI CR.
 	KonfluxApplicationAPICRName = "konflux-application-api"
+	// KonfluxInfoCRName is the name for the KonfluxInfo CR.
+	KonfluxInfoCRName = "konflux-info"
 	// CertManagerGroup is the API group for cert-manager resources
 	CertManagerGroup = "cert-manager.io"
 	// KyvernoGroup is the API group for Kyverno resources
@@ -79,6 +81,7 @@ const (
 	FieldManagerImageController    = "konflux-imagecontroller-controller"
 	FieldManagerEnterpriseContract = "konflux-enterprisecontract-controller"
 	FieldManagerApplicationAPI     = "konflux-applicationapi-controller"
+	FieldManagerInfo               = "konflux-info-controller"
 )
 
 // KonfluxReconciler reconciles a Konflux object
@@ -165,6 +168,16 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Apply the KonfluxRBAC CR
 	if err := r.applyKonfluxRBAC(ctx, konflux); err != nil {
 		log.Error(err, "Failed to apply KonfluxRBAC")
+		SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Apply the KonfluxInfo CR
+	if err := r.applyKonfluxInfo(ctx, konflux); err != nil {
+		log.Error(err, "Failed to apply KonfluxInfo")
 		SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
 		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
@@ -271,6 +284,18 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 	subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, konfluxRBAC, "rbac"))
+
+	// Get and copy status from the KonfluxInfo CR
+	konfluxInfo := &konfluxv1alpha1.KonfluxInfo{}
+	if err := r.Get(ctx, client.ObjectKey{Name: KonfluxInfoCRName}, konfluxInfo); err != nil {
+		log.Error(err, "Failed to get KonfluxInfo")
+		SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetInfoStatus", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+	subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, konfluxInfo, "info"))
 
 	// Get and copy status from the KonfluxNamespaceLister CR
 	konfluxNamespaceLister := &konfluxv1alpha1.KonfluxNamespaceLister{}
@@ -494,6 +519,44 @@ func (r *KonfluxReconciler) applyKonfluxRBAC(ctx context.Context, owner *konflux
 	return r.Patch(ctx, konfluxRBAC, client.Apply, client.FieldOwner(FieldManagerKonflux), client.ForceOwnership)
 }
 
+// applyKonfluxInfo creates or updates the KonfluxInfo CR.
+func (r *KonfluxReconciler) applyKonfluxInfo(ctx context.Context, owner *konfluxv1alpha1.Konflux) error {
+	log := logf.FromContext(ctx)
+
+	var spec konfluxv1alpha1.KonfluxInfoSpec
+	if owner.Spec.KonfluxInfo != nil && owner.Spec.KonfluxInfo.Spec != nil {
+		spec = *owner.Spec.KonfluxInfo.Spec
+	}
+
+	// Normalize Banner field to prevent empty banner array from being serialized
+	if spec.Banner != nil && (spec.Banner.Items == nil || len(*spec.Banner.Items) == 0) {
+		spec.Banner = nil
+	}
+
+	konfluxInfo := &konfluxv1alpha1.KonfluxInfo{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: konfluxv1alpha1.GroupVersion.String(),
+			Kind:       "KonfluxInfo",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: KonfluxInfoCRName,
+			Labels: map[string]string{
+				KonfluxOwnerLabel:     owner.Name,
+				KonfluxComponentLabel: string(manifests.Info),
+			},
+		},
+		Spec: spec,
+	}
+
+	// Set owner reference for garbage collection
+	if err := controllerutil.SetControllerReference(owner, konfluxInfo, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for KonfluxInfo: %w", err)
+	}
+
+	log.Info("Applying KonfluxInfo CR", "name", konfluxInfo.Name)
+	return r.Patch(ctx, konfluxInfo, client.Apply, client.FieldOwner(FieldManagerKonflux), client.ForceOwnership)
+}
+
 // applyKonfluxNamespaceLister creates or updates the KonfluxNamespaceLister CR.
 func (r *KonfluxReconciler) applyKonfluxNamespaceLister(ctx context.Context, owner *konfluxv1alpha1.Konflux) error {
 	log := logf.FromContext(ctx)
@@ -683,6 +746,9 @@ func (r *KonfluxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// Watch KonfluxRBAC for any changes to copy conditions to Konflux CR
 		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
 		Owns(&konfluxv1alpha1.KonfluxRBAC{}).
+		// Watch KonfluxInfo for any changes to copy conditions to Konflux CR
+		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
+		Owns(&konfluxv1alpha1.KonfluxInfo{}).
 		// Watch KonfluxNamespaceLister for any changes to copy conditions to Konflux CR
 		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
 		Owns(&konfluxv1alpha1.KonfluxNamespaceLister{}).

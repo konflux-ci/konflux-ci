@@ -22,6 +22,9 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the konflux-operator itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- konfluxinfo_admin_role.yaml
+- konfluxinfo_editor_role.yaml
+- konfluxinfo_viewer_role.yaml
 - konfluxapplicationapi_admin_role.yaml
 - konfluxapplicationapi_editor_role.yaml
 - konfluxapplicationapi_viewer_role.yaml
