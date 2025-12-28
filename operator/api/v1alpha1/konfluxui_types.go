@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -43,6 +44,9 @@ type DexDeploymentSpec struct {
 	// Dex defines customizations for the dex container.
 	// +optional
 	Dex *ContainerSpec `json:"dex,omitempty"`
+	// Config defines the Dex IdP configuration parameters.
+	// +optional
+	Config *dex.DexParams `json:"config,omitempty"`
 }
 
 // KonfluxUISpec defines the desired state of KonfluxUI

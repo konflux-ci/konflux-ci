@@ -21,6 +21,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
@@ -67,6 +68,11 @@ func (in *DexDeploymentSpec) DeepCopyInto(out *DexDeploymentSpec) {
 	if in.Dex != nil {
 		in, out := &in.Dex, &out.Dex
 		*out = new(ContainerSpec)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.Config != nil {
+		in, out := &in.Config, &out.Config
+		*out = new(dex.DexParams)
 		(*in).DeepCopyInto(*out)
 	}
 }

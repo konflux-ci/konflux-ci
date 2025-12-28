@@ -205,16 +205,16 @@ func TestBuildProxyOverlay(t *testing.T) {
 }
 
 func TestBuildDexOverlay(t *testing.T) {
-	t.Run("nil spec returns empty overlay", func(t *testing.T) {
+	t.Run("nil spec returns overlay with configmap update", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		overlay := buildDexOverlay(nil)
+		overlay := buildDexOverlay(nil, "dex-config-abc123")
 		g.Expect(overlay).NotTo(gomega.BeNil())
 	})
 
-	t.Run("empty spec returns overlay without customizations", func(t *testing.T) {
+	t.Run("empty spec returns overlay with configmap update", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := &konfluxv1alpha1.DexDeploymentSpec{}
-		overlay := buildDexOverlay(spec)
+		overlay := buildDexOverlay(spec, "dex-config-abc123")
 		g.Expect(overlay).NotTo(gomega.BeNil())
 	})
 
@@ -236,7 +236,7 @@ func TestBuildDexOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, dexDeploymentName)
-		overlay := buildDexOverlay(spec)
+		overlay := buildDexOverlay(spec, "dex-config-abc123")
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -266,7 +266,7 @@ func TestBuildDexOverlay(t *testing.T) {
 		originalImage := dexContainer.Image
 		originalArgs := dexContainer.Args
 
-		overlay := buildDexOverlay(spec)
+		overlay := buildDexOverlay(spec, "dex-config-abc123")
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -275,9 +275,32 @@ func TestBuildDexOverlay(t *testing.T) {
 		g.Expect(dexContainer.Image).To(gomega.Equal(originalImage))
 		g.Expect(dexContainer.Args).To(gomega.Equal(originalArgs))
 	})
+
+	t.Run("updates configmap volume reference", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		deployment := getUIDeployment(t, dexDeploymentName)
+
+		overlay := buildDexOverlay(nil, "dex-newconfig-xyz789")
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// Find the dex volume and verify ConfigMap name was updated
+		var dexVolume *corev1.Volume
+		for i := range deployment.Spec.Template.Spec.Volumes {
+			if deployment.Spec.Template.Spec.Volumes[i].Name == dexConfigMapVolumeName {
+				dexVolume = &deployment.Spec.Template.Spec.Volumes[i]
+				break
+			}
+		}
+		g.Expect(dexVolume).NotTo(gomega.BeNil(), "dex volume must exist")
+		g.Expect(dexVolume.ConfigMap).NotTo(gomega.BeNil())
+		g.Expect(dexVolume.ConfigMap.Name).To(gomega.Equal("dex-newconfig-xyz789"))
+	})
 }
 
 func TestApplyUIDeploymentCustomizations(t *testing.T) {
+	const testConfigMapName = "dex-config-test123"
+
 	t.Run("applies customizations to proxy deployment", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := konfluxv1alpha1.KonfluxUISpec{
@@ -293,7 +316,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, spec)
+		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		nginxContainer := findContainer(deployment.Spec.Template.Spec.Containers, nginxContainerName)
@@ -316,7 +339,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, dexDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, spec)
+		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		dexContainer := findContainer(deployment.Spec.Template.Spec.Containers, dexContainerName)
@@ -351,7 +374,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 			},
 		}
 
-		err := applyUIDeploymentCustomizations(deployment, spec)
+		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic and container should be unchanged
@@ -365,7 +388,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, spec)
+		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
@@ -380,7 +403,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, dexDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, spec)
+		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
@@ -393,7 +416,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		spec := konfluxv1alpha1.KonfluxUISpec{}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, spec)
+		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
@@ -409,7 +432,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, spec)
+		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).NotTo(gomega.BeNil())
@@ -425,7 +448,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, dexDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, spec)
+		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).NotTo(gomega.BeNil())
@@ -441,7 +464,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, spec)
+		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).NotTo(gomega.BeNil())
@@ -456,7 +479,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
 		originalReplicas := deployment.Spec.Replicas
-		err := applyUIDeploymentCustomizations(deployment, spec)
+		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).To(gomega.Equal(originalReplicas))
@@ -478,7 +501,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, spec)
+		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Check replicas
@@ -490,9 +513,32 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g.Expect(nginxContainer).NotTo(gomega.BeNil())
 		g.Expect(nginxContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("2"))
 	})
+
+	t.Run("updates dex configmap volume reference", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxUISpec{}
+
+		deployment := getUIDeployment(t, dexDeploymentName)
+		err := applyUIDeploymentCustomizations(deployment, spec, "dex-custom-config-abc")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// Find the dex volume and verify ConfigMap name was updated
+		var dexVolume *corev1.Volume
+		for i := range deployment.Spec.Template.Spec.Volumes {
+			if deployment.Spec.Template.Spec.Volumes[i].Name == dexConfigMapVolumeName {
+				dexVolume = &deployment.Spec.Template.Spec.Volumes[i]
+				break
+			}
+		}
+		g.Expect(dexVolume).NotTo(gomega.BeNil(), "dex volume must exist")
+		g.Expect(dexVolume.ConfigMap).NotTo(gomega.BeNil())
+		g.Expect(dexVolume.ConfigMap.Name).To(gomega.Equal("dex-custom-config-abc"))
+	})
 }
 
 func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
+	const testConfigMapName = "dex-config-test123"
+
 	t.Run("merges limits without affecting requests", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
@@ -517,7 +563,7 @@ func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
 			},
 		}
 
-		err := applyUIDeploymentCustomizations(deployment, spec)
+		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		nginxContainer = findContainer(deployment.Spec.Template.Spec.Containers, nginxContainerName)
@@ -551,7 +597,7 @@ func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
 			},
 		}
 
-		err := applyUIDeploymentCustomizations(deployment, spec)
+		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		nginxContainer = findContainer(deployment.Spec.Template.Spec.Containers, nginxContainerName)

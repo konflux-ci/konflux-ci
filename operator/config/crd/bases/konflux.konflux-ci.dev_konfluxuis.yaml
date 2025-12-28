@@ -42,6 +42,158 @@ spec:
               dex:
                 description: Dex defines customizations for the dex deployment.
                 properties:
+                  config:
+                    description: Config defines the Dex IdP configuration parameters.
+                    properties:
+                      configureLoginWithOpenShift:
+                        description: |-
+                          ConfigureLoginWithOpenShift enables the OpenShift connector for authentication.
+                          When true, an OpenShift connector is automatically added using the Kubernetes API.
+                        type: boolean
+                      connectors:
+                        description: Connectors are upstream identity provider connectors.
+                        items:
+                          description: Connector represents an upstream identity provider
+                            connector.
+                          properties:
+                            config:
+                              description: Config contains connector-specific configuration.
+                              properties:
+                                bindDN:
+                                  type: string
+                                bindPW:
+                                  type: string
+                                clientID:
+                                  description: Common OIDC/OAuth fields
+                                  type: string
+                                clientSecret:
+                                  type: string
+                                groupSearch:
+                                  description: LDAPGroupSearch configures LDAP group
+                                    search settings.
+                                  properties:
+                                    baseDN:
+                                      type: string
+                                    filter:
+                                      type: string
+                                    nameAttr:
+                                      type: string
+                                    userMatchers:
+                                      items:
+                                        description: LDAPUserMatcher configures how
+                                          users are matched to groups.
+                                        properties:
+                                          groupAttr:
+                                            type: string
+                                          userAttr:
+                                            type: string
+                                        type: object
+                                      type: array
+                                  type: object
+                                groups:
+                                  items:
+                                    type: string
+                                  type: array
+                                host:
+                                  description: LDAP-specific fields
+                                  type: string
+                                insecureCA:
+                                  type: boolean
+                                insecureNoSSL:
+                                  type: boolean
+                                insecureSkipVerify:
+                                  type: boolean
+                                issuer:
+                                  type: string
+                                orgs:
+                                  description: GitHub-specific fields
+                                  items:
+                                    description: GitHubOrg represents a GitHub organization
+                                      for authentication.
+                                    properties:
+                                      name:
+                                        type: string
+                                      teams:
+                                        items:
+                                          type: string
+                                        type: array
+                                    type: object
+                                  type: array
+                                redirectURI:
+                                  type: string
+                                userSearch:
+                                  description: LDAPUserSearch configures LDAP user
+                                    search settings.
+                                  properties:
+                                    baseDN:
+                                      type: string
+                                    emailAttr:
+                                      type: string
+                                    filter:
+                                      type: string
+                                    idAttr:
+                                      type: string
+                                    nameAttr:
+                                      type: string
+                                    username:
+                                      type: string
+                                  type: object
+                              type: object
+                            id:
+                              description: ID is a unique identifier for this connector.
+                              type: string
+                            name:
+                              description: Name is a human-readable name for this
+                                connector.
+                              type: string
+                            type:
+                              description: Type specifies the connector type (e.g.,
+                                "oidc", "ldap", "github", "openshift").
+                              type: string
+                          type: object
+                        type: array
+                      enablePasswordDB:
+                        default: true
+                        description: EnablePasswordDB enables the local password database.
+                        type: boolean
+                      hostname:
+                        default: localhost
+                        description: Hostname is the external hostname for the Dex
+                          issuer (e.g., "dex.example.com").
+                        type: string
+                      passwordConnector:
+                        description: PasswordConnector specifies the connector ID
+                          to use for password grants (e.g., "local").
+                        type: string
+                      port:
+                        default: "9443"
+                        description: |-
+                          Port is the external port for the Dex issuer (e.g., "9443").
+                          If empty, no port will be included in URLs.
+                        type: string
+                      staticPasswords:
+                        description: StaticPasswords are predefined user credentials
+                          for the local password database.
+                        items:
+                          description: Password represents a static user password
+                            entry.
+                          properties:
+                            email:
+                              description: Email is the user's email address (used
+                                as the login identifier).
+                              type: string
+                            hash:
+                              description: Hash is the bcrypt hash of the user's password.
+                              type: string
+                            userID:
+                              description: UserID is a unique identifier for the user.
+                              type: string
+                            username:
+                              description: Username is the display name for the user.
+                              type: string
+                          type: object
+                        type: array
+                    type: object
                   dex:
                     description: Dex defines customizations for the dex container.
                     properties:
