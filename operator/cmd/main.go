@@ -326,6 +326,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxImageController")
 		os.Exit(1)
 	}
+	if err = (&controller.KonfluxApplicationAPIReconciler{
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		ObjectStore: objectStore,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "KonfluxApplicationAPI")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {
