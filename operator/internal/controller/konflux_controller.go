@@ -402,6 +402,11 @@ func (r *KonfluxReconciler) applyKonfluxReleaseService(ctx context.Context, owne
 func (r *KonfluxReconciler) applyKonfluxUI(ctx context.Context, owner *konfluxv1alpha1.Konflux) error {
 	log := logf.FromContext(ctx)
 
+	var spec konfluxv1alpha1.KonfluxUISpec
+	if owner.Spec.KonfluxUI != nil && owner.Spec.KonfluxUI.Spec != nil {
+		spec = *owner.Spec.KonfluxUI.Spec
+	}
+
 	ui := &konfluxv1alpha1.KonfluxUI{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: konfluxv1alpha1.GroupVersion.String(),
@@ -414,6 +419,7 @@ func (r *KonfluxReconciler) applyKonfluxUI(ctx context.Context, owner *konfluxv1
 				KonfluxComponentLabel: string(manifests.UI),
 			},
 		},
+		Spec: spec,
 	}
 
 	// Set owner reference for garbage collection

@@ -20,16 +20,39 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// ProxyDeploymentSpec defines customizations for the proxy deployment.
+type ProxyDeploymentSpec struct {
+	// Replicas is the number of replicas for the proxy deployment.
+	// +kubebuilder:default=1
+	// +kubebuilder:validation:Minimum=1
+	Replicas int32 `json:"replicas,omitempty"`
+	// Nginx defines customizations for the nginx container.
+	// +optional
+	Nginx *ContainerSpec `json:"nginx,omitempty"`
+	// OAuth2Proxy defines customizations for the oauth2-proxy container.
+	// +optional
+	OAuth2Proxy *ContainerSpec `json:"oauth2Proxy,omitempty"`
+}
+
+// DexDeploymentSpec defines customizations for the dex deployment.
+type DexDeploymentSpec struct {
+	// Replicas is the number of replicas for the dex deployment.
+	// +kubebuilder:default=1
+	// +kubebuilder:validation:Minimum=1
+	Replicas int32 `json:"replicas,omitempty"`
+	// Dex defines customizations for the dex container.
+	// +optional
+	Dex *ContainerSpec `json:"dex,omitempty"`
+}
 
 // KonfluxUISpec defines the desired state of KonfluxUI
 type KonfluxUISpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of KonfluxUI. Edit konfluxui_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// Proxy defines customizations for the proxy deployment.
+	// +optional
+	Proxy *ProxyDeploymentSpec `json:"proxy,omitempty"`
+	// Dex defines customizations for the dex deployment.
+	// +optional
+	Dex *DexDeploymentSpec `json:"dex,omitempty"`
 }
 
 // KonfluxUIStatus defines the observed state of KonfluxUI

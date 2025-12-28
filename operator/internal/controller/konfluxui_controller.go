@@ -34,6 +34,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
@@ -42,6 +43,15 @@ const (
 	UIConditionTypeReady = "Ready"
 	// uiNamespace is the namespace for UI resources
 	uiNamespace = "konflux-ui"
+
+	// Deployment names
+	proxyDeploymentName = "proxy"
+	dexDeploymentName   = "dex"
+
+	// Container names
+	nginxContainerName       = "nginx"
+	oauth2ProxyContainerName = "oauth2-proxy"
+	dexContainerName         = "dex"
 )
 
 // KonfluxUIReconciler reconciles a KonfluxUI object
@@ -116,6 +126,13 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, owner *konflux
 	}
 
 	for _, obj := range objects {
+		// Apply customizations for deployments
+		if deployment, ok := obj.(*appsv1.Deployment); ok {
+			if err := applyUIDeploymentCustomizations(deployment, owner.Spec); err != nil {
+				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
+			}
+		}
+
 		// Set ownership labels and owner reference
 		if err := setOwnership(obj, owner, string(manifests.UI), r.Scheme); err != nil {
 			return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
@@ -140,6 +157,61 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, owner *konflux
 		}
 	}
 	return nil
+}
+
+// applyUIDeploymentCustomizations applies user-defined customizations to UI deployments.
+func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxUISpec) error {
+	switch deployment.Name {
+	case proxyDeploymentName:
+		if spec.Proxy != nil {
+			deployment.Spec.Replicas = &spec.Proxy.Replicas
+		}
+		if err := buildProxyOverlay(spec.Proxy).ApplyToDeployment(deployment); err != nil {
+			return err
+		}
+	case dexDeploymentName:
+		if spec.Dex != nil {
+			deployment.Spec.Replicas = &spec.Dex.Replicas
+		}
+		if err := buildDexOverlay(spec.Dex).ApplyToDeployment(deployment); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// buildProxyOverlay builds the pod overlay for the proxy deployment.
+func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec) *customization.PodOverlay {
+	if spec == nil {
+		return customization.NewPodOverlay()
+	}
+
+	return customization.BuildPodOverlay(
+		customization.DeploymentContext{Replicas: spec.Replicas},
+		customization.WithContainerBuilder(
+			nginxContainerName,
+			customization.FromContainerSpec(spec.Nginx),
+		),
+		customization.WithContainerBuilder(
+			oauth2ProxyContainerName,
+			customization.FromContainerSpec(spec.OAuth2Proxy),
+		),
+	)
+}
+
+// buildDexOverlay builds the pod overlay for the dex deployment.
+func buildDexOverlay(spec *konfluxv1alpha1.DexDeploymentSpec) *customization.PodOverlay {
+	if spec == nil {
+		return customization.NewPodOverlay()
+	}
+
+	return customization.BuildPodOverlay(
+		customization.DeploymentContext{Replicas: spec.Replicas},
+		customization.WithContainerBuilder(
+			dexContainerName,
+			customization.FromContainerSpec(spec.Dex),
+		),
+	)
 }
 
 // ensureUISecrets ensures that UI secrets exist and are properly configured.
