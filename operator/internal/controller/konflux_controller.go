@@ -19,22 +19,14 @@ package controller
 import (
 	"context"
 	"fmt"
-	"reflect"
-	"strings"
 
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
@@ -42,6 +34,8 @@ import (
 
 const (
 	// KonfluxOwnerLabel is the label used to identify resources owned by the Konflux operator.
+	// Resources are owned either directly by the Konflux CR (e.g., ApplicationAPI CRDs) or
+	// indirectly via component-specific CRs (e.g., deployments owned by KonfluxImageController CR).
 	KonfluxOwnerLabel = "konflux.konflux-ci.dev/owner"
 	// KonfluxComponentLabel is the label used to identify which component a resource belongs to.
 	KonfluxComponentLabel = "konflux.konflux-ci.dev/component"
@@ -76,8 +70,7 @@ const (
 // KonfluxReconciler reconciles a Konflux object
 type KonfluxReconciler struct {
 	client.Client
-	Scheme      *runtime.Scheme
-	ObjectStore *manifests.ObjectStore
+	Scheme *runtime.Scheme
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxes,verbs=get;list;watch;create;update;patch;delete
@@ -104,16 +97,6 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	log.Info("Reconciling Konflux", "name", konflux.Name)
-
-	// Apply all embedded manifests
-	if err := r.applyAllManifests(ctx, konflux); err != nil {
-		log.Error(err, "Failed to apply manifests")
-		SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
-	}
 
 	// Apply the KonfluxApplicationAPI CR
 	if err := r.applyKonfluxApplicationAPI(ctx, konflux); err != nil {
@@ -205,18 +188,9 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
-	// Check the status of owned deployments (doesn't set overall Ready yet)
-	deploymentSummary, err := r.updateComponentStatuses(ctx, konflux)
-	if err != nil {
-		log.Error(err, "Failed to update component statuses")
-		SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetDeploymentStatus", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
-	}
-
-	// Collect status from all sub-CRs
+	// Collect status from all sub-CRs.
+	// All component deployments are managed by their respective reconcilers,
+	// so we aggregate readiness by checking each sub-CR's Ready condition.
 	var subCRStatuses []SubCRStatus
 
 	// Get and copy status from the KonfluxBuildService CR
@@ -329,8 +303,9 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, imageController, "image-controller"))
 	}
 
-	// Set overall Ready condition considering deployments and all sub-CRs
-	SetAggregatedReadyCondition(konflux, ConditionTypeReady, deploymentSummary, subCRStatuses)
+	// Set overall Ready condition based on all sub-CRs.
+	// All deployments are managed by component-specific reconcilers, so we only aggregate sub-CR statuses.
+	SetAggregatedReadyCondition(konflux, ConditionTypeReady, subCRStatuses)
 
 	// Update the status subresource with all collected conditions
 	if err := r.Status().Update(ctx, konflux); err != nil {
@@ -340,80 +315,6 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	log.Info("Successfully reconciled Konflux")
 	return ctrl.Result{}, nil
-}
-
-// applyAllManifests loads and applies all embedded manifests to the cluster.
-// Manifests are parsed once and cached; deep copies are used during reconciliation.
-func (r *KonfluxReconciler) applyAllManifests(ctx context.Context, owner *konfluxv1alpha1.Konflux) error {
-	log := logf.FromContext(ctx)
-
-	return r.ObjectStore.Walk(func(info manifests.ParsedManifestInfo) error {
-		if info.Component == manifests.ApplicationAPI {
-			log.Info("Skipping ApplicationAPI manifest, deferring to its own reconciler")
-			return nil
-		}
-		if info.Component == manifests.BuildService {
-			log.Info("Skipping BuildService manifest, deferring to its own reconciler")
-			return nil
-		}
-		if info.Component == manifests.Integration {
-			log.Info("Skipping Integration manifest, deferring to its own reconciler")
-			return nil
-		}
-		if info.Component == manifests.Release {
-			log.Info("Skipping Release manifest, deferring to its own reconciler")
-			return nil
-		}
-		if info.Component == manifests.UI {
-			log.Info("Skipping UI manifest, deferring to its own reconciler")
-			return nil
-		}
-		if info.Component == manifests.RBAC {
-			log.Info("Skipping RBAC manifest, differing to its own reconciler")
-			return nil
-		}
-		if info.Component == manifests.NamespaceLister {
-			log.Info("Skipping NamespaceLister manifest, differing to its own reconciler")
-			return nil
-		}
-		if info.Component == manifests.EnterpriseContract {
-			log.Info("Skipping EnterpriseContract manifest, differing to its own reconciler")
-			return nil
-		}
-		if info.Component == manifests.ImageController {
-			log.Info("Skipping ImageController manifest, deferring to its own reconciler")
-			return nil
-		}
-
-		objects := transformObjectsForComponent(info.Objects, info.Component)
-		for _, obj := range objects {
-			// Set ownership labels and owner reference
-
-			if err := setOwnership(obj, owner, string(info.Component), r.Scheme); err != nil {
-				return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
-					obj.GetNamespace(), obj.GetName(), getKind(obj), info.Component, err)
-			}
-
-			if err := applyObject(ctx, r.Client, obj); err != nil {
-				gvk := obj.GetObjectKind().GroupVersionKind()
-				if gvk.Group == CertManagerGroup || gvk.Group == KyvernoGroup {
-					// TODO: Remove this once we decide how to install cert-manager crds in envtest
-					// TODO: Remove this once we decide if we want to have a dependency on Kyverno
-					log.Info("Skipping resource: CRD not installed",
-						"kind", gvk.Kind,
-						"apiVersion", gvk.GroupVersion().String(),
-						"namespace", obj.GetNamespace(),
-						"name", obj.GetName(),
-					)
-					continue
-				}
-				return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
-					obj.GetNamespace(), obj.GetName(), getKind(obj), info.Component, err)
-			}
-		}
-
-		return nil
-	})
 }
 
 // applyKonfluxBuildService creates or updates the KonfluxBuildService CR.
@@ -676,29 +577,6 @@ func (r *KonfluxReconciler) applyKonfluxImageController(ctx context.Context, own
 	return r.Patch(ctx, imageController, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
 }
 
-func transformObjectsForComponent(objects []client.Object, component manifests.Component) []client.Object {
-	switch component {
-	case manifests.ApplicationAPI:
-		return objects
-	case manifests.EnterpriseContract:
-		return objects
-	case manifests.ImageController:
-		return objects
-	case manifests.Integration:
-		return objects
-	case manifests.NamespaceLister:
-		return objects
-	case manifests.RBAC:
-		return objects
-	case manifests.Release:
-		return objects
-	case manifests.UI:
-		return objects
-	default:
-		return objects
-	}
-}
-
 // getKind returns the Kind of a client.Object.
 // For unstructured objects, it uses the GVK directly.
 // For typed objects, it uses the GVK from the object's metadata.
@@ -736,138 +614,13 @@ func applyObject(ctx context.Context, k8sClient client.Client, obj client.Object
 	return k8sClient.Patch(ctx, obj, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
 }
 
-// updateComponentStatuses checks the status of all owned Deployments and updates conditions on Konflux.
-// It returns the deployment status summary for use in computing the overall Ready condition.
-func (r *KonfluxReconciler) updateComponentStatuses(ctx context.Context, konflux *konfluxv1alpha1.Konflux) (DeploymentStatusSummary, error) {
-	// List all deployments owned by this Konflux instance
-	deploymentList := &appsv1.DeploymentList{}
-	if err := r.List(ctx, deploymentList, client.MatchingLabels{
-		KonfluxOwnerLabel: konflux.Name,
-	}); err != nil {
-		return DeploymentStatusSummary{}, fmt.Errorf("failed to list owned deployments: %w", err)
-	}
-
-	// Set conditions for each deployment and get summary
-	summary := SetDeploymentConditions(konflux, deploymentList.Items)
-
-	// Remove conditions for deployments that no longer exist
-	CleanupStaleConditions(konflux, func(cond metav1.Condition) bool {
-		return cond.Type == ConditionTypeReady ||
-			summary.SeenConditionTypes[cond.Type] ||
-			strings.HasPrefix(cond.Type, "build-service.") ||
-			strings.HasPrefix(cond.Type, "integration-service.") ||
-			strings.HasPrefix(cond.Type, "release-service.") ||
-			strings.HasPrefix(cond.Type, "ui.") ||
-			strings.HasPrefix(cond.Type, "rbac.") ||
-			strings.HasPrefix(cond.Type, "namespace-lister.") ||
-			strings.HasPrefix(cond.Type, "enterprise-contract.") ||
-			strings.HasPrefix(cond.Type, "image-controller.")
-	})
-
-	return summary, nil
-}
-
-// generationChangedPredicate filters out events where the generation hasn't changed
-// (i.e., status-only updates that shouldn't trigger reconciliation)
-var generationChangedPredicate = predicate.Funcs{
-	UpdateFunc: func(e event.UpdateEvent) bool {
-		if e.ObjectOld == nil || e.ObjectNew == nil {
-			return true
-		}
-		// Only reconcile if the generation changed (spec was modified)
-		// This filters out status-only updates
-		return e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
-	},
-	CreateFunc: func(e event.CreateEvent) bool {
-		return true
-	},
-	DeleteFunc: func(e event.DeleteEvent) bool {
-		return true
-	},
-	GenericFunc: func(e event.GenericEvent) bool {
-		return true
-	},
-}
-
-// deploymentReadinessPredicate triggers reconciliation when:
-// - Spec changes (generation changed)
-// - Readiness status changes (ReadyReplicas, AvailableReplicas, UnavailableReplicas)
-// This allows us to react to deployment health changes without polling
-var deploymentReadinessPredicate = predicate.Funcs{
-	UpdateFunc: func(e event.UpdateEvent) bool {
-		if e.ObjectOld == nil || e.ObjectNew == nil {
-			return true
-		}
-		// Always reconcile on spec changes
-		if e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration() {
-			return true
-		}
-		// Check for meaningful status changes
-		oldDep, ok1 := e.ObjectOld.(*appsv1.Deployment)
-		newDep, ok2 := e.ObjectNew.(*appsv1.Deployment)
-		if !ok1 || !ok2 {
-			return true
-		}
-		// Trigger on readiness changes
-		return oldDep.Status.ReadyReplicas != newDep.Status.ReadyReplicas ||
-			oldDep.Status.AvailableReplicas != newDep.Status.AvailableReplicas ||
-			oldDep.Status.UnavailableReplicas != newDep.Status.UnavailableReplicas ||
-			oldDep.Status.UpdatedReplicas != newDep.Status.UpdatedReplicas ||
-			oldDep.Status.Replicas != newDep.Status.Replicas
-	},
-	CreateFunc: func(e event.CreateEvent) bool {
-		return true
-	},
-	DeleteFunc: func(e event.DeleteEvent) bool {
-		return true
-	},
-	GenericFunc: func(e event.GenericEvent) bool {
-		return true
-	},
-}
-
-// labelsOrAnnotationsChangedPredicate triggers reconciliation when labels or annotations change
-// Used for resources like ConfigMaps that don't have a generation field that changes on data updates
-var labelsOrAnnotationsChangedPredicate = predicate.Funcs{
-	UpdateFunc: func(e event.UpdateEvent) bool {
-		if e.ObjectOld == nil || e.ObjectNew == nil {
-			return true
-		}
-		// Check if generation changed
-		if e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration() {
-			return true
-		}
-		// Also check labels and annotations for resources without generation updates
-		return !reflect.DeepEqual(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels()) ||
-			!reflect.DeepEqual(e.ObjectOld.GetAnnotations(), e.ObjectNew.GetAnnotations())
-	},
-	CreateFunc: func(e event.CreateEvent) bool {
-		return true
-	},
-	DeleteFunc: func(e event.DeleteEvent) bool {
-		return true
-	},
-	GenericFunc: func(e event.GenericEvent) bool {
-		return true
-	},
-}
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&konfluxv1alpha1.Konflux{}).
 		Named("konflux").
-		// Use predicates to filter out unnecessary updates and prevent reconcile loops
-		// Deployments: watch spec changes AND readiness status changes
-		Owns(&appsv1.Deployment{}, builder.WithPredicates(deploymentReadinessPredicate)).
-		Owns(&corev1.Service{}, builder.WithPredicates(generationChangedPredicate)).
-		Owns(&corev1.ConfigMap{}, builder.WithPredicates(labelsOrAnnotationsChangedPredicate)).
-		Owns(&corev1.Secret{}, builder.WithPredicates(labelsOrAnnotationsChangedPredicate)).
-		Owns(&corev1.Namespace{}, builder.WithPredicates(generationChangedPredicate)).
-		Owns(&rbacv1.Role{}, builder.WithPredicates(generationChangedPredicate)).
-		Owns(&rbacv1.RoleBinding{}, builder.WithPredicates(generationChangedPredicate)).
-		Owns(&rbacv1.ClusterRole{}, builder.WithPredicates(generationChangedPredicate)).
-		Owns(&rbacv1.ClusterRoleBinding{}, builder.WithPredicates(generationChangedPredicate)).
+		// Watch sub-CRs for status changes to aggregate conditions on the parent Konflux CR
+		// All resource management (Deployments, Services, etc.) is handled by component-specific reconcilers
 		// Watch KonfluxBuildService for any changes to copy conditions to Konflux CR
 		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
 		Owns(&konfluxv1alpha1.KonfluxBuildService{}).

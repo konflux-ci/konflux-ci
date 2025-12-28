@@ -179,14 +179,10 @@ type SubCRStatus struct {
 	Ready bool
 }
 
-// AggregateReadiness computes the overall readiness from deployment summary and sub-CR statuses.
+// AggregateReadiness computes the overall readiness from sub-CR statuses.
 // Returns whether all components are ready and a slice of reasons for any not-ready components.
-func AggregateReadiness(deploymentSummary DeploymentStatusSummary, subCRStatuses []SubCRStatus) (allReady bool, notReadyReasons []string) {
-	allReady = deploymentSummary.AllReady
-
-	if !deploymentSummary.AllReady {
-		notReadyReasons = append(notReadyReasons, fmt.Sprintf("deployments not ready: %v", deploymentSummary.NotReadyNames))
-	}
+func AggregateReadiness(subCRStatuses []SubCRStatus) (allReady bool, notReadyReasons []string) {
+	allReady = true
 
 	for _, status := range subCRStatuses {
 		if !status.Ready {
@@ -198,18 +194,18 @@ func AggregateReadiness(deploymentSummary DeploymentStatusSummary, subCRStatuses
 	return allReady, notReadyReasons
 }
 
-// SetAggregatedReadyCondition sets the overall Ready condition based on aggregated component readiness.
+// SetAggregatedReadyCondition sets the overall Ready condition based on aggregated sub-CR readiness.
+// All deployments are managed by component-specific reconcilers, so we only aggregate sub-CR statuses.
 func SetAggregatedReadyCondition(
 	obj konfluxv1alpha1.ConditionAccessor,
 	readyConditionType string,
-	deploymentSummary DeploymentStatusSummary,
 	subCRStatuses []SubCRStatus,
 ) {
-	allReady, notReadyReasons := AggregateReadiness(deploymentSummary, subCRStatuses)
+	allReady, notReadyReasons := AggregateReadiness(subCRStatuses)
 
 	if allReady {
-		// Count total components (deployments + sub-CRs)
-		totalComponents := deploymentSummary.TotalCount + len(subCRStatuses)
+		// Count total components (sub-CRs)
+		totalComponents := len(subCRStatuses)
 		SetCondition(obj, metav1.Condition{
 			Type:    readyConditionType,
 			Status:  metav1.ConditionTrue,
