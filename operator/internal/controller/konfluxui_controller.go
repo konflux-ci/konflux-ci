@@ -35,6 +35,8 @@ import (
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/hashedconfigmap"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
@@ -52,6 +54,12 @@ const (
 	nginxContainerName       = "nginx"
 	oauth2ProxyContainerName = "oauth2-proxy"
 	dexContainerName         = "dex"
+
+	// Dex ConfigMap constants
+	dexConfigMapBaseName   = "dex"
+	dexConfigKey           = "config.yaml"
+	dexConfigMapLabel      = "app.kubernetes.io/managed-by-konflux-ui-reconciler"
+	dexConfigMapVolumeName = "dex"
 )
 
 // KonfluxUIReconciler reconciles a KonfluxUI object
@@ -81,8 +89,30 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	log.Info("Reconciling KonfluxUI", "name", ui.Name)
 
+	// Ensure konflux-ui namespace exists
+	if err := r.ensureNamespaceExists(ctx, ui); err != nil {
+		log.Error(err, "Failed to ensure namespace")
+		SetFailedCondition(ui, UIConditionTypeReady, "NamespaceCreationFailed", err)
+		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Reconcile Dex ConfigMap first (if configured) to get the ConfigMap name
+	// This must happen before applyManifests so we can set the correct ConfigMap reference
+	dexConfigMapName, err := r.reconcileDexConfigMap(ctx, ui)
+	if err != nil {
+		log.Error(err, "Failed to reconcile Dex ConfigMap")
+		SetFailedCondition(ui, UIConditionTypeReady, "DexConfigMapFailed", err)
+		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, ui); err != nil {
+	if err := r.applyManifests(ctx, ui, dexConfigMapName); err != nil {
 		log.Error(err, "Failed to apply manifests")
 		SetFailedCondition(ui, UIConditionTypeReady, "ApplyFailed", err)
 		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
@@ -115,9 +145,33 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	return ctrl.Result{}, nil
 }
 
+func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, owner *konfluxv1alpha1.KonfluxUI) error {
+	objects, err := r.ObjectStore.GetForComponent(manifests.UI)
+	if err != nil {
+		return fmt.Errorf("failed to get parsed manifests for UI: %w", err)
+	}
+
+	for _, obj := range objects {
+		// Apply customizations for deployments
+		if namespace, ok := obj.(*corev1.Namespace); ok {
+			// Set ownership labels and owner reference
+			if err := setOwnership(namespace, owner, string(manifests.UI), r.Scheme); err != nil {
+				return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
+					namespace.GetNamespace(), namespace.GetName(), getKind(namespace), manifests.UI, err)
+			}
+			if err := applyObject(ctx, r.Client, namespace); err != nil {
+				return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
+					namespace.GetNamespace(), namespace.GetName(), getKind(namespace), manifests.UI, err)
+			}
+		}
+	}
+	return nil
+}
+
 // applyManifests loads and applies all embedded manifests to the cluster.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
-func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, owner *konfluxv1alpha1.KonfluxUI) error {
+// dexConfigMapName is the name of the Dex ConfigMap to use (empty if not configured).
+func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, owner *konfluxv1alpha1.KonfluxUI, dexConfigMapName string) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.UI)
@@ -128,7 +182,7 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, owner *konflux
 	for _, obj := range objects {
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
-			if err := applyUIDeploymentCustomizations(deployment, owner.Spec); err != nil {
+			if err := applyUIDeploymentCustomizations(deployment, owner.Spec, dexConfigMapName); err != nil {
 				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
 			}
 		}
@@ -160,7 +214,7 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, owner *konflux
 }
 
 // applyUIDeploymentCustomizations applies user-defined customizations to UI deployments.
-func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxUISpec) error {
+func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxUISpec, dexConfigMapName string) error {
 	switch deployment.Name {
 	case proxyDeploymentName:
 		if spec.Proxy != nil {
@@ -173,7 +227,7 @@ func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, spec konflux
 		if spec.Dex != nil {
 			deployment.Spec.Replicas = &spec.Dex.Replicas
 		}
-		if err := buildDexOverlay(spec.Dex).ApplyToDeployment(deployment); err != nil {
+		if err := buildDexOverlay(spec.Dex, dexConfigMapName).ApplyToDeployment(deployment); err != nil {
 			return err
 		}
 	}
@@ -200,18 +254,21 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec) *customization
 }
 
 // buildDexOverlay builds the pod overlay for the dex deployment.
-func buildDexOverlay(spec *konfluxv1alpha1.DexDeploymentSpec) *customization.PodOverlay {
-	if spec == nil {
-		return customization.NewPodOverlay()
+func buildDexOverlay(spec *konfluxv1alpha1.DexDeploymentSpec, configMapName string) *customization.PodOverlay {
+	opts := []customization.PodOverlayOption{
+		customization.WithConfigMapVolumeUpdate(dexConfigMapVolumeName, configMapName),
 	}
 
-	return customization.BuildPodOverlay(
-		customization.DeploymentContext{Replicas: spec.Replicas},
-		customization.WithContainerBuilder(
+	// Add container customizations if spec is provided
+	if spec != nil {
+		opts = append(opts, customization.WithContainerOpts(
 			dexContainerName,
+			customization.DeploymentContext{Replicas: spec.Replicas},
 			customization.FromContainerSpec(spec.Dex),
-		),
-	)
+		))
+	}
+
+	return customization.NewPodOverlay(opts...)
 }
 
 // ensureUISecrets ensures that UI secrets exist and are properly configured.
@@ -266,6 +323,46 @@ func generateRandomBytes(length int, urlSafe bool) ([]byte, error) {
 		return []byte(base64.RawURLEncoding.EncodeToString(b)), nil
 	}
 	return []byte(base64.StdEncoding.EncodeToString(b)), nil
+}
+
+// reconcileDexConfigMap creates or updates the Dex ConfigMap based on the DexConfig in the CR.
+// It generates a content-based hash suffix for the ConfigMap name (like kustomize),
+// cleans up old ConfigMaps, and returns the new ConfigMap name.
+func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *konfluxv1alpha1.KonfluxUI) (string, error) {
+	var dexConfig *dex.Config
+	// Check if DexConfig is configured
+	if ui.Spec.Dex != nil && ui.Spec.Dex.Config != nil {
+		dexConfig = dex.NewDexConfig(ui.Spec.Dex.Config)
+	} else {
+		dexConfig = dex.NewDexConfig(
+			&dex.DexParams{
+				Hostname: "localhost",
+				Port:     "9443",
+			},
+		)
+	}
+
+	configYAML, err := dexConfig.ToYAML()
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal Dex config to YAML: %w", err)
+	}
+
+	// Use hashedconfigmap to apply the ConfigMap with content-based hash suffix
+	hcm := hashedconfigmap.New(
+		r.Client,
+		r.Scheme,
+		dexConfigMapBaseName,
+		uiNamespace,
+		dexConfigKey,
+		dexConfigMapLabel,
+	)
+
+	result, err := hcm.Apply(ctx, string(configYAML), ui)
+	if err != nil {
+		return "", err
+	}
+
+	return result.ConfigMapName, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

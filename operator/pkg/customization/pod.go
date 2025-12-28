@@ -29,6 +29,8 @@ type PodOverlay struct {
 	podSpec corev1.PodSpec
 	// containerOverlays holds per-container customizations by name
 	containerOverlays map[string]*corev1.Container
+	// configMapVolumeUpdates holds updates to existing ConfigMap volume references
+	configMapVolumeUpdates map[string]string
 }
 
 // PodOverlayOption is a functional option for configuring a PodOverlay.
@@ -113,6 +115,18 @@ func WithVolumes(volumes ...corev1.Volume) PodOverlayOption {
 	}
 }
 
+// WithConfigMapVolumeUpdate updates an existing ConfigMap volume's ConfigMap name.
+// This modifies the volume in-place during ApplyToPodTemplateSpec, preserving other fields
+// like items and defaultMode.
+func WithConfigMapVolumeUpdate(volumeName, configMapName string) PodOverlayOption {
+	return func(p *PodOverlay) {
+		if p.configMapVolumeUpdates == nil {
+			p.configMapVolumeUpdates = make(map[string]string)
+		}
+		p.configMapVolumeUpdates[volumeName] = configMapName
+	}
+}
+
 // WithServiceAccountName sets the service account name for the pod.
 func WithServiceAccountName(name string) PodOverlayOption {
 	return func(p *PodOverlay) {
@@ -162,6 +176,10 @@ func (p *PodOverlay) ApplyToPodTemplateSpec(template *corev1.PodTemplateSpec) er
 			return err
 		}
 	}
+
+	// Apply ConfigMap volume updates
+	applyConfigMapVolumeUpdates(template.Spec.Volumes, p.configMapVolumeUpdates)
+
 	return nil
 }
 
@@ -203,4 +221,17 @@ func mergeContainerList(containers []corev1.Container, overlays map[string]*core
 		}
 	}
 	return nil
+}
+
+// applyConfigMapVolumeUpdates updates ConfigMap volume references in-place.
+func applyConfigMapVolumeUpdates(volumes []corev1.Volume, updates map[string]string) {
+	if updates == nil {
+		return
+	}
+	for i := range volumes {
+		vol := &volumes[i]
+		if configMapName, ok := updates[vol.Name]; ok && vol.ConfigMap != nil {
+			vol.ConfigMap.Name = configMapName
+		}
+	}
 }

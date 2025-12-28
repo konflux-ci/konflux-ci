@@ -8,8 +8,3 @@ images:
   - name: ghcr.io/dexidp/dex
     newName: ghcr.io/dexidp/dex
     newTag: v2.44.0
-
-configMapGenerator:
-  - name: dex
-    files:
-      - config.yaml
