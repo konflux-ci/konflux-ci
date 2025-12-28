@@ -1,0 +1,15 @@
+apiVersion: konflux.konflux-ci.dev/v1alpha1
+kind: KonfluxInfo
+metadata:
+  labels:
+    app.kubernetes.io/name: konflux-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: konflux-info
+spec:
+  publicInfo:
+    environment: development
+    visibility: public
+  banner:
+    items:
+      - summary: "Welcome to Konflux-CI! This is a development environment for testing and development purposes."
+        type: info

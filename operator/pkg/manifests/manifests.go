@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-//go:embed all:application-api all:build-service all:enterprise-contract all:image-controller all:integration all:namespace-lister all:rbac all:release all:ui
+//go:embed all:application-api all:build-service all:enterprise-contract all:image-controller all:integration all:namespace-lister all:rbac all:release all:ui all:info
 var embeddedFS embed.FS
 
 // Component represents a known upstream component.
@@ -33,6 +33,7 @@ const (
 	RBAC               Component = "rbac"
 	Release            Component = "release"
 	UI                 Component = "ui"
+	Info               Component = "info"
 )
 
 // AllComponents returns all available components.
@@ -47,6 +48,7 @@ func AllComponents() []Component {
 		NamespaceLister,
 		UI,
 		ImageController,
+		Info,
 	}
 }
 

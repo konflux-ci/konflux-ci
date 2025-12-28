@@ -10,4 +10,5 @@ resources:
 - konflux_v1alpha1_konfluxenterprisecontract.yaml
 - konflux_v1alpha1_konfluximagecontroller.yaml
 - konflux_v1alpha1_konfluxapplicationapi.yaml
+- konflux_v1alpha1_konfluxinfo.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

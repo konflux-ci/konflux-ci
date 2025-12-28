@@ -313,6 +313,203 @@ spec:
                       If false or unset, the component CR will not be created.
                     type: boolean
                 type: object
+              info:
+                description: |-
+                  KonfluxInfo configures the info component.
+                  The runtime configuration is copied to the KonfluxInfo CR by the operator.
+                properties:
+                  spec:
+                    description: Spec configures the info component.
+                    properties:
+                      banner:
+                        description: |-
+                          Banner defines the configuration for the banner-content.yaml ConfigMap.
+                          If not specified, an empty banner array will be used.
+                        properties:
+                          items:
+                            description: Items is the list of banners to display
+                            items:
+                              description: BannerItem contains individual banner configuration
+                              properties:
+                                dayOfMonth:
+                                  description: DayOfMonth is the day of month (1-31)
+                                  maximum: 31
+                                  minimum: 1
+                                  type: integer
+                                dayOfWeek:
+                                  description: DayOfWeek is the day of week (0-6,
+                                    0=Sunday)
+                                  maximum: 6
+                                  minimum: 0
+                                  type: integer
+                                endTime:
+                                  description: EndTime is the end time in HH:mm format
+                                    (required if date fields are set)
+                                  type: string
+                                month:
+                                  description: Month is the month (1-12)
+                                  maximum: 12
+                                  minimum: 1
+                                  type: integer
+                                startTime:
+                                  description: StartTime is the start time in HH:mm
+                                    format (required if date fields are set)
+                                  type: string
+                                summary:
+                                  description: Summary is the banner text (5-500 chars,
+                                    supports Markdown)
+                                  maxLength: 500
+                                  minLength: 5
+                                  type: string
+                                timeZone:
+                                  description: TimeZone is the IANA timezone (optional,
+                                    defaults to UTC)
+                                  type: string
+                                type:
+                                  description: Type is the banner type (info, warning,
+                                    danger)
+                                  enum:
+                                  - info
+                                  - warning
+                                  - danger
+                                  type: string
+                                year:
+                                  description: Year is the year for one-time banners
+                                  type: integer
+                              required:
+                              - summary
+                              - type
+                              type: object
+                            type: array
+                        type: object
+                      publicInfo:
+                        description: |-
+                          PublicInfo defines the configuration for the info.json ConfigMap.
+                          If not specified, default development values will be used.
+                        properties:
+                          environment:
+                            default: development
+                            description: Environment is the environment type (development,
+                              production, staging)
+                            enum:
+                            - development
+                            - production
+                            - staging
+                            type: string
+                          integrations:
+                            description: Integrations contains integration configuration
+                            properties:
+                              github:
+                                description: GitHub contains GitHub integration configuration
+                                properties:
+                                  application_url:
+                                    description: ApplicationURL is the GitHub App
+                                      installation URL
+                                    type: string
+                                required:
+                                - application_url
+                                type: object
+                              image_controller:
+                                description: ImageController contains image controller
+                                  configuration
+                                properties:
+                                  enabled:
+                                    description: Enabled indicates if image controller
+                                      is enabled
+                                    type: boolean
+                                  notifications:
+                                    description: Notifications contains notification
+                                      configurations
+                                    items:
+                                      description: InfoNotificationConfig contains
+                                        notification configuration for info.json
+                                      properties:
+                                        config:
+                                          description: |-
+                                            Config contains method-specific configuration (as JSON).
+                                            For webhook method, use: {"url": "https://webhook.example.com/endpoint"}
+                                            For email method, use: {"email": "notifications@example.com"}
+                                            Example webhook config:
+                                              config:
+                                                url: "https://webhook.example.com/build"
+                                            Example email config:
+                                              config:
+                                                email: "team@example.com"
+                                          x-kubernetes-preserve-unknown-fields: true
+                                        event:
+                                          description: Event is the event type (e.g.,
+                                            "repo_push", "build_complete")
+                                          type: string
+                                        method:
+                                          description: Method is the notification
+                                            method (e.g., "webhook", "email")
+                                          type: string
+                                        title:
+                                          description: Title is the notification title
+                                          type: string
+                                      required:
+                                      - config
+                                      - event
+                                      - method
+                                      - title
+                                      type: object
+                                    type: array
+                                required:
+                                - enabled
+                                type: object
+                              sbom_server:
+                                description: SBOMServer contains SBOM server configuration
+                                properties:
+                                  sbom_sha:
+                                    description: SBOMSha is the SBOM SHA URL
+                                    type: string
+                                  url:
+                                    description: URL is the SBOM content URL
+                                    type: string
+                                required:
+                                - sbom_sha
+                                - url
+                                type: object
+                            type: object
+                          rbac:
+                            description: RBAC contains RBAC role definitions
+                            items:
+                              description: RBACRole contains RBAC role definition
+                              properties:
+                                description:
+                                  description: Description is the role description
+                                  type: string
+                                displayName:
+                                  description: |-
+                                    DisplayName is the human-readable name displayed in the UI.
+                                    If not specified, defaults to the Name field.
+                                  type: string
+                                name:
+                                  description: Name is the ClusterRole name (e.g.,
+                                    "konflux-admin-user-actions")
+                                  type: string
+                              required:
+                              - description
+                              - name
+                              type: object
+                            type: array
+                          statusPageUrl:
+                            description: StatusPageUrl is the URL to the status page
+                            type: string
+                          visibility:
+                            default: public
+                            description: Visibility is the visibility level (public,
+                              private)
+                            enum:
+                            - public
+                            - private
+                            type: string
+                        required:
+                        - environment
+                        - visibility
+                        type: object
+                    type: object
+                type: object
               integrationService:
                 description: |-
                   KonfluxIntegrationService configures the integration-service component.

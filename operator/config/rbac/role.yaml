@@ -5,11 +5,28 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - namespaces
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
   - '*'
   resources:
   - '*'
   verbs:
   - '*'
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - list
 - apiGroups:
   - config.openshift.io
   resources:
@@ -24,6 +41,7 @@ rules:
   - konfluxenterprisecontracts
   - konfluxes
   - konfluximagecontrollers
+  - konfluxinfoes
   - konfluxintegrationservices
   - konfluxnamespacelisters
   - konfluxrbacs
@@ -45,6 +63,7 @@ rules:
   - konfluxenterprisecontracts/finalizers
   - konfluxes/finalizers
   - konfluximagecontrollers/finalizers
+  - konfluxinfoes/finalizers
   - konfluxintegrationservices/finalizers
   - konfluxnamespacelisters/finalizers
   - konfluxrbacs/finalizers
@@ -60,6 +79,7 @@ rules:
   - konfluxenterprisecontracts/status
   - konfluxes/status
   - konfluximagecontrollers/status
+  - konfluxinfoes/status
   - konfluxintegrationservices/status
   - konfluxnamespacelisters/status
   - konfluxrbacs/status
@@ -80,4 +100,15 @@ rules:
   - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  - roles
+  verbs:
+  - create
+  - get
+  - list
+  - patch
   - watch

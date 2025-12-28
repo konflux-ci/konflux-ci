@@ -54,6 +54,11 @@ type KonfluxSpec struct {
 	// The runtime configuration is copied to the KonfluxNamespaceLister CR by the operator.
 	// +optional
 	NamespaceLister *NamespaceListerConfig `json:"namespaceLister,omitempty"`
+
+	// KonfluxInfo configures the info component.
+	// The runtime configuration is copied to the KonfluxInfo CR by the operator.
+	// +optional
+	KonfluxInfo *KonfluxInfoConfig `json:"info,omitempty"`
 }
 
 // ImageControllerConfig defines the configuration for the image-controller component.
@@ -104,6 +109,14 @@ type NamespaceListerConfig struct {
 	// Spec configures the namespace-lister component.
 	// +optional
 	Spec *KonfluxNamespaceListerSpec `json:"spec,omitempty"`
+}
+
+// KonfluxInfoConfig defines the configuration for the info component.
+// The Spec field is the runtime configuration passed to the component.
+type KonfluxInfoConfig struct {
+	// Spec configures the info component.
+	// +optional
+	Spec *KonfluxInfoSpec `json:"spec,omitempty"`
 }
 
 // ComponentStatus represents the status of a Konflux component.
