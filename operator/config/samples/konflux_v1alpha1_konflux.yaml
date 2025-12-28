@@ -5,4 +5,16 @@ metadata:
     app.kubernetes.io/name: konflux-operator
     app.kubernetes.io/managed-by: kustomize
   name: konflux
-spec: {}
+spec:
+  ui:
+    spec:
+      proxy:
+        replicas: 1
+        nginx:
+          resources:
+            requests:
+              cpu: 30m
+              memory: 128Mi
+            limits:
+              cpu: 30m
+              memory: 128Mi
