@@ -1,0 +1,44 @@
+apiVersion: konflux.konflux-ci.dev/v1alpha1
+kind: Konflux
+metadata:
+  labels:
+    app.kubernetes.io/name: konflux-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: konflux
+spec:
+  ui:
+    spec:
+      proxy:
+        replicas: 1
+        nginx:
+          resources:
+            requests:
+              cpu: 30m
+              memory: 128Mi
+            limits:
+              cpu: 30m
+              memory: 128Mi
+      dex:
+        dex:
+          # The secret should be created in the konflux-ui namespace
+          env:
+            - name: GITHUB_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: github-client
+                  key: clientID
+            - name: GITHUB_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: github-client
+                  key: clientSecret
+        config:
+          connectors:
+          # Add a GitHub connector to the Dex configuration - https://dexidp.io/docs/connectors/github/
+            - type: github
+              id: github
+              name: GitHub
+              config:
+                clientID: $GITHUB_CLIENT_ID
+                clientSecret: $GITHUB_CLIENT_SECRET
+
