@@ -127,6 +127,13 @@ func (r *KonfluxNamespaceListerReconciler) applyManifests(ctx context.Context, o
 				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.NamespaceLister, err)
 		}
 	}
+
+	// Clean up orphaned resources from previous operator versions
+	if err := PruneOrphanedResources(ctx, r.Client, string(manifests.NamespaceLister)); err != nil {
+		log.Error(err, "Failed to prune orphaned resources")
+		// Don't fail the reconciliation if pruning fails
+	}
+
 	return nil
 }
 

@@ -30,6 +30,7 @@ import (
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/version"
 )
 
 const (
@@ -39,6 +40,9 @@ const (
 	KonfluxOwnerLabel = "konflux.konflux-ci.dev/owner"
 	// KonfluxComponentLabel is the label used to identify which component a resource belongs to.
 	KonfluxComponentLabel = "konflux.konflux-ci.dev/component"
+	// OperatorVersionLabel is the label used to track which operator version applied a resource.
+	// Used for detecting and cleaning up orphaned resources after operator upgrades.
+	OperatorVersionLabel = "konflux.konflux-ci.dev/operator-version"
 	// KonfluxCRName is the singleton name for the Konflux CR.
 	KonfluxCRName = "konflux"
 	// ConditionTypeReady is the condition type for overall readiness
@@ -607,6 +611,12 @@ func setOwnership(obj client.Object, owner client.Object, component string, sche
 	}
 	labels[KonfluxOwnerLabel] = owner.GetName()
 	labels[KonfluxComponentLabel] = component
+
+	// Add operator version label for orphan detection after upgrades
+	if digest, err := version.GetBinaryDigest(); err == nil {
+		labels[OperatorVersionLabel] = digest
+	}
+
 	obj.SetLabels(labels)
 
 	// Set owner reference for garbage collection and watch triggers
