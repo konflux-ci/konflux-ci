@@ -348,6 +348,11 @@ func (r *KonfluxReconciler) applyKonfluxBuildService(ctx context.Context, owner 
 func (r *KonfluxReconciler) applyKonfluxIntegrationService(ctx context.Context, owner *konfluxv1alpha1.Konflux) error {
 	log := logf.FromContext(ctx)
 
+	var spec konfluxv1alpha1.KonfluxIntegrationServiceSpec
+	if owner.Spec.KonfluxIntegrationService != nil && owner.Spec.KonfluxIntegrationService.Spec != nil {
+		spec = *owner.Spec.KonfluxIntegrationService.Spec
+	}
+
 	integrationService := &konfluxv1alpha1.KonfluxIntegrationService{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: konfluxv1alpha1.GroupVersion.String(),
@@ -360,6 +365,7 @@ func (r *KonfluxReconciler) applyKonfluxIntegrationService(ctx context.Context, 
 				KonfluxComponentLabel: string(manifests.Integration),
 			},
 		},
+		Spec: spec,
 	}
 
 	// Set owner reference for garbage collection
@@ -401,7 +407,6 @@ func (r *KonfluxReconciler) applyKonfluxReleaseService(ctx context.Context, owne
 // applyKonfluxUI creates or updates the KonfluxUI CR.
 func (r *KonfluxReconciler) applyKonfluxUI(ctx context.Context, owner *konfluxv1alpha1.Konflux) error {
 	log := logf.FromContext(ctx)
-
 	var spec konfluxv1alpha1.KonfluxUISpec
 	if owner.Spec.KonfluxUI != nil && owner.Spec.KonfluxUI.Spec != nil {
 		spec = *owner.Spec.KonfluxUI.Spec

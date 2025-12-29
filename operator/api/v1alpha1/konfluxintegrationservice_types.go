@@ -20,16 +20,22 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// ControllerManagerDeploymentSpec defines customizations for the controller-manager deployment.
+type ControllerManagerDeploymentSpec struct {
+	// Replicas is the number of replicas for the controller-manager deployment.
+	// +kubebuilder:default=1
+	// +kubebuilder:validation:Minimum=1
+	Replicas int32 `json:"replicas,omitempty"`
+	// Manager defines customizations for the manager container.
+	// +optional
+	Manager *ContainerSpec `json:"manager,omitempty"`
+}
 
 // KonfluxIntegrationServiceSpec defines the desired state of KonfluxIntegrationService
 type KonfluxIntegrationServiceSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of KonfluxIntegrationService. Edit konfluxintegrationservice_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// IntegrationControllerManager defines customizations for the controller-manager deployment.
+	// +optional
+	IntegrationControllerManager *ControllerManagerDeploymentSpec `json:"integrationControllerManager,omitempty"`
 }
 
 // KonfluxIntegrationServiceStatus defines the observed state of KonfluxIntegrationService
@@ -49,7 +55,7 @@ type KonfluxIntegrationService struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   KonfluxIntegrationServiceSpec   `json:"spec,omitempty"`
+	Spec   KonfluxIntegrationServiceSpec   `json:"spec"`
 	Status KonfluxIntegrationServiceStatus `json:"status,omitempty"`
 }
 

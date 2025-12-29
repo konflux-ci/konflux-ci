@@ -6,4 +6,13 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: konflux-integration-service
 spec:
-  # TODO(user): Add fields here
+  integrationControllerManager:
+    replicas: 1
+    manager:
+      resources:
+        requests:
+          cpu: 30m
+          memory: 128Mi
+        limits:
+          cpu: 30m
+          memory: 128Mi

@@ -30,12 +30,19 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
 const (
 	// IntegrationServiceConditionTypeReady is the condition type for overall readiness
 	IntegrationServiceConditionTypeReady = "Ready"
+
+	// Deployment names
+	controllerManagerDeploymentName = "integration-service-controller-manager"
+
+	// Container names
+	managerContainerName = "manager"
 )
 
 // KonfluxIntegrationServiceReconciler reconciles a KonfluxIntegrationService object
@@ -100,6 +107,13 @@ func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context
 	}
 
 	for _, obj := range objects {
+		// Apply customizations for deployments
+		if deployment, ok := obj.(*appsv1.Deployment); ok {
+			if err := applyIntegrationServiceDeploymentCustomizations(deployment, owner.Spec); err != nil {
+				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
+			}
+		}
+
 		// Set ownership labels and owner reference
 		if err := setOwnership(obj, owner, string(manifests.Integration), r.Scheme); err != nil {
 			return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
@@ -124,6 +138,35 @@ func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context
 		}
 	}
 	return nil
+}
+
+// applyIntegrationServiceDeploymentCustomizations applies user-defined customizations to IntegrationService deployments.
+func applyIntegrationServiceDeploymentCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxIntegrationServiceSpec) error {
+	switch deployment.Name {
+	case controllerManagerDeploymentName:
+		if spec.IntegrationControllerManager != nil {
+			deployment.Spec.Replicas = &spec.IntegrationControllerManager.Replicas
+		}
+		if err := buildControllerManagerOverlay(spec.IntegrationControllerManager).ApplyToDeployment(deployment); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// buildControllerManagerOverlay builds the pod overlay for the controller-manager deployment.
+func buildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploymentSpec) *customization.PodOverlay {
+	if spec == nil {
+		return customization.NewPodOverlay()
+	}
+
+	return customization.BuildPodOverlay(
+		customization.DeploymentContext{Replicas: spec.Replicas},
+		customization.WithContainerBuilder(
+			managerContainerName,
+			customization.FromContainerSpec(spec.Manager),
+		),
+	)
 }
 
 // SetupWithManager sets up the controller with the Manager.
