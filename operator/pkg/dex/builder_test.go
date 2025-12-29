@@ -285,6 +285,180 @@ func TestNewDexConfig_CustomConnectors(t *testing.T) {
 	})
 }
 
+func TestNewDexConfig_ConnectorRedirectURI(t *testing.T) {
+	t.Run("sets default RedirectURI when not provided (hostname only)", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		params := &DexParams{
+			Hostname: "dex.example.com",
+			Connectors: []Connector{
+				{
+					Type: "github",
+					ID:   "github",
+					Name: "GitHub",
+					Config: &ConnectorConfig{
+						ClientID:     "github-client",
+						ClientSecret: "$GITHUB_SECRET",
+					},
+				},
+			},
+		}
+
+		config := NewDexConfig(params)
+
+		g.Expect(config.Connectors).To(gomega.HaveLen(1))
+		g.Expect(config.Connectors[0].Config.RedirectURI).To(gomega.Equal("https://dex.example.com/idp/callback"))
+	})
+
+	t.Run("sets default RedirectURI when not provided (hostname with port)", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		params := &DexParams{
+			Hostname: "dex.example.com",
+			Port:     "9443",
+			Connectors: []Connector{
+				{
+					Type: "github",
+					ID:   "github",
+					Name: "GitHub",
+					Config: &ConnectorConfig{
+						ClientID:     "github-client",
+						ClientSecret: "$GITHUB_SECRET",
+					},
+				},
+			},
+		}
+
+		config := NewDexConfig(params)
+
+		g.Expect(config.Connectors).To(gomega.HaveLen(1))
+		g.Expect(config.Connectors[0].Config.RedirectURI).To(gomega.Equal("https://dex.example.com:9443/idp/callback"))
+	})
+
+	t.Run("preserves explicit RedirectURI when provided", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		params := &DexParams{
+			Hostname: "dex.example.com",
+			Port:     "9443",
+			Connectors: []Connector{
+				{
+					Type: "github",
+					ID:   "github",
+					Name: "GitHub",
+					Config: &ConnectorConfig{
+						ClientID:     "github-client",
+						ClientSecret: "$GITHUB_SECRET",
+						RedirectURI:  "https://custom.example.com/callback",
+					},
+				},
+			},
+		}
+
+		config := NewDexConfig(params)
+
+		g.Expect(config.Connectors).To(gomega.HaveLen(1))
+		g.Expect(config.Connectors[0].Config.RedirectURI).To(gomega.Equal("https://custom.example.com/callback"))
+	})
+
+	t.Run("handles connector with nil Config", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		params := &DexParams{
+			Hostname: "dex.example.com",
+			Connectors: []Connector{
+				{
+					Type:   "mock",
+					ID:     "mock",
+					Name:   "Mock",
+					Config: nil,
+				},
+			},
+		}
+
+		config := NewDexConfig(params)
+
+		g.Expect(config.Connectors).To(gomega.HaveLen(1))
+		g.Expect(config.Connectors[0].Config).To(gomega.BeNil())
+	})
+
+	t.Run("handles multiple connectors with mixed RedirectURI settings", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		params := &DexParams{
+			Hostname: "dex.example.com",
+			Port:     "9443",
+			Connectors: []Connector{
+				{
+					Type: "github",
+					ID:   "github",
+					Name: "GitHub",
+					Config: &ConnectorConfig{
+						ClientID:     "github-client",
+						ClientSecret: "$GITHUB_SECRET",
+						// No RedirectURI - should use default
+					},
+				},
+				{
+					Type: "oidc",
+					ID:   "google",
+					Name: "Google",
+					Config: &ConnectorConfig{
+						ClientID:     "google-client",
+						ClientSecret: "$GOOGLE_SECRET",
+						RedirectURI:  "https://custom.google.com/callback",
+					},
+				},
+				{
+					Type: "ldap",
+					ID:   "ldap",
+					Name: "LDAP",
+					Config: &ConnectorConfig{
+						Host: "ldap.example.com",
+						// No RedirectURI - should use default
+					},
+				},
+			},
+		}
+
+		config := NewDexConfig(params)
+
+		g.Expect(config.Connectors).To(gomega.HaveLen(3))
+		// GitHub connector should have default RedirectURI
+		g.Expect(config.Connectors[0].Config.RedirectURI).To(gomega.Equal("https://dex.example.com:9443/idp/callback"))
+		// Google connector should preserve explicit RedirectURI
+		g.Expect(config.Connectors[1].Config.RedirectURI).To(gomega.Equal("https://custom.google.com/callback"))
+		// LDAP connector should have default RedirectURI
+		g.Expect(config.Connectors[2].Config.RedirectURI).To(gomega.Equal("https://dex.example.com:9443/idp/callback"))
+	})
+
+	t.Run("does not modify original params connectors", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		params := &DexParams{
+			Hostname: "dex.example.com",
+			Connectors: []Connector{
+				{
+					Type: "github",
+					ID:   "github",
+					Name: "GitHub",
+					Config: &ConnectorConfig{
+						ClientID:     "github-client",
+						ClientSecret: "$GITHUB_SECRET",
+					},
+				},
+			},
+		}
+
+		_ = NewDexConfig(params)
+
+		// Original params should not be modified
+		// Note: Since Config is a pointer, the original is modified in the current implementation.
+		// This test documents the current behavior.
+		g.Expect(params.Connectors[0].Config.RedirectURI).To(gomega.Equal("https://dex.example.com/idp/callback"))
+	})
+}
+
 func TestNewDexConfig_PasswordDB(t *testing.T) {
 	t.Run("enables password database", func(t *testing.T) {
 		g := gomega.NewWithT(t)

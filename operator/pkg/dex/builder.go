@@ -64,8 +64,17 @@ func NewDexConfig(params *DexParams) *Config {
 		baseURL = fmt.Sprintf("https://%s:%s", params.Hostname, params.Port)
 	}
 
-	// Start with provided connectors
-	connectors := params.Connectors
+	defaultRedirectURI := fmt.Sprintf("%s/idp/callback", baseURL)
+
+	// Start with provided connectors, setting default RedirectURI if not provided
+	connectors := make([]Connector, len(params.Connectors))
+	for i, c := range params.Connectors {
+		connectors[i] = c
+		// Set default RedirectURI if not explicitly provided
+		if c.Config != nil && c.Config.RedirectURI == "" {
+			connectors[i].Config.RedirectURI = defaultRedirectURI
+		}
+	}
 
 	// Add OpenShift connector if configured
 	if params.ConfigureLoginWithOpenShift {
@@ -77,7 +86,7 @@ func NewDexConfig(params *DexParams) *Config {
 				Issuer:       "https://kubernetes.default.svc",
 				ClientID:     "system:serviceaccount:konflux-ui:dex-client",
 				ClientSecret: "$OPENSHIFT_OAUTH_CLIENT_SECRET",
-				RedirectURI:  fmt.Sprintf("%s/idp/callback", baseURL),
+				RedirectURI:  defaultRedirectURI,
 			},
 		}
 		connectors = append(connectors, openShiftConnector)
