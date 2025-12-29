@@ -44,7 +44,6 @@ spec:
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
-          runAsUser: 1001
         resources:
           limits:
             cpu: 50m
@@ -53,7 +52,7 @@ spec:
             cpu: 10m
             memory: 64Mi
       - name: generate-nginx-configs
-        image: registry.access.redhat.com/ubi9/ubi@sha256:66233eebd72bb5baa25190d4f55e1dc3fff3a9b77186c1f91a0abdb274452072
+        image: quay.io/konflux-ci/konflux-ui
         command:
           - sh
           - -c
@@ -75,7 +74,6 @@ spec:
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
-          runAsUser: 1001
         resources:
           limits:
             cpu: 50m
@@ -148,7 +146,6 @@ spec:
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
-          runAsUser: 1001
       - image: quay.io/oauth2-proxy/oauth2-proxy@sha256:latest
         name: oauth2-proxy
         env:
@@ -209,7 +206,6 @@ spec:
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
-          runAsUser: 1001
       volumes:
         - configMap:
             defaultMode: 420

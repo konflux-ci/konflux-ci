@@ -309,7 +309,6 @@ spec:
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
-          runAsUser: 1001
         volumeMounts:
         - mountPath: /etc/dex/cfg
           name: dex
@@ -398,7 +397,6 @@ spec:
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
-          runAsUser: 1001
         volumeMounts:
         - mountPath: /etc/nginx/nginx.conf
           name: proxy
@@ -478,7 +476,6 @@ spec:
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
-          runAsUser: 1001
       initContainers:
       - command:
         - cp
@@ -497,7 +494,6 @@ spec:
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
-          runAsUser: 1001
         volumeMounts:
         - mountPath: /mnt/static-content
           name: static-content
@@ -511,7 +507,7 @@ spec:
           token=$(cat /mnt/api-token/token)
           sed "s/__BEARER_TOKEN__/$token/" /mnt/nginx-templates/auth.conf > /mnt/nginx-generated-config/auth.conf
           chmod 640 /mnt/nginx-generated-config/auth.conf
-        image: registry.access.redhat.com/ubi9/ubi@sha256:66233eebd72bb5baa25190d4f55e1dc3fff3a9b77186c1f91a0abdb274452072
+        image: quay.io/konflux-ci/konflux-ui@sha256:8a99a673ab73461ba9a29b69579aa462bd04bbc06cda46a44229612420e583aa
         name: generate-nginx-configs
         resources:
           limits:
@@ -523,7 +519,6 @@ spec:
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
-          runAsUser: 1001
         volumeMounts:
         - mountPath: /mnt/nginx-generated-config
           name: nginx-generated-config
