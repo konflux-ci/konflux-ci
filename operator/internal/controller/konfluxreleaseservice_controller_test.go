@@ -50,7 +50,7 @@ var _ = Describe("KonfluxReleaseService Controller", func() {
 						Name:      KonfluxReleaseServiceCRName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: konfluxv1alpha1.KonfluxReleaseServiceSpec{},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}

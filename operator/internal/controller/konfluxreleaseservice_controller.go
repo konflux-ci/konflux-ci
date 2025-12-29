@@ -30,12 +30,19 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
 const (
 	// ReleaseServiceConditionTypeReady is the condition type for overall readiness
 	ReleaseServiceConditionTypeReady = "Ready"
+
+	// Deployment names
+	releaseControllerManagerDeploymentName = "release-service-controller-manager"
+
+	// Container names
+	releaseManagerContainerName = "manager"
 )
 
 // KonfluxReleaseServiceReconciler reconciles a KonfluxReleaseService object
@@ -100,6 +107,13 @@ func (r *KonfluxReleaseServiceReconciler) applyManifests(ctx context.Context, ow
 	}
 
 	for _, obj := range objects {
+		// Apply customizations for deployments
+		if deployment, ok := obj.(*appsv1.Deployment); ok {
+			if err := applyReleaseServiceDeploymentCustomizations(deployment, owner.Spec); err != nil {
+				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
+			}
+		}
+
 		// Set ownership labels and owner reference
 		if err := setOwnership(obj, owner, string(manifests.Release), r.Scheme); err != nil {
 			return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
@@ -124,6 +138,36 @@ func (r *KonfluxReleaseServiceReconciler) applyManifests(ctx context.Context, ow
 		}
 	}
 	return nil
+}
+
+// applyReleaseServiceDeploymentCustomizations applies user-defined customizations to ReleaseService deployments.
+func applyReleaseServiceDeploymentCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxReleaseServiceSpec) error {
+	switch deployment.Name {
+	case releaseControllerManagerDeploymentName:
+		if spec.ReleaseControllerManager != nil {
+			deployment.Spec.Replicas = &spec.ReleaseControllerManager.Replicas
+		}
+		if err := buildReleaseControllerManagerOverlay(spec.ReleaseControllerManager).ApplyToDeployment(deployment); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// buildReleaseControllerManagerOverlay builds the pod overlay for the controller-manager deployment.
+func buildReleaseControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploymentSpec) *customization.PodOverlay {
+	if spec == nil {
+		return customization.NewPodOverlay()
+	}
+
+	return customization.BuildPodOverlay(
+		customization.DeploymentContext{Replicas: spec.Replicas},
+		customization.WithContainerBuilder(
+			releaseManagerContainerName,
+			customization.FromContainerSpec(spec.Manager),
+			customization.WithLeaderElection(),
+		),
+	)
 }
 
 // SetupWithManager sets up the controller with the Manager.

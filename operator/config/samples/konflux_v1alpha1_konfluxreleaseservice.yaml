@@ -4,6 +4,15 @@ metadata:
   labels:
     app.kubernetes.io/name: konflux-operator
     app.kubernetes.io/managed-by: kustomize
-  name: konfluxreleaseservice-sample
+  name: konflux-release-service
 spec:
-  # TODO(user): Add fields here
+  releaseControllerManager:
+    replicas: 1
+    manager:
+      resources:
+        requests:
+          cpu: 30m
+          memory: 128Mi
+        limits:
+          cpu: 30m
+          memory: 128Mi
