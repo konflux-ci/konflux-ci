@@ -493,6 +493,11 @@ func (r *KonfluxReconciler) applyKonfluxRBAC(ctx context.Context, owner *konflux
 func (r *KonfluxReconciler) applyKonfluxNamespaceLister(ctx context.Context, owner *konfluxv1alpha1.Konflux) error {
 	log := logf.FromContext(ctx)
 
+	var spec konfluxv1alpha1.KonfluxNamespaceListerSpec
+	if owner.Spec.NamespaceLister != nil && owner.Spec.NamespaceLister.Spec != nil {
+		spec = *owner.Spec.NamespaceLister.Spec
+	}
+
 	konfluxNamespaceLister := &konfluxv1alpha1.KonfluxNamespaceLister{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: konfluxv1alpha1.GroupVersion.String(),
@@ -505,6 +510,7 @@ func (r *KonfluxReconciler) applyKonfluxNamespaceLister(ctx context.Context, own
 				KonfluxComponentLabel: string(manifests.NamespaceLister),
 			},
 		},
+		Spec: spec,
 	}
 
 	// Set owner reference for garbage collection

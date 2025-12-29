@@ -25,9 +25,6 @@ import (
 
 // KonfluxSpec defines the desired state of Konflux.
 type KonfluxSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
 	// ImageController configures the image-controller component.
 	// The runtime configuration is copied to the KonfluxImageController CR by the operator.
 	// +optional
@@ -52,6 +49,11 @@ type KonfluxSpec struct {
 	// The runtime configuration is copied to the KonfluxBuildService CR by the operator.
 	// +optional
 	KonfluxBuildService *BuildServiceConfig `json:"buildService,omitempty"`
+
+	// NamespaceLister configures the namespace-lister component.
+	// The runtime configuration is copied to the KonfluxNamespaceLister CR by the operator.
+	// +optional
+	NamespaceLister *NamespaceListerConfig `json:"namespaceLister,omitempty"`
 }
 
 // ImageControllerConfig defines the configuration for the image-controller component.
@@ -94,6 +96,14 @@ type BuildServiceConfig struct {
 	// Spec configures the build-service component.
 	// +optional
 	Spec *KonfluxBuildServiceSpec `json:"spec,omitempty"`
+}
+
+// NamespaceListerConfig defines the configuration for the namespace-lister component.
+// The Spec field is the runtime configuration passed to the component.
+type NamespaceListerConfig struct {
+	// Spec configures the namespace-lister component.
+	// +optional
+	Spec *KonfluxNamespaceListerSpec `json:"spec,omitempty"`
 }
 
 // ComponentStatus represents the status of a Konflux component.
