@@ -165,6 +165,7 @@ func buildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploy
 		customization.WithContainerBuilder(
 			managerContainerName,
 			customization.FromContainerSpec(spec.Manager),
+			customization.WithLeaderElection(),
 		),
 	)
 }

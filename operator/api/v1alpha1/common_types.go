@@ -27,3 +27,14 @@ type ContainerSpec struct {
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
+
+// ControllerManagerDeploymentSpec defines customizations for the controller-manager deployment.
+type ControllerManagerDeploymentSpec struct {
+	// Replicas is the number of replicas for the controller-manager deployment.
+	// +kubebuilder:default=1
+	// +kubebuilder:validation:Minimum=1
+	Replicas int32 `json:"replicas,omitempty"`
+	// Manager defines customizations for the manager container.
+	// +optional
+	Manager *ContainerSpec `json:"manager,omitempty"`
+}

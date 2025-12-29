@@ -20,17 +20,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ControllerManagerDeploymentSpec defines customizations for the controller-manager deployment.
-type ControllerManagerDeploymentSpec struct {
-	// Replicas is the number of replicas for the controller-manager deployment.
-	// +kubebuilder:default=1
-	// +kubebuilder:validation:Minimum=1
-	Replicas int32 `json:"replicas,omitempty"`
-	// Manager defines customizations for the manager container.
-	// +optional
-	Manager *ContainerSpec `json:"manager,omitempty"`
-}
-
 // KonfluxIntegrationServiceSpec defines the desired state of KonfluxIntegrationService
 type KonfluxIntegrationServiceSpec struct {
 	// IntegrationControllerManager defines customizations for the controller-manager deployment.

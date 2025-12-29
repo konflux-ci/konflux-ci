@@ -25,11 +25,9 @@ import (
 
 // KonfluxReleaseServiceSpec defines the desired state of KonfluxReleaseService
 type KonfluxReleaseServiceSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of KonfluxReleaseService. Edit konfluxreleaseservice_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// ReleaseControllerManager defines customizations for the controller-manager deployment.
+	// +optional
+	ReleaseControllerManager *ControllerManagerDeploymentSpec `json:"releaseControllerManager,omitempty"`
 }
 
 // KonfluxReleaseServiceStatus defines the observed state of KonfluxReleaseService
@@ -49,7 +47,7 @@ type KonfluxReleaseService struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   KonfluxReleaseServiceSpec   `json:"spec,omitempty"`
+	Spec   KonfluxReleaseServiceSpec   `json:"spec"`
 	Status KonfluxReleaseServiceStatus `json:"status,omitempty"`
 }
 

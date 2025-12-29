@@ -45,3 +45,15 @@ spec:
             limits:
               cpu: 30m
               memory: 128Mi
+  releaseService:
+    spec:
+      releaseControllerManager:
+        replicas: 1
+        manager:
+          resources:
+            requests:
+              cpu: 30m
+              memory: 128Mi
+            limits:
+              cpu: 30m
+              memory: 128Mi
