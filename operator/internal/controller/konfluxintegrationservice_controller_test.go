@@ -49,7 +49,7 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 						Name:      KonfluxIntegrationServiceCRName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: konfluxv1alpha1.KonfluxIntegrationServiceSpec{},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}

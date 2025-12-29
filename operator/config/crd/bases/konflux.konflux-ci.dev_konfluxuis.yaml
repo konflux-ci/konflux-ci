@@ -468,6 +468,8 @@ spec:
                   type: object
                 type: array
             type: object
+        required:
+        - spec
         type: object
         x-kubernetes-validations:
         - message: KonfluxUI CR must be named 'konflux-ui'. Only one instance is allowed

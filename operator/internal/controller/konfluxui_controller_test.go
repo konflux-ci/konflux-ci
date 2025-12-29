@@ -54,7 +54,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 						Name:      KonfluxUICRName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: konfluxv1alpha1.KonfluxUISpec{},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -113,6 +113,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: KonfluxUICRName,
 				},
+				Spec: konfluxv1alpha1.KonfluxUISpec{},
 			}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
 

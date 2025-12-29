@@ -33,3 +33,15 @@ spec:
             hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" # notsecret
             username: "user2"
             userID: "ea8e8ee1-2283-4e03-83d4-b00f8b821b64"
+  integrationService:
+    spec:
+      integrationControllerManager:
+        replicas: 1
+        manager:
+          resources:
+            requests:
+              cpu: 30m
+              memory: 128Mi
+            limits:
+              cpu: 30m
+              memory: 128Mi

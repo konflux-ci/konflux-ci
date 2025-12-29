@@ -37,6 +37,11 @@ type KonfluxSpec struct {
 	// The runtime configuration is copied to the KonfluxUI CR by the operator.
 	// +optional
 	KonfluxUI *KonfluxUIConfig `json:"ui,omitempty"`
+
+	// KonfluxIntegrationService configures the integration-service component.
+	// The runtime configuration is copied to the KonfluxIntegrationService CR by the operator.
+	// +optional
+	KonfluxIntegrationService *IntegrationServiceConfig `json:"integrationService,omitempty"`
 }
 
 // ImageControllerConfig defines the configuration for the image-controller component.
@@ -55,6 +60,14 @@ type KonfluxUIConfig struct {
 	// Spec configures the UI component.
 	// +optional
 	Spec *KonfluxUISpec `json:"spec,omitempty"`
+}
+
+// IntegrationServiceConfig defines the configuration for the integration-service component.
+// The Spec field is the runtime configuration passed to the component.
+type IntegrationServiceConfig struct {
+	// Spec configures the integration-service component.
+	// +optional
+	Spec *KonfluxIntegrationServiceSpec `json:"spec,omitempty"`
 }
 
 // ComponentStatus represents the status of a Konflux component.

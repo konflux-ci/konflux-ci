@@ -76,7 +76,7 @@ type KonfluxUI struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   KonfluxUISpec   `json:"spec,omitempty"`
+	Spec   KonfluxUISpec   `json:"spec"`
 	Status KonfluxUIStatus `json:"status,omitempty"`
 }
 
