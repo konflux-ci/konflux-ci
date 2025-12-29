@@ -334,10 +334,14 @@ func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *kon
 	if ui.Spec.Dex != nil && ui.Spec.Dex.Config != nil {
 		dexConfig = dex.NewDexConfig(ui.Spec.Dex.Config)
 	} else {
+		// TODO: set defaults in a single place, probably in the dex package
 		dexConfig = dex.NewDexConfig(
 			&dex.DexParams{
 				Hostname: "localhost",
 				Port:     "9443",
+				// password db must be enabled when the connector
+				// list is empty
+				EnablePasswordDB: true,
 			},
 		)
 	}
