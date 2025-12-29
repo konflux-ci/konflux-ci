@@ -86,6 +86,74 @@ func TestFromContainerSpec(t *testing.T) {
 		g.Expect(c.Resources.Requests.Cpu().String()).To(gomega.Equal("100m"))
 		g.Expect(c.Resources.Requests.Memory().String()).To(gomega.Equal("128Mi"))
 	})
+
+	t.Run("empty env in spec is handled gracefully", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := &konfluxv1alpha1.ContainerSpec{Env: nil}
+		c := NewContainerOverlay(ctx, FromContainerSpec(spec))
+		g.Expect(c.Env).To(gomega.BeEmpty())
+	})
+
+	t.Run("env vars are copied from spec", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := &konfluxv1alpha1.ContainerSpec{
+			Env: []corev1.EnvVar{
+				{Name: "VAR1", Value: "value1"},
+				{Name: "VAR2", Value: "value2"},
+			},
+		}
+
+		c := NewContainerOverlay(ctx, FromContainerSpec(spec))
+
+		g.Expect(c.Env).To(gomega.HaveLen(2))
+		g.Expect(c.Env[0].Name).To(gomega.Equal("VAR1"))
+		g.Expect(c.Env[0].Value).To(gomega.Equal("value1"))
+		g.Expect(c.Env[1].Name).To(gomega.Equal("VAR2"))
+		g.Expect(c.Env[1].Value).To(gomega.Equal("value2"))
+	})
+
+	t.Run("env vars from spec are appended to existing env", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := &konfluxv1alpha1.ContainerSpec{
+			Env: []corev1.EnvVar{
+				{Name: "FROM_SPEC", Value: "spec-value"},
+			},
+		}
+
+		c := NewContainerOverlay(ctx,
+			WithEnv(corev1.EnvVar{Name: "EXISTING", Value: "existing-value"}),
+			FromContainerSpec(spec),
+		)
+
+		g.Expect(c.Env).To(gomega.HaveLen(2))
+		g.Expect(c.Env[0].Name).To(gomega.Equal("EXISTING"))
+		g.Expect(c.Env[1].Name).To(gomega.Equal("FROM_SPEC"))
+	})
+
+	t.Run("env vars with valueFrom are copied from spec", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := &konfluxv1alpha1.ContainerSpec{
+			Env: []corev1.EnvVar{
+				{
+					Name: "SECRET_VAR",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "my-secret"},
+							Key:                  "password",
+						},
+					},
+				},
+			},
+		}
+
+		c := NewContainerOverlay(ctx, FromContainerSpec(spec))
+
+		g.Expect(c.Env).To(gomega.HaveLen(1))
+		g.Expect(c.Env[0].Name).To(gomega.Equal("SECRET_VAR"))
+		g.Expect(c.Env[0].ValueFrom).NotTo(gomega.BeNil())
+		g.Expect(c.Env[0].ValueFrom.SecretKeyRef.Name).To(gomega.Equal("my-secret"))
+		g.Expect(c.Env[0].ValueFrom.SecretKeyRef.Key).To(gomega.Equal("password"))
+	})
 }
 
 func TestWithArgs(t *testing.T) {
@@ -263,6 +331,9 @@ func TestCombinedOptions(t *testing.T) {
 				corev1.ResourceCPU: resource.MustParse("500m"),
 			},
 		},
+		Env: []corev1.EnvVar{
+			{Name: "FROM_SPEC", Value: "spec-value"},
+		},
 	}
 
 	c := NewContainerOverlay(ctx,
@@ -279,6 +350,8 @@ func TestCombinedOptions(t *testing.T) {
 	// Should have 2 args: --config and --leader-elect
 	g.Expect(c.Args).To(gomega.HaveLen(2))
 	g.Expect(c.Args).To(gomega.ContainElements("--config=/etc/config", "--leader-elect=true"))
-	g.Expect(c.Env).To(gomega.HaveLen(1))
-	g.Expect(c.Env[0].Name).To(gomega.Equal("LOG_LEVEL"))
+	// Should have 2 env vars: FROM_SPEC from spec and LOG_LEVEL from WithEnv
+	g.Expect(c.Env).To(gomega.HaveLen(2))
+	g.Expect(c.Env[0].Name).To(gomega.Equal("FROM_SPEC"))
+	g.Expect(c.Env[1].Name).To(gomega.Equal("LOG_LEVEL"))
 }

@@ -26,4 +26,8 @@ type ContainerSpec struct {
 	// Resources specifies the resource requirements for the container.
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// Env specifies environment variables for the container.
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
 }

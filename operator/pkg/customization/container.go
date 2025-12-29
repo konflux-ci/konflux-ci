@@ -44,8 +44,14 @@ func NewContainerOverlay(ctx DeploymentContext, opts ...ContainerOption) *corev1
 // FromContainerSpec creates options from a user-facing ContainerSpec.
 func FromContainerSpec(spec *konfluxv1alpha1.ContainerSpec) ContainerOption {
 	return func(c *corev1.Container, _ DeploymentContext) {
-		if spec != nil && spec.Resources != nil {
+		if spec == nil {
+			return
+		}
+		if spec.Resources != nil {
 			c.Resources = *spec.Resources
+		}
+		if len(spec.Env) > 0 {
+			c.Env = append(c.Env, spec.Env...)
 		}
 	}
 }
