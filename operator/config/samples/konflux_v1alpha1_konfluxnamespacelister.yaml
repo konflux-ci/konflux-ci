@@ -4,6 +4,15 @@ metadata:
   labels:
     app.kubernetes.io/name: konflux-operator
     app.kubernetes.io/managed-by: kustomize
-  name: konfluxnamespacelister-sample
+  name: konflux-namespace-lister
 spec:
-  # TODO(user): Add fields here
+  namespaceLister:
+    replicas: 2
+    namespaceLister:
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi

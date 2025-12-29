@@ -20,16 +20,22 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// NamespaceListerDeploymentSpec defines customizations for the namespace-lister deployment.
+type NamespaceListerDeploymentSpec struct {
+	// Replicas is the number of replicas for the namespace-lister deployment.
+	// +kubebuilder:default=1
+	// +kubebuilder:validation:Minimum=1
+	Replicas int32 `json:"replicas,omitempty"`
+	// NamespaceLister defines customizations for the namespace-lister container.
+	// +optional
+	NamespaceLister *ContainerSpec `json:"namespaceLister,omitempty"`
+}
 
 // KonfluxNamespaceListerSpec defines the desired state of KonfluxNamespaceLister.
 type KonfluxNamespaceListerSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of KonfluxNamespaceLister. Edit konfluxnamespacelister_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// NamespaceLister defines customizations for the namespace-lister deployment.
+	// +optional
+	NamespaceLister *NamespaceListerDeploymentSpec `json:"namespaceLister,omitempty"`
 }
 
 // KonfluxNamespaceListerStatus defines the observed state of KonfluxNamespaceLister.
@@ -49,7 +55,7 @@ type KonfluxNamespaceLister struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   KonfluxNamespaceListerSpec   `json:"spec,omitempty"`
+	Spec   KonfluxNamespaceListerSpec   `json:"spec"`
 	Status KonfluxNamespaceListerStatus `json:"status,omitempty"`
 }
 

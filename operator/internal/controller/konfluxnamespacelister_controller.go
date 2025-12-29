@@ -30,12 +30,16 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
 const (
 	// NamespaceListerConditionTypeReady is the condition type for overall readiness
 	NamespaceListerConditionTypeReady = "Ready"
+
+	// namespaceListerContainerName is the name of the namespace-lister container
+	namespaceListerContainerName = "namespace-lister"
 )
 
 // KonfluxNamespaceListerReconciler reconciles a KonfluxNamespaceLister object
@@ -104,6 +108,13 @@ func (r *KonfluxNamespaceListerReconciler) applyManifests(ctx context.Context, o
 	}
 
 	for _, obj := range objects {
+		// Apply customizations for deployments
+		if deployment, ok := obj.(*appsv1.Deployment); ok {
+			if err := applyNamespaceListerCustomizations(deployment, owner.Spec); err != nil {
+				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
+			}
+		}
+
 		// Set ownership labels and owner reference
 		if err := setOwnership(obj, owner, string(manifests.NamespaceLister), r.Scheme); err != nil {
 			return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
@@ -128,6 +139,30 @@ func (r *KonfluxNamespaceListerReconciler) applyManifests(ctx context.Context, o
 		}
 	}
 	return nil
+}
+
+// applyNamespaceListerCustomizations applies user-defined customizations to the namespace-lister deployment.
+func applyNamespaceListerCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxNamespaceListerSpec) error {
+	if spec.NamespaceLister == nil {
+		return nil
+	}
+
+	deploymentSpec := spec.NamespaceLister
+
+	// Apply replicas if set (non-zero value)
+	if deploymentSpec.Replicas > 0 {
+		deployment.Spec.Replicas = &deploymentSpec.Replicas
+	}
+
+	// Build and apply container customizations using pkg/customization
+	overlay := customization.BuildPodOverlay(
+		customization.DeploymentContext{},
+		customization.WithContainerBuilder(
+			namespaceListerContainerName,
+			customization.FromContainerSpec(deploymentSpec.NamespaceLister),
+		),
+	)
+	return overlay.ApplyToDeployment(deployment)
 }
 
 // SetupWithManager sets up the controller with the Manager.

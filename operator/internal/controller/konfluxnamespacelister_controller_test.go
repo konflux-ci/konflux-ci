@@ -21,7 +21,10 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -76,8 +79,107 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
 		})
+	})
+})
+
+var _ = Describe("applyNamespaceListerCustomizations", func() {
+	var deployment *appsv1.Deployment
+
+	BeforeEach(func() {
+		replicas := int32(1)
+		deployment = &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &replicas,
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "namespace-lister",
+								Resources: corev1.ResourceRequirements{
+									Requests: corev1.ResourceList{
+										corev1.ResourceCPU:    resource.MustParse("50m"),
+										corev1.ResourceMemory: resource.MustParse("64Mi"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+	})
+
+	It("should not modify deployment with empty spec", func() {
+		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{}
+		err := applyNamespaceListerCustomizations(deployment, spec)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(*deployment.Spec.Replicas).To(Equal(int32(1)))
+	})
+
+	It("should not modify deployment with nil deployment spec", func() {
+		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+			NamespaceLister: nil,
+		}
+		err := applyNamespaceListerCustomizations(deployment, spec)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(*deployment.Spec.Replicas).To(Equal(int32(1)))
+	})
+
+	It("should apply replicas override", func() {
+		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+			NamespaceLister: &konfluxv1alpha1.NamespaceListerDeploymentSpec{
+				Replicas: 3,
+			},
+		}
+		err := applyNamespaceListerCustomizations(deployment, spec)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(*deployment.Spec.Replicas).To(Equal(int32(3)))
+	})
+
+	It("should apply resources override", func() {
+		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+			NamespaceLister: &konfluxv1alpha1.NamespaceListerDeploymentSpec{
+				NamespaceLister: &konfluxv1alpha1.ContainerSpec{
+					Resources: &corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("100m"),
+							corev1.ResourceMemory: resource.MustParse("128Mi"),
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("500m"),
+							corev1.ResourceMemory: resource.MustParse("512Mi"),
+						},
+					},
+				},
+			},
+		}
+		err := applyNamespaceListerCustomizations(deployment, spec)
+		Expect(err).NotTo(HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		Expect(container.Resources.Requests.Cpu().String()).To(Equal("100m"))
+		Expect(container.Resources.Requests.Memory().String()).To(Equal("128Mi"))
+		Expect(container.Resources.Limits.Cpu().String()).To(Equal("500m"))
+		Expect(container.Resources.Limits.Memory().String()).To(Equal("512Mi"))
+	})
+
+	It("should apply both replicas and resources", func() {
+		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+			NamespaceLister: &konfluxv1alpha1.NamespaceListerDeploymentSpec{
+				Replicas: 2,
+				NamespaceLister: &konfluxv1alpha1.ContainerSpec{
+					Resources: &corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceMemory: resource.MustParse("256Mi"),
+						},
+					},
+				},
+			},
+		}
+		err := applyNamespaceListerCustomizations(deployment, spec)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(*deployment.Spec.Replicas).To(Equal(int32(2)))
+		Expect(deployment.Spec.Template.Spec.Containers[0].Resources.Limits.Memory().String()).To(Equal("256Mi"))
 	})
 })
