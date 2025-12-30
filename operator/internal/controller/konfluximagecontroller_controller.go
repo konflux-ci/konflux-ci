@@ -106,7 +106,7 @@ func (r *KonfluxImageControllerReconciler) applyManifests(ctx context.Context, o
 				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.ImageController, err)
 		}
 
-		if err := applyObject(ctx, r.Client, obj); err != nil {
+		if err := applyObject(ctx, r.Client, obj, FieldManagerImageController); err != nil {
 			gvk := obj.GetObjectKind().GroupVersionKind()
 			if gvk.Group == CertManagerGroup || gvk.Group == KyvernoGroup {
 				// TODO: Remove this once we decide how to install cert-manager crds in envtest

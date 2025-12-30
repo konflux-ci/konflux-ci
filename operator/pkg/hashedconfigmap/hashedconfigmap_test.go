@@ -108,11 +108,12 @@ func newOwner() *corev1.ConfigMap {
 }
 
 const (
-	testBaseName  = "test-config"
-	testNamespace = "test-ns"
-	testDataKey   = "config.yaml"
-	testLabel     = "app.kubernetes.io/managed-by-test"
-	testContent   = "key: value"
+	testBaseName     = "test-config"
+	testNamespace    = "test-ns"
+	testDataKey      = "config.yaml"
+	testLabel        = "app.kubernetes.io/managed-by-test"
+	testContent      = "key: value"
+	testFieldManager = "test-controller"
 )
 
 func TestHashedConfigMapApply(t *testing.T) {
@@ -130,7 +131,7 @@ func TestHashedConfigMapApply(t *testing.T) {
 		owner := newOwner()
 		c := newFakeClient(scheme, owner)
 
-		hcm := New(c, scheme, baseName, namespace, dataKey, label)
+		hcm := New(c, scheme, baseName, namespace, dataKey, label, testFieldManager)
 		content := testContent
 
 		result, err := hcm.Apply(ctx, content, owner)
@@ -153,7 +154,7 @@ func TestHashedConfigMapApply(t *testing.T) {
 		owner := newOwner()
 		c := newFakeClient(scheme, owner)
 
-		hcm := New(c, scheme, baseName, namespace, dataKey, label)
+		hcm := New(c, scheme, baseName, namespace, dataKey, label, testFieldManager)
 		content := testContent
 
 		result, err := hcm.Apply(ctx, content, owner)
@@ -187,7 +188,7 @@ func TestHashedConfigMapApply(t *testing.T) {
 		}
 		c := newFakeClient(scheme, owner, existingCM)
 
-		hcm := New(c, scheme, baseName, namespace, dataKey, label)
+		hcm := New(c, scheme, baseName, namespace, dataKey, label, testFieldManager)
 		result, err := hcm.Apply(ctx, content, owner)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(result.ConfigMapName).To(gomega.Equal(expectedName))
@@ -216,7 +217,7 @@ func TestHashedConfigMapApply(t *testing.T) {
 		}
 		c := newFakeClient(scheme, owner, oldCM)
 
-		hcm := New(c, scheme, baseName, namespace, dataKey, label)
+		hcm := New(c, scheme, baseName, namespace, dataKey, label, testFieldManager)
 		newContent := "new content"
 
 		result, err := hcm.Apply(ctx, newContent, owner)
@@ -250,7 +251,7 @@ func TestHashedConfigMapApply(t *testing.T) {
 		}
 		c := newFakeClient(scheme, owner, unmanagedCM)
 
-		hcm := New(c, scheme, baseName, namespace, dataKey, label)
+		hcm := New(c, scheme, baseName, namespace, dataKey, label, testFieldManager)
 		_, err := hcm.Apply(ctx, "new content", owner)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -277,7 +278,7 @@ func TestHashedConfigMapApply(t *testing.T) {
 		}
 		c := newFakeClient(scheme, owner, differentBaseCM)
 
-		hcm := New(c, scheme, baseName, namespace, dataKey, label)
+		hcm := New(c, scheme, baseName, namespace, dataKey, label, testFieldManager)
 		_, err := hcm.Apply(ctx, "new content", owner)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -294,7 +295,7 @@ func TestHashedConfigMapApply(t *testing.T) {
 		owner := newOwner()
 		c := newFakeClient(scheme, owner)
 
-		hcm := New(c, scheme, baseName, namespace, dataKey, label)
+		hcm := New(c, scheme, baseName, namespace, dataKey, label, testFieldManager)
 		content := testContent
 
 		result, err := hcm.Apply(ctx, content, owner)
@@ -321,7 +322,7 @@ func TestHashedConfigMapApplyIdempotent(t *testing.T) {
 		owner := newOwner()
 		c := newFakeClient(scheme, owner)
 
-		hcm := New(c, scheme, baseName, namespace, dataKey, label)
+		hcm := New(c, scheme, baseName, namespace, dataKey, label, testFieldManager)
 		content := testContent
 
 		// First apply

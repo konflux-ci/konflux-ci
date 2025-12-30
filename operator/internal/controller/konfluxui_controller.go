@@ -159,7 +159,7 @@ func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, owner *
 				return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
 					namespace.GetNamespace(), namespace.GetName(), getKind(namespace), manifests.UI, err)
 			}
-			if err := applyObject(ctx, r.Client, namespace); err != nil {
+			if err := applyObject(ctx, r.Client, namespace, FieldManagerUI); err != nil {
 				return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
 					namespace.GetNamespace(), namespace.GetName(), getKind(namespace), manifests.UI, err)
 			}
@@ -193,7 +193,7 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, owner *konflux
 				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.UI, err)
 		}
 
-		if err := applyObject(ctx, r.Client, obj); err != nil {
+		if err := applyObject(ctx, r.Client, obj, FieldManagerUI); err != nil {
 			gvk := obj.GetObjectKind().GroupVersionKind()
 			if gvk.Group == CertManagerGroup || gvk.Group == KyvernoGroup {
 				// TODO: Remove this once we decide how to install cert-manager crds in envtest
@@ -359,6 +359,7 @@ func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *kon
 		uiNamespace,
 		dexConfigKey,
 		dexConfigMapLabel,
+		FieldManagerUI,
 	)
 
 	result, err := hcm.Apply(ctx, string(configYAML), ui)

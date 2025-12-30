@@ -65,6 +65,20 @@ const (
 	CertManagerGroup = "cert-manager.io"
 	// KyvernoGroup is the API group for Kyverno resources
 	KyvernoGroup = "kyverno.io"
+
+	// Field manager identifiers for server-side apply.
+	// Each controller uses a unique field manager to make it clear which controller
+	// manages which fields when inspecting managedFields on resources.
+	FieldManagerKonflux            = "konflux-controller"
+	FieldManagerBuildService       = "konflux-buildservice-controller"
+	FieldManagerIntegrationService = "konflux-integrationservice-controller"
+	FieldManagerReleaseService     = "konflux-releaseservice-controller"
+	FieldManagerUI                 = "konflux-ui-controller"
+	FieldManagerRBAC               = "konflux-rbac-controller"
+	FieldManagerNamespaceLister    = "konflux-namespacelister-controller"
+	FieldManagerImageController    = "konflux-imagecontroller-controller"
+	FieldManagerEnterpriseContract = "konflux-enterprisecontract-controller"
+	FieldManagerApplicationAPI     = "konflux-applicationapi-controller"
 )
 
 // KonfluxReconciler reconciles a Konflux object
@@ -347,7 +361,7 @@ func (r *KonfluxReconciler) applyKonfluxBuildService(ctx context.Context, owner 
 	}
 
 	log.Info("Applying KonfluxBuildService CR", "name", buildService.Name)
-	return r.Patch(ctx, buildService, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+	return r.Patch(ctx, buildService, client.Apply, client.FieldOwner(FieldManagerKonflux), client.ForceOwnership)
 }
 
 // applyKonfluxIntegrationService creates or updates the KonfluxIntegrationService CR.
@@ -380,7 +394,7 @@ func (r *KonfluxReconciler) applyKonfluxIntegrationService(ctx context.Context, 
 	}
 
 	log.Info("Applying KonfluxIntegrationService CR", "name", integrationService.Name)
-	return r.Patch(ctx, integrationService, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+	return r.Patch(ctx, integrationService, client.Apply, client.FieldOwner(FieldManagerKonflux), client.ForceOwnership)
 }
 
 // applyKonfluxReleaseService creates or updates the KonfluxReleaseService CR.
@@ -413,7 +427,7 @@ func (r *KonfluxReconciler) applyKonfluxReleaseService(ctx context.Context, owne
 	}
 
 	log.Info("Applying KonfluxReleaseService CR", "name", releaseService.Name)
-	return r.Patch(ctx, releaseService, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+	return r.Patch(ctx, releaseService, client.Apply, client.FieldOwner(FieldManagerKonflux), client.ForceOwnership)
 }
 
 // applyKonfluxUI creates or updates the KonfluxUI CR.
@@ -445,7 +459,7 @@ func (r *KonfluxReconciler) applyKonfluxUI(ctx context.Context, owner *konfluxv1
 	}
 
 	log.Info("Applying KonfluxUI CR", "name", ui.Name)
-	return r.Patch(ctx, ui, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+	return r.Patch(ctx, ui, client.Apply, client.FieldOwner(FieldManagerKonflux), client.ForceOwnership)
 }
 
 // applyKonfluxRBAC creates or updates the KonfluxRBAC CR.
@@ -472,7 +486,7 @@ func (r *KonfluxReconciler) applyKonfluxRBAC(ctx context.Context, owner *konflux
 	}
 
 	log.Info("Applying KonfluxRBAC CR", "name", konfluxRBAC.Name)
-	return r.Patch(ctx, konfluxRBAC, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+	return r.Patch(ctx, konfluxRBAC, client.Apply, client.FieldOwner(FieldManagerKonflux), client.ForceOwnership)
 }
 
 // applyKonfluxNamespaceLister creates or updates the KonfluxNamespaceLister CR.
@@ -499,7 +513,7 @@ func (r *KonfluxReconciler) applyKonfluxNamespaceLister(ctx context.Context, own
 	}
 
 	log.Info("Applying KonfluxNamespaceLister CR", "name", konfluxNamespaceLister.Name)
-	return r.Patch(ctx, konfluxNamespaceLister, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+	return r.Patch(ctx, konfluxNamespaceLister, client.Apply, client.FieldOwner(FieldManagerKonflux), client.ForceOwnership)
 }
 
 // applyKonfluxEnterpriseContract creates or updates the KonfluxEnterpriseContract CR.
@@ -526,7 +540,7 @@ func (r *KonfluxReconciler) applyKonfluxEnterpriseContract(ctx context.Context, 
 	}
 
 	log.Info("Applying KonfluxEnterpriseContract CR", "name", konfluxEnterpriseContract.Name)
-	return r.Patch(ctx, konfluxEnterpriseContract, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+	return r.Patch(ctx, konfluxEnterpriseContract, client.Apply, client.FieldOwner(FieldManagerKonflux), client.ForceOwnership)
 }
 
 // applyKonfluxApplicationAPI creates or updates the KonfluxApplicationAPI CR.
@@ -553,7 +567,7 @@ func (r *KonfluxReconciler) applyKonfluxApplicationAPI(ctx context.Context, owne
 	}
 
 	log.Info("Applying KonfluxApplicationAPI CR", "name", applicationAPI.Name)
-	return r.Patch(ctx, applicationAPI, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+	return r.Patch(ctx, applicationAPI, client.Apply, client.FieldOwner(FieldManagerKonflux), client.ForceOwnership)
 }
 
 // applyKonfluxImageController creates or updates the KonfluxImageController CR if enabled,
@@ -597,7 +611,7 @@ func (r *KonfluxReconciler) applyKonfluxImageController(ctx context.Context, own
 	}
 
 	log.Info("Applying KonfluxImageController CR", "name", imageController.Name)
-	return r.Patch(ctx, imageController, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+	return r.Patch(ctx, imageController, client.Apply, client.FieldOwner(FieldManagerKonflux), client.ForceOwnership)
 }
 
 // getKind returns the Kind of a client.Object.
@@ -633,8 +647,10 @@ func setOwnership(obj client.Object, owner client.Object, component string, sche
 // applyObject applies a single object to the cluster using server-side apply.
 // Server-side apply is idempotent and only triggers updates when there are actual changes,
 // preventing reconcile loops when watching owned resources.
-func applyObject(ctx context.Context, k8sClient client.Client, obj client.Object) error {
-	return k8sClient.Patch(ctx, obj, client.Apply, client.FieldOwner("konflux-operator"), client.ForceOwnership)
+// The fieldManager parameter identifies which controller manages the fields being applied,
+// making it clear when different reconcilers try to manage the same resource.
+func applyObject(ctx context.Context, k8sClient client.Client, obj client.Object, fieldManager string) error {
+	return k8sClient.Patch(ctx, obj, client.Apply, client.FieldOwner(fieldManager), client.ForceOwnership)
 }
 
 // SetupWithManager sets up the controller with the Manager.
