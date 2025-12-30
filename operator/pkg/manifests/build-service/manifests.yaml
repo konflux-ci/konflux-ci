@@ -409,4 +409,5 @@ spec:
           - key: ca-bundle.crt
             path: ca-bundle.crt
           name: trusted-ca
+          optional: true
         name: trusted-ca
