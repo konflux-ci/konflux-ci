@@ -40,9 +40,6 @@ resources:
 - konfluxrbac_admin_role.yaml
 - konfluxrbac_editor_role.yaml
 - konfluxrbac_viewer_role.yaml
-- konflux_admin_role.yaml
-- konflux_editor_role.yaml
-- konflux_viewer_role.yaml
 
 # For each CRD, "Editor" and "Viewer" roles are scaffolded by
 # default, aiding admins in cluster management. Those roles are

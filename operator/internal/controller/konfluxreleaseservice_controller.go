@@ -55,6 +55,21 @@ type KonfluxReleaseServiceReconciler struct {
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxreleaseservices,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxreleaseservices/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxreleaseservices/finalizers,verbs=update
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=core,resources=services;secrets;serviceaccounts,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,resourceNames=release-service-leader-election-role,verbs=bind;escalate
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,resourceNames=release-service-leader-election-rolebinding;releaseserviceconfigs-rolebinding,verbs=bind
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=release-pipeline-resource-role;release-service-application-role;release-service-component-role;release-service-environment-viewer-role;release-service-manager-role;release-service-metrics-auth-role;release-service-release-editor-role;release-service-release-viewer-role;release-service-releaseplan-editor-role;release-service-releaseplan-viewer-role;release-service-releaseplanadmission-editor-role;release-service-releaseplanadmission-viewer-role;release-service-snapshot-editor-role;release-service-snapshot-viewer-role;release-service-snapshotenvironmentbinding-editor-role;release-service-tekton-role;releaseserviceconfig-role,verbs=bind;escalate
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=release-service-application-role-binding;release-service-component-role-binding;release-service-environment-role-binding;release-service-manager-rolebinding;release-service-metrics-auth-rolebinding;release-service-release-role-binding;release-service-releaseplan-role-binding;release-service-releaseplanadmission-role-binding;release-service-snapshot-role-binding;release-service-snapshotenvironmentbinding-role-binding;release-service-tekton-role-binding,verbs=bind
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;patch
+// +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;patch
+// +kubebuilder:rbac:groups=cert-manager.io,resources=certificates;issuers,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=appstudio.redhat.com,resources=releaseserviceconfigs,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;create;patch
+// +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=mutatingwebhookconfigurations;validatingwebhookconfigurations,verbs=get;list;watch;create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
