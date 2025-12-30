@@ -42,5 +42,14 @@ func StrategicMerge[T any](base, overlay *T) error {
 		return err
 	}
 
-	return json.Unmarshal(merged, base)
+	// Unmarshal into a new zero-value struct to prevent stale data from the original base.
+	// Without this, existing pointer fields (like EnvVar.ValueFrom) would be preserved
+	// even when the merged JSON doesn't include them, causing invalid combinations
+	// (e.g., EnvVar with both Value and ValueFrom set).
+	var result T
+	if err := json.Unmarshal(merged, &result); err != nil {
+		return err
+	}
+	*base = result
+	return nil
 }

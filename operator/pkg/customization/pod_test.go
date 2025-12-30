@@ -530,3 +530,151 @@ func TestComplexScenario(t *testing.T) {
 		g.Expect(sidecarContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("100m"))
 	})
 }
+
+// TestApplyToPodTemplateSpec_ContainerDeletionBug tests for a regression where
+// applying pod-level customizations (like ServiceAccountName) would accidentally
+// delete all containers from the deployment.
+//
+// The bug was caused by the overlay PodSpec having Containers: nil, which
+// serializes to "containers": null in JSON. Strategic merge interprets null
+// as "delete this field", so the containers would be removed.
+//
+// The fix preserves containers by copying them from the template to the overlay
+// before doing the strategic merge.
+func TestApplyToPodTemplateSpec_ContainerDeletionBug(t *testing.T) {
+	t.Run("pod-level customizations preserve containers", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		// Create overlay with only pod-level customizations (no container overlays)
+		p := NewPodOverlay(
+			WithServiceAccountName("custom-sa"),
+		)
+
+		deployment := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-app"},
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						ServiceAccountName: "default",
+						Containers: []corev1.Container{
+							{Name: "app", Image: "app:v1"},
+							{Name: "sidecar", Image: "sidecar:v1"},
+						},
+						InitContainers: []corev1.Container{
+							{Name: "init", Image: "init:v1"},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		spec := deployment.Spec.Template.Spec
+
+		// Pod-level customization should be applied
+		g.Expect(spec.ServiceAccountName).To(gomega.Equal("custom-sa"))
+
+		// CRITICAL: Containers should NOT be deleted
+		// This was the bug: containers would be nil after applying pod-level customizations
+		g.Expect(spec.Containers).To(gomega.HaveLen(2), "containers should not be deleted")
+		g.Expect(spec.Containers[0].Name).To(gomega.Equal("app"))
+		g.Expect(spec.Containers[0].Image).To(gomega.Equal("app:v1"))
+		g.Expect(spec.Containers[1].Name).To(gomega.Equal("sidecar"))
+		g.Expect(spec.Containers[1].Image).To(gomega.Equal("sidecar:v1"))
+
+		// InitContainers should also NOT be deleted
+		g.Expect(spec.InitContainers).To(gomega.HaveLen(1), "initContainers should not be deleted")
+		g.Expect(spec.InitContainers[0].Name).To(gomega.Equal("init"))
+	})
+
+	t.Run("no pod-level customizations preserve containers", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		// Create overlay with no pod-level customizations at all
+		// (only container overlays)
+		ctx := DeploymentContext{Replicas: 1}
+		p := NewPodOverlay(
+			WithContainerOpts("app", ctx, WithImage("app:v2")),
+		)
+
+		deployment := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-app"},
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{Name: "app", Image: "app:v1"},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		spec := deployment.Spec.Template.Spec
+
+		// Container should be updated, not deleted
+		g.Expect(spec.Containers).To(gomega.HaveLen(1))
+		g.Expect(spec.Containers[0].Name).To(gomega.Equal("app"))
+		g.Expect(spec.Containers[0].Image).To(gomega.Equal("app:v2"))
+	})
+
+	t.Run("combined pod and container customizations work together", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		// Create overlay with both pod-level and container-level customizations
+		ctx := DeploymentContext{Replicas: 1}
+		p := NewPodOverlay(
+			WithServiceAccountName("custom-sa"),
+			WithTolerations(corev1.Toleration{Key: "special", Operator: corev1.TolerationOpExists}),
+			WithContainerOpts("app", ctx,
+				WithImage("app:v2"),
+				WithEnv(corev1.EnvVar{Name: "NEW_VAR", Value: "new-value"}),
+			),
+		)
+
+		deployment := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-app"},
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						ServiceAccountName: "default",
+						Containers: []corev1.Container{
+							{
+								Name:  "app",
+								Image: "app:v1",
+								Env:   []corev1.EnvVar{{Name: "EXISTING", Value: "existing"}},
+							},
+							{Name: "sidecar", Image: "sidecar:v1"},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		spec := deployment.Spec.Template.Spec
+
+		// Pod-level customizations applied
+		g.Expect(spec.ServiceAccountName).To(gomega.Equal("custom-sa"))
+		g.Expect(spec.Tolerations).To(gomega.HaveLen(1))
+
+		// Containers preserved
+		g.Expect(spec.Containers).To(gomega.HaveLen(2))
+
+		// App container customizations applied
+		appContainer := spec.Containers[0]
+		g.Expect(appContainer.Image).To(gomega.Equal("app:v2"))
+		// Should have both existing and new env vars
+		g.Expect(appContainer.Env).To(gomega.HaveLen(2))
+
+		// Sidecar unchanged
+		g.Expect(spec.Containers[1].Image).To(gomega.Equal("sidecar:v1"))
+	})
+}

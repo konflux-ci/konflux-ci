@@ -162,8 +162,15 @@ func (p *PodOverlay) ApplyToPodTemplateSpec(template *corev1.PodTemplateSpec) er
 		return nil
 	}
 
-	// Apply pod-level customizations using strategic merge
-	if err := StrategicMerge(&template.Spec, &p.podSpec); err != nil {
+	// Apply pod-level customizations using strategic merge.
+	// We copy containers from the template to the overlay to prevent them from
+	// being deleted by strategic merge (nil serializes as "null" in JSON, which
+	// strategic merge interprets as "delete this field"). Container merging is
+	// handled separately below with mergeContainerList.
+	overlay := p.podSpec
+	overlay.Containers = template.Spec.Containers
+	overlay.InitContainers = template.Spec.InitContainers
+	if err := StrategicMerge(&template.Spec, &overlay); err != nil {
 		return err
 	}
 

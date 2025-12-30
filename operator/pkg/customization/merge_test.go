@@ -359,3 +359,87 @@ func TestStrategicMerge_SecurityContext(t *testing.T) {
 		g.Expect(*base.SecurityContext.RunAsUser).To(gomega.Equal(int64(1000)))
 	})
 }
+
+// TestStrategicMerge_EnvVarValueFromBug tests for a regression where env vars with
+// valueFrom in base would get their valueFrom pointer incorrectly preserved when
+// merged with overlay env vars that had value set. This caused env vars to have
+// both value AND valueFrom set, which is invalid in Kubernetes.
+//
+// The bug was caused by json.Unmarshal not clearing pointer fields when
+// unmarshaling into an existing struct. The fix is to unmarshal into a new
+// zero-value struct first.
+func TestStrategicMerge_EnvVarValueFromBug(t *testing.T) {
+	t.Run("does not combine value and valueFrom from different env vars", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		// Base container has env vars with valueFrom (secrets)
+		base := &corev1.Container{
+			Name: "oauth2-proxy",
+			Env: []corev1.EnvVar{
+				{
+					Name: "CLIENT_SECRET",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "secret"},
+							Key:                  "client-secret",
+						},
+					},
+				},
+				{
+					Name: "COOKIE_SECRET",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "secret"},
+							Key:                  "cookie-secret",
+						},
+					},
+				},
+			},
+		}
+
+		// Overlay container has env vars with value (not valueFrom)
+		overlay := &corev1.Container{
+			Name: "oauth2-proxy",
+			Env: []corev1.EnvVar{
+				{Name: "PROVIDER", Value: "oidc"},
+				{Name: "CLIENT_ID", Value: "my-client"},
+			},
+		}
+
+		err := StrategicMerge(base, overlay)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// Should have 4 env vars (2 from base + 2 from overlay)
+		g.Expect(base.Env).To(gomega.HaveLen(4))
+
+		// CRITICAL: No env var should have both value and valueFrom set
+		for _, env := range base.Env {
+			hasValue := env.Value != ""
+			hasValueFrom := env.ValueFrom != nil
+
+			// This was the bug: env vars from overlay would incorrectly get
+			// valueFrom pointers from base env vars at the same index
+			g.Expect(hasValue && hasValueFrom).To(gomega.BeFalse(),
+				"env var %s has both value (%q) and valueFrom set - this is invalid",
+				env.Name, env.Value)
+		}
+
+		// Verify the specific env vars have correct values
+		envMap := make(map[string]corev1.EnvVar)
+		for _, env := range base.Env {
+			envMap[env.Name] = env
+		}
+
+		// Overlay env vars should only have value
+		g.Expect(envMap["PROVIDER"].Value).To(gomega.Equal("oidc"))
+		g.Expect(envMap["PROVIDER"].ValueFrom).To(gomega.BeNil())
+		g.Expect(envMap["CLIENT_ID"].Value).To(gomega.Equal("my-client"))
+		g.Expect(envMap["CLIENT_ID"].ValueFrom).To(gomega.BeNil())
+
+		// Base env vars should still have only valueFrom
+		g.Expect(envMap["CLIENT_SECRET"].Value).To(gomega.BeEmpty())
+		g.Expect(envMap["CLIENT_SECRET"].ValueFrom).NotTo(gomega.BeNil())
+		g.Expect(envMap["COOKIE_SECRET"].Value).To(gomega.BeEmpty())
+		g.Expect(envMap["COOKIE_SECRET"].ValueFrom).NotTo(gomega.BeNil())
+	})
+}
