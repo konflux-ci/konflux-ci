@@ -25,11 +25,9 @@ import (
 
 // KonfluxBuildServiceSpec defines the desired state of KonfluxBuildService
 type KonfluxBuildServiceSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of KonfluxBuildService. Edit konfluxbuildservice_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// BuildControllerManager defines customizations for the controller-manager deployment.
+	// +optional
+	BuildControllerManager *ControllerManagerDeploymentSpec `json:"buildControllerManager,omitempty"`
 }
 
 // KonfluxBuildServiceStatus defines the observed state of KonfluxBuildService
@@ -49,7 +47,7 @@ type KonfluxBuildService struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   KonfluxBuildServiceSpec   `json:"spec,omitempty"`
+	Spec   KonfluxBuildServiceSpec   `json:"spec"`
 	Status KonfluxBuildServiceStatus `json:"status,omitempty"`
 }
 

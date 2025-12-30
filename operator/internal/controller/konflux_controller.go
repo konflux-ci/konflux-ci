@@ -321,6 +321,11 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 func (r *KonfluxReconciler) applyKonfluxBuildService(ctx context.Context, owner *konfluxv1alpha1.Konflux) error {
 	log := logf.FromContext(ctx)
 
+	var spec konfluxv1alpha1.KonfluxBuildServiceSpec
+	if owner.Spec.KonfluxBuildService != nil && owner.Spec.KonfluxBuildService.Spec != nil {
+		spec = *owner.Spec.KonfluxBuildService.Spec
+	}
+
 	buildService := &konfluxv1alpha1.KonfluxBuildService{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: konfluxv1alpha1.GroupVersion.String(),
@@ -333,6 +338,7 @@ func (r *KonfluxReconciler) applyKonfluxBuildService(ctx context.Context, owner 
 				KonfluxComponentLabel: string(manifests.BuildService),
 			},
 		},
+		Spec: spec,
 	}
 
 	// Set owner reference for garbage collection
