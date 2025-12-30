@@ -1,7 +1,15 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "ignorePaths": [
-    "operator/upstream-kustomizations/**",
+    "operator/upstream-kustomizations/application-api/**",
+    "operator/upstream-kustomizations/build-service/**",
+    "operator/upstream-kustomizations/enterprise-contract/core/**",
+    "operator/upstream-kustomizations/image-controller/**",
+    "operator/upstream-kustomizations/integration/**",
+    "operator/upstream-kustomizations/namespace-lister/**",
+    "operator/upstream-kustomizations/rbac/**",
+    "operator/upstream-kustomizations/release/**",
+    "operator/upstream-kustomizations/ui/**",
     "operator/pkg/manifests/**"
   ],
   "packageRules": [
@@ -123,7 +131,10 @@
     },
     {
       "customType": "regex",
-      "fileMatch": ["konflux-ci/enterprise-contract/policies/.*\\.yaml$"],
+      "fileMatch": [
+        "konflux-ci/enterprise-contract/policies/.*\\.yaml$",
+        "operator/upstream-kustomizations/enterprise-contract/policies/.*\\.yaml$"
+      ],
       "matchStrings": [
         "- oci::(?<depName>quay\\.io/conforma/[^:]+):konflux@(?<currentDigest>sha256:[a-f0-9]{64})"
       ],
