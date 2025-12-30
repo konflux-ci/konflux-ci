@@ -6,11 +6,6 @@ resources:
   - certmanager
   - dex
 
-configMapGenerator:
-  - name: nginx-idp-location
-    files:
-      - nginx-idp-location.conf
-
 patches:
   - path: node-port-patch.yaml
     target:
@@ -18,14 +13,3 @@ patches:
       version: v1
       kind: Service
       name: proxy
-  - target:
-      group: apps
-      version: v1
-      kind: Deployment
-      name: proxy
-    patch: |
-      - op: add
-        path: /spec/template/spec/volumes/2/projected/sources/-
-        value:
-          configMap:
-            name: nginx-idp-location

@@ -64,6 +64,20 @@ spec:
             sed "s/__BEARER_TOKEN__/$token/" /mnt/nginx-templates/auth.conf > /mnt/nginx-generated-config/auth.conf
             chmod 640 /mnt/nginx-generated-config/auth.conf
 
+            # Resolve tekton-results hostname
+            results_hostname_k8s=tekton-results-api-service.tekton-pipelines.svc.cluster.local
+            results_hostname_openshift=tekton-results-api-service.openshift-pipelines.svc.cluster.local
+            if nslookup $results_hostname_k8s > /dev/null 2>&1; then
+              results_hostname=$results_hostname_k8s
+            elif nslookup $results_hostname_openshift > /dev/null 2>&1; then
+              results_hostname=$results_hostname_openshift
+            else
+              echo "Error: Could not resolve tekton-results hostname"
+              exit 1
+            fi
+            sed "s/__TEKTON_RESULTS_HOSTNAME__/$results_hostname/" /mnt/nginx-templates/tekton-results.conf > /mnt/nginx-generated-config/tekton-results.conf
+            chmod 640 /mnt/nginx-generated-config/tekton-results.conf
+
         volumeMounts:
         - name: nginx-generated-config
           mountPath: /mnt/nginx-generated-config
@@ -139,8 +153,6 @@ spec:
             mountPath: /mnt
           - name: nginx-generated-config
             mountPath: /mnt/nginx-generated-config
-          - name: nginx-static
-            mountPath: /mnt/nginx-additional-location-configs
           - name: static-content
             mountPath: /opt/app-root/src/static-content
         securityContext:
@@ -218,12 +230,6 @@ spec:
             defaultMode: 420
             name: proxy-nginx-templates
           name: nginx-templates
-        - name: nginx-static
-          projected:
-            defaultMode: 420
-            sources:
-            - configMap:
-                name: proxy-nginx-static
         - name: logs
           emptyDir: {}
         - name: nginx-tmp

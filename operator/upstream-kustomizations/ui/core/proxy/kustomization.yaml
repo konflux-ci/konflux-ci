@@ -19,8 +19,6 @@ configMapGenerator:
   - name: proxy-nginx-templates
     files:
       - auth.conf
-  - name: proxy-nginx-static
-    files:
       - tekton-results.conf
 
 namespace: konflux-ui

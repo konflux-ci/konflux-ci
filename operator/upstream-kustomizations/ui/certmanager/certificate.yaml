@@ -4,7 +4,10 @@ metadata:
   name: serving-cert
 spec:
   dnsNames:
+  # TODO: don't include localhost by default. make it configurable.
   - localhost
+  - proxy.konflux-ui.svc
+  - proxy.konflux-ui.svc.cluster.local
   issuerRef:
     kind: ClusterIssuer
     name: self-signed-cluster-issuer
