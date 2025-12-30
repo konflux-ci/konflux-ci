@@ -106,6 +106,16 @@ func assertOAuth2ProxyEnvVarsSet(g *gomega.WithT, container *corev1.Container) {
 	}
 }
 
+// assertNoConflictingEnvVars verifies no env var has both value and valueFrom set.
+func assertNoConflictingEnvVars(g *gomega.WithT, container *corev1.Container) {
+	for _, env := range container.Env {
+		hasValue := env.Value != ""
+		hasValueFrom := env.ValueFrom != nil
+		g.Expect(hasValue && hasValueFrom).To(gomega.BeFalse(),
+			"env var %s has both value (%q) and valueFrom set - this is invalid", env.Name, env.Value)
+	}
+}
+
 func TestBuildProxyOverlay(t *testing.T) {
 	t.Run("nil spec returns overlay with oauth2-proxy config", func(t *testing.T) {
 		g := gomega.NewWithT(t)
@@ -118,6 +128,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 
 		container := findContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
+		assertNoConflictingEnvVars(g, container)
 		assertOAuth2ProxyEnvVarsSet(g, container)
 	})
 
@@ -133,6 +144,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 
 		container := findContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
+		assertNoConflictingEnvVars(g, container)
 		assertOAuth2ProxyEnvVarsSet(g, container)
 	})
 
