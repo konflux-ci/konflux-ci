@@ -222,6 +222,8 @@ spec:
   - ports:
     - port: 6443
       protocol: TCP
+    - port: 443
+      protocol: TCP
     to:
     - namespaceSelector:
         matchLabels:
@@ -229,6 +231,12 @@ spec:
       podSelector:
         matchLabels:
           component: kube-apiserver
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: openshift-kube-apiserver
+      podSelector:
+        matchLabels:
+          app: openshift-kube-apiserver
   podSelector:
     matchLabels:
       apps: namespace-lister
