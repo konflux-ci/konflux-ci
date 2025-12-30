@@ -255,6 +255,11 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, ui, "ui"))
 
+	// Propagate UI URL from KonfluxUI status to Konflux status
+	if ui.Status.Ingress != nil {
+		konflux.Status.UIURL = ui.Status.Ingress.URL
+	}
+
 	// Get and copy status from the KonfluxRBAC CR
 	konfluxRBAC := &konfluxv1alpha1.KonfluxRBAC{}
 	if err := r.Get(ctx, client.ObjectKey{Name: KonfluxRBACCRName}, konfluxRBAC); err != nil {

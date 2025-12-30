@@ -24,6 +24,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,9 +35,11 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/hashedconfigmap"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/ingress"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/oauth2proxy"
 )
@@ -61,11 +64,6 @@ const (
 	dexConfigKey           = "config.yaml"
 	dexConfigMapLabel      = "app.kubernetes.io/managed-by-konflux-ui-reconciler"
 	dexConfigMapVolumeName = "dex"
-
-	// Default proxy configuration
-	// TODO: These should come from the CR (e.g., ingress section) once implemented
-	defaultProxyHostname = "localhost"
-	defaultProxyPort     = "9443"
 )
 
 // KonfluxUIReconciler reconciles a KonfluxUI object
@@ -73,11 +71,14 @@ type KonfluxUIReconciler struct {
 	client.Client
 	Scheme      *runtime.Scheme
 	ObjectStore *manifests.ObjectStore
+	ClusterInfo *clusterinfo.Info
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxuis,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxuis/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxuis/finalizers,verbs=update
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=config.openshift.io,resources=ingresses,verbs=get
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -105,9 +106,21 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	// Determine the hostname for ingress, dex, and oauth2-proxy configuration
+	hostname, port, err := ingress.DetermineHostnameAndPort(ctx, r.Client, ui, uiNamespace, r.ClusterInfo)
+	if err != nil {
+		log.Error(err, "Failed to determine hostname")
+		SetFailedCondition(ui, UIConditionTypeReady, "HostnameDeterminationFailed", err)
+		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+	log.Info("Determined hostname for KonfluxUI", "hostname", hostname, "port", port)
+
 	// Reconcile Dex ConfigMap first (if configured) to get the ConfigMap name
 	// This must happen before applyManifests so we can set the correct ConfigMap reference
-	dexConfigMapName, err := r.reconcileDexConfigMap(ctx, ui)
+	dexConfigMapName, err := r.reconcileDexConfigMap(ctx, ui, hostname, port)
 	if err != nil {
 		log.Error(err, "Failed to reconcile Dex ConfigMap")
 		SetFailedCondition(ui, UIConditionTypeReady, "DexConfigMapFailed", err)
@@ -118,9 +131,19 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, ui, dexConfigMapName); err != nil {
+	if err := r.applyManifests(ctx, ui, dexConfigMapName, hostname, port); err != nil {
 		log.Error(err, "Failed to apply manifests")
 		SetFailedCondition(ui, UIConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Reconcile Ingress if enabled
+	if err := r.reconcileIngress(ctx, ui, hostname); err != nil {
+		log.Error(err, "Failed to reconcile Ingress")
+		SetFailedCondition(ui, UIConditionTypeReady, "IngressReconcileFailed", err)
 		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
@@ -147,8 +170,38 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	// Update ingress status
+	updateIngressStatus(ui, hostname, port)
+
+	// Final status update
+	if err := r.Status().Update(ctx, ui); err != nil {
+		log.Error(err, "Failed to update final status")
+		return ctrl.Result{}, err
+	}
+
 	log.Info("Successfully reconciled KonfluxUI")
 	return ctrl.Result{}, nil
+}
+
+// updateIngressStatus updates the ingress status fields on the KonfluxUI CR.
+func updateIngressStatus(ui *konfluxv1alpha1.KonfluxUI, hostname, port string) {
+	ingressEnabled := ui.Spec.Ingress != nil && ui.Spec.Ingress.Enabled
+
+	// Build the URL
+	var url string
+	if hostname != "" {
+		if port != "" {
+			url = fmt.Sprintf("https://%s:%s", hostname, port)
+		} else {
+			url = fmt.Sprintf("https://%s", hostname)
+		}
+	}
+
+	ui.Status.Ingress = &konfluxv1alpha1.IngressStatus{
+		Enabled:  ingressEnabled,
+		Hostname: hostname,
+		URL:      url,
+	}
 }
 
 func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, owner *konfluxv1alpha1.KonfluxUI) error {
@@ -177,7 +230,8 @@ func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, owner *
 // applyManifests loads and applies all embedded manifests to the cluster.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
 // dexConfigMapName is the name of the Dex ConfigMap to use (empty if not configured).
-func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, owner *konfluxv1alpha1.KonfluxUI, dexConfigMapName string) error {
+// hostname and port are used to configure oauth2-proxy.
+func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, owner *konfluxv1alpha1.KonfluxUI, dexConfigMapName, hostname, port string) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.UI)
@@ -188,7 +242,7 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, owner *konflux
 	for _, obj := range objects {
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
-			if err := applyUIDeploymentCustomizations(deployment, owner.Spec, dexConfigMapName); err != nil {
+			if err := applyUIDeploymentCustomizations(deployment, owner.Spec, dexConfigMapName, hostname, port); err != nil {
 				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
 			}
 		}
@@ -220,15 +274,14 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, owner *konflux
 }
 
 // applyUIDeploymentCustomizations applies user-defined customizations to UI deployments.
-func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxUISpec, dexConfigMapName string) error {
+func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxUISpec, dexConfigMapName, hostname, port string) error {
 	switch deployment.Name {
 	case proxyDeploymentName:
 		if spec.Proxy != nil {
 			deployment.Spec.Replicas = &spec.Proxy.Replicas
 		}
-		// Build oauth2-proxy options based on spec
-		// TODO: Once ingress is added to the CR, extract hostname/port from there
-		oauth2ProxyOpts := buildOAuth2ProxyOptions(spec)
+		// Build oauth2-proxy options based on hostname and port
+		oauth2ProxyOpts := buildOAuth2ProxyOptions(hostname, port)
 		if err := buildProxyOverlay(spec.Proxy, oauth2ProxyOpts...).ApplyToDeployment(deployment); err != nil {
 			return err
 		}
@@ -270,12 +323,7 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, oauth2ProxyOpt
 }
 
 // buildOAuth2ProxyOptions builds the container options for oauth2-proxy configuration.
-// TODO: Once ingress is added to the CR, extract hostname/port from spec.Ingress
-func buildOAuth2ProxyOptions(_ konfluxv1alpha1.KonfluxUISpec) []customization.ContainerOption {
-	// For now, use defaults. This will be updated when ingress support is added.
-	hostname := defaultProxyHostname
-	port := defaultProxyPort
-
+func buildOAuth2ProxyOptions(hostname, port string) []customization.ContainerOption {
 	return []customization.ContainerOption{
 		oauth2proxy.WithProvider(),
 		oauth2proxy.WithOIDCURLs(hostname, port),
@@ -362,17 +410,25 @@ func generateRandomBytes(length int, urlSafe bool) ([]byte, error) {
 // reconcileDexConfigMap creates or updates the Dex ConfigMap based on the DexConfig in the CR.
 // It generates a content-based hash suffix for the ConfigMap name (like kustomize),
 // cleans up old ConfigMaps, and returns the new ConfigMap name.
-func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *konfluxv1alpha1.KonfluxUI) (string, error) {
+// hostname and port are used for the dex issuer URL configuration.
+func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *konfluxv1alpha1.KonfluxUI, hostname, port string) (string, error) {
 	var dexConfig *dex.Config
 	// Check if DexConfig is configured
 	if ui.Spec.Dex != nil && ui.Spec.Dex.Config != nil {
-		dexConfig = dex.NewDexConfig(ui.Spec.Dex.Config)
+		dexParams := ui.Spec.Dex.Config.DeepCopy()
+		// Use ingress-determined hostname and port if not explicitly provided in dexParams
+		if dexParams.Hostname == "" {
+			dexParams.Hostname = hostname
+		}
+		if dexParams.Port == "" {
+			dexParams.Port = port
+		}
+		dexConfig = dex.NewDexConfig(dexParams)
 	} else {
-		// TODO: set defaults in a single place, probably in the dex package
 		dexConfig = dex.NewDexConfig(
 			&dex.DexParams{
-				Hostname: "localhost",
-				Port:     "9443",
+				Hostname: hostname,
+				Port:     port,
 				// password db must be enabled when the connector
 				// list is empty
 				EnablePasswordDB: true,
@@ -420,5 +476,46 @@ func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&rbacv1.RoleBinding{}, builder.WithPredicates(generationChangedPredicate)).
 		Owns(&rbacv1.ClusterRole{}, builder.WithPredicates(generationChangedPredicate)).
 		Owns(&rbacv1.ClusterRoleBinding{}, builder.WithPredicates(generationChangedPredicate)).
+		Owns(&networkingv1.Ingress{}, builder.WithPredicates(generationChangedPredicate)).
 		Complete(r)
+}
+
+// reconcileIngress creates, updates, or deletes the Ingress resource for KonfluxUI.
+// If ingress is disabled, any existing Ingress resource will be deleted.
+func (r *KonfluxUIReconciler) reconcileIngress(ctx context.Context, ui *konfluxv1alpha1.KonfluxUI, hostname string) error {
+	log := logf.FromContext(ctx)
+
+	// If ingress is not enabled, delete the Ingress resource if it exists
+	if ui.Spec.Ingress == nil || !ui.Spec.Ingress.Enabled {
+		existingIngress := &networkingv1.Ingress{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      ingress.IngressName,
+				Namespace: uiNamespace,
+			},
+		}
+		if err := r.Delete(ctx, existingIngress); err != nil {
+			if client.IgnoreNotFound(err) != nil {
+				return fmt.Errorf("failed to delete ingress: %w", err)
+			}
+			// Ingress doesn't exist, nothing to do
+		} else {
+			log.Info("Deleted Ingress resource because ingress is disabled")
+		}
+		return nil
+	}
+
+	log.Info("Reconciling Ingress", "hostname", hostname)
+
+	ingressResource := ingress.BuildForUI(ui, uiNamespace, hostname)
+
+	// Set ownership
+	if err := setOwnership(ingressResource, ui, string(manifests.UI), r.Scheme); err != nil {
+		return fmt.Errorf("failed to set ownership for ingress: %w", err)
+	}
+
+	if err := applyObject(ctx, r.Client, ingressResource, FieldManagerUI); err != nil {
+		return fmt.Errorf("failed to apply ingress: %w", err)
+	}
+
+	return nil
 }

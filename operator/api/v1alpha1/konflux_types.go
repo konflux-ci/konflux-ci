@@ -126,11 +126,19 @@ type KonfluxStatus struct {
 	// Components shows the status of individual Konflux components
 	// +optional
 	Components []ComponentStatus `json:"components,omitempty"`
+
+	// UIURL is the URL to access the Konflux UI.
+	// This is populated from the KonfluxUI status when ingress is enabled.
+	// +optional
+	UIURL string `json:"uiURL,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status",description="Ready status"
+// +kubebuilder:printcolumn:name="UI-URL",type="string",JSONPath=".status.uiURL",description="URL to access the Konflux UI"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:validation:XValidation:rule="self.metadata.name == 'konflux'",message="Konflux CR must be named 'konflux'. Only one instance is allowed per cluster."
 
 // Konflux is the Schema for the konfluxes API.

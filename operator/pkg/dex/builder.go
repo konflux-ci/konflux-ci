@@ -25,12 +25,13 @@ import (
 // DexParams contains the configurable parameters for the Dex IdP configuration.
 type DexParams struct {
 	// Hostname is the external hostname for the Dex issuer (e.g., "dex.example.com").
-	// +kubebuilder:default=localhost
+	// If empty, the hostname is determined from the ingress configuration.
+	// +optional
 	Hostname string `json:"hostname,omitempty"`
 
 	// Port is the external port for the Dex issuer (e.g., "9443").
-	// If empty, no port will be included in URLs.
-	// +kubebuilder:default="9443"
+	// If empty, the port is determined from the ingress configuration (typically empty for HTTPS on 443).
+	// +optional
 	Port string `json:"port,omitempty"`
 
 	// Connectors are upstream identity provider connectors.

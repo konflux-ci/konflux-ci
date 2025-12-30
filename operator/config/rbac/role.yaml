@@ -11,6 +11,12 @@ rules:
   verbs:
   - '*'
 - apiGroups:
+  - config.openshift.io
+  resources:
+  - ingresses
+  verbs:
+  - get
+- apiGroups:
   - konflux.konflux-ci.dev
   resources:
   - konfluxapplicationapis
@@ -63,3 +69,15 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
