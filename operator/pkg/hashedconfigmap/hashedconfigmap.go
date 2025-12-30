@@ -40,19 +40,17 @@ import (
 // HashSuffixLength is the number of characters to use from the hash for the suffix.
 const HashSuffixLength = 10
 
-// FieldOwner is the field manager name used for server-side apply.
-const FieldOwner = "konflux-operator"
-
 // HashedConfigMap handles ConfigMaps with content-based hash suffixes.
 // It creates new ConfigMaps when content changes (with new hash suffixes) and
 // cleans up old ConfigMaps that are no longer in use.
 type HashedConfigMap struct {
-	client    client.Client
-	scheme    *runtime.Scheme
-	baseName  string
-	namespace string
-	dataKey   string
-	label     string
+	client       client.Client
+	scheme       *runtime.Scheme
+	baseName     string
+	namespace    string
+	dataKey      string
+	label        string
+	fieldManager string
 }
 
 // New creates a new HashedConfigMap handler.
@@ -64,14 +62,18 @@ type HashedConfigMap struct {
 //   - namespace: The namespace where ConfigMaps will be created
 //   - dataKey: The key to use in the ConfigMap's data field
 //   - label: The label key to mark managed ConfigMaps (value will be "true")
-func New(c client.Client, scheme *runtime.Scheme, baseName, namespace, dataKey, label string) *HashedConfigMap {
+//   - fieldManager: The field manager name for server-side apply operations
+func New(
+	c client.Client, scheme *runtime.Scheme, baseName, namespace, dataKey, label, fieldManager string,
+) *HashedConfigMap {
 	return &HashedConfigMap{
-		client:    c,
-		scheme:    scheme,
-		baseName:  baseName,
-		namespace: namespace,
-		dataKey:   dataKey,
-		label:     label,
+		client:       c,
+		scheme:       scheme,
+		baseName:     baseName,
+		namespace:    namespace,
+		dataKey:      dataKey,
+		label:        label,
+		fieldManager: fieldManager,
 	}
 }
 
@@ -124,7 +126,7 @@ func (h *HashedConfigMap) Apply(ctx context.Context, content string, owner clien
 	}
 
 	// Apply using server-side apply
-	patchOpts := []client.PatchOption{client.FieldOwner(FieldOwner), client.ForceOwnership}
+	patchOpts := []client.PatchOption{client.FieldOwner(h.fieldManager), client.ForceOwnership}
 	if err := h.client.Patch(ctx, configMap, client.Apply, patchOpts...); err != nil {
 		return nil, fmt.Errorf("failed to apply ConfigMap %s: %w", configMapName, err)
 	}

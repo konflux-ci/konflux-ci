@@ -120,7 +120,7 @@ func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context
 				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.Integration, err)
 		}
 
-		if err := applyObject(ctx, r.Client, obj); err != nil {
+		if err := applyObject(ctx, r.Client, obj, FieldManagerIntegrationService); err != nil {
 			gvk := obj.GetObjectKind().GroupVersionKind()
 			if gvk.Group == CertManagerGroup || gvk.Group == KyvernoGroup {
 				// TODO: Remove this once we decide how to install cert-manager crds in envtest

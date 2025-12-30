@@ -109,7 +109,7 @@ func (r *KonfluxRBACReconciler) applyManifests(ctx context.Context, owner *konfl
 				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.RBAC, err)
 		}
 
-		if err := applyObject(ctx, r.Client, obj); err != nil {
+		if err := applyObject(ctx, r.Client, obj, FieldManagerRBAC); err != nil {
 			gvk := obj.GetObjectKind().GroupVersionKind()
 			// TODO: Remove this once we decide how to install cert-manager crds in envtest
 			// TODO: Remove this once we decide if we want to have a dependency on Kyverno
