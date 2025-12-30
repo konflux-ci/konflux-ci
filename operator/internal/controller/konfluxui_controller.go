@@ -38,6 +38,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/hashedconfigmap"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/oauth2proxy"
 )
 
 const (
@@ -60,6 +61,11 @@ const (
 	dexConfigKey           = "config.yaml"
 	dexConfigMapLabel      = "app.kubernetes.io/managed-by-konflux-ui-reconciler"
 	dexConfigMapVolumeName = "dex"
+
+	// Default proxy configuration
+	// TODO: These should come from the CR (e.g., ingress section) once implemented
+	defaultProxyHostname = "localhost"
+	defaultProxyPort     = "9443"
 )
 
 // KonfluxUIReconciler reconciles a KonfluxUI object
@@ -220,7 +226,10 @@ func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, spec konflux
 		if spec.Proxy != nil {
 			deployment.Spec.Replicas = &spec.Proxy.Replicas
 		}
-		if err := buildProxyOverlay(spec.Proxy).ApplyToDeployment(deployment); err != nil {
+		// Build oauth2-proxy options based on spec
+		// TODO: Once ingress is added to the CR, extract hostname/port from there
+		oauth2ProxyOpts := buildOAuth2ProxyOptions(spec)
+		if err := buildProxyOverlay(spec.Proxy, oauth2ProxyOpts...).ApplyToDeployment(deployment); err != nil {
 			return err
 		}
 	case dexDeploymentName:
@@ -235,10 +244,17 @@ func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, spec konflux
 }
 
 // buildProxyOverlay builds the pod overlay for the proxy deployment.
-func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec) *customization.PodOverlay {
+// oauth2ProxyOpts are applied to the oauth2-proxy container before user-provided overrides.
+func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, oauth2ProxyOpts ...customization.ContainerOption) *customization.PodOverlay {
 	if spec == nil {
-		return customization.NewPodOverlay()
+		return customization.BuildPodOverlay(
+			customization.DeploymentContext{},
+			customization.WithContainerBuilder(oauth2ProxyContainerName, oauth2ProxyOpts...),
+		)
 	}
+
+	// Append user overrides after oauth2proxy options
+	oauth2ProxyOpts = append(oauth2ProxyOpts, customization.FromContainerSpec(spec.OAuth2Proxy))
 
 	return customization.BuildPodOverlay(
 		customization.DeploymentContext{Replicas: spec.Replicas},
@@ -248,9 +264,27 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec) *customization
 		),
 		customization.WithContainerBuilder(
 			oauth2ProxyContainerName,
-			customization.FromContainerSpec(spec.OAuth2Proxy),
+			oauth2ProxyOpts...,
 		),
 	)
+}
+
+// buildOAuth2ProxyOptions builds the container options for oauth2-proxy configuration.
+// TODO: Once ingress is added to the CR, extract hostname/port from spec.Ingress
+func buildOAuth2ProxyOptions(_ konfluxv1alpha1.KonfluxUISpec) []customization.ContainerOption {
+	// For now, use defaults. This will be updated when ingress support is added.
+	hostname := defaultProxyHostname
+	port := defaultProxyPort
+
+	return []customization.ContainerOption{
+		oauth2proxy.WithProvider(),
+		oauth2proxy.WithOIDCURLs(hostname, port),
+		oauth2proxy.WithInternalDexURLs(),
+		oauth2proxy.WithCookieConfig(),
+		oauth2proxy.WithAuthSettings(),
+		oauth2proxy.WithTLSSkipVerify(),
+		oauth2proxy.WithWhitelistDomain(hostname, port),
+	}
 }
 
 // buildDexOverlay builds the pod overlay for the dex deployment.

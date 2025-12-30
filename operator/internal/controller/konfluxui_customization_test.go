@@ -28,6 +28,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
@@ -76,18 +77,63 @@ func getUIDeployment(t *testing.T, name string) *appsv1.Deployment {
 	return nil
 }
 
+// requiredOAuth2ProxyEnvVars are the environment variables that must be set for oauth2-proxy.
+var requiredOAuth2ProxyEnvVars = []string{
+	"OAUTH2_PROXY_PROVIDER",
+	"OAUTH2_PROXY_REDIRECT_URL",
+	"OAUTH2_PROXY_OIDC_ISSUER_URL",
+	"OAUTH2_PROXY_LOGIN_URL",
+	"OAUTH2_PROXY_SKIP_OIDC_DISCOVERY",
+	"OAUTH2_PROXY_REDEEM_URL",
+	"OAUTH2_PROXY_OIDC_JWKS_URL",
+	"OAUTH2_PROXY_COOKIE_SECURE",
+	"OAUTH2_PROXY_COOKIE_NAME",
+	"OAUTH2_PROXY_EMAIL_DOMAINS",
+	"OAUTH2_PROXY_SET_XAUTHREQUEST",
+	"OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS",
+	"OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY",
+	"OAUTH2_PROXY_WHITELIST_DOMAINS",
+}
+
+// assertOAuth2ProxyEnvVarsSet verifies that all required oauth2-proxy env vars are present.
+func assertOAuth2ProxyEnvVarsSet(g *gomega.WithT, container *corev1.Container) {
+	envMap := make(map[string]string)
+	for _, env := range container.Env {
+		envMap[env.Name] = env.Value
+	}
+	for _, key := range requiredOAuth2ProxyEnvVars {
+		g.Expect(envMap).To(gomega.HaveKey(key), "missing required env var: %s", key)
+	}
+}
+
 func TestBuildProxyOverlay(t *testing.T) {
-	t.Run("nil spec returns empty overlay", func(t *testing.T) {
+	t.Run("nil spec returns overlay with oauth2-proxy config", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		overlay := buildProxyOverlay(nil)
+		overlay := buildProxyOverlay(nil, buildOAuth2ProxyOptions(konfluxv1alpha1.KonfluxUISpec{})...)
 		g.Expect(overlay).NotTo(gomega.BeNil())
+
+		deployment := getUIDeployment(t, proxyDeploymentName)
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := findContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+		assertOAuth2ProxyEnvVarsSet(g, container)
 	})
 
-	t.Run("empty spec returns overlay without customizations", func(t *testing.T) {
+	t.Run("empty spec returns overlay with oauth2-proxy config", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := &konfluxv1alpha1.ProxyDeploymentSpec{}
-		overlay := buildProxyOverlay(spec)
+		overlay := buildProxyOverlay(spec, buildOAuth2ProxyOptions(konfluxv1alpha1.KonfluxUISpec{})...)
 		g.Expect(overlay).NotTo(gomega.BeNil())
+
+		deployment := getUIDeployment(t, proxyDeploymentName)
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := findContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+		assertOAuth2ProxyEnvVarsSet(g, container)
 	})
 
 	t.Run("nginx resources are applied", func(t *testing.T) {
@@ -108,7 +154,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay := buildProxyOverlay(spec)
+		overlay := buildProxyOverlay(spec, buildOAuth2ProxyOptions(konfluxv1alpha1.KonfluxUISpec{})...)
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -134,7 +180,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay := buildProxyOverlay(spec)
+		overlay := buildProxyOverlay(spec, buildOAuth2ProxyOptions(konfluxv1alpha1.KonfluxUISpec{})...)
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -142,6 +188,9 @@ func TestBuildProxyOverlay(t *testing.T) {
 		g.Expect(container).NotTo(gomega.BeNil())
 		g.Expect(container.Resources.Limits.Cpu().String()).To(gomega.Equal("200m"))
 		g.Expect(container.Resources.Limits.Memory().String()).To(gomega.Equal("128Mi"))
+
+		// Verify required env vars are set
+		assertOAuth2ProxyEnvVarsSet(g, container)
 	})
 
 	t.Run("both containers can be customized", func(t *testing.T) {
@@ -164,7 +213,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay := buildProxyOverlay(spec)
+		overlay := buildProxyOverlay(spec, buildOAuth2ProxyOptions(konfluxv1alpha1.KonfluxUISpec{})...)
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -175,6 +224,9 @@ func TestBuildProxyOverlay(t *testing.T) {
 		oauth2Container := findContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
 		g.Expect(oauth2Container).NotTo(gomega.BeNil())
 		g.Expect(oauth2Container.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
+
+		// Verify required env vars are set
+		assertOAuth2ProxyEnvVarsSet(g, oauth2Container)
 	})
 
 	t.Run("preserves existing container fields", func(t *testing.T) {
@@ -194,13 +246,71 @@ func TestBuildProxyOverlay(t *testing.T) {
 		g.Expect(nginxContainer).NotTo(gomega.BeNil(), "nginx container must exist in proxy deployment")
 		originalImage := nginxContainer.Image
 
-		overlay := buildProxyOverlay(spec)
+		overlay := buildProxyOverlay(spec, buildOAuth2ProxyOptions(konfluxv1alpha1.KonfluxUISpec{})...)
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		nginxContainer = findContainer(deployment.Spec.Template.Spec.Containers, nginxContainerName)
 		g.Expect(nginxContainer).NotTo(gomega.BeNil())
 		g.Expect(nginxContainer.Image).To(gomega.Equal(originalImage))
+	})
+}
+
+func TestBuildOAuth2ProxyOptions(t *testing.T) {
+	t.Run("returns default options for empty spec", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxUISpec{}
+
+		opts := buildOAuth2ProxyOptions(spec)
+
+		// Apply options to a container to verify
+		c := &corev1.Container{}
+		for _, opt := range opts {
+			opt(c, customization.DeploymentContext{})
+		}
+
+		envMap := make(map[string]string)
+		for _, env := range c.Env {
+			envMap[env.Name] = env.Value
+		}
+
+		// Verify default hostname/port are used
+		g.Expect(envMap["OAUTH2_PROXY_REDIRECT_URL"]).To(gomega.Equal("https://localhost:9443/oauth2/callback"))
+		g.Expect(envMap["OAUTH2_PROXY_WHITELIST_DOMAINS"]).To(gomega.Equal("localhost:9443"))
+	})
+
+	t.Run("returns all required options", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxUISpec{}
+
+		opts := buildOAuth2ProxyOptions(spec)
+
+		// Apply options to a container
+		c := &corev1.Container{}
+		for _, opt := range opts {
+			opt(c, customization.DeploymentContext{})
+		}
+
+		envMap := make(map[string]string)
+		for _, env := range c.Env {
+			envMap[env.Name] = env.Value
+		}
+
+		// Verify all required env vars are present
+		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_PROVIDER"))
+		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_REDIRECT_URL"))
+		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_OIDC_ISSUER_URL"))
+		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_LOGIN_URL"))
+		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_SKIP_OIDC_DISCOVERY"))
+		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_REDEEM_URL"))
+		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_OIDC_JWKS_URL"))
+		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_COOKIE_SECURE"))
+		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_COOKIE_NAME"))
+		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_EMAIL_DOMAINS"))
+		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_SET_XAUTHREQUEST"))
+		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS"))
+		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY"))
+		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_WHITELIST_DOMAINS"))
 	})
 }
 

@@ -161,6 +161,8 @@ spec:
       - image: quay.io/oauth2-proxy/oauth2-proxy@sha256:latest
         name: oauth2-proxy
         env:
+        # Secrets are configured here; all other config is injected by the controller via env vars
+        # See: https://oauth2-proxy.github.io/oauth2-proxy/configuration/overview/#environment-variables
         - name: OAUTH2_PROXY_CLIENT_SECRET
           valueFrom:
             secretKeyRef:
@@ -171,39 +173,6 @@ spec:
             secretKeyRef:
               name: oauth2-proxy-cookie-secret
               key: cookie-secret
-        args:
-          - --provider
-          - oidc
-          - --provider-display-name
-          - "Dex OIDC"
-          - --client-id
-          - oauth2-proxy
-          - --http-address
-          - "127.0.0.1:6000"
-          - --redirect-url
-          - https://localhost:9443/oauth2/callback
-          - --oidc-issuer-url
-          - https://localhost:9443/idp/
-          - --skip-oidc-discovery
-          - --login-url
-          - https://localhost:9443/idp/auth
-          - --redeem-url
-          - https://dex.konflux-ui.svc.cluster.local:9443/idp/token
-          - --oidc-jwks-url
-          - https://dex.konflux-ui.svc.cluster.local:9443/idp/keys
-          - --cookie-secure
-          - "true"
-          - --cookie-name
-          - __Host-konflux-ci-cookie
-          - --email-domain
-          - "*"
-          - --ssl-insecure-skip-verify
-          - "true"
-          - --set-xauthrequest
-          - "true"
-          - --whitelist-domain
-          - localhost:9443
-          - --skip-jwt-bearer-tokens
         ports:
           - containerPort: 6000
             name: web
