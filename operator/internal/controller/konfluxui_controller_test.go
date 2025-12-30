@@ -24,6 +24,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -31,6 +32,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/ingress"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
@@ -425,6 +427,191 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 			By("verifying result is empty")
 			Expect(result).To(BeEmpty())
+		})
+	})
+
+	Context("Ingress reconciliation via Reconcile", Serial, func() {
+		var ui *konfluxv1alpha1.KonfluxUI
+		var reconciler *KonfluxUIReconciler
+
+		// Helper: refresh UI from cluster
+		refreshUI := func(ctx context.Context) {
+			ExpectWithOffset(1, k8sClient.Get(ctx, types.NamespacedName{Name: ui.Name}, ui)).To(Succeed())
+		}
+
+		// Helper: reconcile and expect success
+		reconcileUI := func(ctx context.Context) {
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: ui.Name},
+			})
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+		}
+
+		// Helper: get Ingress resource
+		getIngress := func(ctx context.Context) *networkingv1.Ingress {
+			ing := &networkingv1.Ingress{}
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name:      ingress.IngressName,
+				Namespace: uiNamespace,
+			}, ing)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			return ing
+		}
+
+		// Helper: check if Ingress exists
+		ingressExists := func(ctx context.Context) bool {
+			ing := &networkingv1.Ingress{}
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name:      ingress.IngressName,
+				Namespace: uiNamespace,
+			}, ing)
+			return err == nil
+		}
+
+		// Helper: enable ingress with host and reconcile
+		enableIngressAndReconcile := func(ctx context.Context, host string) {
+			refreshUI(ctx)
+			ui.Spec.Ingress = &konfluxv1alpha1.IngressSpec{
+				Enabled: true,
+				Host:    host,
+			}
+			ExpectWithOffset(1, k8sClient.Update(ctx, ui)).To(Succeed())
+			reconcileUI(ctx)
+		}
+
+		BeforeEach(func(ctx context.Context) {
+			By("cleaning up any existing ingress from previous tests")
+			existingIngress := &networkingv1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      ingress.IngressName,
+					Namespace: uiNamespace,
+				},
+			}
+			_ = k8sClient.Delete(ctx, existingIngress)
+
+			By("creating the KonfluxUI resource")
+			ui = &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: KonfluxUICRName,
+				},
+				Spec: konfluxv1alpha1.KonfluxUISpec{},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+
+			reconciler = &KonfluxUIReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ObjectStore: objectStore,
+			}
+		})
+
+		AfterEach(func(ctx context.Context) {
+			By("cleaning up ingress")
+			existingIngress := &networkingv1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      ingress.IngressName,
+					Namespace: uiNamespace,
+				},
+			}
+			_ = k8sClient.Delete(ctx, existingIngress)
+
+			By("cleaning up KonfluxUI resource")
+			_ = k8sClient.Delete(ctx, ui)
+		})
+
+		It("Should create Ingress when ingress is enabled", func(ctx context.Context) {
+			enableIngressAndReconcile(ctx, "test.example.com")
+
+			By("verifying the Ingress was created")
+			ing := getIngress(ctx)
+			Expect(ing.Spec.Rules).To(HaveLen(1))
+			Expect(ing.Spec.Rules[0].Host).To(Equal("test.example.com"))
+		})
+
+		It("Should delete Ingress when ingress spec is set to nil", func(ctx context.Context) {
+			By("first enabling ingress and reconciling to create the Ingress")
+			enableIngressAndReconcile(ctx, "test.example.com")
+			Expect(ingressExists(ctx)).To(BeTrue())
+
+			By("disabling ingress by setting spec to nil")
+			refreshUI(ctx)
+			ui.Spec.Ingress = nil
+			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
+			reconcileUI(ctx)
+
+			By("verifying the Ingress was deleted")
+			Expect(ingressExists(ctx)).To(BeFalse())
+		})
+
+		It("Should delete Ingress when Enabled is set to false", func(ctx context.Context) {
+			By("first enabling ingress and reconciling to create the Ingress")
+			enableIngressAndReconcile(ctx, "test.example.com")
+			Expect(ingressExists(ctx)).To(BeTrue())
+
+			By("setting Enabled to false in the KonfluxUI spec")
+			refreshUI(ctx)
+			ui.Spec.Ingress = &konfluxv1alpha1.IngressSpec{Enabled: false}
+			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
+			reconcileUI(ctx)
+
+			By("verifying the Ingress was deleted")
+			Expect(ingressExists(ctx)).To(BeFalse())
+		})
+
+		It("Should not error when ingress is disabled and no Ingress exists", func(ctx context.Context) {
+			By("ensuring no Ingress exists")
+			Expect(ingressExists(ctx)).To(BeFalse())
+
+			By("reconciling with ingress disabled - should not error")
+			reconcileUI(ctx)
+		})
+
+		It("Should update Ingress when hostname changes", func(ctx context.Context) {
+			By("enabling ingress with initial hostname")
+			enableIngressAndReconcile(ctx, "initial.example.com")
+			Expect(getIngress(ctx).Spec.Rules[0].Host).To(Equal("initial.example.com"))
+
+			By("updating to new hostname")
+			refreshUI(ctx)
+			ui.Spec.Ingress.Host = "updated.example.com"
+			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
+			reconcileUI(ctx)
+
+			By("verifying the Ingress was updated with new hostname")
+			Expect(getIngress(ctx).Spec.Rules[0].Host).To(Equal("updated.example.com"))
+		})
+
+		It("Should include OpenShift TLS annotations on created Ingress", func(ctx context.Context) {
+			enableIngressAndReconcile(ctx, "test.example.com")
+
+			By("verifying the Ingress has OpenShift TLS annotations")
+			ing := getIngress(ctx)
+			Expect(ing.Annotations).To(HaveKeyWithValue(
+				"route.openshift.io/destination-ca-certificate-secret", "serving-cert"))
+			Expect(ing.Annotations).To(HaveKeyWithValue(
+				"route.openshift.io/termination", "reencrypt"))
+		})
+
+		It("Should set owner reference on created Ingress", func(ctx context.Context) {
+			enableIngressAndReconcile(ctx, "test.example.com")
+
+			By("verifying the Ingress has owner reference")
+			ing := getIngress(ctx)
+			Expect(ing.OwnerReferences).To(HaveLen(1))
+			Expect(ing.OwnerReferences[0].Name).To(Equal(KonfluxUICRName))
+			Expect(ing.OwnerReferences[0].Kind).To(Equal("KonfluxUI"))
+		})
+
+		It("Should update KonfluxUI status with ingress information", func(ctx context.Context) {
+			enableIngressAndReconcile(ctx, "status-test.example.com")
+
+			By("verifying the KonfluxUI status has ingress information")
+			updatedUI := &konfluxv1alpha1.KonfluxUI{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: ui.Name}, updatedUI)).To(Succeed())
+			Expect(updatedUI.Status.Ingress).NotTo(BeNil())
+			Expect(updatedUI.Status.Ingress.Enabled).To(BeTrue())
+			Expect(updatedUI.Status.Ingress.Hostname).To(Equal("status-test.example.com"))
+			Expect(updatedUI.Status.Ingress.URL).To(Equal("https://status-test.example.com"))
 		})
 	})
 })

@@ -8,6 +8,8 @@ metadata:
 spec:
   ui:
     spec:
+      ingress:
+        enabled: true
       proxy:
         replicas: 1
         nginx:

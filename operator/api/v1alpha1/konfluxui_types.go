@@ -21,6 +21,27 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// IngressSpec defines the ingress configuration for KonfluxUI.
+type IngressSpec struct {
+	// Enabled controls whether an Ingress resource should be created.
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+	// IngressClassName specifies which IngressClass to use for the ingress.
+	// +optional
+	IngressClassName *string `json:"ingressClassName,omitempty"`
+	// Host is the hostname to use for the ingress.
+	// On OpenShift, if empty, the default ingress domain and naming convention will be used.
+	// +optional
+	Host string `json:"host,omitempty"`
+	// Annotations to add to the ingress resource.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+	// TLSSecretName is the name of the Kubernetes TLS secret to use for the ingress.
+	// If not specified, TLS will not be configured on the ingress.
+	// +optional
+	TLSSecretName string `json:"tlsSecretName,omitempty"`
+}
+
 // ProxyDeploymentSpec defines customizations for the proxy deployment.
 type ProxyDeploymentSpec struct {
 	// Replicas is the number of replicas for the proxy deployment.
@@ -51,6 +72,11 @@ type DexDeploymentSpec struct {
 
 // KonfluxUISpec defines the desired state of KonfluxUI
 type KonfluxUISpec struct {
+	// Ingress defines the ingress configuration for KonfluxUI.
+	// This affects the proxy, oauth2-proxy, and dex components.
+	// +optional
+	// +nullable
+	Ingress *IngressSpec `json:"ingress,omitempty"`
 	// Proxy defines customizations for the proxy deployment.
 	// +optional
 	Proxy *ProxyDeploymentSpec `json:"proxy,omitempty"`
@@ -59,11 +85,27 @@ type KonfluxUISpec struct {
 	Dex *DexDeploymentSpec `json:"dex,omitempty"`
 }
 
+// IngressStatus defines the observed state of the Ingress configuration.
+type IngressStatus struct {
+	// Enabled indicates whether the Ingress resource is enabled.
+	Enabled bool `json:"enabled"`
+	// Hostname is the hostname configured for the ingress.
+	// This is the actual hostname being used, whether explicitly configured or auto-generated.
+	// +optional
+	Hostname string `json:"hostname,omitempty"`
+	// URL is the full URL to access the KonfluxUI.
+	// +optional
+	URL string `json:"url,omitempty"`
+}
+
 // KonfluxUIStatus defines the observed state of KonfluxUI
 type KonfluxUIStatus struct {
 	// Conditions represent the latest available observations of the KonfluxUI state
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// Ingress contains the observed state of the Ingress configuration.
+	// +optional
+	Ingress *IngressStatus `json:"ingress,omitempty"`
 }
 
 // +kubebuilder:object:root=true

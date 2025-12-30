@@ -14,7 +14,19 @@ spec:
     singular: konflux
   scope: Cluster
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - description: Ready status
+      jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - description: URL to access the Konflux UI
+      jsonPath: .status.uiURL
+      name: UI-URL
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: Konflux is the Schema for the konfluxes API.
@@ -1185,19 +1197,18 @@ spec:
                                   database.
                                 type: boolean
                               hostname:
-                                default: localhost
-                                description: Hostname is the external hostname for
-                                  the Dex issuer (e.g., "dex.example.com").
+                                description: |-
+                                  Hostname is the external hostname for the Dex issuer (e.g., "dex.example.com").
+                                  If empty, the hostname is determined from the ingress configuration.
                                 type: string
                               passwordConnector:
                                 description: PasswordConnector specifies the connector
                                   ID to use for password grants (e.g., "local").
                                 type: string
                               port:
-                                default: "9443"
                                 description: |-
                                   Port is the external port for the Dex issuer (e.g., "9443").
-                                  If empty, no port will be included in URLs.
+                                  If empty, the port is determined from the ingress configuration (typically empty for HTTPS on 443).
                                 type: string
                               staticPasswords:
                                 description: StaticPasswords are predefined user credentials
@@ -1460,6 +1471,37 @@ spec:
                             format: int32
                             minimum: 1
                             type: integer
+                        type: object
+                      ingress:
+                        description: |-
+                          Ingress defines the ingress configuration for KonfluxUI.
+                          This affects the proxy, oauth2-proxy, and dex components.
+                        nullable: true
+                        properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            description: Annotations to add to the ingress resource.
+                            type: object
+                          enabled:
+                            default: false
+                            description: Enabled controls whether an Ingress resource
+                              should be created.
+                            type: boolean
+                          host:
+                            description: |-
+                              Host is the hostname to use for the ingress.
+                              On OpenShift, if empty, the default ingress domain and naming convention will be used.
+                            type: string
+                          ingressClassName:
+                            description: IngressClassName specifies which IngressClass
+                              to use for the ingress.
+                            type: string
+                          tlsSecretName:
+                            description: |-
+                              TLSSecretName is the name of the Kubernetes TLS secret to use for the ingress.
+                              If not specified, TLS will not be configured on the ingress.
+                            type: string
                         type: object
                       proxy:
                         description: Proxy defines customizations for the proxy deployment.
@@ -2015,6 +2057,11 @@ spec:
                   - type
                   type: object
                 type: array
+              uiURL:
+                description: |-
+                  UIURL is the URL to access the Konflux UI.
+                  This is populated from the KonfluxUI status when ingress is enabled.
+                type: string
             type: object
         type: object
         x-kubernetes-validations:
