@@ -8,7 +8,34 @@ rules:
   - ""
   resources:
   - configmaps
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - groups
+  - users
+  verbs:
+  - impersonate
+- apiGroups:
+  - ""
+  resources:
   - namespaces
+  - serviceaccounts
+  - services
   verbs:
   - create
   - get
@@ -16,23 +43,129 @@ rules:
   - patch
   - watch
 - apiGroups:
-  - '*'
+  - ""
   resources:
-  - '*'
+  - secrets
   verbs:
-  - '*'
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - create
+  - get
+  - patch
 - apiGroups:
   - apps
   resources:
   - deployments
   verbs:
+  - create
+  - get
   - list
+  - patch
+  - watch
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - enterprisecontractpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - releaseserviceconfigs
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - localsubjectaccessreviews
+  verbs:
+  - create
+- apiGroups:
+  - batch
+  resources:
+  - cronjobs
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
+  - cert-manager.io
+  resources:
+  - certificates
+  - issuers
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - watch
 - apiGroups:
   - config.openshift.io
   resources:
   - ingresses
   verbs:
   - get
+- apiGroups:
+  - console.openshift.io
+  resources:
+  - consoleyamlsamples
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - dex.coreos.com
+  resources:
+  - '*'
+  verbs:
+  - '*'
 - apiGroups:
   - konflux.konflux-ci.dev
   resources:
@@ -90,6 +223,26 @@ rules:
   - patch
   - update
 - apiGroups:
+  - kyverno.io
+  resources:
+  - clusterpolicies
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - servicemonitors
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
   - networking.k8s.io
   resources:
   - ingresses
@@ -102,6 +255,242 @@ rules:
   - update
   - watch
 - apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  verbs:
+  - bind
+  - create
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - build-pipeline-runner-rolebinding
+  - build-service-manager-rolebinding
+  - build-service-metrics-auth-rolebinding
+  resources:
+  - clusterrolebindings
+  verbs:
+  - bind
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - dex
+  - konflux-proxy
+  - konflux-proxy-namespace-lister
+  resources:
+  - clusterrolebindings
+  verbs:
+  - bind
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - image-controller-manager-rolebinding
+  - image-controller-metrics-auth-rolebinding
+  resources:
+  - clusterrolebindings
+  verbs:
+  - bind
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - integration-service-manager-rolebinding
+  - integration-service-metrics-auth-rolebinding
+  - integration-service-snapshot-garbage-collector
+  - integration-service-tekton-role-binding
+  - kyverno-background-controller-konflux-integration-runner
+  resources:
+  - clusterrolebindings
+  verbs:
+  - bind
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - namespace-lister-authorizer
+  resources:
+  - clusterrolebindings
+  verbs:
+  - bind
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - release-service-application-role-binding
+  - release-service-component-role-binding
+  - release-service-environment-role-binding
+  - release-service-manager-rolebinding
+  - release-service-metrics-auth-rolebinding
+  - release-service-release-role-binding
+  - release-service-releaseplan-role-binding
+  - release-service-releaseplanadmission-role-binding
+  - release-service-snapshot-role-binding
+  - release-service-snapshotenvironmentbinding-role-binding
+  - release-service-tekton-role-binding
+  resources:
+  - clusterrolebindings
+  verbs:
+  - bind
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterroles
+  verbs:
+  - create
+  - escalate
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - appstudio-pipelines-runner
+  - build-service-manager-role
+  - build-service-metrics-auth-role
+  resources:
+  - clusterroles
+  verbs:
+  - bind
+  - escalate
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - dex
+  - konflux-proxy
+  - konflux-proxy-namespace-lister
+  resources:
+  - clusterroles
+  verbs:
+  - bind
+  - escalate
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - enterprisecontract-configmap-viewer-role
+  - enterprisecontractpolicy-viewer-role
+  resources:
+  - clusterroles
+  verbs:
+  - bind
+  - escalate
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - image-controller-imagerepository-editor-role
+  - image-controller-imagerepository-viewer-role
+  - image-controller-manager-role
+  - image-controller-metrics-auth-role
+  resources:
+  - clusterroles
+  verbs:
+  - bind
+  - escalate
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - integration-service-integrationtestscenario-admin-role
+  - integration-service-integrationtestscenario-editor-role
+  - integration-service-integrationtestscenario-viewer-role
+  - integration-service-manager-role
+  - integration-service-metrics-auth-role
+  - integration-service-snapshot-garbage-collector
+  - integration-service-tekton-editor-role
+  - konflux-integration-runner
+  resources:
+  - clusterroles
+  verbs:
+  - bind
+  - escalate
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - namespace-lister-authorizer
+  resources:
+  - clusterroles
+  verbs:
+  - bind
+  - escalate
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - release-pipeline-resource-role
+  - release-service-application-role
+  - release-service-component-role
+  - release-service-environment-viewer-role
+  - release-service-manager-role
+  - release-service-metrics-auth-role
+  - release-service-release-editor-role
+  - release-service-release-viewer-role
+  - release-service-releaseplan-editor-role
+  - release-service-releaseplan-viewer-role
+  - release-service-releaseplanadmission-editor-role
+  - release-service-releaseplanadmission-viewer-role
+  - release-service-snapshot-editor-role
+  - release-service-snapshot-viewer-role
+  - release-service-snapshotenvironmentbinding-editor-role
+  - release-service-tekton-role
+  - releaseserviceconfig-role
+  resources:
+  - clusterroles
+  verbs:
+  - bind
+  - escalate
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - build-pipeline-config-read-only-binding
+  - build-service-leader-election-rolebinding
+  resources:
+  - rolebindings
+  verbs:
+  - bind
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - image-controller-leader-election-rolebinding
+  resources:
+  - rolebindings
+  verbs:
+  - bind
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - integration-service-leader-election-rolebinding
+  resources:
+  - rolebindings
+  verbs:
+  - bind
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - public-ec-cm
+  - public-ecp
+  resources:
+  - rolebindings
+  verbs:
+  - bind
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - release-service-leader-election-rolebinding
+  - releaseserviceconfigs-rolebinding
+  resources:
+  - rolebindings
+  verbs:
+  - bind
+- apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - rolebindings
@@ -112,3 +501,39 @@ rules:
   - list
   - patch
   - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - build-service-leader-election-role
+  resources:
+  - roles
+  verbs:
+  - bind
+  - escalate
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - image-controller-leader-election-role
+  resources:
+  - roles
+  verbs:
+  - bind
+  - escalate
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - integration-service-leader-election-role
+  resources:
+  - roles
+  verbs:
+  - bind
+  - escalate
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - release-service-leader-election-role
+  resources:
+  - roles
+  verbs:
+  - bind
+  - escalate

@@ -1,0 +1,44 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: konflux-admin-user-actions
+  annotations:
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
+aggregationRule:
+  clusterRoleSelectors:
+  - matchLabels:
+      rbac.konflux-ci.dev/aggregate-to-admin: "true"
+rules: []
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: konflux-contributor-user-actions
+aggregationRule:
+  clusterRoleSelectors:
+  - matchLabels:
+      rbac.konflux-ci.dev/aggregate-to-contributor: "true"
+rules: []
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: konflux-maintainer-user-actions
+aggregationRule:
+  clusterRoleSelectors:
+  - matchLabels:
+      rbac.konflux-ci.dev/aggregate-to-maintainer: "true"
+rules: []
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: konflux-viewer-user-actions
+  annotations:
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
+aggregationRule:
+  clusterRoleSelectors:
+  - matchLabels:
+      rbac.konflux-ci.dev/aggregate-to-viewer: "true"
+rules: []

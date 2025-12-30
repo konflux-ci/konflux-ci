@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# User-facing RBAC resources
+# These ClusterRoles are provided for cluster admins to manage user permissions
+# and must NOT have a namePrefix applied (users reference them by exact name in RoleBindings)
+resources:
+- konflux_admin_role.yaml
+- konflux_editor_role.yaml
+- konflux_viewer_role.yaml
+- konflux_user_action_roles.yaml
