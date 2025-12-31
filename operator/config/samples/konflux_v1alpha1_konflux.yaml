@@ -72,7 +72,7 @@ spec:
   namespaceLister:
     spec:
       namespaceLister:
-        replicas: 2
+        replicas: 1
         namespaceLister:
           resources:
             requests:
