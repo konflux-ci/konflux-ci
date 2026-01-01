@@ -213,6 +213,11 @@ func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, owner *
 	for _, obj := range objects {
 		// Apply customizations for deployments
 		if namespace, ok := obj.(*corev1.Namespace); ok {
+			// Validate that the namespace name matches the expected uiNamespace
+			if namespace.Name != uiNamespace {
+				return fmt.Errorf(
+					"unexpected namespace name in manifest: expected %s, got %s", uiNamespace, namespace.Name)
+			}
 			// Set ownership labels and owner reference
 			if err := setOwnership(namespace, owner, string(manifests.UI), r.Scheme); err != nil {
 				return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
