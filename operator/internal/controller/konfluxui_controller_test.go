@@ -34,6 +34,7 @@ import (
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/ingress"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
 
 var _ = Describe("KonfluxUI Controller", func() {
@@ -197,7 +198,8 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 
 			By("calling ensureUISecrets")
-			err := reconciler.ensureUISecrets(ctx, ui)
+			tc := tracking.NewClient(k8sClient, k8sClient.Scheme())
+			err := reconciler.ensureUISecrets(ctx, tc, ui)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying the secret data was preserved")
@@ -228,7 +230,8 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 
 			By("calling ensureUISecrets")
-			err := reconciler.ensureUISecrets(ctx, ui)
+			tc := tracking.NewClient(k8sClient, k8sClient.Scheme())
+			err := reconciler.ensureUISecrets(ctx, tc, ui)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying the ownership labels were updated")
@@ -258,7 +261,8 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 
 			By("calling ensureUISecrets")
-			err := reconciler.ensureUISecrets(ctx, ui)
+			tc := tracking.NewClient(k8sClient, k8sClient.Scheme())
+			err := reconciler.ensureUISecrets(ctx, tc, ui)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying the secret data was generated")
@@ -274,7 +278,8 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 		It("Should use URL-safe base64 encoding for client-secret", func(ctx context.Context) {
 			By("calling ensureUISecrets")
-			err := reconciler.ensureUISecrets(ctx, ui)
+			tc := tracking.NewClient(k8sClient, k8sClient.Scheme())
+			err := reconciler.ensureUISecrets(ctx, tc, ui)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying the client-secret uses URL-safe encoding")
@@ -294,7 +299,8 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 		It("Should use standard base64 encoding for cookie-secret", func(ctx context.Context) {
 			By("calling ensureUISecrets")
-			err := reconciler.ensureUISecrets(ctx, ui)
+			tc := tracking.NewClient(k8sClient, k8sClient.Scheme())
+			err := reconciler.ensureUISecrets(ctx, tc, ui)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying the cookie-secret uses standard encoding")
@@ -312,7 +318,8 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 		It("Should create both secrets in a single call", func(ctx context.Context) {
 			By("calling ensureUISecrets")
-			err := reconciler.ensureUISecrets(ctx, ui)
+			tc := tracking.NewClient(k8sClient, k8sClient.Scheme())
+			err := reconciler.ensureUISecrets(ctx, tc, ui)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying both secrets were created")
@@ -333,7 +340,8 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 		It("Should be idempotent when called multiple times", func(ctx context.Context) {
 			By("calling ensureUISecrets first time")
-			err := reconciler.ensureUISecrets(ctx, ui)
+			tc := tracking.NewClient(k8sClient, k8sClient.Scheme())
+			err := reconciler.ensureUISecrets(ctx, tc, ui)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("getting the first secret value")
@@ -346,7 +354,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			firstValue := secret1.Data["client-secret"]
 
 			By("calling ensureUISecrets second time")
-			err = reconciler.ensureUISecrets(ctx, ui)
+			err = reconciler.ensureUISecrets(ctx, tc, ui)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying the secret value was not changed")

@@ -28,6 +28,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,6 +43,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/ingress"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/oauth2proxy"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
 
 const (
@@ -65,6 +67,15 @@ const (
 	dexConfigMapLabel      = "app.kubernetes.io/managed-by-konflux-ui-reconciler"
 	dexConfigMapVolumeName = "dex"
 )
+
+// uiCleanupGVKs defines which resource types should be cleaned up when they are
+// no longer part of the desired state. For example, when Ingress is disabled,
+// the Ingress resource will be automatically deleted because it wasn't applied
+// during the reconcile but has the owner label.
+var uiCleanupGVKs = []schema.GroupVersionKind{
+	{Group: "networking.k8s.io", Version: "v1", Kind: "Ingress"},
+	// Add other GVKs here as needed for automatic cleanup
+}
 
 // KonfluxUIReconciler reconciles a KonfluxUI object
 type KonfluxUIReconciler struct {
@@ -96,8 +107,13 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	log.Info("Reconciling KonfluxUI", "name", ui.Name)
 
+	// Create a tracking client for this reconcile.
+	// Resources applied through this client are automatically tracked.
+	// At the end of a successful reconcile, orphaned resources are cleaned up.
+	tc := tracking.NewClient(r.Client, r.Scheme)
+
 	// Ensure konflux-ui namespace exists
-	if err := r.ensureNamespaceExists(ctx, ui); err != nil {
+	if err := r.ensureNamespaceExists(ctx, tc, ui); err != nil {
 		log.Error(err, "Failed to ensure namespace")
 		SetFailedCondition(ui, UIConditionTypeReady, "NamespaceCreationFailed", err)
 		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
@@ -131,7 +147,7 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, ui, dexConfigMapName, hostname, port); err != nil {
+	if err := r.applyManifests(ctx, tc, ui, dexConfigMapName, hostname, port); err != nil {
 		log.Error(err, "Failed to apply manifests")
 		SetFailedCondition(ui, UIConditionTypeReady, "ApplyFailed", err)
 		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
@@ -140,8 +156,8 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	// Reconcile Ingress if enabled
-	if err := r.reconcileIngress(ctx, ui, hostname); err != nil {
+	// Reconcile Ingress if enabled (tracked automatically, deleted if not applied)
+	if err := r.reconcileIngress(ctx, tc, ui, hostname); err != nil {
 		log.Error(err, "Failed to reconcile Ingress")
 		SetFailedCondition(ui, UIConditionTypeReady, "IngressReconcileFailed", err)
 		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
@@ -151,9 +167,21 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Ensure UI secrets are created
-	if err := r.ensureUISecrets(ctx, ui); err != nil {
+	if err := r.ensureUISecrets(ctx, tc, ui); err != nil {
 		log.Error(err, "Failed to ensure UI secrets")
 		SetFailedCondition(ui, UIConditionTypeReady, "SecretCreationFailed", err)
+		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Cleanup orphaned resources - delete any resources with our owner label
+	// that weren't applied during this reconcile. This handles cases like
+	// disabling Ingress (the Ingress resource is automatically deleted).
+	if err := tc.CleanupOrphans(ctx, KonfluxOwnerLabel, ui.Name, uiCleanupGVKs); err != nil {
+		log.Error(err, "Failed to cleanup orphaned resources")
+		SetFailedCondition(ui, UIConditionTypeReady, "CleanupFailed", err)
 		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
@@ -204,7 +232,7 @@ func updateIngressStatus(ui *konfluxv1alpha1.KonfluxUI, hostname, port string) {
 	}
 }
 
-func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, owner *konfluxv1alpha1.KonfluxUI) error {
+func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxUI) error {
 	objects, err := r.ObjectStore.GetForComponent(manifests.UI)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for UI: %w", err)
@@ -218,7 +246,7 @@ func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, owner *
 				return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
 					namespace.GetNamespace(), namespace.GetName(), getKind(namespace), manifests.UI, err)
 			}
-			if err := applyObject(ctx, r.Client, namespace, FieldManagerUI); err != nil {
+			if err := tc.ApplyObject(ctx, namespace, FieldManagerUI); err != nil {
 				return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
 					namespace.GetNamespace(), namespace.GetName(), getKind(namespace), manifests.UI, err)
 			}
@@ -231,7 +259,7 @@ func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, owner *
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
 // dexConfigMapName is the name of the Dex ConfigMap to use (empty if not configured).
 // hostname and port are used to configure oauth2-proxy.
-func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, owner *konfluxv1alpha1.KonfluxUI, dexConfigMapName, hostname, port string) error {
+func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxUI, dexConfigMapName, hostname, port string) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.UI)
@@ -253,7 +281,7 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, owner *konflux
 				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.UI, err)
 		}
 
-		if err := applyObject(ctx, r.Client, obj, FieldManagerUI); err != nil {
+		if err := tc.ApplyObject(ctx, obj, FieldManagerUI); err != nil {
 			gvk := obj.GetObjectKind().GroupVersionKind()
 			if gvk.Group == CertManagerGroup || gvk.Group == KyvernoGroup {
 				// TODO: Remove this once we decide how to install cert-manager crds in envtest
@@ -355,7 +383,8 @@ func buildDexOverlay(spec *konfluxv1alpha1.DexDeploymentSpec, configMapName stri
 
 // ensureUISecrets ensures that UI secrets exist and are properly configured.
 // Only generates secret values if they don't already exist (preserves existing secrets).
-func (r *KonfluxUIReconciler) ensureUISecrets(ctx context.Context, ui *konfluxv1alpha1.KonfluxUI) error {
+// Uses the tracking client so secrets are tracked and not orphaned during cleanup.
+func (r *KonfluxUIReconciler) ensureUISecrets(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI) error {
 	// Helper for the actual reconciliation logic
 	ensureSecret := func(name, key string, length int, urlSafe bool) error {
 		secret := &corev1.Secret{
@@ -365,7 +394,8 @@ func (r *KonfluxUIReconciler) ensureUISecrets(ctx context.Context, ui *konfluxv1
 			},
 		}
 
-		_, err := controllerutil.CreateOrUpdate(ctx, r.Client, secret, func() error {
+		// Use the tracking client so Create/Update operations are tracked
+		_, err := controllerutil.CreateOrUpdate(ctx, tc, secret, func() error {
 			// 1. Ensure Ownership/Labels (Updates if missing)
 			if err := setOwnership(secret, ui, string(manifests.UI), r.Scheme); err != nil {
 				return err
@@ -480,27 +510,16 @@ func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// reconcileIngress creates, updates, or deletes the Ingress resource for KonfluxUI.
-// If ingress is disabled, any existing Ingress resource will be deleted.
-func (r *KonfluxUIReconciler) reconcileIngress(ctx context.Context, ui *konfluxv1alpha1.KonfluxUI, hostname string) error {
+// reconcileIngress creates or updates the Ingress resource for KonfluxUI when enabled.
+// If ingress is disabled, the resource is not applied and will be automatically
+// cleaned up by the tracking client's CleanupOrphans method.
+func (r *KonfluxUIReconciler) reconcileIngress(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, hostname string) error {
 	log := logf.FromContext(ctx)
 
-	// If ingress is not enabled, delete the Ingress resource if it exists
+	// If ingress is not enabled, don't apply it.
+	// The tracking client will delete it during CleanupOrphans since it wasn't applied.
 	if ui.Spec.Ingress == nil || !ui.Spec.Ingress.Enabled {
-		existingIngress := &networkingv1.Ingress{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      ingress.IngressName,
-				Namespace: uiNamespace,
-			},
-		}
-		if err := r.Delete(ctx, existingIngress); err != nil {
-			if client.IgnoreNotFound(err) != nil {
-				return fmt.Errorf("failed to delete ingress: %w", err)
-			}
-			// Ingress doesn't exist, nothing to do
-		} else {
-			log.Info("Deleted Ingress resource because ingress is disabled")
-		}
+		log.Info("Ingress is disabled, skipping (will be cleaned up if exists)")
 		return nil
 	}
 
@@ -513,7 +532,7 @@ func (r *KonfluxUIReconciler) reconcileIngress(ctx context.Context, ui *konfluxv
 		return fmt.Errorf("failed to set ownership for ingress: %w", err)
 	}
 
-	if err := applyObject(ctx, r.Client, ingressResource, FieldManagerUI); err != nil {
+	if err := tc.ApplyObject(ctx, ingressResource, FieldManagerUI); err != nil {
 		return fmt.Errorf("failed to apply ingress: %w", err)
 	}
 
