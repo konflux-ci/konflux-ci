@@ -1,0 +1,279 @@
+/*
+Copyright 2025 Konflux CI.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+// Package tracking provides a client wrapper that tracks applied resources during
+// reconciliation and enables cleanup of orphaned resources. This implements a
+// declarative reconciliation pattern where the desired state is implicitly defined
+// by the resources that are applied during a reconcile loop.
+//
+// The Client type implements client.Client, so it can be used anywhere the
+// standard controller-runtime client is expected.
+//
+// Usage:
+//
+//	func (r *MyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+//	    tc := tracking.NewClient(r.Client, r.Scheme)
+//
+//	    // Apply resources - they're automatically tracked
+//	    if err := tc.ApplyObject(ctx, deployment, fieldManager); err != nil {
+//	        return ctrl.Result{}, err
+//	    }
+//
+//	    // Only reached if all applies succeeded - cleanup orphans
+//	    return ctrl.Result{}, tc.CleanupOrphans(ctx, ownerLabelKey, ownerName, gvksToClean)
+//	}
+package tracking
+
+import (
+	"context"
+	"fmt"
+	"sync"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+)
+
+var _ client.Client = &Client{}
+
+// ResourceKey uniquely identifies a Kubernetes resource.
+type ResourceKey struct {
+	GVK       schema.GroupVersionKind
+	Namespace string
+	Name      string
+}
+
+// String returns a human-readable representation of the resource key.
+func (k ResourceKey) String() string {
+	if k.Namespace == "" {
+		return fmt.Sprintf("%s/%s", k.GVK.Kind, k.Name)
+	}
+	return fmt.Sprintf("%s/%s/%s", k.GVK.Kind, k.Namespace, k.Name)
+}
+
+// Client wraps a controller-runtime client and tracks all resources that are
+// applied during a reconciliation. This enables cleanup of orphaned resources
+// at the end of a successful reconcile.
+//
+// Create a new Client at the start of each reconcile loop. The tracked state
+// is intentionally ephemeral - it only lives for the duration of one reconcile.
+type Client struct {
+	client.Client
+	scheme  *runtime.Scheme
+	tracked map[ResourceKey]struct{}
+	mu      sync.Mutex
+}
+
+// NewClient creates a new tracking client wrapping the given client.
+// Call this at the start of each reconcile to get a fresh tracker.
+// The scheme is required to derive GVK for typed objects.
+func NewClient(c client.Client, scheme *runtime.Scheme) *Client {
+	return &Client{
+		Client:  c,
+		scheme:  scheme,
+		tracked: make(map[ResourceKey]struct{}),
+	}
+}
+
+// Apply implements client.Writer.Apply for runtime.ApplyConfiguration objects.
+// NOTE: This method does NOT track the applied resource. Use ApplyObject instead
+// for server-side apply with tracking. This method exists only to satisfy the
+// client.Client interface for code paths that use runtime.ApplyConfiguration.
+//
+// If tracking is needed for ApplyConfiguration objects, use ApplyObject with a
+// client.Object instead, or implement tracking for your specific use case.
+func (c *Client) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
+	return c.Client.Apply(ctx, obj, opts...)
+}
+
+// ApplyObject applies an object using server-side apply and tracks it.
+// This is the primary method for reconcilers - it uses Patch with client.Apply
+// to perform server-side apply and automatically tracks the resource.
+func (c *Client) ApplyObject(
+	ctx context.Context,
+	obj client.Object,
+	fieldManager string,
+	opts ...client.PatchOption,
+) error {
+	patchOpts := append([]client.PatchOption{client.FieldOwner(fieldManager), client.ForceOwnership}, opts...)
+	if err := c.Client.Patch(ctx, obj, client.Apply, patchOpts...); err != nil {
+		return err
+	}
+	c.track(obj)
+	return nil
+}
+
+// Patch applies a patch to an object and tracks it if the patch succeeds.
+// This overrides the embedded client's Patch method to add tracking.
+func (c *Client) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	if err := c.Client.Patch(ctx, obj, patch, opts...); err != nil {
+		return err
+	}
+	c.track(obj)
+	return nil
+}
+
+// Create creates an object and tracks it if the creation succeeds.
+// This overrides the embedded client's Create method to add tracking.
+func (c *Client) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	if err := c.Client.Create(ctx, obj, opts...); err != nil {
+		return err
+	}
+	c.track(obj)
+	return nil
+}
+
+// Update updates an object and tracks it if the update succeeds.
+// This overrides the embedded client's Update method to add tracking.
+func (c *Client) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	if err := c.Client.Update(ctx, obj, opts...); err != nil {
+		return err
+	}
+	c.track(obj)
+	return nil
+}
+
+// track adds a resource to the tracked set.
+func (c *Client) track(obj client.Object) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	gvk := obj.GetObjectKind().GroupVersionKind()
+
+	// If GVK is not set on the object (common for typed objects after client operations),
+	// derive it from the scheme.
+	if gvk.Empty() && c.scheme != nil {
+		gvks, _, err := c.scheme.ObjectKinds(obj)
+		if err == nil && len(gvks) > 0 {
+			gvk = gvks[0]
+		}
+	}
+
+	key := ResourceKey{
+		GVK:       gvk,
+		Namespace: obj.GetNamespace(),
+		Name:      obj.GetName(),
+	}
+	c.tracked[key] = struct{}{}
+}
+
+// IsTracked returns true if the resource is in the tracked set.
+// Useful for testing and debugging.
+func (c *Client) IsTracked(gvk schema.GroupVersionKind, namespace, name string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	key := ResourceKey{GVK: gvk, Namespace: namespace, Name: name}
+	_, exists := c.tracked[key]
+	return exists
+}
+
+// TrackedResources returns a copy of all tracked resource keys.
+// Useful for testing and debugging.
+func (c *Client) TrackedResources() []ResourceKey {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	keys := make([]ResourceKey, 0, len(c.tracked))
+	for key := range c.tracked {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+// CleanupOrphans deletes resources that have the specified owner label but were
+// not applied during this reconcile. Only resources matching the provided GVKs
+// are considered for cleanup.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - ownerLabelKey: The label key that identifies ownership (e.g., "konflux.konflux-ci.dev/owner")
+//   - ownerLabelValue: The value of the owner label to match (e.g., the CR name)
+//   - gvks: List of GroupVersionKinds to check for orphaned resources
+//
+// Returns an error if listing or deleting fails. NotFound errors during deletion
+// are ignored (resource may have been deleted by another process).
+func (c *Client) CleanupOrphans(
+	ctx context.Context,
+	ownerLabelKey, ownerLabelValue string,
+	gvks []schema.GroupVersionKind,
+) error {
+	log := logf.FromContext(ctx)
+
+	for _, gvk := range gvks {
+		if err := c.cleanupOrphansForGVK(ctx, ownerLabelKey, ownerLabelValue, gvk); err != nil {
+			log.Error(err, "Failed to cleanup orphans", "gvk", gvk.String())
+			return fmt.Errorf("failed to cleanup orphans for %s: %w", gvk.String(), err)
+		}
+	}
+
+	return nil
+}
+
+// cleanupOrphansForGVK handles cleanup for a single GVK.
+func (c *Client) cleanupOrphansForGVK(
+	ctx context.Context,
+	ownerLabelKey, ownerLabelValue string,
+	gvk schema.GroupVersionKind,
+) error {
+	log := logf.FromContext(ctx)
+
+	// Create an unstructured list to hold resources of this GVK
+	list := &unstructured.UnstructuredList{}
+	list.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   gvk.Group,
+		Version: gvk.Version,
+		Kind:    gvk.Kind + "List",
+	})
+
+	// List all resources with the owner label
+	if err := c.List(ctx, list, client.MatchingLabels{
+		ownerLabelKey: ownerLabelValue,
+	}); err != nil {
+		return fmt.Errorf("failed to list resources: %w", err)
+	}
+
+	// Delete resources that weren't tracked this reconcile
+	for i := range list.Items {
+		item := &list.Items[i]
+		key := ResourceKey{
+			GVK:       gvk,
+			Namespace: item.GetNamespace(),
+			Name:      item.GetName(),
+		}
+
+		c.mu.Lock()
+		_, wasTracked := c.tracked[key]
+		c.mu.Unlock()
+
+		if !wasTracked {
+			log.Info("Deleting orphaned resource",
+				"gvk", gvk.String(),
+				"resource", key.String(),
+			)
+			if err := c.Delete(ctx, item); err != nil {
+				if client.IgnoreNotFound(err) != nil {
+					return fmt.Errorf("failed to delete %s: %w", key.String(), err)
+				}
+				// Resource already deleted, continue
+			}
+		}
+	}
+
+	return nil
+}
