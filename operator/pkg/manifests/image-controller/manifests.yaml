@@ -949,6 +949,7 @@ metadata:
   name: image-controller-controller-manager
   namespace: image-controller
 spec:
+  progressDeadlineSeconds: 2147483647
   replicas: 1
   selector:
     matchLabels:

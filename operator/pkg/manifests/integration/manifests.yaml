@@ -1184,6 +1184,7 @@ metadata:
   name: integration-service-controller-manager
   namespace: integration-service
 spec:
+  progressDeadlineSeconds: 2147483647
   replicas: 1
   selector:
     matchLabels:

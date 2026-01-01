@@ -332,6 +332,7 @@ metadata:
   name: dex
   namespace: konflux-ui
 spec:
+  progressDeadlineSeconds: 2147483647
   replicas: 1
   selector:
     matchLabels:
@@ -403,6 +404,7 @@ metadata:
   namespace: konflux-ui
 spec:
   minReadySeconds: 30
+  progressDeadlineSeconds: 2147483647
   replicas: 1
   selector:
     matchLabels:

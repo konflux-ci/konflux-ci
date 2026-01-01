@@ -4,6 +4,17 @@ resources:
   - core
   - certmanager
 
+patches:
+  # Prevent deployment failures during slow dependency setup
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/progressDeadlineSeconds
+        value: 2147483647
+
 replacements:
   - source: # Add cert-manager annotation to ValidatingWebhookConfiguration, MutatingWebhookConfiguration and CRDs
       kind: Certificate
