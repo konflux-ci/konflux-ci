@@ -9,3 +9,12 @@ patches:
       kind: Deployment
       name: build-service-controller-manager
     path: mount-custom-ca-bundle.yaml
+  # Prevent deployment failures during slow dependency setup
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/progressDeadlineSeconds
+        value: 2147483647

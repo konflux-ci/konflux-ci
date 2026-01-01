@@ -4679,6 +4679,7 @@ metadata:
   name: release-service-controller-manager
   namespace: release-service
 spec:
+  progressDeadlineSeconds: 2147483647
   replicas: 1
   selector:
     matchLabels:

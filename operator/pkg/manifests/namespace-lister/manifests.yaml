@@ -72,6 +72,7 @@ metadata:
   name: namespace-lister
   namespace: namespace-lister
 spec:
+  progressDeadlineSeconds: 2147483647
   replicas: 1
   selector:
     matchLabels:

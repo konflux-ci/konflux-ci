@@ -343,6 +343,7 @@ metadata:
   name: build-service-controller-manager
   namespace: build-service
 spec:
+  progressDeadlineSeconds: 2147483647
   replicas: 1
   selector:
     matchLabels:
