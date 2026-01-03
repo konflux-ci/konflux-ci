@@ -168,6 +168,54 @@ func TestClient_Create(t *testing.T) {
 	g.Expect(tc.IsTracked(configMapGVK, testNamespace, "created-cm")).To(BeTrue())
 }
 
+func TestClient_Create_AlreadyExists(t *testing.T) {
+	g := NewWithT(t)
+	ctx := context.Background()
+
+	scheme := setupScheme(g)
+
+	// Pre-create the object in the cluster
+	existing := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "existing-cm",
+			Namespace: testNamespace,
+			Labels: map[string]string{
+				testOwnerLabel: testOwnerValue,
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
+	tc := NewClient(fakeClient, scheme)
+
+	// Try to create the same object
+	cm := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "existing-cm",
+			Namespace: testNamespace,
+			Labels: map[string]string{
+				testOwnerLabel: testOwnerValue,
+			},
+		},
+	}
+
+	err := tc.Create(ctx, cm)
+
+	// Verify AlreadyExists error is returned
+	g.Expect(errors.IsAlreadyExists(err)).To(BeTrue(), "expected AlreadyExists error")
+
+	// Verify the resource is still tracked (to prevent orphan cleanup from deleting it)
+	g.Expect(tc.IsTracked(configMapGVK, testNamespace, "existing-cm")).To(BeTrue())
+}
+
 func TestClient_Update(t *testing.T) {
 	g := NewWithT(t)
 	ctx := context.Background()
