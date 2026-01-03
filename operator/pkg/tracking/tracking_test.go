@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 const (
@@ -508,6 +509,148 @@ func TestClient_CleanupOrphans_MultipleGVKs(t *testing.T) {
 	var deletedSecret corev1.Secret
 	err = fakeClient.Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: "orphan-secret"}, &deletedSecret)
 	g.Expect(errors.IsNotFound(err)).To(BeTrue(), "expected NotFound error for Secret")
+}
+
+func TestClient_CreateOrUpdate_Create(t *testing.T) {
+	g := NewWithT(t)
+	ctx := context.Background()
+
+	scheme := setupScheme(g)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	tc := NewClient(fakeClient, scheme)
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "new-cm",
+			Namespace: testNamespace,
+		},
+	}
+
+	result, err := tc.CreateOrUpdate(ctx, cm, func() error {
+		cm.Data = map[string]string{"key": "value"}
+		return nil
+	})
+
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result).To(Equal(controllerutil.OperationResultCreated))
+
+	// Verify the resource is tracked
+	g.Expect(tc.IsTracked(configMapGVK, testNamespace, "new-cm")).To(BeTrue())
+
+	// Verify the resource exists in the cluster with correct data
+	var fetched corev1.ConfigMap
+	err = fakeClient.Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: "new-cm"}, &fetched)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(fetched.Data["key"]).To(Equal("value"))
+}
+
+func TestClient_CreateOrUpdate_Update(t *testing.T) {
+	g := NewWithT(t)
+	ctx := context.Background()
+
+	scheme := setupScheme(g)
+
+	existing := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "existing-cm",
+			Namespace: testNamespace,
+		},
+		Data: map[string]string{
+			"key": "old-value",
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
+	tc := NewClient(fakeClient, scheme)
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "existing-cm",
+			Namespace: testNamespace,
+		},
+	}
+
+	result, err := tc.CreateOrUpdate(ctx, cm, func() error {
+		cm.Data = map[string]string{"key": "new-value"}
+		return nil
+	})
+
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result).To(Equal(controllerutil.OperationResultUpdated))
+
+	// Verify the resource is tracked
+	g.Expect(tc.IsTracked(configMapGVK, testNamespace, "existing-cm")).To(BeTrue())
+
+	// Verify the resource was updated
+	var fetched corev1.ConfigMap
+	err = fakeClient.Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: "existing-cm"}, &fetched)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(fetched.Data["key"]).To(Equal("new-value"))
+}
+
+func TestClient_CreateOrUpdate_Unchanged(t *testing.T) {
+	g := NewWithT(t)
+	ctx := context.Background()
+
+	scheme := setupScheme(g)
+
+	existing := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "unchanged-cm",
+			Namespace: testNamespace,
+		},
+		Data: map[string]string{
+			"key": "value",
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
+	tc := NewClient(fakeClient, scheme)
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "unchanged-cm",
+			Namespace: testNamespace,
+		},
+	}
+
+	result, err := tc.CreateOrUpdate(ctx, cm, func() error {
+		// Don't change anything - the mutate function doesn't modify the object
+		return nil
+	})
+
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result).To(Equal(controllerutil.OperationResultNone))
+
+	// Verify the resource is STILL tracked even though no update occurred
+	// This is the key behavior - objects must be tracked to prevent orphan cleanup
+	g.Expect(tc.IsTracked(configMapGVK, testNamespace, "unchanged-cm")).To(BeTrue())
+}
+
+func TestClient_CreateOrUpdate_Error(t *testing.T) {
+	g := NewWithT(t)
+	ctx := context.Background()
+
+	scheme := setupScheme(g)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	tc := NewClient(fakeClient, scheme)
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "error-cm",
+			Namespace: testNamespace,
+		},
+	}
+
+	result, err := tc.CreateOrUpdate(ctx, cm, func() error {
+		return errors.NewBadRequest("mutate error")
+	})
+
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(result).To(Equal(controllerutil.OperationResultNone))
+
+	// Verify the resource is NOT tracked when there's an error
+	g.Expect(tc.IsTracked(configMapGVK, testNamespace, "error-cm")).To(BeFalse())
 }
 
 func TestResourceKey_String(t *testing.T) {

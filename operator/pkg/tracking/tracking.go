@@ -47,6 +47,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -149,6 +150,23 @@ func (c *Client) Update(ctx context.Context, obj client.Object, opts ...client.U
 	}
 	c.track(obj)
 	return nil
+}
+
+// CreateOrUpdate wraps controllerutil.CreateOrUpdate and tracks the object regardless
+// of whether it was created, updated, or unchanged. This is necessary because
+// controllerutil.CreateOrUpdate only calls Create/Update when changes are needed,
+// but we always want to track the object to prevent orphan cleanup from deleting it.
+func (c *Client) CreateOrUpdate(
+	ctx context.Context,
+	obj client.Object,
+	f controllerutil.MutateFn,
+) (controllerutil.OperationResult, error) {
+	result, err := controllerutil.CreateOrUpdate(ctx, c.Client, obj, f)
+	if err != nil {
+		return result, err
+	}
+	c.track(obj)
+	return result, nil
 }
 
 // track adds a resource to the tracked set.
