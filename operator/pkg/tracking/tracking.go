@@ -42,6 +42,7 @@ import (
 	"fmt"
 	"sync"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -128,14 +129,16 @@ func (c *Client) Patch(ctx context.Context, obj client.Object, patch client.Patc
 	return nil
 }
 
-// Create creates an object and tracks it if the creation succeeds.
+// Create creates an object and tracks it if the creation succeeds or the object already exists.
 // This overrides the embedded client's Create method to add tracking.
+// Note: If the object already exists (AlreadyExists error), it is still tracked to prevent
+// orphan cleanup from deleting it in subsequent reconcile attempts.
 func (c *Client) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
-	if err := c.Client.Create(ctx, obj, opts...); err != nil {
-		return err
+	err := c.Client.Create(ctx, obj, opts...)
+	if err == nil || apierrors.IsAlreadyExists(err) {
+		c.track(obj)
 	}
-	c.track(obj)
-	return nil
+	return err
 }
 
 // Update updates an object and tracks it if the update succeeds.
