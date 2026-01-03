@@ -32,7 +32,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
@@ -74,6 +73,7 @@ const (
 // during the reconcile but has the owner label.
 var uiCleanupGVKs = []schema.GroupVersionKind{
 	{Group: "networking.k8s.io", Version: "v1", Kind: "Ingress"},
+	{Group: "", Version: "v1", Kind: "Secret"},
 	// Add other GVKs here as needed for automatic cleanup
 }
 
@@ -414,8 +414,9 @@ func (r *KonfluxUIReconciler) ensureUISecrets(ctx context.Context, tc *tracking.
 			},
 		}
 
-		// Use the tracking client so Create/Update operations are tracked
-		_, err := controllerutil.CreateOrUpdate(ctx, tc, secret, func() error {
+		// Use the tracking client's CreateOrUpdate which tracks the object
+		// regardless of whether it was created, updated, or unchanged
+		_, err := tc.CreateOrUpdate(ctx, secret, func() error {
 			// 1. Ensure Ownership/Labels (Updates if missing)
 			if err := setOwnership(secret, ui, string(manifests.UI), r.Scheme); err != nil {
 				return err
