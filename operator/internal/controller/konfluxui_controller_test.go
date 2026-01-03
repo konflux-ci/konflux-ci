@@ -34,7 +34,6 @@ import (
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/ingress"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
-	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
 
 var _ = Describe("KonfluxUI Controller", func() {
@@ -92,6 +91,14 @@ var _ = Describe("KonfluxUI Controller", func() {
 	Context("ensureUISecrets", func() {
 		var ui *konfluxv1alpha1.KonfluxUI
 		var reconciler *KonfluxUIReconciler
+
+		// Helper: reconcile and expect success
+		reconcileUI := func(ctx context.Context) {
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: ui.Name},
+			})
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+		}
 
 		BeforeEach(func(ctx context.Context) {
 			By("cleaning up any existing secrets from previous tests")
@@ -197,18 +204,15 @@ var _ = Describe("KonfluxUI Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 
-			By("calling ensureUISecrets")
-			tc := tracking.NewClient(k8sClient, k8sClient.Scheme())
-			err := reconciler.ensureUISecrets(ctx, tc, ui)
-			Expect(err).NotTo(HaveOccurred())
+			By("calling Reconcile")
+			reconcileUI(ctx)
 
 			By("verifying the secret data was preserved")
 			updatedSecret := &corev1.Secret{}
-			err = k8sClient.Get(ctx, types.NamespacedName{
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name:      "oauth2-proxy-client-secret",
 				Namespace: uiNamespace,
-			}, updatedSecret)
-			Expect(err).NotTo(HaveOccurred())
+			}, updatedSecret)).To(Succeed())
 			Expect(updatedSecret.Data["client-secret"]).To(Equal(existingData))
 		})
 
@@ -229,18 +233,15 @@ var _ = Describe("KonfluxUI Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 
-			By("calling ensureUISecrets")
-			tc := tracking.NewClient(k8sClient, k8sClient.Scheme())
-			err := reconciler.ensureUISecrets(ctx, tc, ui)
-			Expect(err).NotTo(HaveOccurred())
+			By("calling Reconcile")
+			reconcileUI(ctx)
 
 			By("verifying the ownership labels were updated")
 			updatedSecret := &corev1.Secret{}
-			err = k8sClient.Get(ctx, types.NamespacedName{
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name:      "oauth2-proxy-client-secret",
 				Namespace: uiNamespace,
-			}, updatedSecret)
-			Expect(err).NotTo(HaveOccurred())
+			}, updatedSecret)).To(Succeed())
 			Expect(updatedSecret.Labels).To(HaveKeyWithValue(KonfluxOwnerLabel, KonfluxUICRName))
 			Expect(updatedSecret.Labels).To(HaveKeyWithValue(KonfluxComponentLabel, string(manifests.UI)))
 
@@ -260,35 +261,29 @@ var _ = Describe("KonfluxUI Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 
-			By("calling ensureUISecrets")
-			tc := tracking.NewClient(k8sClient, k8sClient.Scheme())
-			err := reconciler.ensureUISecrets(ctx, tc, ui)
-			Expect(err).NotTo(HaveOccurred())
+			By("calling Reconcile")
+			reconcileUI(ctx)
 
 			By("verifying the secret data was generated")
 			updatedSecret := &corev1.Secret{}
-			err = k8sClient.Get(ctx, types.NamespacedName{
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name:      "oauth2-proxy-client-secret",
 				Namespace: uiNamespace,
-			}, updatedSecret)
-			Expect(err).NotTo(HaveOccurred())
+			}, updatedSecret)).To(Succeed())
 			Expect(updatedSecret.Data).To(HaveKey("client-secret"))
 			Expect(updatedSecret.Data["client-secret"]).ToNot(BeEmpty())
 		})
 
 		It("Should use URL-safe base64 encoding for client-secret", func(ctx context.Context) {
-			By("calling ensureUISecrets")
-			tc := tracking.NewClient(k8sClient, k8sClient.Scheme())
-			err := reconciler.ensureUISecrets(ctx, tc, ui)
-			Expect(err).NotTo(HaveOccurred())
+			By("calling Reconcile")
+			reconcileUI(ctx)
 
 			By("verifying the client-secret uses URL-safe encoding")
 			secret := &corev1.Secret{}
-			err = k8sClient.Get(ctx, types.NamespacedName{
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name:      "oauth2-proxy-client-secret",
 				Namespace: uiNamespace,
-			}, secret)
-			Expect(err).NotTo(HaveOccurred())
+			}, secret)).To(Succeed())
 
 			clientSecretValue := string(secret.Data["client-secret"])
 			By("verifying no padding characters (URL-safe uses RawURLEncoding)")
@@ -298,18 +293,15 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("Should use standard base64 encoding for cookie-secret", func(ctx context.Context) {
-			By("calling ensureUISecrets")
-			tc := tracking.NewClient(k8sClient, k8sClient.Scheme())
-			err := reconciler.ensureUISecrets(ctx, tc, ui)
-			Expect(err).NotTo(HaveOccurred())
+			By("calling Reconcile")
+			reconcileUI(ctx)
 
 			By("verifying the cookie-secret uses standard encoding")
 			secret := &corev1.Secret{}
-			err = k8sClient.Get(ctx, types.NamespacedName{
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name:      "oauth2-proxy-cookie-secret",
 				Namespace: uiNamespace,
-			}, secret)
-			Expect(err).NotTo(HaveOccurred())
+			}, secret)).To(Succeed())
 
 			cookieSecretValue := string(secret.Data["cookie-secret"])
 			By("verifying it contains standard base64 characters (may include + and /)")
@@ -317,45 +309,38 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("Should create both secrets in a single call", func(ctx context.Context) {
-			By("calling ensureUISecrets")
-			tc := tracking.NewClient(k8sClient, k8sClient.Scheme())
-			err := reconciler.ensureUISecrets(ctx, tc, ui)
-			Expect(err).NotTo(HaveOccurred())
+			By("calling Reconcile")
+			reconcileUI(ctx)
 
 			By("verifying both secrets were created")
 			clientSecret := &corev1.Secret{}
-			err = k8sClient.Get(ctx, types.NamespacedName{
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name:      "oauth2-proxy-client-secret",
 				Namespace: uiNamespace,
-			}, clientSecret)
-			Expect(err).NotTo(HaveOccurred())
+			}, clientSecret)).To(Succeed())
 
 			cookieSecret := &corev1.Secret{}
-			err = k8sClient.Get(ctx, types.NamespacedName{
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name:      "oauth2-proxy-cookie-secret",
 				Namespace: uiNamespace,
-			}, cookieSecret)
-			Expect(err).NotTo(HaveOccurred())
+			}, cookieSecret)).To(Succeed())
 		})
 
 		It("Should be idempotent when called multiple times", func(ctx context.Context) {
-			By("calling ensureUISecrets first time")
-			tc := tracking.NewClient(k8sClient, k8sClient.Scheme())
-			err := reconciler.ensureUISecrets(ctx, tc, ui)
-			Expect(err).NotTo(HaveOccurred())
+			By("calling Reconcile first time")
+			reconcileUI(ctx)
 
 			By("getting the first secret value")
 			secret1 := &corev1.Secret{}
-			err = k8sClient.Get(ctx, types.NamespacedName{
+			err := k8sClient.Get(ctx, types.NamespacedName{
 				Name:      "oauth2-proxy-client-secret",
 				Namespace: uiNamespace,
 			}, secret1)
 			Expect(err).NotTo(HaveOccurred())
 			firstValue := secret1.Data["client-secret"]
 
-			By("calling ensureUISecrets second time")
-			err = reconciler.ensureUISecrets(ctx, tc, ui)
-			Expect(err).NotTo(HaveOccurred())
+			By("calling Reconcile second time")
+			reconcileUI(ctx)
 
 			By("verifying the secret value was not changed")
 			secret2 := &corev1.Secret{}
