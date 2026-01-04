@@ -40,6 +40,9 @@ resources:
 - konfluxrbac_admin_role.yaml
 - konfluxrbac_editor_role.yaml
 - konfluxrbac_viewer_role.yaml
+# Unified system admin role for Platform Engineers to configure
+# Konflux system settings, integrations, and global policies.
+- konflux_system_admin_role.yaml
 
 # For each CRD, "Editor" and "Viewer" roles are scaffolded by
 # default, aiding admins in cluster management. Those roles are
