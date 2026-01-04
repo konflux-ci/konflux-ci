@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/onsi/gomega"
+	"k8s.io/utils/ptr"
 )
 
 func TestNewDexConfig(t *testing.T) {
@@ -134,7 +135,7 @@ func TestNewDexConfig_OpenShiftConnector(t *testing.T) {
 
 		params := &DexParams{
 			Hostname:                    "dex.example.com",
-			ConfigureLoginWithOpenShift: true,
+			ConfigureLoginWithOpenShift: ptr.To(true),
 		}
 
 		config := NewDexConfig(params)
@@ -151,7 +152,7 @@ func TestNewDexConfig_OpenShiftConnector(t *testing.T) {
 
 		params := &DexParams{
 			Hostname:                    "dex.example.com",
-			ConfigureLoginWithOpenShift: true,
+			ConfigureLoginWithOpenShift: ptr.To(true),
 		}
 
 		config := NewDexConfig(params)
@@ -166,7 +167,7 @@ func TestNewDexConfig_OpenShiftConnector(t *testing.T) {
 
 		params := &DexParams{
 			Hostname:                    "dex.example.com",
-			ConfigureLoginWithOpenShift: true,
+			ConfigureLoginWithOpenShift: ptr.To(true),
 		}
 
 		config := NewDexConfig(params)
@@ -176,12 +177,26 @@ func TestNewDexConfig_OpenShiftConnector(t *testing.T) {
 		g.Expect(connector.Config.ClientSecret).To(gomega.Equal("$OPENSHIFT_OAUTH_CLIENT_SECRET"))
 	})
 
+	t.Run("configures OpenShift connector with root CA for API server TLS", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		params := &DexParams{
+			Hostname:                    "dex.example.com",
+			ConfigureLoginWithOpenShift: ptr.To(true),
+		}
+
+		config := NewDexConfig(params)
+
+		connector := config.Connectors[0]
+		g.Expect(connector.Config.RootCA).To(gomega.Equal("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"))
+	})
+
 	t.Run("configures OpenShift connector redirect URI without port", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
 		params := &DexParams{
 			Hostname:                    "dex.example.com",
-			ConfigureLoginWithOpenShift: true,
+			ConfigureLoginWithOpenShift: ptr.To(true),
 		}
 
 		config := NewDexConfig(params)
@@ -196,7 +211,7 @@ func TestNewDexConfig_OpenShiftConnector(t *testing.T) {
 		params := &DexParams{
 			Hostname:                    "dex.example.com",
 			Port:                        "9443",
-			ConfigureLoginWithOpenShift: true,
+			ConfigureLoginWithOpenShift: ptr.To(true),
 		}
 
 		config := NewDexConfig(params)
@@ -210,7 +225,7 @@ func TestNewDexConfig_OpenShiftConnector(t *testing.T) {
 
 		params := &DexParams{
 			Hostname:                    "dex.example.com",
-			ConfigureLoginWithOpenShift: false,
+			ConfigureLoginWithOpenShift: ptr.To(false),
 		}
 
 		config := NewDexConfig(params)
@@ -257,7 +272,7 @@ func TestNewDexConfig_CustomConnectors(t *testing.T) {
 					Name: "GitHub",
 				},
 			},
-			ConfigureLoginWithOpenShift: true,
+			ConfigureLoginWithOpenShift: ptr.To(true),
 		}
 
 		config := NewDexConfig(params)
@@ -537,7 +552,7 @@ func TestNewDexConfig_YAML_Output(t *testing.T) {
 		params := &DexParams{
 			Hostname:                    "dex.example.com",
 			Port:                        "9443",
-			ConfigureLoginWithOpenShift: true,
+			ConfigureLoginWithOpenShift: ptr.To(true),
 			EnablePasswordDB:            true,
 			PasswordConnector:           "local",
 			StaticPasswords: []Password{

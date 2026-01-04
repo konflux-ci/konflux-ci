@@ -119,7 +119,7 @@ func assertNoConflictingEnvVars(g *gomega.WithT, container *corev1.Container) {
 func TestBuildProxyOverlay(t *testing.T) {
 	t.Run("nil spec returns overlay with oauth2-proxy config", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		overlay := buildProxyOverlay(nil, buildOAuth2ProxyOptions("localhost", "9443")...)
+		overlay := buildProxyOverlay(nil, buildOAuth2ProxyOptions("localhost", "9443", false)...)
 		g.Expect(overlay).NotTo(gomega.BeNil())
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
@@ -135,7 +135,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 	t.Run("empty spec returns overlay with oauth2-proxy config", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := &konfluxv1alpha1.ProxyDeploymentSpec{}
-		overlay := buildProxyOverlay(spec, buildOAuth2ProxyOptions("localhost", "9443")...)
+		overlay := buildProxyOverlay(spec, buildOAuth2ProxyOptions("localhost", "9443", false)...)
 		g.Expect(overlay).NotTo(gomega.BeNil())
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
@@ -166,7 +166,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay := buildProxyOverlay(spec, buildOAuth2ProxyOptions("localhost", "9443")...)
+		overlay := buildProxyOverlay(spec, buildOAuth2ProxyOptions("localhost", "9443", false)...)
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -192,7 +192,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay := buildProxyOverlay(spec, buildOAuth2ProxyOptions("localhost", "9443")...)
+		overlay := buildProxyOverlay(spec, buildOAuth2ProxyOptions("localhost", "9443", false)...)
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -225,7 +225,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay := buildProxyOverlay(spec, buildOAuth2ProxyOptions("localhost", "9443")...)
+		overlay := buildProxyOverlay(spec, buildOAuth2ProxyOptions("localhost", "9443", false)...)
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -258,7 +258,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		g.Expect(nginxContainer).NotTo(gomega.BeNil(), "nginx container must exist in proxy deployment")
 		originalImage := nginxContainer.Image
 
-		overlay := buildProxyOverlay(spec, buildOAuth2ProxyOptions("localhost", "9443")...)
+		overlay := buildProxyOverlay(spec, buildOAuth2ProxyOptions("localhost", "9443", false)...)
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -272,7 +272,7 @@ func TestBuildOAuth2ProxyOptions(t *testing.T) {
 	t.Run("returns default options for empty spec", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
-		opts := buildOAuth2ProxyOptions("localhost", "9443")
+		opts := buildOAuth2ProxyOptions("localhost", "9443", false)
 
 		// Apply options to a container to verify
 		c := &corev1.Container{}
@@ -293,7 +293,7 @@ func TestBuildOAuth2ProxyOptions(t *testing.T) {
 	t.Run("returns all required options", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
-		opts := buildOAuth2ProxyOptions("localhost", "9443")
+		opts := buildOAuth2ProxyOptions("localhost", "9443", false)
 
 		// Apply options to a container
 		c := &corev1.Container{}
@@ -322,19 +322,60 @@ func TestBuildOAuth2ProxyOptions(t *testing.T) {
 		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY"))
 		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_WHITELIST_DOMAINS"))
 	})
+
+	t.Run("includes allow unverified email when OpenShift login enabled", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		opts := buildOAuth2ProxyOptions("localhost", "9443", true)
+
+		// Apply options to a container
+		c := &corev1.Container{}
+		for _, opt := range opts {
+			opt(c, customization.DeploymentContext{})
+		}
+
+		envMap := make(map[string]string)
+		for _, env := range c.Env {
+			envMap[env.Name] = env.Value
+		}
+
+		// Verify allow unverified email is set
+		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL"))
+		g.Expect(envMap["OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL"]).To(gomega.Equal("true"))
+	})
+
+	t.Run("does not include allow unverified email when OpenShift login disabled", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		opts := buildOAuth2ProxyOptions("localhost", "9443", false)
+
+		// Apply options to a container
+		c := &corev1.Container{}
+		for _, opt := range opts {
+			opt(c, customization.DeploymentContext{})
+		}
+
+		envMap := make(map[string]string)
+		for _, env := range c.Env {
+			envMap[env.Name] = env.Value
+		}
+
+		// Verify allow unverified email is NOT set
+		g.Expect(envMap).NotTo(gomega.HaveKey("OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL"))
+	})
 }
 
 func TestBuildDexOverlay(t *testing.T) {
 	t.Run("nil spec returns overlay with configmap update", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		overlay := buildDexOverlay(nil, "dex-config-abc123")
+		overlay := buildDexOverlay(nil, "dex-config-abc123", false)
 		g.Expect(overlay).NotTo(gomega.BeNil())
 	})
 
 	t.Run("empty spec returns overlay with configmap update", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := &konfluxv1alpha1.DexDeploymentSpec{}
-		overlay := buildDexOverlay(spec, "dex-config-abc123")
+		overlay := buildDexOverlay(spec, "dex-config-abc123", false)
 		g.Expect(overlay).NotTo(gomega.BeNil())
 	})
 
@@ -356,7 +397,7 @@ func TestBuildDexOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, dexDeploymentName)
-		overlay := buildDexOverlay(spec, "dex-config-abc123")
+		overlay := buildDexOverlay(spec, "dex-config-abc123", false)
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -386,7 +427,7 @@ func TestBuildDexOverlay(t *testing.T) {
 		originalImage := dexContainer.Image
 		originalArgs := dexContainer.Args
 
-		overlay := buildDexOverlay(spec, "dex-config-abc123")
+		overlay := buildDexOverlay(spec, "dex-config-abc123", false)
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -400,7 +441,7 @@ func TestBuildDexOverlay(t *testing.T) {
 		g := gomega.NewWithT(t)
 		deployment := getUIDeployment(t, dexDeploymentName)
 
-		overlay := buildDexOverlay(nil, "dex-newconfig-xyz789")
+		overlay := buildDexOverlay(nil, "dex-newconfig-xyz789", false)
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -416,6 +457,60 @@ func TestBuildDexOverlay(t *testing.T) {
 		g.Expect(dexVolume.ConfigMap).NotTo(gomega.BeNil())
 		g.Expect(dexVolume.ConfigMap.Name).To(gomega.Equal("dex-newconfig-xyz789"))
 	})
+
+	t.Run("adds OpenShift OAuth client secret env var when enabled", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		deployment := getUIDeployment(t, dexDeploymentName)
+
+		overlay := buildDexOverlay(nil, "dex-config-abc123", true)
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		dexContainer := findContainer(deployment.Spec.Template.Spec.Containers, dexContainerName)
+		g.Expect(dexContainer).NotTo(gomega.BeNil())
+
+		// Find the OPENSHIFT_OAUTH_CLIENT_SECRET env var
+		var foundEnv *corev1.EnvVar
+		for i := range dexContainer.Env {
+			if dexContainer.Env[i].Name == "OPENSHIFT_OAUTH_CLIENT_SECRET" {
+				foundEnv = &dexContainer.Env[i]
+				break
+			}
+		}
+		g.Expect(foundEnv).NotTo(gomega.BeNil(), "OPENSHIFT_OAUTH_CLIENT_SECRET env var should exist")
+		g.Expect(foundEnv.ValueFrom).NotTo(gomega.BeNil())
+		g.Expect(foundEnv.ValueFrom.SecretKeyRef).NotTo(gomega.BeNil())
+		g.Expect(foundEnv.ValueFrom.SecretKeyRef.Name).To(gomega.Equal("dex-client"))
+		g.Expect(foundEnv.ValueFrom.SecretKeyRef.Key).To(gomega.Equal("token"))
+	})
+
+	t.Run("does not add OpenShift OAuth env var when disabled", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		deployment := getUIDeployment(t, dexDeploymentName)
+
+		overlay := buildDexOverlay(nil, "dex-config-abc123", false)
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		dexContainer := findContainer(deployment.Spec.Template.Spec.Containers, dexContainerName)
+		g.Expect(dexContainer).NotTo(gomega.BeNil())
+
+		// Ensure OPENSHIFT_OAUTH_CLIENT_SECRET env var does NOT exist
+		for _, env := range dexContainer.Env {
+			g.Expect(env.Name).NotTo(gomega.Equal("OPENSHIFT_OAUTH_CLIENT_SECRET"),
+				"OPENSHIFT_OAUTH_CLIENT_SECRET should not be present when OpenShift login is disabled")
+		}
+	})
+}
+
+// buildUIFromSpec creates a KonfluxUI CR from a spec for testing purposes.
+func buildUIFromSpec(spec konfluxv1alpha1.KonfluxUISpec) *konfluxv1alpha1.KonfluxUI {
+	return &konfluxv1alpha1.KonfluxUI{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "konflux-ui",
+		},
+		Spec: spec,
+	}
 }
 
 func TestApplyUIDeploymentCustomizations(t *testing.T) {
@@ -423,7 +518,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 
 	t.Run("applies customizations to proxy deployment", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxUISpec{
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
 				Nginx: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
@@ -433,10 +528,10 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 					},
 				},
 			},
-		}
+		})
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName, "localhost", "9443")
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "localhost", "9443")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		nginxContainer := findContainer(deployment.Spec.Template.Spec.Containers, nginxContainerName)
@@ -446,7 +541,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 
 	t.Run("applies customizations to dex deployment", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxUISpec{
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Dex: &konfluxv1alpha1.DexDeploymentSpec{
 				Dex: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
@@ -456,10 +551,10 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 					},
 				},
 			},
-		}
+		})
 
 		deployment := getUIDeployment(t, dexDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName, "localhost", "9443")
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "localhost", "9443")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		dexContainer := findContainer(deployment.Spec.Template.Spec.Containers, dexContainerName)
@@ -469,7 +564,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 
 	t.Run("ignores unknown deployment names", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxUISpec{
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
 				Nginx: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
@@ -479,7 +574,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 					},
 				},
 			},
-		}
+		})
 
 		deployment := &appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{Name: "unknown-deployment"},
@@ -494,7 +589,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 			},
 		}
 
-		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName, "localhost", "9443")
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "localhost", "9443")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic and container should be unchanged
@@ -503,12 +598,12 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 
 	t.Run("handles nil proxy spec", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxUISpec{
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Proxy: nil,
-		}
+		})
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName, "localhost", "9443")
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "localhost", "9443")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
@@ -518,12 +613,12 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 
 	t.Run("handles nil dex spec", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxUISpec{
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Dex: nil,
-		}
+		})
 
 		deployment := getUIDeployment(t, dexDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName, "localhost", "9443")
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "localhost", "9443")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
@@ -533,10 +628,10 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 
 	t.Run("handles empty spec", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxUISpec{}
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName, "localhost", "9443")
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "localhost", "9443")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
@@ -545,14 +640,14 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 
 	t.Run("applies replicas to proxy deployment", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxUISpec{
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
 				Replicas: 3,
 			},
-		}
+		})
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName, "localhost", "9443")
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "localhost", "9443")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).NotTo(gomega.BeNil())
@@ -561,14 +656,14 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 
 	t.Run("applies replicas to dex deployment", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxUISpec{
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Dex: &konfluxv1alpha1.DexDeploymentSpec{
 				Replicas: 2,
 			},
-		}
+		})
 
 		deployment := getUIDeployment(t, dexDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName, "localhost", "9443")
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "localhost", "9443")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).NotTo(gomega.BeNil())
@@ -577,14 +672,14 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 
 	t.Run("applies default replicas when using default value", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxUISpec{
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
 				Replicas: 1, // default value
 			},
-		}
+		})
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName, "localhost", "9443")
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "localhost", "9443")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).NotTo(gomega.BeNil())
@@ -593,13 +688,13 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 
 	t.Run("does not modify replicas when proxy spec is nil", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxUISpec{
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Proxy: nil,
-		}
+		})
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
 		originalReplicas := deployment.Spec.Replicas
-		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName, "localhost", "9443")
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "localhost", "9443")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).To(gomega.Equal(originalReplicas))
@@ -607,7 +702,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 
 	t.Run("applies replicas together with container resources", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxUISpec{
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
 				Replicas: 5,
 				Nginx: &konfluxv1alpha1.ContainerSpec{
@@ -618,10 +713,10 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 					},
 				},
 			},
-		}
+		})
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName, "localhost", "9443")
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "localhost", "9443")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Check replicas
@@ -636,10 +731,10 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 
 	t.Run("updates dex configmap volume reference", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxUISpec{}
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
 
 		deployment := getUIDeployment(t, dexDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, spec, "dex-custom-config-abc", "localhost", "9443")
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, "dex-custom-config-abc", "localhost", "9443")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Find the dex volume and verify ConfigMap name was updated
@@ -671,7 +766,7 @@ func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
 			corev1.ResourceMemory: resource.MustParse("64Mi"),
 		}
 
-		spec := konfluxv1alpha1.KonfluxUISpec{
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
 				Nginx: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
@@ -681,9 +776,9 @@ func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
 					},
 				},
 			},
-		}
+		})
 
-		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName, "localhost", "9443")
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "localhost", "9443")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		nginxContainer = findContainer(deployment.Spec.Template.Spec.Containers, nginxContainerName)
@@ -705,7 +800,7 @@ func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
 			corev1.ResourceMemory: resource.MustParse("512Mi"),
 		}
 
-		spec := konfluxv1alpha1.KonfluxUISpec{
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
 				Nginx: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
@@ -715,9 +810,9 @@ func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
 					},
 				},
 			},
-		}
+		})
 
-		err := applyUIDeploymentCustomizations(deployment, spec, testConfigMapName, "localhost", "9443")
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "localhost", "9443")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		nginxContainer = findContainer(deployment.Spec.Template.Spec.Containers, nginxContainerName)

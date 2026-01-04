@@ -74,6 +74,7 @@ const (
 var uiCleanupGVKs = []schema.GroupVersionKind{
 	{Group: "networking.k8s.io", Version: "v1", Kind: "Ingress"},
 	{Group: "", Version: "v1", Kind: "Secret"},
+	{Group: "", Version: "v1", Kind: "ServiceAccount"},
 	// Add other GVKs here as needed for automatic cleanup
 }
 
@@ -175,6 +176,16 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.reconcileIngress(ctx, tc, ui, hostname); err != nil {
 		log.Error(err, "Failed to reconcile Ingress")
 		SetFailedCondition(ui, UIConditionTypeReady, "IngressReconcileFailed", err)
+		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Reconcile OpenShift OAuth resources if enabled
+	if err := r.reconcileOpenShiftOAuth(ctx, tc, ui, hostname, port); err != nil {
+		log.Error(err, "Failed to reconcile OpenShift OAuth resources")
+		SetFailedCondition(ui, UIConditionTypeReady, "OpenShiftOAuthFailed", err)
 		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
@@ -290,7 +301,7 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 	for _, obj := range objects {
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
-			if err := applyUIDeploymentCustomizations(deployment, owner.Spec, dexConfigMapName, hostname, port); err != nil {
+			if err := applyUIDeploymentCustomizations(deployment, owner, r.ClusterInfo, dexConfigMapName, hostname, port); err != nil {
 				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
 			}
 		}
@@ -322,14 +333,17 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 }
 
 // applyUIDeploymentCustomizations applies user-defined customizations to UI deployments.
-func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxUISpec, dexConfigMapName, hostname, port string) error {
+func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv1alpha1.KonfluxUI, clusterInfo *clusterinfo.Info, dexConfigMapName, hostname, port string) error {
+	spec := ui.Spec
+	openShiftLoginEnabled := isOpenShiftLoginEnabled(ui, clusterInfo)
+
 	switch deployment.Name {
 	case proxyDeploymentName:
 		if spec.Proxy != nil {
 			deployment.Spec.Replicas = &spec.Proxy.Replicas
 		}
-		// Build oauth2-proxy options based on hostname and port
-		oauth2ProxyOpts := buildOAuth2ProxyOptions(hostname, port)
+		// Build oauth2-proxy options based on hostname, port, and OpenShift login state
+		oauth2ProxyOpts := buildOAuth2ProxyOptions(hostname, port, openShiftLoginEnabled)
 		if err := buildProxyOverlay(spec.Proxy, oauth2ProxyOpts...).ApplyToDeployment(deployment); err != nil {
 			return err
 		}
@@ -337,7 +351,7 @@ func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, spec konflux
 		if spec.Dex != nil {
 			deployment.Spec.Replicas = &spec.Dex.Replicas
 		}
-		if err := buildDexOverlay(spec.Dex, dexConfigMapName).ApplyToDeployment(deployment); err != nil {
+		if err := buildDexOverlay(spec.Dex, dexConfigMapName, openShiftLoginEnabled).ApplyToDeployment(deployment); err != nil {
 			return err
 		}
 	}
@@ -371,8 +385,9 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, oauth2ProxyOpt
 }
 
 // buildOAuth2ProxyOptions builds the container options for oauth2-proxy configuration.
-func buildOAuth2ProxyOptions(hostname, port string) []customization.ContainerOption {
-	return []customization.ContainerOption{
+// openShiftLoginEnabled controls whether to allow unverified emails (needed for OpenShift OAuth).
+func buildOAuth2ProxyOptions(hostname, port string, openShiftLoginEnabled bool) []customization.ContainerOption {
+	opts := []customization.ContainerOption{
 		oauth2proxy.WithProvider(),
 		oauth2proxy.WithOIDCURLs(hostname, port),
 		oauth2proxy.WithInternalDexURLs(),
@@ -381,20 +396,45 @@ func buildOAuth2ProxyOptions(hostname, port string) []customization.ContainerOpt
 		oauth2proxy.WithTLSSkipVerify(),
 		oauth2proxy.WithWhitelistDomain(hostname, port),
 	}
+
+	// Allow unverified emails when using OpenShift OAuth
+	// OpenShift OAuth may not return email verification information
+	if openShiftLoginEnabled {
+		opts = append(opts, oauth2proxy.WithAllowUnverifiedEmail())
+	}
+
+	return opts
 }
 
 // buildDexOverlay builds the pod overlay for the dex deployment.
-func buildDexOverlay(spec *konfluxv1alpha1.DexDeploymentSpec, configMapName string) *customization.PodOverlay {
+// openShiftLoginEnabled controls whether the OpenShift OAuth client secret env var is added.
+func buildDexOverlay(spec *konfluxv1alpha1.DexDeploymentSpec, configMapName string, openShiftLoginEnabled bool) *customization.PodOverlay {
 	opts := []customization.PodOverlayOption{
 		customization.WithConfigMapVolumeUpdate(dexConfigMapVolumeName, configMapName),
 	}
 
-	// Add container customizations if spec is provided
+	// Build container options
+	var containerOpts []customization.ContainerOption
+
+	// Add OpenShift OAuth client secret env var if enabled
+	if openShiftLoginEnabled {
+		containerOpts = append(containerOpts, customization.WithEnv(dex.OpenShiftOAuthClientSecretEnv()))
+	}
+
+	// Add user-provided container customizations if spec is provided
 	if spec != nil {
+		containerOpts = append(containerOpts, customization.FromContainerSpec(spec.Dex))
 		opts = append(opts, customization.WithContainerOpts(
 			dexContainerName,
 			customization.DeploymentContext{Replicas: spec.Replicas},
-			customization.FromContainerSpec(spec.Dex),
+			containerOpts...,
+		))
+	} else if len(containerOpts) > 0 {
+		// Only add container opts if we have any (e.g., OpenShift login enabled but no spec)
+		opts = append(opts, customization.WithContainerOpts(
+			dexContainerName,
+			customization.DeploymentContext{},
+			containerOpts...,
 		))
 	}
 
@@ -463,6 +503,9 @@ func generateRandomBytes(length int, urlSafe bool) ([]byte, error) {
 // cleans up old ConfigMaps, and returns the new ConfigMap name.
 // hostname and port are used for the dex issuer URL configuration.
 func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *konfluxv1alpha1.KonfluxUI, hostname, port string) (string, error) {
+	// Resolve whether OpenShift login should be enabled
+	openShiftLoginEnabled := isOpenShiftLoginEnabled(ui, r.ClusterInfo)
+
 	var dexConfig *dex.Config
 	// Check if DexConfig is configured
 	if ui.Spec.Dex != nil && ui.Spec.Dex.Config != nil {
@@ -474,6 +517,8 @@ func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *kon
 		if dexParams.Port == "" {
 			dexParams.Port = port
 		}
+		// Set the resolved OpenShift login value
+		dexParams.ConfigureLoginWithOpenShift = &openShiftLoginEnabled
 		dexConfig = dex.NewDexConfig(dexParams)
 	} else {
 		dexConfig = dex.NewDexConfig(
@@ -482,7 +527,8 @@ func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *kon
 				Port:     port,
 				// password db must be enabled when the connector
 				// list is empty
-				EnablePasswordDB: true,
+				EnablePasswordDB:            true,
+				ConfigureLoginWithOpenShift: &openShiftLoginEnabled,
 			},
 		)
 	}
@@ -558,4 +604,70 @@ func (r *KonfluxUIReconciler) reconcileIngress(ctx context.Context, tc *tracking
 	}
 
 	return nil
+}
+
+// reconcileOpenShiftOAuth creates or updates the ServiceAccount and Secret required for
+// OpenShift OAuth integration when ConfigureLoginWithOpenShift is enabled.
+// If not enabled, the resources are not applied and will be automatically
+// cleaned up by the tracking client's CleanupOrphans method.
+// hostname and port are used to construct the OAuth redirect URI.
+func (r *KonfluxUIReconciler) reconcileOpenShiftOAuth(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, hostname, port string) error {
+	log := logf.FromContext(ctx)
+
+	// Check if OpenShift login is enabled (requires running on OpenShift and option not disabled)
+	if !isOpenShiftLoginEnabled(ui, r.ClusterInfo) {
+		log.Info("OpenShift login is disabled, skipping OAuth resources (will be cleaned up if exists)")
+		return nil
+	}
+
+	log.Info("Reconciling OpenShift OAuth resources", "hostname", hostname, "port", port)
+
+	// Create the ServiceAccount for OAuth redirect with the full callback URI
+	sa := dex.BuildOpenShiftOAuthServiceAccount(uiNamespace, hostname, port)
+
+	// Set ownership
+	if err := setOwnership(sa, ui, string(manifests.UI), r.Scheme); err != nil {
+		return fmt.Errorf("failed to set ownership for OpenShift OAuth ServiceAccount: %w", err)
+	}
+
+	if err := tc.ApplyObject(ctx, sa, FieldManagerUI); err != nil {
+		return fmt.Errorf("failed to apply OpenShift OAuth ServiceAccount: %w", err)
+	}
+
+	// Create the Secret for the ServiceAccount token
+	secret := dex.BuildOpenShiftOAuthSecret(uiNamespace)
+
+	// Set ownership
+	if err := setOwnership(secret, ui, string(manifests.UI), r.Scheme); err != nil {
+		return fmt.Errorf("failed to set ownership for OpenShift OAuth Secret: %w", err)
+	}
+
+	if err := tc.ApplyObject(ctx, secret, FieldManagerUI); err != nil {
+		return fmt.Errorf("failed to apply OpenShift OAuth Secret: %w", err)
+	}
+
+	return nil
+}
+
+// isOpenShiftLoginEnabled checks if OpenShift login should be enabled.
+// Returns true if running on OpenShift AND the ConfigureLoginWithOpenShift option is nil or true.
+// This means OpenShift login is enabled by default on OpenShift unless explicitly disabled.
+func isOpenShiftLoginEnabled(ui *konfluxv1alpha1.KonfluxUI, clusterInfo *clusterinfo.Info) bool {
+	// Must be running on OpenShift
+	if clusterInfo == nil || !clusterInfo.IsOpenShift() {
+		return false
+	}
+
+	// If no dex config is specified, enable by default on OpenShift
+	if ui.Spec.Dex == nil || ui.Spec.Dex.Config == nil {
+		return true
+	}
+
+	// If the option is nil (not explicitly set), enable by default on OpenShift
+	if ui.Spec.Dex.Config.ConfigureLoginWithOpenShift == nil {
+		return true
+	}
+
+	// Otherwise, use the explicitly set value
+	return *ui.Spec.Dex.Config.ConfigureLoginWithOpenShift
 }

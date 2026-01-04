@@ -103,6 +103,17 @@ func WithTLSSkipVerify() customization.ContainerOption {
 	)
 }
 
+// --- Email Verification ---
+
+// WithAllowUnverifiedEmail configures oauth2-proxy to allow unverified emails.
+// This is needed when using identity providers like OpenShift that may not return
+// email verification information.
+func WithAllowUnverifiedEmail() customization.ContainerOption {
+	return customization.WithEnv(
+		corev1.EnvVar{Name: "OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL", Value: "true"},
+	)
+}
+
 // --- Domain Whitelist ---
 
 // WithWhitelistDomain configures the allowed redirect domains.

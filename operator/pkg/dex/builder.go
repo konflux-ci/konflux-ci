@@ -18,6 +18,8 @@ package dex
 
 import (
 	"fmt"
+
+	"k8s.io/utils/ptr"
 )
 
 // +kubebuilder:object:generate=true
@@ -52,9 +54,11 @@ type DexParams struct {
 	PasswordConnector string `json:"passwordConnector,omitempty"`
 
 	// ConfigureLoginWithOpenShift enables the OpenShift connector for authentication.
-	// When true, an OpenShift connector is automatically added using the Kubernetes API.
+	// When true (or nil on OpenShift), an OpenShift connector is automatically added using the Kubernetes API.
+	// Set to false to explicitly disable OpenShift login even when running on OpenShift.
 	// +optional
-	ConfigureLoginWithOpenShift bool `json:"configureLoginWithOpenShift,omitempty"`
+	// +nullable
+	ConfigureLoginWithOpenShift *bool `json:"configureLoginWithOpenShift,omitempty"`
 }
 
 // NewDexConfig creates a Dex configuration for the Konflux UI.
@@ -77,8 +81,9 @@ func NewDexConfig(params *DexParams) *Config {
 		}
 	}
 
-	// Add OpenShift connector if configured
-	if params.ConfigureLoginWithOpenShift {
+	// Add OpenShift connector if explicitly enabled
+	// Note: The controller resolves the default-on-OpenShift logic before calling this function
+	if ptr.Deref(params.ConfigureLoginWithOpenShift, false) {
 		openShiftConnector := Connector{
 			Type: "openshift",
 			ID:   "openshift",
@@ -88,6 +93,8 @@ func NewDexConfig(params *DexParams) *Config {
 				ClientID:     "system:serviceaccount:konflux-ui:dex-client",
 				ClientSecret: "$OPENSHIFT_OAUTH_CLIENT_SECRET",
 				RedirectURI:  defaultRedirectURI,
+				// Use the service account's CA certificate to verify the Kubernetes API server
+				RootCA: "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
 			},
 		}
 		connectors = append(connectors, openShiftConnector)

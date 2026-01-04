@@ -26,12 +26,16 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/version"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/ingress"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
@@ -607,4 +611,328 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Expect(updatedUI.Status.Ingress.URL).To(Equal("https://status-test.example.com"))
 		})
 	})
+
+	Context("OpenShift OAuth reconciliation via Reconcile", Serial, func() {
+		var ui *konfluxv1alpha1.KonfluxUI
+		var reconciler *KonfluxUIReconciler
+		var openShiftClusterInfo *clusterinfo.Info
+		var defaultClusterInfo *clusterinfo.Info
+
+		// Helper: refresh UI from cluster
+		refreshUI := func(ctx context.Context) {
+			ExpectWithOffset(1, k8sClient.Get(ctx, types.NamespacedName{Name: ui.Name}, ui)).To(Succeed())
+		}
+
+		// Helper: reconcile and expect success
+		reconcileUI := func(ctx context.Context) {
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: ui.Name},
+			})
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+		}
+
+		// Helper: check if OpenShift OAuth ServiceAccount exists
+		serviceAccountExists := func(ctx context.Context) bool {
+			sa := &corev1.ServiceAccount{}
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name:      dex.DexClientServiceAccountName,
+				Namespace: uiNamespace,
+			}, sa)
+			return err == nil
+		}
+
+		// Helper: check if OpenShift OAuth Secret exists
+		secretExists := func(ctx context.Context) bool {
+			secret := &corev1.Secret{}
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name:      dex.DexClientSecretName,
+				Namespace: uiNamespace,
+			}, secret)
+			return err == nil
+		}
+
+		// Helper: get OpenShift OAuth ServiceAccount
+		getServiceAccount := func(ctx context.Context) *corev1.ServiceAccount {
+			sa := &corev1.ServiceAccount{}
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name:      dex.DexClientServiceAccountName,
+				Namespace: uiNamespace,
+			}, sa)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			return sa
+		}
+
+		// Helper: get OpenShift OAuth Secret
+		getSecret := func(ctx context.Context) *corev1.Secret {
+			secret := &corev1.Secret{}
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name:      dex.DexClientSecretName,
+				Namespace: uiNamespace,
+			}, secret)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			return secret
+		}
+
+		BeforeEach(func(ctx context.Context) {
+			By("cleaning up any existing OpenShift OAuth resources from previous tests")
+			existingSA := &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      dex.DexClientServiceAccountName,
+					Namespace: uiNamespace,
+				},
+			}
+			_ = k8sClient.Delete(ctx, existingSA)
+
+			existingSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      dex.DexClientSecretName,
+					Namespace: uiNamespace,
+				},
+			}
+			_ = k8sClient.Delete(ctx, existingSecret)
+
+			By("creating mock cluster info for OpenShift and non-OpenShift platforms")
+			var err error
+			openShiftClusterInfo, err = clusterinfo.DetectWithClient(&mockDiscoveryClient{
+				resources: map[string]*metav1.APIResourceList{
+					"config.openshift.io/v1": {
+						APIResources: []metav1.APIResource{
+							{Kind: "ClusterVersion"},
+						},
+					},
+				},
+				serverVersion: &version.Info{GitVersion: "v1.29.0"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			defaultClusterInfo, err = clusterinfo.DetectWithClient(&mockDiscoveryClient{
+				resources:     map[string]*metav1.APIResourceList{},
+				serverVersion: &version.Info{GitVersion: "v1.29.0"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating the KonfluxUI resource with ingress enabled")
+			ui = &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: KonfluxUICRName,
+				},
+				Spec: konfluxv1alpha1.KonfluxUISpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled: true,
+						Host:    "openshift-test.example.com",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+
+			reconciler = &KonfluxUIReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ObjectStore: objectStore,
+				ClusterInfo: nil, // Will be set in individual tests
+			}
+		})
+
+		AfterEach(func(ctx context.Context) {
+			By("cleaning up OpenShift OAuth ServiceAccount")
+			existingSA := &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      dex.DexClientServiceAccountName,
+					Namespace: uiNamespace,
+				},
+			}
+			_ = k8sClient.Delete(ctx, existingSA)
+
+			By("cleaning up OpenShift OAuth Secret")
+			existingSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      dex.DexClientSecretName,
+					Namespace: uiNamespace,
+				},
+			}
+			_ = k8sClient.Delete(ctx, existingSecret)
+
+			By("cleaning up KonfluxUI resource")
+			_ = k8sClient.Delete(ctx, ui)
+		})
+
+		It("Should create OpenShift OAuth resources when running on OpenShift (default behavior)", func(ctx context.Context) {
+			By("setting ClusterInfo to OpenShift")
+			reconciler.ClusterInfo = openShiftClusterInfo
+
+			By("reconciling the resource")
+			reconcileUI(ctx)
+
+			By("verifying the ServiceAccount was created")
+			Expect(serviceAccountExists(ctx)).To(BeTrue())
+			sa := getServiceAccount(ctx)
+			Expect(sa.Annotations).To(HaveKeyWithValue(
+				"serviceaccounts.openshift.io/oauth-redirecturi.dex",
+				"https://openshift-test.example.com/idp/callback",
+			))
+
+			By("verifying the Secret was created")
+			Expect(secretExists(ctx)).To(BeTrue())
+			secret := getSecret(ctx)
+			Expect(secret.Type).To(Equal(corev1.SecretTypeServiceAccountToken))
+			Expect(secret.Annotations).To(HaveKeyWithValue(
+				"kubernetes.io/service-account.name",
+				dex.DexClientServiceAccountName,
+			))
+		})
+
+		It("Should NOT create OpenShift OAuth resources when NOT running on OpenShift", func(ctx context.Context) {
+			By("setting ClusterInfo to non-OpenShift")
+			reconciler.ClusterInfo = defaultClusterInfo
+
+			By("reconciling the resource")
+			reconcileUI(ctx)
+
+			By("verifying the ServiceAccount was NOT created")
+			Expect(serviceAccountExists(ctx)).To(BeFalse())
+
+			By("verifying the Secret was NOT created")
+			Expect(secretExists(ctx)).To(BeFalse())
+		})
+
+		It("Should NOT create OpenShift OAuth resources when ClusterInfo is nil", func(ctx context.Context) {
+			By("keeping ClusterInfo as nil")
+			reconciler.ClusterInfo = nil
+
+			By("reconciling the resource")
+			reconcileUI(ctx)
+
+			By("verifying the ServiceAccount was NOT created")
+			Expect(serviceAccountExists(ctx)).To(BeFalse())
+
+			By("verifying the Secret was NOT created")
+			Expect(secretExists(ctx)).To(BeFalse())
+		})
+
+		It("Should NOT create OpenShift OAuth resources when explicitly disabled on OpenShift", func(ctx context.Context) {
+			By("setting ClusterInfo to OpenShift")
+			reconciler.ClusterInfo = openShiftClusterInfo
+
+			By("explicitly disabling OpenShift login")
+			refreshUI(ctx)
+			ui.Spec.Dex = &konfluxv1alpha1.DexDeploymentSpec{
+				Config: &dex.DexParams{
+					ConfigureLoginWithOpenShift: ptr.To(false),
+				},
+			}
+			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
+
+			By("reconciling the resource")
+			reconcileUI(ctx)
+
+			By("verifying the ServiceAccount was NOT created")
+			Expect(serviceAccountExists(ctx)).To(BeFalse())
+
+			By("verifying the Secret was NOT created")
+			Expect(secretExists(ctx)).To(BeFalse())
+		})
+
+		It("Should create OpenShift OAuth resources when explicitly enabled on OpenShift", func(ctx context.Context) {
+			By("setting ClusterInfo to OpenShift")
+			reconciler.ClusterInfo = openShiftClusterInfo
+
+			By("explicitly enabling OpenShift login")
+			refreshUI(ctx)
+			ui.Spec.Dex = &konfluxv1alpha1.DexDeploymentSpec{
+				Config: &dex.DexParams{
+					ConfigureLoginWithOpenShift: ptr.To(true),
+				},
+			}
+			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
+
+			By("reconciling the resource")
+			reconcileUI(ctx)
+
+			By("verifying the ServiceAccount was created")
+			Expect(serviceAccountExists(ctx)).To(BeTrue())
+
+			By("verifying the Secret was created")
+			Expect(secretExists(ctx)).To(BeTrue())
+		})
+
+		It("Should delete OpenShift OAuth resources when disabled after being enabled", func(ctx context.Context) {
+			By("setting ClusterInfo to OpenShift")
+			reconciler.ClusterInfo = openShiftClusterInfo
+
+			By("first reconciling to create the resources")
+			reconcileUI(ctx)
+			Expect(serviceAccountExists(ctx)).To(BeTrue())
+			Expect(secretExists(ctx)).To(BeTrue())
+
+			By("disabling OpenShift login")
+			refreshUI(ctx)
+			ui.Spec.Dex = &konfluxv1alpha1.DexDeploymentSpec{
+				Config: &dex.DexParams{
+					ConfigureLoginWithOpenShift: ptr.To(false),
+				},
+			}
+			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
+
+			By("reconciling again")
+			reconcileUI(ctx)
+
+			By("verifying the ServiceAccount was deleted")
+			Expect(serviceAccountExists(ctx)).To(BeFalse())
+
+			By("verifying the Secret was deleted")
+			Expect(secretExists(ctx)).To(BeFalse())
+		})
+
+		It("Should set owner reference on OpenShift OAuth resources", func(ctx context.Context) {
+			By("setting ClusterInfo to OpenShift")
+			reconciler.ClusterInfo = openShiftClusterInfo
+
+			By("reconciling the resource")
+			reconcileUI(ctx)
+
+			By("verifying the ServiceAccount has owner reference")
+			sa := getServiceAccount(ctx)
+			Expect(sa.OwnerReferences).To(HaveLen(1))
+			Expect(sa.OwnerReferences[0].Name).To(Equal(KonfluxUICRName))
+			Expect(sa.OwnerReferences[0].Kind).To(Equal("KonfluxUI"))
+
+			By("verifying the Secret has owner reference")
+			secret := getSecret(ctx)
+			Expect(secret.OwnerReferences).To(HaveLen(1))
+			Expect(secret.OwnerReferences[0].Name).To(Equal(KonfluxUICRName))
+			Expect(secret.OwnerReferences[0].Kind).To(Equal("KonfluxUI"))
+		})
+
+		It("Should use correct redirect URI format without port", func(ctx context.Context) {
+			By("setting ClusterInfo to OpenShift")
+			reconciler.ClusterInfo = openShiftClusterInfo
+
+			By("reconciling the resource")
+			reconcileUI(ctx)
+
+			By("verifying the redirect URI has correct format")
+			sa := getServiceAccount(ctx)
+			// The redirect URI should be the hostname followed by the Dex callback path
+			Expect(sa.Annotations["serviceaccounts.openshift.io/oauth-redirecturi.dex"]).To(
+				Equal("https://openshift-test.example.com/idp/callback"),
+			)
+		})
+	})
 })
+
+// mockDiscoveryClient implements clusterinfo.DiscoveryClient for testing.
+type mockDiscoveryClient struct {
+	resources     map[string]*metav1.APIResourceList
+	serverVersion *version.Info
+}
+
+func (m *mockDiscoveryClient) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
+	if r, ok := m.resources[groupVersion]; ok {
+		return r, nil
+	}
+	return nil, errors.NewNotFound(schema.GroupResource{Group: groupVersion}, "")
+}
+
+func (m *mockDiscoveryClient) ServerVersion() (*version.Info, error) {
+	return m.serverVersion, nil
+}

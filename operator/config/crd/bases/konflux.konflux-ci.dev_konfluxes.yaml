@@ -1281,7 +1281,9 @@ spec:
                               configureLoginWithOpenShift:
                                 description: |-
                                   ConfigureLoginWithOpenShift enables the OpenShift connector for authentication.
-                                  When true, an OpenShift connector is automatically added using the Kubernetes API.
+                                  When true (or nil on OpenShift), an OpenShift connector is automatically added using the Kubernetes API.
+                                  Set to false to explicitly disable OpenShift login even when running on OpenShift.
+                                nullable: true
                                 type: boolean
                               connectors:
                                 description: Connectors are upstream identity provider
@@ -1355,6 +1357,11 @@ spec:
                                             type: object
                                           type: array
                                         redirectURI:
+                                          type: string
+                                        rootCA:
+                                          description: |-
+                                            RootCA is the path to a trusted root certificate for verifying TLS connections.
+                                            Used by connectors that need to verify the TLS certificate of the upstream provider.
                                           type: string
                                         userSearch:
                                           description: LDAPUserSearch configures LDAP

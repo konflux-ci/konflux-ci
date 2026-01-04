@@ -176,6 +176,10 @@ type ConnectorConfig struct {
 	InsecureCA   bool     `json:"insecureCA,omitempty"`
 	Groups       []string `json:"groups,omitempty"`
 
+	// RootCA is the path to a trusted root certificate for verifying TLS connections.
+	// Used by connectors that need to verify the TLS certificate of the upstream provider.
+	RootCA string `json:"rootCA,omitempty"`
+
 	// LDAP-specific fields
 	Host               string           `json:"host,omitempty"`
 	InsecureNoSSL      bool             `json:"insecureNoSSL,omitempty"`
