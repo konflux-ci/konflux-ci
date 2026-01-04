@@ -147,6 +147,15 @@ func TestWithTLSSkipVerify(t *testing.T) {
 	g.Expect(envMap["OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY"]).To(Equal("true"))
 }
 
+func TestWithAllowUnverifiedEmail(t *testing.T) {
+	g := NewGomegaWithT(t)
+
+	envVars := applyOption(WithAllowUnverifiedEmail())
+	envMap := envVarsToMap(envVars)
+
+	g.Expect(envMap["OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL"]).To(Equal("true"))
+}
+
 func TestWithWhitelistDomain(t *testing.T) {
 	tests := []struct {
 		name     string
