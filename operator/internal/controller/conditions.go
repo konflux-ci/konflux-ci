@@ -149,11 +149,17 @@ func SetDeploymentConditions(obj konfluxv1alpha1.ConditionAccessor, deployments 
 // SetOverallReadyCondition sets the overall Ready condition based on the deployment status summary.
 func SetOverallReadyCondition(obj konfluxv1alpha1.ConditionAccessor, readyConditionType string, summary DeploymentStatusSummary) {
 	if summary.AllReady {
+		var message string
+		if summary.TotalCount == 0 {
+			message = "Component ready (no deployments to track)"
+		} else {
+			message = fmt.Sprintf("All %d deployments are ready", summary.TotalCount)
+		}
 		SetCondition(obj, metav1.Condition{
 			Type:    readyConditionType,
 			Status:  metav1.ConditionTrue,
 			Reason:  "AllComponentsReady",
-			Message: fmt.Sprintf("All %d deployments are ready", summary.TotalCount),
+			Message: message,
 		})
 	} else {
 		SetCondition(obj, metav1.Condition{
