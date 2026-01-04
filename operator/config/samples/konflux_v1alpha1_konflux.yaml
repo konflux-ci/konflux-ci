@@ -106,3 +106,7 @@ spec:
         items:
           - summary: "Welcome to Konflux-CI! This is a development environment for testing and development purposes."
             type: info
+  certManager:
+    # CreateClusterIssuer controls whether cluster issuer resources are created
+    # Defaults to true if not specified
+    createClusterIssuer: true

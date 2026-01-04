@@ -63,6 +63,8 @@ const (
 	KonfluxApplicationAPICRName = "konflux-application-api"
 	// KonfluxInfoCRName is the name for the KonfluxInfo CR.
 	KonfluxInfoCRName = "konflux-info"
+	// KonfluxCertManagerCRName is the name for the KonfluxCertManager CR.
+	KonfluxCertManagerCRName = "konflux-cert-manager"
 	// CertManagerGroup is the API group for cert-manager resources
 	CertManagerGroup = "cert-manager.io"
 	// KyvernoGroup is the API group for Kyverno resources
@@ -120,6 +122,9 @@ type KonfluxReconciler struct {
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluximagecontrollers,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluximagecontrollers/status,verbs=get;patch;update
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluximagecontrollers/finalizers,verbs=update
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxcertmanagers,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxcertmanagers/status,verbs=get;patch;update
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxcertmanagers/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -232,6 +237,16 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Apply the KonfluxImageController CR (if enabled)
 	if err := r.applyKonfluxImageController(ctx, konflux); err != nil {
 		log.Error(err, "Failed to apply KonfluxImageController")
+		SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Apply the KonfluxCertManager CR
+	if err := r.applyKonfluxCertManager(ctx, konflux); err != nil {
+		log.Error(err, "Failed to apply KonfluxCertManager")
 		SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
 		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
@@ -370,6 +385,18 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 		subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, imageController, "image-controller"))
 	}
+
+	// Get and copy status from the KonfluxCertManager CR
+	certManager := &konfluxv1alpha1.KonfluxCertManager{}
+	if err := r.Get(ctx, client.ObjectKey{Name: KonfluxCertManagerCRName}, certManager); err != nil {
+		log.Error(err, "Failed to get KonfluxCertManager")
+		SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetCertManagerStatus", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+	subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, certManager, "cert-manager"))
 
 	// Set overall Ready condition based on all sub-CRs.
 	// All deployments are managed by component-specific reconcilers, so we only aggregate sub-CR statuses.
@@ -712,6 +739,39 @@ func (r *KonfluxReconciler) applyKonfluxImageController(ctx context.Context, own
 	return r.Patch(ctx, imageController, client.Apply, client.FieldOwner(FieldManagerKonflux), client.ForceOwnership)
 }
 
+// applyKonfluxCertManager creates or updates the KonfluxCertManager CR.
+func (r *KonfluxReconciler) applyKonfluxCertManager(ctx context.Context, owner *konfluxv1alpha1.Konflux) error {
+	log := logf.FromContext(ctx)
+
+	var spec konfluxv1alpha1.KonfluxCertManagerSpec
+	if owner.Spec.CertManager != nil {
+		spec.CreateClusterIssuer = owner.Spec.CertManager.CreateClusterIssuer
+	}
+
+	certManager := &konfluxv1alpha1.KonfluxCertManager{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: konfluxv1alpha1.GroupVersion.String(),
+			Kind:       "KonfluxCertManager",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: KonfluxCertManagerCRName,
+			Labels: map[string]string{
+				KonfluxOwnerLabel:     owner.Name,
+				KonfluxComponentLabel: string(manifests.CertManager),
+			},
+		},
+		Spec: spec,
+	}
+
+	// Set owner reference for garbage collection
+	if err := controllerutil.SetControllerReference(owner, certManager, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for KonfluxCertManager: %w", err)
+	}
+
+	log.Info("Applying KonfluxCertManager CR", "name", certManager.Name)
+	return r.Patch(ctx, certManager, client.Apply, client.FieldOwner(FieldManagerKonflux), client.ForceOwnership)
+}
+
 // getKind returns the Kind of a client.Object.
 // For unstructured objects, it uses the GVK directly.
 // For typed objects, it uses the GVK from the object's metadata.
@@ -785,5 +845,8 @@ func (r *KonfluxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// Watch KonfluxImageController for any changes to copy conditions to Konflux CR
 		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
 		Owns(&konfluxv1alpha1.KonfluxImageController{}).
+		// Watch KonfluxCertManager for any changes to copy conditions to Konflux CR
+		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
+		Owns(&konfluxv1alpha1.KonfluxCertManager{}).
 		Complete(r)
 }

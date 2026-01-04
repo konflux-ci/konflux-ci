@@ -158,6 +158,7 @@ jobs:
         env:
           SKIP_DEX: "true"
           SKIP_KONFLUX_INFO: "true"
+          SKIP_CLUSTER_ISSUER: "true"
         run: |
           ./deploy-deps.sh
 

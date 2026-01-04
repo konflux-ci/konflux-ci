@@ -302,6 +302,17 @@ spec:
                         type: object
                     type: object
                 type: object
+              certManager:
+                description: |-
+                  CertManager configures the cert-manager component.
+                  The runtime configuration is copied to the KonfluxCertManager CR by the operator.
+                properties:
+                  createClusterIssuer:
+                    description: |-
+                      CreateClusterIssuer controls whether cluster issuer resources are created.
+                      Defaults to true if not specified.
+                    type: boolean
+                type: object
               imageController:
                 description: |-
                   ImageController configures the image-controller component.
