@@ -1,0 +1,59 @@
+# This role is not used by the project konflux-operator itself.
+# It is provided to allow the cluster admin to help manage permissions for users.
+#
+# Grants full administrative access to configure Konflux system settings,
+# integrations, and global policies. This role is intended for Platform Engineers
+# and DevSecOps Engineers who manage the Konflux installation.
+#
+# Scope:
+#   - Konflux Operator CRDs (system configuration)
+#   - Dex resources (identity provider integrations)
+#   - Enterprise Contract Policies (global policies)
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: konflux-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: konflux-system-admin
+rules:
+# Konflux Operator CRDs - Full access to all Konflux configuration resources
+- apiGroups:
+  - konflux.konflux-ci.dev
+  resources:
+  - konfluxes
+  - konfluxapplicationapis
+  - konfluxbuildservices
+  - konfluxenterprisecontracts
+  - konfluximagecontrollers
+  - konfluxinfoes
+  - konfluxintegrationservices
+  - konfluxnamespacelisters
+  - konfluxrbacs
+  - konfluxreleaseservices
+  - konfluxuis
+  verbs:
+  - '*'
+# Identity Provider Integrations - Full access to Dex for configuring identity providers
+- apiGroups:
+  - dex.coreos.com
+  resources:
+  - '*'
+  verbs:
+  - '*'
+# Global Policies - Enterprise Contract Policies
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - enterprisecontractpolicies
+  verbs:
+  - '*'
+# Global Policies - Release Service Configurations
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - releaseserviceconfigs
+  verbs:
+  - '*'
+
