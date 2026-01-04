@@ -17,6 +17,7 @@ limitations under the License.
 package dex
 
 import (
+	"net/url"
 	"testing"
 
 	"github.com/onsi/gomega"
@@ -26,8 +27,9 @@ import (
 func TestBuildOpenShiftOAuthServiceAccount(t *testing.T) {
 	t.Run("creates service account with correct name and namespace", func(t *testing.T) {
 		g := gomega.NewWithT(t)
+		endpoint, _ := url.Parse("https://example.com")
 
-		sa := BuildOpenShiftOAuthServiceAccount("konflux-ui", "example.com", "")
+		sa := BuildOpenShiftOAuthServiceAccount("konflux-ui", endpoint)
 
 		g.Expect(sa.Name).To(gomega.Equal(DexClientServiceAccountName))
 		g.Expect(sa.Namespace).To(gomega.Equal("konflux-ui"))
@@ -35,8 +37,9 @@ func TestBuildOpenShiftOAuthServiceAccount(t *testing.T) {
 
 	t.Run("includes oauth redirect uri annotation without port", func(t *testing.T) {
 		g := gomega.NewWithT(t)
+		endpoint, _ := url.Parse("https://example.com")
 
-		sa := BuildOpenShiftOAuthServiceAccount("konflux-ui", "example.com", "")
+		sa := BuildOpenShiftOAuthServiceAccount("konflux-ui", endpoint)
 
 		g.Expect(sa.Annotations).To(gomega.HaveKeyWithValue(
 			"serviceaccounts.openshift.io/oauth-redirecturi.dex",
@@ -46,8 +49,9 @@ func TestBuildOpenShiftOAuthServiceAccount(t *testing.T) {
 
 	t.Run("includes oauth redirect uri annotation with port", func(t *testing.T) {
 		g := gomega.NewWithT(t)
+		endpoint, _ := url.Parse("https://example.com:9443")
 
-		sa := BuildOpenShiftOAuthServiceAccount("konflux-ui", "example.com", "9443")
+		sa := BuildOpenShiftOAuthServiceAccount("konflux-ui", endpoint)
 
 		g.Expect(sa.Annotations).To(gomega.HaveKeyWithValue(
 			"serviceaccounts.openshift.io/oauth-redirecturi.dex",
@@ -57,8 +61,9 @@ func TestBuildOpenShiftOAuthServiceAccount(t *testing.T) {
 
 	t.Run("sets correct TypeMeta", func(t *testing.T) {
 		g := gomega.NewWithT(t)
+		endpoint, _ := url.Parse("https://example.com")
 
-		sa := BuildOpenShiftOAuthServiceAccount("konflux-ui", "example.com", "")
+		sa := BuildOpenShiftOAuthServiceAccount("konflux-ui", endpoint)
 
 		g.Expect(sa.APIVersion).To(gomega.Equal("v1"))
 		g.Expect(sa.Kind).To(gomega.Equal("ServiceAccount"))

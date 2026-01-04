@@ -21,6 +21,7 @@ package ingress
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -194,39 +195,52 @@ func GetOpenShiftIngressDomain(ctx context.Context, c client.Client) (string, er
 	return domain, nil
 }
 
-// DetermineHostnameAndPort determines the hostname and port for the UI based on ingress configuration.
+// DetermineEndpointURL determines the endpoint URL for the UI based on ingress configuration.
 // If ingress is enabled and host is specified, use that host.
 // If ingress is enabled on OpenShift without a host, use the default OpenShift ingress domain.
 // Otherwise, use the default localhost configuration.
 // The namespace parameter is used for generating the OpenShift hostname convention.
-func DetermineHostnameAndPort(
+// Returns a *url.URL with Scheme set to "https" and Host set appropriately.
+func DetermineEndpointURL(
 	ctx context.Context,
 	c client.Client,
 	ui *konfluxv1alpha1.KonfluxUI,
 	namespace string,
 	clusterInfo *clusterinfo.Info,
-) (string, string, error) {
+) (*url.URL, error) {
 	// If ingress is not enabled or not configured, use defaults
 	if ui.Spec.Ingress == nil || !ui.Spec.Ingress.Enabled {
-		return DefaultProxyHostname, DefaultProxyPort, nil
+		return &url.URL{
+			Scheme: "https",
+			Host:   fmt.Sprintf("%s:%s", DefaultProxyHostname, DefaultProxyPort),
+		}, nil
 	}
 
 	// If host is explicitly specified, use it (no port for ingress, TLS on 443)
 	if ui.Spec.Ingress.Host != "" {
-		return ui.Spec.Ingress.Host, "", nil
+		return &url.URL{
+			Scheme: "https",
+			Host:   ui.Spec.Ingress.Host,
+		}, nil
 	}
 
 	// If on OpenShift, try to get the default ingress domain
 	if clusterInfo != nil && clusterInfo.IsOpenShift() {
 		domain, err := GetOpenShiftIngressDomain(ctx, c)
 		if err != nil {
-			return "", "", fmt.Errorf("failed to get OpenShift ingress domain: %w", err)
+			return nil, fmt.Errorf("failed to get OpenShift ingress domain: %w", err)
 		}
 		// Generate hostname using OpenShift naming convention: <name>-<namespace>.<domain>
 		hostname := fmt.Sprintf("%s-%s.%s", IngressName, namespace, domain)
-		return hostname, "", nil
+		return &url.URL{
+			Scheme: "https",
+			Host:   hostname,
+		}, nil
 	}
 
 	// Fallback to defaults
-	return DefaultProxyHostname, DefaultProxyPort, nil
+	return &url.URL{
+		Scheme: "https",
+		Host:   fmt.Sprintf("%s:%s", DefaultProxyHostname, DefaultProxyPort),
+	}, nil
 }
