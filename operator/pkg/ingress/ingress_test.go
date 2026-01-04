@@ -352,7 +352,7 @@ func TestGetOpenShiftIngressDomain(t *testing.T) {
 	})
 }
 
-func TestDetermineHostnameAndPort(t *testing.T) {
+func TestDetermineEndpointURL(t *testing.T) {
 	t.Run("returns defaults when ingress is nil", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
@@ -362,12 +362,13 @@ func TestDetermineHostnameAndPort(t *testing.T) {
 			},
 		}
 
-		hostname, port, err := DetermineHostnameAndPort(
+		endpoint, err := DetermineEndpointURL(
 			context.Background(), nil, ui, "konflux-ui", nil)
 
 		g.Expect(err).NotTo(gomega.HaveOccurred())
-		g.Expect(hostname).To(gomega.Equal(DefaultProxyHostname))
-		g.Expect(port).To(gomega.Equal(DefaultProxyPort))
+		g.Expect(endpoint.Hostname()).To(gomega.Equal(DefaultProxyHostname))
+		g.Expect(endpoint.Port()).To(gomega.Equal(DefaultProxyPort))
+		g.Expect(endpoint.String()).To(gomega.Equal("https://localhost:9443"))
 	})
 
 	t.Run("returns defaults when ingress is not enabled", func(t *testing.T) {
@@ -381,12 +382,12 @@ func TestDetermineHostnameAndPort(t *testing.T) {
 			},
 		}
 
-		hostname, port, err := DetermineHostnameAndPort(
+		endpoint, err := DetermineEndpointURL(
 			context.Background(), nil, ui, "konflux-ui", nil)
 
 		g.Expect(err).NotTo(gomega.HaveOccurred())
-		g.Expect(hostname).To(gomega.Equal(DefaultProxyHostname))
-		g.Expect(port).To(gomega.Equal(DefaultProxyPort))
+		g.Expect(endpoint.Hostname()).To(gomega.Equal(DefaultProxyHostname))
+		g.Expect(endpoint.Port()).To(gomega.Equal(DefaultProxyPort))
 	})
 
 	t.Run("returns explicit host when ingress is enabled with host specified", func(t *testing.T) {
@@ -401,12 +402,13 @@ func TestDetermineHostnameAndPort(t *testing.T) {
 			},
 		}
 
-		hostname, port, err := DetermineHostnameAndPort(
+		endpoint, err := DetermineEndpointURL(
 			context.Background(), nil, ui, "konflux-ui", nil)
 
 		g.Expect(err).NotTo(gomega.HaveOccurred())
-		g.Expect(hostname).To(gomega.Equal("my-custom-host.example.com"))
-		g.Expect(port).To(gomega.Equal("")) // No port for standard ingress TLS
+		g.Expect(endpoint.Hostname()).To(gomega.Equal("my-custom-host.example.com"))
+		g.Expect(endpoint.Port()).To(gomega.Equal("")) // No port for standard ingress TLS
+		g.Expect(endpoint.String()).To(gomega.Equal("https://my-custom-host.example.com"))
 	})
 
 	t.Run("generates OpenShift hostname when ingress enabled without host on OpenShift", func(t *testing.T) {
@@ -433,12 +435,12 @@ func TestDetermineHostnameAndPort(t *testing.T) {
 
 		openShiftClusterInfo := createOpenShiftClusterInfo()
 
-		hostname, port, err := DetermineHostnameAndPort(
+		endpoint, err := DetermineEndpointURL(
 			context.Background(), fakeClient, ui, "konflux-ui", openShiftClusterInfo)
 
 		g.Expect(err).NotTo(gomega.HaveOccurred())
-		g.Expect(hostname).To(gomega.Equal("konflux-ui-konflux-ui.apps.openshift.example.com"))
-		g.Expect(port).To(gomega.Equal(""))
+		g.Expect(endpoint.Hostname()).To(gomega.Equal("konflux-ui-konflux-ui.apps.openshift.example.com"))
+		g.Expect(endpoint.Port()).To(gomega.Equal(""))
 	})
 
 	t.Run("returns defaults when not on OpenShift and no host specified", func(t *testing.T) {
@@ -453,12 +455,12 @@ func TestDetermineHostnameAndPort(t *testing.T) {
 		}
 
 		// clusterInfo is nil - not on OpenShift
-		hostname, port, err := DetermineHostnameAndPort(
+		endpoint, err := DetermineEndpointURL(
 			context.Background(), nil, ui, "konflux-ui", nil)
 
 		g.Expect(err).NotTo(gomega.HaveOccurred())
-		g.Expect(hostname).To(gomega.Equal(DefaultProxyHostname))
-		g.Expect(port).To(gomega.Equal(DefaultProxyPort))
+		g.Expect(endpoint.Hostname()).To(gomega.Equal(DefaultProxyHostname))
+		g.Expect(endpoint.Port()).To(gomega.Equal(DefaultProxyPort))
 	})
 
 	t.Run("returns defaults when clusterInfo indicates not OpenShift", func(t *testing.T) {
@@ -474,12 +476,12 @@ func TestDetermineHostnameAndPort(t *testing.T) {
 
 		nonOpenShiftClusterInfo := createNonOpenShiftClusterInfo()
 
-		hostname, port, err := DetermineHostnameAndPort(
+		endpoint, err := DetermineEndpointURL(
 			context.Background(), nil, ui, "konflux-ui", nonOpenShiftClusterInfo)
 
 		g.Expect(err).NotTo(gomega.HaveOccurred())
-		g.Expect(hostname).To(gomega.Equal(DefaultProxyHostname))
-		g.Expect(port).To(gomega.Equal(DefaultProxyPort))
+		g.Expect(endpoint.Hostname()).To(gomega.Equal(DefaultProxyHostname))
+		g.Expect(endpoint.Port()).To(gomega.Equal(DefaultProxyPort))
 	})
 
 	t.Run("returns error when OpenShift ingress domain fetch fails", func(t *testing.T) {
@@ -501,7 +503,7 @@ func TestDetermineHostnameAndPort(t *testing.T) {
 
 		openShiftClusterInfo := createOpenShiftClusterInfo()
 
-		_, _, err := DetermineHostnameAndPort(
+		_, err := DetermineEndpointURL(
 			context.Background(), fakeClient, ui, "konflux-ui", openShiftClusterInfo)
 
 		g.Expect(err).To(gomega.HaveOccurred())
@@ -532,11 +534,11 @@ func TestDetermineHostnameAndPort(t *testing.T) {
 
 		openShiftClusterInfo := createOpenShiftClusterInfo()
 
-		hostname, _, err := DetermineHostnameAndPort(
+		endpoint, err := DetermineEndpointURL(
 			context.Background(), fakeClient, ui, "custom-namespace", openShiftClusterInfo)
 
 		g.Expect(err).NotTo(gomega.HaveOccurred())
-		g.Expect(hostname).To(gomega.Equal("konflux-ui-custom-namespace.apps.cluster.example.com"))
+		g.Expect(endpoint.Hostname()).To(gomega.Equal("konflux-ui-custom-namespace.apps.cluster.example.com"))
 	})
 }
 

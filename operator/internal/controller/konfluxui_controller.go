@@ -21,6 +21,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"net/url"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -138,21 +139,21 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	// Determine the hostname for ingress, dex, and oauth2-proxy configuration
-	hostname, port, err := ingress.DetermineHostnameAndPort(ctx, r.Client, ui, uiNamespace, r.ClusterInfo)
+	// Determine the endpoint URL for ingress, dex, and oauth2-proxy configuration
+	endpoint, err := ingress.DetermineEndpointURL(ctx, r.Client, ui, uiNamespace, r.ClusterInfo)
 	if err != nil {
-		log.Error(err, "Failed to determine hostname")
-		SetFailedCondition(ui, UIConditionTypeReady, "HostnameDeterminationFailed", err)
+		log.Error(err, "Failed to determine endpoint URL")
+		SetFailedCondition(ui, UIConditionTypeReady, "EndpointDeterminationFailed", err)
 		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
 		return ctrl.Result{}, err
 	}
-	log.Info("Determined hostname for KonfluxUI", "hostname", hostname, "port", port)
+	log.Info("Determined endpoint for KonfluxUI", "url", endpoint.String())
 
 	// Reconcile Dex ConfigMap first (if configured) to get the ConfigMap name
 	// This must happen before applyManifests so we can set the correct ConfigMap reference
-	dexConfigMapName, err := r.reconcileDexConfigMap(ctx, ui, hostname, port)
+	dexConfigMapName, err := r.reconcileDexConfigMap(ctx, ui, endpoint)
 	if err != nil {
 		log.Error(err, "Failed to reconcile Dex ConfigMap")
 		SetFailedCondition(ui, UIConditionTypeReady, "DexConfigMapFailed", err)
@@ -163,7 +164,7 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, tc, ui, dexConfigMapName, hostname, port); err != nil {
+	if err := r.applyManifests(ctx, tc, ui, dexConfigMapName, endpoint); err != nil {
 		log.Error(err, "Failed to apply manifests")
 		SetFailedCondition(ui, UIConditionTypeReady, "ApplyFailed", err)
 		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
@@ -173,7 +174,7 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Reconcile Ingress if enabled (tracked automatically, deleted if not applied)
-	if err := r.reconcileIngress(ctx, tc, ui, hostname); err != nil {
+	if err := r.reconcileIngress(ctx, tc, ui, endpoint); err != nil {
 		log.Error(err, "Failed to reconcile Ingress")
 		SetFailedCondition(ui, UIConditionTypeReady, "IngressReconcileFailed", err)
 		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
@@ -183,7 +184,7 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Reconcile OpenShift OAuth resources if enabled
-	if err := r.reconcileOpenShiftOAuth(ctx, tc, ui, hostname, port); err != nil {
+	if err := r.reconcileOpenShiftOAuth(ctx, tc, ui, endpoint); err != nil {
 		log.Error(err, "Failed to reconcile OpenShift OAuth resources")
 		SetFailedCondition(ui, UIConditionTypeReady, "OpenShiftOAuthFailed", err)
 		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
@@ -225,7 +226,7 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Update ingress status
-	updateIngressStatus(ui, hostname, port)
+	updateIngressStatus(ui, endpoint)
 
 	// Final status update
 	if err := r.Status().Update(ctx, ui); err != nil {
@@ -238,23 +239,13 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 }
 
 // updateIngressStatus updates the ingress status fields on the KonfluxUI CR.
-func updateIngressStatus(ui *konfluxv1alpha1.KonfluxUI, hostname, port string) {
+func updateIngressStatus(ui *konfluxv1alpha1.KonfluxUI, endpoint *url.URL) {
 	ingressEnabled := ui.Spec.Ingress != nil && ui.Spec.Ingress.Enabled
-
-	// Build the URL
-	var url string
-	if hostname != "" {
-		if port != "" {
-			url = fmt.Sprintf("https://%s:%s", hostname, port)
-		} else {
-			url = fmt.Sprintf("https://%s", hostname)
-		}
-	}
 
 	ui.Status.Ingress = &konfluxv1alpha1.IngressStatus{
 		Enabled:  ingressEnabled,
-		Hostname: hostname,
-		URL:      url,
+		Hostname: endpoint.Hostname(),
+		URL:      endpoint.String(),
 	}
 }
 
@@ -289,8 +280,8 @@ func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, tc *tra
 // applyManifests loads and applies all embedded manifests to the cluster.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
 // dexConfigMapName is the name of the Dex ConfigMap to use (empty if not configured).
-// hostname and port are used to configure oauth2-proxy.
-func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxUI, dexConfigMapName, hostname, port string) error {
+// endpoint is the base URL used to configure oauth2-proxy.
+func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxUI, dexConfigMapName string, endpoint *url.URL) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.UI)
@@ -301,7 +292,7 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 	for _, obj := range objects {
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
-			if err := applyUIDeploymentCustomizations(deployment, owner, r.ClusterInfo, dexConfigMapName, hostname, port); err != nil {
+			if err := applyUIDeploymentCustomizations(deployment, owner, r.ClusterInfo, dexConfigMapName, endpoint); err != nil {
 				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
 			}
 		}
@@ -333,7 +324,7 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 }
 
 // applyUIDeploymentCustomizations applies user-defined customizations to UI deployments.
-func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv1alpha1.KonfluxUI, clusterInfo *clusterinfo.Info, dexConfigMapName, hostname, port string) error {
+func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv1alpha1.KonfluxUI, clusterInfo *clusterinfo.Info, dexConfigMapName string, endpoint *url.URL) error {
 	spec := ui.Spec
 	openShiftLoginEnabled := isOpenShiftLoginEnabled(ui, clusterInfo)
 
@@ -342,8 +333,8 @@ func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv
 		if spec.Proxy != nil {
 			deployment.Spec.Replicas = &spec.Proxy.Replicas
 		}
-		// Build oauth2-proxy options based on hostname, port, and OpenShift login state
-		oauth2ProxyOpts := buildOAuth2ProxyOptions(hostname, port, openShiftLoginEnabled)
+		// Build oauth2-proxy options based on endpoint URL and OpenShift login state
+		oauth2ProxyOpts := buildOAuth2ProxyOptions(endpoint, openShiftLoginEnabled)
 		if err := buildProxyOverlay(spec.Proxy, oauth2ProxyOpts...).ApplyToDeployment(deployment); err != nil {
 			return err
 		}
@@ -386,15 +377,15 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, oauth2ProxyOpt
 
 // buildOAuth2ProxyOptions builds the container options for oauth2-proxy configuration.
 // openShiftLoginEnabled controls whether to allow unverified emails (needed for OpenShift OAuth).
-func buildOAuth2ProxyOptions(hostname, port string, openShiftLoginEnabled bool) []customization.ContainerOption {
+func buildOAuth2ProxyOptions(endpoint *url.URL, openShiftLoginEnabled bool) []customization.ContainerOption {
 	opts := []customization.ContainerOption{
 		oauth2proxy.WithProvider(),
-		oauth2proxy.WithOIDCURLs(hostname, port),
+		oauth2proxy.WithOIDCURLs(endpoint),
 		oauth2proxy.WithInternalDexURLs(),
 		oauth2proxy.WithCookieConfig(),
 		oauth2proxy.WithAuthSettings(),
 		oauth2proxy.WithTLSSkipVerify(),
-		oauth2proxy.WithWhitelistDomain(hostname, port),
+		oauth2proxy.WithWhitelistDomain(endpoint),
 	}
 
 	// Allow unverified emails when using OpenShift OAuth
@@ -501,30 +492,35 @@ func generateRandomBytes(length int, urlSafe bool) ([]byte, error) {
 // reconcileDexConfigMap creates or updates the Dex ConfigMap based on the DexConfig in the CR.
 // It generates a content-based hash suffix for the ConfigMap name (like kustomize),
 // cleans up old ConfigMaps, and returns the new ConfigMap name.
-// hostname and port are used for the dex issuer URL configuration.
-func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *konfluxv1alpha1.KonfluxUI, hostname, port string) (string, error) {
+// endpoint is used for the dex issuer URL configuration.
+func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *konfluxv1alpha1.KonfluxUI, endpoint *url.URL) (string, error) {
 	// Resolve whether OpenShift login should be enabled
 	openShiftLoginEnabled := isOpenShiftLoginEnabled(ui, r.ClusterInfo)
+	hasDexConfig := ui.Spec.Dex != nil && ui.Spec.Dex.Config != nil
+
+	// Determine the effective endpoint: use CR spec values if provided, otherwise use the determined endpoint
+	effectiveEndpoint := endpoint
+	if hasDexConfig && ui.Spec.Dex.Config.Hostname != "" {
+		host := ui.Spec.Dex.Config.Hostname
+		if ui.Spec.Dex.Config.Port != "" {
+			host = fmt.Sprintf("%s:%s", host, ui.Spec.Dex.Config.Port)
+		}
+		effectiveEndpoint = &url.URL{
+			Scheme: "https",
+			Host:   host,
+		}
+	}
 
 	var dexConfig *dex.Config
-	// Check if DexConfig is configured
-	if ui.Spec.Dex != nil && ui.Spec.Dex.Config != nil {
+	if hasDexConfig {
 		dexParams := ui.Spec.Dex.Config.DeepCopy()
-		// Use ingress-determined hostname and port if not explicitly provided in dexParams
-		if dexParams.Hostname == "" {
-			dexParams.Hostname = hostname
-		}
-		if dexParams.Port == "" {
-			dexParams.Port = port
-		}
 		// Set the resolved OpenShift login value
 		dexParams.ConfigureLoginWithOpenShift = &openShiftLoginEnabled
-		dexConfig = dex.NewDexConfig(dexParams)
+		dexConfig = dex.NewDexConfig(effectiveEndpoint, dexParams)
 	} else {
 		dexConfig = dex.NewDexConfig(
+			effectiveEndpoint,
 			&dex.DexParams{
-				Hostname: hostname,
-				Port:     port,
 				// password db must be enabled when the connector
 				// list is empty
 				EnablePasswordDB:            true,
@@ -580,7 +576,7 @@ func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // reconcileIngress creates or updates the Ingress resource for KonfluxUI when enabled.
 // If ingress is disabled, the resource is not applied and will be automatically
 // cleaned up by the tracking client's CleanupOrphans method.
-func (r *KonfluxUIReconciler) reconcileIngress(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, hostname string) error {
+func (r *KonfluxUIReconciler) reconcileIngress(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, endpoint *url.URL) error {
 	log := logf.FromContext(ctx)
 
 	// If ingress is not enabled, don't apply it.
@@ -590,6 +586,7 @@ func (r *KonfluxUIReconciler) reconcileIngress(ctx context.Context, tc *tracking
 		return nil
 	}
 
+	hostname := endpoint.Hostname()
 	log.Info("Reconciling Ingress", "hostname", hostname)
 
 	ingressResource := ingress.BuildForUI(ui, uiNamespace, hostname)
@@ -610,8 +607,8 @@ func (r *KonfluxUIReconciler) reconcileIngress(ctx context.Context, tc *tracking
 // OpenShift OAuth integration when ConfigureLoginWithOpenShift is enabled.
 // If not enabled, the resources are not applied and will be automatically
 // cleaned up by the tracking client's CleanupOrphans method.
-// hostname and port are used to construct the OAuth redirect URI.
-func (r *KonfluxUIReconciler) reconcileOpenShiftOAuth(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, hostname, port string) error {
+// endpoint is used to construct the OAuth redirect URI.
+func (r *KonfluxUIReconciler) reconcileOpenShiftOAuth(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, endpoint *url.URL) error {
 	log := logf.FromContext(ctx)
 
 	// Check if OpenShift login is enabled (requires running on OpenShift and option not disabled)
@@ -620,10 +617,10 @@ func (r *KonfluxUIReconciler) reconcileOpenShiftOAuth(ctx context.Context, tc *t
 		return nil
 	}
 
-	log.Info("Reconciling OpenShift OAuth resources", "hostname", hostname, "port", port)
+	log.Info("Reconciling OpenShift OAuth resources", "endpoint", endpoint.String())
 
 	// Create the ServiceAccount for OAuth redirect with the full callback URI
-	sa := dex.BuildOpenShiftOAuthServiceAccount(uiNamespace, hostname, port)
+	sa := dex.BuildOpenShiftOAuthServiceAccount(uiNamespace, endpoint)
 
 	// Set ownership
 	if err := setOwnership(sa, ui, string(manifests.UI), r.Scheme); err != nil {

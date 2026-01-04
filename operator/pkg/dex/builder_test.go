@@ -17,6 +17,7 @@ limitations under the License.
 package dex
 
 import (
+	"net/url"
 	"testing"
 
 	"github.com/onsi/gomega"
@@ -27,11 +28,10 @@ func TestNewDexConfig(t *testing.T) {
 	t.Run("creates config with hostname only", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
-		params := &DexParams{
-			Hostname: "dex.example.com",
-		}
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
+		params := &DexParams{}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config).NotTo(gomega.BeNil())
 		g.Expect(config.Issuer).To(gomega.Equal("https://dex.example.com/idp/"))
@@ -42,12 +42,10 @@ func TestNewDexConfig(t *testing.T) {
 	t.Run("creates config with hostname and port", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
-		params := &DexParams{
-			Hostname: "dex.example.com",
-			Port:     "9443",
-		}
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com:9443"}
+		params := &DexParams{}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config).NotTo(gomega.BeNil())
 		g.Expect(config.Issuer).To(gomega.Equal("https://dex.example.com:9443/idp/"))
@@ -59,11 +57,10 @@ func TestNewDexConfig(t *testing.T) {
 	t.Run("configures kubernetes storage", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
-		params := &DexParams{
-			Hostname: "dex.example.com",
-		}
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
+		params := &DexParams{}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.Storage).NotTo(gomega.BeNil())
 		g.Expect(config.Storage.Type).To(gomega.Equal("kubernetes"))
@@ -74,11 +71,10 @@ func TestNewDexConfig(t *testing.T) {
 	t.Run("configures HTTPS with TLS", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
-		params := &DexParams{
-			Hostname: "dex.example.com",
-		}
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
+		params := &DexParams{}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.Web).NotTo(gomega.BeNil())
 		g.Expect(config.Web.HTTPS).To(gomega.Equal("0.0.0.0:9443"))
@@ -89,11 +85,10 @@ func TestNewDexConfig(t *testing.T) {
 	t.Run("configures oauth2-proxy client", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
-		params := &DexParams{
-			Hostname: "dex.example.com",
-		}
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
+		params := &DexParams{}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.StaticClients).To(gomega.HaveLen(1))
 		client := config.StaticClients[0]
@@ -105,11 +100,10 @@ func TestNewDexConfig(t *testing.T) {
 	t.Run("configures telemetry", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
-		params := &DexParams{
-			Hostname: "dex.example.com",
-		}
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
+		params := &DexParams{}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.Telemetry).NotTo(gomega.BeNil())
 		g.Expect(config.Telemetry.HTTP).To(gomega.Equal("0.0.0.0:5558"))
@@ -118,11 +112,10 @@ func TestNewDexConfig(t *testing.T) {
 	t.Run("skips approval screen", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
-		params := &DexParams{
-			Hostname: "dex.example.com",
-		}
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
+		params := &DexParams{}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.OAuth2).NotTo(gomega.BeNil())
 		g.Expect(config.OAuth2.SkipApprovalScreen).To(gomega.BeTrue())
@@ -133,12 +126,13 @@ func TestNewDexConfig_OpenShiftConnector(t *testing.T) {
 	t.Run("adds OpenShift connector when enabled", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
 			Hostname:                    "dex.example.com",
 			ConfigureLoginWithOpenShift: ptr.To(true),
 		}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.Connectors).To(gomega.HaveLen(1))
 		connector := config.Connectors[0]
@@ -150,12 +144,13 @@ func TestNewDexConfig_OpenShiftConnector(t *testing.T) {
 	t.Run("configures OpenShift connector with correct issuer", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
 			Hostname:                    "dex.example.com",
 			ConfigureLoginWithOpenShift: ptr.To(true),
 		}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		connector := config.Connectors[0]
 		g.Expect(connector.Config).NotTo(gomega.BeNil())
@@ -165,12 +160,13 @@ func TestNewDexConfig_OpenShiftConnector(t *testing.T) {
 	t.Run("configures OpenShift connector with service account client ID", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
 			Hostname:                    "dex.example.com",
 			ConfigureLoginWithOpenShift: ptr.To(true),
 		}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		connector := config.Connectors[0]
 		g.Expect(connector.Config.ClientID).To(gomega.Equal("system:serviceaccount:konflux-ui:dex-client"))
@@ -180,12 +176,13 @@ func TestNewDexConfig_OpenShiftConnector(t *testing.T) {
 	t.Run("configures OpenShift connector with root CA for API server TLS", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
 			Hostname:                    "dex.example.com",
 			ConfigureLoginWithOpenShift: ptr.To(true),
 		}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		connector := config.Connectors[0]
 		g.Expect(connector.Config.RootCA).To(gomega.Equal("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"))
@@ -194,12 +191,13 @@ func TestNewDexConfig_OpenShiftConnector(t *testing.T) {
 	t.Run("configures OpenShift connector redirect URI without port", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
 			Hostname:                    "dex.example.com",
 			ConfigureLoginWithOpenShift: ptr.To(true),
 		}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		connector := config.Connectors[0]
 		g.Expect(connector.Config.RedirectURI).To(gomega.Equal("https://dex.example.com/idp/callback"))
@@ -208,13 +206,14 @@ func TestNewDexConfig_OpenShiftConnector(t *testing.T) {
 	t.Run("configures OpenShift connector redirect URI with port", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com:9443"}
 		params := &DexParams{
 			Hostname:                    "dex.example.com",
 			Port:                        "9443",
 			ConfigureLoginWithOpenShift: ptr.To(true),
 		}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		connector := config.Connectors[0]
 		g.Expect(connector.Config.RedirectURI).To(gomega.Equal("https://dex.example.com:9443/idp/callback"))
@@ -223,12 +222,13 @@ func TestNewDexConfig_OpenShiftConnector(t *testing.T) {
 	t.Run("does not add OpenShift connector when disabled", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
 			Hostname:                    "dex.example.com",
 			ConfigureLoginWithOpenShift: ptr.To(false),
 		}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.Connectors).To(gomega.BeEmpty())
 	})
@@ -238,8 +238,8 @@ func TestNewDexConfig_CustomConnectors(t *testing.T) {
 	t.Run("includes custom connectors", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
-			Hostname: "dex.example.com",
 			Connectors: []Connector{
 				{
 					Type: "github",
@@ -253,7 +253,7 @@ func TestNewDexConfig_CustomConnectors(t *testing.T) {
 			},
 		}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.Connectors).To(gomega.HaveLen(1))
 		g.Expect(config.Connectors[0].Type).To(gomega.Equal("github"))
@@ -263,8 +263,8 @@ func TestNewDexConfig_CustomConnectors(t *testing.T) {
 	t.Run("appends OpenShift connector to custom connectors", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
-			Hostname: "dex.example.com",
 			Connectors: []Connector{
 				{
 					Type: "github",
@@ -275,7 +275,7 @@ func TestNewDexConfig_CustomConnectors(t *testing.T) {
 			ConfigureLoginWithOpenShift: ptr.To(true),
 		}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.Connectors).To(gomega.HaveLen(2))
 		g.Expect(config.Connectors[0].Type).To(gomega.Equal("github"))
@@ -285,8 +285,8 @@ func TestNewDexConfig_CustomConnectors(t *testing.T) {
 	t.Run("supports multiple custom connectors", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
-			Hostname: "dex.example.com",
 			Connectors: []Connector{
 				{Type: "github", ID: "github", Name: "GitHub"},
 				{Type: "ldap", ID: "ldap", Name: "LDAP"},
@@ -294,7 +294,7 @@ func TestNewDexConfig_CustomConnectors(t *testing.T) {
 			},
 		}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.Connectors).To(gomega.HaveLen(3))
 	})
@@ -304,8 +304,8 @@ func TestNewDexConfig_ConnectorRedirectURI(t *testing.T) {
 	t.Run("sets default RedirectURI when not provided (hostname only)", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
-			Hostname: "dex.example.com",
 			Connectors: []Connector{
 				{
 					Type: "github",
@@ -319,7 +319,7 @@ func TestNewDexConfig_ConnectorRedirectURI(t *testing.T) {
 			},
 		}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.Connectors).To(gomega.HaveLen(1))
 		g.Expect(config.Connectors[0].Config.RedirectURI).To(gomega.Equal("https://dex.example.com/idp/callback"))
@@ -328,9 +328,8 @@ func TestNewDexConfig_ConnectorRedirectURI(t *testing.T) {
 	t.Run("sets default RedirectURI when not provided (hostname with port)", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com:9443"}
 		params := &DexParams{
-			Hostname: "dex.example.com",
-			Port:     "9443",
 			Connectors: []Connector{
 				{
 					Type: "github",
@@ -344,7 +343,7 @@ func TestNewDexConfig_ConnectorRedirectURI(t *testing.T) {
 			},
 		}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.Connectors).To(gomega.HaveLen(1))
 		g.Expect(config.Connectors[0].Config.RedirectURI).To(gomega.Equal("https://dex.example.com:9443/idp/callback"))
@@ -353,9 +352,8 @@ func TestNewDexConfig_ConnectorRedirectURI(t *testing.T) {
 	t.Run("preserves explicit RedirectURI when provided", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com:9443"}
 		params := &DexParams{
-			Hostname: "dex.example.com",
-			Port:     "9443",
 			Connectors: []Connector{
 				{
 					Type: "github",
@@ -370,7 +368,7 @@ func TestNewDexConfig_ConnectorRedirectURI(t *testing.T) {
 			},
 		}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.Connectors).To(gomega.HaveLen(1))
 		g.Expect(config.Connectors[0].Config.RedirectURI).To(gomega.Equal("https://custom.example.com/callback"))
@@ -379,8 +377,8 @@ func TestNewDexConfig_ConnectorRedirectURI(t *testing.T) {
 	t.Run("handles connector with nil Config", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
-			Hostname: "dex.example.com",
 			Connectors: []Connector{
 				{
 					Type:   "mock",
@@ -391,7 +389,7 @@ func TestNewDexConfig_ConnectorRedirectURI(t *testing.T) {
 			},
 		}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.Connectors).To(gomega.HaveLen(1))
 		g.Expect(config.Connectors[0].Config).To(gomega.BeNil())
@@ -400,9 +398,8 @@ func TestNewDexConfig_ConnectorRedirectURI(t *testing.T) {
 	t.Run("handles multiple connectors with mixed RedirectURI settings", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com:9443"}
 		params := &DexParams{
-			Hostname: "dex.example.com",
-			Port:     "9443",
 			Connectors: []Connector{
 				{
 					Type: "github",
@@ -436,7 +433,7 @@ func TestNewDexConfig_ConnectorRedirectURI(t *testing.T) {
 			},
 		}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.Connectors).To(gomega.HaveLen(3))
 		// GitHub connector should have default RedirectURI
@@ -450,8 +447,8 @@ func TestNewDexConfig_ConnectorRedirectURI(t *testing.T) {
 	t.Run("does not modify original params connectors", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
-			Hostname: "dex.example.com",
 			Connectors: []Connector{
 				{
 					Type: "github",
@@ -465,7 +462,7 @@ func TestNewDexConfig_ConnectorRedirectURI(t *testing.T) {
 			},
 		}
 
-		_ = NewDexConfig(params)
+		_ = NewDexConfig(endpoint, params)
 
 		// Original params should not be modified
 		// Note: Since Config is a pointer, the original is modified in the current implementation.
@@ -478,12 +475,12 @@ func TestNewDexConfig_PasswordDB(t *testing.T) {
 	t.Run("enables password database", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
-			Hostname:         "dex.example.com",
 			EnablePasswordDB: true,
 		}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.EnablePasswordDB).To(gomega.BeTrue())
 	})
@@ -491,12 +488,12 @@ func TestNewDexConfig_PasswordDB(t *testing.T) {
 	t.Run("disables password database when explicitly set", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
-			Hostname:         "dex.example.com",
 			EnablePasswordDB: false,
 		}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.EnablePasswordDB).To(gomega.BeFalse())
 	})
@@ -504,8 +501,8 @@ func TestNewDexConfig_PasswordDB(t *testing.T) {
 	t.Run("includes static passwords", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
-			Hostname:         "dex.example.com",
 			EnablePasswordDB: true,
 			StaticPasswords: []Password{
 				{
@@ -523,7 +520,7 @@ func TestNewDexConfig_PasswordDB(t *testing.T) {
 			},
 		}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.StaticPasswords).To(gomega.HaveLen(2))
 		g.Expect(config.StaticPasswords[0].Email).To(gomega.Equal("admin@example.com"))
@@ -533,13 +530,13 @@ func TestNewDexConfig_PasswordDB(t *testing.T) {
 	t.Run("configures password connector", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
-			Hostname:          "dex.example.com",
 			EnablePasswordDB:  true,
 			PasswordConnector: "local",
 		}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.OAuth2.PasswordConnector).To(gomega.Equal("local"))
 	})
@@ -549,6 +546,7 @@ func TestNewDexConfig_YAML_Output(t *testing.T) {
 	t.Run("generates valid YAML", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com:9443"}
 		params := &DexParams{
 			Hostname:                    "dex.example.com",
 			Port:                        "9443",
@@ -565,7 +563,7 @@ func TestNewDexConfig_YAML_Output(t *testing.T) {
 			},
 		}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 		yamlData, err := config.ToYAML()
 
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -581,12 +579,12 @@ func TestNewDexConfig_YAML_Output(t *testing.T) {
 	t.Run("omits empty fields in YAML", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
-			Hostname:         "dex.example.com",
 			EnablePasswordDB: false,
 		}
 
-		config := NewDexConfig(params)
+		config := NewDexConfig(endpoint, params)
 		yamlData, err := config.ToYAML()
 
 		g.Expect(err).NotTo(gomega.HaveOccurred())

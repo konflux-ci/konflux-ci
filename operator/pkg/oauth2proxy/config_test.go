@@ -17,6 +17,7 @@ limitations under the License.
 package oauth2proxy
 
 import (
+	"net/url"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -56,14 +57,12 @@ func TestWithProvider(t *testing.T) {
 func TestWithOIDCURLs(t *testing.T) {
 	tests := []struct {
 		name     string
-		hostname string
-		port     string
+		endpoint *url.URL
 		want     map[string]string
 	}{
 		{
 			name:     "with hostname and port",
-			hostname: "example.com",
-			port:     "9443",
+			endpoint: &url.URL{Scheme: "https", Host: "example.com:9443"},
 			want: map[string]string{
 				"OAUTH2_PROXY_REDIRECT_URL":    "https://example.com:9443/oauth2/callback",
 				"OAUTH2_PROXY_OIDC_ISSUER_URL": "https://example.com:9443/idp/",
@@ -72,8 +71,7 @@ func TestWithOIDCURLs(t *testing.T) {
 		},
 		{
 			name:     "with hostname only (no port)",
-			hostname: "konflux.example.com",
-			port:     "",
+			endpoint: &url.URL{Scheme: "https", Host: "konflux.example.com"},
 			want: map[string]string{
 				"OAUTH2_PROXY_REDIRECT_URL":    "https://konflux.example.com/oauth2/callback",
 				"OAUTH2_PROXY_OIDC_ISSUER_URL": "https://konflux.example.com/idp/",
@@ -82,8 +80,7 @@ func TestWithOIDCURLs(t *testing.T) {
 		},
 		{
 			name:     "localhost default",
-			hostname: "localhost",
-			port:     "9443",
+			endpoint: &url.URL{Scheme: "https", Host: "localhost:9443"},
 			want: map[string]string{
 				"OAUTH2_PROXY_REDIRECT_URL":    "https://localhost:9443/oauth2/callback",
 				"OAUTH2_PROXY_OIDC_ISSUER_URL": "https://localhost:9443/idp/",
@@ -96,7 +93,7 @@ func TestWithOIDCURLs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewGomegaWithT(t)
 
-			envVars := applyOption(WithOIDCURLs(tt.hostname, tt.port))
+			envVars := applyOption(WithOIDCURLs(tt.endpoint))
 			envMap := envVarsToMap(envVars)
 
 			for key, wantValue := range tt.want {
@@ -159,20 +156,17 @@ func TestWithAllowUnverifiedEmail(t *testing.T) {
 func TestWithWhitelistDomain(t *testing.T) {
 	tests := []struct {
 		name     string
-		hostname string
-		port     string
+		endpoint *url.URL
 		want     string
 	}{
 		{
 			name:     "with port",
-			hostname: "example.com",
-			port:     "9443",
+			endpoint: &url.URL{Scheme: "https", Host: "example.com:9443"},
 			want:     "example.com:9443",
 		},
 		{
 			name:     "without port",
-			hostname: "example.com",
-			port:     "",
+			endpoint: &url.URL{Scheme: "https", Host: "example.com"},
 			want:     "example.com",
 		},
 	}
@@ -181,7 +175,7 @@ func TestWithWhitelistDomain(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewGomegaWithT(t)
 
-			envVars := applyOption(WithWhitelistDomain(tt.hostname, tt.port))
+			envVars := applyOption(WithWhitelistDomain(tt.endpoint))
 			envMap := envVarsToMap(envVars)
 
 			g.Expect(envMap["OAUTH2_PROXY_WHITELIST_DOMAINS"]).To(Equal(tt.want))
@@ -197,8 +191,9 @@ func TestOptionsAreComposable(t *testing.T) {
 	ctx := customization.DeploymentContext{}
 
 	// Apply multiple options
+	endpoint := &url.URL{Scheme: "https", Host: "example.com:8443"}
 	WithProvider()(c, ctx)
-	WithOIDCURLs("example.com", "8443")(c, ctx)
+	WithOIDCURLs(endpoint)(c, ctx)
 	WithCookieConfig()(c, ctx)
 
 	envMap := envVarsToMap(c.Env)
@@ -209,41 +204,4 @@ func TestOptionsAreComposable(t *testing.T) {
 	g.Expect(envMap["OAUTH2_PROXY_REDIRECT_URL"]).To(Equal("https://example.com:8443/oauth2/callback"))
 	// Verify cookie config
 	g.Expect(envMap["OAUTH2_PROXY_COOKIE_SECURE"]).To(Equal("true"))
-}
-
-func TestBuildBaseURL(t *testing.T) {
-	tests := []struct {
-		name     string
-		hostname string
-		port     string
-		want     string
-	}{
-		{
-			name:     "with port",
-			hostname: "example.com",
-			port:     "9443",
-			want:     "https://example.com:9443",
-		},
-		{
-			name:     "without port",
-			hostname: "example.com",
-			port:     "",
-			want:     "https://example.com",
-		},
-		{
-			name:     "localhost with port",
-			hostname: "localhost",
-			port:     "8443",
-			want:     "https://localhost:8443",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewGomegaWithT(t)
-
-			got := buildBaseURL(tt.hostname, tt.port)
-			g.Expect(got).To(Equal(tt.want))
-		})
-	}
 }

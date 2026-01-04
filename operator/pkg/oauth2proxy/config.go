@@ -23,16 +23,19 @@ limitations under the License.
 package oauth2proxy
 
 import (
-	"fmt"
+	"net/url"
 
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 )
 
-const (
+var (
 	// dexInternalURL is the internal Dex service URL used for token redemption and JWKS.
-	dexInternalURL = "https://dex.konflux-ui.svc.cluster.local:9443"
+	dexInternalURL = &url.URL{
+		Scheme: "https",
+		Host:   "dex.konflux-ui.svc.cluster.local:9443",
+	}
 )
 
 // --- Provider Configuration ---
@@ -50,14 +53,13 @@ func WithProvider() customization.ContainerOption {
 
 // --- OIDC URL Configuration ---
 
-// WithOIDCURLs configures the external-facing OIDC URLs based on hostname and port.
+// WithOIDCURLs configures the external-facing OIDC URLs based on the endpoint URL.
 // These URLs are used by browsers to interact with the OIDC flow.
-func WithOIDCURLs(hostname, port string) customization.ContainerOption {
-	baseURL := buildBaseURL(hostname, port)
+func WithOIDCURLs(endpoint *url.URL) customization.ContainerOption {
 	return customization.WithEnv(
-		corev1.EnvVar{Name: "OAUTH2_PROXY_REDIRECT_URL", Value: fmt.Sprintf("%s/oauth2/callback", baseURL)},
-		corev1.EnvVar{Name: "OAUTH2_PROXY_OIDC_ISSUER_URL", Value: fmt.Sprintf("%s/idp/", baseURL)},
-		corev1.EnvVar{Name: "OAUTH2_PROXY_LOGIN_URL", Value: fmt.Sprintf("%s/idp/auth", baseURL)},
+		corev1.EnvVar{Name: "OAUTH2_PROXY_REDIRECT_URL", Value: endpoint.JoinPath("/oauth2/callback").String()},
+		corev1.EnvVar{Name: "OAUTH2_PROXY_OIDC_ISSUER_URL", Value: endpoint.JoinPath("/idp/").String()},
+		corev1.EnvVar{Name: "OAUTH2_PROXY_LOGIN_URL", Value: endpoint.JoinPath("/idp/auth").String()},
 	)
 }
 
@@ -66,8 +68,8 @@ func WithOIDCURLs(hostname, port string) customization.ContainerOption {
 func WithInternalDexURLs() customization.ContainerOption {
 	return customization.WithEnv(
 		corev1.EnvVar{Name: "OAUTH2_PROXY_SKIP_OIDC_DISCOVERY", Value: "true"},
-		corev1.EnvVar{Name: "OAUTH2_PROXY_REDEEM_URL", Value: fmt.Sprintf("%s/idp/token", dexInternalURL)},
-		corev1.EnvVar{Name: "OAUTH2_PROXY_OIDC_JWKS_URL", Value: fmt.Sprintf("%s/idp/keys", dexInternalURL)},
+		corev1.EnvVar{Name: "OAUTH2_PROXY_REDEEM_URL", Value: dexInternalURL.JoinPath("/idp/token").String()},
+		corev1.EnvVar{Name: "OAUTH2_PROXY_OIDC_JWKS_URL", Value: dexInternalURL.JoinPath("/idp/keys").String()},
 	)
 }
 
@@ -117,24 +119,9 @@ func WithAllowUnverifiedEmail() customization.ContainerOption {
 // --- Domain Whitelist ---
 
 // WithWhitelistDomain configures the allowed redirect domains.
-func WithWhitelistDomain(hostname, port string) customization.ContainerOption {
-	domain := hostname
-	if port != "" {
-		domain = fmt.Sprintf("%s:%s", hostname, port)
-	}
+func WithWhitelistDomain(endpoint *url.URL) customization.ContainerOption {
+	// endpoint.Host contains "hostname:port" or just "hostname" if port is default
 	return customization.WithEnv(
-		corev1.EnvVar{Name: "OAUTH2_PROXY_WHITELIST_DOMAINS", Value: domain},
+		corev1.EnvVar{Name: "OAUTH2_PROXY_WHITELIST_DOMAINS", Value: endpoint.Host},
 	)
-}
-
-// --- Convenience Functions ---
-
-// --- Helper Functions ---
-
-// buildBaseURL constructs the base URL from hostname and port.
-func buildBaseURL(hostname, port string) string {
-	if port != "" {
-		return fmt.Sprintf("https://%s:%s", hostname, port)
-	}
-	return fmt.Sprintf("https://%s", hostname)
 }

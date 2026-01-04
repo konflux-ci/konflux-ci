@@ -19,6 +19,8 @@ package dex
 import (
 	"fmt"
 
+	"net/url"
+
 	"k8s.io/utils/ptr"
 )
 
@@ -63,11 +65,9 @@ type DexParams struct {
 
 // NewDexConfig creates a Dex configuration for the Konflux UI.
 // This configuration uses Kubernetes storage, HTTPS with TLS, and an oauth2-proxy client.
-func NewDexConfig(params *DexParams) *Config {
-	baseURL := fmt.Sprintf("https://%s", params.Hostname)
-	if params.Port != "" {
-		baseURL = fmt.Sprintf("https://%s:%s", params.Hostname, params.Port)
-	}
+// endpoint is the base URL for the Dex issuer (e.g., https://dex.example.com).
+func NewDexConfig(endpoint *url.URL, params *DexParams) *Config {
+	baseURL := endpoint.String()
 
 	defaultRedirectURI := fmt.Sprintf("%s/idp/callback", baseURL)
 

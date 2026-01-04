@@ -17,7 +17,7 @@ limitations under the License.
 package dex
 
 import (
-	"fmt"
+	"net/url"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,15 +39,10 @@ const (
 // BuildOpenShiftOAuthServiceAccount creates a ServiceAccount for OpenShift OAuth integration.
 // The ServiceAccount includes the oauth-redirecturi annotation that configures
 // OpenShift OAuth with the exact redirect URI for the Dex callback.
-// hostname and port are used to construct the full redirect URI.
-func BuildOpenShiftOAuthServiceAccount(namespace, hostname, port string) *corev1.ServiceAccount {
+// endpoint is the base URL used to construct the full redirect URI.
+func BuildOpenShiftOAuthServiceAccount(namespace string, endpoint *url.URL) *corev1.ServiceAccount {
 	// Build the redirect URI with the Dex callback path
-	var redirectURI string
-	if port != "" {
-		redirectURI = fmt.Sprintf("https://%s:%s%s", hostname, port, DexCallbackPath)
-	} else {
-		redirectURI = fmt.Sprintf("https://%s%s", hostname, DexCallbackPath)
-	}
+	redirectURI := endpoint.JoinPath(DexCallbackPath).String()
 
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{
