@@ -74,7 +74,7 @@ deploy() {
     echo "🤝 Deploying Trust Manager..." >&2
     deploy_trust_manager
     echo "📜 Setting up Cluster Issuer..." >&2
-    kubectl apply -k "${script_path}/dependencies/cluster-issuer"
+    deploy_cluster_issuer
     echo "🐱 Deploying Tekton..." >&2
     deploy_tekton
     echo "🔑 Deploying Dex..." >&2
@@ -135,6 +135,15 @@ deploy_trust_manager() {
     sleep 5
     retry "kubectl wait --for=condition=Ready --timeout=60s -l app.kubernetes.io/instance=trust-manager -n cert-manager pod" \
           "Trust manager did not become available within the allocated time"
+}
+
+deploy_cluster_issuer() {
+    : "${SKIP_CLUSTER_ISSUER:=false}"
+    if [[ "${SKIP_CLUSTER_ISSUER}" == "true" ]]; then
+        echo "⏭️  Skipping Cluster Issuer deployment (managed by operator)" >&2
+        return 0
+    fi
+    kubectl apply -k "${script_path}/dependencies/cluster-issuer"
 }
 
 deploy_dex() {

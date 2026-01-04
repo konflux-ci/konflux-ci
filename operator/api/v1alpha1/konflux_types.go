@@ -59,6 +59,11 @@ type KonfluxSpec struct {
 	// The runtime configuration is copied to the KonfluxInfo CR by the operator.
 	// +optional
 	KonfluxInfo *KonfluxInfoConfig `json:"info,omitempty"`
+
+	// CertManager configures the cert-manager component.
+	// The runtime configuration is copied to the KonfluxCertManager CR by the operator.
+	// +optional
+	CertManager *CertManagerConfig `json:"certManager,omitempty"`
 }
 
 // ImageControllerConfig defines the configuration for the image-controller component.
@@ -109,6 +114,14 @@ type NamespaceListerConfig struct {
 	// Spec configures the namespace-lister component.
 	// +optional
 	Spec *KonfluxNamespaceListerSpec `json:"spec,omitempty"`
+}
+
+// CertManagerConfig defines the configuration for the cert-manager component.
+type CertManagerConfig struct {
+	// CreateClusterIssuer controls whether cluster issuer resources are created.
+	// Defaults to true if not specified.
+	// +optional
+	CreateClusterIssuer *bool `json:"createClusterIssuer,omitempty"`
 }
 
 // KonfluxInfoConfig defines the configuration for the info component.
