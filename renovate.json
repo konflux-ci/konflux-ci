@@ -2,7 +2,9 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "ignorePaths": [
     "operator/upstream-kustomizations/application-api/**",
-    "operator/upstream-kustomizations/build-service/**",
+    "operator/upstream-kustomizations/build-service/monitoring/**",
+    "operator/upstream-kustomizations/build-service/core/kustomization.yaml",
+    "operator/upstream-kustomizations/build-service/kustomization.yaml",
     "operator/upstream-kustomizations/enterprise-contract/core/**",
     "operator/upstream-kustomizations/image-controller/**",
     "operator/upstream-kustomizations/integration/**",
@@ -89,7 +91,10 @@
     },
     {
       "customType": "regex",
-      "fileMatch": ["konflux-ci/build-service/core/build-pipeline-config.yaml"],
+      "fileMatch": [
+        "konflux-ci/build-service/core/build-pipeline-config.yaml",
+        "operator/upstream-kustomizations/build-service/core/build-pipeline-config.yaml"
+      ],
       "matchStrings": [
         "bundle: (?<depName>quay\\.io/konflux-ci/tekton-catalog/pipeline-[^@]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
       ],
