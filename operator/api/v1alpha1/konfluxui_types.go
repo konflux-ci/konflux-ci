@@ -17,6 +17,9 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"fmt"
+	"net/url"
+
 	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -139,6 +142,80 @@ func (k *KonfluxUI) GetConditions() []metav1.Condition {
 // SetConditions sets the conditions on the KonfluxUI status.
 func (k *KonfluxUI) SetConditions(conditions []metav1.Condition) {
 	k.Status.Conditions = conditions
+}
+
+// -----------------------------------------------------------------------------
+// Spec Accessor Methods
+// These methods provide safe access to optional fields with sensible defaults,
+// reducing nil checks throughout the codebase.
+// -----------------------------------------------------------------------------
+
+// GetIngress returns the IngressSpec with safe defaults if nil.
+func (s *KonfluxUISpec) GetIngress() IngressSpec {
+	if s.Ingress == nil {
+		return IngressSpec{}
+	}
+	return *s.Ingress
+}
+
+// GetProxy returns the ProxyDeploymentSpec with safe defaults if nil.
+func (s *KonfluxUISpec) GetProxy() ProxyDeploymentSpec {
+	if s.Proxy == nil {
+		return ProxyDeploymentSpec{Replicas: 1}
+	}
+	return *s.Proxy
+}
+
+// GetDex returns the DexDeploymentSpec with safe defaults if nil.
+func (s *KonfluxUISpec) GetDex() DexDeploymentSpec {
+	if s.Dex == nil {
+		return DexDeploymentSpec{Replicas: 1}
+	}
+	return *s.Dex
+}
+
+// -----------------------------------------------------------------------------
+// High-level Convenience Methods on KonfluxUI
+// These methods encapsulate common conditional checks used throughout the controller.
+// -----------------------------------------------------------------------------
+
+// IsIngressEnabled returns true if ingress is explicitly enabled.
+func (k *KonfluxUI) IsIngressEnabled() bool {
+	return k.Spec.GetIngress().Enabled
+}
+
+// HasDexConfig returns true if custom Dex configuration is provided.
+func (k *KonfluxUI) HasDexConfig() bool {
+	return k.Spec.GetDex().Config != nil
+}
+
+// GetOpenShiftLoginPreference returns the user's preference for OpenShift login.
+// Returns nil if not explicitly configured, allowing callers to apply defaults.
+func (k *KonfluxUI) GetOpenShiftLoginPreference() *bool {
+	config := k.Spec.GetDex().Config
+	if config == nil {
+		return nil
+	}
+	return config.ConfigureLoginWithOpenShift
+}
+
+// ResolveDexEndpoint returns the effective Dex endpoint URL.
+// If the CR specifies a hostname override, it uses that; otherwise, it returns the default endpoint.
+func (k *KonfluxUI) ResolveDexEndpoint(defaultEndpoint *url.URL) *url.URL {
+	config := k.Spec.GetDex().Config
+	if config == nil || config.Hostname == "" {
+		return defaultEndpoint
+	}
+
+	host := config.Hostname
+	if config.Port != "" {
+		host = fmt.Sprintf("%s:%s", host, config.Port)
+	}
+
+	return &url.URL{
+		Scheme: "https",
+		Host:   host,
+	}
 }
 
 func init() {

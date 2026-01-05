@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -240,10 +241,8 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 // updateIngressStatus updates the ingress status fields on the KonfluxUI CR.
 func updateIngressStatus(ui *konfluxv1alpha1.KonfluxUI, endpoint *url.URL) {
-	ingressEnabled := ui.Spec.Ingress != nil && ui.Spec.Ingress.Enabled
-
 	ui.Status.Ingress = &konfluxv1alpha1.IngressStatus{
-		Enabled:  ingressEnabled,
+		Enabled:  ui.IsIngressEnabled(),
 		Hostname: endpoint.Hostname(),
 		URL:      endpoint.String(),
 	}
@@ -325,24 +324,21 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 
 // applyUIDeploymentCustomizations applies user-defined customizations to UI deployments.
 func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv1alpha1.KonfluxUI, clusterInfo *clusterinfo.Info, dexConfigMapName string, endpoint *url.URL) error {
-	spec := ui.Spec
 	openShiftLoginEnabled := isOpenShiftLoginEnabled(ui, clusterInfo)
 
 	switch deployment.Name {
 	case proxyDeploymentName:
-		if spec.Proxy != nil {
-			deployment.Spec.Replicas = &spec.Proxy.Replicas
-		}
+		proxySpec := ui.Spec.GetProxy()
+		deployment.Spec.Replicas = &proxySpec.Replicas
 		// Build oauth2-proxy options based on endpoint URL and OpenShift login state
 		oauth2ProxyOpts := buildOAuth2ProxyOptions(endpoint, openShiftLoginEnabled)
-		if err := buildProxyOverlay(spec.Proxy, oauth2ProxyOpts...).ApplyToDeployment(deployment); err != nil {
+		if err := buildProxyOverlay(ui.Spec.Proxy, oauth2ProxyOpts...).ApplyToDeployment(deployment); err != nil {
 			return err
 		}
 	case dexDeploymentName:
-		if spec.Dex != nil {
-			deployment.Spec.Replicas = &spec.Dex.Replicas
-		}
-		if err := buildDexOverlay(spec.Dex, dexConfigMapName, openShiftLoginEnabled).ApplyToDeployment(deployment); err != nil {
+		dexSpec := ui.Spec.GetDex()
+		deployment.Spec.Replicas = &dexSpec.Replicas
+		if err := buildDexOverlay(ui.Spec.Dex, dexConfigMapName, openShiftLoginEnabled).ApplyToDeployment(deployment); err != nil {
 			return err
 		}
 	}
@@ -496,24 +492,13 @@ func generateRandomBytes(length int, urlSafe bool) ([]byte, error) {
 func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *konfluxv1alpha1.KonfluxUI, endpoint *url.URL) (string, error) {
 	// Resolve whether OpenShift login should be enabled
 	openShiftLoginEnabled := isOpenShiftLoginEnabled(ui, r.ClusterInfo)
-	hasDexConfig := ui.Spec.Dex != nil && ui.Spec.Dex.Config != nil
 
 	// Determine the effective endpoint: use CR spec values if provided, otherwise use the determined endpoint
-	effectiveEndpoint := endpoint
-	if hasDexConfig && ui.Spec.Dex.Config.Hostname != "" {
-		host := ui.Spec.Dex.Config.Hostname
-		if ui.Spec.Dex.Config.Port != "" {
-			host = fmt.Sprintf("%s:%s", host, ui.Spec.Dex.Config.Port)
-		}
-		effectiveEndpoint = &url.URL{
-			Scheme: "https",
-			Host:   host,
-		}
-	}
+	effectiveEndpoint := ui.ResolveDexEndpoint(endpoint)
 
 	var dexConfig *dex.Config
-	if hasDexConfig {
-		dexParams := ui.Spec.Dex.Config.DeepCopy()
+	if ui.HasDexConfig() {
+		dexParams := ui.Spec.GetDex().Config.DeepCopy()
 		// Set the resolved OpenShift login value
 		dexParams.ConfigureLoginWithOpenShift = &openShiftLoginEnabled
 		dexConfig = dex.NewDexConfig(effectiveEndpoint, dexParams)
@@ -581,7 +566,7 @@ func (r *KonfluxUIReconciler) reconcileIngress(ctx context.Context, tc *tracking
 
 	// If ingress is not enabled, don't apply it.
 	// The tracking client will delete it during CleanupOrphans since it wasn't applied.
-	if ui.Spec.Ingress == nil || !ui.Spec.Ingress.Enabled {
+	if !ui.IsIngressEnabled() {
 		log.Info("Ingress is disabled, skipping (will be cleaned up if exists)")
 		return nil
 	}
@@ -655,16 +640,6 @@ func isOpenShiftLoginEnabled(ui *konfluxv1alpha1.KonfluxUI, clusterInfo *cluster
 		return false
 	}
 
-	// If no dex config is specified, enable by default on OpenShift
-	if ui.Spec.Dex == nil || ui.Spec.Dex.Config == nil {
-		return true
-	}
-
-	// If the option is nil (not explicitly set), enable by default on OpenShift
-	if ui.Spec.Dex.Config.ConfigureLoginWithOpenShift == nil {
-		return true
-	}
-
-	// Otherwise, use the explicitly set value
-	return *ui.Spec.Dex.Config.ConfigureLoginWithOpenShift
+	// Default to true on OpenShift unless explicitly disabled
+	return ptr.Deref(ui.GetOpenShiftLoginPreference(), true)
 }

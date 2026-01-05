@@ -147,15 +147,7 @@ func Build(cfg Config) *networkingv1.Ingress {
 
 // BuildForUI creates an Ingress resource for KonfluxUI based on the spec, namespace, and hostname.
 func BuildForUI(ui *konfluxv1alpha1.KonfluxUI, namespace, hostname string) *networkingv1.Ingress {
-	var annotations map[string]string
-	var ingressClassName *string
-	var tlsSecretName string
-
-	if ui.Spec.Ingress != nil {
-		annotations = ui.Spec.Ingress.Annotations
-		ingressClassName = ui.Spec.Ingress.IngressClassName
-		tlsSecretName = ui.Spec.Ingress.TLSSecretName
-	}
+	ingressSpec := ui.Spec.GetIngress()
 
 	return Build(Config{
 		Name:             IngressName,
@@ -164,9 +156,9 @@ func BuildForUI(ui *konfluxv1alpha1.KonfluxUI, namespace, hostname string) *netw
 		ServiceName:      ProxyServiceName,
 		ServicePort:      ProxyServicePort,
 		Path:             DefaultIngressPath,
-		IngressClassName: ingressClassName,
-		Annotations:      annotations,
-		TLSSecretName:    tlsSecretName,
+		IngressClassName: ingressSpec.IngressClassName,
+		Annotations:      ingressSpec.Annotations,
+		TLSSecretName:    ingressSpec.TLSSecretName,
 	})
 }
 
@@ -208,8 +200,10 @@ func DetermineEndpointURL(
 	namespace string,
 	clusterInfo *clusterinfo.Info,
 ) (*url.URL, error) {
-	// If ingress is not enabled or not configured, use defaults
-	if ui.Spec.Ingress == nil || !ui.Spec.Ingress.Enabled {
+	ingressSpec := ui.Spec.GetIngress()
+
+	// If ingress is not enabled, use defaults
+	if !ingressSpec.Enabled {
 		return &url.URL{
 			Scheme: "https",
 			Host:   fmt.Sprintf("%s:%s", DefaultProxyHostname, DefaultProxyPort),
@@ -217,10 +211,10 @@ func DetermineEndpointURL(
 	}
 
 	// If host is explicitly specified, use it (no port for ingress, TLS on 443)
-	if ui.Spec.Ingress.Host != "" {
+	if ingressSpec.Host != "" {
 		return &url.URL{
 			Scheme: "https",
-			Host:   ui.Spec.Ingress.Host,
+			Host:   ingressSpec.Host,
 		}, nil
 	}
 
