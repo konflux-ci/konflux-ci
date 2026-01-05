@@ -44,7 +44,7 @@
       "description": "Group core Tekton components for coordinated updates. Note: tektoncd/results is managed by the operator and its version is determined by the operator version."
     }
   ],
-  "enabledManagers": ["regex", "kustomize", "github-actions", "gomod"],
+  "enabledManagers": ["regex", "kustomize", "github-actions", "gomod", "dockerfile"],
   "customManagers": [
     {
       "customType": "regex",
