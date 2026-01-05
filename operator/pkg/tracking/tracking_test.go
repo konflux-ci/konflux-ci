@@ -32,9 +32,12 @@ import (
 )
 
 const (
-	testOwnerLabel = "test.example.com/owner"
-	testOwnerValue = "test-owner"
-	testNamespace  = "test-namespace"
+	testOwnerLabel     = "test.example.com/owner"
+	testComponentLabel = "test.example.com/component"
+	testOwnerValue     = "test-owner"
+	testComponent      = "test-component"
+	testFieldManager   = "test-manager"
+	testNamespace      = "test-namespace"
 )
 
 var configMapGVK = schema.GroupVersionKind{
@@ -43,12 +46,31 @@ var configMapGVK = schema.GroupVersionKind{
 	Kind:    "ConfigMap",
 }
 
+// createTestOwner creates a ConfigMap to use as an owner for testing.
+// ConfigMaps work as owners because they have the required metadata.
+func createTestOwner(g *WithT, fakeClient client.Client) *corev1.ConfigMap {
+	owner := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testOwnerValue,
+			Namespace: testNamespace,
+			UID:       "test-owner-uid",
+		},
+	}
+	err := fakeClient.Create(context.Background(), owner)
+	g.Expect(err).NotTo(HaveOccurred())
+	return owner
+}
+
 func TestNewClient(t *testing.T) {
 	g := NewWithT(t)
 
 	scheme := setupScheme(g)
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	tc := NewClient(fakeClient, scheme)
+	tc := NewClient(fakeClient)
 
 	g.Expect(tc).NotTo(BeNil())
 	g.Expect(tc.tracked).NotTo(BeNil())
@@ -61,7 +83,7 @@ func TestClient_ApplyObject(t *testing.T) {
 
 	scheme := setupScheme(g)
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	tc := NewClient(fakeClient, scheme)
+	tc := NewClient(fakeClient)
 
 	cm := &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
@@ -113,7 +135,7 @@ func TestClient_Patch(t *testing.T) {
 	}
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-	tc := NewClient(fakeClient, scheme)
+	tc := NewClient(fakeClient)
 
 	// Patch the ConfigMap using server-side apply
 	patched := &corev1.ConfigMap{
@@ -146,7 +168,7 @@ func TestClient_Create(t *testing.T) {
 
 	scheme := setupScheme(g)
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	tc := NewClient(fakeClient, scheme)
+	tc := NewClient(fakeClient)
 
 	cm := &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
@@ -191,7 +213,7 @@ func TestClient_Create_AlreadyExists(t *testing.T) {
 	}
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-	tc := NewClient(fakeClient, scheme)
+	tc := NewClient(fakeClient)
 
 	// Try to create the same object
 	cm := &corev1.ConfigMap{
@@ -241,7 +263,7 @@ func TestClient_Update(t *testing.T) {
 	}
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-	tc := NewClient(fakeClient, scheme)
+	tc := NewClient(fakeClient)
 
 	// First fetch the object to get its resourceVersion
 	var fetched corev1.ConfigMap
@@ -263,7 +285,7 @@ func TestClient_TrackedResources(t *testing.T) {
 
 	scheme := setupScheme(g)
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	tc := NewClient(fakeClient, scheme)
+	tc := NewClient(fakeClient)
 
 	// Apply multiple resources
 	for i, name := range []string{"cm-1", "cm-2", "cm-3"} {
@@ -345,7 +367,7 @@ func TestClient_CleanupOrphans(t *testing.T) {
 		WithScheme(scheme).
 		WithObjects(existing1, existing2, existing3).
 		Build()
-	tc := NewClient(fakeClient, scheme)
+	tc := NewClient(fakeClient)
 
 	// Apply only one of the owned resources - the other becomes an orphan
 	cm := &corev1.ConfigMap{
@@ -420,7 +442,7 @@ func TestClient_CleanupOrphans_ClusterScoped(t *testing.T) {
 		WithScheme(scheme).
 		WithObjects(ns1, ns2).
 		Build()
-	tc := NewClient(fakeClient, scheme)
+	tc := NewClient(fakeClient)
 
 	// Apply only one namespace
 	ns := &corev1.Namespace{
@@ -492,7 +514,7 @@ func TestClient_CleanupOrphans_MultipleGVKs(t *testing.T) {
 		WithScheme(scheme).
 		WithObjects(cm, secret).
 		Build()
-	tc := NewClient(fakeClient, scheme)
+	tc := NewClient(fakeClient)
 
 	// Don't apply anything - both resources are orphans
 
@@ -517,7 +539,7 @@ func TestClient_CreateOrUpdate_Create(t *testing.T) {
 
 	scheme := setupScheme(g)
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	tc := NewClient(fakeClient, scheme)
+	tc := NewClient(fakeClient)
 
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -561,7 +583,7 @@ func TestClient_CreateOrUpdate_Update(t *testing.T) {
 	}
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-	tc := NewClient(fakeClient, scheme)
+	tc := NewClient(fakeClient)
 
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -605,7 +627,7 @@ func TestClient_CreateOrUpdate_Unchanged(t *testing.T) {
 	}
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-	tc := NewClient(fakeClient, scheme)
+	tc := NewClient(fakeClient)
 
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -633,7 +655,7 @@ func TestClient_CreateOrUpdate_Error(t *testing.T) {
 
 	scheme := setupScheme(g)
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	tc := NewClient(fakeClient, scheme)
+	tc := NewClient(fakeClient)
 
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -685,6 +707,310 @@ func TestResourceKey_String(t *testing.T) {
 			g.Expect(tt.key.String()).To(Equal(tt.expected))
 		})
 	}
+}
+
+func TestNewClientWithOwnership(t *testing.T) {
+	g := NewWithT(t)
+
+	scheme := setupScheme(g)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	owner := createTestOwner(g, fakeClient)
+
+	tc := NewClientWithOwnership(fakeClient, OwnershipConfig{
+		Owner:             owner,
+		OwnerLabelKey:     testOwnerLabel,
+		ComponentLabelKey: testComponentLabel,
+		Component:         testComponent,
+		FieldManager:      testFieldManager,
+	})
+
+	g.Expect(tc).NotTo(BeNil())
+	g.Expect(tc.tracked).NotTo(BeNil())
+	g.Expect(tc.tracked).To(BeEmpty())
+	g.Expect(tc.ownership).NotTo(BeNil())
+	g.Expect(tc.ownership.Owner).To(Equal(owner))
+	g.Expect(tc.ownership.OwnerLabelKey).To(Equal(testOwnerLabel))
+	g.Expect(tc.ownership.ComponentLabelKey).To(Equal(testComponentLabel))
+	g.Expect(tc.ownership.Component).To(Equal(testComponent))
+	g.Expect(tc.ownership.FieldManager).To(Equal(testFieldManager))
+}
+
+func TestClient_SetOwnership(t *testing.T) {
+	g := NewWithT(t)
+
+	scheme := setupScheme(g)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	owner := createTestOwner(g, fakeClient)
+
+	tc := NewClientWithOwnership(fakeClient, OwnershipConfig{
+		Owner:             owner,
+		OwnerLabelKey:     testOwnerLabel,
+		ComponentLabelKey: testComponentLabel,
+		Component:         testComponent,
+		FieldManager:      testFieldManager,
+	})
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "owned-cm",
+			Namespace: testNamespace,
+		},
+	}
+
+	err := tc.SetOwnership(cm)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Verify labels were set
+	g.Expect(cm.Labels).To(HaveKeyWithValue(testOwnerLabel, testOwnerValue))
+	g.Expect(cm.Labels).To(HaveKeyWithValue(testComponentLabel, testComponent))
+
+	// Verify owner reference was set
+	g.Expect(cm.OwnerReferences).To(HaveLen(1))
+	g.Expect(cm.OwnerReferences[0].Name).To(Equal(testOwnerValue))
+	g.Expect(cm.OwnerReferences[0].UID).To(Equal(owner.UID))
+	g.Expect(*cm.OwnerReferences[0].Controller).To(BeTrue())
+}
+
+func TestClient_SetOwnership_PreservesExistingLabels(t *testing.T) {
+	g := NewWithT(t)
+
+	scheme := setupScheme(g)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	owner := createTestOwner(g, fakeClient)
+
+	tc := NewClientWithOwnership(fakeClient, OwnershipConfig{
+		Owner:             owner,
+		OwnerLabelKey:     testOwnerLabel,
+		ComponentLabelKey: testComponentLabel,
+		Component:         testComponent,
+		FieldManager:      testFieldManager,
+	})
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "owned-cm",
+			Namespace: testNamespace,
+			Labels: map[string]string{
+				"existing-label": "existing-value",
+			},
+		},
+	}
+
+	err := tc.SetOwnership(cm)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Verify existing labels are preserved
+	g.Expect(cm.Labels).To(HaveKeyWithValue("existing-label", "existing-value"))
+	// Verify ownership labels were added
+	g.Expect(cm.Labels).To(HaveKeyWithValue(testOwnerLabel, testOwnerValue))
+	g.Expect(cm.Labels).To(HaveKeyWithValue(testComponentLabel, testComponent))
+}
+
+func TestClient_SetOwnership_ErrorWithoutOwnershipConfig(t *testing.T) {
+	g := NewWithT(t)
+
+	scheme := setupScheme(g)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	// Create client WITHOUT ownership config
+	tc := NewClient(fakeClient)
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "owned-cm",
+			Namespace: testNamespace,
+		},
+	}
+
+	err := tc.SetOwnership(cm)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("ownership config"))
+}
+
+func TestClient_ApplyOwned(t *testing.T) {
+	g := NewWithT(t)
+	ctx := context.Background()
+
+	scheme := setupScheme(g)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	owner := createTestOwner(g, fakeClient)
+
+	tc := NewClientWithOwnership(fakeClient, OwnershipConfig{
+		Owner:             owner,
+		OwnerLabelKey:     testOwnerLabel,
+		ComponentLabelKey: testComponentLabel,
+		Component:         testComponent,
+		FieldManager:      testFieldManager,
+	})
+
+	cm := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "applied-cm",
+			Namespace: testNamespace,
+		},
+		Data: map[string]string{
+			"key": "value",
+		},
+	}
+
+	err := tc.ApplyOwned(ctx, cm)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Verify the resource is tracked
+	g.Expect(tc.IsTracked(configMapGVK, testNamespace, "applied-cm")).To(BeTrue())
+
+	// Verify the resource exists in the cluster
+	var fetched corev1.ConfigMap
+	err = fakeClient.Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: "applied-cm"}, &fetched)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Verify labels were set
+	g.Expect(fetched.Labels).To(HaveKeyWithValue(testOwnerLabel, testOwnerValue))
+	g.Expect(fetched.Labels).To(HaveKeyWithValue(testComponentLabel, testComponent))
+
+	// Verify owner reference was set
+	g.Expect(fetched.OwnerReferences).To(HaveLen(1))
+	g.Expect(fetched.OwnerReferences[0].Name).To(Equal(testOwnerValue))
+
+	// Verify data was applied
+	g.Expect(fetched.Data["key"]).To(Equal("value"))
+}
+
+func TestClient_ApplyOwned_ErrorWithoutOwnershipConfig(t *testing.T) {
+	g := NewWithT(t)
+	ctx := context.Background()
+
+	scheme := setupScheme(g)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	// Create client WITHOUT ownership config
+	tc := NewClient(fakeClient)
+
+	cm := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "applied-cm",
+			Namespace: testNamespace,
+		},
+	}
+
+	err := tc.ApplyOwned(ctx, cm)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("ownership config"))
+
+	// Verify the resource is NOT tracked
+	g.Expect(tc.IsTracked(configMapGVK, testNamespace, "applied-cm")).To(BeFalse())
+}
+
+func TestClient_ApplyOwned_UpdatesExistingResource(t *testing.T) {
+	g := NewWithT(t)
+	ctx := context.Background()
+
+	scheme := setupScheme(g)
+
+	// Pre-create a resource without ownership
+	existing := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "existing-cm",
+			Namespace: testNamespace,
+		},
+		Data: map[string]string{
+			"key": "old-value",
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
+	owner := createTestOwner(g, fakeClient)
+
+	tc := NewClientWithOwnership(fakeClient, OwnershipConfig{
+		Owner:             owner,
+		OwnerLabelKey:     testOwnerLabel,
+		ComponentLabelKey: testComponentLabel,
+		Component:         testComponent,
+		FieldManager:      testFieldManager,
+	})
+
+	cm := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "existing-cm",
+			Namespace: testNamespace,
+		},
+		Data: map[string]string{
+			"key": "new-value",
+		},
+	}
+
+	err := tc.ApplyOwned(ctx, cm)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Verify the resource was updated with ownership
+	var fetched corev1.ConfigMap
+	err = fakeClient.Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: "existing-cm"}, &fetched)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Verify labels were added
+	g.Expect(fetched.Labels).To(HaveKeyWithValue(testOwnerLabel, testOwnerValue))
+	g.Expect(fetched.Labels).To(HaveKeyWithValue(testComponentLabel, testComponent))
+
+	// Verify data was updated
+	g.Expect(fetched.Data["key"]).To(Equal("new-value"))
+}
+
+func TestClient_CreateOrUpdate_WithSetOwnership(t *testing.T) {
+	g := NewWithT(t)
+	ctx := context.Background()
+
+	scheme := setupScheme(g)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	owner := createTestOwner(g, fakeClient)
+
+	tc := NewClientWithOwnership(fakeClient, OwnershipConfig{
+		Owner:             owner,
+		OwnerLabelKey:     testOwnerLabel,
+		ComponentLabelKey: testComponentLabel,
+		Component:         testComponent,
+		FieldManager:      testFieldManager,
+	})
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "createorupdate-cm",
+			Namespace: testNamespace,
+		},
+	}
+
+	// Use CreateOrUpdate with SetOwnership in the mutate function
+	result, err := tc.CreateOrUpdate(ctx, cm, func() error {
+		if err := tc.SetOwnership(cm); err != nil {
+			return err
+		}
+		cm.Data = map[string]string{"key": "value"}
+		return nil
+	})
+
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result).To(Equal(controllerutil.OperationResultCreated))
+
+	// Verify the resource is tracked
+	g.Expect(tc.IsTracked(configMapGVK, testNamespace, "createorupdate-cm")).To(BeTrue())
+
+	// Verify the resource has ownership set
+	var fetched corev1.ConfigMap
+	err = fakeClient.Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: "createorupdate-cm"}, &fetched)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(fetched.Labels).To(HaveKeyWithValue(testOwnerLabel, testOwnerValue))
+	g.Expect(fetched.OwnerReferences).To(HaveLen(1))
 }
 
 func setupScheme(g *WithT) *runtime.Scheme {

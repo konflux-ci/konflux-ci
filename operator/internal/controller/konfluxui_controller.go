@@ -128,10 +128,16 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Create a tracking client for this reconcile.
 	// Resources applied through this client are automatically tracked.
 	// At the end of a successful reconcile, orphaned resources are cleaned up.
-	tc := tracking.NewClient(r.Client, r.Scheme)
+	tc := tracking.NewClientWithOwnership(r.Client, tracking.OwnershipConfig{
+		Owner:             ui,
+		OwnerLabelKey:     KonfluxOwnerLabel,
+		ComponentLabelKey: KonfluxComponentLabel,
+		Component:         string(manifests.UI),
+		FieldManager:      FieldManagerUI,
+	})
 
 	// Ensure konflux-ui namespace exists
-	if err := r.ensureNamespaceExists(ctx, tc, ui); err != nil {
+	if err := r.ensureNamespaceExists(ctx, tc); err != nil {
 		log.Error(err, "Failed to ensure namespace")
 		SetFailedCondition(ui, UIConditionTypeReady, "NamespaceCreationFailed", err)
 		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
@@ -195,7 +201,7 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Ensure UI secrets are created
-	if err := r.ensureUISecrets(ctx, tc, ui); err != nil {
+	if err := r.ensureUISecrets(ctx, tc); err != nil {
 		log.Error(err, "Failed to ensure UI secrets")
 		SetFailedCondition(ui, UIConditionTypeReady, "SecretCreationFailed", err)
 		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
@@ -248,28 +254,21 @@ func updateIngressStatus(ui *konfluxv1alpha1.KonfluxUI, endpoint *url.URL) {
 	}
 }
 
-func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxUI) error {
+func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, tc *tracking.Client) error {
 	objects, err := r.ObjectStore.GetForComponent(manifests.UI)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for UI: %w", err)
 	}
 
 	for _, obj := range objects {
-		// Apply customizations for deployments
 		if namespace, ok := obj.(*corev1.Namespace); ok {
 			// Validate that the namespace name matches the expected uiNamespace
 			if namespace.Name != uiNamespace {
 				return fmt.Errorf(
 					"unexpected namespace name in manifest: expected %s, got %s", uiNamespace, namespace.Name)
 			}
-			// Set ownership labels and owner reference
-			if err := setOwnership(namespace, owner, string(manifests.UI), r.Scheme); err != nil {
-				return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
-					namespace.GetNamespace(), namespace.GetName(), getKind(namespace), manifests.UI, err)
-			}
-			if err := tc.ApplyObject(ctx, namespace, FieldManagerUI); err != nil {
-				return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
-					namespace.GetNamespace(), namespace.GetName(), getKind(namespace), manifests.UI, err)
+			if err := tc.ApplyOwned(ctx, namespace); err != nil {
+				return fmt.Errorf("failed to apply namespace %s: %w", namespace.Name, err)
 			}
 		}
 	}
@@ -280,7 +279,7 @@ func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, tc *tra
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
 // dexConfigMapName is the name of the Dex ConfigMap to use (empty if not configured).
 // endpoint is the base URL used to configure oauth2-proxy.
-func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxUI, dexConfigMapName string, endpoint *url.URL) error {
+func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, dexConfigMapName string, endpoint *url.URL) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.UI)
@@ -291,18 +290,12 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 	for _, obj := range objects {
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
-			if err := applyUIDeploymentCustomizations(deployment, owner, r.ClusterInfo, dexConfigMapName, endpoint); err != nil {
+			if err := applyUIDeploymentCustomizations(deployment, ui, r.ClusterInfo, dexConfigMapName, endpoint); err != nil {
 				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
 			}
 		}
 
-		// Set ownership labels and owner reference
-		if err := setOwnership(obj, owner, string(manifests.UI), r.Scheme); err != nil {
-			return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.UI, err)
-		}
-
-		if err := tc.ApplyObject(ctx, obj, FieldManagerUI); err != nil {
+		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			gvk := obj.GetObjectKind().GroupVersionKind()
 			if gvk.Group == CertManagerGroup || gvk.Group == KyvernoGroup {
 				// TODO: Remove this once we decide how to install cert-manager crds in envtest
@@ -315,8 +308,8 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 				)
 				continue
 			}
-			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.UI, err)
+			return fmt.Errorf("failed to apply object %s/%s (%s): %w",
+				obj.GetNamespace(), obj.GetName(), getKind(obj), err)
 		}
 	}
 	return nil
@@ -431,7 +424,7 @@ func buildDexOverlay(spec *konfluxv1alpha1.DexDeploymentSpec, configMapName stri
 // ensureUISecrets ensures that UI secrets exist and are properly configured.
 // Only generates secret values if they don't already exist (preserves existing secrets).
 // Uses the tracking client so secrets are tracked and not orphaned during cleanup.
-func (r *KonfluxUIReconciler) ensureUISecrets(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI) error {
+func (r *KonfluxUIReconciler) ensureUISecrets(ctx context.Context, tc *tracking.Client) error {
 	// Helper for the actual reconciliation logic
 	ensureSecret := func(name, key string, length int, urlSafe bool) error {
 		secret := &corev1.Secret{
@@ -445,7 +438,7 @@ func (r *KonfluxUIReconciler) ensureUISecrets(ctx context.Context, tc *tracking.
 		// regardless of whether it was created, updated, or unchanged
 		_, err := tc.CreateOrUpdate(ctx, secret, func() error {
 			// 1. Ensure Ownership/Labels (Updates if missing)
-			if err := setOwnership(secret, ui, string(manifests.UI), r.Scheme); err != nil {
+			if err := tc.SetOwnership(secret); err != nil {
 				return err
 			}
 
@@ -576,12 +569,7 @@ func (r *KonfluxUIReconciler) reconcileIngress(ctx context.Context, tc *tracking
 
 	ingressResource := ingress.BuildForUI(ui, uiNamespace, hostname)
 
-	// Set ownership
-	if err := setOwnership(ingressResource, ui, string(manifests.UI), r.Scheme); err != nil {
-		return fmt.Errorf("failed to set ownership for ingress: %w", err)
-	}
-
-	if err := tc.ApplyObject(ctx, ingressResource, FieldManagerUI); err != nil {
+	if err := tc.ApplyOwned(ctx, ingressResource); err != nil {
 		return fmt.Errorf("failed to apply ingress: %w", err)
 	}
 
@@ -606,25 +594,13 @@ func (r *KonfluxUIReconciler) reconcileOpenShiftOAuth(ctx context.Context, tc *t
 
 	// Create the ServiceAccount for OAuth redirect with the full callback URI
 	sa := dex.BuildOpenShiftOAuthServiceAccount(uiNamespace, endpoint)
-
-	// Set ownership
-	if err := setOwnership(sa, ui, string(manifests.UI), r.Scheme); err != nil {
-		return fmt.Errorf("failed to set ownership for OpenShift OAuth ServiceAccount: %w", err)
-	}
-
-	if err := tc.ApplyObject(ctx, sa, FieldManagerUI); err != nil {
+	if err := tc.ApplyOwned(ctx, sa); err != nil {
 		return fmt.Errorf("failed to apply OpenShift OAuth ServiceAccount: %w", err)
 	}
 
 	// Create the Secret for the ServiceAccount token
 	secret := dex.BuildOpenShiftOAuthSecret(uiNamespace)
-
-	// Set ownership
-	if err := setOwnership(secret, ui, string(manifests.UI), r.Scheme); err != nil {
-		return fmt.Errorf("failed to set ownership for OpenShift OAuth Secret: %w", err)
-	}
-
-	if err := tc.ApplyObject(ctx, secret, FieldManagerUI); err != nil {
+	if err := tc.ApplyOwned(ctx, secret); err != nil {
 		return fmt.Errorf("failed to apply OpenShift OAuth Secret: %w", err)
 	}
 

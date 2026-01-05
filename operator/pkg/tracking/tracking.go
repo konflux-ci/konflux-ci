@@ -22,18 +22,37 @@ limitations under the License.
 // The Client type implements client.Client, so it can be used anywhere the
 // standard controller-runtime client is expected.
 //
-// Usage:
+// Usage with automatic ownership (recommended):
 //
 //	func (r *MyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-//	    tc := tracking.NewClient(r.Client, r.Scheme)
+//	    // Create client with ownership config - sets labels and owner references automatically
+//	    tc := tracking.NewClientWithOwnership(r.Client, tracking.OwnershipConfig{
+//	        Owner:             myCR,
+//	        OwnerLabelKey:     "example.com/owner",
+//	        ComponentLabelKey: "example.com/component",
+//	        Component:         "my-component",
+//	        FieldManager:      "my-controller",
+//	    })
 //
-//	    // Apply resources - they're automatically tracked
-//	    if err := tc.ApplyObject(ctx, deployment, fieldManager); err != nil {
+//	    // Apply resources with ownership - automatically sets labels, owner ref, and tracks
+//	    if err := tc.ApplyOwned(ctx, deployment); err != nil {
 //	        return ctrl.Result{}, err
 //	    }
 //
+//	    // For CreateOrUpdate patterns, use SetOwnership in the mutate function
+//	    _, err := tc.CreateOrUpdate(ctx, secret, func() error {
+//	        return tc.SetOwnership(secret)
+//	    })
+//
 //	    // Only reached if all applies succeeded - cleanup orphans
 //	    return ctrl.Result{}, tc.CleanupOrphans(ctx, ownerLabelKey, ownerName, gvksToClean)
+//	}
+//
+// Usage without ownership (for simple tracking only):
+//
+//	tc := tracking.NewClient(r.Client)
+//	if err := tc.ApplyObject(ctx, deployment, fieldManager); err != nil {
+//	    return ctrl.Result{}, err
 //	}
 package tracking
 
@@ -68,6 +87,21 @@ func (k ResourceKey) String() string {
 	return fmt.Sprintf("%s/%s/%s", k.GVK.Kind, k.Namespace, k.Name)
 }
 
+// OwnershipConfig holds configuration for automatic ownership management.
+// When configured, ApplyOwned will automatically set labels and owner references.
+type OwnershipConfig struct {
+	// Owner is the owning resource (e.g., the CR being reconciled)
+	Owner client.Object
+	// OwnerLabelKey is the label key for the owner name (e.g., "konflux.konflux-ci.dev/owner")
+	OwnerLabelKey string
+	// ComponentLabelKey is the label key for the component (e.g., "konflux.konflux-ci.dev/component")
+	ComponentLabelKey string
+	// Component is the component value (e.g., "ui", "konflux")
+	Component string
+	// FieldManager identifies this controller for server-side apply
+	FieldManager string
+}
+
 // Client wraps a controller-runtime client and tracks all resources that are
 // applied during a reconciliation. This enables cleanup of orphaned resources
 // at the end of a successful reconcile.
@@ -76,19 +110,27 @@ func (k ResourceKey) String() string {
 // is intentionally ephemeral - it only lives for the duration of one reconcile.
 type Client struct {
 	client.Client
-	scheme  *runtime.Scheme
-	tracked map[ResourceKey]struct{}
-	mu      sync.Mutex
+	ownership *OwnershipConfig
+	tracked   map[ResourceKey]struct{}
+	mu        sync.Mutex
 }
 
 // NewClient creates a new tracking client wrapping the given client.
 // Call this at the start of each reconcile to get a fresh tracker.
-// The scheme is required to derive GVK for typed objects.
-func NewClient(c client.Client, scheme *runtime.Scheme) *Client {
+func NewClient(c client.Client) *Client {
 	return &Client{
 		Client:  c,
-		scheme:  scheme,
 		tracked: make(map[ResourceKey]struct{}),
+	}
+}
+
+// NewClientWithOwnership creates a tracking client configured for automatic ownership management.
+// Use ApplyOwned to apply objects with ownership automatically set.
+func NewClientWithOwnership(c client.Client, cfg OwnershipConfig) *Client {
+	return &Client{
+		Client:    c,
+		ownership: &cfg,
+		tracked:   make(map[ResourceKey]struct{}),
 	}
 }
 
@@ -117,6 +159,41 @@ func (c *Client) ApplyObject(
 		return err
 	}
 	c.track(obj)
+	return nil
+}
+
+// ApplyOwned sets ownership (labels + owner reference) on the object and applies it
+// using server-side apply. The client must be created with NewClientWithOwnership.
+// This combines SetOwnership + ApplyObject into a single call for cleaner reconciler code.
+func (c *Client) ApplyOwned(ctx context.Context, obj client.Object, opts ...client.PatchOption) error {
+	if err := c.SetOwnership(obj); err != nil {
+		return err
+	}
+	return c.ApplyObject(ctx, obj, c.ownership.FieldManager, opts...)
+}
+
+// SetOwnership sets ownership labels and owner reference on the object without applying it.
+// This is useful for CreateOrUpdate patterns where ownership must be set in the mutate function.
+// The client must be created with NewClientWithOwnership.
+func (c *Client) SetOwnership(obj client.Object) error {
+	if c.ownership == nil {
+		return fmt.Errorf("SetOwnership called but client was not created with ownership config; use NewClientWithOwnership")
+	}
+
+	// Set ownership labels
+	labels := obj.GetLabels()
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+	labels[c.ownership.OwnerLabelKey] = c.ownership.Owner.GetName()
+	labels[c.ownership.ComponentLabelKey] = c.ownership.Component
+	obj.SetLabels(labels)
+
+	// Set owner reference for garbage collection and watch triggers
+	if err := controllerutil.SetControllerReference(c.ownership.Owner, obj, c.Scheme()); err != nil {
+		return fmt.Errorf("failed to set controller reference: %w", err)
+	}
+
 	return nil
 }
 
@@ -178,8 +255,8 @@ func (c *Client) track(obj client.Object) {
 
 	// If GVK is not set on the object (common for typed objects after client operations),
 	// derive it from the scheme.
-	if gvk.Empty() && c.scheme != nil {
-		gvks, _, err := c.scheme.ObjectKinds(obj)
+	if gvk.Empty() {
+		gvks, _, err := c.Scheme().ObjectKinds(obj)
 		if err == nil && len(gvks) > 0 {
 			gvk = gvks[0]
 		}
