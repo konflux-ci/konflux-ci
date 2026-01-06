@@ -65,6 +65,8 @@ const (
 	KonfluxInfoCRName = "konflux-info"
 	// KonfluxCertManagerCRName is the name for the KonfluxCertManager CR.
 	KonfluxCertManagerCRName = "konflux-cert-manager"
+	// KonfluxInternalRegistryCRName is the name for the KonfluxInternalRegistry CR.
+	KonfluxInternalRegistryCRName = "konflux-internal-registry"
 	// CertManagerGroup is the API group for cert-manager resources
 	CertManagerGroup = "cert-manager.io"
 	// KyvernoGroup is the API group for Kyverno resources
@@ -254,6 +256,16 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
+	// Apply the KonfluxInternalRegistry CR
+	if err := r.applyKonfluxInternalRegistry(ctx, konflux); err != nil {
+		log.Error(err, "Failed to apply KonfluxInternalRegistry")
+		SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
 	// Collect status from all sub-CRs.
 	// All component deployments are managed by their respective reconcilers,
 	// so we aggregate readiness by checking each sub-CR's Ready condition.
@@ -397,6 +409,20 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 	subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, certManager, "cert-manager"))
+
+	// Get and copy status from the KonfluxInternalRegistry CR (if enabled)
+	if konflux.Spec.IsInternalRegistryEnabled() {
+		registry := &konfluxv1alpha1.KonfluxInternalRegistry{}
+		if err := r.Get(ctx, client.ObjectKey{Name: KonfluxInternalRegistryCRName}, registry); err != nil {
+			log.Error(err, "Failed to get KonfluxInternalRegistry")
+			SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetInternalRegistryStatus", err)
+			if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
+				log.Error(updateErr, "Failed to update status")
+			}
+			return ctrl.Result{}, err
+		}
+		subCRStatuses = append(subCRStatuses, CopySubCRStatus(konflux, registry, "internal-registry"))
+	}
 
 	// Set overall Ready condition based on all sub-CRs.
 	// All deployments are managed by component-specific reconcilers, so we only aggregate sub-CR statuses.
@@ -772,6 +798,50 @@ func (r *KonfluxReconciler) applyKonfluxCertManager(ctx context.Context, owner *
 	return r.Patch(ctx, certManager, client.Apply, client.FieldOwner(FieldManagerKonflux), client.ForceOwnership)
 }
 
+// applyKonfluxInternalRegistry creates or updates the KonfluxInternalRegistry CR if enabled,
+// or deletes it if disabled.
+func (r *KonfluxReconciler) applyKonfluxInternalRegistry(ctx context.Context, owner *konfluxv1alpha1.Konflux) error {
+	log := logf.FromContext(ctx)
+
+	// Check if internal registry is enabled
+	if !owner.Spec.IsInternalRegistryEnabled() {
+		// Delete the CR if it exists (idempotent - NotFound is ignored)
+		registry := &konfluxv1alpha1.KonfluxInternalRegistry{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: KonfluxInternalRegistryCRName,
+			},
+		}
+		if err := r.Delete(ctx, registry); err != nil {
+			return client.IgnoreNotFound(err)
+		}
+		log.Info("Internal registry disabled, deleted KonfluxInternalRegistry CR", "name", KonfluxInternalRegistryCRName)
+		return nil
+	}
+
+	// Create or update the CR
+	registry := &konfluxv1alpha1.KonfluxInternalRegistry{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: konfluxv1alpha1.GroupVersion.String(),
+			Kind:       "KonfluxInternalRegistry",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: KonfluxInternalRegistryCRName,
+			Labels: map[string]string{
+				KonfluxOwnerLabel:     owner.Name,
+				KonfluxComponentLabel: string(manifests.Registry),
+			},
+		},
+	}
+
+	// Set owner reference for garbage collection
+	if err := controllerutil.SetControllerReference(owner, registry, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for KonfluxInternalRegistry: %w", err)
+	}
+
+	log.Info("Applying KonfluxInternalRegistry CR", "name", registry.Name)
+	return r.Patch(ctx, registry, client.Apply, client.FieldOwner(FieldManagerKonflux), client.ForceOwnership)
+}
+
 // getKind returns the Kind of a client.Object.
 // For unstructured objects, it uses the GVK directly.
 // For typed objects, it uses the GVK from the object's metadata.
@@ -848,5 +918,8 @@ func (r *KonfluxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// Watch KonfluxCertManager for any changes to copy conditions to Konflux CR
 		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
 		Owns(&konfluxv1alpha1.KonfluxCertManager{}).
+		// Watch KonfluxInternalRegistry for any changes to copy conditions to Konflux CR
+		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
+		Owns(&konfluxv1alpha1.KonfluxInternalRegistry{}).
 		Complete(r)
 }

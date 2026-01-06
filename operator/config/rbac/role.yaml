@@ -34,10 +34,10 @@ rules:
   - ""
   resources:
   - namespaces
-  - serviceaccounts
   - services
   verbs:
   - create
+  - delete
   - get
   - list
   - patch
@@ -52,6 +52,16 @@ rules:
   - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - create
+  - get
+  - list
+  - patch
   - watch
 - apiGroups:
   - admissionregistration.k8s.io
@@ -78,6 +88,7 @@ rules:
   - deployments
   verbs:
   - create
+  - delete
   - get
   - list
   - patch
@@ -188,6 +199,7 @@ rules:
   - konfluximagecontrollers
   - konfluxinfoes
   - konfluxintegrationservices
+  - konfluxinternalregistries
   - konfluxnamespacelisters
   - konfluxrbacs
   - konfluxreleaseservices
@@ -211,6 +223,7 @@ rules:
   - konfluximagecontrollers/finalizers
   - konfluxinfoes/finalizers
   - konfluxintegrationservices/finalizers
+  - konfluxinternalregistries/finalizers
   - konfluxnamespacelisters/finalizers
   - konfluxrbacs/finalizers
   - konfluxreleaseservices/finalizers
@@ -228,6 +241,7 @@ rules:
   - konfluximagecontrollers/status
   - konfluxinfoes/status
   - konfluxintegrationservices/status
+  - konfluxinternalregistries/status
   - konfluxnamespacelisters/status
   - konfluxrbacs/status
   - konfluxreleaseservices/status
@@ -551,3 +565,14 @@ rules:
   verbs:
   - bind
   - escalate
+- apiGroups:
+  - trust.cert-manager.io
+  resources:
+  - bundles
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - watch

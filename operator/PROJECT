@@ -109,4 +109,12 @@ resources:
   kind: KonfluxCertManager
   path: github.com/konflux-ci/konflux-ci/operator/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+  controller: true
+  domain: konflux-ci.dev
+  group: konflux
+  kind: KonfluxInternalRegistry
+  path: github.com/konflux-ci/konflux-ci/operator/api/v1alpha1
+  version: v1alpha1
 version: "3"

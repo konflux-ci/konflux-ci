@@ -18,11 +18,13 @@ package tracking
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -1011,6 +1013,66 @@ func TestClient_CreateOrUpdate_WithSetOwnership(t *testing.T) {
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(fetched.Labels).To(HaveKeyWithValue(testOwnerLabel, testOwnerValue))
 	g.Expect(fetched.OwnerReferences).To(HaveLen(1))
+}
+
+// TestIsNoKindMatchError tests the IsNoKindMatchError helper function.
+func TestIsNoKindMatchError(t *testing.T) {
+	t.Run("returns true for NoKindMatchError", func(t *testing.T) {
+		g := NewWithT(t)
+		noKindErr := &meta.NoKindMatchError{
+			GroupKind: schema.GroupKind{Group: "cert-manager.io", Kind: "Certificate"},
+		}
+		g.Expect(IsNoKindMatchError(noKindErr)).To(BeTrue())
+	})
+
+	t.Run("returns false for other errors", func(t *testing.T) {
+		g := NewWithT(t)
+		otherErr := fmt.Errorf("some other error")
+		g.Expect(IsNoKindMatchError(otherErr)).To(BeFalse())
+	})
+
+	t.Run("returns false for nil error", func(t *testing.T) {
+		g := NewWithT(t)
+		g.Expect(IsNoKindMatchError(nil)).To(BeFalse())
+	})
+
+	t.Run("returns false for wrapped non-NoKindMatchError", func(t *testing.T) {
+		g := NewWithT(t)
+		wrappedErr := fmt.Errorf("wrapped: %w", fmt.Errorf("inner error"))
+		g.Expect(IsNoKindMatchError(wrappedErr)).To(BeFalse())
+	})
+
+	t.Run("returns true for wrapped NoKindMatchError", func(t *testing.T) {
+		g := NewWithT(t)
+		noKindErr := &meta.NoKindMatchError{
+			GroupKind: schema.GroupKind{Group: "trust.cert-manager.io", Kind: "Bundle"},
+		}
+		wrappedErr := fmt.Errorf("failed to list resources: %w", noKindErr)
+		g.Expect(IsNoKindMatchError(wrappedErr)).To(BeTrue())
+	})
+
+	t.Run("returns true for deeply wrapped NoKindMatchError", func(t *testing.T) {
+		g := NewWithT(t)
+		noKindErr := &meta.NoKindMatchError{
+			GroupKind: schema.GroupKind{Group: "kyverno.io", Kind: "Policy"},
+		}
+		wrappedOnce := fmt.Errorf("cleanup failed: %w", noKindErr)
+		wrappedTwice := fmt.Errorf("reconcile error: %w", wrappedOnce)
+		g.Expect(IsNoKindMatchError(wrappedTwice)).To(BeTrue())
+	})
+
+	t.Run("returns false for standard API errors", func(t *testing.T) {
+		g := NewWithT(t)
+		notFoundErr := errors.NewNotFound(schema.GroupResource{Group: "", Resource: "configmaps"}, "test")
+		g.Expect(IsNoKindMatchError(notFoundErr)).To(BeFalse())
+
+		forbiddenErr := errors.NewForbidden(
+			schema.GroupResource{Group: "", Resource: "secrets"},
+			"test",
+			fmt.Errorf("access denied"),
+		)
+		g.Expect(IsNoKindMatchError(forbiddenErr)).To(BeFalse())
+	})
 }
 
 func setupScheme(g *WithT) *runtime.Scheme {

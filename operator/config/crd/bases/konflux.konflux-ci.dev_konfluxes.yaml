@@ -772,6 +772,18 @@ spec:
                         type: object
                     type: object
                 type: object
+              internalRegistry:
+                description: |-
+                  InternalRegistry configures the internal registry component.
+                  The runtime configuration is copied to the KonfluxInternalRegistry CR by the operator.
+                  Enabling internal registry requires trust-manager to be deployed.
+                properties:
+                  enabled:
+                    description: |-
+                      Enabled controls whether internal registry resources are deployed.
+                      Defaults to false if not specified.
+                    type: boolean
+                type: object
               namespaceLister:
                 description: |-
                   NamespaceLister configures the namespace-lister component.

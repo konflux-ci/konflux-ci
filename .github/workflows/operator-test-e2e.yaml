@@ -159,6 +159,7 @@ jobs:
           SKIP_DEX: "true"
           SKIP_KONFLUX_INFO: "true"
           SKIP_CLUSTER_ISSUER: "true"
+          SKIP_INTERNAL_REGISTRY: "true"
         run: |
           ./deploy-deps.sh
 

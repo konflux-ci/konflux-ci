@@ -12,4 +12,5 @@ resources:
 - konflux_v1alpha1_konfluxapplicationapi.yaml
 - konflux_v1alpha1_konfluxinfo.yaml
 - konflux_v1alpha1_konfluxcertmanager.yaml
+- konflux_v1alpha1_konfluxinternalregistry.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples
