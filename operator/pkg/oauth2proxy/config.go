@@ -41,13 +41,16 @@ var (
 // --- Provider Configuration ---
 
 // WithProvider configures the OIDC provider settings.
-// Sets provider type, display name, client ID, and HTTP address.
+// Sets provider type, display name, client ID, HTTP address, skips the provider button,
+// and sets the OIDC prompt to "login".
 func WithProvider() customization.ContainerOption {
 	return customization.WithEnv(
 		corev1.EnvVar{Name: "OAUTH2_PROXY_PROVIDER", Value: "oidc"},
 		corev1.EnvVar{Name: "OAUTH2_PROXY_PROVIDER_DISPLAY_NAME", Value: "Dex OIDC"},
 		corev1.EnvVar{Name: "OAUTH2_PROXY_CLIENT_ID", Value: "oauth2-proxy"},
 		corev1.EnvVar{Name: "OAUTH2_PROXY_HTTP_ADDRESS", Value: "127.0.0.1:6000"},
+		corev1.EnvVar{Name: "OAUTH2_PROXY_SKIP_PROVIDER_BUTTON", Value: "true"},
+		corev1.EnvVar{Name: "OAUTH2_PROXY_PROMPT", Value: "login"},
 	)
 }
 

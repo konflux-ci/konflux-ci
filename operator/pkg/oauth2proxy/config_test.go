@@ -52,6 +52,8 @@ func TestWithProvider(t *testing.T) {
 	g.Expect(envMap["OAUTH2_PROXY_PROVIDER_DISPLAY_NAME"]).To(Equal("Dex OIDC"))
 	g.Expect(envMap["OAUTH2_PROXY_CLIENT_ID"]).To(Equal("oauth2-proxy"))
 	g.Expect(envMap["OAUTH2_PROXY_HTTP_ADDRESS"]).To(Equal("127.0.0.1:6000"))
+	g.Expect(envMap["OAUTH2_PROXY_SKIP_PROVIDER_BUTTON"]).To(Equal("true"))
+	g.Expect(envMap["OAUTH2_PROXY_PROMPT"]).To(Equal("login"))
 }
 
 func TestWithOIDCURLs(t *testing.T) {
