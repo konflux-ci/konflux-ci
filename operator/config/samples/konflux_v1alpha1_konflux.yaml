@@ -110,3 +110,7 @@ spec:
     # CreateClusterIssuer controls whether cluster issuer resources are created
     # Defaults to true if not specified
     createClusterIssuer: true
+  internalRegistry:
+    # Enabled controls whether internal registry resources are deployed
+    # Defaults to false if not specified
+    enabled: true

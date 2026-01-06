@@ -58,10 +58,12 @@ package tracking
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -374,4 +376,12 @@ func (c *Client) cleanupOrphansForGVK(
 	}
 
 	return nil
+}
+
+// IsNoKindMatchError checks if an error is due to a missing CRD (NoKindMatchError).
+// This is used to handle cleanup failures gracefully in test environments where
+// certain CRDs may not be installed.
+func IsNoKindMatchError(err error) bool {
+	var noKindErr *meta.NoKindMatchError
+	return errors.As(err, &noKindErr)
 }

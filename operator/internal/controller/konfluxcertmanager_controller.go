@@ -18,11 +18,9 @@ package controller
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -80,7 +78,7 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// Create a tracking client for this reconcile.
 	// Resources applied through this client are automatically tracked.
 	// At the end of a successful reconcile, orphaned resources are cleaned up.
-	tc := tracking.NewClient(r.Client, r.Scheme)
+	tc := tracking.NewClient(r.Client)
 
 	// Apply manifests only if createClusterIssuer is enabled (defaults to true)
 	if certManager.Spec.ShouldCreateClusterIssuer() {
@@ -103,7 +101,7 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	if err := tc.CleanupOrphans(ctx, KonfluxOwnerLabel, certManager.Name, certManagerCleanupGVKs); err != nil {
 		// Check if the error is due to missing CRDs (NoKindMatchError)
 		// This happens in test environments without cert-manager installed
-		if !isNoKindMatchError(err) {
+		if !tracking.IsNoKindMatchError(err) {
 			log.Error(err, "Failed to cleanup orphaned resources")
 			SetFailedCondition(certManager, CertManagerConditionTypeReady, "CleanupFailed", err)
 			if updateErr := r.Status().Update(ctx, certManager); updateErr != nil {
@@ -150,7 +148,7 @@ func (r *KonfluxCertManagerReconciler) applyManifests(ctx context.Context, tc *t
 			// Only skip if it's specifically a "CRD not installed" error.
 			// This prevents masking real reconciliation failures like RBAC denials,
 			// validation errors, or resource conflicts.
-			if isNoKindMatchError(err) {
+			if tracking.IsNoKindMatchError(err) {
 				gvk := obj.GetObjectKind().GroupVersionKind()
 				log.Info("Skipping resource: CRD not installed (test environment)",
 					"kind", gvk.Kind,
@@ -166,14 +164,6 @@ func (r *KonfluxCertManagerReconciler) applyManifests(ctx context.Context, tc *t
 		}
 	}
 	return nil
-}
-
-// isNoKindMatchError checks if an error is due to a missing CRD (NoKindMatchError).
-// This is used to handle cleanup failures gracefully in test environments where
-// cert-manager CRDs may not be installed.
-func isNoKindMatchError(err error) bool {
-	var noKindErr *meta.NoKindMatchError
-	return errors.As(err, &noKindErr)
 }
 
 // SetupWithManager sets up the controller with the Manager.

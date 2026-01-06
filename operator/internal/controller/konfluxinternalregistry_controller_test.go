@@ -23,6 +23,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,19 +35,19 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
 
-var _ = Describe("KonfluxCertManager Controller", func() {
+var _ = Describe("KonfluxInternalRegistry Controller", func() {
 	Context("When reconciling a resource", func() {
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
-			Name: KonfluxCertManagerCRName,
+			Name: KonfluxInternalRegistryCRName,
 		}
 
-		var reconciler *KonfluxCertManagerReconciler
+		var reconciler *KonfluxInternalRegistryReconciler
 
 		BeforeEach(func() {
 			// Ensure cleanup of any existing resource from previous test runs
-			resource := &konfluxv1alpha1.KonfluxCertManager{}
+			resource := &konfluxv1alpha1.KonfluxInternalRegistry{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			if err == nil {
 				By("Cleanup existing resource from previous test")
@@ -54,12 +55,12 @@ var _ = Describe("KonfluxCertManager Controller", func() {
 
 				// Wait for the resource to be fully deleted
 				Eventually(func() bool {
-					err := k8sClient.Get(ctx, typeNamespacedName, &konfluxv1alpha1.KonfluxCertManager{})
+					err := k8sClient.Get(ctx, typeNamespacedName, &konfluxv1alpha1.KonfluxInternalRegistry{})
 					return errors.IsNotFound(err)
 				}, 10*time.Second, 250*time.Millisecond).Should(BeTrue(), "Resource should be deleted before test starts")
 			}
 
-			reconciler = &KonfluxCertManagerReconciler{
+			reconciler = &KonfluxInternalRegistryReconciler{
 				Client:      k8sClient,
 				Scheme:      k8sClient.Scheme(),
 				ObjectStore: objectStore,
@@ -68,29 +69,27 @@ var _ = Describe("KonfluxCertManager Controller", func() {
 
 		AfterEach(func() {
 			// Cleanup the resource instance
-			resource := &konfluxv1alpha1.KonfluxCertManager{}
+			resource := &konfluxv1alpha1.KonfluxInternalRegistry{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			if err == nil {
-				By("Cleanup the specific resource instance KonfluxCertManager")
+				By("Cleanup the specific resource instance KonfluxInternalRegistry")
 				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 
 				// Wait for the resource to be fully deleted
 				Eventually(func() bool {
-					err := k8sClient.Get(ctx, typeNamespacedName, &konfluxv1alpha1.KonfluxCertManager{})
+					err := k8sClient.Get(ctx, typeNamespacedName, &konfluxv1alpha1.KonfluxInternalRegistry{})
 					return errors.IsNotFound(err)
 				}, 10*time.Second, 250*time.Millisecond).Should(BeTrue(), "Resource should be deleted")
 			}
 		})
 
-		It("should successfully reconcile with createClusterIssuer enabled (default)", func() {
-			By("creating the custom resource with createClusterIssuer unset (defaults to true)")
-			resource := &konfluxv1alpha1.KonfluxCertManager{
+		It("should successfully reconcile the resource", func() {
+			By("creating the custom resource")
+			resource := &konfluxv1alpha1.KonfluxInternalRegistry{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: KonfluxCertManagerCRName,
+					Name: KonfluxInternalRegistryCRName,
 				},
-				Spec: konfluxv1alpha1.KonfluxCertManagerSpec{
-					// CreateClusterIssuer is nil, should default to true
-				},
+				Spec: konfluxv1alpha1.KonfluxInternalRegistrySpec{},
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
@@ -100,36 +99,34 @@ var _ = Describe("KonfluxCertManager Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Verifying the status is ready")
-			updatedResource := &konfluxv1alpha1.KonfluxCertManager{}
+			By("Verifying the status condition exists")
+			updatedResource := &konfluxv1alpha1.KonfluxInternalRegistry{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, updatedResource)).To(Succeed())
 
-			// Check for Ready condition
+			// Check for Ready condition - in test environment deployments may not be ready
+			// because Certificate CRD is not installed, so we just verify the condition exists
 			conditions := updatedResource.Status.Conditions
 			Expect(conditions).NotTo(BeEmpty())
 
 			var readyCondition *metav1.Condition
 			for i := range conditions {
-				if conditions[i].Type == CertManagerConditionTypeReady {
+				if conditions[i].Type == InternalRegistryConditionTypeReady {
 					readyCondition = &conditions[i]
 					break
 				}
 			}
 			Expect(readyCondition).NotTo(BeNil(), "Ready condition should be present")
-			Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
-			Expect(readyCondition.Message).To(ContainSubstring("Component ready"))
+			// In test environment, deployment may not be ready due to missing Certificate Secret
+			// We verify reconcile completed without error, condition is set
 		})
 
-		It("should successfully reconcile with createClusterIssuer explicitly enabled", func() {
-			By("creating the custom resource with createClusterIssuer=true")
-			enabled := true
-			resource := &konfluxv1alpha1.KonfluxCertManager{
+		It("should set ownership labels on applied resources", func() {
+			By("creating the custom resource")
+			resource := &konfluxv1alpha1.KonfluxInternalRegistry{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: KonfluxCertManagerCRName,
+					Name: KonfluxInternalRegistryCRName,
 				},
-				Spec: konfluxv1alpha1.KonfluxCertManagerSpec{
-					CreateClusterIssuer: &enabled,
-				},
+				Spec: konfluxv1alpha1.KonfluxInternalRegistrySpec{},
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
@@ -139,67 +136,37 @@ var _ = Describe("KonfluxCertManager Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Verifying the status is ready")
-			updatedResource := &konfluxv1alpha1.KonfluxCertManager{}
-			Expect(k8sClient.Get(ctx, typeNamespacedName, updatedResource)).To(Succeed())
+			By("Verifying ownership labels are set on the namespace")
+			namespace := &corev1.Namespace{}
+			Eventually(func() error {
+				return k8sClient.Get(ctx, types.NamespacedName{Name: "kind-registry"}, namespace)
+			}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
 
-			conditions := updatedResource.Status.Conditions
-			Expect(conditions).NotTo(BeEmpty())
+			labels := namespace.GetLabels()
+			Expect(labels).NotTo(BeNil())
+			Expect(labels[KonfluxOwnerLabel]).To(Equal(KonfluxInternalRegistryCRName))
+			Expect(labels[KonfluxComponentLabel]).To(Equal("registry"))
 
-			var readyCondition *metav1.Condition
-			for i := range conditions {
-				if conditions[i].Type == CertManagerConditionTypeReady {
-					readyCondition = &conditions[i]
+			By("Verifying owner reference is set on the namespace")
+			ownerRefs := namespace.GetOwnerReferences()
+			Expect(ownerRefs).NotTo(BeEmpty())
+			found := false
+			for _, ref := range ownerRefs {
+				if ref.Name == KonfluxInternalRegistryCRName && ref.Kind == "KonfluxInternalRegistry" {
+					found = true
+					Expect(ref.Controller).NotTo(BeNil())
+					Expect(*ref.Controller).To(BeTrue())
 					break
 				}
 			}
-			Expect(readyCondition).NotTo(BeNil())
-			Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
-		})
-
-		It("should successfully reconcile with createClusterIssuer disabled", func() {
-			By("creating the custom resource with createClusterIssuer=false")
-			disabled := false
-			resource := &konfluxv1alpha1.KonfluxCertManager{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: KonfluxCertManagerCRName,
-				},
-				Spec: konfluxv1alpha1.KonfluxCertManagerSpec{
-					CreateClusterIssuer: &disabled,
-				},
-			}
-			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-
-			By("Reconciling the created resource")
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Verifying the status is ready (no deployments to track)")
-			updatedResource := &konfluxv1alpha1.KonfluxCertManager{}
-			Expect(k8sClient.Get(ctx, typeNamespacedName, updatedResource)).To(Succeed())
-
-			conditions := updatedResource.Status.Conditions
-			Expect(conditions).NotTo(BeEmpty())
-
-			var readyCondition *metav1.Condition
-			for i := range conditions {
-				if conditions[i].Type == CertManagerConditionTypeReady {
-					readyCondition = &conditions[i]
-					break
-				}
-			}
-			Expect(readyCondition).NotTo(BeNil())
-			Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
-			Expect(readyCondition.Message).To(ContainSubstring("Component ready"))
+			Expect(found).To(BeTrue(), "Owner reference should be set")
 		})
 	})
 
 	Context("tracking.IsNoKindMatchError helper function", func() {
 		It("should correctly identify NoKindMatchError", func() {
 			noKindErr := &meta.NoKindMatchError{
-				GroupKind: schema.GroupKind{Group: "cert-manager.io", Kind: "ClusterIssuer"},
+				GroupKind: schema.GroupKind{Group: "cert-manager.io", Kind: "Certificate"},
 			}
 			Expect(tracking.IsNoKindMatchError(noKindErr)).To(BeTrue())
 
@@ -214,7 +181,7 @@ var _ = Describe("KonfluxCertManager Controller", func() {
 
 		It("should return true for wrapped NoKindMatchError", func() {
 			noKindErr := &meta.NoKindMatchError{
-				GroupKind: schema.GroupKind{Group: "cert-manager.io", Kind: "Certificate"},
+				GroupKind: schema.GroupKind{Group: "trust.cert-manager.io", Kind: "Bundle"},
 			}
 			wrappedErr := fmt.Errorf("failed to list resources: %w", noKindErr)
 			Expect(tracking.IsNoKindMatchError(wrappedErr)).To(BeTrue())

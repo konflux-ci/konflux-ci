@@ -164,6 +164,11 @@ deploy_dex() {
 }
 
 deploy_registry() {
+    : "${SKIP_INTERNAL_REGISTRY:=false}"
+    if [[ "${SKIP_INTERNAL_REGISTRY}" == "true" ]]; then
+        echo "⏭️  Skipping Internal Registry deployment (managed by operator)" >&2
+        return 0
+    fi
     kubectl apply -k "${script_path}/dependencies/registry"
     retry "kubectl wait --for=condition=Ready --timeout=240s -n kind-registry -l run=registry pod" \
           "The local registry did not become available within the allocated time"

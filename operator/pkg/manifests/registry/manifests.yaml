@@ -1,0 +1,112 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kind-registry
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry-service
+  namespace: kind-registry
+spec:
+  ports:
+  - nodePort: 30001
+    port: 443
+    protocol: TCP
+    targetPort: 5000
+  selector:
+    run: registry
+  type: NodePort
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    ignore-check.kube-linter.io/no-read-only-root-fs: This component requires write
+      permissions
+    ignore-check.kube-linter.io/run-as-non-root: This component requires root permissions
+  labels:
+    run: registry
+  name: registry
+  namespace: kind-registry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: registry
+  template:
+    metadata:
+      labels:
+        run: registry
+    spec:
+      containers:
+      - env:
+        - name: REGISTRY_HTTP_TLS_CERTIFICATE
+          value: /certs/tls.crt
+        - name: REGISTRY_HTTP_TLS_KEY
+          value: /certs/tls.key
+        image: registry:2
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 5000
+            scheme: HTTPS
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: registry
+        ports:
+        - containerPort: 5000
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 5000
+            scheme: HTTPS
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 100m
+            memory: 250Mi
+          requests:
+            cpu: 10m
+            memory: 50Mi
+        volumeMounts:
+        - mountPath: /certs
+          name: certs
+      volumes:
+      - name: certs
+        secret:
+          secretName: local-registry-tls
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: registry-cert
+  namespace: kind-registry
+spec:
+  dnsNames:
+  - localhost
+  - registry-service.kind-registry
+  isCA: true
+  issuerRef:
+    kind: ClusterIssuer
+    name: ca-issuer
+  secretName: local-registry-tls
+  subject:
+    organizations:
+    - konflux
+---
+apiVersion: trust.cert-manager.io/v1alpha1
+kind: Bundle
+metadata:
+  name: trusted-ca
+spec:
+  sources:
+  - useDefaultCAs: true
+  - secret:
+      key: ca.crt
+      name: root-secret
+  target:
+    configMap:
+      key: ca-bundle.crt
+    namespaceSelector: {}

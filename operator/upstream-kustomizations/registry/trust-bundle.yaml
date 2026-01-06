@@ -1,0 +1,15 @@
+---
+apiVersion: trust.cert-manager.io/v1alpha1
+kind: Bundle
+metadata:
+  name: trusted-ca
+spec:
+  sources:
+  - useDefaultCAs: true
+  - secret:
+      name: "root-secret"
+      key: "ca.crt"
+  target:
+    configMap:
+      key: "ca-bundle.crt"
+    namespaceSelector: {}

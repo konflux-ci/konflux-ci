@@ -157,4 +157,171 @@ var _ = Describe("Konflux Controller", func() {
 			Expect(err).NotTo(HaveOccurred(), "Updates should be allowed")
 		})
 	})
+
+	Context("InternalRegistry conditional enablement", func() {
+		const resourceName = "konflux"
+		ctx := context.Background()
+
+		typeNamespacedName := types.NamespacedName{
+			Name: resourceName,
+		}
+		registryTypeNamespacedName := types.NamespacedName{
+			Name: KonfluxInternalRegistryCRName,
+		}
+
+		AfterEach(func() {
+			// Cleanup Konflux CR
+			resource := &konfluxv1alpha1.Konflux{}
+			if err := k8sClient.Get(ctx, typeNamespacedName, resource); err == nil {
+				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			}
+
+			// Cleanup InternalRegistry CR if it exists
+			registry := &konfluxv1alpha1.KonfluxInternalRegistry{}
+			if err := k8sClient.Get(ctx, registryTypeNamespacedName, registry); err == nil {
+				Expect(k8sClient.Delete(ctx, registry)).To(Succeed())
+			}
+		})
+
+		It("should not create InternalRegistry CR when internalRegistry is omitted", func() {
+			By("creating Konflux CR without internalRegistry config")
+			konflux := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: resourceName,
+				},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					// internalRegistry is omitted (nil)
+				},
+			}
+			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+
+			By("reconciling the Konflux CR")
+			reconciler := &KonfluxReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying InternalRegistry CR was not created")
+			registry := &konfluxv1alpha1.KonfluxInternalRegistry{}
+			err = k8sClient.Get(ctx, registryTypeNamespacedName, registry)
+			Expect(errors.IsNotFound(err)).To(BeTrue(), "InternalRegistry CR should not exist when omitted")
+		})
+
+		It("should not create InternalRegistry CR when enabled is false", func() {
+			By("creating Konflux CR with internalRegistry.enabled=false")
+			disabled := false
+			konflux := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: resourceName,
+				},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					InternalRegistry: &konfluxv1alpha1.InternalRegistryConfig{
+						Enabled: &disabled,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+
+			By("reconciling the Konflux CR")
+			reconciler := &KonfluxReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying InternalRegistry CR was not created")
+			registry := &konfluxv1alpha1.KonfluxInternalRegistry{}
+			err = k8sClient.Get(ctx, registryTypeNamespacedName, registry)
+			Expect(errors.IsNotFound(err)).To(BeTrue(), "InternalRegistry CR should not exist when enabled=false")
+		})
+
+		It("should create InternalRegistry CR when enabled is true", func() {
+			By("creating Konflux CR with internalRegistry.enabled=true")
+			enabled := true
+			konflux := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: resourceName,
+				},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					InternalRegistry: &konfluxv1alpha1.InternalRegistryConfig{
+						Enabled: &enabled,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+
+			By("reconciling the Konflux CR")
+			reconciler := &KonfluxReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying InternalRegistry CR was created")
+			registry := &konfluxv1alpha1.KonfluxInternalRegistry{}
+			err = k8sClient.Get(ctx, registryTypeNamespacedName, registry)
+			Expect(err).NotTo(HaveOccurred(), "InternalRegistry CR should exist when enabled=true")
+			Expect(registry.Name).To(Equal(KonfluxInternalRegistryCRName))
+		})
+
+		It("should delete InternalRegistry CR when enabled changes from true to false", func() {
+			By("creating Konflux CR with internalRegistry.enabled=true")
+			enabled := true
+			konflux := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: resourceName,
+				},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					InternalRegistry: &konfluxv1alpha1.InternalRegistryConfig{
+						Enabled: &enabled,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+
+			By("reconciling to create the InternalRegistry CR")
+			reconciler := &KonfluxReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying InternalRegistry CR was created")
+			registry := &konfluxv1alpha1.KonfluxInternalRegistry{}
+			err = k8sClient.Get(ctx, registryTypeNamespacedName, registry)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("updating Konflux CR to set enabled=false")
+			updatedKonflux := &konfluxv1alpha1.Konflux{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, updatedKonflux)).To(Succeed())
+			disabled := false
+			updatedKonflux.Spec.InternalRegistry = &konfluxv1alpha1.InternalRegistryConfig{
+				Enabled: &disabled,
+			}
+			Expect(k8sClient.Update(ctx, updatedKonflux)).To(Succeed())
+
+			By("reconciling again after disabling")
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying InternalRegistry CR was deleted")
+			err = k8sClient.Get(ctx, registryTypeNamespacedName, registry)
+			Expect(errors.IsNotFound(err)).To(BeTrue(), "InternalRegistry CR should be deleted when enabled changes to false")
+		})
+	})
 })

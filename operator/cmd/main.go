@@ -350,6 +350,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxCertManager")
 		os.Exit(1)
 	}
+	if err := (&controller.KonfluxInternalRegistryReconciler{
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		ObjectStore: objectStore,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "KonfluxInternalRegistry")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {

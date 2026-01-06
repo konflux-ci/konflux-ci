@@ -64,6 +64,12 @@ type KonfluxSpec struct {
 	// The runtime configuration is copied to the KonfluxCertManager CR by the operator.
 	// +optional
 	CertManager *CertManagerConfig `json:"certManager,omitempty"`
+
+	// InternalRegistry configures the internal registry component.
+	// The runtime configuration is copied to the KonfluxInternalRegistry CR by the operator.
+	// Enabling internal registry requires trust-manager to be deployed.
+	// +optional
+	InternalRegistry *InternalRegistryConfig `json:"internalRegistry,omitempty"`
 }
 
 // ImageControllerConfig defines the configuration for the image-controller component.
@@ -122,6 +128,15 @@ type CertManagerConfig struct {
 	// Defaults to true if not specified.
 	// +optional
 	CreateClusterIssuer *bool `json:"createClusterIssuer,omitempty"`
+}
+
+// InternalRegistryConfig defines the configuration for the internal registry component.
+// Enabling internal registry requires trust-manager to be deployed.
+type InternalRegistryConfig struct {
+	// Enabled controls whether internal registry resources are deployed.
+	// Defaults to false if not specified.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
 }
 
 // KonfluxInfoConfig defines the configuration for the info component.
@@ -202,6 +217,15 @@ func (k *KonfluxSpec) IsImageControllerEnabled() bool {
 		return false
 	}
 	return *k.ImageController.Enabled
+}
+
+// IsInternalRegistryEnabled returns true if internal registry is enabled.
+// Defaults to false if not specified.
+func (k *KonfluxSpec) IsInternalRegistryEnabled() bool {
+	if k.InternalRegistry == nil || k.InternalRegistry.Enabled == nil {
+		return false
+	}
+	return *k.InternalRegistry.Enabled
 }
 
 func init() {

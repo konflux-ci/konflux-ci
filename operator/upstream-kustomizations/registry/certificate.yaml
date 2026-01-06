@@ -1,0 +1,19 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: registry-cert
+  namespace: kind-registry
+spec:
+  isCA: true
+  subject:
+    organizations:
+      - konflux
+  dnsNames:
+  - localhost
+  - registry-service.kind-registry
+  issuerRef:
+    kind: ClusterIssuer
+    name: ca-issuer
+  secretName: local-registry-tls
+  
