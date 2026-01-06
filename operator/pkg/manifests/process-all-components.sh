@@ -29,17 +29,13 @@ if [[ "${GITHUB_ACTIONS:-}" != "true" ]]; then
     echo "Running in local mode (skipping git operations)"
 fi
 
-# List of components to process
-COMPONENTS=(
-    "application-api"
-    "build-service"
-    "enterprise-contract"
-    "image-controller"
-    "integration"
-    "namespace-lister"
-    "rbac"
-    "release"
-    "ui"
+# List of components to process (dynamically discovered from upstream-kustomizations directory)
+mapfile -t COMPONENTS < <(
+    for dir in "${WORKSPACE_ROOT}/operator/upstream-kustomizations"/*; do
+        if [[ -d "${dir}" ]]; then
+            basename "${dir}"
+        fi
+    done | sort
 )
 
 # Track results
