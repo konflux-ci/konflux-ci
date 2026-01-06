@@ -49,7 +49,8 @@ type KonfluxEnterpriseContract struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   KonfluxEnterpriseContractSpec   `json:"spec,omitempty"`
+	// +kubebuilder:default:={}
+	Spec   KonfluxEnterpriseContractSpec   `json:"spec"`
 	Status KonfluxEnterpriseContractStatus `json:"status,omitempty"`
 }
 

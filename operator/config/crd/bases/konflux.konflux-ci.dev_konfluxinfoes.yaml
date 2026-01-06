@@ -37,6 +37,7 @@ spec:
           metadata:
             type: object
           spec:
+            default: {}
             description: KonfluxInfoSpec defines the desired state of KonfluxInfo.
             properties:
               banner:
@@ -283,6 +284,8 @@ spec:
                   type: object
                 type: array
             type: object
+        required:
+        - spec
         type: object
         x-kubernetes-validations:
         - message: KonfluxInfo CR must be named 'konflux-info'. Only one instance

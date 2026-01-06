@@ -38,6 +38,7 @@ spec:
           metadata:
             type: object
           spec:
+            default: {}
             description: KonfluxImageControllerSpec defines the desired state of KonfluxImageController.
             type: object
           status:
@@ -103,6 +104,8 @@ spec:
                   type: object
                 type: array
             type: object
+        required:
+        - spec
         type: object
         x-kubernetes-validations:
         - message: KonfluxImageController CR must be named 'konflux-image-controller'.

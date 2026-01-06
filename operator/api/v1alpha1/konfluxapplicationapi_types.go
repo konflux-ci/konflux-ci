@@ -43,7 +43,8 @@ type KonfluxApplicationAPI struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   KonfluxApplicationAPISpec   `json:"spec,omitempty"`
+	// +kubebuilder:default:={}
+	Spec   KonfluxApplicationAPISpec   `json:"spec"`
 	Status KonfluxApplicationAPIStatus `json:"status,omitempty"`
 }
 

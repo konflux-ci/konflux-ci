@@ -38,6 +38,7 @@ spec:
           metadata:
             type: object
           spec:
+            default: {}
             description: KonfluxNamespaceListerSpec defines the desired state of KonfluxNamespaceLister.
             properties:
               namespaceLister:

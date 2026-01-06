@@ -39,6 +39,7 @@ spec:
           metadata:
             type: object
           spec:
+            default: {}
             description: KonfluxInternalRegistrySpec defines the desired state of
               KonfluxInternalRegistry.
             type: object
@@ -105,6 +106,8 @@ spec:
                   type: object
                 type: array
             type: object
+        required:
+        - spec
         type: object
         x-kubernetes-validations:
         - message: KonfluxInternalRegistry CR must be named 'konflux-internal-registry'.

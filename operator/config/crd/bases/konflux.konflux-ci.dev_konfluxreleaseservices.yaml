@@ -38,6 +38,7 @@ spec:
           metadata:
             type: object
           spec:
+            default: {}
             description: KonfluxReleaseServiceSpec defines the desired state of KonfluxReleaseService
             properties:
               releaseControllerManager:

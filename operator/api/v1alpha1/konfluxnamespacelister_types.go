@@ -55,6 +55,7 @@ type KonfluxNamespaceLister struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// +kubebuilder:default:={}
 	Spec   KonfluxNamespaceListerSpec   `json:"spec"`
 	Status KonfluxNamespaceListerStatus `json:"status,omitempty"`
 }

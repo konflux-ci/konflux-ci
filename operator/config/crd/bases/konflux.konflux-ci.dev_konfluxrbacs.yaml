@@ -37,6 +37,7 @@ spec:
           metadata:
             type: object
           spec:
+            default: {}
             description: KonfluxRBACSpec defines the desired state of KonfluxRBAC.
             properties:
               foo:
@@ -106,6 +107,8 @@ spec:
                   type: object
                 type: array
             type: object
+        required:
+        - spec
         type: object
         x-kubernetes-validations:
         - message: KonfluxRBAC CR must be named 'konflux-rbac'. Only one instance

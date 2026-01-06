@@ -38,6 +38,7 @@ spec:
           metadata:
             type: object
           spec:
+            default: {}
             description: KonfluxEnterpriseContractSpec defines the desired state of
               KonfluxEnterpriseContract.
             properties:
@@ -109,6 +110,8 @@ spec:
                   type: object
                 type: array
             type: object
+        required:
+        - spec
         type: object
         x-kubernetes-validations:
         - message: KonfluxEnterpriseContract CR must be named 'konflux-enterprise-contract'.

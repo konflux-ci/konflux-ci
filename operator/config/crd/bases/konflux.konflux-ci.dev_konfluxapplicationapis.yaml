@@ -38,6 +38,7 @@ spec:
           metadata:
             type: object
           spec:
+            default: {}
             description: KonfluxApplicationAPISpec defines the desired state of KonfluxApplicationAPI.
             type: object
           status:
@@ -103,6 +104,8 @@ spec:
                   type: object
                 type: array
             type: object
+        required:
+        - spec
         type: object
         x-kubernetes-validations:
         - message: KonfluxApplicationAPI CR must be named 'konflux-application-api'.

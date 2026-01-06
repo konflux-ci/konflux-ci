@@ -46,7 +46,8 @@ type KonfluxImageController struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   KonfluxImageControllerSpec   `json:"spec,omitempty"`
+	// +kubebuilder:default:={}
+	Spec   KonfluxImageControllerSpec   `json:"spec"`
 	Status KonfluxImageControllerStatus `json:"status,omitempty"`
 }
 

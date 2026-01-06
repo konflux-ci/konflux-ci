@@ -49,7 +49,8 @@ type KonfluxCertManager struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   KonfluxCertManagerSpec   `json:"spec,omitempty"`
+	// +kubebuilder:default:={}
+	Spec   KonfluxCertManagerSpec   `json:"spec"`
 	Status KonfluxCertManagerStatus `json:"status,omitempty"`
 }
 
