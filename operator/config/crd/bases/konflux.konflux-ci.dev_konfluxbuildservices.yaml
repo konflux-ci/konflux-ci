@@ -38,6 +38,7 @@ spec:
           metadata:
             type: object
           spec:
+            default: {}
             description: KonfluxBuildServiceSpec defines the desired state of KonfluxBuildService
             properties:
               buildControllerManager:

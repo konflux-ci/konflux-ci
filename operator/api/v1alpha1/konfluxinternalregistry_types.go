@@ -47,7 +47,8 @@ type KonfluxInternalRegistry struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   KonfluxInternalRegistrySpec   `json:"spec,omitempty"`
+	// +kubebuilder:default:={}
+	Spec   KonfluxInternalRegistrySpec   `json:"spec"`
 	Status KonfluxInternalRegistryStatus `json:"status,omitempty"`
 }
 

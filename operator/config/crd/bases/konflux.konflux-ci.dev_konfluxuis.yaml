@@ -37,6 +37,7 @@ spec:
           metadata:
             type: object
           spec:
+            default: {}
             description: KonfluxUISpec defines the desired state of KonfluxUI
             properties:
               dex:

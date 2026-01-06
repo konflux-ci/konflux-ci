@@ -38,6 +38,7 @@ spec:
           metadata:
             type: object
           spec:
+            default: {}
             description: KonfluxCertManagerSpec defines the desired state of KonfluxCertManager.
             properties:
               createClusterIssuer:
@@ -109,6 +110,8 @@ spec:
                   type: object
                 type: array
             type: object
+        required:
+        - spec
         type: object
         x-kubernetes-validations:
         - message: KonfluxCertManager CR must be named 'konflux-cert-manager'. Only

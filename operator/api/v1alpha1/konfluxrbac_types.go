@@ -49,7 +49,8 @@ type KonfluxRBAC struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   KonfluxRBACSpec   `json:"spec,omitempty"`
+	// +kubebuilder:default:={}
+	Spec   KonfluxRBACSpec   `json:"spec"`
 	Status KonfluxRBACStatus `json:"status,omitempty"`
 }
 

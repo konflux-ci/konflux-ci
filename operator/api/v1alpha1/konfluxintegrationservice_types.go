@@ -44,6 +44,7 @@ type KonfluxIntegrationService struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// +kubebuilder:default:={}
 	Spec   KonfluxIntegrationServiceSpec   `json:"spec"`
 	Status KonfluxIntegrationServiceStatus `json:"status,omitempty"`
 }

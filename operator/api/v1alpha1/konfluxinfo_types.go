@@ -210,7 +210,8 @@ type KonfluxInfo struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   KonfluxInfoSpec   `json:"spec,omitempty"`
+	// +kubebuilder:default:={}
+	Spec   KonfluxInfoSpec   `json:"spec"`
 	Status KonfluxInfoStatus `json:"status,omitempty"`
 }
 
