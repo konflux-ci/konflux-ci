@@ -6,6 +6,7 @@ require (
 	github.com/cert-manager/cert-manager v1.16.3
 	github.com/onsi/ginkgo/v2 v2.27.3
 	github.com/onsi/gomega v1.38.3
+	github.com/openshift/api v0.0.0-20260105114749-aae5635a71a7
 	k8s.io/api v0.34.1
 	k8s.io/apiextensions-apiserver v0.34.1
 	k8s.io/apimachinery v0.34.1

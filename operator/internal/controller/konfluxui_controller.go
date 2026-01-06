@@ -38,6 +38,7 @@ import (
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/consolelink"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/hashedconfigmap"
@@ -75,6 +76,7 @@ const (
 // during the reconcile but has the owner label.
 var uiCleanupGVKs = []schema.GroupVersionKind{
 	{Group: "networking.k8s.io", Version: "v1", Kind: "Ingress"},
+	{Group: "console.openshift.io", Version: "v1", Kind: "ConsoleLink"},
 	{Group: "", Version: "v1", Kind: "Secret"},
 	{Group: "", Version: "v1", Kind: "ServiceAccount"},
 	// Add other GVKs here as needed for automatic cleanup
@@ -102,6 +104,7 @@ type KonfluxUIReconciler struct {
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=dex;konflux-proxy;konflux-proxy-namespace-lister,verbs=bind
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;patch
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=console.openshift.io,resources=consolelinks,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;patch
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=config.openshift.io,resources=ingresses,verbs=get
@@ -181,6 +184,7 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Reconcile Ingress if enabled (tracked automatically, deleted if not applied)
+	// On OpenShift, also creates a ConsoleLink for the application menu
 	if err := r.reconcileIngress(ctx, tc, ui, endpoint); err != nil {
 		log.Error(err, "Failed to reconcile Ingress")
 		SetFailedCondition(ui, UIConditionTypeReady, "IngressReconcileFailed", err)
@@ -233,7 +237,8 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Update ingress status
-	updateIngressStatus(ui, endpoint)
+	isOnOpenShift := r.ClusterInfo != nil && r.ClusterInfo.IsOpenShift()
+	updateIngressStatus(ui, isOnOpenShift, endpoint)
 
 	// Final status update
 	if err := r.Status().Update(ctx, ui); err != nil {
@@ -246,9 +251,9 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 }
 
 // updateIngressStatus updates the ingress status fields on the KonfluxUI CR.
-func updateIngressStatus(ui *konfluxv1alpha1.KonfluxUI, endpoint *url.URL) {
+func updateIngressStatus(ui *konfluxv1alpha1.KonfluxUI, isOnOpenShift bool, endpoint *url.URL) {
 	ui.Status.Ingress = &konfluxv1alpha1.IngressStatus{
-		Enabled:  ui.IsIngressEnabled(),
+		Enabled:  ptr.Deref(ui.GetIngressEnabledPreference(), isOnOpenShift),
 		Hostname: endpoint.Hostname(),
 		URL:      endpoint.String(),
 	}
@@ -557,7 +562,9 @@ func (r *KonfluxUIReconciler) reconcileIngress(ctx context.Context, tc *tracking
 
 	// If ingress is not enabled, don't apply it.
 	// The tracking client will delete it during CleanupOrphans since it wasn't applied.
-	if !ui.IsIngressEnabled() {
+	// Ingress defaults to enabled on OpenShift, disabled otherwise.
+	isOnOpenShift := r.ClusterInfo != nil && r.ClusterInfo.IsOpenShift()
+	if !ptr.Deref(ui.GetIngressEnabledPreference(), isOnOpenShift) {
 		log.Info("Ingress is disabled, skipping (will be cleaned up if exists)")
 		return nil
 	}
@@ -569,6 +576,14 @@ func (r *KonfluxUIReconciler) reconcileIngress(ctx context.Context, tc *tracking
 
 	if err := tc.ApplyOwned(ctx, ingressResource); err != nil {
 		return fmt.Errorf("failed to apply ingress: %w", err)
+	}
+
+	// On OpenShift, also create a ConsoleLink for the application menu
+	if isOnOpenShift {
+		consoleLinkResource := consolelink.Build(endpoint)
+		if err := tc.ApplyOwned(ctx, consoleLinkResource); err != nil {
+			return fmt.Errorf("failed to apply ConsoleLink: %w", err)
+		}
 	}
 
 	return nil

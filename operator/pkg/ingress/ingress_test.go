@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/version"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -253,7 +254,7 @@ func TestBuildForUI(t *testing.T) {
 			},
 			Spec: konfluxv1alpha1.KonfluxUISpec{
 				Ingress: &konfluxv1alpha1.IngressSpec{
-					Enabled:          true,
+					Enabled:          ptr.To(true),
 					IngressClassName: &ingressClassName,
 					Annotations: map[string]string{
 						"nginx.ingress.kubernetes.io/proxy-body-size": "100m",
@@ -282,7 +283,7 @@ func TestBuildForUI(t *testing.T) {
 			},
 			Spec: konfluxv1alpha1.KonfluxUISpec{
 				Ingress: &konfluxv1alpha1.IngressSpec{
-					Enabled: true,
+					Enabled: ptr.To(true),
 					Host:    "explicit.host.com",
 				},
 			},
@@ -377,7 +378,7 @@ func TestDetermineEndpointURL(t *testing.T) {
 		ui := &konfluxv1alpha1.KonfluxUI{
 			Spec: konfluxv1alpha1.KonfluxUISpec{
 				Ingress: &konfluxv1alpha1.IngressSpec{
-					Enabled: false,
+					Enabled: ptr.To(false),
 				},
 			},
 		}
@@ -396,7 +397,7 @@ func TestDetermineEndpointURL(t *testing.T) {
 		ui := &konfluxv1alpha1.KonfluxUI{
 			Spec: konfluxv1alpha1.KonfluxUISpec{
 				Ingress: &konfluxv1alpha1.IngressSpec{
-					Enabled: true,
+					Enabled: ptr.To(true),
 					Host:    "my-custom-host.example.com",
 				},
 			},
@@ -417,7 +418,7 @@ func TestDetermineEndpointURL(t *testing.T) {
 		ui := &konfluxv1alpha1.KonfluxUI{
 			Spec: konfluxv1alpha1.KonfluxUISpec{
 				Ingress: &konfluxv1alpha1.IngressSpec{
-					Enabled: true,
+					Enabled: ptr.To(true),
 				},
 			},
 		}
@@ -449,7 +450,7 @@ func TestDetermineEndpointURL(t *testing.T) {
 		ui := &konfluxv1alpha1.KonfluxUI{
 			Spec: konfluxv1alpha1.KonfluxUISpec{
 				Ingress: &konfluxv1alpha1.IngressSpec{
-					Enabled: true,
+					Enabled: ptr.To(true),
 				},
 			},
 		}
@@ -469,7 +470,7 @@ func TestDetermineEndpointURL(t *testing.T) {
 		ui := &konfluxv1alpha1.KonfluxUI{
 			Spec: konfluxv1alpha1.KonfluxUISpec{
 				Ingress: &konfluxv1alpha1.IngressSpec{
-					Enabled: true,
+					Enabled: ptr.To(true),
 				},
 			},
 		}
@@ -490,7 +491,7 @@ func TestDetermineEndpointURL(t *testing.T) {
 		ui := &konfluxv1alpha1.KonfluxUI{
 			Spec: konfluxv1alpha1.KonfluxUISpec{
 				Ingress: &konfluxv1alpha1.IngressSpec{
-					Enabled: true,
+					Enabled: ptr.To(true),
 				},
 			},
 		}
@@ -516,7 +517,7 @@ func TestDetermineEndpointURL(t *testing.T) {
 		ui := &konfluxv1alpha1.KonfluxUI{
 			Spec: konfluxv1alpha1.KonfluxUISpec{
 				Ingress: &konfluxv1alpha1.IngressSpec{
-					Enabled: true,
+					Enabled: ptr.To(true),
 				},
 			},
 		}
