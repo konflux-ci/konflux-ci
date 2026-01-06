@@ -43,9 +43,10 @@ type DexParams struct {
 	Connectors []Connector `json:"connectors,omitempty"`
 
 	// EnablePasswordDB enables the local password database.
+	// When nil (not set), defaults to true if no connectors are configured.
 	// +optional
-	// +kubebuilder:default=true
-	EnablePasswordDB bool `json:"enablePasswordDB,omitempty"`
+	// +nullable
+	EnablePasswordDB *bool `json:"enablePasswordDB,omitempty"`
 
 	// StaticPasswords are predefined user credentials for the local password database.
 	// +optional
@@ -81,7 +82,6 @@ func NewDexConfig(endpoint *url.URL, params *DexParams) *Config {
 		}
 	}
 
-	// Add OpenShift connector if explicitly enabled
 	// Note: The controller resolves the default-on-OpenShift logic before calling this function
 	if ptr.Deref(params.ConfigureLoginWithOpenShift, false) {
 		openShiftConnector := Connector{
@@ -99,6 +99,10 @@ func NewDexConfig(endpoint *url.URL, params *DexParams) *Config {
 		}
 		connectors = append(connectors, openShiftConnector)
 	}
+
+	// Enable password DB if explicitly set to true,
+	// or if not set and no connectors are configured
+	enablePasswordDB := ptr.Deref(params.EnablePasswordDB, len(connectors) == 0)
 
 	return &Config{
 		Issuer: fmt.Sprintf("%s/idp/", baseURL),
@@ -128,7 +132,7 @@ func NewDexConfig(endpoint *url.URL, params *DexParams) *Config {
 			},
 		},
 		Connectors:       connectors,
-		EnablePasswordDB: params.EnablePasswordDB,
+		EnablePasswordDB: enablePasswordDB,
 		StaticPasswords:  params.StaticPasswords,
 		Telemetry: &Telemetry{
 			HTTP: "0.0.0.0:5558",

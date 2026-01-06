@@ -472,12 +472,12 @@ func TestNewDexConfig_ConnectorRedirectURI(t *testing.T) {
 }
 
 func TestNewDexConfig_PasswordDB(t *testing.T) {
-	t.Run("enables password database", func(t *testing.T) {
+	t.Run("enables password database when explicitly set to true", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
 		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
-			EnablePasswordDB: true,
+			EnablePasswordDB: ptr.To(true),
 		}
 
 		config := NewDexConfig(endpoint, params)
@@ -485,12 +485,12 @@ func TestNewDexConfig_PasswordDB(t *testing.T) {
 		g.Expect(config.EnablePasswordDB).To(gomega.BeTrue())
 	})
 
-	t.Run("disables password database when explicitly set", func(t *testing.T) {
+	t.Run("disables password database when explicitly set to false", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
 		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
-			EnablePasswordDB: false,
+			EnablePasswordDB: ptr.To(false),
 		}
 
 		config := NewDexConfig(endpoint, params)
@@ -498,12 +498,72 @@ func TestNewDexConfig_PasswordDB(t *testing.T) {
 		g.Expect(config.EnablePasswordDB).To(gomega.BeFalse())
 	})
 
+	t.Run("defaults to true when not set and no connectors", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
+		params := &DexParams{
+			// EnablePasswordDB not set (nil)
+			// No connectors
+		}
+
+		config := NewDexConfig(endpoint, params)
+
+		g.Expect(config.EnablePasswordDB).To(gomega.BeTrue())
+	})
+
+	t.Run("defaults to false when not set and connectors exist", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
+		params := &DexParams{
+			// EnablePasswordDB not set (nil)
+			Connectors: []Connector{
+				{Type: "github", ID: "github", Name: "GitHub"},
+			},
+		}
+
+		config := NewDexConfig(endpoint, params)
+
+		g.Expect(config.EnablePasswordDB).To(gomega.BeFalse())
+	})
+
+	t.Run("defaults to false when not set and OpenShift connector is enabled", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
+		params := &DexParams{
+			// EnablePasswordDB not set (nil)
+			ConfigureLoginWithOpenShift: ptr.To(true),
+		}
+
+		config := NewDexConfig(endpoint, params)
+
+		g.Expect(config.EnablePasswordDB).To(gomega.BeFalse())
+	})
+
+	t.Run("respects explicit true even with connectors", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
+		params := &DexParams{
+			EnablePasswordDB: ptr.To(true),
+			Connectors: []Connector{
+				{Type: "github", ID: "github", Name: "GitHub"},
+			},
+		}
+
+		config := NewDexConfig(endpoint, params)
+
+		g.Expect(config.EnablePasswordDB).To(gomega.BeTrue())
+	})
+
 	t.Run("includes static passwords", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
 		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
-			EnablePasswordDB: true,
+			EnablePasswordDB: ptr.To(true),
 			StaticPasswords: []Password{
 				{
 					Email:    "admin@example.com",
@@ -532,7 +592,7 @@ func TestNewDexConfig_PasswordDB(t *testing.T) {
 
 		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
-			EnablePasswordDB:  true,
+			EnablePasswordDB:  ptr.To(true),
 			PasswordConnector: "local",
 		}
 
@@ -551,7 +611,7 @@ func TestNewDexConfig_YAML_Output(t *testing.T) {
 			Hostname:                    "dex.example.com",
 			Port:                        "9443",
 			ConfigureLoginWithOpenShift: ptr.To(true),
-			EnablePasswordDB:            true,
+			EnablePasswordDB:            ptr.To(true),
 			PasswordConnector:           "local",
 			StaticPasswords: []Password{
 				{
@@ -581,7 +641,7 @@ func TestNewDexConfig_YAML_Output(t *testing.T) {
 
 		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
 		params := &DexParams{
-			EnablePasswordDB: false,
+			EnablePasswordDB: ptr.To(false),
 		}
 
 		config := NewDexConfig(endpoint, params)

@@ -1396,9 +1396,10 @@ spec:
                                   type: object
                                 type: array
                               enablePasswordDB:
-                                default: true
-                                description: EnablePasswordDB enables the local password
-                                  database.
+                                description: |-
+                                  EnablePasswordDB enables the local password database.
+                                  When nil (not set), defaults to true if no connectors are configured.
+                                nullable: true
                                 type: boolean
                               hostname:
                                 description: |-
