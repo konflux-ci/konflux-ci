@@ -7,12 +7,27 @@ metadata:
   name: konflux-namespace-lister
 spec:
   namespaceLister:
-    replicas: 2
+    replicas: 3
     namespaceLister:
       resources:
         requests:
           cpu: 100m
-          memory: 128Mi
-        limits:
-          cpu: 500m
           memory: 256Mi
+        limits:
+          cpu: 512m
+          memory: 1Gi
+      env:
+        - name: LOG_LEVEL
+          value: "0"
+        - name: CACHE_RESYNC_PERIOD
+          value: "10m"
+        - name: EXAMPLE_CUSTOM_CONFIG
+          valueFrom:
+            configMapKeyRef:
+              name: namespace-lister-config
+              key: custom-config
+        - name: EXAMPLE_SECRET_VALUE
+          valueFrom:
+            secretKeyRef:
+              name: namespace-lister-secret
+              key: secret-key

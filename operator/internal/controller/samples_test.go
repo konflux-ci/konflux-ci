@@ -245,6 +245,7 @@ var _ = Describe("Sample YAML Files", func() {
 					if len(missingFields) > 0 {
 						// Filter out known metadata fields that are expected to differ
 						filteredMissing := []string{}
+						fieldDetails := []string{}
 						for _, field := range missingFields {
 							// Skip metadata fields that Kubernetes adds/transforms
 							if !strings.HasPrefix(field, "metadata.creationTimestamp") &&
@@ -254,14 +255,29 @@ var _ = Describe("Sample YAML Files", func() {
 								!strings.HasPrefix(field, "metadata.uid") &&
 								!strings.HasPrefix(field, "metadata.selfLink") {
 								filteredMissing = append(filteredMissing, field)
+
+								// Get detailed comparison for this field
+								detail := getFieldComparison(originalYAML, decodedMap, field)
+								if detail != "" {
+									fieldDetails = append(fieldDetails, detail)
+								}
 							}
 						}
 
 						if len(filteredMissing) > 0 {
-							Fail(fmt.Sprintf(
+							errorMsg := fmt.Sprintf(
 								"Sample file %s contains fields that are not preserved after decoding (unknown/ignored fields): %v\n"+
-									"This likely means the sample contains typos, outdated fields, or fields not defined in the CRD schema.",
-								entry.Name(), filteredMissing))
+									"This likely means the sample contains typos, outdated fields, or fields not defined in the CRD schema.\n",
+								entry.Name(), filteredMissing)
+
+							if len(fieldDetails) > 0 {
+								errorMsg += "\nDetailed field comparisons:\n"
+								for _, detail := range fieldDetails {
+									errorMsg += detail + "\n"
+								}
+							}
+
+							Fail(errorMsg)
 						}
 					}
 
@@ -283,11 +299,7 @@ func findMissingFields(original, decoded map[string]interface{}, prefix string) 
 	var missing []string
 
 	for key, originalValue := range original {
-		path := key
-		if prefix != "" {
-			path = prefix + "." + key
-		}
-
+		path := buildFieldPath(prefix, key)
 		decodedValue, exists := decoded[key]
 
 		if !exists {
@@ -296,42 +308,146 @@ func findMissingFields(original, decoded map[string]interface{}, prefix string) 
 			continue
 		}
 
-		// If both are maps, recurse
-		originalMap, origIsMap := originalValue.(map[string]interface{})
-		decodedMap, decIsMap := decodedValue.(map[string]interface{})
+		missingInField := compareFieldValues(originalValue, decodedValue, path)
+		missing = append(missing, missingInField...)
+	}
 
-		if origIsMap && decIsMap {
-			// Recurse into nested maps
-			missing = append(missing, findMissingFields(originalMap, decodedMap, path)...)
-		} else if origIsMap {
-			// Original is a map but decoded isn't - check if decoded is nil/empty
-			if decodedValue == nil {
-				// Empty map vs nil is acceptable (normalization)
-				continue
-			}
-			// Structure mismatch
-			missing = append(missing, path+" (type mismatch: map vs "+fmt.Sprintf("%T", decodedValue)+")")
-		} else if decIsMap {
-			// Decoded is a map but original isn't - check if original is nil/empty
-			if originalValue == nil {
-				// Nil vs empty map is acceptable (normalization)
-				continue
-			}
-			// Structure mismatch
-			missing = append(missing, path+" (type mismatch: "+fmt.Sprintf("%T", originalValue)+" vs map)")
-		} else {
-			// Compare values (but ignore nil vs empty differences)
-			if !reflect.DeepEqual(normalizeValue(originalValue), normalizeValue(decodedValue)) {
-				// Values differ - this could be normalization (e.g., empty string vs nil)
-				// Only report if it's a significant difference
-				if !isNormalizedDifference(originalValue, decodedValue) {
-					missing = append(missing, path+" (value differs)")
-				}
+	return missing
+}
+
+// buildFieldPath constructs a field path with proper prefix handling
+func buildFieldPath(prefix, key string) string {
+	if prefix != "" {
+		return prefix + "." + key
+	}
+	return key
+}
+
+// compareFieldValues compares original and decoded values for a specific field
+func compareFieldValues(originalValue, decodedValue interface{}, path string) []string {
+	var missing []string
+
+	// If both are maps, recurse
+	originalMap, origIsMap := originalValue.(map[string]interface{})
+	decodedMap, decIsMap := decodedValue.(map[string]interface{})
+
+	if origIsMap && decIsMap {
+		// Recurse into nested maps
+		missing = append(missing, findMissingFields(originalMap, decodedMap, path)...)
+	} else if origIsMap {
+		// Original is a map but decoded isn't - check if decoded is nil/empty
+		if decodedValue == nil {
+			// Empty map vs nil is acceptable (normalization)
+			return missing
+		}
+		// Structure mismatch
+		missing = append(missing, path+" (type mismatch: map vs "+fmt.Sprintf("%T", decodedValue)+")")
+	} else if decIsMap {
+		// Decoded is a map but original isn't - check if original is nil/empty
+		if originalValue == nil {
+			// Nil vs empty map is acceptable (normalization)
+			return missing
+		}
+		// Structure mismatch
+		missing = append(missing, path+" (type mismatch: "+fmt.Sprintf("%T", originalValue)+" vs map)")
+	} else {
+		// Compare values (but ignore nil vs empty differences)
+		if !reflect.DeepEqual(normalizeValue(originalValue), normalizeValue(decodedValue)) {
+			// Values differ - this could be normalization (e.g., empty string vs nil)
+			// Only report if it's a significant difference
+			if !isNormalizedDifference(originalValue, decodedValue) {
+				missing = append(missing, path+" (value differs)")
 			}
 		}
 	}
 
 	return missing
+}
+
+// getFieldComparison returns a detailed comparison string for a field path
+func getFieldComparison(original, decoded map[string]interface{}, fieldPath string) string {
+	cleanPath := cleanFieldPath(fieldPath)
+	parts := strings.Split(cleanPath, ".")
+
+	origVal, origExists := navigateToField(original, parts)
+	if !origExists {
+		return ""
+	}
+
+	decVal, decExists := navigateToField(decoded, parts)
+	if !decExists {
+		return fmt.Sprintf("  %s: original exists but decoded path is invalid", cleanPath)
+	}
+
+	return formatFieldComparison(cleanPath, origVal, decVal)
+}
+
+// cleanFieldPath strips suffixes like " (value differs)" from field paths
+func cleanFieldPath(fieldPath string) string {
+	if idx := strings.Index(fieldPath, " ("); idx != -1 {
+		return fieldPath[:idx]
+	}
+	return fieldPath
+}
+
+// navigateToField navigates to a specific field in a nested map structure
+func navigateToField(data map[string]interface{}, parts []string) (interface{}, bool) {
+	current := data
+	for i, part := range parts {
+		if i == len(parts)-1 {
+			// Last part - return the field value
+			val, exists := current[part]
+			return val, exists
+		}
+
+		// Navigate deeper
+		if nextMap, ok := current[part].(map[string]interface{}); ok {
+			current = nextMap
+		} else {
+			return nil, false
+		}
+	}
+	return nil, false
+}
+
+// formatFieldComparison formats the comparison between original and decoded field values
+func formatFieldComparison(fieldPath string, origVal, decVal interface{}) string {
+	origStr := formatValue(origVal)
+	decStr := formatValue(decVal)
+
+	return fmt.Sprintf("  %s:\n    Original: %s\n    Decoded:  %s", fieldPath, origStr, decStr)
+}
+
+// formatValue formats a value for display in error messages
+func formatValue(v interface{}) string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	switch val := v.(type) {
+	case string:
+		return fmt.Sprintf("%q", val)
+	case []interface{}:
+		if len(val) == 0 {
+			return "[]"
+		}
+		items := make([]string, 0, len(val))
+		for _, item := range val {
+			items = append(items, formatValue(item))
+		}
+		return "[" + strings.Join(items, ", ") + "]"
+	case map[string]interface{}:
+		if len(val) == 0 {
+			return "{}"
+		}
+		items := make([]string, 0, len(val))
+		for k, v := range val {
+			items = append(items, fmt.Sprintf("%s: %s", k, formatValue(v)))
+		}
+		return "{" + strings.Join(items, ", ") + "}"
+	default:
+		return fmt.Sprintf("%v (type: %T)", val, val)
+	}
 }
 
 // normalizeValue normalizes values for comparison (e.g., empty string to nil)

@@ -7,12 +7,23 @@ metadata:
   name: konflux-integration-service
 spec:
   integrationControllerManager:
-    replicas: 1
+    replicas: 3
     manager:
       resources:
         requests:
-          cpu: 30m
-          memory: 128Mi
+          cpu: 100m
+          memory: 256Mi
         limits:
-          cpu: 30m
-          memory: 128Mi
+          cpu: 512m
+          memory: 1Gi
+      env:
+        - name: EXAMPLE_CUSTOM_CONFIG
+          valueFrom:
+            configMapKeyRef:
+              name: integration-service-config
+              key: custom-config
+        - name: EXAMPLE_SECRET_VALUE
+          valueFrom:
+            secretKeyRef:
+              name: integration-service-secret
+              key: secret-key
