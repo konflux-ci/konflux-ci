@@ -7,12 +7,28 @@ metadata:
   name: konflux-release-service
 spec:
   releaseControllerManager:
-    replicas: 1
+    replicas: 3
     manager:
       resources:
         requests:
-          cpu: 30m
-          memory: 128Mi
+          cpu: 100m
+          memory: 256Mi
         limits:
-          cpu: 30m
-          memory: 128Mi
+          cpu: 100m
+          memory: 256Mi
+      env:
+        - name: DEFAULT_RELEASE_PVC
+          valueFrom:
+            configMapKeyRef:
+              name: release-service-manager-properties
+              key: DEFAULT_RELEASE_PVC
+        - name: EXAMPLE_CUSTOM_CONFIG
+          valueFrom:
+            configMapKeyRef:
+              name: release-service-config
+              key: custom-config
+        - name: EXAMPLE_SECRET_VALUE
+          valueFrom:
+            secretKeyRef:
+              name: release-service-secret
+              key: secret-key

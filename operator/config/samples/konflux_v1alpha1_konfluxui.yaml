@@ -6,4 +6,139 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: konflux-ui
 spec:
-  # TODO(user): Add fields here
+  # Ingress configuration
+  ingress:
+    enabled: true
+    ingressClassName: "nginx"
+    host: "konflux-ui.example.com"
+    annotations:
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    tlsSecretName: "konflux-ui-tls"
+
+  # Proxy deployment configuration
+  proxy:
+    replicas: 3
+    nginx:
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+      env:
+        - name: NGINX_WORKER_PROCESSES
+          value: "4"
+        - name: NGINX_WORKER_CONNECTIONS
+          value: "1024"
+        - name: NGINX_KEEPALIVE_TIMEOUT
+          value: "65"
+    oauth2Proxy:
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
+      env:
+        - name: OAUTH2_PROXY_PROVIDER
+          value: "oidc"
+        - name: OAUTH2_PROXY_OIDC_ISSUER_URL
+          value: "https://dex.example.com/idp/"
+        - name: OAUTH2_PROXY_CLIENT_ID
+          value: "oauth2-proxy"
+        - name: OAUTH2_PROXY_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: oauth2-proxy-secret
+              key: client-secret
+
+  # Dex deployment configuration
+  dex:
+    replicas: 2
+    dex:
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+      env:
+        - name: DEX_LOG_LEVEL
+          value: "debug"
+        - name: DEX_STORAGE_TYPE
+          value: "kubernetes"
+    config:
+      hostname: "dex.example.com"
+      port: "9443"
+      enablePasswordDB: true
+      passwordConnector: "local"
+      configureLoginWithOpenShift: true
+      connectors:
+        - type: "github"
+          id: "github"
+          name: "GitHub"
+          config:
+            clientID: "$GITHUB_CLIENT_ID"
+            clientSecret: "$GITHUB_CLIENT_SECRET"
+            redirectURI: "https://dex.example.com/idp/callback"
+            orgs:
+              - name: "my-org"
+                teams:
+                  - "developers"
+                  - "admins"
+              - name: "another-org"
+                teams:
+                  - "contributors"
+        - type: "oidc"
+          id: "google"
+          name: "Google"
+          config:
+            clientID: "$GOOGLE_CLIENT_ID"
+            clientSecret: "$GOOGLE_CLIENT_SECRET"
+            redirectURI: "https://dex.example.com/idp/callback"
+            issuer: "https://accounts.google.com"
+            groups:
+              - "admin@example.com"
+        - type: "ldap"
+          id: "ldap"
+          name: "LDAP"
+          config:
+            host: "ldap.example.com:636"
+            bindDN: "cn=admin,dc=example,dc=com"
+            bindPW: "$LDAP_BIND_PASSWORD"
+            userSearch:
+              baseDN: "ou=Users,dc=example,dc=com"
+              filter: "(objectClass=person)"
+              username: "uid"
+              idAttr: "uid"
+              emailAttr: "mail"
+              nameAttr: "cn"
+            groupSearch:
+              baseDN: "ou=Groups,dc=example,dc=com"
+              filter: "(objectClass=groupOfNames)"
+              nameAttr: "cn"
+              userMatchers:
+                - userAttr: "DN"
+                  groupAttr: "member"
+      staticPasswords:
+        - email: "user1@konflux.dev"
+          # bcrypt hash of the string "password": $(echo password | htpasswd -BinC 10 admin | cut -d: -f2)
+          hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" # notsecret
+          username: "user1"
+          userID: "7138d2fe-724e-4e86-af8a-db7c4b080e20"
+        - email: "user2@konflux.dev"
+          # bcrypt hash of the string "password": $(echo password | htpasswd -BinC 10 admin | cut -d: -f2)
+          hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" # notsecret
+          username: "user2"
+          userID: "ea8e8ee1-2283-4e03-83d4-b00f8b821b64"
+        - email: "admin@konflux.dev"
+          # bcrypt hash of the string "admin": $(echo admin | htpasswd -BinC 10 admin | cut -d: -f2)
+          hash: "$2a$10$8K1p/a0dL1A1dL1A1dL1Ae" # notsecret
+          username: "admin"
+          userID: "admin-12345-67890-abcdef"

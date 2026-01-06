@@ -7,9 +7,122 @@ metadata:
   name: konflux-info
 spec:
   publicInfo:
-    environment: development
+    # Environment type: development, production, or staging
+    environment: production
+
+    # Visibility level: public or private
     visibility: public
+
+    # Optional status page URL
+    statusPageUrl: "https://status.konflux.example.com"
+
+    # Integration configurations
+    integrations:
+      # GitHub App integration
+      github:
+        application_url: "https://github.com/apps/my-konflux-app/installations/new"
+
+      # SBOM server configuration
+      sbom_server:
+        url: "https://sbom.example.com/content"
+        sbom_sha: "https://sbom.example.com/sha"
+
+      # Image Controller configuration
+      image_controller:
+        enabled: true
+        notifications:
+          # Webhook notification example
+          - title: "Build Complete Notification"
+            event: "build_complete"
+            method: "webhook"
+            config:
+              url: "https://webhook.example.com/build/complete"
+
+          # Email notification example
+          - title: "Repository Push Notification"
+            event: "repo_push"
+            method: "email"
+            config:
+              email: "devops-team@example.com"
+
+          # Another webhook with different event
+          - title: "Image Scan Complete"
+            event: "image_scan_complete"
+            method: "webhook"
+            config:
+              url: "https://webhook.example.com/scan"
+              timeout: "30s"
+
+    # RBAC role definitions
+    rbac:
+      # Admin role with custom display name
+      - name: "konflux-admin-user-actions"
+        description: "Full access to Konflux resources including secrets and administrative operations"
+        displayName: "Administrator"
+
+      # Maintainer role (displayName defaults to name)
+      - name: "konflux-maintainer-user-actions"
+        description: "Manage workspace resources without access to sensitive or destructive actions"
+
+      # Viewer role
+      - name: "konflux-viewer-user-actions"
+        description: "Read-only access to view CI results and workspace information"
+        displayName: "Viewer Role"
+
+      # Custom role
+      - name: "konflux-custom-role"
+        description: "Custom role for specific use case with limited permissions"
+
+  # Banner configurations
   banner:
     items:
-      - summary: "Welcome to Konflux-CI! This is a development environment for testing and development purposes."
+      # Simple informational banner (always visible)
+      - summary: "Welcome to Konflux-CI! This is a production environment."
         type: info
+
+      # Warning banner with time-based scheduling (weekdays 9 AM - 5 PM EST)
+      - summary: "**Scheduled Maintenance**: System maintenance will occur on Friday, March 15th from 2:00 AM to 4:00 AM EST."
+        type: warning
+        startTime: "09:00"
+        endTime: "17:00"
+        timeZone: "America/New_York"
+        dayOfWeek: 1  # Monday
+
+      # Danger banner for specific date (one-time event)
+      - summary: "**CRITICAL**: Security patch deployment in progress. Some services may be temporarily unavailable."
+        type: danger
+        startTime: "14:00"
+        endTime: "18:00"
+        timeZone: "UTC"
+        year: 2025
+        month: 3
+        dayOfMonth: 15
+
+      # Info banner for specific day of week (recurring weekly)
+      - summary: "Weekly team standup reminder: Every Monday at 10:00 AM."
+        type: info
+        startTime: "09:00"
+        endTime: "11:00"
+        timeZone: "America/Los_Angeles"
+        dayOfWeek: 1  # Monday (0=Sunday, 1=Monday, etc.)
+
+      # Warning banner for specific month and day (recurring annually)
+      - summary: "**Annual Review Period**: Performance reviews are due by end of month."
+        type: warning
+        startTime: "00:00"
+        endTime: "23:59"
+        timeZone: "UTC"
+        month: 12
+        dayOfMonth: 31
+
+      # Info banner with Markdown formatting
+      - summary: |
+          **New Feature Available**:
+
+          - Enhanced build pipeline visualization
+          - Improved security scanning
+          - [View Documentation](https://docs.konflux.example.com)
+        type: info
+        startTime: "08:00"
+        endTime: "20:00"
+        timeZone: "Europe/London"

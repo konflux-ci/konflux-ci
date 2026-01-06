@@ -7,12 +7,25 @@ metadata:
   name: konflux-build-service
 spec:
   buildControllerManager:
-    replicas: 1
+    replicas: 2
     manager:
       resources:
         requests:
-          cpu: 30m
-          memory: 128Mi
+          cpu: 100m
+          memory: 256Mi
         limits:
-          cpu: 30m
-          memory: 128Mi
+          cpu: 500m
+          memory: 512Mi
+      env:
+        - name: PAC_WEBHOOK_URL
+          value: "http://pipelines-as-code-controller.pipelines-as-code.svc.cluster.local:8180"
+        - name: EXAMPLE_CUSTOM_CONFIG
+          valueFrom:
+            configMapKeyRef:
+              name: build-service-config
+              key: custom-config
+        - name: EXAMPLE_SECRET_VALUE
+          valueFrom:
+            secretKeyRef:
+              name: build-service-secret
+              key: secret-key
