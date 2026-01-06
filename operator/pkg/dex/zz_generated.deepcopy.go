@@ -89,6 +89,11 @@ func (in *DexParams) DeepCopyInto(out *DexParams) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.EnablePasswordDB != nil {
+		in, out := &in.EnablePasswordDB, &out.EnablePasswordDB
+		*out = new(bool)
+		**out = **in
+	}
 	if in.StaticPasswords != nil {
 		in, out := &in.StaticPasswords, &out.StaticPasswords
 		*out = make([]Password, len(*in))

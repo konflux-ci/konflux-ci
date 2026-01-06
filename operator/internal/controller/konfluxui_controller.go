@@ -499,9 +499,7 @@ func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *kon
 		dexConfig = dex.NewDexConfig(
 			effectiveEndpoint,
 			&dex.DexParams{
-				// password db must be enabled when the connector
-				// list is empty
-				EnablePasswordDB:            true,
+				// EnablePasswordDB defaults to true when no connectors are configured
 				ConfigureLoginWithOpenShift: &openShiftLoginEnabled,
 			},
 		)
