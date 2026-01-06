@@ -443,9 +443,10 @@ spec:
                     description: Annotations to add to the ingress resource.
                     type: object
                   enabled:
-                    default: false
-                    description: Enabled controls whether an Ingress resource should
-                      be created.
+                    description: |-
+                      Enabled controls whether an Ingress resource should be created.
+                      When nil (unset), defaults to true on OpenShift, false otherwise.
+                    nullable: true
                     type: boolean
                   host:
                     description: |-

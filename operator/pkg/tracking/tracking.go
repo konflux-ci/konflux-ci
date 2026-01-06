@@ -345,6 +345,11 @@ func (c *Client) cleanupOrphansForGVK(
 	if err := c.List(ctx, list, client.MatchingLabels{
 		ownerLabelKey: ownerLabelValue,
 	}); err != nil {
+		// If the CRD doesn't exist (e.g., ConsoleLink on non-OpenShift), skip cleanup
+		if meta.IsNoMatchError(err) {
+			log.V(1).Info("Skipping cleanup for GVK (CRD not installed)", "gvk", gvk.String())
+			return nil
+		}
 		return fmt.Errorf("failed to list resources: %w", err)
 	}
 

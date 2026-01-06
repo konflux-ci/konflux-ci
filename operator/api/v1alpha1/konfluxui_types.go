@@ -27,8 +27,10 @@ import (
 // IngressSpec defines the ingress configuration for KonfluxUI.
 type IngressSpec struct {
 	// Enabled controls whether an Ingress resource should be created.
-	// +kubebuilder:default=false
-	Enabled bool `json:"enabled,omitempty"`
+	// When nil (unset), defaults to true on OpenShift, false otherwise.
+	// +optional
+	// +nullable
+	Enabled *bool `json:"enabled,omitempty"`
 	// IngressClassName specifies which IngressClass to use for the ingress.
 	// +optional
 	IngressClassName *string `json:"ingressClassName,omitempty"`
@@ -179,8 +181,9 @@ func (s *KonfluxUISpec) GetDex() DexDeploymentSpec {
 // These methods encapsulate common conditional checks used throughout the controller.
 // -----------------------------------------------------------------------------
 
-// IsIngressEnabled returns true if ingress is explicitly enabled.
-func (k *KonfluxUI) IsIngressEnabled() bool {
+// GetIngressEnabledPreference returns the user's preference for ingress.
+// Returns nil if not explicitly configured, allowing callers to apply defaults.
+func (k *KonfluxUI) GetIngressEnabledPreference() *bool {
 	return k.Spec.GetIngress().Enabled
 }
 

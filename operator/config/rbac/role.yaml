@@ -162,6 +162,18 @@ rules:
 - apiGroups:
   - console.openshift.io
   resources:
+  - consolelinks
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - console.openshift.io
+  resources:
   - consoleyamlsamples
   verbs:
   - create

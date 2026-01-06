@@ -33,8 +33,11 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	consolev1 "github.com/openshift/api/console/v1"
+
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/consolelink"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/ingress"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
@@ -469,7 +472,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		enableIngressAndReconcile := func(ctx context.Context, host string) {
 			refreshUI(ctx)
 			ui.Spec.Ingress = &konfluxv1alpha1.IngressSpec{
-				Enabled: true,
+				Enabled: ptr.To(true),
 				Host:    host,
 			}
 			ExpectWithOffset(1, k8sClient.Update(ctx, ui)).To(Succeed())
@@ -547,7 +550,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 			By("setting Enabled to false in the KonfluxUI spec")
 			refreshUI(ctx)
-			ui.Spec.Ingress = &konfluxv1alpha1.IngressSpec{Enabled: false}
+			ui.Spec.Ingress = &konfluxv1alpha1.IngressSpec{Enabled: ptr.To(false)}
 			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
 			reconcileUI(ctx)
 
@@ -718,7 +721,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 				},
 				Spec: konfluxv1alpha1.KonfluxUISpec{
 					Ingress: &konfluxv1alpha1.IngressSpec{
-						Enabled: true,
+						Enabled: ptr.To(true),
 						Host:    "openshift-test.example.com",
 					},
 				},
@@ -916,6 +919,206 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Expect(sa.Annotations["serviceaccounts.openshift.io/oauth-redirecturi.dex"]).To(
 				Equal("https://openshift-test.example.com/idp/callback"),
 			)
+		})
+	})
+
+	Context("ConsoleLink reconciliation via Reconcile", Serial, func() {
+		var ui *konfluxv1alpha1.KonfluxUI
+		var reconciler *KonfluxUIReconciler
+		var openShiftClusterInfo *clusterinfo.Info
+		var defaultClusterInfo *clusterinfo.Info
+
+		// Helper: refresh UI from cluster
+		refreshUI := func(ctx context.Context) {
+			ExpectWithOffset(1, k8sClient.Get(ctx, types.NamespacedName{Name: ui.Name}, ui)).To(Succeed())
+		}
+
+		// Helper: reconcile and expect success
+		reconcileUI := func(ctx context.Context) {
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: ui.Name},
+			})
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+		}
+
+		// Helper: check if ConsoleLink exists
+		consoleLinkExists := func(ctx context.Context) bool {
+			cl := &consolev1.ConsoleLink{}
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name: consolelink.ConsoleLinkName,
+			}, cl)
+			return err == nil
+		}
+
+		// Helper: get ConsoleLink resource
+		getConsoleLink := func(ctx context.Context) *consolev1.ConsoleLink {
+			cl := &consolev1.ConsoleLink{}
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name: consolelink.ConsoleLinkName,
+			}, cl)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			return cl
+		}
+
+		BeforeEach(func(ctx context.Context) {
+			By("cleaning up any existing ConsoleLink from previous tests")
+			existingCL := &consolev1.ConsoleLink{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: consolelink.ConsoleLinkName,
+				},
+			}
+			_ = k8sClient.Delete(ctx, existingCL)
+
+			By("creating mock cluster info for OpenShift and non-OpenShift platforms")
+			var err error
+			openShiftClusterInfo, err = clusterinfo.DetectWithClient(&mockDiscoveryClient{
+				resources: map[string]*metav1.APIResourceList{
+					"config.openshift.io/v1": {
+						APIResources: []metav1.APIResource{
+							{Kind: "ClusterVersion"},
+						},
+					},
+				},
+				serverVersion: &version.Info{GitVersion: "v1.29.0"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			defaultClusterInfo, err = clusterinfo.DetectWithClient(&mockDiscoveryClient{
+				resources:     map[string]*metav1.APIResourceList{},
+				serverVersion: &version.Info{GitVersion: "v1.29.0"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating the KonfluxUI resource with ingress enabled")
+			ui = &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: KonfluxUICRName,
+				},
+				Spec: konfluxv1alpha1.KonfluxUISpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled: ptr.To(true),
+						Host:    "consolelink-test.example.com",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+
+			reconciler = &KonfluxUIReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ObjectStore: objectStore,
+				ClusterInfo: nil, // Will be set in individual tests
+			}
+		})
+
+		AfterEach(func(ctx context.Context) {
+			By("cleaning up ConsoleLink")
+			existingCL := &consolev1.ConsoleLink{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: consolelink.ConsoleLinkName,
+				},
+			}
+			_ = k8sClient.Delete(ctx, existingCL)
+
+			By("cleaning up KonfluxUI resource")
+			_ = k8sClient.Delete(ctx, ui)
+		})
+
+		It("Should create ConsoleLink when ingress is enabled and running on OpenShift", func(ctx context.Context) {
+			By("setting ClusterInfo to OpenShift")
+			reconciler.ClusterInfo = openShiftClusterInfo
+
+			By("reconciling the resource")
+			reconcileUI(ctx)
+
+			By("verifying the ConsoleLink was created")
+			Expect(consoleLinkExists(ctx)).To(BeTrue())
+
+			By("verifying the ConsoleLink has correct configuration")
+			cl := getConsoleLink(ctx)
+			Expect(cl.Spec.Href).To(Equal("https://consolelink-test.example.com"))
+			Expect(cl.Spec.Text).To(Equal("Konflux Console"))
+			Expect(cl.Spec.Location).To(Equal(consolev1.ApplicationMenu))
+			Expect(cl.Spec.ApplicationMenu).NotTo(BeNil())
+			Expect(cl.Spec.ApplicationMenu.Section).To(Equal("Konflux"))
+		})
+
+		It("Should NOT create ConsoleLink when NOT running on OpenShift", func(ctx context.Context) {
+			By("setting ClusterInfo to non-OpenShift")
+			reconciler.ClusterInfo = defaultClusterInfo
+
+			By("reconciling the resource")
+			reconcileUI(ctx)
+
+			By("verifying the ConsoleLink was NOT created")
+			Expect(consoleLinkExists(ctx)).To(BeFalse())
+		})
+
+		It("Should NOT create ConsoleLink when ClusterInfo is nil", func(ctx context.Context) {
+			By("keeping ClusterInfo as nil")
+			reconciler.ClusterInfo = nil
+
+			By("reconciling the resource")
+			reconcileUI(ctx)
+
+			By("verifying the ConsoleLink was NOT created")
+			Expect(consoleLinkExists(ctx)).To(BeFalse())
+		})
+
+		It("Should NOT create ConsoleLink when ingress is disabled on OpenShift", func(ctx context.Context) {
+			By("setting ClusterInfo to OpenShift")
+			reconciler.ClusterInfo = openShiftClusterInfo
+
+			By("disabling ingress")
+			refreshUI(ctx)
+			ui.Spec.Ingress = &konfluxv1alpha1.IngressSpec{Enabled: ptr.To(false)}
+			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
+
+			By("reconciling the resource")
+			reconcileUI(ctx)
+
+			By("verifying the ConsoleLink was NOT created")
+			Expect(consoleLinkExists(ctx)).To(BeFalse())
+		})
+
+		It("Should delete ConsoleLink when ingress is disabled", func(ctx context.Context) {
+			By("setting ClusterInfo to OpenShift")
+			reconciler.ClusterInfo = openShiftClusterInfo
+
+			By("first reconciling to create the ConsoleLink")
+			reconcileUI(ctx)
+			Expect(consoleLinkExists(ctx)).To(BeTrue())
+
+			By("disabling ingress")
+			refreshUI(ctx)
+			ui.Spec.Ingress = &konfluxv1alpha1.IngressSpec{Enabled: ptr.To(false)}
+			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
+
+			By("reconciling again")
+			reconcileUI(ctx)
+
+			By("verifying the ConsoleLink was deleted")
+			Expect(consoleLinkExists(ctx)).To(BeFalse())
+		})
+
+		It("Should update ConsoleLink when hostname changes", func(ctx context.Context) {
+			By("setting ClusterInfo to OpenShift")
+			reconciler.ClusterInfo = openShiftClusterInfo
+
+			By("reconciling to create the ConsoleLink")
+			reconcileUI(ctx)
+			Expect(getConsoleLink(ctx).Spec.Href).To(Equal("https://consolelink-test.example.com"))
+
+			By("updating the hostname")
+			refreshUI(ctx)
+			ui.Spec.Ingress.Host = "updated-consolelink.example.com"
+			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
+
+			By("reconciling again")
+			reconcileUI(ctx)
+
+			By("verifying the ConsoleLink href was updated")
+			Expect(getConsoleLink(ctx).Spec.Href).To(Equal("https://updated-consolelink.example.com"))
 		})
 	})
 })

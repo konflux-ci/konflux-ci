@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
@@ -202,8 +203,14 @@ func DetermineEndpointURL(
 ) (*url.URL, error) {
 	ingressSpec := ui.Spec.GetIngress()
 
+	// Determine if ingress is effectively enabled:
+	// - Explicitly enabled (true), OR
+	// - Unset (nil) AND on OpenShift (defaults to true on OpenShift)
+	isOnOpenShift := clusterInfo != nil && clusterInfo.IsOpenShift()
+	ingressEnabled := ptr.Deref(ingressSpec.Enabled, isOnOpenShift)
+
 	// If ingress is not enabled, use defaults
-	if !ingressSpec.Enabled {
+	if !ingressEnabled {
 		return &url.URL{
 			Scheme: "https",
 			Host:   fmt.Sprintf("%s:%s", DefaultProxyHostname, DefaultProxyPort),

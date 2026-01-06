@@ -19,7 +19,9 @@ package controller
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -34,6 +36,9 @@ import (
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
+
+	// Import openshift/api for ConsoleLink types and CRDs
+	consolev1 "github.com/openshift/api/console/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -64,6 +69,9 @@ var _ = BeforeSuite(func() {
 	err = konfluxv1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = consolev1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
 	// +kubebuilder:scaffold:scheme
 
 	// Parse all embedded manifests into an ObjectStore
@@ -72,7 +80,10 @@ var _ = BeforeSuite(func() {
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "config", "crd", "bases"),
+			filepath.Join(getGoModuleDir("github.com/openshift/api"), "console", "v1", "zz_generated.crd-manifests"),
+		},
 		ErrorIfCRDPathMissing: true,
 	}
 
@@ -119,4 +130,16 @@ func getFirstFoundEnvTestBinaryDir() string {
 		}
 	}
 	return ""
+}
+
+// getGoModuleDir returns the directory path of a Go module in the module cache.
+// This is used to reference CRD files from external modules like github.com/openshift/api.
+func getGoModuleDir(modulePath string) string {
+	cmd := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", modulePath)
+	output, err := cmd.Output()
+	if err != nil {
+		logf.Log.Error(err, "Failed to get Go module directory", "module", modulePath)
+		return ""
+	}
+	return strings.TrimSpace(string(output))
 }
