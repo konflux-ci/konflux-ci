@@ -37,8 +37,9 @@ import (
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 
-	// Import openshift/api for ConsoleLink types and CRDs
+	// Import openshift/api for ConsoleLink and SecurityContextConstraints types and CRDs
 	consolev1 "github.com/openshift/api/console/v1"
+	securityv1 "github.com/openshift/api/security/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -72,6 +73,9 @@ var _ = BeforeSuite(func() {
 	err = consolev1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = securityv1.Install(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
 	// +kubebuilder:scaffold:scheme
 
 	// Parse all embedded manifests into an ObjectStore
@@ -83,6 +87,7 @@ var _ = BeforeSuite(func() {
 		CRDDirectoryPaths: []string{
 			filepath.Join("..", "..", "config", "crd", "bases"),
 			filepath.Join(getGoModuleDir("github.com/openshift/api"), "console", "v1", "zz_generated.crd-manifests"),
+			filepath.Join(getGoModuleDir("github.com/openshift/api"), "security", "v1", "zz_generated.crd-manifests"),
 		},
 		ErrorIfCRDPathMissing: true,
 	}

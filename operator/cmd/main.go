@@ -41,6 +41,7 @@ import (
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	consolev1 "github.com/openshift/api/console/v1"
+	securityv1 "github.com/openshift/api/security/v1"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller"
@@ -59,6 +60,7 @@ func init() {
 	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
 	utilruntime.Must(certmanagerv1.AddToScheme(scheme))
 	utilruntime.Must(consolev1.AddToScheme(scheme))
+	utilruntime.Must(securityv1.Install(scheme))
 
 	utilruntime.Must(konfluxv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
@@ -267,6 +269,7 @@ func main() {
 		Client:      mgr.GetClient(),
 		Scheme:      mgr.GetScheme(),
 		ObjectStore: objectStore,
+		ClusterInfo: clusterInfo,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxBuildService")
 		os.Exit(1)

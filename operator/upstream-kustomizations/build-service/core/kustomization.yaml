@@ -6,6 +6,7 @@ resources:
   - build-config-rolebinding.yaml
   - appstudio-pipelines-runner.yaml
   - build-pipeline-runner-rolebinding.yaml
+  - appstudio-pipeline-scc.yaml
 
 namespace: build-service
 

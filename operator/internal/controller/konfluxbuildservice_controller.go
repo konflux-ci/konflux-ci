@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	securityv1 "github.com/openshift/api/security/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -30,6 +31,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
@@ -50,6 +52,7 @@ type KonfluxBuildServiceReconciler struct {
 	client.Client
 	Scheme      *runtime.Scheme
 	ObjectStore *manifests.ObjectStore
+	ClusterInfo *clusterinfo.Info
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxbuildservices,verbs=get;list;watch;create;update;patch;delete
@@ -68,6 +71,7 @@ type KonfluxBuildServiceReconciler struct {
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=build-pipeline-runner-rolebinding;build-service-manager-rolebinding;build-service-metrics-auth-rolebinding,verbs=bind
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=security.openshift.io,resources=securitycontextconstraints,verbs=get;list;watch;create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -141,6 +145,17 @@ func (r *KonfluxBuildServiceReconciler) applyManifests(ctx context.Context, owne
 		if err := setOwnership(obj, owner, string(manifests.BuildService), r.Scheme); err != nil {
 			return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
 				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.BuildService, err)
+		}
+
+		// Skip OpenShift SecurityContextConstraints when not running on OpenShift
+		if _, isSCC := obj.(*securityv1.SecurityContextConstraints); isSCC {
+			if r.ClusterInfo == nil || !r.ClusterInfo.IsOpenShift() {
+				log.V(1).Info("Skipping OpenShift-specific resource: not running on OpenShift",
+					"kind", "SecurityContextConstraints",
+					"name", obj.GetName(),
+				)
+				continue
+			}
 		}
 
 		if err := applyObject(ctx, r.Client, obj, FieldManagerBuildService); err != nil {
