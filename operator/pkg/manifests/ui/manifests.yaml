@@ -311,18 +311,16 @@ spec:
   ipFamilyPolicy: SingleStack
   ports:
   - name: web
-    nodePort: 30010
     port: 8888
     protocol: TCP
     targetPort: web
   - name: web-tls
-    nodePort: 30011
     port: 9443
     protocol: TCP
     targetPort: web-tls
   selector:
     app: proxy
-  type: NodePort
+  type: ClusterIP
 ---
 apiVersion: apps/v1
 kind: Deployment

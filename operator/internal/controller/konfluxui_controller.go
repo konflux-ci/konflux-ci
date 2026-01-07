@@ -58,6 +58,9 @@ const (
 	proxyDeploymentName = "proxy"
 	dexDeploymentName   = "dex"
 
+	// Service names
+	proxyServiceName = "proxy"
+
 	// Container names
 	nginxContainerName       = "nginx"
 	oauth2ProxyContainerName = "oauth2-proxy"
@@ -300,6 +303,11 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 			}
 		}
 
+		// Apply customizations for services
+		if service, ok := obj.(*corev1.Service); ok {
+			applyUIServiceCustomizations(service, ui)
+		}
+
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			gvk := obj.GetObjectKind().GroupVersionKind()
 			if gvk.Group == CertManagerGroup || gvk.Group == KyvernoGroup {
@@ -341,6 +349,31 @@ func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv
 		}
 	}
 	return nil
+}
+
+// applyUIServiceCustomizations applies user-defined customizations to UI services.
+func applyUIServiceCustomizations(service *corev1.Service, ui *konfluxv1alpha1.KonfluxUI) {
+	if service.Name != proxyServiceName {
+		return
+	}
+
+	nodePortSpec := ui.Spec.GetNodePortService()
+	if nodePortSpec == nil {
+		return
+	}
+
+	// Change Service type to NodePort
+	service.Spec.Type = corev1.ServiceTypeNodePort
+
+	// Set the HTTPS NodePort if specified
+	if nodePortSpec.HTTPSPort != nil {
+		for i := range service.Spec.Ports {
+			if service.Spec.Ports[i].Name == "web-tls" {
+				service.Spec.Ports[i].NodePort = *nodePortSpec.HTTPSPort
+				break
+			}
+		}
+	}
 }
 
 // buildProxyOverlay builds the pod overlay for the proxy deployment.
