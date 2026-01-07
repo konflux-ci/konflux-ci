@@ -130,6 +130,12 @@ func (r *KonfluxInternalRegistryReconciler) Reconcile(ctx context.Context, req c
 		return ctrl.Result{}, err
 	}
 
+	// Update status
+	if err := r.Status().Update(ctx, registry); err != nil {
+		log.Error(err, "Failed to update status")
+		return ctrl.Result{}, err
+	}
+
 	log.Info("Successfully reconciled KonfluxInternalRegistry")
 	return ctrl.Result{}, nil
 }

@@ -26,7 +26,6 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 )
@@ -268,12 +267,17 @@ func CopySubCRStatus(
 }
 
 // UpdateComponentStatuses is a generic helper that checks the status of all owned Deployments
-// and updates the CR's status conditions. It can be used by any controller that manages
+// and updates the CR's status conditions in memory. It can be used by any controller that manages
 // deployments and implements ConditionAccessor.
+//
+// This function only modifies the CR object in memory. The caller is responsible for persisting
+// the status update to the Kubernetes API (e.g., via k8sClient.Status().Update()).
+// This allows the caller to batch multiple status changes and perform a single update,
+// avoiding conflicts when multiple changes occur during a reconcile loop.
 //
 // Parameters:
 //   - ctx: The context for the operation
-//   - k8sClient: The Kubernetes client for listing deployments and updating status
+//   - k8sClient: The Kubernetes client for listing deployments
 //   - cr: The custom resource that implements ConditionAccessor (e.g., KonfluxBuildService, KonfluxIntegrationService)
 //   - readyConditionType: The condition type to use for the overall Ready condition (e.g., "Ready")
 func UpdateComponentStatuses(
@@ -282,8 +286,6 @@ func UpdateComponentStatuses(
 	cr konfluxv1alpha1.ConditionAccessor,
 	readyConditionType string,
 ) error {
-	log := logf.FromContext(ctx)
-
 	// List all deployments owned by this CR instance
 	deploymentList := &appsv1.DeploymentList{}
 	if err := k8sClient.List(ctx, deploymentList, client.MatchingLabels{
@@ -302,12 +304,6 @@ func UpdateComponentStatuses(
 
 	// Set the overall Ready condition
 	SetOverallReadyCondition(cr, readyConditionType, summary)
-
-	// Update the status subresource
-	if err := k8sClient.Status().Update(ctx, cr); err != nil {
-		log.Error(err, "Failed to update status")
-		return err
-	}
 
 	return nil
 }
