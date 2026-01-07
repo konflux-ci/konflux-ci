@@ -922,6 +922,155 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 	})
 
+	Context("NodePort Service configuration via Reconcile", Serial, func() {
+		var ui *konfluxv1alpha1.KonfluxUI
+		var reconciler *KonfluxUIReconciler
+
+		// Helper: refresh UI from cluster
+		refreshUI := func(ctx context.Context) {
+			ExpectWithOffset(1, k8sClient.Get(ctx, types.NamespacedName{Name: ui.Name}, ui)).To(Succeed())
+		}
+
+		// Helper: reconcile and expect success
+		reconcileUI := func(ctx context.Context) {
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: ui.Name},
+			})
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+		}
+
+		// Helper: get proxy Service
+		getProxyService := func(ctx context.Context) *corev1.Service {
+			svc := &corev1.Service{}
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name:      proxyServiceName,
+				Namespace: uiNamespace,
+			}, svc)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			return svc
+		}
+
+		BeforeEach(func(ctx context.Context) {
+			By("creating the KonfluxUI resource")
+			ui = &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: KonfluxUICRName,
+				},
+				Spec: konfluxv1alpha1.KonfluxUISpec{},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+
+			reconciler = &KonfluxUIReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ObjectStore: objectStore,
+			}
+		})
+
+		AfterEach(func(ctx context.Context) {
+			By("cleaning up KonfluxUI resource")
+			_ = k8sClient.Delete(ctx, ui)
+		})
+
+		It("Should create proxy Service as ClusterIP by default", func(ctx context.Context) {
+			By("reconciling the resource")
+			reconcileUI(ctx)
+
+			By("verifying the proxy Service is ClusterIP")
+			svc := getProxyService(ctx)
+			Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
+		})
+
+		It("Should create proxy Service as NodePort when nodePortService is configured", func(ctx context.Context) {
+			By("configuring nodePortService")
+			refreshUI(ctx)
+			ui.Spec.Ingress = &konfluxv1alpha1.IngressSpec{
+				NodePortService: &konfluxv1alpha1.NodePortServiceSpec{},
+			}
+			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
+
+			By("reconciling the resource")
+			reconcileUI(ctx)
+
+			By("verifying the proxy Service is NodePort")
+			svc := getProxyService(ctx)
+			Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeNodePort))
+		})
+
+		It("Should set specific HTTPS NodePort when httpsPort is specified", func(ctx context.Context) {
+			By("configuring nodePortService with specific httpsPort")
+			refreshUI(ctx)
+			ui.Spec.Ingress = &konfluxv1alpha1.IngressSpec{
+				NodePortService: &konfluxv1alpha1.NodePortServiceSpec{
+					HTTPSPort: ptr.To(int32(30443)),
+				},
+			}
+			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
+
+			By("reconciling the resource")
+			reconcileUI(ctx)
+
+			By("verifying the proxy Service has the specified NodePort")
+			svc := getProxyService(ctx)
+			Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeNodePort))
+
+			var httpsPort *corev1.ServicePort
+			for i := range svc.Spec.Ports {
+				if svc.Spec.Ports[i].Name == "web-tls" {
+					httpsPort = &svc.Spec.Ports[i]
+					break
+				}
+			}
+			Expect(httpsPort).NotTo(BeNil())
+			Expect(httpsPort.NodePort).To(Equal(int32(30443)))
+		})
+
+		It("Should change proxy Service from ClusterIP to NodePort when nodePortService is added", func(ctx context.Context) {
+			By("reconciling without nodePortService")
+			reconcileUI(ctx)
+			Expect(getProxyService(ctx).Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
+
+			By("adding nodePortService configuration")
+			refreshUI(ctx)
+			ui.Spec.Ingress = &konfluxv1alpha1.IngressSpec{
+				NodePortService: &konfluxv1alpha1.NodePortServiceSpec{
+					HTTPSPort: ptr.To(int32(30444)),
+				},
+			}
+			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
+
+			By("reconciling again")
+			reconcileUI(ctx)
+
+			By("verifying the proxy Service changed to NodePort")
+			svc := getProxyService(ctx)
+			Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeNodePort))
+		})
+
+		It("Should change proxy Service from NodePort to ClusterIP when nodePortService is removed", func(ctx context.Context) {
+			By("configuring nodePortService and reconciling")
+			refreshUI(ctx)
+			ui.Spec.Ingress = &konfluxv1alpha1.IngressSpec{
+				NodePortService: &konfluxv1alpha1.NodePortServiceSpec{},
+			}
+			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
+			reconcileUI(ctx)
+			Expect(getProxyService(ctx).Spec.Type).To(Equal(corev1.ServiceTypeNodePort))
+
+			By("removing nodePortService configuration")
+			refreshUI(ctx)
+			ui.Spec.Ingress = nil
+			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
+
+			By("reconciling again")
+			reconcileUI(ctx)
+
+			By("verifying the proxy Service changed back to ClusterIP")
+			svc := getProxyService(ctx)
+			Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
+		})
+	})
+
 	Context("ConsoleLink reconciliation via Reconcile", Serial, func() {
 		var ui *konfluxv1alpha1.KonfluxUI
 		var reconciler *KonfluxUIReconciler

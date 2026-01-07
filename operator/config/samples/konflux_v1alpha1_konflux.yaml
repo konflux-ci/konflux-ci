@@ -8,6 +8,9 @@ metadata:
 spec:
   ui:
     spec:
+      ingress:
+        nodePortService:
+          httpsPort: 30011
       proxy:
         replicas: 1
         nginx:

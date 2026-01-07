@@ -1726,6 +1726,22 @@ spec:
                             description: IngressClassName specifies which IngressClass
                               to use for the ingress.
                             type: string
+                          nodePortService:
+                            description: |-
+                              NodePortService configures the proxy Service as a NodePort type.
+                              When set, the proxy Service will be exposed via NodePort instead of ClusterIP.
+                              This is useful for accessing Konflux UI from outside the cluster without an Ingress controller.
+                            properties:
+                              httpsPort:
+                                description: |-
+                                  HTTPSPort is the NodePort to use for the HTTPS port.
+                                  If not specified, Kubernetes will allocate a port automatically.
+                                  This is useful for exposing Konflux UI to the outside world without an Ingress controller.
+                                format: int32
+                                maximum: 32767
+                                minimum: 30000
+                                type: integer
+                            type: object
                           tlsSecretName:
                             description: |-
                               TLSSecretName is the name of the Kubernetes TLS secret to use for the ingress.

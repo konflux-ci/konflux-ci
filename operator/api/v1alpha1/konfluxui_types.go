@@ -24,6 +24,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// NodePortServiceSpec defines the NodePort service configuration for the proxy.
+type NodePortServiceSpec struct {
+	// HTTPSPort is the NodePort to use for the HTTPS port.
+	// If not specified, Kubernetes will allocate a port automatically.
+	// This is useful for exposing Konflux UI to the outside world without an Ingress controller.
+	// +optional
+	// +kubebuilder:validation:Minimum=30000
+	// +kubebuilder:validation:Maximum=32767
+	HTTPSPort *int32 `json:"httpsPort,omitempty"`
+}
+
 // IngressSpec defines the ingress configuration for KonfluxUI.
 type IngressSpec struct {
 	// Enabled controls whether an Ingress resource should be created.
@@ -45,6 +56,11 @@ type IngressSpec struct {
 	// If not specified, TLS will not be configured on the ingress.
 	// +optional
 	TLSSecretName string `json:"tlsSecretName,omitempty"`
+	// NodePortService configures the proxy Service as a NodePort type.
+	// When set, the proxy Service will be exposed via NodePort instead of ClusterIP.
+	// This is useful for accessing Konflux UI from outside the cluster without an Ingress controller.
+	// +optional
+	NodePortService *NodePortServiceSpec `json:"nodePortService,omitempty"`
 }
 
 // ProxyDeploymentSpec defines customizations for the proxy deployment.
@@ -159,6 +175,14 @@ func (s *KonfluxUISpec) GetIngress() IngressSpec {
 		return IngressSpec{}
 	}
 	return *s.Ingress
+}
+
+// GetNodePortService returns the NodePortServiceSpec if configured, nil otherwise.
+func (s *KonfluxUISpec) GetNodePortService() *NodePortServiceSpec {
+	if s.Ingress == nil {
+		return nil
+	}
+	return s.Ingress.NodePortService
 }
 
 // GetProxy returns the ProxyDeploymentSpec with safe defaults if nil.
