@@ -1,6 +1,52 @@
 ---
-apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: appstudio-pipelines-runner
 rules:
+  - verbs:
+      - get
+      - list
+    apiGroups:
+      - ''
+    resources:
+      - secrets
+  - verbs:
+      - use
+    apiGroups:
+      - security.openshift.io
+    resources:
+      - securitycontextconstraints
+    resourceNames:
+      - appstudio-pipelines-scc
+  - verbs:
+      - get
+      - list
+    apiGroups:
+      - appstudio.redhat.com
+    resources:
+      - enterprisecontractpolicies
+  - verbs:
+      - get
+      - create
+      - delete
+      - list
+      - watch
+    apiGroups:
+      - eaas.konflux-ci.dev
+    resources:
+      - namespaces
+  - verbs:
+      - get
+      - list
+    apiGroups:
+      - tekton.dev
+    resources:
+      - pipelineruns
+      - taskruns
+  - verbs:
+      - "*"
+    apiGroups:
+      - ci.openshift.org
+    resources:
+      - testplatformclusters
