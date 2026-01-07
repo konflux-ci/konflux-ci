@@ -83,6 +83,12 @@ func (r *KonfluxApplicationAPIReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, err
 	}
 
+	// Update status
+	if err := r.Status().Update(ctx, applicationAPI); err != nil {
+		log.Error(err, "Failed to update status")
+		return ctrl.Result{}, err
+	}
+
 	log.Info("Successfully reconciled KonfluxApplicationAPI")
 	return ctrl.Result{}, nil
 }

@@ -109,6 +109,12 @@ func (r *KonfluxBuildServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, err
 	}
 
+	// Update status
+	if err := r.Status().Update(ctx, buildService); err != nil {
+		log.Error(err, "Failed to update status")
+		return ctrl.Result{}, err
+	}
+
 	log.Info("Successfully reconciled KonfluxBuildService")
 	return ctrl.Result{}, nil
 }

@@ -98,6 +98,12 @@ func (r *KonfluxImageControllerReconciler) Reconcile(ctx context.Context, req ct
 		return ctrl.Result{}, err
 	}
 
+	// Update status
+	if err := r.Status().Update(ctx, imageController); err != nil {
+		log.Error(err, "Failed to update status")
+		return ctrl.Result{}, err
+	}
+
 	log.Info("Successfully reconciled KonfluxImageController")
 	return ctrl.Result{}, nil
 }

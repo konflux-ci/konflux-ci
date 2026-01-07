@@ -102,6 +102,12 @@ func (r *KonfluxNamespaceListerReconciler) Reconcile(ctx context.Context, req ct
 		return ctrl.Result{}, err
 	}
 
+	// Update status
+	if err := r.Status().Update(ctx, konfluxNamespaceLister); err != nil {
+		log.Error(err, "Failed to update status")
+		return ctrl.Result{}, err
+	}
+
 	log.Info("Successfully reconciled KonfluxNamespaceLister")
 	return ctrl.Result{}, nil
 }

@@ -123,6 +123,12 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
+	// Update status
+	if err := r.Status().Update(ctx, certManager); err != nil {
+		log.Error(err, "Failed to update status")
+		return ctrl.Result{}, err
+	}
+
 	log.Info("Successfully reconciled KonfluxCertManager")
 	return ctrl.Result{}, nil
 }

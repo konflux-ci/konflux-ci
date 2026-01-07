@@ -92,6 +92,12 @@ func (r *KonfluxRBACReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
+	// Update status
+	if err := r.Status().Update(ctx, konfluxRBAC); err != nil {
+		log.Error(err, "Failed to update status")
+		return ctrl.Result{}, err
+	}
+
 	log.Info("Successfully reconciled KonfluxRBAC")
 	return ctrl.Result{}, nil
 }
