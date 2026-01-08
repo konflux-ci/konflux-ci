@@ -17,16 +17,7 @@ staticClients:
   name: 'oauth2-proxy'
   secretEnv: 'CLIENT_SECRET'
 enablePasswordDB: true
-staticPasswords:
-- email: "user1@konflux.dev"
-  # bcrypt hash of the string "password": $(echo password | htpasswd -BinC 10 admin | cut -d: -f2)
-  hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" # notsecret
-  username: "user1"
-  userID: "7138d2fe-724e-4e86-af8a-db7c4b080e20"
-- email: "user2@konflux.dev"
-  # bcrypt hash of the string "password": $(echo password | htpasswd -BinC 10 admin | cut -d: -f2)
-  hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" # notsecret
-  username: "user2"
-  userID: "ea8e8ee1-2283-4e03-83d4-b00f8b821b64"
+# Demo user configuration removed - these should be added by demo/example repositories
+# that need authentication for their specific use case
 telemetry:
   http: 0.0.0.0:5558
