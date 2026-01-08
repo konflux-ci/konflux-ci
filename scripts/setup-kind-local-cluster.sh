@@ -196,7 +196,7 @@ echo "Reverting kind config to original state..."
 
 sleep 2
 
-# Optionally increase the Podman PID limit
+# Optionally increase the Podman PID limit if the feature is enabled and Podman is the active runtime.
 if [[ "${INCREASE_PODMAN_PIDS_LIMIT}" -eq 1 ]] && \
    command -v podman &> /dev/null && \
    [ -n "$(podman ps -q --filter 'name=^konflux-control-plane$')" ]; then
