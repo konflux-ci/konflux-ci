@@ -1,0 +1,228 @@
+name: Operator Integration Tests (ARM64)
+
+on:
+    pull_request_target:
+      types: [opened, synchronize, reopened]
+      branches: [ "main" ]
+    merge_group:
+      types: [checks_requested]
+
+jobs:
+  check-prerequisites:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check prerequisites for running Operator E2E test
+      run: |
+        if [ "${{ github.event_name }}" != 'pull_request_target' ]; then
+          echo "The workflow is not triggered from PR, but ${{ github.event_name }} - skipping further checks."
+          exit 0
+        fi
+
+        WHITELISTED_BOT_NAMES=(
+          "renovate[bot]"
+          "red-hat-konflux[bot]"
+          "github-actions[bot]"
+          "konflux-ci-update-bot[bot]"
+        )
+        REQUIRED_LABEL_NAME="ok-to-test"
+
+        ORG="${{ github.repository_owner }}"
+        PR_AUTHOR=$(jq --raw-output .pull_request.user.login $GITHUB_EVENT_PATH)
+        echo "PR author: $PR_AUTHOR"
+        PR_LABELS=$(jq --raw-output .pull_request.labels[].name $GITHUB_EVENT_PATH)
+
+        # Check if PR author is in the whitelisted bots list
+        BOT_WHITELISTED=false
+        for BOT_NAME in "${WHITELISTED_BOT_NAMES[@]}"; do
+          if [ "$PR_AUTHOR" == "$BOT_NAME" ]; then
+            BOT_WHITELISTED=true
+            echo "PR author is $BOT_NAME, skipping further checks."
+            break
+          fi
+        done
+
+        if [ "$BOT_WHITELISTED" == "true" ]; then
+          exit 0
+        fi
+
+        if [[ "$PR_LABELS" == *$REQUIRED_LABEL_NAME* ]]; then
+          echo "PR has '$REQUIRED_LABEL_NAME' label, skipping further checks."
+          exit 0
+        fi
+
+        if gh api "/orgs/$ORG/members/$PR_AUTHOR"; then
+          echo "PR author is a member of $ORG GitHub organization, skipping further checks"
+          exit 0
+        fi
+
+        # Create comma-separated list for error message
+        BOT_LIST=$(IFS=','; echo "${WHITELISTED_BOT_NAMES[*]}")
+
+        ERROR_SUMMARY=$(cat <<EOF
+
+        ### ❌ Cannot run Operator E2E test (ARM64) - at least one of the following conditions must be met:
+        * PR author is one of: $BOT_LIST
+        * PR has label '$REQUIRED_LABEL_NAME'
+        * PR author is a public member of '$ORG' GitHub organization
+        EOF
+        )
+        echo "$ERROR_SUMMARY" >> $GITHUB_STEP_SUMMARY
+        echo "$ERROR_SUMMARY"
+
+        exit 1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+
+  check-changes:
+    name: Check for relevant changes
+    runs-on: ubuntu-slim
+    outputs:
+      operator: ${{ steps.changed-files.outputs.any_changed }}
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Check for changes
+        uses: tj-actions/changed-files@v47
+        id: changed-files
+        with:
+          files: |
+            operator/**
+            .github/workflows/operator-test-e2e-arm.yaml
+
+  test-integration-arm:
+    name: Run Operator Integration Tests (ARM64)
+    runs-on: ubuntu-24.04-arm
+    needs: [check-prerequisites, check-changes]
+    if: needs.check-changes.outputs.operator == 'true'
+    env:
+      # renovate: datasource=github-releases depName=kubernetes-sigs/kind
+      KIND_VERSION: "0.31.0"
+      # renovate: datasource=github-releases depName=kubernetes/kubernetes
+      KUBECTL_VERSION: "1.35.0"
+      OPERATOR_IMAGE: example.com/konflux-operator:v0.0.1-arm64
+      KIND_CLUSTER: konflux-operator-test-e2e-arm
+    defaults:
+      run:
+        working-directory: operator
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          docker-images: false
+
+      - name: Clone the code
+        uses: actions/checkout@v6
+        with:
+          ref: "${{ github.event.pull_request.head.sha }}"
+
+      - name: Disable AppArmor
+        # works around a change in ubuntu 24.04 that restricts Linux namespace access
+        # for unprivileged users
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: operator/go.mod
+          cache-dependency-path: operator/go.sum
+
+      - name: Install kind (ARM64)
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/v${KIND_VERSION}/kind-linux-arm64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+
+      - name: Install kubectl (ARM64)
+        run: |
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/arm64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/kubectl
+
+      - name: Verify kind installation
+        run: kind version
+
+      - name: Deploy kind cluster
+        run: |
+          make setup-test-e2e
+
+      - name: Show version information
+        run: |
+          kubectl version
+          kind version
+          uname -m
+
+      - name: Deploying Dependencies
+        working-directory: ${{ github.workspace }}
+        env:
+          SKIP_DEX: "true"
+          SKIP_KONFLUX_INFO: "true"
+          SKIP_CLUSTER_ISSUER: "true"
+          SKIP_INTERNAL_REGISTRY: "true"
+        run: |
+          ./deploy-deps.sh
+
+      - name: Build Operator Image (ARM64)
+        run: |
+          make docker-build IMG=$OPERATOR_IMAGE
+
+      - name: Load Operator Image to Kind
+        run: |
+          kind load docker-image $OPERATOR_IMAGE --name $KIND_CLUSTER
+
+      - name: Install Operator CRDs
+        run: make install
+
+      - name: Deploy Operator Controller
+        run: |
+          make deploy IMG=$OPERATOR_IMAGE
+
+      - name: Wait for Operator to be Ready
+        run: |
+          kubectl wait --for=condition=Available deployment/konflux-operator-controller-manager -n konflux-operator --timeout=5m
+
+      - name: Create Konflux CR Instance
+        working-directory: ${{ github.workspace }}
+        run: |
+          kubectl apply -f operator/config/samples/konflux_v1alpha1_konflux.yaml
+
+      - name: Wait for Konflux CR to be Ready
+        run: |
+          # Wait for the Konflux CR to be ready
+          # If the operator deployment is ready and the CR is ready, the operator should have
+          # ensured all underlying services (webhooks, CRDs, etc.) are ready
+          echo "Waiting for Konflux CR to be ready..."
+          kubectl wait --for=jsonpath='{.status.conditions[?(@.type=="Ready")].status}'=True \
+            konflux/konflux --timeout=15m
+          echo "Konflux CR is ready!"
+
+      - name: List namespaces
+        run: |
+          kubectl get namespace
+
+      - name: Deploy Test Resources
+        working-directory: ${{ github.workspace }}
+        run: |
+          ./deploy-test-resources.sh
+
+      - name: Run Konflux Integration Tests
+        working-directory: ${{ github.workspace }}
+        run: |
+          cd test/go-tests
+          go test ./...
+
+      - name: Generate error logs
+        if: ${{ !cancelled() }}
+        working-directory: ${{ github.workspace }}
+        run: |
+          ./generate-err-logs.sh
+
+      - name: Archive logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: logs-arm64
+          path: logs

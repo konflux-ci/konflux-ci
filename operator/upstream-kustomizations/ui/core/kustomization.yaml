@@ -4,11 +4,4 @@ resources:
   - ns.yaml
   - proxy
 
-images:
-  # workspace-manager
-  - name: quay.io/konflux-ci/workspace-manager
-    digest: sha256:d72968158bec10442236d4f84a904beeff5a022f3e032ecdd2d421651c01f8d3
-  - name: quay.io/konflux-ci/konflux-ui
-    digest: sha256:008e0b1f6db14b6223b3191a114b733b82aee6577c62857f54286dff8df97448
-
 namespace: konflux-ui

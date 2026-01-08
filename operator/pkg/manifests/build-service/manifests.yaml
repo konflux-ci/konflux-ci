@@ -389,7 +389,6 @@ metadata:
   name: build-service-controller-manager
   namespace: build-service
 spec:
-  progressDeadlineSeconds: 2147483647
   replicas: 1
   selector:
     matchLabels:
@@ -439,25 +438,12 @@ spec:
             - ALL
           privileged: false
           readOnlyRootFilesystem: true
-        volumeMounts:
-        - mountPath: /etc/ssl/certs/ca-custom-bundle.crt
-          name: trusted-ca
-          readOnly: true
-          subPath: ca-bundle.crt
       securityContext:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: build-service-controller-manager
       terminationGracePeriodSeconds: 10
-      volumes:
-      - configMap:
-          items:
-          - key: ca-bundle.crt
-            path: ca-bundle.crt
-          name: trusted-ca
-          optional: true
-        name: trusted-ca
 ---
 allowHostDirVolumePlugin: false
 allowHostIPC: false
