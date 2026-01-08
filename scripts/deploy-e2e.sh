@@ -71,6 +71,7 @@ INCREASE_PODMAN_PIDS_LIMIT="${INCREASE_PODMAN_PIDS_LIMIT:-1}"
 QUAY_TOKEN="${QUAY_TOKEN:-}"
 ENABLE_REGISTRY_PORT="${ENABLE_REGISTRY_PORT:-1}"
 REGISTRY_HOST_PORT="${REGISTRY_HOST_PORT:-5001}"
+DEPLOY_DEMO_RESOURCES="${DEPLOY_DEMO_RESOURCES:-1}"
 
 # Validate that the required variables are set
 if [ -z "${GITHUB_PRIVATE_KEY_PATH}" ] || [ -z "${GITHUB_APP_ID}" ] || [ -z "${WEBHOOK_SECRET}" ]; then
@@ -268,7 +269,11 @@ if [ -n "${QUAY_TOKEN:-}" ]; then
 else
     echo "QUAY_TOKEN is not set. Skipping image-controller deployment."
 fi
-"${SCRIPT_DIR}/deploy-test-resources.sh"
+if [[ "${DEPLOY_DEMO_RESOURCES}" -eq 1 ]]; then
+    "${SCRIPT_DIR}/deploy-test-resources.sh"
+else
+    echo "DEPLOY_DEMO_RESOURCES is disabled. Skipping demo resources deployment."
+fi
 
 echo "Creating PaC secrets"
 for ns in pipelines-as-code build-service integration-service; do
