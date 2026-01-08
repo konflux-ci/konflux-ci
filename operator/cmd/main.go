@@ -44,6 +44,7 @@ import (
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/buildservice"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	// +kubebuilder:scaffold:imports
@@ -263,7 +264,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Konflux")
 		os.Exit(1)
 	}
-	if err = (&controller.KonfluxBuildServiceReconciler{
+	if err = (&buildservice.Reconciler{
 		Client:      mgr.GetClient(),
 		Scheme:      mgr.GetScheme(),
 		ObjectStore: objectStore,
