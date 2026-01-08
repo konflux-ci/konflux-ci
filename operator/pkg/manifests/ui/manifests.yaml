@@ -429,7 +429,7 @@ spec:
         - daemon off;
         - -c
         - /etc/nginx/nginx.conf
-        image: registry.access.redhat.com/ubi9/nginx-124@sha256:b924363ff07ee0f8fd4f680497da774ac0721722a119665998ff5b2111098ad1
+        image: registry.access.redhat.com/ubi9/nginx-124@sha256:a75f10d71969dd2451914df6539dea28f8e2c88506f691ea211768a0bd0746d1
         livenessProbe:
           failureThreshold: 3
           httpGet:
@@ -520,7 +520,7 @@ spec:
         - -R
         - /opt/app-root/src/.
         - /mnt/static-content/
-        image: quay.io/konflux-ci/konflux-ui@sha256:008e0b1f6db14b6223b3191a114b733b82aee6577c62857f54286dff8df97448
+        image: quay.io/konflux-ci/konflux-ui:fa9b7642f2bb87ad9f599cf5b17ae2aa23ffb57e
         name: copy-static-content
         resources:
           limits:
@@ -559,7 +559,7 @@ spec:
           fi
           sed "s/__TEKTON_RESULTS_HOSTNAME__/$results_hostname/" /mnt/nginx-templates/tekton-results.conf > /mnt/nginx-generated-location-config/tekton-results.conf
           chmod 640 /mnt/nginx-generated-location-config/tekton-results.conf
-        image: quay.io/konflux-ci/konflux-ui@sha256:008e0b1f6db14b6223b3191a114b733b82aee6577c62857f54286dff8df97448
+        image: quay.io/konflux-ci/konflux-ui:fa9b7642f2bb87ad9f599cf5b17ae2aa23ffb57e
         name: generate-nginx-configs
         resources:
           limits:
