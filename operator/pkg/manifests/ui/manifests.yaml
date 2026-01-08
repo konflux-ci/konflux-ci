@@ -243,12 +243,14 @@ data:
                 proxy_pass https://dex.konflux-ui.svc.cluster.local:9443;
             }
 
+            include /mnt/nginx-generated-location-config/*.conf;
+
             include /mnt/nginx-additional-location-configs/*.conf;
         }
     }
 kind: ConfigMap
 metadata:
-  name: proxy-9654k5hfft
+  name: proxy-d2bh9588df
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -477,6 +479,8 @@ spec:
           name: serving-cert
         - mountPath: /mnt/nginx-generated-config
           name: nginx-generated-config
+        - mountPath: /mnt/nginx-generated-location-config
+          name: nginx-generated-location-config
         - mountPath: /opt/app-root/src/static-content
           name: static-content
       - env:
@@ -549,8 +553,8 @@ spec:
             echo "Error: Could not resolve tekton-results hostname"
             exit 1
           fi
-          sed "s/__TEKTON_RESULTS_HOSTNAME__/$results_hostname/" /mnt/nginx-templates/tekton-results.conf > /mnt/nginx-generated-config/tekton-results.conf
-          chmod 640 /mnt/nginx-generated-config/tekton-results.conf
+          sed "s/__TEKTON_RESULTS_HOSTNAME__/$results_hostname/" /mnt/nginx-templates/tekton-results.conf > /mnt/nginx-generated-location-config/tekton-results.conf
+          chmod 640 /mnt/nginx-generated-location-config/tekton-results.conf
         image: quay.io/konflux-ci/konflux-ui@sha256:8a99a673ab73461ba9a29b69579aa462bd04bbc06cda46a44229612420e583aa
         name: generate-nginx-configs
         resources:
@@ -570,6 +574,8 @@ spec:
           name: nginx-templates
         - mountPath: /mnt/api-token
           name: api-token
+        - mountPath: /mnt/nginx-generated-location-config
+          name: nginx-generated-location-config
       serviceAccountName: proxy
       topologySpreadConstraints:
       - labelSelector:
@@ -584,7 +590,7 @@ spec:
           items:
           - key: nginx.conf
             path: nginx.conf
-          name: proxy-9654k5hfft
+          name: proxy-d2bh9588df
         name: proxy
       - configMap:
           defaultMode: 420
@@ -601,6 +607,8 @@ spec:
           secretName: serving-cert
       - emptyDir: {}
         name: nginx-generated-config
+      - emptyDir: {}
+        name: nginx-generated-location-config
       - name: api-token
         secret:
           secretName: proxy
