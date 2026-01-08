@@ -188,11 +188,14 @@ If Konflux was installed on a cluster hosted in a remote machine, SSH port-forwa
 ssh -L 9443:localhost:9443 $USER@$VM_IP
 ```
 
-6. The UI will be available at https://localhost:9443. You can login using a test user.
+The UI will be available at https://localhost:9443.
 
-`username:` `user2@konflux.dev`
+**Note on Demo Users**: By default, the base Konflux deployment does not include any demo users. If you deployed with `DEPLOY_DEMO_RESOURCES=1` (the default), demo users are available:
 
-`password:` `password`
+- `user1@konflux.dev` / `password` (has access to `user-ns1`)
+- `user2@konflux.dev` / `password` (has access to `user-ns2`)
+
+If you deployed without demo resources (`DEPLOY_DEMO_RESOURCES=0`), you'll need to configure your own authentication. See the [Users Management](#users-management) section for details.
 
 We now have Konflux up and running. Next, we shall configure Konflux to respond
 to Pull Request webhooks, build a user application and push it to a registry.
@@ -219,7 +222,9 @@ Once installed, your repositories will send webhook events through your Smee cha
 
 ## Onboard a new Application
 
-The next step is to onboard an application to Konflux on behalf of user2.
+The next step is to onboard an application to Konflux.
+
+**Note**: The examples below use the demo user `user2@konflux.dev` and namespace `user-ns2`. If you deployed without demo resources (`DEPLOY_DEMO_RESOURCES=0`), substitute with your own user and namespace.
 
 This section includes two options for onboarding an application to Konflux.
 
@@ -880,12 +885,15 @@ Together with [oauth2-proxy](https://github.com/oauth2-proxy/oauth2-proxy), it a
 for offloading authentication to different identity providers per the requirement
 of the environment or organization where Konflux is installed.
 
-For the simple standalone deployment, however, Dex is configured with static passwords
-defined as part of
-[Dex configurations](https://github.com/konflux-ci/konflux-ci/blob/main/dependencies/dex/config.yaml).
+The base Konflux deployment includes Dex with no predefined users, allowing you to configure authentication according to your requirements. For testing and demo purposes, you can optionally deploy demo users by running the demo resources script:
 
-See Dex documentation for both [OAuth 2.0](https://dexidp.io/docs/connectors/oauth/) and
-the [builtin connector](https://dexidp.io/docs/connectors/local/).
+```bash
+./scripts/deploy-test-resources.sh
+```
+
+This will configure Dex with static demo users (`user1@konflux.dev` and `user2@konflux.dev`, both with password `password`) and create the corresponding namespaces and permissions. These demo users are automatically deployed when `DEPLOY_DEMO_RESOURCES=1` in your deployment configuration.
+
+For production deployments, configure Dex with your organization's identity provider. See Dex documentation for both [OAuth 2.0](https://dexidp.io/docs/connectors/oauth/) and the [builtin connector](https://dexidp.io/docs/connectors/local/).
 
 ## Repository Links
 
