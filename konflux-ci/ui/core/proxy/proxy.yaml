@@ -59,12 +59,12 @@ spec:
           - -c
           - |
             set -e
-            
+
             # Copy the auth.conf template and replace the bearer token
             token=$(cat /mnt/api-token/token)
             sed "s/__BEARER_TOKEN__/$token/" /mnt/nginx-templates/auth.conf > /mnt/nginx-generated-config/auth.conf
             chmod 640 /mnt/nginx-generated-config/auth.conf
-            
+
         volumeMounts:
         - name: nginx-generated-config
           mountPath: /mnt/nginx-generated-config
@@ -86,7 +86,7 @@ spec:
       containers:
       - image: registry.access.redhat.com/ubi9/nginx-124@sha256:b924363ff07ee0f8fd4f680497da774ac0721722a119665998ff5b2111098ad1
         name: nginx
-        command: 
+        command:
           - nginx
           - "-g"
           - "daemon off;"
@@ -216,7 +216,7 @@ spec:
             name: proxy
             items:
               - key: nginx.conf
-                path: nginx.conf 
+                path: nginx.conf
           name: proxy
         - configMap:
             defaultMode: 420

@@ -10,7 +10,7 @@ jobs:
   check-prerequisites:
     runs-on: ubuntu-latest
     steps:
-    - name: Check prerequisites for running Operator E2E test
+    - name: Check prerequisites for running Operator tests
       run: |
         if [ "${{ github.event_name }}" != 'pull_request_target' ]; then
           echo "The workflow is not triggered from PR, but ${{ github.event_name }} - skipping further checks."
@@ -59,7 +59,7 @@ jobs:
 
         ERROR_SUMMARY=$(cat <<EOF
 
-        ### ❌ Cannot run Operator E2E test - at least one of the following conditions must be met:
+        ### ❌ Cannot run Operator tests - at least one of the following conditions must be met:
         * PR author is one of: $BOT_LIST
         * PR has label '$REQUIRED_LABEL_NAME'
         * PR author is a public member of '$ORG' GitHub organization
@@ -91,18 +91,37 @@ jobs:
             operator/**
             .github/workflows/operator-test-e2e.yaml
 
-  test-e2e:
-    name: Run Operator E2E Tests
-    runs-on: ubuntu-latest
+  test:
+    name: ${{ matrix.job_name }}
+    runs-on: ${{ matrix.runner }}
     needs: [check-prerequisites, check-changes]
     if: needs.check-changes.outputs.operator == 'true'
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+            kind_binary: kind-linux-amd64
+            kubectl_arch: amd64
+            image_suffix: ""
+            cluster_suffix: ""
+            test_scope: "integration+e2e"
+            job_name: "Run Operator E2E Tests"
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            kind_binary: kind-linux-arm64
+            kubectl_arch: arm64
+            image_suffix: "-arm64"
+            cluster_suffix: "-arm"
+            test_scope: "integration"
+            job_name: "Run Operator Integration Tests (ARM64)"
     env:
       # renovate: datasource=github-releases depName=kubernetes-sigs/kind
       KIND_VERSION: "0.31.0"
       # renovate: datasource=github-releases depName=kubernetes/kubernetes
       KUBECTL_VERSION: "1.35.0"
-      OPERATOR_IMAGE: example.com/konflux-operator:v0.0.1
-      KIND_CLUSTER: konflux-operator-test-e2e
+      OPERATOR_IMAGE: example.com/konflux-operator:v0.0.1${{ matrix.image_suffix }}
+      KIND_CLUSTER: konflux-operator-test-e2e${{ matrix.cluster_suffix }}
     defaults:
       run:
         working-directory: operator
@@ -129,15 +148,15 @@ jobs:
           go-version-file: operator/go.mod
           cache-dependency-path: operator/go.sum
 
-      - name: Install kind
+      - name: Install kind (${{ matrix.arch }})
         run: |
-          curl -Lo ./kind https://kind.sigs.k8s.io/dl/v${KIND_VERSION}/kind-linux-amd64
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/v${KIND_VERSION}/${{ matrix.kind_binary }}
           chmod +x ./kind
           sudo mv ./kind /usr/local/bin/kind
 
-      - name: Install kubectl
+      - name: Install kubectl (${{ matrix.arch }})
         run: |
-          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${{ matrix.kubectl_arch }}/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/kubectl
 
@@ -163,7 +182,7 @@ jobs:
         run: |
           ./deploy-deps.sh
 
-      - name: Build Operator Image
+      - name: Build Operator Image (${{ matrix.arch }})
         run: |
           make docker-build IMG=$OPERATOR_IMAGE
 
@@ -213,6 +232,7 @@ jobs:
           go test ./...
 
       - name: Prepare resources for E2E tests
+        if: matrix.test_scope == 'integration+e2e'
         working-directory: ${{ github.workspace }}
         env:
           APP_ID: ${{ secrets.APP_ID }}
@@ -225,6 +245,7 @@ jobs:
           ./test/e2e/prepare-e2e.sh
 
       - name: Run E2E tests
+        if: matrix.test_scope == 'integration+e2e'
         working-directory: ${{ github.workspace }}
         env:
           GH_ORG: ${{ secrets.GH_ORG }}
@@ -246,5 +267,5 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v6
         with:
-          name: logs
+          name: logs-${{ matrix.arch }}
           path: logs
