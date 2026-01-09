@@ -3,7 +3,7 @@ module github.com/konflux-ci/konflux-ci/test/go-tests
 go 1.24.0
 
 require (
-	github.com/onsi/ginkgo/v2 v2.27.3
+	github.com/onsi/ginkgo/v2 v2.27.4
 	github.com/onsi/gomega v1.38.3
 	k8s.io/api v0.32.0
 	k8s.io/apimachinery v0.32.0
