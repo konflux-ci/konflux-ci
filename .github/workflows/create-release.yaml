@@ -47,14 +47,9 @@ jobs:
         with:
           go-version-file: operator/go.mod
 
-      - name: Generate install.yaml
-        env:
-          IMG: quay.io/konflux-ci/konflux-operator:${{ inputs.image_tag }}
+      - name: Generate release artifacts
         run: |
-          make build-installer IMG=${IMG}
-
-          echo "Generated install.yaml at: $(pwd)/dist/install.yaml"
-          ls -lh dist/install.yaml
+          bash ${{ github.workspace }}/.github/scripts/generate-release-artifacts.sh "${{ inputs.image_tag }}"
 
       - name: Prepare release notes
         id: release-notes
@@ -76,6 +71,6 @@ jobs:
             "${{ inputs.version }}" \
             "${{ inputs.commit_sha }}" \
             /tmp/release-notes.md \
-            operator/dist/install.yaml \
+            operator/dist \
             "${{ inputs.draft }}" \
             "${{ inputs.generate_notes }}"
