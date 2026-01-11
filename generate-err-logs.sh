@@ -132,6 +132,60 @@ echo "logs from all pods from user-ns2 namespace"
 kubectl get pods -n user-ns2 -o name \
   | xargs -I {} kubectl logs -n user-ns2 --all-containers {}
 
+    # Collect Konflux Operator logs unconditionally (critical for debugging)
+    {
+        echo "=== KONFLUX OPERATOR LOGS ==="
+        echo "Date: $(date)"
+        echo ""
+
+        echo "--- Operator Deployment Status ---"
+        kubectl get deployment -n konflux-operator konflux-operator-controller-manager -o yaml 2>&1 || echo "Failed to get operator deployment"
+        echo ""
+
+        echo "--- Operator Pods ---"
+        kubectl get pods -n konflux-operator -o wide 2>&1 || echo "No pods in konflux-operator namespace"
+        echo ""
+
+        echo "--- Operator Pod Logs ---"
+        kubectl logs -n konflux-operator -l control-plane=controller-manager --all-containers --tail=1000 2>&1 || echo "Failed to get operator logs"
+        echo ""
+
+        echo "--- Operator Pod Events ---"
+        kubectl get events -n konflux-operator --sort-by='.lastTimestamp' 2>&1 || echo "Failed to get operator events"
+        echo ""
+    } > "$logs_dir/operator-logs.log"
+
+    # Collect Konflux CR and sub-CR status
+    {
+        echo "=== KONFLUX CRS STATUS ==="
+        echo "Date: $(date)"
+        echo ""
+
+        echo "--- Main Konflux CR ---"
+        kubectl get konflux konflux -o yaml 2>&1 || echo "Failed to get Konflux CR"
+        echo ""
+
+        echo "--- KonfluxBuildService CR ---"
+        kubectl get konfluxbuildservice -A -o yaml 2>&1 || echo "No KonfluxBuildService CR found"
+        echo ""
+
+        echo "--- KonfluxIntegrationService CR ---"
+        kubectl get konfluxintegrationservice -A -o yaml 2>&1 || echo "No KonfluxIntegrationService CR found"
+        echo ""
+
+        echo "--- KonfluxReleaseService CR ---"
+        kubectl get konfluxreleaseservice -A -o yaml 2>&1 || echo "No KonfluxReleaseService CR found"
+        echo ""
+
+        echo "--- KonfluxUI CR ---"
+        kubectl get konfluxui -A -o yaml 2>&1 || echo "No KonfluxUI CR found"
+        echo ""
+
+        echo "--- KonfluxImageController CR ---"
+        kubectl get konfluximagecontroller -A -o yaml 2>&1 || echo "No KonfluxImageController CR found"
+        echo ""
+    } > "$logs_dir/konflux-crs-status.log"
+
     local namespaces
     namespaces=$(kubectl get namespaces -o name | xargs -n1 basename)
 
@@ -167,5 +221,3 @@ kubectl get pods -n user-ns2 -o name \
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     main "$@"
 fi
-
-
