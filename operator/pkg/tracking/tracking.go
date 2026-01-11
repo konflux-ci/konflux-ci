@@ -63,6 +63,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -317,11 +318,19 @@ func (c *Client) CleanupOrphans(
 	log := logf.FromContext(ctx)
 	start := time.Now()
 
+	g, ctx := errgroup.WithContext(ctx)
 	for _, gvk := range gvks {
-		if err := c.cleanupOrphansForGVK(ctx, ownerLabelKey, ownerLabelValue, gvk); err != nil {
-			log.Error(err, "Failed to cleanup orphans", "gvk", gvk.String())
-			return fmt.Errorf("failed to cleanup orphans for %s: %w", gvk.String(), err)
-		}
+		g.Go(func() error {
+			if err := c.cleanupOrphansForGVK(ctx, ownerLabelKey, ownerLabelValue, gvk); err != nil {
+				log.Error(err, "Failed to cleanup orphans", "gvk", gvk.String())
+				return fmt.Errorf("failed to cleanup orphans for %s: %w", gvk.String(), err)
+			}
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return err
 	}
 
 	log.Info("CleanupOrphans completed", "duration", time.Since(start), "gvkCount", len(gvks))
