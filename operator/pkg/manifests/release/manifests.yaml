@@ -4720,7 +4720,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: quay.io/konflux-ci/release-service:e979b04b4ade0d121423f7246be24df9ae93d2fb
+        image: quay.io/konflux-ci/release-service:cb33cfbe7a0966db8e223da756ed603cfc041e35
         livenessProbe:
           httpGet:
             path: /healthz
