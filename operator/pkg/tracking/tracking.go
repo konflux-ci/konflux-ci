@@ -61,6 +61,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -314,6 +315,7 @@ func (c *Client) CleanupOrphans(
 	gvks []schema.GroupVersionKind,
 ) error {
 	log := logf.FromContext(ctx)
+	start := time.Now()
 
 	for _, gvk := range gvks {
 		if err := c.cleanupOrphansForGVK(ctx, ownerLabelKey, ownerLabelValue, gvk); err != nil {
@@ -322,6 +324,7 @@ func (c *Client) CleanupOrphans(
 		}
 	}
 
+	log.Info("CleanupOrphans completed", "duration", time.Since(start), "gvkCount", len(gvks))
 	return nil
 }
 
