@@ -88,7 +88,7 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	// Apply manifests only if createClusterIssuer is enabled (defaults to true)
 	if certManager.Spec.ShouldCreateClusterIssuer() {
-		if err := r.applyManifests(ctx, tc, certManager); err != nil {
+		if err := r.applyManifests(ctx, tc); err != nil {
 			log.Error(err, "Failed to apply manifests")
 			SetFailedCondition(certManager, CertManagerConditionTypeReady, "ApplyFailed", err)
 			if updateErr := r.Status().Update(ctx, certManager); updateErr != nil {
@@ -135,7 +135,7 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
-func (r *KonfluxCertManagerReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxCertManager) error {
+func (r *KonfluxCertManagerReconciler) applyManifests(ctx context.Context, tc *tracking.Client) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.CertManager)
@@ -160,7 +160,7 @@ func (r *KonfluxCertManagerReconciler) applyManifests(ctx context.Context, tc *t
 			}
 			// All other errors should fail the reconciliation
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.CertManager, err)
+				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), manifests.CertManager, err)
 		}
 	}
 	return nil

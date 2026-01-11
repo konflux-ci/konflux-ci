@@ -100,7 +100,7 @@ func (r *KonfluxEnterpriseContractReconciler) Reconcile(ctx context.Context, req
 	})
 
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, tc, konfluxEnterpriseContract); err != nil {
+	if err := r.applyManifests(ctx, tc); err != nil {
 		log.Error(err, "Failed to apply manifests")
 		SetFailedCondition(konfluxEnterpriseContract, EnterpriseContractConditionTypeReady, "ApplyFailed", err)
 		if updateErr := r.Status().Update(ctx, konfluxEnterpriseContract); updateErr != nil {
@@ -141,7 +141,7 @@ func (r *KonfluxEnterpriseContractReconciler) Reconcile(ctx context.Context, req
 
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
-func (r *KonfluxEnterpriseContractReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxEnterpriseContract) error {
+func (r *KonfluxEnterpriseContractReconciler) applyManifests(ctx context.Context, tc *tracking.Client) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.EnterpriseContract)
@@ -165,7 +165,7 @@ func (r *KonfluxEnterpriseContractReconciler) applyManifests(ctx context.Context
 				continue
 			}
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.EnterpriseContract, err)
+				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), manifests.EnterpriseContract, err)
 		}
 	}
 	return nil

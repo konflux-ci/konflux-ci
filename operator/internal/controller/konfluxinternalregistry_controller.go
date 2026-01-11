@@ -162,7 +162,7 @@ func (r *KonfluxInternalRegistryReconciler) applyManifests(ctx context.Context, 
 			}
 			// All other errors should fail the reconciliation
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.Registry, err)
+				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), manifests.Registry, err)
 		}
 	}
 	return nil

@@ -193,7 +193,7 @@ func (r *KonfluxReleaseServiceReconciler) applyManifests(ctx context.Context, tc
 				continue
 			}
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.Release, err)
+				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), manifests.Release, err)
 		}
 	}
 	return nil
