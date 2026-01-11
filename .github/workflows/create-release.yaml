@@ -20,6 +20,11 @@ on:
         required: false
         type: boolean
         default: true
+      generate_notes:
+        description: 'Auto-generate commit history (skip for first release with many commits)'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   create-release:
@@ -67,20 +72,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Create release using official GitHub CLI (gh)
-          # Uses GITHUB_TOKEN (if permissions are insufficient, we can add GitHub App token later)
-          # --notes prepends our custom content, --generate-notes appends commit history
-          # --draft flag creates a draft release (no notifications, hidden from main releases page)
-          DRAFT_FLAG=""
-          if [ "${{ inputs.draft }}" == "true" ]; then
-            DRAFT_FLAG="--draft"
-            echo "Creating draft release (no notifications will be sent)"
-          fi
-
-          gh release create "${{ inputs.version }}" \
-            --title "Release ${{ inputs.version }}" \
-            --notes-file /tmp/release-notes.md \
-            --generate-notes \
-            $DRAFT_FLAG \
+          .github/scripts/create-release.sh \
+            "${{ inputs.version }}" \
+            "${{ inputs.commit_sha }}" \
+            /tmp/release-notes.md \
             operator/dist/install.yaml \
-            --target "${{ inputs.commit_sha }}"
+            "${{ inputs.draft }}" \
+            "${{ inputs.generate_notes }}"
