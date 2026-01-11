@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,12 +32,31 @@ import (
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
 
 const (
 	// ImageControllerConditionTypeReady is the condition type for overall readiness
 	ImageControllerConditionTypeReady = "Ready"
 )
+
+// imageControllerCleanupGVKs defines which resource types should be cleaned up when they are
+// no longer part of the desired state for the ImageController component.
+var imageControllerCleanupGVKs = []schema.GroupVersionKind{
+	{Group: "apps", Version: "v1", Kind: "Deployment"},
+	{Group: "", Version: "v1", Kind: "Service"},
+	{Group: "", Version: "v1", Kind: "ConfigMap"},
+	{Group: "", Version: "v1", Kind: "Secret"},
+	{Group: "", Version: "v1", Kind: "ServiceAccount"},
+	{Group: "", Version: "v1", Kind: "Namespace"},
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "RoleBinding"},
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"},
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"},
+	{Group: "networking.k8s.io", Version: "v1", Kind: "NetworkPolicy"},
+	{Group: "monitoring.coreos.com", Version: "v1", Kind: "ServiceMonitor"},
+	{Group: "batch", Version: "v1", Kind: "CronJob"},
+}
 
 // KonfluxImageControllerReconciler reconciles a KonfluxImageController object
 type KonfluxImageControllerReconciler struct {
@@ -78,10 +98,29 @@ func (r *KonfluxImageControllerReconciler) Reconcile(ctx context.Context, req ct
 
 	log.Info("Reconciling KonfluxImageController", "name", imageController.Name)
 
+	// Create a tracking client with ownership config for this reconcile.
+	tc := tracking.NewClientWithOwnership(r.Client, tracking.OwnershipConfig{
+		Owner:             imageController,
+		OwnerLabelKey:     KonfluxOwnerLabel,
+		ComponentLabelKey: KonfluxComponentLabel,
+		Component:         string(manifests.ImageController),
+		FieldManager:      FieldManagerImageController,
+	})
+
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, imageController); err != nil {
+	if err := r.applyManifests(ctx, tc, imageController); err != nil {
 		log.Error(err, "Failed to apply manifests")
 		SetFailedCondition(imageController, ImageControllerConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, imageController); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Cleanup orphaned resources
+	if err := tc.CleanupOrphans(ctx, KonfluxOwnerLabel, imageController.Name, imageControllerCleanupGVKs); err != nil {
+		log.Error(err, "Failed to cleanup orphaned resources")
+		SetFailedCondition(imageController, ImageControllerConditionTypeReady, "CleanupFailed", err)
 		if updateErr := r.Status().Update(ctx, imageController); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
@@ -108,9 +147,9 @@ func (r *KonfluxImageControllerReconciler) Reconcile(ctx context.Context, req ct
 	return ctrl.Result{}, nil
 }
 
-// applyManifests loads and applies all embedded manifests to the cluster.
+// applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
-func (r *KonfluxImageControllerReconciler) applyManifests(ctx context.Context, owner *konfluxv1alpha1.KonfluxImageController) error {
+func (r *KonfluxImageControllerReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxImageController) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.ImageController)
@@ -119,13 +158,8 @@ func (r *KonfluxImageControllerReconciler) applyManifests(ctx context.Context, o
 	}
 
 	for _, obj := range objects {
-		// Set ownership labels and owner reference
-		if err := setOwnership(obj, owner, string(manifests.ImageController), r.Scheme); err != nil {
-			return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.ImageController, err)
-		}
-
-		if err := applyObject(ctx, r.Client, obj, FieldManagerImageController); err != nil {
+		// Apply with ownership using the tracking client
+		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			gvk := obj.GetObjectKind().GroupVersionKind()
 			if gvk.Group == CertManagerGroup || gvk.Group == KyvernoGroup {
 				// TODO: Remove this once we decide how to install cert-manager crds in envtest

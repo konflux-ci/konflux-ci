@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,6 +33,7 @@ import (
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
 
 const (
@@ -41,6 +43,20 @@ const (
 	// namespaceListerContainerName is the name of the namespace-lister container
 	namespaceListerContainerName = "namespace-lister"
 )
+
+// namespaceListerCleanupGVKs defines which resource types should be cleaned up when they are
+// no longer part of the desired state for the NamespaceLister component.
+var namespaceListerCleanupGVKs = []schema.GroupVersionKind{
+	{Group: "apps", Version: "v1", Kind: "Deployment"},
+	{Group: "", Version: "v1", Kind: "Service"},
+	{Group: "", Version: "v1", Kind: "ServiceAccount"},
+	{Group: "", Version: "v1", Kind: "Namespace"},
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"},
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"},
+	{Group: "networking.k8s.io", Version: "v1", Kind: "NetworkPolicy"},
+	{Group: "cert-manager.io", Version: "v1", Kind: "Certificate"},
+	{Group: "kyverno.io", Version: "v1", Kind: "ClusterPolicy"},
+}
 
 // KonfluxNamespaceListerReconciler reconciles a KonfluxNamespaceLister object
 type KonfluxNamespaceListerReconciler struct {
@@ -82,10 +98,29 @@ func (r *KonfluxNamespaceListerReconciler) Reconcile(ctx context.Context, req ct
 
 	log.Info("Reconciling KonfluxNamespaceLister", "name", konfluxNamespaceLister.Name)
 
+	// Create a tracking client with ownership config for this reconcile.
+	tc := tracking.NewClientWithOwnership(r.Client, tracking.OwnershipConfig{
+		Owner:             konfluxNamespaceLister,
+		OwnerLabelKey:     KonfluxOwnerLabel,
+		ComponentLabelKey: KonfluxComponentLabel,
+		Component:         string(manifests.NamespaceLister),
+		FieldManager:      FieldManagerNamespaceLister,
+	})
+
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, konfluxNamespaceLister); err != nil {
+	if err := r.applyManifests(ctx, tc, konfluxNamespaceLister); err != nil {
 		log.Error(err, "Failed to apply manifests")
 		SetFailedCondition(konfluxNamespaceLister, NamespaceListerConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, konfluxNamespaceLister); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Cleanup orphaned resources
+	if err := tc.CleanupOrphans(ctx, KonfluxOwnerLabel, konfluxNamespaceLister.Name, namespaceListerCleanupGVKs); err != nil {
+		log.Error(err, "Failed to cleanup orphaned resources")
+		SetFailedCondition(konfluxNamespaceLister, NamespaceListerConditionTypeReady, "CleanupFailed", err)
 		if updateErr := r.Status().Update(ctx, konfluxNamespaceLister); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
@@ -112,9 +147,9 @@ func (r *KonfluxNamespaceListerReconciler) Reconcile(ctx context.Context, req ct
 	return ctrl.Result{}, nil
 }
 
-// applyManifests loads and applies all embedded manifests to the cluster.
+// applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
-func (r *KonfluxNamespaceListerReconciler) applyManifests(ctx context.Context, owner *konfluxv1alpha1.KonfluxNamespaceLister) error {
+func (r *KonfluxNamespaceListerReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxNamespaceLister) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.NamespaceLister)
@@ -130,13 +165,8 @@ func (r *KonfluxNamespaceListerReconciler) applyManifests(ctx context.Context, o
 			}
 		}
 
-		// Set ownership labels and owner reference
-		if err := setOwnership(obj, owner, string(manifests.NamespaceLister), r.Scheme); err != nil {
-			return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.NamespaceLister, err)
-		}
-
-		if err := applyObject(ctx, r.Client, obj, FieldManagerNamespaceLister); err != nil {
+		// Apply with ownership using the tracking client
+		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			gvk := obj.GetObjectKind().GroupVersionKind()
 			if gvk.Group == CertManagerGroup || gvk.Group == KyvernoGroup {
 				// TODO: Remove this once we decide how to install cert-manager crds in envtest

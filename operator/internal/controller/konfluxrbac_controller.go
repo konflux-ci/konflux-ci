@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,12 +32,20 @@ import (
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
 
 const (
 	// RBACConditionTypeReady is the condition type for overall readiness
 	RBACConditionTypeReady = "Ready"
 )
+
+// rbacCleanupGVKs defines which resource types should be cleaned up when they are
+// no longer part of the desired state for the RBAC component.
+var rbacCleanupGVKs = []schema.GroupVersionKind{
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"},
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"},
+}
 
 // KonfluxRBACReconciler reconciles a KonfluxRBAC object
 type KonfluxRBACReconciler struct {
@@ -72,10 +81,29 @@ func (r *KonfluxRBACReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	log.Info("Reconciling KonfluxRBAC", "name", konfluxRBAC.Name)
 
+	// Create a tracking client with ownership config for this reconcile.
+	tc := tracking.NewClientWithOwnership(r.Client, tracking.OwnershipConfig{
+		Owner:             konfluxRBAC,
+		OwnerLabelKey:     KonfluxOwnerLabel,
+		ComponentLabelKey: KonfluxComponentLabel,
+		Component:         string(manifests.RBAC),
+		FieldManager:      FieldManagerRBAC,
+	})
+
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, konfluxRBAC); err != nil {
+	if err := r.applyManifests(ctx, tc, konfluxRBAC); err != nil {
 		log.Error(err, "Failed to apply manifests")
 		SetFailedCondition(konfluxRBAC, RBACConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, konfluxRBAC); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Cleanup orphaned resources
+	if err := tc.CleanupOrphans(ctx, KonfluxOwnerLabel, konfluxRBAC.Name, rbacCleanupGVKs); err != nil {
+		log.Error(err, "Failed to cleanup orphaned resources")
+		SetFailedCondition(konfluxRBAC, RBACConditionTypeReady, "CleanupFailed", err)
 		if updateErr := r.Status().Update(ctx, konfluxRBAC); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
@@ -102,8 +130,8 @@ func (r *KonfluxRBACReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return ctrl.Result{}, nil
 }
 
-// applyManifests loads and applies all embedded manifests to the cluster.
-func (r *KonfluxRBACReconciler) applyManifests(ctx context.Context, owner *konfluxv1alpha1.KonfluxRBAC) error {
+// applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
+func (r *KonfluxRBACReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxRBAC) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.RBAC)
@@ -112,13 +140,8 @@ func (r *KonfluxRBACReconciler) applyManifests(ctx context.Context, owner *konfl
 	}
 
 	for _, obj := range objects {
-		// Set ownership labels and owner reference
-		if err := setOwnership(obj, owner, string(manifests.RBAC), r.Scheme); err != nil {
-			return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.RBAC, err)
-		}
-
-		if err := applyObject(ctx, r.Client, obj, FieldManagerRBAC); err != nil {
+		// Apply with ownership using the tracking client
+		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			gvk := obj.GetObjectKind().GroupVersionKind()
 			// TODO: Remove this once we decide how to install cert-manager crds in envtest
 			// TODO: Remove this once we decide if we want to have a dependency on Kyverno

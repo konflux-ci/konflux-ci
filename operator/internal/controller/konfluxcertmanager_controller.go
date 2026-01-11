@@ -75,10 +75,16 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	log.Info("Reconciling KonfluxCertManager", "name", certManager.Name)
 
-	// Create a tracking client for this reconcile.
-	// Resources applied through this client are automatically tracked.
+	// Create a tracking client for this reconcile with ownership config.
+	// Resources applied through this client are automatically tracked and have ownership set.
 	// At the end of a successful reconcile, orphaned resources are cleaned up.
-	tc := tracking.NewClient(r.Client)
+	tc := tracking.NewClientWithOwnership(r.Client, tracking.OwnershipConfig{
+		Owner:             certManager,
+		OwnerLabelKey:     KonfluxOwnerLabel,
+		ComponentLabelKey: KonfluxComponentLabel,
+		Component:         string(manifests.CertManager),
+		FieldManager:      FieldManagerCertManager,
+	})
 
 	// Apply manifests only if createClusterIssuer is enabled (defaults to true)
 	if certManager.Spec.ShouldCreateClusterIssuer() {
@@ -97,19 +103,13 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// Cleanup orphaned resources - delete any resources with our owner label
 	// that weren't applied during this reconcile. This handles the case where
 	// createClusterIssuer changes from true to false (resources are automatically deleted).
-	// Note: In test environments without cert-manager CRDs, this is a no-op.
 	if err := tc.CleanupOrphans(ctx, KonfluxOwnerLabel, certManager.Name, certManagerCleanupGVKs); err != nil {
-		// Check if the error is due to missing CRDs (NoKindMatchError)
-		// This happens in test environments without cert-manager installed
-		if !tracking.IsNoKindMatchError(err) {
-			log.Error(err, "Failed to cleanup orphaned resources")
-			SetFailedCondition(certManager, CertManagerConditionTypeReady, "CleanupFailed", err)
-			if updateErr := r.Status().Update(ctx, certManager); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
-			}
-			return ctrl.Result{}, err
+		log.Error(err, "Failed to cleanup orphaned resources")
+		SetFailedCondition(certManager, CertManagerConditionTypeReady, "CleanupFailed", err)
+		if updateErr := r.Status().Update(ctx, certManager); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
 		}
-		log.Info("Skipping cleanup: cert-manager CRDs not installed (test environment)")
+		return ctrl.Result{}, err
 	}
 
 	// Check the status of owned deployments and update KonfluxCertManager status
@@ -144,13 +144,7 @@ func (r *KonfluxCertManagerReconciler) applyManifests(ctx context.Context, tc *t
 	}
 
 	for _, obj := range objects {
-		// Set ownership labels and owner reference
-		if err := setOwnership(obj, owner, string(manifests.CertManager), r.Scheme); err != nil {
-			return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.CertManager, err)
-		}
-
-		if err := tc.ApplyObject(ctx, obj, FieldManagerCertManager); err != nil {
+		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			// Only skip if it's specifically a "CRD not installed" error.
 			// This prevents masking real reconciliation failures like RBAC denials,
 			// validation errors, or resource conflicts.
