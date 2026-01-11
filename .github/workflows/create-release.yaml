@@ -53,6 +53,7 @@ jobs:
 
       - name: Prepare release notes
         id: release-notes
+        working-directory: ${{ github.workspace }}
         run: |
           .github/scripts/prepare-release-notes.sh \
             "${{ inputs.version }}" \
