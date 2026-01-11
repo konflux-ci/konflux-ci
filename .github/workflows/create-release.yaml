@@ -1,0 +1,84 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v0.2025.03)'
+        required: true
+        type: string
+      commit_sha:
+        description: 'Full commit SHA to release'
+        required: true
+        type: string
+      image_tag:
+        description: 'Image tag (e.g., release-sha-abc1234)'
+        required: true
+        type: string
+      draft:
+        description: 'Create as draft release (for testing - no notifications)'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: operator
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: operator/go.mod
+
+      - name: Generate install.yaml
+        env:
+          IMG: quay.io/konflux-ci/konflux-operator:${{ inputs.image_tag }}
+        run: |
+          make build-installer IMG=${IMG}
+
+          echo "Generated install.yaml at: $(pwd)/dist/install.yaml"
+          ls -lh dist/install.yaml
+
+      - name: Prepare release notes
+        id: release-notes
+        run: |
+          .github/scripts/prepare-release-notes.sh \
+            "${{ inputs.version }}" \
+            "${{ inputs.image_tag }}" \
+            "${{ inputs.commit_sha }}" \
+            /tmp/release-notes.md
+          echo "notes_file=/tmp/release-notes.md" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Create release using official GitHub CLI (gh)
+          # Uses GITHUB_TOKEN (if permissions are insufficient, we can add GitHub App token later)
+          # --notes prepends our custom content, --generate-notes appends commit history
+          # --draft flag creates a draft release (no notifications, hidden from main releases page)
+          DRAFT_FLAG=""
+          if [ "${{ inputs.draft }}" == "true" ]; then
+            DRAFT_FLAG="--draft"
+            echo "Creating draft release (no notifications will be sent)"
+          fi
+
+          gh release create "${{ inputs.version }}" \
+            --title "Release ${{ inputs.version }}" \
+            --notes-file /tmp/release-notes.md \
+            --generate-notes \
+            $DRAFT_FLAG \
+            operator/dist/install.yaml \
+            --target "${{ inputs.commit_sha }}"
