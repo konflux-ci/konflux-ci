@@ -235,22 +235,21 @@ func CopySubCRStatus(
 	subCR konfluxv1alpha1.ConditionAccessor,
 	conditionPrefix string,
 ) SubCRStatus {
-	// Remove existing conditions with this prefix
 	prefixWithDot := conditionPrefix + "."
-	var newConditions []metav1.Condition
-	for _, cond := range parent.GetConditions() {
-		if !strings.HasPrefix(cond.Type, prefixWithDot) {
-			newConditions = append(newConditions, cond)
-		}
-	}
-	parent.SetConditions(newConditions)
 
-	// Copy conditions from sub-CR to parent, prefixing with the condition prefix
+	// Track which prefixed conditions we're updating (to detect stale ones)
+	updatedConditions := make(map[string]bool)
+
+	// Copy conditions from sub-CR to parent, prefixing with the condition prefix.
+	// SetCondition (via apimeta.SetStatusCondition) handles LastTransitionTime correctly:
+	// it only updates the time when the status actually changes.
 	for _, cond := range subCR.GetConditions() {
 		// Replace slashes with dots in the condition type to avoid multiple slashes
 		sanitizedType := strings.ReplaceAll(cond.Type, "/", ".")
 		// Prefix the condition type to namespace it under the sub-CR
 		prefixedType := fmt.Sprintf("%s.%s", conditionPrefix, sanitizedType)
+		updatedConditions[prefixedType] = true
+
 		SetCondition(parent, metav1.Condition{
 			Type:               prefixedType,
 			Status:             cond.Status,
@@ -259,6 +258,17 @@ func CopySubCRStatus(
 			ObservedGeneration: cond.ObservedGeneration,
 		})
 	}
+
+	// Remove stale conditions (prefixed conditions that no longer exist in sub-CR)
+	parentConditions := parent.GetConditions()
+	newConditions := make([]metav1.Condition, 0, len(parentConditions))
+	for _, cond := range parentConditions {
+		if strings.HasPrefix(cond.Type, prefixWithDot) && !updatedConditions[cond.Type] {
+			continue // Skip stale condition
+		}
+		newConditions = append(newConditions, cond)
+	}
+	parent.SetConditions(newConditions)
 
 	return SubCRStatus{
 		Name:  conditionPrefix,
