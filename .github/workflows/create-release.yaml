@@ -63,6 +63,7 @@ jobs:
           echo "notes_file=/tmp/release-notes.md" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
+        working-directory: ${{ github.workspace }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
