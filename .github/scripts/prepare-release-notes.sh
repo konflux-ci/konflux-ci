@@ -38,6 +38,12 @@ kubectl apply -f https://github.com/konflux-ci/konflux-ci/releases/download/${VE
 
 ### Artifacts
 - install.yaml - Complete installation manifest (references SHA-tagged image)
+- crds.yaml - CRDs only
+- rbac.yaml - RBAC resources
+- samples.tar.gz - Sample Custom Resources
+
+### Documentation
+- [README.md](https://github.com/konflux-ci/konflux-ci/blob/main/README.md) - Installation and usage instructions
 EOF
 
 echo "Release notes generated at: ${OUTPUT_FILE}"
