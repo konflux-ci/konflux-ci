@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,6 +33,7 @@ import (
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
 
 const (
@@ -44,6 +46,28 @@ const (
 	// Container names
 	releaseManagerContainerName = "manager"
 )
+
+// releaseServiceCleanupGVKs defines which resource types should be cleaned up when they are
+// no longer part of the desired state for the ReleaseService component.
+var releaseServiceCleanupGVKs = []schema.GroupVersionKind{
+	{Group: "apps", Version: "v1", Kind: "Deployment"},
+	{Group: "", Version: "v1", Kind: "Service"},
+	{Group: "", Version: "v1", Kind: "ConfigMap"},
+	{Group: "", Version: "v1", Kind: "Secret"},
+	{Group: "", Version: "v1", Kind: "ServiceAccount"},
+	{Group: "", Version: "v1", Kind: "Namespace"},
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "RoleBinding"},
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"},
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"},
+	{Group: "networking.k8s.io", Version: "v1", Kind: "NetworkPolicy"},
+	{Group: "monitoring.coreos.com", Version: "v1", Kind: "ServiceMonitor"},
+	{Group: "cert-manager.io", Version: "v1", Kind: "Certificate"},
+	{Group: "cert-manager.io", Version: "v1", Kind: "Issuer"},
+	{Group: "admissionregistration.k8s.io", Version: "v1", Kind: "ValidatingWebhookConfiguration"},
+	{Group: "admissionregistration.k8s.io", Version: "v1", Kind: "MutatingWebhookConfiguration"},
+	{Group: "appstudio.redhat.com", Version: "v1alpha1", Kind: "ReleaseServiceConfig"},
+}
 
 // KonfluxReleaseServiceReconciler reconciles a KonfluxReleaseService object
 type KonfluxReleaseServiceReconciler struct {
@@ -87,10 +111,29 @@ func (r *KonfluxReleaseServiceReconciler) Reconcile(ctx context.Context, req ctr
 
 	log.Info("Reconciling KonfluxReleaseService", "name", releaseService.Name)
 
+	// Create a tracking client with ownership config for this reconcile.
+	tc := tracking.NewClientWithOwnership(r.Client, tracking.OwnershipConfig{
+		Owner:             releaseService,
+		OwnerLabelKey:     KonfluxOwnerLabel,
+		ComponentLabelKey: KonfluxComponentLabel,
+		Component:         string(manifests.Release),
+		FieldManager:      FieldManagerReleaseService,
+	})
+
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, releaseService); err != nil {
+	if err := r.applyManifests(ctx, tc, releaseService); err != nil {
 		log.Error(err, "Failed to apply manifests")
 		SetFailedCondition(releaseService, ReleaseServiceConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, releaseService); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Cleanup orphaned resources
+	if err := tc.CleanupOrphans(ctx, KonfluxOwnerLabel, releaseService.Name, releaseServiceCleanupGVKs); err != nil {
+		log.Error(err, "Failed to cleanup orphaned resources")
+		SetFailedCondition(releaseService, ReleaseServiceConditionTypeReady, "CleanupFailed", err)
 		if updateErr := r.Status().Update(ctx, releaseService); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
@@ -117,9 +160,9 @@ func (r *KonfluxReleaseServiceReconciler) Reconcile(ctx context.Context, req ctr
 	return ctrl.Result{}, nil
 }
 
-// applyManifests loads and applies all embedded manifests to the cluster.
+// applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
-func (r *KonfluxReleaseServiceReconciler) applyManifests(ctx context.Context, owner *konfluxv1alpha1.KonfluxReleaseService) error {
+func (r *KonfluxReleaseServiceReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxReleaseService) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.Release)
@@ -135,13 +178,8 @@ func (r *KonfluxReleaseServiceReconciler) applyManifests(ctx context.Context, ow
 			}
 		}
 
-		// Set ownership labels and owner reference
-		if err := setOwnership(obj, owner, string(manifests.Release), r.Scheme); err != nil {
-			return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.Release, err)
-		}
-
-		if err := applyObject(ctx, r.Client, obj, FieldManagerReleaseService); err != nil {
+		// Apply with ownership using the tracking client
+		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			gvk := obj.GetObjectKind().GroupVersionKind()
 			if gvk.Group == CertManagerGroup || gvk.Group == KyvernoGroup {
 				// TODO: Remove this once we decide how to install cert-manager crds in envtest

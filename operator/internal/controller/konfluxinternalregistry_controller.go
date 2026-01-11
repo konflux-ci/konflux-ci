@@ -105,19 +105,13 @@ func (r *KonfluxInternalRegistryReconciler) Reconcile(ctx context.Context, req c
 	// Cleanup orphaned resources - delete any resources with our owner label
 	// that weren't applied during this reconcile. This handles the case where
 	// enabled changes from true to false (resources are automatically deleted).
-	// Note: In test environments without cert-manager CRDs, this may fail gracefully.
 	if err := tc.CleanupOrphans(ctx, KonfluxOwnerLabel, registry.Name, internalRegistryCleanupGVKs); err != nil {
-		// Check if the error is due to missing CRDs (NoKindMatchError)
-		// This happens in test environments without cert-manager installed
-		if !tracking.IsNoKindMatchError(err) {
-			log.Error(err, "Failed to cleanup orphaned resources")
-			SetFailedCondition(registry, InternalRegistryConditionTypeReady, "CleanupFailed", err)
-			if updateErr := r.Status().Update(ctx, registry); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
-			}
-			return ctrl.Result{}, err
+		log.Error(err, "Failed to cleanup orphaned resources")
+		SetFailedCondition(registry, InternalRegistryConditionTypeReady, "CleanupFailed", err)
+		if updateErr := r.Status().Update(ctx, registry); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
 		}
-		log.Info("Skipping cleanup for some resources: CRDs not installed (test environment)")
+		return ctrl.Result{}, err
 	}
 
 	// Check the status of owned deployments and update KonfluxInternalRegistry status

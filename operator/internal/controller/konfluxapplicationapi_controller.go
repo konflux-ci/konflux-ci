@@ -21,18 +21,25 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
 
 const (
 	// ApplicationAPIConditionTypeReady is the condition type for overall readiness
 	ApplicationAPIConditionTypeReady = "Ready"
 )
+
+// applicationAPICleanupGVKs defines which resource types should be cleaned up when they are
+// no longer part of the desired state for the ApplicationAPI component.
+// Note: This component only contains CRDs, which are excluded from cleanup.
+var applicationAPICleanupGVKs = []schema.GroupVersionKind{}
 
 // KonfluxApplicationAPIReconciler reconciles a KonfluxApplicationAPI object
 type KonfluxApplicationAPIReconciler struct {
@@ -63,10 +70,29 @@ func (r *KonfluxApplicationAPIReconciler) Reconcile(ctx context.Context, req ctr
 
 	log.Info("Reconciling KonfluxApplicationAPI", "name", applicationAPI.Name)
 
+	// Create a tracking client with ownership config for this reconcile.
+	tc := tracking.NewClientWithOwnership(r.Client, tracking.OwnershipConfig{
+		Owner:             applicationAPI,
+		OwnerLabelKey:     KonfluxOwnerLabel,
+		ComponentLabelKey: KonfluxComponentLabel,
+		Component:         string(manifests.ApplicationAPI),
+		FieldManager:      FieldManagerApplicationAPI,
+	})
+
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, applicationAPI); err != nil {
+	if err := r.applyManifests(ctx, tc, applicationAPI); err != nil {
 		log.Error(err, "Failed to apply manifests")
 		SetFailedCondition(applicationAPI, ApplicationAPIConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, applicationAPI); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Cleanup orphaned resources
+	if err := tc.CleanupOrphans(ctx, KonfluxOwnerLabel, applicationAPI.Name, applicationAPICleanupGVKs); err != nil {
+		log.Error(err, "Failed to cleanup orphaned resources")
+		SetFailedCondition(applicationAPI, ApplicationAPIConditionTypeReady, "CleanupFailed", err)
 		if updateErr := r.Status().Update(ctx, applicationAPI); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
@@ -93,9 +119,9 @@ func (r *KonfluxApplicationAPIReconciler) Reconcile(ctx context.Context, req ctr
 	return ctrl.Result{}, nil
 }
 
-// applyManifests loads and applies all embedded manifests to the cluster.
+// applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
-func (r *KonfluxApplicationAPIReconciler) applyManifests(ctx context.Context, owner *konfluxv1alpha1.KonfluxApplicationAPI) error {
+func (r *KonfluxApplicationAPIReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxApplicationAPI) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.ApplicationAPI)
@@ -104,13 +130,8 @@ func (r *KonfluxApplicationAPIReconciler) applyManifests(ctx context.Context, ow
 	}
 
 	for _, obj := range objects {
-		// Set ownership labels and owner reference
-		if err := setOwnership(obj, owner, string(manifests.ApplicationAPI), r.Scheme); err != nil {
-			return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.ApplicationAPI, err)
-		}
-
-		if err := applyObject(ctx, r.Client, obj, FieldManagerApplicationAPI); err != nil {
+		// Apply with ownership using the tracking client
+		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			gvk := obj.GetObjectKind().GroupVersionKind()
 			if gvk.Group == CertManagerGroup || gvk.Group == KyvernoGroup {
 				// TODO: Remove this once we decide how to install cert-manager crds in envtest

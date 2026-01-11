@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,12 +32,23 @@ import (
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
 
 const (
 	// EnterpriseContractConditionTypeReady is the condition type for overall readiness
 	EnterpriseContractConditionTypeReady = "Ready"
 )
+
+// enterpriseContractCleanupGVKs defines which resource types should be cleaned up when they are
+// no longer part of the desired state for the EnterpriseContract component.
+var enterpriseContractCleanupGVKs = []schema.GroupVersionKind{
+	{Group: "", Version: "v1", Kind: "ConfigMap"},
+	{Group: "", Version: "v1", Kind: "Namespace"},
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "RoleBinding"},
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"},
+	{Group: "appstudio.redhat.com", Version: "v1alpha1", Kind: "EnterpriseContractPolicy"},
+}
 
 // KonfluxEnterpriseContractReconciler reconciles a KonfluxEnterpriseContract object
 type KonfluxEnterpriseContractReconciler struct {
@@ -78,10 +90,29 @@ func (r *KonfluxEnterpriseContractReconciler) Reconcile(ctx context.Context, req
 
 	log.Info("Reconciling KonfluxEnterpriseContract", "name", konfluxEnterpriseContract.Name)
 
+	// Create a tracking client with ownership config for this reconcile.
+	tc := tracking.NewClientWithOwnership(r.Client, tracking.OwnershipConfig{
+		Owner:             konfluxEnterpriseContract,
+		OwnerLabelKey:     KonfluxOwnerLabel,
+		ComponentLabelKey: KonfluxComponentLabel,
+		Component:         string(manifests.EnterpriseContract),
+		FieldManager:      FieldManagerEnterpriseContract,
+	})
+
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, konfluxEnterpriseContract); err != nil {
+	if err := r.applyManifests(ctx, tc, konfluxEnterpriseContract); err != nil {
 		log.Error(err, "Failed to apply manifests")
 		SetFailedCondition(konfluxEnterpriseContract, EnterpriseContractConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, konfluxEnterpriseContract); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Cleanup orphaned resources
+	if err := tc.CleanupOrphans(ctx, KonfluxOwnerLabel, konfluxEnterpriseContract.Name, enterpriseContractCleanupGVKs); err != nil {
+		log.Error(err, "Failed to cleanup orphaned resources")
+		SetFailedCondition(konfluxEnterpriseContract, EnterpriseContractConditionTypeReady, "CleanupFailed", err)
 		if updateErr := r.Status().Update(ctx, konfluxEnterpriseContract); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
@@ -108,9 +139,9 @@ func (r *KonfluxEnterpriseContractReconciler) Reconcile(ctx context.Context, req
 	return ctrl.Result{}, nil
 }
 
-// applyManifests loads and applies all embedded manifests to the cluster.
+// applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
-func (r *KonfluxEnterpriseContractReconciler) applyManifests(ctx context.Context, owner *konfluxv1alpha1.KonfluxEnterpriseContract) error {
+func (r *KonfluxEnterpriseContractReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxEnterpriseContract) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.EnterpriseContract)
@@ -119,13 +150,8 @@ func (r *KonfluxEnterpriseContractReconciler) applyManifests(ctx context.Context
 	}
 
 	for _, obj := range objects {
-		// Set ownership labels and owner reference
-		if err := setOwnership(obj, owner, string(manifests.EnterpriseContract), r.Scheme); err != nil {
-			return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.EnterpriseContract, err)
-		}
-
-		if err := applyObject(ctx, r.Client, obj, FieldManagerEnterpriseContract); err != nil {
+		// Apply with ownership using the tracking client
+		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			gvk := obj.GetObjectKind().GroupVersionKind()
 			if gvk.Group == CertManagerGroup || gvk.Group == KyvernoGroup {
 				// TODO: Remove this once we decide how to install cert-manager crds in envtest

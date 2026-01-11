@@ -25,15 +25,16 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/yaml"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
 
 const (
@@ -46,6 +47,15 @@ const (
 	// bannerConfigMapName is the name of the banner ConfigMap
 	bannerConfigMapName = "konflux-banner-configmap"
 )
+
+// infoCleanupGVKs defines which resource types should be cleaned up when they are
+// no longer part of the desired state for the Info component.
+var infoCleanupGVKs = []schema.GroupVersionKind{
+	{Group: "", Version: "v1", Kind: "ConfigMap"},
+	{Group: "", Version: "v1", Kind: "Namespace"},
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "RoleBinding"},
+}
 
 // KonfluxInfoReconciler reconciles a KonfluxInfo object
 type KonfluxInfoReconciler struct {
@@ -79,8 +89,17 @@ func (r *KonfluxInfoReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	log.Info("Reconciling KonfluxInfo", "name", konfluxInfo.Name)
 
+	// Create a tracking client with ownership config for this reconcile.
+	tc := tracking.NewClientWithOwnership(r.Client, tracking.OwnershipConfig{
+		Owner:             konfluxInfo,
+		OwnerLabelKey:     KonfluxOwnerLabel,
+		ComponentLabelKey: KonfluxComponentLabel,
+		Component:         string(manifests.Info),
+		FieldManager:      FieldManagerInfo,
+	})
+
 	// Ensure konflux-info namespace exists
-	if err := r.ensureNamespaceExists(ctx, konfluxInfo); err != nil {
+	if err := r.ensureNamespaceExists(ctx, tc, konfluxInfo); err != nil {
 		log.Error(err, "Failed to ensure namespace")
 		SetFailedCondition(konfluxInfo, InfoConditionTypeReady, "NamespaceCreationFailed", err)
 		if updateErr := r.Status().Update(ctx, konfluxInfo); updateErr != nil {
@@ -91,7 +110,7 @@ func (r *KonfluxInfoReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Reconcile ConfigMaps first (if configured)
 	// This must happen before applyManifests to ensure ConfigMaps exist
-	if err := r.reconcileInfoConfigMap(ctx, konfluxInfo); err != nil {
+	if err := r.reconcileInfoConfigMap(ctx, tc, konfluxInfo); err != nil {
 		log.Error(err, "Failed to reconcile info ConfigMap")
 		SetFailedCondition(konfluxInfo, InfoConditionTypeReady, "InfoConfigMapFailed", err)
 		if updateErr := r.Status().Update(ctx, konfluxInfo); updateErr != nil {
@@ -100,7 +119,7 @@ func (r *KonfluxInfoReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
-	if err := r.reconcileBannerConfigMap(ctx, konfluxInfo); err != nil {
+	if err := r.reconcileBannerConfigMap(ctx, tc, konfluxInfo); err != nil {
 		log.Error(err, "Failed to reconcile banner ConfigMap")
 		SetFailedCondition(konfluxInfo, InfoConditionTypeReady, "BannerConfigMapFailed", err)
 		if updateErr := r.Status().Update(ctx, konfluxInfo); updateErr != nil {
@@ -110,9 +129,19 @@ func (r *KonfluxInfoReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, konfluxInfo); err != nil {
+	if err := r.applyManifests(ctx, tc, konfluxInfo); err != nil {
 		log.Error(err, "Failed to apply manifests")
 		SetFailedCondition(konfluxInfo, InfoConditionTypeReady, "ApplyFailed", err)
+		if updateErr := r.Status().Update(ctx, konfluxInfo); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Cleanup orphaned resources
+	if err := tc.CleanupOrphans(ctx, KonfluxOwnerLabel, konfluxInfo.Name, infoCleanupGVKs); err != nil {
+		log.Error(err, "Failed to cleanup orphaned resources")
+		SetFailedCondition(konfluxInfo, InfoConditionTypeReady, "CleanupFailed", err)
 		if updateErr := r.Status().Update(ctx, konfluxInfo); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
@@ -140,8 +169,8 @@ func (r *KonfluxInfoReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return ctrl.Result{}, nil
 }
 
-// applyManifests loads and applies all embedded manifests to the cluster.
-func (r *KonfluxInfoReconciler) applyManifests(ctx context.Context, owner *konfluxv1alpha1.KonfluxInfo) error {
+// applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
+func (r *KonfluxInfoReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxInfo) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.Info)
@@ -150,13 +179,8 @@ func (r *KonfluxInfoReconciler) applyManifests(ctx context.Context, owner *konfl
 	}
 
 	for _, obj := range objects {
-		// Set ownership labels and owner reference
-		if err := setOwnership(obj, owner, string(manifests.Info), r.Scheme); err != nil {
-			return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.Info, err)
-		}
-
-		if err := applyObject(ctx, r.Client, obj, FieldManagerInfo); err != nil {
+		// Apply with ownership using the tracking client
+		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			gvk := obj.GetObjectKind().GroupVersionKind()
 			// TODO: Remove this once we decide how to install cert-manager crds in envtest
 			// TODO: Remove this once we decide if we want to have a dependency on Kyverno
@@ -190,7 +214,7 @@ func (r *KonfluxInfoReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // ensureNamespaceExists ensures the konflux-info namespace exists before creating ConfigMaps.
-func (r *KonfluxInfoReconciler) ensureNamespaceExists(ctx context.Context, owner *konfluxv1alpha1.KonfluxInfo) error {
+func (r *KonfluxInfoReconciler) ensureNamespaceExists(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxInfo) error {
 	objects, err := r.ObjectStore.GetForComponent(manifests.Info)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for Info: %w", err)
@@ -203,12 +227,8 @@ func (r *KonfluxInfoReconciler) ensureNamespaceExists(ctx context.Context, owner
 				return fmt.Errorf(
 					"unexpected namespace name in manifest: expected %s, got %s", infoNamespace, namespace.Name)
 			}
-			// Set ownership labels and owner reference
-			if err := setOwnership(namespace, owner, string(manifests.Info), r.Scheme); err != nil {
-				return fmt.Errorf("failed to set ownership for %s/%s (%s) from %s: %w",
-					namespace.GetNamespace(), namespace.GetName(), getKind(namespace), manifests.Info, err)
-			}
-			if err := applyObject(ctx, r.Client, namespace, FieldManagerInfo); err != nil {
+			// Apply with ownership using the tracking client
+			if err := tc.ApplyOwned(ctx, namespace); err != nil {
 				return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
 					namespace.GetNamespace(), namespace.GetName(), getKind(namespace), manifests.Info, err)
 			}
@@ -270,7 +290,7 @@ func (r *KonfluxInfoReconciler) generateBannerYAML(config *konfluxv1alpha1.Banne
 }
 
 // reconcileInfoConfigMap creates or updates the info.json ConfigMap.
-func (r *KonfluxInfoReconciler) reconcileInfoConfigMap(ctx context.Context, info *konfluxv1alpha1.KonfluxInfo) error {
+func (r *KonfluxInfoReconciler) reconcileInfoConfigMap(ctx context.Context, tc *tracking.Client, info *konfluxv1alpha1.KonfluxInfo) error {
 	log := logf.FromContext(ctx)
 
 	var infoJSON []byte
@@ -302,13 +322,8 @@ func (r *KonfluxInfoReconciler) reconcileInfoConfigMap(ctx context.Context, info
 		},
 	}
 
-	// Set owner reference
-	if err := controllerutil.SetControllerReference(info, configMap, r.Scheme); err != nil {
-		return fmt.Errorf("failed to set owner reference: %w", err)
-	}
-
 	log.Info("Applying info ConfigMap", "name", configMap.Name, "namespace", configMap.Namespace)
-	if err := r.Patch(ctx, configMap, client.Apply, client.FieldOwner(FieldManagerInfo), client.ForceOwnership); err != nil {
+	if err := tc.ApplyOwned(ctx, configMap); err != nil {
 		return fmt.Errorf("failed to apply ConfigMap: %w", err)
 	}
 
@@ -316,7 +331,7 @@ func (r *KonfluxInfoReconciler) reconcileInfoConfigMap(ctx context.Context, info
 }
 
 // reconcileBannerConfigMap creates or updates the banner-content.yaml ConfigMap.
-func (r *KonfluxInfoReconciler) reconcileBannerConfigMap(ctx context.Context, info *konfluxv1alpha1.KonfluxInfo) error {
+func (r *KonfluxInfoReconciler) reconcileBannerConfigMap(ctx context.Context, tc *tracking.Client, info *konfluxv1alpha1.KonfluxInfo) error {
 	log := logf.FromContext(ctx)
 
 	bannerYAML, err := r.generateBannerYAML(info.Spec.Banner)
@@ -338,13 +353,8 @@ func (r *KonfluxInfoReconciler) reconcileBannerConfigMap(ctx context.Context, in
 		},
 	}
 
-	// Set owner reference
-	if err := controllerutil.SetControllerReference(info, configMap, r.Scheme); err != nil {
-		return fmt.Errorf("failed to set owner reference: %w", err)
-	}
-
 	log.Info("Applying banner ConfigMap", "name", configMap.Name, "namespace", configMap.Namespace)
-	if err := r.Patch(ctx, configMap, client.Apply, client.FieldOwner(FieldManagerInfo), client.ForceOwnership); err != nil {
+	if err := tc.ApplyOwned(ctx, configMap); err != nil {
 		return fmt.Errorf("failed to apply ConfigMap: %w", err)
 	}
 
