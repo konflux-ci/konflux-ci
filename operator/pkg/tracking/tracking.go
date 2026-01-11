@@ -61,7 +61,9 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
+	"golang.org/x/sync/errgroup"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -314,14 +316,24 @@ func (c *Client) CleanupOrphans(
 	gvks []schema.GroupVersionKind,
 ) error {
 	log := logf.FromContext(ctx)
+	start := time.Now()
 
+	g, ctx := errgroup.WithContext(ctx)
 	for _, gvk := range gvks {
-		if err := c.cleanupOrphansForGVK(ctx, ownerLabelKey, ownerLabelValue, gvk); err != nil {
-			log.Error(err, "Failed to cleanup orphans", "gvk", gvk.String())
-			return fmt.Errorf("failed to cleanup orphans for %s: %w", gvk.String(), err)
-		}
+		g.Go(func() error {
+			if err := c.cleanupOrphansForGVK(ctx, ownerLabelKey, ownerLabelValue, gvk); err != nil {
+				log.Error(err, "Failed to cleanup orphans", "gvk", gvk.String())
+				return fmt.Errorf("failed to cleanup orphans for %s: %w", gvk.String(), err)
+			}
+			return nil
+		})
 	}
 
+	if err := g.Wait(); err != nil {
+		return err
+	}
+
+	log.Info("CleanupOrphans completed", "duration", time.Since(start), "gvkCount", len(gvks))
 	return nil
 }
 
@@ -389,4 +401,14 @@ func (c *Client) cleanupOrphansForGVK(
 func IsNoKindMatchError(err error) bool {
 	var noKindErr *meta.NoKindMatchError
 	return errors.As(err, &noKindErr)
+}
+
+// GetKind returns the Kind of a client.Object.
+// For unstructured objects, it uses the GVK directly.
+// For typed objects, it uses the GVK from the object's metadata.
+func GetKind(obj client.Object) string {
+	if u, ok := obj.(*unstructured.Unstructured); ok {
+		return u.GetKind()
+	}
+	return obj.GetObjectKind().GroupVersionKind().Kind
 }

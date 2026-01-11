@@ -342,4 +342,188 @@ var _ = Describe("Conditions Helper Functions", func() {
 			Expect(condition.Message).To(Equal("something went wrong"))
 		})
 	})
+
+	Describe("CopySubCRStatus", func() {
+		var parent *konfluxv1alpha1.Konflux
+		var subCR *konfluxv1alpha1.KonfluxBuildService
+		var originalTime metav1.Time
+
+		BeforeEach(func() {
+			// Set a fixed time in the past for the original condition
+			originalTime = metav1.NewTime(metav1.Now().Add(-1 * 60 * 60 * 1000000000)) // 1 hour ago
+
+			parent = &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-konflux",
+					Generation: 1,
+				},
+			}
+
+			subCR = &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-build-service",
+					Generation: 1,
+				},
+			}
+		})
+
+		It("should preserve LastTransitionTime when status hasn't changed", func() {
+			// Simulate a previous reconcile: parent already has a condition from sub-CR
+			parent.Status.Conditions = []metav1.Condition{
+				{
+					Type:               "build-service.Ready",
+					Status:             metav1.ConditionTrue,
+					Reason:             "AllComponentsReady",
+					Message:            "All components are ready",
+					LastTransitionTime: originalTime,
+					ObservedGeneration: 1,
+				},
+			}
+
+			// Sub-CR has the same status (True -> True, no change)
+			subCR.Status.Conditions = []metav1.Condition{
+				{
+					Type:               "Ready",
+					Status:             metav1.ConditionTrue,
+					Reason:             "AllComponentsReady",
+					Message:            "All components are ready",
+					LastTransitionTime: metav1.Now(), // Sub-CR's own LastTransitionTime (irrelevant)
+					ObservedGeneration: 1,
+				},
+			}
+
+			// Call CopySubCRStatus - this simulates a subsequent reconcile
+			CopySubCRStatus(parent, subCR, "build-service")
+
+			// The key assertion: LastTransitionTime should NOT change because
+			// the status (ConditionTrue) hasn't changed
+			condition := apimeta.FindStatusCondition(parent.GetConditions(), "build-service.Ready")
+			Expect(condition).NotTo(BeNil())
+			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(condition.LastTransitionTime).To(Equal(originalTime),
+				"LastTransitionTime should be preserved when status hasn't changed. "+
+					"BUG: If this fails, it means CopySubCRStatus is resetting LastTransitionTime "+
+					"on every call, which causes infinite reconcile loops.")
+		})
+
+		It("should update LastTransitionTime when status changes", func() {
+			// Parent has an existing condition with status True
+			parent.Status.Conditions = []metav1.Condition{
+				{
+					Type:               "build-service.Ready",
+					Status:             metav1.ConditionTrue,
+					Reason:             "AllComponentsReady",
+					Message:            "All components are ready",
+					LastTransitionTime: originalTime,
+					ObservedGeneration: 1,
+				},
+			}
+
+			// Sub-CR now has status False (a real change)
+			subCR.Status.Conditions = []metav1.Condition{
+				{
+					Type:               "Ready",
+					Status:             metav1.ConditionFalse,
+					Reason:             "ComponentNotReady",
+					Message:            "Deployment not ready",
+					LastTransitionTime: metav1.Now(),
+					ObservedGeneration: 1,
+				},
+			}
+
+			CopySubCRStatus(parent, subCR, "build-service")
+
+			condition := apimeta.FindStatusCondition(parent.GetConditions(), "build-service.Ready")
+			Expect(condition).NotTo(BeNil())
+			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			// LastTransitionTime SHOULD be updated because status changed
+			Expect(condition.LastTransitionTime).NotTo(Equal(originalTime),
+				"LastTransitionTime should be updated when status changes from True to False")
+		})
+
+		It("should copy conditions with correct prefix", func() {
+			subCR.Status.Conditions = []metav1.Condition{
+				{
+					Type:               "Ready",
+					Status:             metav1.ConditionTrue,
+					Reason:             "AllReady",
+					Message:            "All ready",
+					LastTransitionTime: metav1.Now(),
+				},
+				{
+					Type:               "default/deployment-1",
+					Status:             metav1.ConditionTrue,
+					Reason:             "DeploymentReady",
+					Message:            "Deployment ready",
+					LastTransitionTime: metav1.Now(),
+				},
+			}
+
+			CopySubCRStatus(parent, subCR, "build-service")
+
+			// Check prefixed conditions exist
+			readyCond := apimeta.FindStatusCondition(parent.GetConditions(), "build-service.Ready")
+			Expect(readyCond).NotTo(BeNil())
+
+			// Slashes should be replaced with dots
+			deploymentCond := apimeta.FindStatusCondition(parent.GetConditions(), "build-service.default.deployment-1")
+			Expect(deploymentCond).NotTo(BeNil())
+		})
+
+		It("should return correct ready status", func() {
+			subCR.Status.Conditions = []metav1.Condition{
+				{
+					Type:               "Ready",
+					Status:             metav1.ConditionTrue,
+					Reason:             "AllReady",
+					LastTransitionTime: metav1.Now(),
+				},
+			}
+
+			status := CopySubCRStatus(parent, subCR, "build-service")
+
+			Expect(status.Name).To(Equal("build-service"))
+			Expect(status.Ready).To(BeTrue())
+		})
+
+		It("should remove stale conditions for sub-CR", func() {
+			// Parent has old conditions from a previous state
+			parent.Status.Conditions = []metav1.Condition{
+				{
+					Type:               "build-service.Ready",
+					Status:             metav1.ConditionTrue,
+					LastTransitionTime: originalTime,
+				},
+				{
+					Type:               "build-service.old-deployment",
+					Status:             metav1.ConditionTrue,
+					LastTransitionTime: originalTime,
+				},
+				{
+					Type:               "other-component.Ready", // Different component, should be kept
+					Status:             metav1.ConditionTrue,
+					LastTransitionTime: originalTime,
+				},
+			}
+
+			// Sub-CR only has Ready condition now (old-deployment is gone)
+			subCR.Status.Conditions = []metav1.Condition{
+				{
+					Type:               "Ready",
+					Status:             metav1.ConditionTrue,
+					Reason:             "AllReady",
+					LastTransitionTime: metav1.Now(),
+				},
+			}
+
+			CopySubCRStatus(parent, subCR, "build-service")
+
+			// build-service.Ready should exist
+			Expect(apimeta.FindStatusCondition(parent.GetConditions(), "build-service.Ready")).NotTo(BeNil())
+			// build-service.old-deployment should be removed
+			Expect(apimeta.FindStatusCondition(parent.GetConditions(), "build-service.old-deployment")).To(BeNil())
+			// other-component.Ready should still exist
+			Expect(apimeta.FindStatusCondition(parent.GetConditions(), "other-component.Ready")).NotTo(BeNil())
+		})
+	})
 })

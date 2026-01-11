@@ -322,7 +322,7 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 				continue
 			}
 			return fmt.Errorf("failed to apply object %s/%s (%s): %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), err)
+				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), err)
 		}
 	}
 	return nil
