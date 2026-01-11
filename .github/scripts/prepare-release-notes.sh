@@ -37,7 +37,11 @@ kubectl apply -f https://github.com/konflux-ci/konflux-ci/releases/download/${VE
 - **Pull command**: \`podman pull quay.io/konflux-ci/konflux-operator:${IMAGE_TAG}\`
 
 ### Artifacts
-- install.yaml - Complete installation manifest (references SHA-tagged image)
+- install.yaml - Complete installation manifest (includes CRDs, RBAC, and operator deployment)
+- samples.tar.gz - Sample Custom Resources
+
+### Documentation
+- [README.md](https://github.com/konflux-ci/konflux-ci/blob/main/README.md) - Installation and usage instructions
 EOF
 
 echo "Release notes generated at: ${OUTPUT_FILE}"
