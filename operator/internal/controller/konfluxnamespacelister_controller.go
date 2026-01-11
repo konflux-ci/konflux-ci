@@ -180,7 +180,7 @@ func (r *KonfluxNamespaceListerReconciler) applyManifests(ctx context.Context, t
 				continue
 			}
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.NamespaceLister, err)
+				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), manifests.NamespaceLister, err)
 		}
 	}
 	return nil
