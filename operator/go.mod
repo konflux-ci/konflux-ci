@@ -1,16 +1,16 @@
 module github.com/konflux-ci/konflux-ci/operator
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/cert-manager/cert-manager v1.16.3
 	github.com/onsi/ginkgo/v2 v2.27.4
 	github.com/onsi/gomega v1.38.3
 	github.com/openshift/api v0.0.0-20260109135506-3920bba77f16
-	k8s.io/api v0.34.1
+	k8s.io/api v0.35.0
 	k8s.io/apiextensions-apiserver v0.34.1
-	k8s.io/apimachinery v0.34.1
-	k8s.io/client-go v0.34.1
+	k8s.io/apimachinery v0.35.0
+	k8s.io/client-go v0.35.0
 	k8s.io/utils v0.0.0-20260108192941-914a6e750570
 	sigs.k8s.io/controller-runtime v0.22.4
 	sigs.k8s.io/yaml v1.6.0
