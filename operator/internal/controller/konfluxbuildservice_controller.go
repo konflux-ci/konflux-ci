@@ -208,7 +208,7 @@ func (r *KonfluxBuildServiceReconciler) applyManifests(ctx context.Context, tc *
 				continue
 			}
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.BuildService, err)
+				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), manifests.BuildService, err)
 		}
 	}
 	return nil

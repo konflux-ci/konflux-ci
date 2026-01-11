@@ -108,7 +108,7 @@ func (r *KonfluxImageControllerReconciler) Reconcile(ctx context.Context, req ct
 	})
 
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, tc, imageController); err != nil {
+	if err := r.applyManifests(ctx, tc); err != nil {
 		log.Error(err, "Failed to apply manifests")
 		SetFailedCondition(imageController, ImageControllerConditionTypeReady, "ApplyFailed", err)
 		if updateErr := r.Status().Update(ctx, imageController); updateErr != nil {
@@ -149,7 +149,7 @@ func (r *KonfluxImageControllerReconciler) Reconcile(ctx context.Context, req ct
 
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
-func (r *KonfluxImageControllerReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxImageController) error {
+func (r *KonfluxImageControllerReconciler) applyManifests(ctx context.Context, tc *tracking.Client) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.ImageController)
@@ -173,7 +173,7 @@ func (r *KonfluxImageControllerReconciler) applyManifests(ctx context.Context, t
 				continue
 			}
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.ImageController, err)
+				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), manifests.ImageController, err)
 		}
 	}
 	return nil

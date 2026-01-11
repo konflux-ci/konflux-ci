@@ -195,7 +195,7 @@ func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context
 				continue
 			}
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.Integration, err)
+				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), manifests.Integration, err)
 		}
 	}
 	return nil

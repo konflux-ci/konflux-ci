@@ -91,7 +91,7 @@ func (r *KonfluxRBACReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	})
 
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, tc, konfluxRBAC); err != nil {
+	if err := r.applyManifests(ctx, tc); err != nil {
 		log.Error(err, "Failed to apply manifests")
 		SetFailedCondition(konfluxRBAC, RBACConditionTypeReady, "ApplyFailed", err)
 		if updateErr := r.Status().Update(ctx, konfluxRBAC); updateErr != nil {
@@ -131,7 +131,7 @@ func (r *KonfluxRBACReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 }
 
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
-func (r *KonfluxRBACReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxRBAC) error {
+func (r *KonfluxRBACReconciler) applyManifests(ctx context.Context, tc *tracking.Client) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.RBAC)
@@ -155,7 +155,7 @@ func (r *KonfluxRBACReconciler) applyManifests(ctx context.Context, tc *tracking
 				continue
 			}
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.RBAC, err)
+				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), manifests.RBAC, err)
 		}
 	}
 	return nil

@@ -99,7 +99,7 @@ func (r *KonfluxInfoReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	})
 
 	// Ensure konflux-info namespace exists
-	if err := r.ensureNamespaceExists(ctx, tc, konfluxInfo); err != nil {
+	if err := r.ensureNamespaceExists(ctx, tc); err != nil {
 		log.Error(err, "Failed to ensure namespace")
 		SetFailedCondition(konfluxInfo, InfoConditionTypeReady, "NamespaceCreationFailed", err)
 		if updateErr := r.Status().Update(ctx, konfluxInfo); updateErr != nil {
@@ -129,7 +129,7 @@ func (r *KonfluxInfoReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, tc, konfluxInfo); err != nil {
+	if err := r.applyManifests(ctx, tc); err != nil {
 		log.Error(err, "Failed to apply manifests")
 		SetFailedCondition(konfluxInfo, InfoConditionTypeReady, "ApplyFailed", err)
 		if updateErr := r.Status().Update(ctx, konfluxInfo); updateErr != nil {
@@ -170,7 +170,7 @@ func (r *KonfluxInfoReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 }
 
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
-func (r *KonfluxInfoReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxInfo) error {
+func (r *KonfluxInfoReconciler) applyManifests(ctx context.Context, tc *tracking.Client) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.Info)
@@ -194,7 +194,7 @@ func (r *KonfluxInfoReconciler) applyManifests(ctx context.Context, tc *tracking
 				continue
 			}
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
-				obj.GetNamespace(), obj.GetName(), getKind(obj), manifests.Info, err)
+				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), manifests.Info, err)
 		}
 	}
 	return nil
@@ -214,7 +214,7 @@ func (r *KonfluxInfoReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // ensureNamespaceExists ensures the konflux-info namespace exists before creating ConfigMaps.
-func (r *KonfluxInfoReconciler) ensureNamespaceExists(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxInfo) error {
+func (r *KonfluxInfoReconciler) ensureNamespaceExists(ctx context.Context, tc *tracking.Client) error {
 	objects, err := r.ObjectStore.GetForComponent(manifests.Info)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for Info: %w", err)
@@ -230,7 +230,7 @@ func (r *KonfluxInfoReconciler) ensureNamespaceExists(ctx context.Context, tc *t
 			// Apply with ownership using the tracking client
 			if err := tc.ApplyOwned(ctx, namespace); err != nil {
 				return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
-					namespace.GetNamespace(), namespace.GetName(), getKind(namespace), manifests.Info, err)
+					namespace.GetNamespace(), namespace.GetName(), tracking.GetKind(namespace), manifests.Info, err)
 			}
 		}
 	}

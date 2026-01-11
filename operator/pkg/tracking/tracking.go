@@ -390,3 +390,13 @@ func IsNoKindMatchError(err error) bool {
 	var noKindErr *meta.NoKindMatchError
 	return errors.As(err, &noKindErr)
 }
+
+// GetKind returns the Kind of a client.Object.
+// For unstructured objects, it uses the GVK directly.
+// For typed objects, it uses the GVK from the object's metadata.
+func GetKind(obj client.Object) string {
+	if u, ok := obj.(*unstructured.Unstructured); ok {
+		return u.GetKind()
+	}
+	return obj.GetObjectKind().GroupVersionKind().Kind
+}
