@@ -6,7 +6,8 @@ require (
 	github.com/cert-manager/cert-manager v1.16.3
 	github.com/onsi/ginkgo/v2 v2.27.4
 	github.com/onsi/gomega v1.39.0
-	github.com/openshift/api v0.0.0-20260112003852-92b92bfb5020
+	github.com/openshift/api v0.0.0-20260112104441-900e7e5b58ab
+	golang.org/x/sync v0.19.0
 	k8s.io/api v0.34.1
 	k8s.io/apiextensions-apiserver v0.34.1
 	k8s.io/apimachinery v0.34.1
@@ -87,7 +88,6 @@ require (
 	golang.org/x/mod v0.31.0 // indirect
 	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/term v0.38.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
