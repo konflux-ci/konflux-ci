@@ -108,6 +108,28 @@ subjects:
 ---
 apiVersion: v1
 data:
+  auth.conf: |
+    # Auth configuration with impersonate headers
+    auth_request_set $user  $upstream_http_x_auth_request_email;
+    proxy_set_header Impersonate-User $user;
+    proxy_set_header Impersonate-Group system:authenticated;
+    proxy_set_header Authorization "Bearer __BEARER_TOKEN__";
+  tekton-results.conf: |
+    location /api/k8s/plugins/tekton-results/ {
+        auth_request /oauth2/auth;
+
+        rewrite /api/k8s/plugins/tekton-results/(.+) /$1 break;
+        proxy_read_timeout 30m;
+        proxy_pass https://__TEKTON_RESULTS_HOSTNAME__:8080;
+        include /mnt/nginx-generated-config/auth.conf;
+    }
+kind: ConfigMap
+metadata:
+  name: proxy-nginx-templates-dt292585th
+  namespace: konflux-ui
+---
+apiVersion: v1
+data:
   nginx.conf: |
     worker_processes auto;
     error_log /var/log/nginx/error.log;
@@ -189,6 +211,7 @@ data:
             location /wss/k8s/ {
                 auth_request /oauth2/auth;
 
+                proxy_pass https://kubernetes.default.svc/;
                 proxy_http_version 1.1;
                 proxy_set_header Upgrade $http_upgrade;
                 proxy_set_header Connection $connection_upgrade;
@@ -250,29 +273,7 @@ data:
     }
 kind: ConfigMap
 metadata:
-  name: proxy-d2bh9588df
-  namespace: konflux-ui
----
-apiVersion: v1
-data:
-  auth.conf: |
-    # Auth configuration with impersonate headers
-    auth_request_set $user  $upstream_http_x_auth_request_email;
-    proxy_set_header Impersonate-User $user;
-    proxy_set_header Impersonate-Group system:authenticated;
-    proxy_set_header Authorization "Bearer __BEARER_TOKEN__";
-  tekton-results.conf: |
-    location /api/k8s/plugins/tekton-results/ {
-        auth_request /oauth2/auth;
-
-        rewrite /api/k8s/plugins/tekton-results/(.+) /$1 break;
-        proxy_read_timeout 30m;
-        proxy_pass https://__TEKTON_RESULTS_HOSTNAME__:8080;
-        include /mnt/nginx-generated-config/auth.conf;
-    }
-kind: ConfigMap
-metadata:
-  name: proxy-nginx-templates-dt292585th
+  name: proxy-t8gc9c9fbh
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -590,7 +591,7 @@ spec:
           items:
           - key: nginx.conf
             path: nginx.conf
-          name: proxy-d2bh9588df
+          name: proxy-t8gc9c9fbh
         name: proxy
       - configMap:
           defaultMode: 420
