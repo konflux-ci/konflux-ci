@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g., v0.2025.03)'
-        required: true
+        description: 'Release version (e.g., v0.0.1). If not provided, will auto-calculate from latest release'
+        required: false
         type: string
       commit_sha:
         description: 'Full commit SHA to release'
@@ -42,6 +42,16 @@ jobs:
           ref: ${{ inputs.commit_sha }}
           fetch-depth: 0
 
+      - name: Calculate or use provided version
+        id: version
+        working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(.github/scripts/calculate-version.sh "${{ inputs.version }}")
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Final version: ${VERSION}"
+
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
@@ -56,7 +66,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           .github/scripts/prepare-release-notes.sh \
-            "${{ inputs.version }}" \
+            "${{ steps.version.outputs.version }}" \
             "${{ inputs.image_tag }}" \
             "${{ inputs.commit_sha }}" \
             /tmp/release-notes.md
@@ -68,7 +78,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           .github/scripts/create-release.sh \
-            "${{ inputs.version }}" \
+            "${{ steps.version.outputs.version }}" \
             "${{ inputs.commit_sha }}" \
             /tmp/release-notes.md \
             operator/dist \
