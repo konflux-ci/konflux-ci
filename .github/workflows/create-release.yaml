@@ -25,6 +25,11 @@ on:
         required: false
         type: boolean
         default: false
+      create_issue_for_unreleased:
+        description: 'Create GitHub issue if unreleased commits detected (default: false)'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   create-release:
@@ -32,6 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      issues: write
     defaults:
       run:
         working-directory: operator
@@ -65,7 +71,22 @@ jobs:
             echo "Already on target ref: ${TARGET_REF}"
           fi
 
+      - name: Check for duplicate release
+        id: check-duplicate
+        working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          result=$(.github/scripts/check-duplicate-release.sh \
+            "${{ inputs.image_tag || steps.detect-sha.outputs.image_tag }}" \
+            "${{ inputs.git_ref || steps.detect-sha.outputs.git_ref }}" \
+            "${{ inputs.create_issue_for_unreleased }}")
+          echo "${result}" | grep "^should_skip=" >> $GITHUB_OUTPUT
+          echo "${result}" | grep "^has_unreleased_commits=" >> $GITHUB_OUTPUT
+          echo "${result}" | grep "^issue_created=" >> $GITHUB_OUTPUT
+
       - name: Calculate or use provided version
+        if: steps.check-duplicate.outputs.should_skip != 'true'
         id: version
         working-directory: ${{ github.workspace }}
         env:
@@ -76,16 +97,19 @@ jobs:
           echo "Final version: ${VERSION}"
 
       - name: Setup Go
+        if: steps.check-duplicate.outputs.should_skip != 'true'
         uses: actions/setup-go@v6
         with:
           go-version-file: operator/go.mod
 
       - name: Generate release artifacts
+        if: steps.check-duplicate.outputs.should_skip != 'true'
         run: |
           .github/scripts/generate-release-artifacts.sh \
             "${{ inputs.image_tag || steps.detect-sha.outputs.image_tag }}"
 
       - name: Prepare release notes
+        if: steps.check-duplicate.outputs.should_skip != 'true'
         id: release-notes
         working-directory: ${{ github.workspace }}
         run: |
@@ -97,6 +121,7 @@ jobs:
           echo "notes_file=/tmp/release-notes.md" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
+        if: steps.check-duplicate.outputs.should_skip != 'true'
         working-directory: ${{ github.workspace }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
