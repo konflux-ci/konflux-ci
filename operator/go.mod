@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/cert-manager/cert-manager v1.16.3
 	github.com/onsi/ginkgo/v2 v2.27.4
-	github.com/onsi/gomega v1.38.3
+	github.com/onsi/gomega v1.39.0
 	github.com/openshift/api v0.0.0-20260112003852-92b92bfb5020
 	k8s.io/api v0.34.1
 	k8s.io/apiextensions-apiserver v0.34.1
