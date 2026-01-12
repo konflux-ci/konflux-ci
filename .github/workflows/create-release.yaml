@@ -7,13 +7,13 @@ on:
         description: 'Release version (e.g., v0.0.1). If not provided, will auto-calculate from latest release'
         required: false
         type: string
-      commit_sha:
-        description: 'Full commit SHA to release'
-        required: true
+      git_ref:
+        description: 'Git ref to release (commit SHA, branch, or tag). If not provided, will auto-detect from latest Quay image'
+        required: false
         type: string
       image_tag:
-        description: 'Image tag (e.g., release-sha-abc1234)'
-        required: true
+        description: 'Image tag (e.g., release-sha-abc1234). If not provided, will auto-detect from latest Quay image'
+        required: false
         type: string
       draft:
         description: 'Create as draft release (for testing - no notifications)'
@@ -39,8 +39,31 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.commit_sha }}
           fetch-depth: 0
+
+      - name: Detect SHA and image tag from Quay
+        id: detect-sha
+        working-directory: ${{ github.workspace }}
+        run: |
+          result=$(.github/scripts/detect-sha-from-quay.sh \
+            "${{ github.workspace }}" \
+            "${{ inputs.image_tag }}" \
+            "${{ inputs.git_ref }}")
+          echo "${result}" | grep "^image_tag=" >> $GITHUB_OUTPUT
+          echo "${result}" | grep "^git_ref=" >> $GITHUB_OUTPUT
+
+      - name: Checkout target commit
+        working-directory: ${{ github.workspace }}
+        run: |
+          TARGET_REF="${{ inputs.git_ref || steps.detect-sha.outputs.git_ref }}"
+          CURRENT_SHA=$(git rev-parse HEAD)
+          TARGET_SHA=$(git rev-parse "${TARGET_REF}")
+          if [ "${TARGET_SHA}" != "${CURRENT_SHA}" ]; then
+            echo "Checking out target ref: ${TARGET_REF}"
+            git checkout "${TARGET_REF}"
+          else
+            echo "Already on target ref: ${TARGET_REF}"
+          fi
 
       - name: Calculate or use provided version
         id: version
@@ -59,7 +82,8 @@ jobs:
 
       - name: Generate release artifacts
         run: |
-          bash ${{ github.workspace }}/.github/scripts/generate-release-artifacts.sh "${{ inputs.image_tag }}"
+          .github/scripts/generate-release-artifacts.sh \
+            "${{ inputs.image_tag || steps.detect-sha.outputs.image_tag }}"
 
       - name: Prepare release notes
         id: release-notes
@@ -67,8 +91,8 @@ jobs:
         run: |
           .github/scripts/prepare-release-notes.sh \
             "${{ steps.version.outputs.version }}" \
-            "${{ inputs.image_tag }}" \
-            "${{ inputs.commit_sha }}" \
+            "${{ inputs.image_tag || steps.detect-sha.outputs.image_tag }}" \
+            "${{ inputs.git_ref || steps.detect-sha.outputs.git_ref }}" \
             /tmp/release-notes.md
           echo "notes_file=/tmp/release-notes.md" >> $GITHUB_OUTPUT
 
@@ -79,7 +103,7 @@ jobs:
         run: |
           .github/scripts/create-release.sh \
             "${{ steps.version.outputs.version }}" \
-            "${{ inputs.commit_sha }}" \
+            "${{ inputs.git_ref || steps.detect-sha.outputs.git_ref }}" \
             /tmp/release-notes.md \
             operator/dist \
             "${{ inputs.draft }}" \
