@@ -10,7 +10,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 
+	"github.com/coder/websocket"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -87,7 +89,66 @@ var _ = Describe("Test Proxy endpoints", func() {
 			home+"/api/k8s/apis/appstudio.redhat.com/v1alpha1/namespaces/user-ns2/applications", 200),
 		Entry("Namespaces",
 			home+"/api/k8s/api/v1/namespaces", 200),
+		Entry("PipelineRuns",
+			home+"/api/k8s/apis/tekton.dev/v1/namespaces/user-ns2/pipelineruns", 200),
 	)
+
+	Describe("Test WebSocket endpoint", func() {
+		It("should establish a WebSocket connection through /wss/k8s/", func() {
+			token, err := ExtractToken(k8sClient)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(token).ToNot(BeEmpty())
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			wsURL := "wss://localhost:9443/wss/k8s/apis/tekton.dev/v1/namespaces/user-ns2/pipelineruns?watch=true"
+
+			httpClient := &http.Client{
+				Transport: &http.Transport{
+					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+				},
+			}
+
+			conn, resp, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
+				HTTPClient:   httpClient,
+				Subprotocols: []string{"base64.binary.k8s.io"},
+				HTTPHeader: http.Header{
+					"Authorization": []string{"Bearer " + token},
+					// This is needed to allow the WebSocket connection to be established
+					"Origin":        []string{"https://localhost:9443"},
+				},
+			})
+			Expect(err).NotTo(HaveOccurred(), "WebSocket connection should be established")
+			Expect(resp.StatusCode).To(Equal(http.StatusSwitchingProtocols))
+			defer conn.Close(websocket.StatusNormalClosure, "test complete")
+		})
+
+		It("should reject WebSocket connection without token", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			wsURL := "wss://localhost:9443/wss/k8s/apis/tekton.dev/v1/namespaces/user-ns2/pipelineruns?watch=true"
+
+			httpClient := &http.Client{
+				Transport: &http.Transport{
+					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+				},
+			}
+
+			_, resp, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
+				HTTPClient: httpClient,
+				HTTPHeader: http.Header{
+					// This is needed to allow the WebSocket connection to be established
+					"Origin": []string{"https://localhost:9443"},
+				},
+			})
+			Expect(err).To(HaveOccurred(), "WebSocket connection should be rejected without token")
+			if resp != nil {
+				Expect(resp.StatusCode).To(Equal(http.StatusUnauthorized))
+			}
+		})
+	})
 })
 
 // A struct to hold the response of a token request
