@@ -22,6 +22,18 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/applicationapi"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/buildservice"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/certmanager"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/enterprisecontract"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/imagecontroller"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/info"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/integrationservice"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/internalregistry"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/namespacelister"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/rbac"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/releaseservice"
+	uictrl "github.com/konflux-ci/konflux-ci/operator/internal/controller/ui"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
@@ -63,15 +75,16 @@ var _ = DescribeTable("Cleanup GVKs should cover all resource types in manifests
 				"Add these GVKs to the cleanup list to ensure orphaned resources are properly cleaned up.",
 			component, missingGVKs.UnsortedList())
 	},
-	Entry("application-api", manifests.ApplicationAPI, applicationAPICleanupGVKs),
-	Entry("build-service", manifests.BuildService, buildServiceCleanupGVKs),
-	Entry("integration", manifests.Integration, integrationServiceCleanupGVKs),
-	Entry("release", manifests.Release, releaseServiceCleanupGVKs),
-	Entry("rbac", manifests.RBAC, rbacCleanupGVKs),
-	Entry("namespace-lister", manifests.NamespaceLister, namespaceListerCleanupGVKs),
-	Entry("enterprise-contract", manifests.EnterpriseContract, enterpriseContractCleanupGVKs),
-	Entry("image-controller", manifests.ImageController, imageControllerCleanupGVKs),
-	Entry("info", manifests.Info, infoCleanupGVKs),
-	Entry("cert-manager", manifests.CertManager, certManagerCleanupGVKs),
-	Entry("registry", manifests.Registry, internalRegistryCleanupGVKs),
+	Entry("application-api", manifests.ApplicationAPI, applicationapi.ApplicationAPICleanupGVKs),
+	Entry("build-service", manifests.BuildService, buildservice.BuildServiceCleanupGVKs),
+	Entry("integration", manifests.Integration, integrationservice.IntegrationServiceCleanupGVKs),
+	Entry("release", manifests.Release, releaseservice.ReleaseServiceCleanupGVKs),
+	Entry("rbac", manifests.RBAC, rbac.RBACCleanupGVKs),
+	Entry("namespace-lister", manifests.NamespaceLister, namespacelister.NamespaceListerCleanupGVKs),
+	Entry("enterprise-contract", manifests.EnterpriseContract, enterprisecontract.EnterpriseContractCleanupGVKs),
+	Entry("image-controller", manifests.ImageController, imagecontroller.ImageControllerCleanupGVKs),
+	Entry("info", manifests.Info, info.InfoCleanupGVKs),
+	Entry("cert-manager", manifests.CertManager, certmanager.CertManagerCleanupGVKs),
+	Entry("registry", manifests.Registry, internalregistry.InternalRegistryCleanupGVKs),
+	Entry("ui", manifests.UI, uictrl.UICleanupGVKs),
 )

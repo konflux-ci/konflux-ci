@@ -44,7 +44,19 @@ import (
 	securityv1 "github.com/openshift/api/security/v1"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
-	"github.com/konflux-ci/konflux-ci/operator/internal/controller"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/applicationapi"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/buildservice"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/certmanager"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/enterprisecontract"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/imagecontroller"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/info"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/integrationservice"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/internalregistry"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/konflux"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/namespacelister"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/rbac"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/releaseservice"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/ui"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	// +kubebuilder:scaffold:imports
@@ -258,14 +270,14 @@ func main() {
 		"k8sVersion", clusterInfo.K8sVersion().GitVersion,
 	)
 
-	if err := (&controller.KonfluxReconciler{
+	if err := (&konflux.KonfluxReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Konflux")
 		os.Exit(1)
 	}
-	if err = (&controller.KonfluxBuildServiceReconciler{
+	if err = (&buildservice.KonfluxBuildServiceReconciler{
 		Client:      mgr.GetClient(),
 		Scheme:      mgr.GetScheme(),
 		ObjectStore: objectStore,
@@ -274,7 +286,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxBuildService")
 		os.Exit(1)
 	}
-	if err = (&controller.KonfluxIntegrationServiceReconciler{
+	if err = (&integrationservice.KonfluxIntegrationServiceReconciler{
 		Client:      mgr.GetClient(),
 		Scheme:      mgr.GetScheme(),
 		ObjectStore: objectStore,
@@ -282,7 +294,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxIntegrationService")
 		os.Exit(1)
 	}
-	if err = (&controller.KonfluxReleaseServiceReconciler{
+	if err = (&releaseservice.KonfluxReleaseServiceReconciler{
 		Client:      mgr.GetClient(),
 		Scheme:      mgr.GetScheme(),
 		ObjectStore: objectStore,
@@ -290,7 +302,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxReleaseService")
 		os.Exit(1)
 	}
-	if err = (&controller.KonfluxUIReconciler{
+	if err = (&ui.KonfluxUIReconciler{
 		Client:      mgr.GetClient(),
 		Scheme:      mgr.GetScheme(),
 		ObjectStore: objectStore,
@@ -299,7 +311,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxUI")
 		os.Exit(1)
 	}
-	if err = (&controller.KonfluxRBACReconciler{
+	if err = (&rbac.KonfluxRBACReconciler{
 		Client:      mgr.GetClient(),
 		Scheme:      mgr.GetScheme(),
 		ObjectStore: objectStore,
@@ -307,7 +319,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxRBAC")
 		os.Exit(1)
 	}
-	if err = (&controller.KonfluxNamespaceListerReconciler{
+	if err = (&namespacelister.KonfluxNamespaceListerReconciler{
 		Client:      mgr.GetClient(),
 		Scheme:      mgr.GetScheme(),
 		ObjectStore: objectStore,
@@ -315,7 +327,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxNamespaceLister")
 		os.Exit(1)
 	}
-	if err = (&controller.KonfluxEnterpriseContractReconciler{
+	if err = (&enterprisecontract.KonfluxEnterpriseContractReconciler{
 		Client:      mgr.GetClient(),
 		Scheme:      mgr.GetScheme(),
 		ObjectStore: objectStore,
@@ -323,7 +335,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxEnterpriseContract")
 		os.Exit(1)
 	}
-	if err = (&controller.KonfluxImageControllerReconciler{
+	if err = (&imagecontroller.KonfluxImageControllerReconciler{
 		Client:      mgr.GetClient(),
 		Scheme:      mgr.GetScheme(),
 		ObjectStore: objectStore,
@@ -331,7 +343,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxImageController")
 		os.Exit(1)
 	}
-	if err = (&controller.KonfluxApplicationAPIReconciler{
+	if err = (&applicationapi.KonfluxApplicationAPIReconciler{
 		Client:      mgr.GetClient(),
 		Scheme:      mgr.GetScheme(),
 		ObjectStore: objectStore,
@@ -339,7 +351,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxApplicationAPI")
 		os.Exit(1)
 	}
-	if err = (&controller.KonfluxInfoReconciler{
+	if err = (&info.KonfluxInfoReconciler{
 		Client:      mgr.GetClient(),
 		Scheme:      mgr.GetScheme(),
 		ObjectStore: objectStore,
@@ -347,7 +359,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxInfo")
 		os.Exit(1)
 	}
-	if err = (&controller.KonfluxCertManagerReconciler{
+	if err = (&certmanager.KonfluxCertManagerReconciler{
 		Client:      mgr.GetClient(),
 		Scheme:      mgr.GetScheme(),
 		ObjectStore: objectStore,
@@ -355,7 +367,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxCertManager")
 		os.Exit(1)
 	}
-	if err := (&controller.KonfluxInternalRegistryReconciler{
+	if err := (&internalregistry.KonfluxInternalRegistryReconciler{
 		Client:      mgr.GetClient(),
 		Scheme:      mgr.GetScheme(),
 		ObjectStore: objectStore,
