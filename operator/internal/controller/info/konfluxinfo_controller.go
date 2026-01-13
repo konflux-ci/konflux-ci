@@ -45,9 +45,8 @@ const (
 	CRName = "konflux-info"
 	// FieldManager is the field manager identifier for server-side apply.
 	FieldManager = "konflux-info-controller"
-
-	// InfoConditionTypeReady is the condition type for overall readiness
-	InfoConditionTypeReady = "Ready"
+	// crKind is used in error messages to identify this CR type.
+	crKind = "KonfluxInfo"
 	// infoNamespace is the namespace for info resources
 	infoNamespace = "konflux-info"
 	// infoConfigMapName is the name of the info.json ConfigMap
@@ -97,6 +96,9 @@ func (r *KonfluxInfoReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	log.Info("Reconciling KonfluxInfo", "name", konfluxInfo.Name)
 
+	// Create error handler for consistent error reporting
+	errHandler := condition.NewReconcileErrorHandler(log, r.Status(), konfluxInfo, crKind)
+
 	// Create a tracking client with ownership config for this reconcile.
 	tc := tracking.NewClientWithOwnership(r.Client, tracking.OwnershipConfig{
 		Owner:             konfluxInfo,
@@ -108,63 +110,33 @@ func (r *KonfluxInfoReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Ensure konflux-info namespace exists
 	if err := r.ensureNamespaceExists(ctx, tc); err != nil {
-		log.Error(err, "Failed to ensure namespace")
-		condition.SetFailedCondition(konfluxInfo, InfoConditionTypeReady, "NamespaceCreationFailed", err)
-		if updateErr := r.Status().Update(ctx, konfluxInfo); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonNamespaceCreationFailed, "ensure namespace exists")
 	}
 
 	// Reconcile ConfigMaps first (if configured)
 	// This must happen before applyManifests to ensure ConfigMaps exist
 	if err := r.reconcileInfoConfigMap(ctx, tc, konfluxInfo); err != nil {
-		log.Error(err, "Failed to reconcile info ConfigMap")
-		condition.SetFailedCondition(konfluxInfo, InfoConditionTypeReady, "InfoConfigMapFailed", err)
-		if updateErr := r.Status().Update(ctx, konfluxInfo); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonConfigMapFailed, "reconcile info ConfigMap")
 	}
 
 	if err := r.reconcileBannerConfigMap(ctx, tc, konfluxInfo); err != nil {
-		log.Error(err, "Failed to reconcile banner ConfigMap")
-		condition.SetFailedCondition(konfluxInfo, InfoConditionTypeReady, "BannerConfigMapFailed", err)
-		if updateErr := r.Status().Update(ctx, konfluxInfo); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonConfigMapFailed, "reconcile banner ConfigMap")
 	}
 
 	// Apply all embedded manifests
 	if err := r.applyManifests(ctx, tc); err != nil {
-		log.Error(err, "Failed to apply manifests")
-		condition.SetFailedCondition(konfluxInfo, InfoConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, konfluxInfo); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleApplyError(ctx, err)
 	}
 
 	// Cleanup orphaned resources
 	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, konfluxInfo.Name, InfoCleanupGVKs); err != nil {
-		log.Error(err, "Failed to cleanup orphaned resources")
-		condition.SetFailedCondition(konfluxInfo, InfoConditionTypeReady, "CleanupFailed", err)
-		if updateErr := r.Status().Update(ctx, konfluxInfo); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleCleanupError(ctx, err)
 	}
 
 	// Update component status (sets Ready condition based on owned resources)
 	// Note: konflux-info has no deployments, so this will set Ready=true
-	if err := condition.UpdateComponentStatuses(ctx, r.Client, konfluxInfo, InfoConditionTypeReady); err != nil {
-		log.Error(err, "Failed to update component statuses")
-		condition.SetFailedCondition(konfluxInfo, InfoConditionTypeReady, "FailedToGetDeploymentStatus", err)
-		if updateErr := r.Status().Update(ctx, konfluxInfo); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+	if err := condition.UpdateComponentStatuses(ctx, r.Client, konfluxInfo); err != nil {
+		return errHandler.HandleStatusUpdateError(ctx, err)
 	}
 
 	// Update status

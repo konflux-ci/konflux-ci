@@ -44,9 +44,8 @@ const (
 	CRName = "konflux-namespace-lister"
 	// FieldManager is the field manager identifier for server-side apply.
 	FieldManager = "konflux-namespacelister-controller"
-
-	// NamespaceListerConditionTypeReady is the condition type for overall readiness
-	NamespaceListerConditionTypeReady = "Ready"
+	// crKind is used in error messages to identify this CR type.
+	crKind = "KonfluxNamespaceLister"
 
 	// namespaceListerContainerName is the name of the namespace-lister container
 	namespaceListerContainerName = "namespace-lister"
@@ -106,6 +105,9 @@ func (r *KonfluxNamespaceListerReconciler) Reconcile(ctx context.Context, req ct
 
 	log.Info("Reconciling KonfluxNamespaceLister", "name", konfluxNamespaceLister.Name)
 
+	// Create error handler for consistent error reporting
+	errHandler := condition.NewReconcileErrorHandler(log, r.Status(), konfluxNamespaceLister, crKind)
+
 	// Create a tracking client with ownership config for this reconcile.
 	tc := tracking.NewClientWithOwnership(r.Client, tracking.OwnershipConfig{
 		Owner:             konfluxNamespaceLister,
@@ -117,32 +119,17 @@ func (r *KonfluxNamespaceListerReconciler) Reconcile(ctx context.Context, req ct
 
 	// Apply all embedded manifests
 	if err := r.applyManifests(ctx, tc, konfluxNamespaceLister); err != nil {
-		log.Error(err, "Failed to apply manifests")
-		condition.SetFailedCondition(konfluxNamespaceLister, NamespaceListerConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, konfluxNamespaceLister); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleApplyError(ctx, err)
 	}
 
 	// Cleanup orphaned resources
 	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, konfluxNamespaceLister.Name, NamespaceListerCleanupGVKs); err != nil {
-		log.Error(err, "Failed to cleanup orphaned resources")
-		condition.SetFailedCondition(konfluxNamespaceLister, NamespaceListerConditionTypeReady, "CleanupFailed", err)
-		if updateErr := r.Status().Update(ctx, konfluxNamespaceLister); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleCleanupError(ctx, err)
 	}
 
 	// Check the status of owned deployments and update KonfluxNamespaceLister status
-	if err := condition.UpdateComponentStatuses(ctx, r.Client, konfluxNamespaceLister, NamespaceListerConditionTypeReady); err != nil {
-		log.Error(err, "Failed to update component statuses")
-		condition.SetFailedCondition(konfluxNamespaceLister, NamespaceListerConditionTypeReady, "FailedToGetDeploymentStatus", err)
-		if updateErr := r.Status().Update(ctx, konfluxNamespaceLister); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+	if err := condition.UpdateComponentStatuses(ctx, r.Client, konfluxNamespaceLister); err != nil {
+		return errHandler.HandleStatusUpdateError(ctx, err)
 	}
 
 	// Update status

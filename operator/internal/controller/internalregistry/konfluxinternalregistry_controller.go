@@ -42,9 +42,8 @@ const (
 	CRName = "konflux-internal-registry"
 	// FieldManager is the field manager identifier for server-side apply.
 	FieldManager = "konflux-internal-registry-controller"
-
-	// InternalRegistryConditionTypeReady is the condition type for overall readiness
-	InternalRegistryConditionTypeReady = "Ready"
+	// crKind is used in error messages to identify this CR type.
+	crKind = "KonfluxInternalRegistry"
 )
 
 // InternalRegistryCleanupGVKs defines which resource types should be cleaned up when they are
@@ -87,6 +86,9 @@ func (r *KonfluxInternalRegistryReconciler) Reconcile(ctx context.Context, req c
 
 	log.Info("Reconciling KonfluxInternalRegistry", "name", registry.Name)
 
+	// Create error handler for consistent error reporting
+	errHandler := condition.NewReconcileErrorHandler(log, r.Status(), registry, crKind)
+
 	// Create a tracking client with ownership config for this reconcile.
 	// Resources applied through this client are automatically tracked and owned.
 	// At the end of a successful reconcile, orphaned resources are cleaned up.
@@ -100,34 +102,19 @@ func (r *KonfluxInternalRegistryReconciler) Reconcile(ctx context.Context, req c
 
 	// Apply manifests (if CR exists, it's enabled)
 	if err := r.applyManifests(ctx, tc); err != nil {
-		log.Error(err, "Failed to apply manifests")
-		condition.SetFailedCondition(registry, InternalRegistryConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, registry); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleApplyError(ctx, err)
 	}
 
 	// Cleanup orphaned resources - delete any resources with our owner label
 	// that weren't applied during this reconcile. This handles the case where
 	// enabled changes from true to false (resources are automatically deleted).
 	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, registry.Name, InternalRegistryCleanupGVKs); err != nil {
-		log.Error(err, "Failed to cleanup orphaned resources")
-		condition.SetFailedCondition(registry, InternalRegistryConditionTypeReady, "CleanupFailed", err)
-		if updateErr := r.Status().Update(ctx, registry); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleCleanupError(ctx, err)
 	}
 
 	// Check the status of owned deployments and update KonfluxInternalRegistry status
-	if err := condition.UpdateComponentStatuses(ctx, r.Client, registry, InternalRegistryConditionTypeReady); err != nil {
-		log.Error(err, "Failed to update component statuses")
-		condition.SetFailedCondition(registry, InternalRegistryConditionTypeReady, "FailedToGetDeploymentStatus", err)
-		if updateErr := r.Status().Update(ctx, registry); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+	if err := condition.UpdateComponentStatuses(ctx, r.Client, registry); err != nil {
+		return errHandler.HandleStatusUpdateError(ctx, err)
 	}
 
 	// Update status

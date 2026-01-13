@@ -38,9 +38,8 @@ const (
 	CRName = "konflux-application-api"
 	// FieldManager is the field manager identifier for server-side apply.
 	FieldManager = "konflux-applicationapi-controller"
-
-	// ApplicationAPIConditionTypeReady is the condition type for overall readiness
-	ApplicationAPIConditionTypeReady = "Ready"
+	// crKind is used in error messages to identify this CR type.
+	crKind = "KonfluxApplicationAPI"
 )
 
 // ApplicationAPICleanupGVKs defines which resource types should be cleaned up when they are
@@ -77,6 +76,9 @@ func (r *KonfluxApplicationAPIReconciler) Reconcile(ctx context.Context, req ctr
 
 	log.Info("Reconciling KonfluxApplicationAPI", "name", applicationAPI.Name)
 
+	// Create error handler for consistent error reporting
+	errHandler := condition.NewReconcileErrorHandler(log, r.Status(), applicationAPI, crKind)
+
 	// Create a tracking client with ownership config for this reconcile.
 	tc := tracking.NewClientWithOwnership(r.Client, tracking.OwnershipConfig{
 		Owner:             applicationAPI,
@@ -88,32 +90,17 @@ func (r *KonfluxApplicationAPIReconciler) Reconcile(ctx context.Context, req ctr
 
 	// Apply all embedded manifests
 	if err := r.applyManifests(ctx, tc); err != nil {
-		log.Error(err, "Failed to apply manifests")
-		condition.SetFailedCondition(applicationAPI, ApplicationAPIConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, applicationAPI); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleApplyError(ctx, err)
 	}
 
 	// Cleanup orphaned resources
 	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, applicationAPI.Name, ApplicationAPICleanupGVKs); err != nil {
-		log.Error(err, "Failed to cleanup orphaned resources")
-		condition.SetFailedCondition(applicationAPI, ApplicationAPIConditionTypeReady, "CleanupFailed", err)
-		if updateErr := r.Status().Update(ctx, applicationAPI); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleCleanupError(ctx, err)
 	}
 
 	// Check the status of owned deployments and update KonfluxApplicationAPI status
-	if err := condition.UpdateComponentStatuses(ctx, r.Client, applicationAPI, ApplicationAPIConditionTypeReady); err != nil {
-		log.Error(err, "Failed to update component statuses")
-		condition.SetFailedCondition(applicationAPI, ApplicationAPIConditionTypeReady, "FailedToGetDeploymentStatus", err)
-		if updateErr := r.Status().Update(ctx, applicationAPI); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+	if err := condition.UpdateComponentStatuses(ctx, r.Client, applicationAPI); err != nil {
+		return errHandler.HandleStatusUpdateError(ctx, err)
 	}
 
 	// Update status

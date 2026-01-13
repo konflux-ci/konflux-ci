@@ -46,9 +46,8 @@ const (
 	CRName = "konflux-build-service"
 	// FieldManager is the field manager identifier for server-side apply.
 	FieldManager = "konflux-buildservice-controller"
-
-	// BuildServiceConditionTypeReady is the condition type for overall readiness
-	BuildServiceConditionTypeReady = "Ready"
+	// crKind is used in error messages to identify this CR type.
+	crKind = "KonfluxBuildService"
 
 	// Deployment names
 	buildControllerManagerDeploymentName = "build-service-controller-manager"
@@ -121,6 +120,9 @@ func (r *KonfluxBuildServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	log.Info("Reconciling KonfluxBuildService", "name", buildService.Name)
 
+	// Create error handler for consistent error reporting
+	errHandler := condition.NewReconcileErrorHandler(log, r.Status(), buildService, crKind)
+
 	// Create a tracking client with ownership config for this reconcile.
 	// Resources applied through this client are automatically tracked and owned.
 	tc := tracking.NewClientWithOwnership(r.Client, tracking.OwnershipConfig{
@@ -133,33 +135,18 @@ func (r *KonfluxBuildServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	// Apply all embedded manifests
 	if err := r.applyManifests(ctx, tc, buildService); err != nil {
-		log.Error(err, "Failed to apply manifests")
-		condition.SetFailedCondition(buildService, BuildServiceConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, buildService); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleApplyError(ctx, err)
 	}
 
 	// Cleanup orphaned resources - delete any resources with our owner label
 	// that weren't applied during this reconcile.
 	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, buildService.Name, BuildServiceCleanupGVKs); err != nil {
-		log.Error(err, "Failed to cleanup orphaned resources")
-		condition.SetFailedCondition(buildService, BuildServiceConditionTypeReady, "CleanupFailed", err)
-		if updateErr := r.Status().Update(ctx, buildService); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleCleanupError(ctx, err)
 	}
 
 	// Check the status of owned deployments and update KonfluxBuildService status
-	if err := condition.UpdateComponentStatuses(ctx, r.Client, buildService, BuildServiceConditionTypeReady); err != nil {
-		log.Error(err, "Failed to update component statuses")
-		condition.SetFailedCondition(buildService, BuildServiceConditionTypeReady, "FailedToGetDeploymentStatus", err)
-		if updateErr := r.Status().Update(ctx, buildService); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+	if err := condition.UpdateComponentStatuses(ctx, r.Client, buildService); err != nil {
+		return errHandler.HandleStatusUpdateError(ctx, err)
 	}
 
 	// Update status

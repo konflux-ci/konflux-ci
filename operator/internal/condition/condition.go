@@ -82,7 +82,7 @@ func DeploymentCondition(deployment *appsv1.Deployment) metav1.Condition {
 		return metav1.Condition{
 			Type:    conditionType,
 			Status:  metav1.ConditionTrue,
-			Reason:  "DeploymentReady",
+			Reason:  ReasonDeploymentReady,
 			Message: fmt.Sprintf("Deployment has %d/%d replicas ready", deployment.Status.ReadyReplicas, deployment.Status.Replicas),
 		}
 	}
@@ -104,7 +104,7 @@ func DeploymentCondition(deployment *appsv1.Deployment) metav1.Condition {
 	return metav1.Condition{
 		Type:    conditionType,
 		Status:  metav1.ConditionFalse,
-		Reason:  "DeploymentNotReady",
+		Reason:  ReasonDeploymentNotReady,
 		Message: message,
 	}
 }
@@ -147,7 +147,7 @@ func SetDeploymentConditions(obj konfluxv1alpha1.ConditionAccessor, deployments 
 }
 
 // SetOverallReadyCondition sets the overall Ready condition based on the deployment status summary.
-func SetOverallReadyCondition(obj konfluxv1alpha1.ConditionAccessor, readyConditionType string, summary DeploymentStatusSummary) {
+func SetOverallReadyCondition(obj konfluxv1alpha1.ConditionAccessor, summary DeploymentStatusSummary) {
 	if summary.AllReady {
 		var message string
 		if summary.TotalCount == 0 {
@@ -156,16 +156,16 @@ func SetOverallReadyCondition(obj konfluxv1alpha1.ConditionAccessor, readyCondit
 			message = fmt.Sprintf("All %d deployments are ready", summary.TotalCount)
 		}
 		SetCondition(obj, metav1.Condition{
-			Type:    readyConditionType,
+			Type:    TypeReady,
 			Status:  metav1.ConditionTrue,
-			Reason:  "AllComponentsReady",
+			Reason:  ReasonAllComponentsReady,
 			Message: message,
 		})
 	} else {
 		SetCondition(obj, metav1.Condition{
-			Type:    readyConditionType,
+			Type:    TypeReady,
 			Status:  metav1.ConditionFalse,
-			Reason:  "ComponentsNotReady",
+			Reason:  ReasonComponentsNotReady,
 			Message: fmt.Sprintf("Deployments not ready: %v", summary.NotReadyNames),
 		})
 	}
@@ -204,7 +204,6 @@ func AggregateReadiness(subCRStatuses []SubCRStatus) (allReady bool, notReadyRea
 // All deployments are managed by component-specific reconcilers, so we only aggregate sub-CR statuses.
 func SetAggregatedReadyCondition(
 	obj konfluxv1alpha1.ConditionAccessor,
-	readyConditionType string,
 	subCRStatuses []SubCRStatus,
 ) {
 	allReady, notReadyReasons := AggregateReadiness(subCRStatuses)
@@ -213,16 +212,16 @@ func SetAggregatedReadyCondition(
 		// Count total components (sub-CRs)
 		totalComponents := len(subCRStatuses)
 		SetCondition(obj, metav1.Condition{
-			Type:    readyConditionType,
+			Type:    TypeReady,
 			Status:  metav1.ConditionTrue,
-			Reason:  "AllComponentsReady",
+			Reason:  ReasonAllComponentsReady,
 			Message: fmt.Sprintf("All %d components are ready", totalComponents),
 		})
 	} else {
 		SetCondition(obj, metav1.Condition{
-			Type:    readyConditionType,
+			Type:    TypeReady,
 			Status:  metav1.ConditionFalse,
-			Reason:  "ComponentsNotReady",
+			Reason:  ReasonComponentsNotReady,
 			Message: strings.Join(notReadyReasons, "; "),
 		})
 	}
@@ -273,7 +272,7 @@ func CopySubCRStatus(
 
 	return SubCRStatus{
 		Name:  conditionPrefix,
-		Ready: IsConditionTrue(subCR, "Ready"),
+		Ready: IsConditionTrue(subCR, TypeReady),
 	}
 }
 
@@ -290,12 +289,10 @@ func CopySubCRStatus(
 //   - ctx: The context for the operation
 //   - k8sClient: The Kubernetes client for listing deployments
 //   - cr: The custom resource that implements ConditionAccessor (e.g., KonfluxBuildService, KonfluxIntegrationService)
-//   - readyConditionType: The condition type to use for the overall Ready condition (e.g., "Ready")
 func UpdateComponentStatuses(
 	ctx context.Context,
 	k8sClient client.Client,
 	cr konfluxv1alpha1.ConditionAccessor,
-	readyConditionType string,
 ) error {
 	// List all deployments owned by this CR instance
 	deploymentList := &appsv1.DeploymentList{}
@@ -310,11 +307,11 @@ func UpdateComponentStatuses(
 
 	// Remove conditions for deployments that no longer exist
 	CleanupStaleConditions(cr, func(cond metav1.Condition) bool {
-		return cond.Type == readyConditionType || summary.SeenConditionTypes[cond.Type]
+		return cond.Type == TypeReady || summary.SeenConditionTypes[cond.Type]
 	})
 
 	// Set the overall Ready condition
-	SetOverallReadyCondition(cr, readyConditionType, summary)
+	SetOverallReadyCondition(cr, summary)
 
 	return nil
 }

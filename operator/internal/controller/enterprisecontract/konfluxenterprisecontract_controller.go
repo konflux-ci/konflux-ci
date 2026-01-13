@@ -43,9 +43,8 @@ const (
 	CRName = "konflux-enterprise-contract"
 	// FieldManager is the field manager identifier for server-side apply.
 	FieldManager = "konflux-enterprisecontract-controller"
-
-	// EnterpriseContractConditionTypeReady is the condition type for overall readiness
-	EnterpriseContractConditionTypeReady = "Ready"
+	// crKind is used in error messages to identify this CR type.
+	crKind = "KonfluxEnterpriseContract"
 )
 
 // EnterpriseContractCleanupGVKs defines which resource types should be cleaned up when they are
@@ -98,6 +97,9 @@ func (r *KonfluxEnterpriseContractReconciler) Reconcile(ctx context.Context, req
 
 	log.Info("Reconciling KonfluxEnterpriseContract", "name", konfluxEnterpriseContract.Name)
 
+	// Create error handler for consistent error reporting
+	errHandler := condition.NewReconcileErrorHandler(log, r.Status(), konfluxEnterpriseContract, crKind)
+
 	// Create a tracking client with ownership config for this reconcile.
 	tc := tracking.NewClientWithOwnership(r.Client, tracking.OwnershipConfig{
 		Owner:             konfluxEnterpriseContract,
@@ -109,32 +111,17 @@ func (r *KonfluxEnterpriseContractReconciler) Reconcile(ctx context.Context, req
 
 	// Apply all embedded manifests
 	if err := r.applyManifests(ctx, tc); err != nil {
-		log.Error(err, "Failed to apply manifests")
-		condition.SetFailedCondition(konfluxEnterpriseContract, EnterpriseContractConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, konfluxEnterpriseContract); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleApplyError(ctx, err)
 	}
 
 	// Cleanup orphaned resources
 	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, konfluxEnterpriseContract.Name, EnterpriseContractCleanupGVKs); err != nil {
-		log.Error(err, "Failed to cleanup orphaned resources")
-		condition.SetFailedCondition(konfluxEnterpriseContract, EnterpriseContractConditionTypeReady, "CleanupFailed", err)
-		if updateErr := r.Status().Update(ctx, konfluxEnterpriseContract); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleCleanupError(ctx, err)
 	}
 
 	// Check the status of owned deployments and update KonfluxEnterpriseContract status
-	if err := condition.UpdateComponentStatuses(ctx, r.Client, konfluxEnterpriseContract, EnterpriseContractConditionTypeReady); err != nil {
-		log.Error(err, "Failed to update component statuses")
-		condition.SetFailedCondition(konfluxEnterpriseContract, EnterpriseContractConditionTypeReady, "FailedToGetDeploymentStatus", err)
-		if updateErr := r.Status().Update(ctx, konfluxEnterpriseContract); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+	if err := condition.UpdateComponentStatuses(ctx, r.Client, konfluxEnterpriseContract); err != nil {
+		return errHandler.HandleStatusUpdateError(ctx, err)
 	}
 
 	// Update status
