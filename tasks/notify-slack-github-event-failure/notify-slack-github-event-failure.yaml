@@ -1,0 +1,124 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: notify-slack-github-event-failure
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.12.1"
+    tekton.dev/tags: "release, tenant"
+spec:
+  description: |-
+    Tekton task to send a Slack notification when the GitHub release event task fails.
+
+    This task sends a failure notification to Slack when the send-github-release-event
+    task fails, alerting the team that the GitHub release workflow was not triggered.
+  params:
+    - name: release
+      type: string
+      description: Namespaced name of release - should be in format "namespace/name"
+    - name: secretName
+      type: string
+      description: Name of secret which contains Slack webhook URL
+    - name: secretKeyName
+      type: string
+      description: Name of key within secret which contains Slack webhook URL
+    - name: slackHandles
+      type: string
+      description: Comma-separated list of Slack member IDs or group IDs to be tagged on failures
+      default: ""
+  volumes:
+    - name: slack-token
+      secret:
+        secretName: $(params.secretName)
+        optional: true
+  steps:
+    - name: notify-failure
+      image: quay.io/konflux-ci/release-service-utils:e633d51cd41d73e4b3310face21bb980af7a662f
+      volumeMounts:
+        - name: slack-token
+          mountPath: "/etc/secrets"
+          readOnly: true
+      env:
+        - name: KEYNAME
+          value: $(params.secretKeyName)
+        - name: SLACK_HANDLES
+          value: $(params.slackHandles)
+      script: |
+        #!/usr/bin/env bash
+        set -euxo pipefail
+
+        # Read Slack webhook URL from secret
+        if [ -z "${KEYNAME}" ]; then
+          echo "Error: Slack secret key name not provided"
+          exit 1
+        fi
+
+        if [ -f "/etc/secrets/${KEYNAME}" ]; then
+          set +x
+          WEBHOOK_URL=$(cat "/etc/secrets/${KEYNAME}")
+          set -x
+        else
+          echo "Error: Slack secret not found at /etc/secrets/${KEYNAME}"
+          exit 1
+        fi
+
+        # Parse release namespace and name
+        IFS='/' read -r RELEASE_NAMESPACE RELEASE_NAME <<< "$(params.release)"
+
+        # Build mentions string if handles are provided
+        MENTIONS_PREFIX=""
+        if [ -n "${SLACK_HANDLES}" ]; then
+          # Save original IFS
+          OLD_IFS=$IFS
+          # Split by comma
+          IFS=',' read -ra HANDLES <<< "$SLACK_HANDLES"
+          MENTIONS=""
+          for handle in "${HANDLES[@]}"; do
+            # Trim whitespace from each handle
+            handle=$(echo "$handle" | xargs)
+            if [ -n "$handle" ]; then
+              if [[ "$handle" == S* ]]; then
+                # Group IDs start with S, use <!subteam^GROUP_ID> format
+                MENTION="<!subteam^$handle>"
+              else
+                # Assume it's a user ID and use <@USER_ID> format
+                MENTION="<@$handle>"
+              fi
+              MENTIONS="$MENTIONS $MENTION"
+            fi
+          done
+          # Trim leading/trailing whitespace from the final string
+          MENTIONS=$(echo "$MENTIONS" | xargs)
+          # Set prefix with mentions
+          MENTIONS_PREFIX=$(printf "%s\n\n" "$MENTIONS")
+          # Restore IFS
+          IFS=$OLD_IFS
+        fi
+
+        # Construct failure message
+        MESSAGE=$(printf "%sRelease: %s/%s\n\nGitHub release event task failed. The GitHub release workflow was not triggered." \
+          "$MENTIONS_PREFIX" "$RELEASE_NAMESPACE" "$RELEASE_NAME")
+
+        # Send message to Slack
+        cat > /tmp/payload.json << EOF
+        {"text": $(echo -n "$MESSAGE" | jq -Rsa .)}
+        EOF
+
+        set +x
+        RESPONSE=$(curl -s -w "\n%{http_code}" \
+          -X POST \
+          -H "Content-Type: application/json" \
+          "${WEBHOOK_URL}" \
+          -d @/tmp/payload.json)
+        set -x
+
+        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+        BODY=$(echo "$RESPONSE" | sed '$d')
+
+        if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+          echo "Successfully sent Slack notification (HTTP $HTTP_CODE)"
+        else
+          echo "Warning: Failed to send Slack notification (HTTP $HTTP_CODE): $BODY"
+          # Don't fail the task if Slack notification fails
+          exit 0
+        fi

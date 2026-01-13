@@ -1,0 +1,161 @@
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: notify-and-trigger-github-release
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.14.0" # Required for .status in finally
+    tekton.dev/tags: release
+spec:
+  description: |-
+    Pipeline that sends Slack notifications and triggers GitHub release workflow.
+
+    This pipeline combines:
+    1. Slack notification (using the community-catalog task)
+    2. GitHub repository_dispatch event (for tag-based releases only)
+
+    The GitHub event task only runs for tag-based releases and gracefully exits
+    for branch-based releases.
+  params:
+    - name: release
+      type: string
+      description: Namespaced name of release - should be in format "namespace/name"
+    - name: secretName
+      type: string
+      description: Name of secret which contains Slack webhook URL
+    - name: secretKeyName
+      type: string
+      description: Name of key within secret which contains Slack webhook URL
+    - name: slackHandles
+      type: string
+      description: Comma-separated list of Slack member IDs or group IDs to be tagged on failures
+      default: ""
+    - name: notifySuccess
+      type: string
+      description: If set to "true", it will also send Slack notification on success
+      default: "false"
+    - name: tagSuccess
+      type: string
+      description: |-
+        If set to "true", will tag users in success notifications as well
+        (only applies when notifySuccess is true)
+      default: "false"
+    - name: githubTokenSecretName
+      type: string
+      description: |-
+        Name of secret which contains GitHub token (PAT).
+        Used as fallback if GitHub App authentication is not available.
+      default: "github-token"
+    - name: githubTokenSecretKey
+      type: string
+      description: Name of key within secret which contains GitHub token
+      default: token
+    - name: githubAppSecretName
+      type: string
+      description: |-
+        Name of secret which contains GitHub App credentials (app-id, installation-id, private-key).
+        Used when githubTokenSecretName is not provided.
+      default: github-app-credentials
+    - name: githubAppIdKey
+      type: string
+      description: Name of key within GitHub App secret which contains the App ID
+      default: app-id
+    - name: githubInstallationIdKey
+      type: string
+      description: Name of key within GitHub App secret which contains the Installation ID
+      default: installation-id
+    - name: githubPrivateKeyKey
+      type: string
+      description: Name of key within GitHub App secret which contains the private key
+      default: private-key
+    - name: githubRepo
+      type: string
+      description: GitHub repository in format "owner/repo" (e.g., "konflux-ci/konflux-ci")
+      default: "konflux-ci/konflux-ci"
+    - name: slackTaskGitUrl
+      type: string
+      description: The url to the git repo where the Slack notification task is stored (community-catalog)
+      default: https://github.com/konflux-ci/community-catalog.git
+    - name: slackTaskGitRevision
+      type: string
+      description: The revision in the Slack task git repo to be used
+      default: development
+  tasks:
+    - name: notify-slack
+      taskRef:
+        resolver: "git"
+        params:
+          - name: url
+            value: $(params.slackTaskGitUrl)
+          - name: revision
+            value: $(params.slackTaskGitRevision)
+          - name: pathInRepo
+            value: tasks/notify-slack-on-failure/notify-slack-on-failure.yaml
+      params:
+        - name: secretName
+          value: $(params.secretName)
+        - name: secretKeyName
+          value: $(params.secretKeyName)
+        - name: release
+          value: $(params.release)
+        - name: notifySuccess
+          value: $(params.notifySuccess)
+        - name: slackHandles
+          value: $(params.slackHandles)
+        - name: tagSuccess
+          value: $(params.tagSuccess)
+
+    - name: send-github-event
+      taskRef:
+        resolver: "git"
+        params:
+          - name: url
+            value: https://github.com/konflux-ci/konflux-ci.git
+          - name: revision
+            value: main
+          - name: pathInRepo
+            value: tasks/send-github-release-event/send-github-release-event.yaml
+      params:
+        - name: release
+          value: $(params.release)
+        - name: githubTokenSecretName
+          value: $(params.githubTokenSecretName)
+        - name: githubTokenSecretKey
+          value: $(params.githubTokenSecretKey)
+        - name: githubAppSecretName
+          value: $(params.githubAppSecretName)
+        - name: githubAppIdKey
+          value: $(params.githubAppIdKey)
+        - name: githubInstallationIdKey
+          value: $(params.githubInstallationIdKey)
+        - name: githubPrivateKeyKey
+          value: $(params.githubPrivateKeyKey)
+        - name: githubRepo
+          value: $(params.githubRepo)
+      runAfter:
+        - notify-slack
+
+  finally:
+    - name: notify-slack-github-event-failure
+      when:
+        - input: $(tasks.send-github-event.status)
+          operator: in
+          values: ["Failed"]
+      taskRef:
+        resolver: "git"
+        params:
+          - name: url
+            value: https://github.com/konflux-ci/konflux-ci.git
+          - name: revision
+            value: main
+          - name: pathInRepo
+            value: tasks/notify-slack-github-event-failure/notify-slack-github-event-failure.yaml
+      params:
+        - name: release
+          value: $(params.release)
+        - name: secretName
+          value: $(params.secretName)
+        - name: secretKeyName
+          value: $(params.secretKeyName)
+        - name: slackHandles
+          value: $(params.slackHandles)
