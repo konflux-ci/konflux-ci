@@ -15,12 +15,6 @@ images:
   name: quay.io/konflux-ci/namespace-lister
   newName: quay.io/konflux-ci/namespace-lister
 patches:
-- path: ./patches/with-header-auth-impersonate-user.yaml
-  target:
-    group: apps
-    kind: Deployment
-    name: namespace-lister
-    namespace: namespace-lister
 # Prevent deployment failures during slow dependency setup
 - target:
     group: apps
@@ -30,3 +24,15 @@ patches:
     - op: add
       path: /spec/progressDeadlineSeconds
       value: 2147483647
+- path: ./patches/with_header_auth_user.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: namespace-lister
+    namespace: namespace-lister
+- path: ./patches/with_header_auth_groups.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: namespace-lister
+    namespace: namespace-lister
