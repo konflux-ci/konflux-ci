@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	github.com/coder/websocket v1.8.14
-	github.com/onsi/ginkgo/v2 v2.27.4
+	github.com/onsi/ginkgo/v2 v2.27.5
 	github.com/onsi/gomega v1.39.0
 	k8s.io/api v0.32.0
 	k8s.io/apimachinery v0.32.0
