@@ -34,6 +34,10 @@ spec:
     - linux/arm64
   - name: rebuild
     value: "true"
+  - name: build-args
+    value:
+      - "VERSION={{git_tag}}"
+      - "GIT_COMMIT={{revision}}"
   pipelineRef:
     name: build-pipeline
   taskRunTemplate:
