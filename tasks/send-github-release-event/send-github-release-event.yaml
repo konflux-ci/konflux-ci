@@ -1,0 +1,270 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: send-github-release-event
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.12.1"
+    tekton.dev/tags: "release, tenant"
+spec:
+  description: |-
+    Tekton task to send a repository_dispatch event to GitHub after a successful tag-based release.
+
+    This task extracts version, image tag, and git ref from the Release CR and sends a
+    repository_dispatch event to trigger the GitHub release workflow.
+
+    The task only runs for tag-based releases (when source-branch starts with "refs/tags/").
+    It gracefully exits if the release is not tag-based or if the release was not successful.
+  params:
+    - name: release
+      type: string
+      description: Namespaced name of release - should be in format "namespace/name"
+    - name: githubTokenSecretName
+      type: string
+      description: |-
+        Name of secret which contains GitHub token (PAT).
+        Used as fallback if GitHub App authentication is not available.
+      default: "github-token"
+    - name: githubTokenSecretKey
+      type: string
+      description: Name of key within secret which contains GitHub token
+      default: token
+    - name: githubAppSecretName
+      type: string
+      description: |-
+        Name of secret which contains GitHub App credentials (app-id, installation-id, private-key).
+        Used when githubTokenSecretName is not provided.
+      default: github-app-credentials
+    - name: githubAppIdKey
+      type: string
+      description: Name of key within GitHub App secret which contains the App ID
+      default: app-id
+    - name: githubInstallationIdKey
+      type: string
+      description: Name of key within GitHub App secret which contains the Installation ID
+      default: installation-id
+    - name: githubPrivateKeyKey
+      type: string
+      description: Name of key within GitHub App secret which contains the private key
+      default: private-key
+    - name: githubRepo
+      type: string
+      description: GitHub repository in format "owner/repo" (e.g., "konflux-ci/konflux-ci")
+  volumes:
+    - name: github-token
+      secret:
+        secretName: $(params.githubTokenSecretName)
+        optional: true
+    - name: github-app-credentials
+      secret:
+        secretName: $(params.githubAppSecretName)
+        optional: true
+  steps:
+    - name: send-github-event
+      image: quay.io/konflux-ci/release-service-utils:9b99072bc14c25be6924a6338af166211ea069a8
+      volumeMounts:
+        - name: github-token
+          mountPath: "/etc/secrets/token"
+          readOnly: true
+        - name: github-app-credentials
+          mountPath: "/etc/secrets/app"
+          readOnly: true
+      env:
+        - name: GITHUB_TOKEN_KEY
+          value: $(params.githubTokenSecretKey)
+        - name: GITHUB_REPO
+          value: $(params.githubRepo)
+        - name: GITHUB_APP_ID_KEY
+          value: $(params.githubAppIdKey)
+        - name: GITHUB_INSTALLATION_ID_KEY
+          value: $(params.githubInstallationIdKey)
+        - name: GITHUB_PRIVATE_KEY_KEY
+          value: $(params.githubPrivateKeyKey)
+      script: |
+        #!/usr/bin/env bash
+        # We explicitly avoid 'x' here to prevent logging variable values.
+        # We will use 'set -x' only on non-sensitive blocks.
+        set -euo pipefail
+
+        # Temporary file to store the token securely (outside of logs)
+        TOKEN_FILE="/tmp/gh_token_env.sh"
+        touch "$TOKEN_FILE"
+        chmod 600 "$TOKEN_FILE"
+
+        # Determine authentication method: GitHub App (preferred) or PAT (fallback)
+        if [ -n "${GITHUB_APP_ID_KEY}" ] && [ -f "/etc/secrets/app/${GITHUB_APP_ID_KEY}" ]; then
+          echo "Using GitHub App authentication"
+
+          # 1. Prepare credentials
+          APP_ID=$(cat "/etc/secrets/app/${GITHUB_APP_ID_KEY}")
+          INSTALLATION_ID=$(cat "/etc/secrets/app/${GITHUB_INSTALLATION_ID_KEY}")
+          PRIVATE_KEY_PATH="/tmp/private_key.pem"
+          cat "/etc/secrets/app/${GITHUB_PRIVATE_KEY_KEY}" > "$PRIVATE_KEY_PATH"
+          chmod 600 "$PRIVATE_KEY_PATH"
+
+          # 2. Generate token using Python (Writing directly to the TOKEN_FILE)
+          export APP_ID INSTALLATION_ID PRIVATE_KEY_PATH TOKEN_FILE
+          if ! python3 - << 'PYTHON_EOF'; then
+        import time, json, base64, requests, sys, os
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import padding
+
+        try:
+            app_id = os.environ['APP_ID']
+            inst_id = os.environ['INSTALLATION_ID']
+            key_path = os.environ['PRIVATE_KEY_PATH']
+            output_file = os.environ['TOKEN_FILE']
+
+            def b64_encode(data):
+                return base64.urlsafe_b64encode(data).decode('utf-8').replace('=', '')
+
+            header = b64_encode(json.dumps({'alg': 'RS256', 'typ': 'JWT'}).encode())
+            payload = b64_encode(
+              json.dumps(
+                {'iat': int(time.time()), 'exp': int(time.time()) + 600, 'iss': app_id}
+              ).encode())
+
+            with open(key_path, 'rb') as f:
+                key = serialization.load_pem_private_key(f.read(), password=None)
+
+            signature = b64_encode(
+              key.sign(f'{header}.{payload}'.encode(), padding.PKCS1v15(), hashes.SHA256()))
+            jwt_token = f'{header}.{payload}.{signature}'
+
+            url = f'https://api.github.com/app/installations/{inst_id}/access_tokens'
+            resp = requests.post(
+              url, headers={
+                'Authorization': f'Bearer {jwt_token}',
+                'Accept': 'application/vnd.github+json'
+              })
+            resp.raise_for_status()
+
+            # CRITICAL: Write to file instead of printing to stdout
+            token = resp.json()['token']
+            with open(output_file, 'w') as f:
+                f.write(f'export GITHUB_TOKEN="{token}"\n')
+            os.chmod(output_file, 0o600)  # rw------- permissions
+
+        except Exception as e:
+            print(f"Python Auth Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        PYTHON_EOF
+            echo "Error: Failed to generate GitHub App installation token" >&2
+            rm -f "$PRIVATE_KEY_PATH"
+            exit 1
+          fi
+
+          # Clean up private key immediately
+          rm -f "$PRIVATE_KEY_PATH"
+
+        elif [ -n "${GITHUB_TOKEN_KEY}" ] && [ -f "/etc/secrets/token/${GITHUB_TOKEN_KEY}" ]; then
+          echo "GitHub App credentials not found, using PAT token for authentication"
+          # Write to file instead of variable to avoid accidental 'set -x' leakage
+          echo "export GITHUB_TOKEN=\"$(cat "/etc/secrets/token/${GITHUB_TOKEN_KEY}")\"" > "$TOKEN_FILE"
+        else
+          echo "Error: Neither GitHub App credentials nor PAT token found"
+          echo "Either provide githubAppSecretName or githubTokenSecretName"
+          exit 1
+        fi
+
+        # 3. Source the token into the shell environment
+        if [ -s "$TOKEN_FILE" ]; then
+          source "$TOKEN_FILE"
+          rm -f "$TOKEN_FILE"
+        else
+          echo "Error: Failed to generate GitHub token file"
+          exit 1
+        fi
+
+        # Verify token was loaded (check before enabling set -x to avoid logging token value)
+        # Use a pattern that doesn't expand the variable value in logs
+        TOKEN_SET=0
+        [ -n "${GITHUB_TOKEN:-}" ] && TOKEN_SET=1
+        if [ "$TOKEN_SET" -eq 0 ]; then
+          echo "Error: Failed to obtain GitHub token"
+          exit 1
+        fi
+
+        if [ -z "${GITHUB_REPO}" ]; then
+          echo "Error: GitHub repository not provided"
+          exit 1
+        fi
+
+        set -x
+        echo "Authentication successful for repository: ${GITHUB_REPO}"
+
+        # Parse release namespace and name
+        IFS='/' read -r RELEASE_NAMESPACE RELEASE_NAME <<< "$(params.release)"
+
+        # Get Release CR
+        RELEASE=$(kubectl get release "$RELEASE_NAME" -n "$RELEASE_NAMESPACE" -o json)
+
+        # Check if release succeeded
+        RELEASE_STATUS=$(jq -r '.status.conditions[] | select(.type=="Released") | .status' <<< "$RELEASE")
+        if [ "$RELEASE_STATUS" != "True" ]; then
+          echo "Release not successful (status: $RELEASE_STATUS), skipping GitHub event"
+          exit 0
+        fi
+
+        # Extract source branch to determine if it's tag-based
+        SOURCE_BRANCH=$(jq -r '.metadata.annotations."pac.test.appstudio.openshift.io/source-branch"' <<< "$RELEASE")
+
+        # Check if this is a tag-based release
+        if [[ ! "$SOURCE_BRANCH" =~ ^refs/tags/ ]]; then
+          echo "Not a tag-based release (source-branch: $SOURCE_BRANCH), skipping GitHub event"
+          exit 0
+        fi
+
+        # Extract version directly from source-branch (remove "refs/tags/" prefix)
+        VERSION="${SOURCE_BRANCH#refs/tags/}"
+
+        # Extract git SHA
+        GIT_SHA=$(jq -r '.metadata.labels."pac.test.appstudio.openshift.io/sha"' <<< "$RELEASE")
+        if [ -z "$GIT_SHA" ] || [ "$GIT_SHA" == "null" ]; then
+          echo "Warning: git sha not found in Release labels, skipping GitHub event"
+          exit 0
+        fi
+
+        # Extract image tag (find the release-sha-* format)
+        IMAGE_TAG=$(jq -r '.status.artifacts.images[0].urls[] | select(contains("release-sha-"))' <<< "$RELEASE" | head -1)
+        if [ -z "$IMAGE_TAG" ] || [ "$IMAGE_TAG" == "null" ]; then
+          echo "Warning: image tag not found in Release artifacts, skipping GitHub event"
+          exit 0
+        fi
+
+        # Extract just the tag part: release-sha-80669c7
+        IMAGE_TAG_VALUE=$(echo "$IMAGE_TAG" | sed 's/.*:\(release-sha-[^@]*\).*/\1/')
+
+        echo "Sending GitHub repository_dispatch event:"
+        echo "  version: $VERSION"
+        echo "  image_tag: $IMAGE_TAG_VALUE"
+        echo "  git_ref: $GIT_SHA"
+
+        # Prepare payload
+        PAYLOAD=$(jq -n \
+          --arg version "$VERSION" \
+          --arg image_tag "$IMAGE_TAG_VALUE" \
+          --arg git_ref "$GIT_SHA" \
+          '{version: $version, image_tag: $image_tag, git_ref: $git_ref}')
+
+        # Send repository_dispatch event
+        set +x
+        RESPONSE=$(curl -s -w "\n%{http_code}" \
+          -X POST \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          "https://api.github.com/repos/${GITHUB_REPO}/dispatches" \
+          -d "{\"event_type\":\"konflux-build-complete\",\"client_payload\":${PAYLOAD}}")
+        set -x
+
+        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+        BODY=$(echo "$RESPONSE" | sed '$d')
+
+        if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+          echo "Successfully sent GitHub repository_dispatch event (HTTP $HTTP_CODE)"
+        else
+          echo "Warning: Failed to send GitHub event (HTTP $HTTP_CODE): $BODY"
+          # Don't fail the pipeline, just log the warning
+          exit 0
+        fi
