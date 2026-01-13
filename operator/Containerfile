@@ -2,6 +2,8 @@
 FROM registry.access.redhat.com/ubi10/go-toolset@sha256:947962f92cc541358a90d54b8da4a4a313522c7b3f602bd934c559f0cc2d2b19 AS builder
 ARG TARGETOS
 ARG TARGETARCH
+ARG VERSION
+ARG GIT_COMMIT
 
 ENV GOTOOLCHAIN=auto
 WORKDIR /workspace
@@ -16,7 +18,16 @@ COPY --chmod=755 api/ api/
 COPY --chmod=755 internal/ internal/
 COPY --chmod=755 pkg/ pkg/
 
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o /opt/app-root/manager cmd/main.go
+# Extract version info from build args or git if not provided, then build with
+# all version info embedded via ldflags
+RUN VERSION_VALUE="${VERSION:-$(git describe --tags --exact-match HEAD 2>/dev/null || echo 'unknown')}" && \
+    GIT_COMMIT_VALUE="${GIT_COMMIT:-$(git rev-parse HEAD 2>/dev/null || echo 'unknown')}" && \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+    go build -a \
+    -ldflags \
+    "-X github.com/konflux-ci/konflux-ci/operator/pkg/version.Version=$${VERSION_VALUE} \
+    -X github.com/konflux-ci/konflux-ci/operator/pkg/version.GitCommit=$${GIT_COMMIT_VALUE}" \
+    -o /opt/app-root/manager cmd/main.go
 
 # Use UBI minimal as base image
 FROM registry.access.redhat.com/ubi10/ubi-minimal@sha256:67aafc6c9c44374e1baf340110d4c835457d59a0444c068ba9ac6431a6d9e7ac
