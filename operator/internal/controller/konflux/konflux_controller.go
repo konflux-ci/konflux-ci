@@ -49,8 +49,8 @@ const (
 	CRName = "konflux"
 	// FieldManager is the field manager identifier for server-side apply.
 	FieldManager = "konflux-controller"
-	// ConditionTypeReady is the condition type for overall readiness
-	ConditionTypeReady = "Ready"
+	// crKind is used in error messages to identify this CR type.
+	crKind = "Konflux"
 )
 
 // konfluxCleanupGVKs defines which sub-CR types should be cleaned up when they are
@@ -129,6 +129,9 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	log.Info("Reconciling Konflux", "name", konflux.Name)
 
+	// Create error handler for consistent error reporting
+	errHandler := condition.NewReconcileErrorHandler(log, r.Status(), konflux, crKind)
+
 	// Initialize tracking client for declarative resource management
 	tc := tracking.NewClientWithOwnership(r.Client, tracking.OwnershipConfig{
 		Owner:             konflux,
@@ -140,137 +143,72 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// Apply the KonfluxApplicationAPI CR
 	if err := r.applyKonfluxApplicationAPI(ctx, tc); err != nil {
-		log.Error(err, "Failed to apply KonfluxApplicationAPI")
-		condition.SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxApplicationAPI")
 	}
 
 	// Apply the KonfluxBuildService CR
 	if err := r.applyKonfluxBuildService(ctx, tc, konflux); err != nil {
-		log.Error(err, "Failed to apply KonfluxBuildService")
-		condition.SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxBuildService")
 	}
 
 	// Apply the KonfluxIntegrationService CR
 	if err := r.applyKonfluxIntegrationService(ctx, tc, konflux); err != nil {
-		log.Error(err, "Failed to apply KonfluxIntegrationService")
-		condition.SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxIntegrationService")
 	}
 
 	// Apply the KonfluxReleaseService CR
 	if err := r.applyKonfluxReleaseService(ctx, tc, konflux); err != nil {
-		log.Error(err, "Failed to apply KonfluxReleaseService")
-		condition.SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxReleaseService")
 	}
 
 	// Apply the KonfluxUI CR
 	if err := r.applyKonfluxUI(ctx, tc, konflux); err != nil {
-		log.Error(err, "Failed to apply KonfluxUI")
-		condition.SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxUI")
 	}
 
 	// Apply the KonfluxRBAC CR
 	if err := r.applyKonfluxRBAC(ctx, tc); err != nil {
-		log.Error(err, "Failed to apply KonfluxRBAC")
-		condition.SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxRBAC")
 	}
 
 	// Apply the KonfluxInfo CR
 	if err := r.applyKonfluxInfo(ctx, tc, konflux); err != nil {
-		log.Error(err, "Failed to apply KonfluxInfo")
-		condition.SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxInfo")
 	}
 
 	// Apply the KonfluxNamespaceLister CR
 	if err := r.applyKonfluxNamespaceLister(ctx, tc, konflux); err != nil {
-		log.Error(err, "Failed to apply KonfluxNamespaceLister")
-		condition.SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxNamespaceLister")
 	}
 
 	// Apply the KonfluxEnterpriseContract CR
 	if err := r.applyKonfluxEnterpriseContract(ctx, tc); err != nil {
-		log.Error(err, "Failed to apply KonfluxEnterpriseContract")
-		condition.SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxEnterpriseContract")
 	}
 
 	// Apply the KonfluxImageController CR (only if enabled)
 	if konflux.Spec.IsImageControllerEnabled() {
 		if err := r.applyKonfluxImageController(ctx, tc); err != nil {
-			log.Error(err, "Failed to apply KonfluxImageController")
-			condition.SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
-			if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
-			}
-			return ctrl.Result{}, err
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxImageController")
 		}
 	}
 
 	// Apply the KonfluxCertManager CR
 	if err := r.applyKonfluxCertManager(ctx, tc, konflux); err != nil {
-		log.Error(err, "Failed to apply KonfluxCertManager")
-		condition.SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxCertManager")
 	}
 
 	// Apply the KonfluxInternalRegistry CR (only if enabled)
 	if konflux.Spec.IsInternalRegistryEnabled() {
 		if err := r.applyKonfluxInternalRegistry(ctx, tc); err != nil {
-			log.Error(err, "Failed to apply KonfluxInternalRegistry")
-			condition.SetFailedCondition(konflux, ConditionTypeReady, "ApplyFailed", err)
-			if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
-			}
-			return ctrl.Result{}, err
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxInternalRegistry")
 		}
 	}
 
 	// Cleanup orphaned sub-CRs - delete any sub-CRs with our owner label
 	// that weren't applied during this reconcile (e.g., disabled optional components)
 	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, konflux.Name, konfluxCleanupGVKs); err != nil {
-		log.Error(err, "Failed to cleanup orphaned sub-CRs")
-		condition.SetFailedCondition(konflux, ConditionTypeReady, "CleanupFailed", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleCleanupError(ctx, err)
 	}
 
 	// Collect status from all sub-CRs.
@@ -281,48 +219,28 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Get and copy status from the KonfluxBuildService CR
 	buildService := &konfluxv1alpha1.KonfluxBuildService{}
 	if err := r.Get(ctx, client.ObjectKey{Name: buildservice.CRName}, buildService); err != nil {
-		log.Error(err, "Failed to get KonfluxBuildService")
-		condition.SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetBuildServiceStatus", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxBuildService status")
 	}
 	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, buildService, "build-service"))
 
 	// Get and copy status from the KonfluxIntegrationService CR
 	integrationService := &konfluxv1alpha1.KonfluxIntegrationService{}
 	if err := r.Get(ctx, client.ObjectKey{Name: integrationservice.CRName}, integrationService); err != nil {
-		log.Error(err, "Failed to get KonfluxIntegrationService")
-		condition.SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetIntegrationServiceStatus", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxIntegrationService status")
 	}
 	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, integrationService, "integration-service"))
 
 	// Get and copy status from the KonfluxReleaseService CR
 	releaseService := &konfluxv1alpha1.KonfluxReleaseService{}
 	if err := r.Get(ctx, client.ObjectKey{Name: releaseservice.CRName}, releaseService); err != nil {
-		log.Error(err, "Failed to get KonfluxReleaseService")
-		condition.SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetReleaseServiceStatus", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxReleaseService status")
 	}
 	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, releaseService, "release-service"))
 
 	// Get and copy status from the KonfluxUI CR
 	ui := &konfluxv1alpha1.KonfluxUI{}
 	if err := r.Get(ctx, client.ObjectKey{Name: uictrl.CRName}, ui); err != nil {
-		log.Error(err, "Failed to get KonfluxUI")
-		condition.SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetUIStatus", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxUI status")
 	}
 	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, ui, "ui"))
 
@@ -334,60 +252,35 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Get and copy status from the KonfluxRBAC CR
 	konfluxRBAC := &konfluxv1alpha1.KonfluxRBAC{}
 	if err := r.Get(ctx, client.ObjectKey{Name: rbac.CRName}, konfluxRBAC); err != nil {
-		log.Error(err, "Failed to get KonfluxRBAC")
-		condition.SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetRBACStatus", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxRBAC status")
 	}
 	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, konfluxRBAC, "rbac"))
 
 	// Get and copy status from the KonfluxInfo CR
 	konfluxInfo := &konfluxv1alpha1.KonfluxInfo{}
 	if err := r.Get(ctx, client.ObjectKey{Name: info.CRName}, konfluxInfo); err != nil {
-		log.Error(err, "Failed to get KonfluxInfo")
-		condition.SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetInfoStatus", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxInfo status")
 	}
 	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, konfluxInfo, "info"))
 
 	// Get and copy status from the KonfluxNamespaceLister CR
 	konfluxNamespaceLister := &konfluxv1alpha1.KonfluxNamespaceLister{}
 	if err := r.Get(ctx, client.ObjectKey{Name: namespacelister.CRName}, konfluxNamespaceLister); err != nil {
-		log.Error(err, "Failed to get KonfluxNamespaceLister")
-		condition.SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetNamespaceListerStatus", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxNamespaceLister status")
 	}
 	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, konfluxNamespaceLister, "namespace-lister"))
 
 	// Get and copy status from the KonfluxEnterpriseContract CR
 	konfluxEnterpriseContract := &konfluxv1alpha1.KonfluxEnterpriseContract{}
 	if err := r.Get(ctx, client.ObjectKey{Name: enterprisecontract.CRName}, konfluxEnterpriseContract); err != nil {
-		log.Error(err, "Failed to get KonfluxEnterpriseContract")
-		condition.SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetEnterpriseContractStatus", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxEnterpriseContract status")
 	}
 	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, konfluxEnterpriseContract, "enterprise-contract"))
 
 	// Get and copy status from the KonfluxApplicationAPI CR
 	applicationAPI := &konfluxv1alpha1.KonfluxApplicationAPI{}
 	if err := r.Get(ctx, client.ObjectKey{Name: applicationapi.CRName}, applicationAPI); err != nil {
-		log.Error(err, "Failed to get KonfluxApplicationAPI")
-		condition.SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetApplicationAPIStatus", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxApplicationAPI status")
 	}
 	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, applicationAPI, "application-api"))
 
@@ -395,12 +288,7 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if konflux.Spec.IsImageControllerEnabled() {
 		imageController := &konfluxv1alpha1.KonfluxImageController{}
 		if err := r.Get(ctx, client.ObjectKey{Name: imagecontroller.CRName}, imageController); err != nil {
-			log.Error(err, "Failed to get KonfluxImageController")
-			condition.SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetImageControllerStatus", err)
-			if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
-			}
-			return ctrl.Result{}, err
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxImageController status")
 		}
 		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, imageController, "image-controller"))
 	}
@@ -408,12 +296,7 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Get and copy status from the KonfluxCertManager CR
 	certManager := &konfluxv1alpha1.KonfluxCertManager{}
 	if err := r.Get(ctx, client.ObjectKey{Name: certmanager.CRName}, certManager); err != nil {
-		log.Error(err, "Failed to get KonfluxCertManager")
-		condition.SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetCertManagerStatus", err)
-		if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxCertManager status")
 	}
 	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, certManager, "cert-manager"))
 
@@ -421,19 +304,14 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if konflux.Spec.IsInternalRegistryEnabled() {
 		registry := &konfluxv1alpha1.KonfluxInternalRegistry{}
 		if err := r.Get(ctx, client.ObjectKey{Name: internalregistry.CRName}, registry); err != nil {
-			log.Error(err, "Failed to get KonfluxInternalRegistry")
-			condition.SetFailedCondition(konflux, ConditionTypeReady, "FailedToGetInternalRegistryStatus", err)
-			if updateErr := r.Status().Update(ctx, konflux); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
-			}
-			return ctrl.Result{}, err
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxInternalRegistry status")
 		}
 		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, registry, "internal-registry"))
 	}
 
 	// Set overall Ready condition based on all sub-CRs.
 	// All deployments are managed by component-specific reconcilers, so we only aggregate sub-CR statuses.
-	condition.SetAggregatedReadyCondition(konflux, ConditionTypeReady, subCRStatuses)
+	condition.SetAggregatedReadyCondition(konflux, subCRStatuses)
 
 	// Update the status subresource with all collected conditions
 	if err := r.Status().Update(ctx, konflux); err != nil {

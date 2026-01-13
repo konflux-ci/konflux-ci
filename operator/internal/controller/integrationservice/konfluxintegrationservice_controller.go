@@ -44,9 +44,8 @@ const (
 	CRName = "konflux-integration-service"
 	// FieldManager is the field manager identifier for server-side apply.
 	FieldManager = "konflux-integrationservice-controller"
-
-	// IntegrationServiceConditionTypeReady is the condition type for overall readiness
-	IntegrationServiceConditionTypeReady = "Ready"
+	// crKind is used in error messages to identify this CR type.
+	crKind = "KonfluxIntegrationService"
 
 	// Deployment names
 	controllerManagerDeploymentName = "integration-service-controller-manager"
@@ -121,6 +120,9 @@ func (r *KonfluxIntegrationServiceReconciler) Reconcile(ctx context.Context, req
 
 	log.Info("Reconciling KonfluxIntegrationService", "name", integrationService.Name)
 
+	// Create error handler for consistent error reporting
+	errHandler := condition.NewReconcileErrorHandler(log, r.Status(), integrationService, crKind)
+
 	// Create a tracking client with ownership config for this reconcile.
 	tc := tracking.NewClientWithOwnership(r.Client, tracking.OwnershipConfig{
 		Owner:             integrationService,
@@ -132,32 +134,17 @@ func (r *KonfluxIntegrationServiceReconciler) Reconcile(ctx context.Context, req
 
 	// Apply all embedded manifests
 	if err := r.applyManifests(ctx, tc, integrationService); err != nil {
-		log.Error(err, "Failed to apply manifests")
-		condition.SetFailedCondition(integrationService, IntegrationServiceConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, integrationService); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleApplyError(ctx, err)
 	}
 
 	// Cleanup orphaned resources
 	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, integrationService.Name, IntegrationServiceCleanupGVKs); err != nil {
-		log.Error(err, "Failed to cleanup orphaned resources")
-		condition.SetFailedCondition(integrationService, IntegrationServiceConditionTypeReady, "CleanupFailed", err)
-		if updateErr := r.Status().Update(ctx, integrationService); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleCleanupError(ctx, err)
 	}
 
 	// Check the status of owned deployments and update KonfluxIntegrationService status
-	if err := condition.UpdateComponentStatuses(ctx, r.Client, integrationService, IntegrationServiceConditionTypeReady); err != nil {
-		log.Error(err, "Failed to update component statuses")
-		condition.SetFailedCondition(integrationService, IntegrationServiceConditionTypeReady, "FailedToGetDeploymentStatus", err)
-		if updateErr := r.Status().Update(ctx, integrationService); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+	if err := condition.UpdateComponentStatuses(ctx, r.Client, integrationService); err != nil {
+		return errHandler.HandleStatusUpdateError(ctx, err)
 	}
 
 	// Update status

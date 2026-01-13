@@ -44,9 +44,8 @@ const (
 	CRName = "konflux-release-service"
 	// FieldManager is the field manager identifier for server-side apply.
 	FieldManager = "konflux-releaseservice-controller"
-
-	// ReleaseServiceConditionTypeReady is the condition type for overall readiness
-	ReleaseServiceConditionTypeReady = "Ready"
+	// crKind is used in error messages to identify this CR type.
+	crKind = "KonfluxReleaseService"
 
 	// Deployment names
 	releaseControllerManagerDeploymentName = "release-service-controller-manager"
@@ -119,6 +118,9 @@ func (r *KonfluxReleaseServiceReconciler) Reconcile(ctx context.Context, req ctr
 
 	log.Info("Reconciling KonfluxReleaseService", "name", releaseService.Name)
 
+	// Create error handler for consistent error reporting
+	errHandler := condition.NewReconcileErrorHandler(log, r.Status(), releaseService, crKind)
+
 	// Create a tracking client with ownership config for this reconcile.
 	tc := tracking.NewClientWithOwnership(r.Client, tracking.OwnershipConfig{
 		Owner:             releaseService,
@@ -130,32 +132,17 @@ func (r *KonfluxReleaseServiceReconciler) Reconcile(ctx context.Context, req ctr
 
 	// Apply all embedded manifests
 	if err := r.applyManifests(ctx, tc, releaseService); err != nil {
-		log.Error(err, "Failed to apply manifests")
-		condition.SetFailedCondition(releaseService, ReleaseServiceConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, releaseService); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleApplyError(ctx, err)
 	}
 
 	// Cleanup orphaned resources
 	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, releaseService.Name, ReleaseServiceCleanupGVKs); err != nil {
-		log.Error(err, "Failed to cleanup orphaned resources")
-		condition.SetFailedCondition(releaseService, ReleaseServiceConditionTypeReady, "CleanupFailed", err)
-		if updateErr := r.Status().Update(ctx, releaseService); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleCleanupError(ctx, err)
 	}
 
 	// Check the status of owned deployments and update KonfluxReleaseService status
-	if err := condition.UpdateComponentStatuses(ctx, r.Client, releaseService, ReleaseServiceConditionTypeReady); err != nil {
-		log.Error(err, "Failed to update component statuses")
-		condition.SetFailedCondition(releaseService, ReleaseServiceConditionTypeReady, "FailedToGetDeploymentStatus", err)
-		if updateErr := r.Status().Update(ctx, releaseService); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+	if err := condition.UpdateComponentStatuses(ctx, r.Client, releaseService); err != nil {
+		return errHandler.HandleStatusUpdateError(ctx, err)
 	}
 
 	// Update status

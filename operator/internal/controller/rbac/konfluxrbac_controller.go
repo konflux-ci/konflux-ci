@@ -43,9 +43,8 @@ const (
 	CRName = "konflux-rbac"
 	// FieldManager is the field manager identifier for server-side apply.
 	FieldManager = "konflux-rbac-controller"
-
-	// RBACConditionTypeReady is the condition type for overall readiness
-	RBACConditionTypeReady = "Ready"
+	// crKind is used in error messages to identify this CR type.
+	crKind = "KonfluxRBAC"
 )
 
 // RBACCleanupGVKs defines which resource types should be cleaned up when they are
@@ -89,6 +88,9 @@ func (r *KonfluxRBACReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	log.Info("Reconciling KonfluxRBAC", "name", konfluxRBAC.Name)
 
+	// Create error handler for consistent error reporting
+	errHandler := condition.NewReconcileErrorHandler(log, r.Status(), konfluxRBAC, crKind)
+
 	// Create a tracking client with ownership config for this reconcile.
 	tc := tracking.NewClientWithOwnership(r.Client, tracking.OwnershipConfig{
 		Owner:             konfluxRBAC,
@@ -100,32 +102,17 @@ func (r *KonfluxRBACReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Apply all embedded manifests
 	if err := r.applyManifests(ctx, tc); err != nil {
-		log.Error(err, "Failed to apply manifests")
-		condition.SetFailedCondition(konfluxRBAC, RBACConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, konfluxRBAC); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleApplyError(ctx, err)
 	}
 
 	// Cleanup orphaned resources
 	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, konfluxRBAC.Name, RBACCleanupGVKs); err != nil {
-		log.Error(err, "Failed to cleanup orphaned resources")
-		condition.SetFailedCondition(konfluxRBAC, RBACConditionTypeReady, "CleanupFailed", err)
-		if updateErr := r.Status().Update(ctx, konfluxRBAC); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleCleanupError(ctx, err)
 	}
 
 	// Check the status of owned deployments and update KonfluxRBAC status
-	if err := condition.UpdateComponentStatuses(ctx, r.Client, konfluxRBAC, RBACConditionTypeReady); err != nil {
-		log.Error(err, "Failed to update component statuses")
-		condition.SetFailedCondition(konfluxRBAC, RBACConditionTypeReady, "FailedToGetDeploymentStatus", err)
-		if updateErr := r.Status().Update(ctx, konfluxRBAC); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+	if err := condition.UpdateComponentStatuses(ctx, r.Client, konfluxRBAC); err != nil {
+		return errHandler.HandleStatusUpdateError(ctx, err)
 	}
 
 	// Update status

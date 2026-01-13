@@ -41,9 +41,8 @@ const (
 	CRName = "konflux-cert-manager"
 	// FieldManager is the field manager identifier for server-side apply.
 	FieldManager = "konflux-cert-manager-controller"
-
-	// CertManagerConditionTypeReady is the condition type for overall readiness
-	CertManagerConditionTypeReady = "Ready"
+	// crKind is used in error messages to identify this CR type.
+	crKind = "KonfluxCertManager"
 )
 
 // CertManagerCleanupGVKs defines which resource types should be cleaned up when they are
@@ -81,6 +80,9 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	log.Info("Reconciling KonfluxCertManager", "name", certManager.Name)
 
+	// Create error handler for consistent error reporting
+	errHandler := condition.NewReconcileErrorHandler(log, r.Status(), certManager, crKind)
+
 	// Create a tracking client for this reconcile with ownership config.
 	// Resources applied through this client are automatically tracked and have ownership set.
 	// At the end of a successful reconcile, orphaned resources are cleaned up.
@@ -95,12 +97,7 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// Apply manifests only if createClusterIssuer is enabled (defaults to true)
 	if certManager.Spec.ShouldCreateClusterIssuer() {
 		if err := r.applyManifests(ctx, tc); err != nil {
-			log.Error(err, "Failed to apply manifests")
-			condition.SetFailedCondition(certManager, CertManagerConditionTypeReady, "ApplyFailed", err)
-			if updateErr := r.Status().Update(ctx, certManager); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
-			}
-			return ctrl.Result{}, err
+			return errHandler.HandleApplyError(ctx, err)
 		}
 	} else {
 		log.Info("Skipping manifest application - createClusterIssuer is false")
@@ -110,23 +107,13 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// that weren't applied during this reconcile. This handles the case where
 	// createClusterIssuer changes from true to false (resources are automatically deleted).
 	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, certManager.Name, CertManagerCleanupGVKs); err != nil {
-		log.Error(err, "Failed to cleanup orphaned resources")
-		condition.SetFailedCondition(certManager, CertManagerConditionTypeReady, "CleanupFailed", err)
-		if updateErr := r.Status().Update(ctx, certManager); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleCleanupError(ctx, err)
 	}
 
 	// Check the status of owned deployments and update KonfluxCertManager status
 	// Note: cert-manager has no deployments, so this will set Ready=true with appropriate message
-	if err := condition.UpdateComponentStatuses(ctx, r.Client, certManager, CertManagerConditionTypeReady); err != nil {
-		log.Error(err, "Failed to update component statuses")
-		condition.SetFailedCondition(certManager, CertManagerConditionTypeReady, "FailedToGetDeploymentStatus", err)
-		if updateErr := r.Status().Update(ctx, certManager); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+	if err := condition.UpdateComponentStatuses(ctx, r.Client, certManager); err != nil {
+		return errHandler.HandleStatusUpdateError(ctx, err)
 	}
 
 	// Update status

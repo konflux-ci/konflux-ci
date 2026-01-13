@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
@@ -111,7 +112,7 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 
 			var readyCondition *metav1.Condition
 			for i := range conditions {
-				if conditions[i].Type == InternalRegistryConditionTypeReady {
+				if conditions[i].Type == condition.TypeReady {
 					readyCondition = &conditions[i]
 					break
 				}

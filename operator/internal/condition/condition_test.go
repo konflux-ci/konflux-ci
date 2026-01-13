@@ -50,9 +50,9 @@ var _ = Describe("Conditions Helper Functions", func() {
 					NotReadyNames: []string{},
 				}
 
-				SetOverallReadyCondition(testObject, "Ready", summary)
+				SetOverallReadyCondition(testObject, summary)
 
-				condition := apimeta.FindStatusCondition(testObject.GetConditions(), "Ready")
+				condition := apimeta.FindStatusCondition(testObject.GetConditions(), TypeReady)
 				Expect(condition).NotTo(BeNil())
 				Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 				Expect(condition.Reason).To(Equal("AllComponentsReady"))
@@ -67,9 +67,9 @@ var _ = Describe("Conditions Helper Functions", func() {
 					NotReadyNames: []string{},
 				}
 
-				SetOverallReadyCondition(testObject, "Ready", summary)
+				SetOverallReadyCondition(testObject, summary)
 
-				condition := apimeta.FindStatusCondition(testObject.GetConditions(), "Ready")
+				condition := apimeta.FindStatusCondition(testObject.GetConditions(), TypeReady)
 				Expect(condition).NotTo(BeNil())
 				Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 				Expect(condition.Message).To(Equal("All 5 deployments are ready"))
@@ -82,9 +82,9 @@ var _ = Describe("Conditions Helper Functions", func() {
 					NotReadyNames: []string{"deployment-1", "deployment-2"},
 				}
 
-				SetOverallReadyCondition(testObject, "Ready", summary)
+				SetOverallReadyCondition(testObject, summary)
 
-				condition := apimeta.FindStatusCondition(testObject.GetConditions(), "Ready")
+				condition := apimeta.FindStatusCondition(testObject.GetConditions(), TypeReady)
 				Expect(condition).NotTo(BeNil())
 				Expect(condition.Status).To(Equal(metav1.ConditionFalse))
 				Expect(condition.Reason).To(Equal("ComponentsNotReady"))
@@ -100,9 +100,9 @@ var _ = Describe("Conditions Helper Functions", func() {
 					NotReadyNames: []string{},
 				}
 
-				SetOverallReadyCondition(testObject, "Ready", summary)
+				SetOverallReadyCondition(testObject, summary)
 
-				condition := apimeta.FindStatusCondition(testObject.GetConditions(), "Ready")
+				condition := apimeta.FindStatusCondition(testObject.GetConditions(), TypeReady)
 				Expect(condition).NotTo(BeNil())
 				Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 				Expect(condition.Reason).To(Equal("AllComponentsReady"))
@@ -116,28 +116,12 @@ var _ = Describe("Conditions Helper Functions", func() {
 					TotalCount: 0,
 				}
 
-				SetOverallReadyCondition(testObject, "Ready", summary)
+				SetOverallReadyCondition(testObject, summary)
 
-				condition := apimeta.FindStatusCondition(testObject.GetConditions(), "Ready")
+				condition := apimeta.FindStatusCondition(testObject.GetConditions(), TypeReady)
 				Expect(condition).NotTo(BeNil())
 				Expect(condition.Message).NotTo(Equal("All 0 deployments are ready"))
 				Expect(condition.Message).To(Equal("Component ready (no deployments to track)"))
-			})
-		})
-
-		Context("when using custom condition types", func() {
-			It("should respect the custom ready condition type", func() {
-				summary := DeploymentStatusSummary{
-					AllReady:   true,
-					TotalCount: 0,
-				}
-
-				SetOverallReadyCondition(testObject, "CustomReady", summary)
-
-				condition := apimeta.FindStatusCondition(testObject.GetConditions(), "CustomReady")
-				Expect(condition).NotTo(BeNil())
-				Expect(condition.Type).To(Equal("CustomReady"))
-				Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 			})
 		})
 	})
@@ -292,9 +276,9 @@ var _ = Describe("Conditions Helper Functions", func() {
 				{Name: "component-2", Ready: true},
 			}
 
-			SetAggregatedReadyCondition(testObject, "Ready", subCRStatuses)
+			SetAggregatedReadyCondition(testObject, subCRStatuses)
 
-			condition := apimeta.FindStatusCondition(testObject.GetConditions(), "Ready")
+			condition := apimeta.FindStatusCondition(testObject.GetConditions(), TypeReady)
 			Expect(condition).NotTo(BeNil())
 			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 			Expect(condition.Reason).To(Equal("AllComponentsReady"))
@@ -307,9 +291,9 @@ var _ = Describe("Conditions Helper Functions", func() {
 				{Name: "component-2", Ready: false},
 			}
 
-			SetAggregatedReadyCondition(testObject, "Ready", subCRStatuses)
+			SetAggregatedReadyCondition(testObject, subCRStatuses)
 
-			condition := apimeta.FindStatusCondition(testObject.GetConditions(), "Ready")
+			condition := apimeta.FindStatusCondition(testObject.GetConditions(), TypeReady)
 			Expect(condition).NotTo(BeNil())
 			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
 			Expect(condition.Reason).To(Equal("ComponentsNotReady"))
@@ -333,9 +317,9 @@ var _ = Describe("Conditions Helper Functions", func() {
 		It("should set a failed condition with error message", func() {
 			testErr := fmt.Errorf("something went wrong")
 
-			SetFailedCondition(testObject, "Ready", "ReconciliationFailed", testErr)
+			SetFailedCondition(testObject, TypeReady, "ReconciliationFailed", testErr)
 
-			condition := apimeta.FindStatusCondition(testObject.GetConditions(), "Ready")
+			condition := apimeta.FindStatusCondition(testObject.GetConditions(), TypeReady)
 			Expect(condition).NotTo(BeNil())
 			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
 			Expect(condition.Reason).To(Equal("ReconciliationFailed"))

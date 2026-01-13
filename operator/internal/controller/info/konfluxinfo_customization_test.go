@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 )
 
 func TestKonfluxInfoReconciliation(t *testing.T) {
@@ -211,7 +212,7 @@ func TestKonfluxInfoReconciliation(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		conditions := updatedInfo.GetConditions()
-		readyCondition := findCondition(conditions, InfoConditionTypeReady)
+		readyCondition := findCondition(conditions, condition.TypeReady)
 		g.Expect(readyCondition).NotTo(gomega.BeNil())
 		g.Expect(readyCondition.Status).To(gomega.Equal(metav1.ConditionTrue))
 	})

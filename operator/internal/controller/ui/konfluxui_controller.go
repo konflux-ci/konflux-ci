@@ -56,9 +56,8 @@ const (
 	CRName = "konflux-ui"
 	// FieldManager is the field manager identifier for server-side apply.
 	FieldManager = "konflux-ui-controller"
-
-	// UIConditionTypeReady is the condition type for overall readiness
-	UIConditionTypeReady = "Ready"
+	// crKind is used in error messages to identify this CR type.
+	crKind = "KonfluxUI"
 	// uiNamespace is the namespace for UI resources
 	uiNamespace = "konflux-ui"
 
@@ -145,6 +144,9 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	log.Info("Reconciling KonfluxUI", "name", ui.Name)
 
+	// Create error handler for consistent error reporting
+	errHandler := condition.NewReconcileErrorHandler(log, r.Status(), ui, crKind)
+
 	// Create a tracking client for this reconcile.
 	// Resources applied through this client are automatically tracked.
 	// At the end of a successful reconcile, orphaned resources are cleaned up.
@@ -158,23 +160,13 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Ensure konflux-ui namespace exists
 	if err := r.ensureNamespaceExists(ctx, tc); err != nil {
-		log.Error(err, "Failed to ensure namespace")
-		condition.SetFailedCondition(ui, UIConditionTypeReady, "NamespaceCreationFailed", err)
-		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonNamespaceCreationFailed, "ensure namespace exists")
 	}
 
 	// Determine the endpoint URL for ingress, dex, and oauth2-proxy configuration
 	endpoint, err := ingress.DetermineEndpointURL(ctx, r.Client, ui, uiNamespace, r.ClusterInfo)
 	if err != nil {
-		log.Error(err, "Failed to determine endpoint URL")
-		condition.SetFailedCondition(ui, UIConditionTypeReady, "EndpointDeterminationFailed", err)
-		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonEndpointDeterminationFailed, "determine endpoint URL")
 	}
 	log.Info("Determined endpoint for KonfluxUI", "url", endpoint.String())
 
@@ -182,75 +174,40 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// This must happen before applyManifests so we can set the correct ConfigMap reference
 	dexConfigMapName, err := r.reconcileDexConfigMap(ctx, ui, endpoint)
 	if err != nil {
-		log.Error(err, "Failed to reconcile Dex ConfigMap")
-		condition.SetFailedCondition(ui, UIConditionTypeReady, "DexConfigMapFailed", err)
-		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonConfigMapFailed, "reconcile Dex ConfigMap")
 	}
 
 	// Apply all embedded manifests
 	if err := r.applyManifests(ctx, tc, ui, dexConfigMapName, endpoint); err != nil {
-		log.Error(err, "Failed to apply manifests")
-		condition.SetFailedCondition(ui, UIConditionTypeReady, "ApplyFailed", err)
-		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleApplyError(ctx, err)
 	}
 
 	// Reconcile Ingress if enabled (tracked automatically, deleted if not applied)
 	// On OpenShift, also creates a ConsoleLink for the application menu
 	if err := r.reconcileIngress(ctx, tc, ui, endpoint); err != nil {
-		log.Error(err, "Failed to reconcile Ingress")
-		condition.SetFailedCondition(ui, UIConditionTypeReady, "IngressReconcileFailed", err)
-		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonIngressReconcileFailed, "reconcile Ingress")
 	}
 
 	// Reconcile OpenShift OAuth resources if enabled
 	if err := r.reconcileOpenShiftOAuth(ctx, tc, ui, endpoint); err != nil {
-		log.Error(err, "Failed to reconcile OpenShift OAuth resources")
-		condition.SetFailedCondition(ui, UIConditionTypeReady, "OpenShiftOAuthFailed", err)
-		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonOAuthFailed, "reconcile OpenShift OAuth resources")
 	}
 
 	// Ensure UI secrets are created
 	if err := r.ensureUISecrets(ctx, tc); err != nil {
-		log.Error(err, "Failed to ensure UI secrets")
-		condition.SetFailedCondition(ui, UIConditionTypeReady, "SecretCreationFailed", err)
-		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonSecretCreationFailed, "ensure UI secrets")
 	}
 
 	// Cleanup orphaned resources - delete any resources with our owner label
 	// that weren't applied during this reconcile. This handles cases like
 	// disabling Ingress (the Ingress resource is automatically deleted).
 	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, ui.Name, UICleanupGVKs); err != nil {
-		log.Error(err, "Failed to cleanup orphaned resources")
-		condition.SetFailedCondition(ui, UIConditionTypeReady, "CleanupFailed", err)
-		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		return errHandler.HandleCleanupError(ctx, err)
 	}
 
 	// Check the status of owned deployments and update KonfluxUI status
-	if err := condition.UpdateComponentStatuses(ctx, r.Client, ui, UIConditionTypeReady); err != nil {
-		log.Error(err, "Failed to update component statuses")
-		condition.SetFailedCondition(ui, UIConditionTypeReady, "FailedToGetDeploymentStatus", err)
-		if updateErr := r.Status().Update(ctx, ui); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+	if err := condition.UpdateComponentStatuses(ctx, r.Client, ui); err != nil {
+		return errHandler.HandleStatusUpdateError(ctx, err)
 	}
 
 	// Update ingress status
