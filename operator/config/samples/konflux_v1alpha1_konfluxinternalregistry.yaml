@@ -1,3 +1,5 @@
+# Title: Konflux Internal Registry Configuration
+# Description: KonfluxInternalRegistry configuration for internal registry
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: KonfluxInternalRegistry
 metadata:

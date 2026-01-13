@@ -1,3 +1,5 @@
+# Title: Konflux UI Configuration
+# Description: KonfluxUI configuration with ingress, proxy, and dex settings
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: KonfluxUI
 metadata:

@@ -1,3 +1,5 @@
+# Title: Konflux Release Service Configuration
+# Description: KonfluxReleaseService configuration with custom resource limits and environment variables
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: KonfluxReleaseService
 metadata:

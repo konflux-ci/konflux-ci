@@ -1,3 +1,5 @@
+# Title: Konflux Cert Manager Configuration
+# Description: KonfluxCertManager configuration for certificate management
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: KonfluxCertManager
 metadata:

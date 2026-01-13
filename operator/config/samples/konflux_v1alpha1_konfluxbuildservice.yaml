@@ -1,3 +1,5 @@
+# Title: Konflux Build Service Configuration
+# Description: KonfluxBuildService configuration with custom resource limits and environment variables
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: KonfluxBuildService
 metadata:

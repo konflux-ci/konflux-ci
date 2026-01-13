@@ -1,3 +1,5 @@
+# Title: Empty Konflux Configuration
+# Description: Empty Konflux configuration (Default values)
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: Konflux
 metadata:

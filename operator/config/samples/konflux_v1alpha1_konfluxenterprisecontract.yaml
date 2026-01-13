@@ -1,3 +1,5 @@
+# Title: Konflux Enterprise Contract Configuration
+# Description: KonfluxEnterpriseContract configuration for enterprise contract policies
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: KonfluxEnterpriseContract
 metadata:

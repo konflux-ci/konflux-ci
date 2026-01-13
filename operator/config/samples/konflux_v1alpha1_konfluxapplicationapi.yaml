@@ -1,3 +1,5 @@
+# Title: Konflux Application API Configuration
+# Description: KonfluxApplicationAPI configuration (minimal example)
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: KonfluxApplicationAPI
 metadata:

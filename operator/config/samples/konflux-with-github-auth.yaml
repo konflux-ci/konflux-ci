@@ -1,3 +1,5 @@
+# Title: Konflux with GitHub Authentication
+# Description: Konflux configuration with GitHub authentication
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: Konflux
 metadata:
@@ -43,4 +45,3 @@ spec:
               config:
                 clientID: $GITHUB_CLIENT_ID
                 clientSecret: $GITHUB_CLIENT_SECRET
-

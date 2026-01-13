@@ -1,3 +1,5 @@
+# Title: Konflux Image Controller Configuration
+# Description: KonfluxImageController configuration for image management
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: KonfluxImageController
 metadata:
