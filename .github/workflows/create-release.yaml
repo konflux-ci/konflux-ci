@@ -100,7 +100,8 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           .github/scripts/generate-release-artifacts.sh \
-            "${{ steps.payload.outputs.image_tag }}"
+            "${{ steps.payload.outputs.image_tag }}" \
+            "${{ steps.version.outputs.version }}"
 
       - name: Prepare release notes
         id: release-notes
