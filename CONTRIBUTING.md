@@ -5,6 +5,9 @@ Contributing Guidelines
 
 - [Editing Markdown Files](#editing-markdown-files)
 - [Using KubeLinter](#using-kubelinter)
+- [CI/CD and Testing](#cicd-and-testing)
+  * [Automated E2E Tests](#automated-e2e-tests)
+  * [ARM64 Testing](#arm64-testing)
 - [Running E2E test](#running-e2e-test)
   * [Prerequisites](#prerequisites)
   * [Setup](#setup)
@@ -46,6 +49,30 @@ finally, run `kube-linter lint ./.kube-linter` to recursively apply KubeLinter c
 It may be also recommended to create a configuration file. To do so please check
 [KubeLinter config documentation](https://docs.kubelinter.io/#/configuring-kubelinter)
 this file will allow you to ignore or include specific KubeLinter checks.
+
+# CI/CD and Testing
+
+## Automated E2E Tests
+
+The repository includes automated E2E tests that run in GitHub Actions on both x86_64 and ARM64 architectures:
+
+- **x86_64 E2E Tests**: Defined in `.github/workflows/operator-test-e2e.yaml`, runs on `ubuntu-latest`
+- **ARM64 E2E Tests**: Defined in `.github/workflows/operator-test-e2e-arm.yaml`, runs on `ubuntu-24.04-arm`
+
+Both workflows run in parallel when changes to the `operator/` directory are detected and perform identical test suites to ensure cross-platform compatibility.
+
+## ARM64 Testing
+
+ARM64 E2E tests run on GitHub-hosted ARM runners and validate that:
+- The operator builds correctly for ARM64 architecture
+- All dependencies and services work on ARM64
+- Full E2E test suite passes on ARM64
+
+The ARM64 workflow uses architecture-specific binaries:
+- kind: `kind-linux-arm64`
+- kubectl: `bin/linux/arm64/kubectl`
+
+The operator container image is built natively for ARM64 using the multi-arch Containerfile which automatically detects the build architecture via `TARGETARCH` and `TARGETOS` build arguments.
 
 # Running E2E test
 In order to validate changes quicker, it is possible to run E2E test, which validates that:
