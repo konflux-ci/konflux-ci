@@ -18,7 +18,7 @@ jobs:
 
       - name: Verify ToC
         run: |
-          find . -name "*.md" | while read -r file; do
+          find . -name "*.md" -not -path "./operator/docs/*" | while read -r file; do
               npx markdown-toc $file -i
           done
           if [[ $(git status --porcelain) ]]; then

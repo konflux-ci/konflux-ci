@@ -1,0 +1,57 @@
+# Hugo configuration for Konflux Operator API Reference
+baseURL: "http://localhost:4000/konflux-ci/operator"
+title: "Konflux Operator"
+description: "API documentation for Konflux Operator Custom Resources"
+
+# Language configuration
+languageCode: "en-us"
+defaultContentLanguage: "en"
+
+# Hugo settings
+markup:
+  goldmark:
+    renderer:
+      unsafe: true
+  highlight:
+    style: github
+    lineNos: false
+
+# Theme configuration - Docsy
+theme: ["github.com/google/docsy", "github.com/google/docsy/dependencies"]
+
+# Docsy theme parameters
+params:
+  # Project information
+  project_name: "Konflux Operator"
+  project_tagline: "API Reference Documentation"
+
+  # GitHub information
+  github_repo: "https://github.com/konflux-ci/konflux-ci"
+  github_subdir: "operator"
+
+  # Search
+  search: true
+
+  # UI
+  ui:
+    navbar_logo: false
+    sidebar_menu_foldable: true
+    navigation:
+      color: "primary"
+
+  # Footer
+  footer:
+    copyright: "Konflux Operator"
+    privacy_policy: ""
+
+# Output formats
+outputs:
+  home:
+    - HTML
+    - RSS
+
+# Exclude files from processing
+ignoreFiles:
+  - "\\.git"
+  - "\\.gitignore"
+  - "README\\.md"

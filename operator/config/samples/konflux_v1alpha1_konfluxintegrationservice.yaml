@@ -1,3 +1,5 @@
+# Title: Konflux Integration Service Configuration
+# Description: KonfluxIntegrationService configuration with custom resource limits and environment variables
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: KonfluxIntegrationService
 metadata:

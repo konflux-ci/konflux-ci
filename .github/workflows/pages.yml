@@ -1,0 +1,134 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'operator/docs/**'
+      - 'operator/hack/genref/**'
+      - 'operator/api/**'
+      - 'operator/config/samples/**'
+  pull_request:
+    paths:
+      - 'operator/docs/**'
+      - 'operator/hack/genref/**'
+      - 'operator/api/**'
+      - 'operator/config/samples/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # Build and verify documentation on PRs
+  build-docs:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: operator/go.mod
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install npm dependencies
+        working-directory: ./operator/docs
+        run: npm ci
+
+      - name: Install Hugo
+        uses: peaceiris/actions-hugo@v2
+        with:
+          hugo-version: 'latest'
+          extended: true
+
+      - name: Generate API Reference
+        working-directory: ./operator
+        run: |
+          make generate-docs
+
+      - name: Build with Hugo
+        working-directory: ./operator/docs
+        env:
+          GITHUB_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          ../../.github/scripts/configure-hugo-baseurl.sh config.yaml
+          hugo --minify
+
+      - name: Check build output
+        run: |
+          if [ ! -d "./operator/docs/public" ]; then
+            echo "Error: Hugo build failed - public directory not found"
+            exit 1
+          fi
+          echo "✓ Documentation built successfully"
+          echo "Note: GitHub Pages doesn't support PR previews. The documentation will be deployed after merging to main."
+
+  # Deploy to GitHub Pages on main branch
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: operator/go.mod
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install npm dependencies
+        working-directory: ./operator/docs
+        run: npm ci
+
+      - name: Install Hugo
+        uses: peaceiris/actions-hugo@v2
+        with:
+          hugo-version: 'latest'
+          extended: true
+
+      - name: Generate API Reference
+        working-directory: ./operator
+        run: |
+          make generate-docs
+
+      - name: Build with Hugo
+        working-directory: ./operator/docs
+        env:
+          GITHUB_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          ../../.github/scripts/configure-hugo-baseurl.sh config.yaml
+          hugo --minify
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './operator/docs/public'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

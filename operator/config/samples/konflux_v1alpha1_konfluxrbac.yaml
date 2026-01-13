@@ -1,3 +1,5 @@
+# Title: Konflux RBAC Configuration
+# Description: KonfluxRBAC configuration for role-based access control
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: KonfluxRBAC
 metadata:
@@ -6,4 +8,3 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: konflux-rbac
 spec: {}
-

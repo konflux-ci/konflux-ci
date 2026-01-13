@@ -1,3 +1,5 @@
+# Title: Konflux Info Configuration
+# Description: KonfluxInfo full configuration for information display
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: KonfluxInfo
 metadata:

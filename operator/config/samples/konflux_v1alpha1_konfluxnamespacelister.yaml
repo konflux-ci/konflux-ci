@@ -1,3 +1,5 @@
+# Title: Konflux Namespace Lister Configuration
+# Description: KonfluxNamespaceLister configuration for namespace lister with custom resource limits and environment variables
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: KonfluxNamespaceLister
 metadata:

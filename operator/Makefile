@@ -100,6 +100,33 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
+.PHONY: genref
+genref: $(LOCALBIN) ## Download genref locally if necessary.
+	$(call go-install-tool,$(GENREF),github.com/kubernetes-sigs/reference-docs/genref,latest)
+
+.PHONY: generate-apiref
+generate-apiref: genref ## Generate API reference documentation in markdown format.
+	@echo "Generating API reference documentation..."
+	@mkdir -p docs/content/docs/reference
+	cd hack/genref && $(GENREF) -c config.yaml \
+		-f markdown \
+		-o ../../docs/content/docs/reference
+
+.PHONY: generate-docs
+generate-docs: generate-apiref ## Generate all documentation (includes API reference).
+	@echo "Adding examples to homepage..."
+	@bash hack/genref/add-examples-to-github-pages.sh config/samples docs/content/docs/examples.md
+	@echo "Documentation generation complete"
+
+.PHONY: docs-serve
+docs-serve: generate-docs ## Serve documentation locally with Hugo (requires: hugo installed).
+	@if ! command -v hugo > /dev/null; then \
+		echo "Error: Hugo not found. Install with: go install -tags extended github.com/gohugoio/hugo@latest"; \
+		echo "Or download from: https://gohugo.io/installation/"; \
+		exit 1; \
+	fi
+	cd docs && hugo server --bind 0.0.0.0 --port 4000
+
 .PHONY: fmt
 fmt: ## Run go fmt against code.
 	go fmt ./...
@@ -237,7 +264,8 @@ undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.
 ##@ Dependencies
 
 ## Location to install dependencies to
-LOCALBIN ?= $(shell pwd)/bin
+OPERATOR_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+LOCALBIN ?= $(OPERATOR_ROOT)bin
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
@@ -248,6 +276,7 @@ KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+GENREF ?= $(LOCALBIN)/genref
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.6.0
