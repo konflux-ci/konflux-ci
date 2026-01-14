@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -1293,6 +1294,207 @@ func TestClient_CleanupOrphans_AllowListDoesNotAffectNamespacedResources(t *test
 		errors.IsNotFound(err)).To(BeTrue(),
 		"expected NotFound error - namespaced resources should be deleted regardless of allow list",
 	)
+}
+
+// TestClient_CleanupOrphans_SkipsResourcesWithoutOwnerReference verifies that resources
+// with the owner label but without a matching owner reference are NOT deleted.
+// This is a security measure to prevent deletion of resources that weren't created by the controller.
+func TestClient_CleanupOrphans_SkipsResourcesWithoutOwnerReference(t *testing.T) {
+	g := NewWithT(t)
+	ctx := context.Background()
+
+	scheme := setupScheme(g)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	owner := createTestOwner(g, fakeClient)
+
+	// Create tracking client WITH ownership config
+	tc := NewClientWithOwnership(fakeClient, OwnershipConfig{
+		Owner:             owner,
+		OwnerLabelKey:     testOwnerLabel,
+		ComponentLabelKey: testComponentLabel,
+		Component:         testComponent,
+		FieldManager:      testFieldManager,
+	})
+
+	// Create a ConfigMap with the owner label but NO owner reference
+	// This simulates an attacker adding the label to a resource they created
+	labelOnlyCM := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "label-only-cm",
+			Namespace: testNamespace,
+			Labels: map[string]string{
+				testOwnerLabel: testOwnerValue,
+			},
+			// No OwnerReferences set!
+		},
+	}
+	err := fakeClient.Create(ctx, labelOnlyCM)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Run cleanup - this should NOT delete the resource because it lacks owner reference
+	err = tc.CleanupOrphans(ctx, testOwnerLabel, testOwnerValue, []schema.GroupVersionKind{configMapGVK})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Verify the ConfigMap still exists (not deleted because no owner reference)
+	var cm corev1.ConfigMap
+	err = fakeClient.Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: "label-only-cm"}, &cm)
+	g.Expect(err).NotTo(HaveOccurred(), "ConfigMap should NOT be deleted - it has no owner reference")
+}
+
+// TestClient_CleanupOrphans_SkipsResourcesWithWrongOwnerUID verifies that resources
+// with the owner label but with an owner reference pointing to a different UID are NOT deleted.
+// This prevents deletion if someone creates a fake owner reference with the right name but wrong UID.
+func TestClient_CleanupOrphans_SkipsResourcesWithWrongOwnerUID(t *testing.T) {
+	g := NewWithT(t)
+	ctx := context.Background()
+
+	scheme := setupScheme(g)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	owner := createTestOwner(g, fakeClient)
+
+	// Create tracking client WITH ownership config
+	tc := NewClientWithOwnership(fakeClient, OwnershipConfig{
+		Owner:             owner,
+		OwnerLabelKey:     testOwnerLabel,
+		ComponentLabelKey: testComponentLabel,
+		Component:         testComponent,
+		FieldManager:      testFieldManager,
+	})
+
+	// Create a ConfigMap with owner label AND owner reference, but with WRONG UID
+	wrongUIDCM := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "wrong-uid-cm",
+			Namespace: testNamespace,
+			Labels: map[string]string{
+				testOwnerLabel: testOwnerValue,
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+					Name:       testOwnerValue, // Correct name
+					UID:        "wrong-uid",    // Wrong UID!
+					Controller: ptr.To(true),
+				},
+			},
+		},
+	}
+	err := fakeClient.Create(ctx, wrongUIDCM)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Run cleanup - this should NOT delete the resource because UID doesn't match
+	err = tc.CleanupOrphans(ctx, testOwnerLabel, testOwnerValue, []schema.GroupVersionKind{configMapGVK})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Verify the ConfigMap still exists (not deleted because UID doesn't match)
+	var cm corev1.ConfigMap
+	err = fakeClient.Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: "wrong-uid-cm"}, &cm)
+	g.Expect(err).NotTo(HaveOccurred(), "ConfigMap should NOT be deleted - owner UID doesn't match")
+}
+
+// TestClient_CleanupOrphans_DeletesResourcesWithCorrectOwnerReference verifies that resources
+// with both the owner label AND a correct owner reference (name + UID) ARE deleted.
+func TestClient_CleanupOrphans_DeletesResourcesWithCorrectOwnerReference(t *testing.T) {
+	g := NewWithT(t)
+	ctx := context.Background()
+
+	scheme := setupScheme(g)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	owner := createTestOwner(g, fakeClient)
+
+	// Create tracking client WITH ownership config
+	tc := NewClientWithOwnership(fakeClient, OwnershipConfig{
+		Owner:             owner,
+		OwnerLabelKey:     testOwnerLabel,
+		ComponentLabelKey: testComponentLabel,
+		Component:         testComponent,
+		FieldManager:      testFieldManager,
+	})
+
+	// Create a ConfigMap with owner label AND correct owner reference
+	correctOwnerCM := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "correct-owner-cm",
+			Namespace: testNamespace,
+			Labels: map[string]string{
+				testOwnerLabel: testOwnerValue,
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+					Name:       owner.GetName(),
+					UID:        owner.GetUID(), // Correct UID!
+					Controller: ptr.To(true),
+				},
+			},
+		},
+	}
+	err := fakeClient.Create(ctx, correctOwnerCM)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Run cleanup - this SHOULD delete the resource because owner reference matches
+	err = tc.CleanupOrphans(ctx, testOwnerLabel, testOwnerValue, []schema.GroupVersionKind{configMapGVK})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Verify the ConfigMap was deleted
+	var cm corev1.ConfigMap
+	err = fakeClient.Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: "correct-owner-cm"}, &cm)
+	g.Expect(errors.IsNotFound(err)).To(BeTrue(), "ConfigMap should be deleted - it has correct owner reference")
+}
+
+// TestClient_CleanupOrphans_WithoutOwnershipConfig verifies that when no ownership config
+// is set, the owner reference check is skipped (backward compatibility).
+func TestClient_CleanupOrphans_WithoutOwnershipConfig(t *testing.T) {
+	g := NewWithT(t)
+	ctx := context.Background()
+
+	scheme := setupScheme(g)
+
+	// Create a ConfigMap with owner label but no owner reference
+	labelOnlyCM := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "label-only-cm",
+			Namespace: testNamespace,
+			Labels: map[string]string{
+				testOwnerLabel: testOwnerValue,
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(labelOnlyCM).
+		Build()
+
+	// Create tracking client WITHOUT ownership config
+	tc := NewClient(fakeClient)
+
+	// Run cleanup - this should delete the resource since owner check is skipped
+	err := tc.CleanupOrphans(ctx, testOwnerLabel, testOwnerValue, []schema.GroupVersionKind{configMapGVK})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Verify the ConfigMap was deleted (no owner check when ownership config is nil)
+	var cm corev1.ConfigMap
+	err = fakeClient.Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: "label-only-cm"}, &cm)
+	g.Expect(errors.IsNotFound(err)).To(BeTrue(), "ConfigMap should be deleted - no ownership config means no owner check")
 }
 
 func setupScheme(g *WithT) *runtime.Scheme {
