@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -1073,6 +1074,225 @@ func TestIsNoKindMatchError(t *testing.T) {
 		)
 		g.Expect(IsNoKindMatchError(forbiddenErr)).To(BeFalse())
 	})
+}
+
+func TestClusterScopedAllowList_IsAllowed(t *testing.T) {
+	namespaceGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Namespace"}
+	clusterRoleGVK := schema.GroupVersionKind{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"}
+
+	tests := []struct {
+		name      string
+		allowList ClusterScopedAllowList
+		gvk       schema.GroupVersionKind
+		namespace string
+		resName   string
+		expected  bool
+	}{
+		{
+			name:      "namespaced resource is always allowed",
+			allowList: ClusterScopedAllowList{namespaceGVK: sets.New("allowed-ns")},
+			gvk:       configMapGVK,
+			namespace: "some-namespace",
+			resName:   "any-configmap",
+			expected:  true,
+		},
+		{
+			name:      "nil allow list allows all",
+			allowList: nil,
+			gvk:       namespaceGVK,
+			namespace: "",
+			resName:   "any-namespace",
+			expected:  true,
+		},
+		{
+			name:      "empty allow list allows all",
+			allowList: ClusterScopedAllowList{},
+			gvk:       namespaceGVK,
+			namespace: "",
+			resName:   "any-namespace",
+			expected:  true,
+		},
+		{
+			name:      "GVK not in allow list is allowed",
+			allowList: ClusterScopedAllowList{namespaceGVK: sets.New("allowed-ns")},
+			gvk:       clusterRoleGVK,
+			namespace: "",
+			resName:   "any-clusterrole",
+			expected:  true,
+		},
+		{
+			name:      "cluster-scoped resource in allow list is allowed",
+			allowList: ClusterScopedAllowList{namespaceGVK: sets.New("allowed-ns", "another-ns")},
+			gvk:       namespaceGVK,
+			namespace: "",
+			resName:   "allowed-ns",
+			expected:  true,
+		},
+		{
+			name:      "cluster-scoped resource NOT in allow list is denied",
+			allowList: ClusterScopedAllowList{namespaceGVK: sets.New("allowed-ns")},
+			gvk:       namespaceGVK,
+			namespace: "",
+			resName:   "not-allowed-ns",
+			expected:  false,
+		},
+		{
+			name:      "empty names list in allow list denies all for that GVK",
+			allowList: ClusterScopedAllowList{namespaceGVK: sets.New[string]()},
+			gvk:       namespaceGVK,
+			namespace: "",
+			resName:   "any-namespace",
+			expected:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			result := tt.allowList.IsAllowed(tt.gvk, tt.namespace, tt.resName)
+			g.Expect(result).To(Equal(tt.expected))
+		})
+	}
+}
+
+func TestClient_CleanupOrphans_WithClusterScopedAllowList(t *testing.T) {
+	g := NewWithT(t)
+	ctx := context.Background()
+
+	scheme := setupScheme(g)
+	namespaceGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Namespace"}
+
+	// Create cluster-scoped resources (Namespaces) with owner label
+	allowedNS := &corev1.Namespace{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Namespace",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "allowed-ns",
+			Labels: map[string]string{
+				testOwnerLabel: testOwnerValue,
+			},
+		},
+	}
+	blockedNS := &corev1.Namespace{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Namespace",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "blocked-ns", // This is NOT in the allow list
+			Labels: map[string]string{
+				testOwnerLabel: testOwnerValue,
+			},
+		},
+	}
+	trackedNS := &corev1.Namespace{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Namespace",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tracked-ns", // This is in allow list and will be tracked
+			Labels: map[string]string{
+				testOwnerLabel: testOwnerValue,
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(allowedNS, blockedNS, trackedNS).
+		Build()
+	tc := NewClient(fakeClient)
+
+	// Track one of the namespaces (simulating it was applied during reconcile)
+	trackedNSCopy := &corev1.Namespace{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Namespace",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tracked-ns",
+			Labels: map[string]string{
+				testOwnerLabel: testOwnerValue,
+			},
+		},
+	}
+	err := tc.ApplyObject(ctx, trackedNSCopy, "test-manager")
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Define allow list - only "allowed-ns" and "tracked-ns" can be deleted
+	allowList := ClusterScopedAllowList{
+		namespaceGVK: sets.New("allowed-ns", "tracked-ns"),
+	}
+
+	// Run cleanup with allow list
+	err = tc.CleanupOrphans(ctx, testOwnerLabel, testOwnerValue, []schema.GroupVersionKind{namespaceGVK},
+		WithClusterScopedAllowList(allowList))
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Verify "tracked-ns" still exists (it was tracked during reconcile)
+	var keptNS corev1.Namespace
+	err = fakeClient.Get(ctx, client.ObjectKey{Name: "tracked-ns"}, &keptNS)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Verify "allowed-ns" was deleted (not tracked, but in allow list)
+	var deletedNS corev1.Namespace
+	err = fakeClient.Get(ctx, client.ObjectKey{Name: "allowed-ns"}, &deletedNS)
+	g.Expect(errors.IsNotFound(err)).To(BeTrue(), "expected NotFound error for allowed-ns")
+
+	// Verify "blocked-ns" still exists (not tracked, but NOT in allow list - blocked from deletion)
+	var blockedNSResult corev1.Namespace
+	err = fakeClient.Get(ctx, client.ObjectKey{Name: "blocked-ns"}, &blockedNSResult)
+	g.Expect(err).NotTo(HaveOccurred(), "blocked-ns should NOT be deleted because it's not in the allow list")
+}
+
+func TestClient_CleanupOrphans_AllowListDoesNotAffectNamespacedResources(t *testing.T) {
+	g := NewWithT(t)
+	ctx := context.Background()
+
+	scheme := setupScheme(g)
+	namespaceGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Namespace"}
+
+	// Create a namespaced ConfigMap with owner label
+	cm := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "orphan-cm",
+			Namespace: testNamespace,
+			Labels: map[string]string{
+				testOwnerLabel: testOwnerValue,
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cm).
+		Build()
+	tc := NewClient(fakeClient)
+
+	// Define allow list for Namespace only (should not affect ConfigMaps)
+	allowList := ClusterScopedAllowList{
+		namespaceGVK: sets.New("some-ns"), // Restrictive, but only for Namespace GVK
+	}
+
+	// Run cleanup for ConfigMap with the allow list
+	err := tc.CleanupOrphans(ctx, testOwnerLabel, testOwnerValue, []schema.GroupVersionKind{configMapGVK},
+		WithClusterScopedAllowList(allowList))
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Verify ConfigMap was deleted (allow list doesn't restrict namespaced resources)
+	var deletedCM corev1.ConfigMap
+	err = fakeClient.Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: "orphan-cm"}, &deletedCM)
+	g.Expect(
+		errors.IsNotFound(err)).To(BeTrue(),
+		"expected NotFound error - namespaced resources should be deleted regardless of allow list",
+	)
 }
 
 func setupScheme(g *WithT) *runtime.Scheme {

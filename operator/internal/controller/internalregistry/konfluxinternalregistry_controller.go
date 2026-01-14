@@ -47,15 +47,17 @@ const (
 )
 
 // InternalRegistryCleanupGVKs defines which resource types should be cleaned up when they are
-// no longer part of the desired state. When enabled is false, registry resources will be
-// automatically deleted because they weren't applied during the reconcile but have the owner label.
-var InternalRegistryCleanupGVKs = []schema.GroupVersionKind{
-	{Group: "", Version: "v1", Kind: "Namespace"},
-	{Group: "apps", Version: "v1", Kind: "Deployment"},
-	{Group: "", Version: "v1", Kind: "Service"},
-	{Group: "cert-manager.io", Version: "v1", Kind: "Certificate"},
-	{Group: "trust.cert-manager.io", Version: "v1alpha1", Kind: "Bundle"},
-}
+// no longer part of the desired state. All resources managed by this controller are always
+// applied, so no cleanup GVKs are needed (they're always tracked and never become orphans).
+var InternalRegistryCleanupGVKs = []schema.GroupVersionKind{}
+
+// InternalRegistryClusterScopedAllowList restricts which cluster-scoped resources can be deleted
+// during orphan cleanup. This is a security measure to prevent attackers from
+// triggering deletion of arbitrary cluster resources by adding the owner label.
+// InternalRegistryClusterScopedAllowList restricts which cluster-scoped resources can be deleted
+// during orphan cleanup. All cluster-scoped resources managed by this controller are always
+// applied, so no allow list is needed (they're always tracked and never become orphans).
+var InternalRegistryClusterScopedAllowList tracking.ClusterScopedAllowList = nil
 
 // KonfluxInternalRegistryReconciler reconciles a KonfluxInternalRegistry object
 type KonfluxInternalRegistryReconciler struct {
@@ -108,7 +110,8 @@ func (r *KonfluxInternalRegistryReconciler) Reconcile(ctx context.Context, req c
 	// Cleanup orphaned resources - delete any resources with our owner label
 	// that weren't applied during this reconcile. This handles the case where
 	// enabled changes from true to false (resources are automatically deleted).
-	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, registry.Name, InternalRegistryCleanupGVKs); err != nil {
+	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, registry.Name, InternalRegistryCleanupGVKs,
+		tracking.WithClusterScopedAllowList(InternalRegistryClusterScopedAllowList)); err != nil {
 		return errHandler.HandleCleanupError(ctx, err)
 	}
 

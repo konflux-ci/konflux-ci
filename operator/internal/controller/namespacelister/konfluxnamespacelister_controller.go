@@ -52,18 +52,17 @@ const (
 )
 
 // NamespaceListerCleanupGVKs defines which resource types should be cleaned up when they are
-// no longer part of the desired state for the NamespaceLister component.
-var NamespaceListerCleanupGVKs = []schema.GroupVersionKind{
-	{Group: "apps", Version: "v1", Kind: "Deployment"},
-	{Group: "", Version: "v1", Kind: "Service"},
-	{Group: "", Version: "v1", Kind: "ServiceAccount"},
-	{Group: "", Version: "v1", Kind: "Namespace"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"},
-	{Group: "networking.k8s.io", Version: "v1", Kind: "NetworkPolicy"},
-	{Group: "cert-manager.io", Version: "v1", Kind: "Certificate"},
-	{Group: "kyverno.io", Version: "v1", Kind: "ClusterPolicy"},
-}
+// no longer part of the desired state. All resources managed by this controller are always
+// applied, so no cleanup GVKs are needed (they're always tracked and never become orphans).
+var NamespaceListerCleanupGVKs = []schema.GroupVersionKind{}
+
+// NamespaceListerClusterScopedAllowList restricts which cluster-scoped resources can be deleted
+// during orphan cleanup. This is a security measure to prevent attackers from
+// triggering deletion of arbitrary cluster resources by adding the owner label.
+// NamespaceListerClusterScopedAllowList restricts which cluster-scoped resources can be deleted
+// during orphan cleanup. All cluster-scoped resources managed by this controller are always
+// applied, so no allow list is needed (they're always tracked and never become orphans).
+var NamespaceListerClusterScopedAllowList tracking.ClusterScopedAllowList = nil
 
 // KonfluxNamespaceListerReconciler reconciles a KonfluxNamespaceLister object
 type KonfluxNamespaceListerReconciler struct {
@@ -123,7 +122,8 @@ func (r *KonfluxNamespaceListerReconciler) Reconcile(ctx context.Context, req ct
 	}
 
 	// Cleanup orphaned resources
-	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, konfluxNamespaceLister.Name, NamespaceListerCleanupGVKs); err != nil {
+	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, konfluxNamespaceLister.Name, NamespaceListerCleanupGVKs,
+		tracking.WithClusterScopedAllowList(NamespaceListerClusterScopedAllowList)); err != nil {
 		return errHandler.HandleCleanupError(ctx, err)
 	}
 

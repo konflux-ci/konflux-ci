@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -81,21 +82,29 @@ const (
 )
 
 // UICleanupGVKs defines which resource types should be cleaned up when they are
-// no longer part of the desired state. For example, when Ingress is disabled,
-// the Ingress resource will be automatically deleted because it wasn't applied
-// during the reconcile but has the owner label.
+// no longer part of the desired state. Only optional/conditional resources are listed here.
+// Always-applied resources don't need cleanup (they're always tracked and never become orphans).
 var UICleanupGVKs = []schema.GroupVersionKind{
-	{Group: "apps", Version: "v1", Kind: "Deployment"},
-	{Group: "", Version: "v1", Kind: "Service"},
-	{Group: "", Version: "v1", Kind: "ConfigMap"},
-	{Group: "", Version: "v1", Kind: "Secret"},
-	{Group: "", Version: "v1", Kind: "ServiceAccount"},
-	{Group: "", Version: "v1", Kind: "Namespace"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"},
+	// Ingress is optional - only created when spec.ingress.enabled is true
 	{Group: "networking.k8s.io", Version: "v1", Kind: "Ingress"},
+	// ConsoleLink is optional - only created on OpenShift when ingress is enabled
 	{Group: "console.openshift.io", Version: "v1", Kind: "ConsoleLink"},
-	{Group: "cert-manager.io", Version: "v1", Kind: "Certificate"},
+	// ServiceAccount is optional - only created for OpenShift OAuth when configureLoginWithOpenShift is true
+	{Group: "", Version: "v1", Kind: "ServiceAccount"},
+	// Secret is optional - only created for OpenShift OAuth when configureLoginWithOpenShift is true
+	{Group: "", Version: "v1", Kind: "Secret"},
+}
+
+// UIClusterScopedAllowList restricts which cluster-scoped resources can be deleted
+// during orphan cleanup. This is a security measure to prevent attackers from
+// triggering deletion of arbitrary cluster resources by adding the owner label.
+// Only conditionally-created resources need to be listed here.
+// Resources that are always applied don't need protection (they're always tracked).
+var UIClusterScopedAllowList = tracking.ClusterScopedAllowList{
+	// ConsoleLink is only created on OpenShift when ingress is enabled
+	{Group: "console.openshift.io", Version: "v1", Kind: "ConsoleLink"}: sets.New(
+		"konflux",
+	),
 }
 
 // KonfluxUIReconciler reconciles a KonfluxUI object
@@ -201,7 +210,8 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Cleanup orphaned resources - delete any resources with our owner label
 	// that weren't applied during this reconcile. This handles cases like
 	// disabling Ingress (the Ingress resource is automatically deleted).
-	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, ui.Name, UICleanupGVKs); err != nil {
+	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, ui.Name, UICleanupGVKs,
+		tracking.WithClusterScopedAllowList(UIClusterScopedAllowList)); err != nil {
 		return errHandler.HandleCleanupError(ctx, err)
 	}
 

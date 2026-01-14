@@ -55,26 +55,14 @@ const (
 )
 
 // ReleaseServiceCleanupGVKs defines which resource types should be cleaned up when they are
-// no longer part of the desired state for the ReleaseService component.
-var ReleaseServiceCleanupGVKs = []schema.GroupVersionKind{
-	{Group: "apps", Version: "v1", Kind: "Deployment"},
-	{Group: "", Version: "v1", Kind: "Service"},
-	{Group: "", Version: "v1", Kind: "ConfigMap"},
-	{Group: "", Version: "v1", Kind: "Secret"},
-	{Group: "", Version: "v1", Kind: "ServiceAccount"},
-	{Group: "", Version: "v1", Kind: "Namespace"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "RoleBinding"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"},
-	{Group: "networking.k8s.io", Version: "v1", Kind: "NetworkPolicy"},
-	{Group: "monitoring.coreos.com", Version: "v1", Kind: "ServiceMonitor"},
-	{Group: "cert-manager.io", Version: "v1", Kind: "Certificate"},
-	{Group: "cert-manager.io", Version: "v1", Kind: "Issuer"},
-	{Group: "admissionregistration.k8s.io", Version: "v1", Kind: "ValidatingWebhookConfiguration"},
-	{Group: "admissionregistration.k8s.io", Version: "v1", Kind: "MutatingWebhookConfiguration"},
-	{Group: "appstudio.redhat.com", Version: "v1alpha1", Kind: "ReleaseServiceConfig"},
-}
+// no longer part of the desired state. All resources managed by this controller are always
+// applied, so no cleanup GVKs are needed (they're always tracked and never become orphans).
+var ReleaseServiceCleanupGVKs = []schema.GroupVersionKind{}
+
+// ReleaseServiceClusterScopedAllowList restricts which cluster-scoped resources can be deleted
+// during orphan cleanup. All cluster-scoped resources managed by this controller are always
+// applied, so no allow list is needed (they're always tracked and never become orphans).
+var ReleaseServiceClusterScopedAllowList tracking.ClusterScopedAllowList = nil
 
 // KonfluxReleaseServiceReconciler reconciles a KonfluxReleaseService object
 type KonfluxReleaseServiceReconciler struct {
@@ -136,7 +124,8 @@ func (r *KonfluxReleaseServiceReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	// Cleanup orphaned resources
-	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, releaseService.Name, ReleaseServiceCleanupGVKs); err != nil {
+	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, releaseService.Name, ReleaseServiceCleanupGVKs,
+		tracking.WithClusterScopedAllowList(ReleaseServiceClusterScopedAllowList)); err != nil {
 		return errHandler.HandleCleanupError(ctx, err)
 	}
 
