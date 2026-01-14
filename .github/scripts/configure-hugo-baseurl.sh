@@ -43,8 +43,8 @@ if [ ! -f "$CONFIG_FILE" ]; then
 fi
 
 # Calculate baseURL and URL
-# baseURL includes repository name: /${REPO_NAME}/operator
-# This matches the actual GitHub Pages serving path
+# baseURL is /${REPO_NAME} (where GitHub Pages actually serves the files)
+# The content structure determines the paths within the site
 if [ -n "${GITHUB_PAGES_DOMAIN:-}" ]; then
   # Custom domain
   URL="https://${GITHUB_PAGES_DOMAIN}"
@@ -53,7 +53,7 @@ else
   URL="https://${GITHUB_OWNER}.github.io"
 fi
 
-BASEURL="/${REPO_NAME}/operator"
+BASEURL="/${REPO_NAME}"
 
 FULL_BASEURL="${URL}${BASEURL}"
 
