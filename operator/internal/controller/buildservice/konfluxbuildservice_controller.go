@@ -57,22 +57,16 @@ const (
 )
 
 // BuildServiceCleanupGVKs defines which resource types should be cleaned up when they are
-// no longer part of the desired state for the BuildService component.
-var BuildServiceCleanupGVKs = []schema.GroupVersionKind{
-	{Group: "apps", Version: "v1", Kind: "Deployment"},
-	{Group: "", Version: "v1", Kind: "Service"},
-	{Group: "", Version: "v1", Kind: "ConfigMap"},
-	{Group: "", Version: "v1", Kind: "Secret"},
-	{Group: "", Version: "v1", Kind: "ServiceAccount"},
-	{Group: "", Version: "v1", Kind: "Namespace"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "RoleBinding"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"},
-	{Group: "networking.k8s.io", Version: "v1", Kind: "NetworkPolicy"},
-	{Group: "monitoring.coreos.com", Version: "v1", Kind: "ServiceMonitor"},
-	{Group: "security.openshift.io", Version: "v1", Kind: "SecurityContextConstraints"},
-}
+// no longer part of the desired state. All resources managed by this controller are always
+// applied (SCC is platform-dependent but cluster type doesn't change at runtime),
+// so no cleanup GVKs are needed.
+var BuildServiceCleanupGVKs = []schema.GroupVersionKind{}
+
+// BuildServiceClusterScopedAllowList restricts which cluster-scoped resources can be deleted
+// during orphan cleanup. All cluster-scoped resources managed by this controller are always
+// applied (SCC is only created on OpenShift, but cluster type doesn't change at runtime),
+// so no allow list is needed.
+var BuildServiceClusterScopedAllowList tracking.ClusterScopedAllowList = nil
 
 // KonfluxBuildServiceReconciler reconciles a KonfluxBuildService object
 type KonfluxBuildServiceReconciler struct {
@@ -140,7 +134,8 @@ func (r *KonfluxBuildServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	// Cleanup orphaned resources - delete any resources with our owner label
 	// that weren't applied during this reconcile.
-	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, buildService.Name, BuildServiceCleanupGVKs); err != nil {
+	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, buildService.Name, BuildServiceCleanupGVKs,
+		tracking.WithClusterScopedAllowList(BuildServiceClusterScopedAllowList)); err != nil {
 		return errHandler.HandleCleanupError(ctx, err)
 	}
 

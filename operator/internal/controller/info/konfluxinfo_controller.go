@@ -56,13 +56,17 @@ const (
 )
 
 // InfoCleanupGVKs defines which resource types should be cleaned up when they are
-// no longer part of the desired state for the Info component.
-var InfoCleanupGVKs = []schema.GroupVersionKind{
-	{Group: "", Version: "v1", Kind: "ConfigMap"},
-	{Group: "", Version: "v1", Kind: "Namespace"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "RoleBinding"},
-}
+// no longer part of the desired state. All resources managed by this controller are always
+// applied, so no cleanup GVKs are needed (they're always tracked and never become orphans).
+var InfoCleanupGVKs = []schema.GroupVersionKind{}
+
+// InfoClusterScopedAllowList restricts which cluster-scoped resources can be deleted
+// during orphan cleanup. This is a security measure to prevent attackers from
+// triggering deletion of arbitrary cluster resources by adding the owner label.
+// InfoClusterScopedAllowList restricts which cluster-scoped resources can be deleted
+// during orphan cleanup. All cluster-scoped resources managed by this controller are always
+// applied, so no allow list is needed (they're always tracked and never become orphans).
+var InfoClusterScopedAllowList tracking.ClusterScopedAllowList = nil
 
 // KonfluxInfoReconciler reconciles a KonfluxInfo object
 type KonfluxInfoReconciler struct {
@@ -129,7 +133,8 @@ func (r *KonfluxInfoReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// Cleanup orphaned resources
-	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, konfluxInfo.Name, InfoCleanupGVKs); err != nil {
+	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, konfluxInfo.Name, InfoCleanupGVKs,
+		tracking.WithClusterScopedAllowList(InfoClusterScopedAllowList)); err != nil {
 		return errHandler.HandleCleanupError(ctx, err)
 	}
 

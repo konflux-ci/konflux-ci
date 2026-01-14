@@ -22,6 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -54,21 +55,26 @@ const (
 )
 
 // konfluxCleanupGVKs defines which sub-CR types should be cleaned up when they are
-// no longer part of the desired state. This handles optional components like
-// ImageController and InternalRegistry that can be enabled/disabled.
+// no longer part of the desired state. Only optional/conditional sub-CRs are listed here.
+// Always-applied sub-CRs don't need cleanup (they're always tracked and never become orphans).
 var konfluxCleanupGVKs = []schema.GroupVersionKind{
-	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxBuildService"},
-	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxIntegrationService"},
-	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxReleaseService"},
-	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxUI"},
-	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxRBAC"},
-	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxInfo"},
-	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxNamespaceLister"},
-	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxEnterpriseContract"},
-	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxApplicationAPI"},
+	// KonfluxImageController is optional - only created when spec.imageController.enabled is true
 	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxImageController"},
-	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxCertManager"},
+	// KonfluxInternalRegistry is optional - only created when spec.internalRegistry.enabled is true
 	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxInternalRegistry"},
+}
+
+// konfluxClusterScopedAllowList restricts which cluster-scoped sub-CRs can be deleted
+// during orphan cleanup. Only conditionally-created sub-CRs need to be listed here.
+var konfluxClusterScopedAllowList = tracking.ClusterScopedAllowList{
+	// KonfluxImageController is optional - only created when spec.imageController.enabled is true
+	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxImageController"}: sets.New(
+		"konflux-image-controller",
+	),
+	// KonfluxInternalRegistry is optional - only created when spec.internalRegistry.enabled is true
+	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxInternalRegistry"}: sets.New(
+		"konflux-internal-registry",
+	),
 }
 
 // KonfluxReconciler reconciles a Konflux object
@@ -207,7 +213,8 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// Cleanup orphaned sub-CRs - delete any sub-CRs with our owner label
 	// that weren't applied during this reconcile (e.g., disabled optional components)
-	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, konflux.Name, konfluxCleanupGVKs); err != nil {
+	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, konflux.Name, konfluxCleanupGVKs,
+		tracking.WithClusterScopedAllowList(konfluxClusterScopedAllowList)); err != nil {
 		return errHandler.HandleCleanupError(ctx, err)
 	}
 

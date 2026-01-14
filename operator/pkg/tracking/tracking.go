@@ -69,6 +69,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -81,6 +82,49 @@ type ResourceKey struct {
 	GVK       schema.GroupVersionKind
 	Namespace string
 	Name      string
+}
+
+// ClusterScopedAllowList defines which cluster-scoped resources are allowed to be
+// deleted during orphan cleanup. This is a security measure to prevent attackers
+// from triggering deletion of arbitrary cluster resources by adding the owner label.
+//
+// For each GVK, only resources with names in the allow list will be considered for
+// deletion. If a GVK is not in the map, all resources of that type are allowed
+// (backwards compatible behavior for namespaced resources).
+//
+// Example:
+//
+//	allowList := tracking.ClusterScopedAllowList{
+//	    {Group: "", Version: "v1", Kind: "Namespace"}: sets.New("my-namespace"),
+//	    {Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"}: sets.New("my-role-1", "my-role-2"),
+//	}
+type ClusterScopedAllowList map[schema.GroupVersionKind]sets.Set[string]
+
+// IsAllowed checks if a cluster-scoped resource is allowed to be deleted.
+// Returns true if:
+// - The resource is namespaced (namespace is not empty)
+// - The GVK is not in the allow list (no restrictions for this type)
+// - The resource name is in the allow list for this GVK
+func (a ClusterScopedAllowList) IsAllowed(gvk schema.GroupVersionKind, namespace, name string) bool {
+	// Namespaced resources are always allowed (not cluster-scoped)
+	if namespace != "" {
+		return true
+	}
+
+	// If no allow list defined, allow all (backwards compatible)
+	if a == nil {
+		return true
+	}
+
+	// Check if this GVK has restrictions
+	allowedNames, hasRestriction := a[gvk]
+	if !hasRestriction {
+		// No restriction for this GVK, allow all
+		return true
+	}
+
+	// Check if the name is in the allow list
+	return allowedNames.Has(name)
 }
 
 // String returns a human-readable representation of the resource key.
@@ -298,6 +342,27 @@ func (c *Client) TrackedResources() []ResourceKey {
 	return keys
 }
 
+// CleanupOptions configures the behavior of CleanupOrphans.
+type CleanupOptions struct {
+	// ClusterScopedAllowList restricts which cluster-scoped resources can be deleted.
+	// If set, only cluster-scoped resources with names in the allow list will be deleted.
+	// This is a security measure to prevent deletion of arbitrary cluster resources
+	// that an attacker might have labeled with the owner label.
+	ClusterScopedAllowList ClusterScopedAllowList
+}
+
+// CleanupOption is a functional option for configuring CleanupOrphans.
+type CleanupOption func(*CleanupOptions)
+
+// WithClusterScopedAllowList sets the allow list for cluster-scoped resources.
+// Only cluster-scoped resources with names in the allow list will be considered
+// for deletion during orphan cleanup.
+func WithClusterScopedAllowList(allowList ClusterScopedAllowList) CleanupOption {
+	return func(opts *CleanupOptions) {
+		opts.ClusterScopedAllowList = allowList
+	}
+}
+
 // CleanupOrphans deletes resources that have the specified owner label but were
 // not applied during this reconcile. Only resources matching the provided GVKs
 // are considered for cleanup.
@@ -307,21 +372,33 @@ func (c *Client) TrackedResources() []ResourceKey {
 //   - ownerLabelKey: The label key that identifies ownership (e.g., "konflux.konflux-ci.dev/owner")
 //   - ownerLabelValue: The value of the owner label to match (e.g., the CR name)
 //   - gvks: List of GroupVersionKinds to check for orphaned resources
+//   - opts: Optional configuration (e.g., WithClusterScopedAllowList)
 //
 // Returns an error if listing or deleting fails. NotFound errors during deletion
 // are ignored (resource may have been deleted by another process).
+//
+// Security: For cluster-scoped resources (Namespace, ClusterRole, ClusterRoleBinding, etc.),
+// use WithClusterScopedAllowList to restrict which resources can be deleted. This prevents
+// attackers from triggering deletion of arbitrary resources by adding the owner label.
 func (c *Client) CleanupOrphans(
 	ctx context.Context,
 	ownerLabelKey, ownerLabelValue string,
 	gvks []schema.GroupVersionKind,
+	opts ...CleanupOption,
 ) error {
 	log := logf.FromContext(ctx)
 	start := time.Now()
 
+	// Apply options
+	options := &CleanupOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	g, ctx := errgroup.WithContext(ctx)
 	for _, gvk := range gvks {
 		g.Go(func() error {
-			if err := c.cleanupOrphansForGVK(ctx, ownerLabelKey, ownerLabelValue, gvk); err != nil {
+			if err := c.cleanupOrphansForGVK(ctx, ownerLabelKey, ownerLabelValue, gvk, options); err != nil {
 				log.Error(err, "Failed to cleanup orphans", "gvk", gvk.String())
 				return fmt.Errorf("failed to cleanup orphans for %s: %w", gvk.String(), err)
 			}
@@ -342,6 +419,7 @@ func (c *Client) cleanupOrphansForGVK(
 	ctx context.Context,
 	ownerLabelKey, ownerLabelValue string,
 	gvk schema.GroupVersionKind,
+	options *CleanupOptions,
 ) error {
 	log := logf.FromContext(ctx)
 
@@ -379,6 +457,15 @@ func (c *Client) cleanupOrphansForGVK(
 		c.mu.Unlock()
 
 		if !wasTracked {
+			// Security check: for cluster-scoped resources, verify the name is in the allow list
+			if options != nil && !options.ClusterScopedAllowList.IsAllowed(gvk, item.GetNamespace(), item.GetName()) {
+				log.Info("Skipping deletion of cluster-scoped resource not in allow list",
+					"gvk", gvk.String(),
+					"name", item.GetName(),
+				)
+				continue
+			}
+
 			log.Info("Deleting orphaned resource",
 				"gvk", gvk.String(),
 				"resource", key.String(),

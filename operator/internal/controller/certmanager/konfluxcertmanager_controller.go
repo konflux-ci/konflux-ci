@@ -23,6 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -52,6 +53,19 @@ const (
 var CertManagerCleanupGVKs = []schema.GroupVersionKind{
 	{Group: "cert-manager.io", Version: "v1", Kind: "ClusterIssuer"},
 	{Group: "cert-manager.io", Version: "v1", Kind: "Certificate"},
+}
+
+// CertManagerClusterScopedAllowList restricts which cluster-scoped resources can be deleted
+// during orphan cleanup. This is a security measure to prevent attackers from
+// triggering deletion of arbitrary cluster resources by adding the owner label.
+// Only conditionally-created resources need to be listed here.
+// Resources that are always applied don't need protection (they're always tracked).
+var CertManagerClusterScopedAllowList = tracking.ClusterScopedAllowList{
+	// ClusterIssuers are only created when spec.createClusterIssuer is true
+	{Group: "cert-manager.io", Version: "v1", Kind: "ClusterIssuer"}: sets.New(
+		"self-signed-cluster-issuer",
+		"ca-issuer",
+	),
 }
 
 // KonfluxCertManagerReconciler reconciles a KonfluxCertManager object
@@ -106,7 +120,8 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// Cleanup orphaned resources - delete any resources with our owner label
 	// that weren't applied during this reconcile. This handles the case where
 	// createClusterIssuer changes from true to false (resources are automatically deleted).
-	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, certManager.Name, CertManagerCleanupGVKs); err != nil {
+	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, certManager.Name, CertManagerCleanupGVKs,
+		tracking.WithClusterScopedAllowList(CertManagerClusterScopedAllowList)); err != nil {
 		return errHandler.HandleCleanupError(ctx, err)
 	}
 

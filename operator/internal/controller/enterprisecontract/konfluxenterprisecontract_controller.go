@@ -48,14 +48,17 @@ const (
 )
 
 // EnterpriseContractCleanupGVKs defines which resource types should be cleaned up when they are
-// no longer part of the desired state for the EnterpriseContract component.
-var EnterpriseContractCleanupGVKs = []schema.GroupVersionKind{
-	{Group: "", Version: "v1", Kind: "ConfigMap"},
-	{Group: "", Version: "v1", Kind: "Namespace"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "RoleBinding"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"},
-	{Group: "appstudio.redhat.com", Version: "v1alpha1", Kind: "EnterpriseContractPolicy"},
-}
+// no longer part of the desired state. All resources managed by this controller are always
+// applied, so no cleanup GVKs are needed (they're always tracked and never become orphans).
+var EnterpriseContractCleanupGVKs = []schema.GroupVersionKind{}
+
+// EnterpriseContractClusterScopedAllowList restricts which cluster-scoped resources can be deleted
+// during orphan cleanup. This is a security measure to prevent attackers from
+// triggering deletion of arbitrary cluster resources by adding the owner label.
+// EnterpriseContractClusterScopedAllowList restricts which cluster-scoped resources can be deleted
+// during orphan cleanup. All cluster-scoped resources managed by this controller are always
+// applied, so no allow list is needed (they're always tracked and never become orphans).
+var EnterpriseContractClusterScopedAllowList tracking.ClusterScopedAllowList = nil
 
 // KonfluxEnterpriseContractReconciler reconciles a KonfluxEnterpriseContract object
 type KonfluxEnterpriseContractReconciler struct {
@@ -115,7 +118,8 @@ func (r *KonfluxEnterpriseContractReconciler) Reconcile(ctx context.Context, req
 	}
 
 	// Cleanup orphaned resources
-	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, konfluxEnterpriseContract.Name, EnterpriseContractCleanupGVKs); err != nil {
+	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, konfluxEnterpriseContract.Name, EnterpriseContractCleanupGVKs,
+		tracking.WithClusterScopedAllowList(EnterpriseContractClusterScopedAllowList)); err != nil {
 		return errHandler.HandleCleanupError(ctx, err)
 	}
 

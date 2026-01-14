@@ -55,27 +55,14 @@ const (
 )
 
 // IntegrationServiceCleanupGVKs defines which resource types should be cleaned up when they are
-// no longer part of the desired state for the IntegrationService component.
-var IntegrationServiceCleanupGVKs = []schema.GroupVersionKind{
-	{Group: "apps", Version: "v1", Kind: "Deployment"},
-	{Group: "", Version: "v1", Kind: "Service"},
-	{Group: "", Version: "v1", Kind: "ConfigMap"},
-	{Group: "", Version: "v1", Kind: "Secret"},
-	{Group: "", Version: "v1", Kind: "ServiceAccount"},
-	{Group: "", Version: "v1", Kind: "Namespace"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "RoleBinding"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"},
-	{Group: "networking.k8s.io", Version: "v1", Kind: "NetworkPolicy"},
-	{Group: "monitoring.coreos.com", Version: "v1", Kind: "ServiceMonitor"},
-	{Group: "cert-manager.io", Version: "v1", Kind: "Certificate"},
-	{Group: "cert-manager.io", Version: "v1", Kind: "Issuer"},
-	{Group: "kyverno.io", Version: "v1", Kind: "ClusterPolicy"},
-	{Group: "admissionregistration.k8s.io", Version: "v1", Kind: "ValidatingWebhookConfiguration"},
-	{Group: "admissionregistration.k8s.io", Version: "v1", Kind: "MutatingWebhookConfiguration"},
-	{Group: "batch", Version: "v1", Kind: "CronJob"},
-}
+// no longer part of the desired state. All resources managed by this controller are always
+// applied, so no cleanup GVKs are needed (they're always tracked and never become orphans).
+var IntegrationServiceCleanupGVKs = []schema.GroupVersionKind{}
+
+// IntegrationServiceClusterScopedAllowList restricts which cluster-scoped resources can be deleted
+// during orphan cleanup. All cluster-scoped resources managed by this controller are always
+// applied, so no allow list is needed (they're always tracked and never become orphans).
+var IntegrationServiceClusterScopedAllowList tracking.ClusterScopedAllowList = nil
 
 // KonfluxIntegrationServiceReconciler reconciles a KonfluxIntegrationService object
 type KonfluxIntegrationServiceReconciler struct {
@@ -138,7 +125,8 @@ func (r *KonfluxIntegrationServiceReconciler) Reconcile(ctx context.Context, req
 	}
 
 	// Cleanup orphaned resources
-	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, integrationService.Name, IntegrationServiceCleanupGVKs); err != nil {
+	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, integrationService.Name, IntegrationServiceCleanupGVKs,
+		tracking.WithClusterScopedAllowList(IntegrationServiceClusterScopedAllowList)); err != nil {
 		return errHandler.HandleCleanupError(ctx, err)
 	}
 

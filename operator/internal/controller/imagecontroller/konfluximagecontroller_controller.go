@@ -48,22 +48,14 @@ const (
 )
 
 // ImageControllerCleanupGVKs defines which resource types should be cleaned up when they are
-// no longer part of the desired state for the ImageController component.
-var ImageControllerCleanupGVKs = []schema.GroupVersionKind{
-	{Group: "apps", Version: "v1", Kind: "Deployment"},
-	{Group: "", Version: "v1", Kind: "Service"},
-	{Group: "", Version: "v1", Kind: "ConfigMap"},
-	{Group: "", Version: "v1", Kind: "Secret"},
-	{Group: "", Version: "v1", Kind: "ServiceAccount"},
-	{Group: "", Version: "v1", Kind: "Namespace"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "RoleBinding"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"},
-	{Group: "networking.k8s.io", Version: "v1", Kind: "NetworkPolicy"},
-	{Group: "monitoring.coreos.com", Version: "v1", Kind: "ServiceMonitor"},
-	{Group: "batch", Version: "v1", Kind: "CronJob"},
-}
+// no longer part of the desired state. All resources managed by this controller are always
+// applied, so no cleanup GVKs are needed (they're always tracked and never become orphans).
+var ImageControllerCleanupGVKs = []schema.GroupVersionKind{}
+
+// ImageControllerClusterScopedAllowList restricts which cluster-scoped resources can be deleted
+// during orphan cleanup. All cluster-scoped resources managed by this controller are always
+// applied, so no allow list is needed (they're always tracked and never become orphans).
+var ImageControllerClusterScopedAllowList tracking.ClusterScopedAllowList = nil
 
 // KonfluxImageControllerReconciler reconciles a KonfluxImageController object
 type KonfluxImageControllerReconciler struct {
@@ -123,7 +115,8 @@ func (r *KonfluxImageControllerReconciler) Reconcile(ctx context.Context, req ct
 	}
 
 	// Cleanup orphaned resources
-	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, imageController.Name, ImageControllerCleanupGVKs); err != nil {
+	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, imageController.Name, ImageControllerCleanupGVKs,
+		tracking.WithClusterScopedAllowList(ImageControllerClusterScopedAllowList)); err != nil {
 		return errHandler.HandleCleanupError(ctx, err)
 	}
 
