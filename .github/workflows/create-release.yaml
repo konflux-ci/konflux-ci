@@ -97,6 +97,7 @@ jobs:
           go-version-file: operator/go.mod
 
       - name: Generate release artifacts
+        working-directory: ${{ github.workspace }}
         run: |
           .github/scripts/generate-release-artifacts.sh \
             "${{ steps.payload.outputs.image_tag }}"
