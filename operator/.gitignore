@@ -41,7 +41,8 @@ docs/content/docs/reference/*.md
 docs/content/docs/examples.md
 
 # Temporary assets (if any)
-docs/assets/icons/
+docs/assets/icons/*
+!docs/assets/icons/logo.svg
 
 # Node.js dependencies
 docs/node_modules/
