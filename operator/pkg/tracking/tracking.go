@@ -66,6 +66,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -457,6 +458,16 @@ func (c *Client) cleanupOrphansForGVK(
 		c.mu.Unlock()
 
 		if !wasTracked {
+			// We use metav1.IsControlledBy (not controllerutil.HasOwnerReference) because it
+			// verifies both name AND UID, preventing spoofed owner references.
+			if c.ownership != nil && !metav1.IsControlledBy(item, c.ownership.Owner) {
+				log.V(1).Info("Skipping deletion of resource without matching owner reference",
+					"gvk", gvk.String(),
+					"resource", key.String(),
+				)
+				continue
+			}
+
 			// Security check: for cluster-scoped resources, verify the name is in the allow list
 			if options != nil && !options.ClusterScopedAllowList.IsAllowed(gvk, item.GetNamespace(), item.GetName()) {
 				log.Info("Skipping deletion of cluster-scoped resource not in allow list",
