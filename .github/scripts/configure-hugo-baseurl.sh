@@ -11,6 +11,8 @@
 # Environment variables:
 #   GITHUB_OWNER: GitHub repository owner (e.g., "konflux-ci")
 #   REPO_NAME: GitHub repository name (e.g., "konflux-ci")
+#   GITHUB_PAGES_DOMAIN: Optional custom domain for GitHub Pages (e.g., "konflux-ci.dev")
+#                        If not set, defaults to "${GITHUB_OWNER}.github.io"
 
 set -euo pipefail
 
@@ -41,8 +43,18 @@ if [ ! -f "$CONFIG_FILE" ]; then
 fi
 
 # Calculate baseURL and URL
+# baseURL includes repository name: /${REPO_NAME}/operator
+# This matches the actual GitHub Pages serving path
+if [ -n "${GITHUB_PAGES_DOMAIN:-}" ]; then
+  # Custom domain
+  URL="https://${GITHUB_PAGES_DOMAIN}"
+else
+  # GitHub.io
+  URL="https://${GITHUB_OWNER}.github.io"
+fi
+
 BASEURL="/${REPO_NAME}/operator"
-URL="https://${GITHUB_OWNER}.github.io"
+
 FULL_BASEURL="${URL}${BASEURL}"
 
 echo "Building Hugo site with baseurl=${BASEURL} and url=${URL}"
