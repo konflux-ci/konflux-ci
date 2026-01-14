@@ -2,7 +2,7 @@
 FROM registry.access.redhat.com/ubi10/go-toolset@sha256:947962f92cc541358a90d54b8da4a4a313522c7b3f602bd934c559f0cc2d2b19 AS builder
 ARG TARGETOS
 ARG TARGETARCH
-ARG VERSION
+ARG OPERATOR_VERSION
 ARG GIT_COMMIT
 
 ENV GOTOOLCHAIN=auto
@@ -18,19 +18,17 @@ COPY --chmod=755 api/ api/
 COPY --chmod=755 internal/ internal/
 COPY --chmod=755 pkg/ pkg/
 
-# Extract version info from build args or git if not provided, then build with
-# all version info embedded via ldflags
-RUN VERSION_VALUE="${VERSION:-$(git describe --tags --exact-match HEAD 2>/dev/null || echo 'unknown')}" && \
-    GIT_COMMIT_VALUE="${GIT_COMMIT:-$(git rev-parse HEAD 2>/dev/null || echo 'unknown')}" && \
-    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+# Build with version info embedded via ldflags
+# ARG values are expected to be passed from the build pipeline, defaulting to "unknown" if not set
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
     go build -a \
-    -ldflags \
-    "-X github.com/konflux-ci/konflux-ci/operator/pkg/version.Version=$${VERSION_VALUE} \
-    -X github.com/konflux-ci/konflux-ci/operator/pkg/version.GitCommit=$${GIT_COMMIT_VALUE}" \
+    -ldflags "-X github.com/konflux-ci/konflux-ci/operator/pkg/version.Version=${OPERATOR_VERSION:-unknown} \
+              -X github.com/konflux-ci/konflux-ci/operator/pkg/version.GitCommit=${GIT_COMMIT:-unknown}" \
     -o /opt/app-root/manager cmd/main.go
 
 # Use UBI minimal as base image
 FROM registry.access.redhat.com/ubi10/ubi-minimal@sha256:67aafc6c9c44374e1baf340110d4c835457d59a0444c068ba9ac6431a6d9e7ac
+ARG OPERATOR_VERSION
 WORKDIR /
 
 COPY --from=builder /opt/app-root/manager .
@@ -42,7 +40,7 @@ LABEL description="Kubernetes operator for managing Konflux installations"
 LABEL summary="Kubernetes operator for managing Konflux installations"
 LABEL io.k8s.description="Kubernetes operator for managing Konflux installations"
 LABEL io.k8s.display-name="konflux-operator"
-LABEL version="0.1"
+LABEL version="${OPERATOR_VERSION#v}"
 LABEL release="1"
 LABEL vendor="Red Hat, Inc."
 # vendor label should be solved in conforma

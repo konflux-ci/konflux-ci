@@ -36,8 +36,8 @@ spec:
     value: "true"
   - name: build-args
     value:
-      - "VERSION={{git_tag}}"
-      - "GIT_COMMIT={{revision}}"
+    - "OPERATOR_VERSION={{git_tag}}"
+    - "GIT_COMMIT={{revision}}"
   pipelineRef:
     name: build-pipeline
   taskRunTemplate:
