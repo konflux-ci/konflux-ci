@@ -19,3 +19,47 @@
     }
   }
 }
+
+// Dark mode: Make all YAML values appear as #0a3069
+[data-bs-theme="dark"] {
+  .td-content {
+    // Target all YAML code blocks (standalone and in containers)
+    code.language-yaml,
+    code[data-lang="yaml"],
+    .highlight code.language-yaml,
+    .highlight code[data-lang="yaml"],
+    pre code.language-yaml,
+    pre code[data-lang="yaml"] {
+      // Set default color for all text (including plain text nodes) to #0a3069
+      // This makes unquoted values inherit the correct color
+      color: #0a3069 !important;
+
+      // Override for keys, comments, syntax, and spacing to keep their original colors
+      // Keys (like apiVersion, kind, metadata, etc.)
+      span[style*="color:#0550ae"],
+      span[style*="color: #0550ae"] {
+        color: #0550ae !important;
+      }
+
+      // Colons and syntax
+      span[style*="color:#1f2328"],
+      span[style*="color: #1f2328"] {
+        color: #1f2328 !important;
+      }
+
+      // Comments
+      span[style*="color:#57606a"],
+      span[style*="color: #57606a"] {
+        color: #57606a !important;
+      }
+
+      // White color spans (spacing/newlines)
+      span[style*="color:#fff"],
+      span[style*="color: #fff"],
+      span[style*="color:#ffffff"],
+      span[style*="color: #ffffff"] {
+        color: #fff !important;
+      }
+    }
+  }
+}
