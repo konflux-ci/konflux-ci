@@ -34,10 +34,11 @@ params:
 
   # UI
   ui:
-    navbar_logo: false
+    navbar_logo: true
     sidebar_menu_foldable: true
     navigation:
       color: "primary"
+    showLightDarkModeMenu: true
 
   # Footer
   footer:

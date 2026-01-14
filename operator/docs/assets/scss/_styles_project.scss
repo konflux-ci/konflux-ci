@@ -1,0 +1,21 @@
+// Custom styles for Konflux Operator documentation
+
+// Logo styling - override fixed SVG dimensions for responsive display
+.td-navbar {
+  .navbar-brand {
+    svg,
+    .navbar-brand__logo {
+      height: 3rem;        // Set preferred height (32px)
+      width: auto;         // Maintain aspect ratio
+      max-width: 200px;    // Optional: limit maximum width
+      margin-right: 0.5rem; // Spacing between logo and text
+
+      // Override fixed width/height attributes from SVG
+      &[width],
+      &[height] {
+        width: auto !important;
+        height: 2rem !important;
+      }
+    }
+  }
+}
