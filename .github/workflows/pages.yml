@@ -117,6 +117,7 @@ jobs:
         env:
           GITHUB_OWNER: ${{ github.repository_owner }}
           REPO_NAME: ${{ github.event.repository.name }}
+          GITHUB_PAGES_DOMAIN: konflux-ci.dev
         run: |
           ../../.github/scripts/configure-hugo-baseurl.sh config.yaml
           hugo --minify
