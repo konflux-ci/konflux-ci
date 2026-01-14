@@ -38,6 +38,11 @@ jobs:
       run:
         working-directory: operator
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
       - name: Extract event payload
         id: payload
         working-directory: ${{ github.workspace }}
@@ -64,11 +69,6 @@ jobs:
           echo "=== Exiting early for testing ==="
           echo "Remove this exit once payload extraction is verified"
           exit 0
-
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
       - name: Detect SHA and image tag from Quay
         id: detect-sha
