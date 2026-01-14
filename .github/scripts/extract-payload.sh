@@ -37,6 +37,25 @@ else
   SOURCE="workflow_dispatch (manual)"
 fi
 
+# Validate required inputs
+if [ -z "${VERSION}" ]; then
+  echo "Error: version is required but not provided" >&2
+  exit 1
+fi
+if [ -z "${GIT_REF}" ]; then
+  echo "Error: git_ref is required but not provided" >&2
+  exit 1
+fi
+if [ -z "${IMAGE_TAG}" ]; then
+  echo "Error: image_tag is required but not provided" >&2
+  exit 1
+fi
+
+echo "All required inputs validated:" >&2
+echo "  version: ${VERSION}" >&2
+echo "  git_ref: ${GIT_REF}" >&2
+echo "  image_tag: ${IMAGE_TAG}" >&2
+
 # Output values
 echo "version=${VERSION}"
 echo "image_tag=${IMAGE_TAG}"
