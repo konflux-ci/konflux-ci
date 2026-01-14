@@ -6,15 +6,15 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g., v0.0.1). If not provided, will auto-calculate from latest release'
+        description: 'Release version (e.g., v0.0.1). Required for manual releases'
         required: false
         type: string
       git_ref:
-        description: 'Git ref to release (commit SHA, branch, or tag). If not provided, will auto-detect from latest Quay image'
+        description: 'Git ref to release (commit SHA, branch, or tag). Required for manual releases'
         required: false
         type: string
       image_tag:
-        description: 'Image tag (e.g., release-sha-abc1234). If not provided, will auto-detect from latest Quay image'
+        description: 'Image tag (e.g., release-sha-abc1234). Required for manual releases'
         required: false
         type: string
       draft:
@@ -65,26 +65,11 @@ jobs:
           echo ""
           echo "=== Full Event JSON (for debugging) ==="
           echo '${{ toJSON(github.event) }}' | jq '.' || echo "Event data not available"
-          echo ""
-          echo "=== Exiting early for testing ==="
-          echo "Remove this exit once payload extraction is verified"
-          exit 0
-
-      - name: Detect SHA and image tag from Quay
-        id: detect-sha
-        working-directory: ${{ github.workspace }}
-        run: |
-          result=$(.github/scripts/detect-sha-from-quay.sh \
-            "${{ github.workspace }}" \
-            "${{ inputs.image_tag }}" \
-            "${{ inputs.git_ref }}")
-          echo "${result}" | grep "^image_tag=" >> $GITHUB_OUTPUT
-          echo "${result}" | grep "^git_ref=" >> $GITHUB_OUTPUT
 
       - name: Checkout target commit
         working-directory: ${{ github.workspace }}
         run: |
-          TARGET_REF="${{ inputs.git_ref || steps.detect-sha.outputs.git_ref }}"
+          TARGET_REF="${{ steps.payload.outputs.git_ref }}"
           CURRENT_SHA=$(git rev-parse HEAD)
           TARGET_SHA=$(git rev-parse "${TARGET_REF}")
           if [ "${TARGET_SHA}" != "${CURRENT_SHA}" ]; then
@@ -94,15 +79,17 @@ jobs:
             echo "Already on target ref: ${TARGET_REF}"
           fi
 
-      - name: Calculate or use provided version
+      - name: Set version
         id: version
         working-directory: ${{ github.workspace }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION=$(.github/scripts/calculate-version.sh "${{ inputs.version }}")
+          VERSION="${{ steps.payload.outputs.version }}"
+          # Ensure version starts with 'v' prefix
+          if [[ ! "${VERSION}" =~ ^v ]]; then
+            VERSION="v${VERSION}"
+          fi
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "Final version: ${VERSION}"
+          echo "Using version: ${VERSION}"
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -112,7 +99,7 @@ jobs:
       - name: Generate release artifacts
         run: |
           .github/scripts/generate-release-artifacts.sh \
-            "${{ inputs.image_tag || steps.detect-sha.outputs.image_tag }}"
+            "${{ steps.payload.outputs.image_tag }}"
 
       - name: Prepare release notes
         id: release-notes
@@ -120,8 +107,8 @@ jobs:
         run: |
           .github/scripts/prepare-release-notes.sh \
             "${{ steps.version.outputs.version }}" \
-            "${{ inputs.image_tag || steps.detect-sha.outputs.image_tag }}" \
-            "${{ inputs.git_ref || steps.detect-sha.outputs.git_ref }}" \
+            "${{ steps.payload.outputs.image_tag }}" \
+            "${{ steps.payload.outputs.git_ref }}" \
             /tmp/release-notes.md
           echo "notes_file=/tmp/release-notes.md" >> $GITHUB_OUTPUT
 
@@ -132,7 +119,7 @@ jobs:
         run: |
           .github/scripts/create-release.sh \
             "${{ steps.version.outputs.version }}" \
-            "${{ inputs.git_ref || steps.detect-sha.outputs.git_ref }}" \
+            "${{ steps.payload.outputs.git_ref }}" \
             /tmp/release-notes.md \
             operator/dist \
             "${{ inputs.draft }}" \
