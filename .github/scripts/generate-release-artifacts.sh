@@ -45,7 +45,9 @@ ls -lh dist/install.yaml
 
 # Package samples
 echo "Packaging samples..."
-tar czf dist/samples.tar.gz -C config/samples ./*.yaml
+pushd config/samples
+tar czf ../../dist/samples.tar.gz ./*.yaml
+popd
 echo "✅ Generated samples.tar.gz at: $(pwd)/dist/samples.tar.gz"
 ls -lh dist/samples.tar.gz
 
