@@ -118,10 +118,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # TODO: Revert to use input when repository_dispatch events support draft flag
+          # Change "true" back to "${{ inputs.draft }}" to restore manual control
           .github/scripts/create-release.sh \
             "${{ steps.version.outputs.version }}" \
             "${{ steps.payload.outputs.git_ref }}" \
             /tmp/release-notes.md \
             operator/dist \
-            "${{ inputs.draft }}" \
+            "true" \
             "${{ inputs.generate_notes }}"
