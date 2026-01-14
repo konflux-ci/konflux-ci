@@ -1,5 +1,5 @@
 # Title: Konflux Configuration
-# Description: Complete Konflux configuration with all components
+# Description: Complete Konflux configuration with all components (UI, Build Service, Integration Service, Release Service, etc.)
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: Konflux
 metadata:
