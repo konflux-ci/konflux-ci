@@ -201,7 +201,12 @@ run: manifests generate fmt vet install-user-rbac ## Run a controller from your 
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -f Containerfile -t ${IMG} .
+	$(CONTAINER_TOOL) build \
+		-f Containerfile \
+		-t ${IMG} \
+		$(if $(VERSION),--build-arg OPERATOR_VERSION=$(VERSION)) \
+		$(if $(GIT_COMMIT),--build-arg GIT_COMMIT=$(GIT_COMMIT)) \
+		.
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.

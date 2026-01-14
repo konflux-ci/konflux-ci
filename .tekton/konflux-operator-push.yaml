@@ -33,7 +33,8 @@ spec:
     - linux/arm64
   - name: build-args
     value:
-      - "GIT_COMMIT={{revision}}"
+    - "OPERATOR_VERSION={{revision}}"
+    - "GIT_COMMIT={{revision}}"
   pipelineRef:
     name: build-pipeline
   taskRunTemplate:
