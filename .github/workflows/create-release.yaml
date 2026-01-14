@@ -1,6 +1,8 @@
 name: Create Release
 
 on:
+  repository_dispatch:
+    types: [konflux-build-complete]
   workflow_dispatch:
     inputs:
       version:
@@ -36,6 +38,33 @@ jobs:
       run:
         working-directory: operator
     steps:
+      - name: Extract event payload
+        id: payload
+        working-directory: ${{ github.workspace }}
+        run: |
+          result=$(.github/scripts/extract-payload.sh \
+            "${{ github.event_name }}" \
+            "${{ inputs.version }}" \
+            "${{ inputs.image_tag }}" \
+            "${{ inputs.git_ref }}" \
+            "${{ github.event.client_payload.version }}" \
+            "${{ github.event.client_payload.image_tag }}" \
+            "${{ github.event.client_payload.git_ref }}")
+          echo "${result}" | grep "^version=" >> $GITHUB_OUTPUT
+          echo "${result}" | grep "^image_tag=" >> $GITHUB_OUTPUT
+          echo "${result}" | grep "^git_ref=" >> $GITHUB_OUTPUT
+          echo "${result}" | grep "^source=" >> $GITHUB_OUTPUT
+          echo ""
+          echo "=== Extracted Payload ==="
+          echo "${result}"
+          echo ""
+          echo "=== Full Event JSON (for debugging) ==="
+          echo '${{ toJSON(github.event) }}' | jq '.' || echo "Event data not available"
+          echo ""
+          echo "=== Exiting early for testing ==="
+          echo "Remove this exit once payload extraction is verified"
+          exit 0
+
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
