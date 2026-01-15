@@ -5,3 +5,4 @@ resources:
   - registry.yaml
   - certificate.yaml
   - trust-bundle.yaml
+  - zot-config.yaml
