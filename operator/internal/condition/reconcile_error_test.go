@@ -114,7 +114,6 @@ var _ = Describe("ReconcileErrorHandler", func() {
 		It("should return empty result and original error", func() {
 			result, returnedErr := handler.Handle(ctx, testErr, "TestReason", "test operation")
 
-			Expect(result.Requeue).To(BeFalse())
 			Expect(result.RequeueAfter).To(BeZero())
 			Expect(returnedErr).To(Equal(testErr))
 		})
@@ -126,7 +125,7 @@ var _ = Describe("ReconcileErrorHandler", func() {
 
 			// Should still return the original error, not the update error
 			Expect(returnedErr).To(Equal(testErr))
-			Expect(result.Requeue).To(BeFalse())
+			Expect(result.RequeueAfter).To(BeZero())
 		})
 
 		It("should include operation in error message", func() {
