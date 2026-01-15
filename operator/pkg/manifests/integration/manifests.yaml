@@ -11,6 +11,247 @@ metadata:
   annotations:
     cert-manager.io/inject-ca-from: integration-service/serving-cert
     controller-gen.kubebuilder.io/version: v0.16.1
+  name: componentgroups.appstudio.redhat.com
+spec:
+  group: appstudio.redhat.com
+  names:
+    kind: ComponentGroup
+    listKind: ComponentGroupList
+    plural: componentgroups
+    shortNames:
+    - cg
+    singular: componentgroup
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1beta2
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ComponentGroup is the Schema for the componentgroups API.
+          ComponentGroup serves as the replacement for the Application CR in the new application/component model.
+          It groups Components together for testing and releasing, supports test serialization,
+          ComponentGroup dependencies, and tracks the Global Candidate List (GCL) for each Component.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ComponentGroupSpec defines the desired state of ComponentGroup
+            properties:
+              components:
+                description: |-
+                  Components is a list of Components (name and branch) that belong to the ComponentGroup.
+                  This is the source of truth for logical groupings of versioned Components.
+                items:
+                  description: ComponentReference references a Component and its specific
+                    branch/version
+                  properties:
+                    componentBranch:
+                      description: |-
+                        ComponentBranch references the ComponentBranch for this Component.
+                        The ComponentBranch CRD will be implemented by the build team as part of STONEBLD-3604.
+                        For now, this contains the branch name and GCL (Global Candidate List) information.
+                      properties:
+                        lastBuildTime:
+                          description: |-
+                            LastBuildTime is the timestamp when the last build was completed.
+                            Format: RFC3339 (e.g., "2025-08-13T12:00:00Z")
+                          format: date-time
+                          type: string
+                        lastPromotedCommit:
+                          description: |-
+                            LastPromotedCommit is the git commit SHA of the last promoted image.
+                            Example: 6a7c81802e785aa869f82301afe61f4e9775772b
+                          type: string
+                        lastPromotedImage:
+                          description: |-
+                            LastPromotedImage is the latest "good" container image for this ComponentBranch.
+                            This is part of the Global Candidate List (GCL) tracking.
+                            Example: quay.io/sampleorg/first-component@sha256:1b29...
+                          type: string
+                        name:
+                          description: |-
+                            Name is the name of the ComponentBranch (typically the branch name like "main", "v1", etc.)
+                            This will reference the ComponentBranch CRD once it's implemented.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    name:
+                      description: Name is the name of the Component
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                  required:
+                  - componentBranch
+                  - name
+                  type: object
+                type: array
+              dependents:
+                description: |-
+                  Dependents is a list of ComponentGroup names that are dependent on this ComponentGroup.
+                  When a snapshot is created for this ComponentGroup, snapshots will also be created for all dependents.
+                items:
+                  type: string
+                type: array
+              snapshotCreator:
+                description: |-
+                  SnapshotCreator is an optional field that allows custom logic for Snapshot creation.
+                  This field is reserved for future implementation and should not be used yet.
+                properties:
+                  taskRef:
+                    description: |-
+                      TaskRef references a Tekton Task that will create the Snapshot CR.
+                      This field is reserved for future use.
+                    properties:
+                      params:
+                        description: Params contains the parameters used to identify
+                          the referenced Task
+                        items:
+                          description: ResolverParameter contains the name and values
+                            used to identify the referenced Tekton resource
+                          properties:
+                            name:
+                              type: string
+                            value:
+                              type: string
+                          required:
+                          - name
+                          - value
+                          type: object
+                        type: array
+                      resolver:
+                        description: Resolver is the name of the resolver (e.g., "git",
+                          "bundle")
+                        type: string
+                    required:
+                    - params
+                    - resolver
+                    type: object
+                type: object
+              testGraph:
+                additionalProperties:
+                  items:
+                    description: TestGraphNode represents a node in the test serialization
+                      graph
+                    properties:
+                      name:
+                        description: Name is the name of the IntegrationTestScenario
+                        type: string
+                      onFail:
+                        default: run
+                        description: |-
+                          OnFail defines how to behave if this IntegrationTestScenario fails.
+                          Options: "run" (default) - continue running dependent tests, "skip" - skip dependent tests
+                        enum:
+                        - run
+                        - skip
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  type: array
+                description: |-
+                  TestGraph describes the desired order in which tests associated with the ComponentGroup should be executed.
+                  If not specified, all tests will run in parallel.
+                  The map key is the test scenario name, and the value is a list of parent test scenarios it depends on.
+                type: object
+            required:
+            - components
+            type: object
+          status:
+            description: ComponentGroupStatus defines the observed state of ComponentGroup
+            properties:
+              conditions:
+                description: Conditions is an array of the ComponentGroup's status
+                  conditions
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+            required:
+            - conditions
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: integration-service/serving-cert
+    controller-gen.kubebuilder.io/version: v0.16.1
     service.beta.openshift.io/inject-cabundle: "true"
   name: integrationtestscenarios.appstudio.redhat.com
 spec:
@@ -714,6 +955,77 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: integration-service
+  name: integration-service-componentgroup-admin-role
+rules:
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - componentgroups
+  verbs:
+  - '*'
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - componentgroups/status
+  verbs:
+  - '*'
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: integration-service
+  name: integration-service-componentgroup-editor-role
+rules:
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - componentgroups
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - componentgroups/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: integration-service
+  name: integration-service-componentgroup-viewer-role
+rules:
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - componentgroups
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - componentgroups/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: integration-service
   name: integration-service-integrationtestscenario-admin-role
 rules:
 - apiGroups:
@@ -1205,7 +1517,7 @@ spec:
         - --leader-elector-retry-period=5s
         command:
         - /manager
-        image: quay.io/konflux-ci/integration-service:c4cfd10c650183ddae2c33a047c2cd9a4bec1f0a
+        image: quay.io/konflux-ci/integration-service:8e8e1e4587970c1a453613fccdc89da66005f4af
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1266,13 +1578,13 @@ spec:
             - --zap-log-level=debug
             - --pr-snapshots-to-keep=70
             - --non-pr-snapshots-to-keep=640
-            image: quay.io/konflux-ci/integration-service:c4cfd10c650183ddae2c33a047c2cd9a4bec1f0a
+            image: quay.io/konflux-ci/integration-service:8e8e1e4587970c1a453613fccdc89da66005f4af
             imagePullPolicy: Always
             name: test-gc
             resources:
               limits:
                 cpu: 1000m
-                memory: 1000Mi
+                memory: 2000Mi
               requests:
                 cpu: 50m
                 memory: 64Mi
