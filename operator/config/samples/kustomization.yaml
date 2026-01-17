@@ -1,6 +1,7 @@
 ## Append samples of your project ##
+## Samples which are mentioned here would be included in the CSV file.
 resources:
-- konflux_v1alpha1_konflux.yaml
+- konflux-empty-cr.yaml
 - konflux_v1alpha1_konfluxbuildservice.yaml
 - konflux_v1alpha1_konfluxintegrationservice.yaml
 - konflux_v1alpha1_konfluxreleaseservice.yaml
