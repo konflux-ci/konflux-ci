@@ -344,15 +344,15 @@ data:
     default-pipeline-name: docker-build-oci-ta
     pipelines:
     - name: fbc-builder
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-fbc-builder@sha256:d16083f635913bde57b633622a0df6ed0d285d7327e0a4fa149e564b4e64e245
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-fbc-builder@sha256:d796a6b031475d1fedb4fa481176f4b98a74dc69de6811654be0258779e03c8a
     - name: docker-build
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build@sha256:e12f7cd080a32e003f60aa4c997d830def1671f94c9c947125b6eaf2e5f25f50
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build@sha256:bd72410fe595d0a9131b42016bde42be6cd3b1f1f651c8edf9e1159b209635c6
     - name: docker-build-oci-ta
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta@sha256:ebd5a04a9c384adb992e46f7e12432df85a4c360afff0d2aacb8d6a8729367e8
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta@sha256:06ac6877fc2e40e3641b9055da3539aa79b1438266969e6627906d49fb036bd8
     - name: tekton-bundle-builder
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder@sha256:4601e2accf5f00b871613b423580de80d62127977d053a9fd227211a90b9dc18
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder@sha256:8a9a4dd2d43d44ea82446e67dbd9bae02632716eb6876f508fb91d9d199f2582
     - name: tekton-bundle-builder-oci-ta
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder-oci-ta@sha256:a6c33ea58f902ce75dd6a31a125ca0b49f29953fc2f8dab1ca11571a83034e0e
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder-oci-ta@sha256:85280a867bba29978a5a94a53ebe245105f962e179bcfe3681f728946b08058a
 kind: ConfigMap
 metadata:
   name: build-pipeline-config
@@ -411,7 +411,7 @@ spec:
         env:
         - name: PAC_WEBHOOK_URL
           value: http://pipelines-as-code-controller.pipelines-as-code.svc.cluster.local:8180
-        image: quay.io/konflux-ci/build-service:affd5b51b3d597ae73a84702e82da7df215915db
+        image: quay.io/konflux-ci/build-service:a98a607efda69827ad202d02a00911c50e5077a5
         livenessProbe:
           httpGet:
             path: /healthz
