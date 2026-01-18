@@ -1,0 +1,48 @@
+name: Community Operator PR
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'GitHub release tag (e.g., v0.0.4)'
+        required: true
+        type: string
+
+jobs:
+  create-pr:
+    name: Create Community Operator PR
+    runs-on: ubuntu-latest
+    # Skip pre-releases for automatic triggers
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
+    steps:
+      - name: Generate GitHub App token for fork repository
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.UPDATE_BOT_APP_ID }}
+          private-key: ${{ secrets.UPDATE_BOT_PRIVATE_KEY }}
+          owner: konflux-ci
+          repositories: community-operators-prod
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Determine release tag
+        id: release
+        run: |
+          if [ "${{ github.event_name }}" == "release" ]; then
+            RELEASE_TAG="${{ github.event.release.tag_name }}"
+          else
+            RELEASE_TAG="${{ inputs.release_tag }}"
+          fi
+          echo "tag=${RELEASE_TAG}" >> $GITHUB_OUTPUT
+          echo "Using release tag: ${RELEASE_TAG}"
+
+      - name: Create Community Operator PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORK_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          .github/scripts/create-community-operator-pr.sh "${{ steps.release.outputs.tag }}"
