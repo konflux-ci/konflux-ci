@@ -34,6 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      issues: write
     defaults:
       run:
         working-directory: operator
@@ -128,3 +129,22 @@ jobs:
             operator/dist \
             "true" \
             "${{ inputs.generate_notes }}"
+
+      - name: Create issue on release failure
+        if: failure()
+        working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          # Pass release information from step outputs (may be empty if steps failed)
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_GIT_REF: ${{ steps.payload.outputs.git_ref }}
+          RELEASE_IMAGE_TAG: ${{ steps.payload.outputs.image_tag }}
+          RELEASE_SOURCE: ${{ steps.payload.outputs.source }}
+
+
+        run: |
+          .github/scripts/create-issue-on-release-failure.sh
