@@ -12,11 +12,10 @@ set -euo pipefail
 #   release_tag - GitHub release tag (e.g., v0.0.4)
 #
 # Environment Variables (required):
-#   GITHUB_TOKEN - GitHub token for downloading release assets from source repo
-#   FORK_TOKEN   - GitHub token with write access to the fork (for push and PR creation)
+#   GITHUB_TOKEN - PAT with public_repo scope for all operations
 #
 # Example:
-#   GITHUB_TOKEN=ghp_xxx FORK_TOKEN=ghp_yyy create-community-operator-pr.sh v0.0.4
+#   GITHUB_TOKEN=ghp_xxx create-community-operator-pr.sh v0.0.4
 
 # Configuration
 UPSTREAM_REPO="redhat-openshift-ecosystem/community-operators-prod"
@@ -34,11 +33,6 @@ RELEASE_TAG="$1"
 
 if [ -z "${GITHUB_TOKEN:-}" ]; then
   echo "Error: GITHUB_TOKEN environment variable is required"
-  exit 1
-fi
-
-if [ -z "${FORK_TOKEN:-}" ]; then
-  echo "Error: FORK_TOKEN environment variable is required"
   exit 1
 fi
 
@@ -88,26 +82,40 @@ tar xzf "${ASSETS_DIR}/bundle.tar.gz" -C "${BUNDLE_DIR}"
 echo "Bundle contents:"
 ls -la "${BUNDLE_DIR}"
 
-# Clone the fork (use FORK_TOKEN for fork repo access)
+# Clone with treeless filter + sparse checkout (fastest - no tree/blob download until needed)
 echo ""
-echo "=== Cloning fork repository ==="
+echo "=== Cloning repository (treeless + sparse) ==="
 REPO_DIR="${WORK_DIR}/community-operators-prod"
-git clone --depth 1 "https://x-access-token:${FORK_TOKEN}@github.com/${FORK_REPO}.git" "${REPO_DIR}"
+
+# Use treeless clone with sparse checkout - only downloads what's actually checked out
+git clone \
+  --filter=tree:0 \
+  --no-checkout \
+  --depth 1 \
+  --single-branch \
+  --branch main \
+  "https://github.com/${UPSTREAM_REPO}.git" \
+  "${REPO_DIR}"
+
 cd "${REPO_DIR}"
 
 # Configure git
 git config user.name "konflux-ci-bot"
-git config user.email "konflux-ci-bot@redhat.com"
+git config user.email "konflux-ci-maintainers@redhat.com"
 
-# Add upstream remote
-git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
-git fetch upstream main --depth 1
+# Add fork as origin for pushing
+git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${FORK_REPO}.git"
 
-# Create branch from upstream main
+# Enable sparse checkout - only checkout the operator directory we need
+git sparse-checkout init --cone
+git sparse-checkout set "operators/${OPERATOR_NAME}"
+git checkout
+
+# Create branch for our changes
 BRANCH_NAME="${OPERATOR_NAME}-${VERSION}"
 echo ""
 echo "=== Creating branch: ${BRANCH_NAME} ==="
-git checkout -b "${BRANCH_NAME}" upstream/main
+git checkout -b "${BRANCH_NAME}"
 
 # Create operator version directory
 OPERATOR_DIR="operators/${OPERATOR_NAME}/${VERSION}"
@@ -141,20 +149,20 @@ This PR adds a new bundle version for the Konflux operator.
 echo ""
 echo "=== Committing changes ==="
 git add "${OPERATOR_DIR}"
-git commit -m "${COMMIT_TITLE}" -m "${COMMIT_BODY}"
+git commit -s -m "${COMMIT_TITLE}" -m "${COMMIT_BODY}"
 echo "Commit title: ${COMMIT_TITLE}"
 
 # Push to fork
 echo ""
 echo "=== Pushing to fork ==="
-git push origin "${BRANCH_NAME}"
+git push --force origin "${BRANCH_NAME}"
 
 # Create PR to upstream
 echo ""
 echo "=== Creating Pull Request ==="
 
-# Use FORK_TOKEN for PR creation (needs write access to create PR from fork)
-PR_URL=$(GH_TOKEN="${FORK_TOKEN}" gh pr create \
+# Create PR to upstream repository
+PR_URL=$(GH_TOKEN="${GITHUB_TOKEN}" gh pr create \
   --repo "${UPSTREAM_REPO}" \
   --head "${FORK_REPO%%/*}:${BRANCH_NAME}" \
   --base main \
