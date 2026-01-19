@@ -8,6 +8,7 @@ Konflux-CI
   * [Machine Minimum Requirements](#machine-minimum-requirements)
   * [Installing Software Dependencies](#installing-software-dependencies)
   * [Bootstrapping the Cluster](#bootstrapping-the-cluster)
+  * [Building and Running the Operator from Source](#building-and-running-the-operator-from-source)
   * [Enable Pipelines Triggering via Webhooks](#enable-pipelines-triggering-via-webhooks)
   * [Onboard a new Application](#onboard-a-new-application)
     + [Option 1: Onboard Application with the Konflux UI](#option-1-onboard-application-with-the-konflux-ui)
@@ -146,33 +147,83 @@ and modify the `system-reserved` line under `kubeletExtraArgs`:
 
 2. :gear: Deploy the dependencies
 
+Konflux Operator can deploy some of the dependencies (see below). The following command
+will skip all dependencies that the operator installs by default:
+
 ```bash
+SKIP_DEX=true \
+SKIP_KONFLUX_INFO=true \
+SKIP_CLUSTER_ISSUER=true \
+SKIP_INTERNAL_REGISTRY=true \
 ./deploy-deps.sh
 ```
 
 > [!NOTE]
-> If you are testing the Konflux Operator and want it to manage the Dex installation
-(e.g. for the UI component), you can skip the manual Dex deployment by setting
-`SKIP_DEX=true ./deploy-deps.sh`.
-
+> - `SKIP_DEX=true` - Skip Dex deployment (managed by operator for UI component)
+> - `SKIP_KONFLUX_INFO=true` - Skip Konflux Info deployment (managed by operator)
+> - `SKIP_CLUSTER_ISSUER=true` - Skip Cluster Issuer deployment (managed by operator)
+> - `SKIP_INTERNAL_REGISTRY=true` - Skip Internal Registry deployment (managed by operator)
 
 **Note:** If you encounter Docker Hub rate limiting failures during deployment,
 see
 [docs/troubleshooting-docker-rate-limits.md](docs/troubleshooting-docker-rate-limits.md).
 
-3. :gear: Deploy Konflux
+3. :gear: Install the Konflux Operator
+
+Install the operator from the latest GitHub release:
 
 ```bash
-./deploy-konflux.sh
+kubectl apply -f https://github.com/konflux-ci/konflux-ci/releases/latest/download/install.yaml
 ```
 
-4. :gear: Deploy demo users
+> [!NOTE]
+> To install a specific version instead of the latest, replace `latest` with the version tag:
+> ```bash
+> kubectl apply -f https://github.com/konflux-ci/konflux-ci/releases/download/v0.0.1/install.yaml
+> ```
+
+Wait for the operator to be ready:
+
+```bash
+kubectl wait --for=condition=Available deployment/konflux-operator-controller-manager -n konflux-operator --timeout=300s
+```
+
+4. :gear: Deploy Konflux using the Operator
+
+Create a Konflux Custom Resource to deploy Konflux. You can use the sample configuration:
+
+```bash
+kubectl apply -f <(curl -L \
+  https://github.com/konflux-ci/konflux-ci/releases/latest/download/samples.tar.gz | \
+  tar -xzO ./konflux_v1alpha1_konflux.yaml)
+```
+
+> [!NOTE]
+> To use a specific version instead of the latest, replace `latest` with the version tag:
+> ```bash
+> kubectl apply -f <(curl -L \
+>   https://github.com/konflux-ci/konflux-ci/releases/download/v0.0.1/samples.tar.gz | \
+>   tar -xzO ./konflux_v1alpha1_konflux.yaml)
+> ```
+
+Wait for Konflux to be ready:
+
+```bash
+kubectl wait --for=condition=Ready=True konflux konflux --timeout=10m
+```
+
+> [!NOTE]
+> The `deploy-konflux.sh` script is deprecated in favor of the Konflux Operator.
+> The operator provides a declarative way to manage Konflux installations and
+> enables better lifecycle management, upgrades, and configuration.
+
+5. :gear: Deploy demo users
 
 ```bash
 ./deploy-test-resources.sh
 ```
 
-5. :gear: If Konflux was installed on a cluster hosted in a remote machine, SSH port-forwarding can
+6. :gear: If Konflux was installed on a cluster hosted in a remote machine, SSH port-forwarding can
 be used to access. Open an additional terminal and run the following command
 (make sure to add the details of your remote machine and user):
 
@@ -180,7 +231,7 @@ be used to access. Open an additional terminal and run the following command
 ssh -L 9443:localhost:9443 $USER@$VM_IP
 ```
 
-6. The UI will be available at https://localhost:9443. You can login using a test user.
+7. The UI will be available at https://localhost:9443. You can login using a test user.
 
 `username:` `user2@konflux.dev`
 
@@ -188,6 +239,11 @@ ssh -L 9443:localhost:9443 $USER@$VM_IP
 
 We now have Konflux up and running. Next, we shall configure Konflux to respond
 to Pull Request webhooks, build a user application and push it to a registry.
+
+## Building and Running the Operator from Source
+
+For instructions on building and running the operator from source, see the
+[Getting Started](./operator/README.md#getting-started) section in the operator README.
 
 ## Enable Pipelines Triggering via Webhooks
 
@@ -824,12 +880,44 @@ system is already active (e.g. Tekton tasks runs).
 
 ### Workloads Deployed *with* Konflux
 
-To adjust resource consumption for workloads deployed when Konflux is started, we can
-patch the installation manifests directly with resource `requests` and `limits`
-appropriate to the Kind environment. There are multiple examples for such treatment.
-Here's [one file](./dependencies/cert-manager/kustomization.yml) with multiple such
-examples. Similarly, we can reduce replica counts, disable unneeded components and
-perform other adjustments appropriate to our needs.
+Konflux is deployed using an Operator. Accordingly, resources consumption for its
+components is configured through the Konflux Custom Resource rather than by patching
+manifests directly. The operator manages these resources declaratively.
+
+To adjust resource consumption, edit your Konflux CR and specify resource `requests`
+and `limits` in the component specifications. For example:
+
+```yaml
+apiVersion: konflux.konflux-ci.dev/v1alpha1
+kind: Konflux
+metadata:
+  name: konflux
+spec:
+  buildService:
+    spec:
+      buildControllerManager:
+        manager:
+          resources:
+            requests:
+              cpu: 30m
+              memory: 128Mi
+            limits:
+              cpu: 30m
+              memory: 128Mi
+  # Similar configuration for other components...
+```
+
+See the [sample Konflux CR](./operator/config/samples/konflux_v1alpha1_konflux.yaml)
+for examples of resource configuration for all components.
+
+For complete API reference documentation, see the
+[Konflux Operator API Reference](https://konflux-ci.dev/konflux-ci/docs/reference/).
+
+> [!NOTE]
+> If you're using the deprecated `deploy-konflux.sh` script, you can still
+> patch installation manifests directly. However, this approach is not recommended as
+> it will be overwritten on redeployment. The operator-based approach ensures
+> configuration persistence and proper lifecycle management.
 
 ### Workloads Deployed *by* Konflux
 
@@ -904,12 +992,43 @@ Together with [oauth2-proxy](https://github.com/oauth2-proxy/oauth2-proxy), it a
 for offloading authentication to different identity providers per the requirement
 of the environment or organization where Konflux is installed.
 
-For the simple standalone deployment, however, Dex is configured with static passwords
-defined as part of
-[Dex configurations](https://github.com/konflux-ci/konflux-ci/blob/main/dependencies/dex/config.yaml).
+The Konflux Operator, manages the Dex configurations through the Konflux
+Custom Resource. For the simple standalone deployment, static passwords are configured
+in the `spec.ui.spec.dex.config` section of the Konflux CR. See the
+[sample Konflux CR](./operator/config/samples/konflux_v1alpha1_konflux.yaml) for an
+example configuration with static users.
 
-See Dex documentation for both [OAuth 2.0](https://dexidp.io/docs/connectors/oauth/) and
-the [builtin connector](https://dexidp.io/docs/connectors/local/).
+To add or modify users, edit your Konflux CR and update the `staticPasswords` section:
+
+```yaml
+spec:
+  ui:
+    spec:
+      dex:
+        config:
+          enablePasswordDB: true
+          passwordConnector: local
+          staticPasswords:
+          - email: "user1@konflux.dev"
+            hash: "$2a$10$..." # bcrypt hash of the password
+            username: "user1"
+            userID: "7138d2fe-724e-4e86-af8a-db7c4b080e20"
+```
+
+After updating the CR, the operator will reconcile the changes and update the Dex
+configuration accordingly.
+
+> [!NOTE]
+> If you're using the deprecated `deploy-konflux.sh` script, Dex configuration
+> is defined in [dependencies/dex/config.yaml](./dependencies/dex/config.yaml). However,
+> this approach is not recommended as manual edits will be overwritten on redeployment.
+
+For advanced authentication scenarios, see Dex documentation for both
+[OAuth 2.0](https://dexidp.io/docs/connectors/oauth/) and the
+[builtin connector](https://dexidp.io/docs/connectors/local/).
+
+For an example of configuring GitHub authentication, see the
+[sample Konflux CR with GitHub authentication](./operator/config/samples/konflux-with-github-auth.yaml).
 
 ## Repository Links
 
