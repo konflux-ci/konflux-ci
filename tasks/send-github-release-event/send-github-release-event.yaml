@@ -200,9 +200,12 @@ spec:
         RELEASE=$(kubectl get release "$RELEASE_NAME" -n "$RELEASE_NAMESPACE" -o json)
 
         # Check if release succeeded
-        RELEASE_STATUS=$(jq -r '.status.conditions[] | select(.type=="Released") | .status' <<< "$RELEASE")
-        if [ "$RELEASE_STATUS" != "True" ]; then
-          echo "Release not successful (status: $RELEASE_STATUS), skipping GitHub event"
+        RELEASECONDITIONS=$(kubectl get release "$RELEASE_NAME" -n "$RELEASE_NAMESPACE" \
+          -o jsonpath='{.status.conditions}' | jq '.[] | select(.type == "ManagedPipelineProcessed")')
+        RELEASESTATUS=$(jq -r '.reason' <<< "$RELEASECONDITIONS")
+
+        if [[ "$RELEASESTATUS" != *"Succeeded"* ]]; then
+          echo "Release managed pipeline not successful (reason: $RELEASESTATUS), skipping GitHub event"
           exit 0
         fi
 

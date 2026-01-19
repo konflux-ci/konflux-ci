@@ -46,7 +46,8 @@ the task falls back to PAT. If neither is available, the task will fail.
 
 ## Behavior
 
-1. **Checks release status**: Only proceeds if release status is "True"
+1. **Checks release status**: Only proceeds if `ManagedPipelineProcessed` condition has
+reason "Succeeded".
 2. **Checks if tag-based**: Only proceeds if `source-branch` starts with `refs/tags/`
 3. **Extracts data from Release CR**:
    - Version: Extracted from `source-branch` annotation (removes `refs/tags/` prefix)
