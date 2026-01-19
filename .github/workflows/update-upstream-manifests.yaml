@@ -106,76 +106,15 @@ jobs:
 
       - name: Notify on failure
         if: failure()
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const fs = require('fs');
-            const workflowUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const triggerType = context.eventName === 'schedule' ? 'Scheduled (cron)' : context.eventName;
-
-            // Read component results from JSON file
-            let failedComponentsList = '';
-            let successfulComponentsList = '';
-            let upToDateComponentsList = '';
-
-            try {
-              const results = JSON.parse(fs.readFileSync('/tmp/component-results.json', 'utf8'));
-
-              if (results.failed && results.failed.length > 0) {
-                failedComponentsList = `\n\n**Failed Components:**\n${results.failed.map(c => `- ${c.component}: ${c.message}`).join('\n')}`;
-              }
-
-              if (results.successful && results.successful.length > 0) {
-                successfulComponentsList = `\n\n**Successfully Processed Components:**\n${results.successful.map(c => `- ${c.component}: ${c.message}`).join('\n')}`;
-              }
-
-              if (results.up_to_date && results.up_to_date.length > 0) {
-                upToDateComponentsList = `\n\n**Up-to-date Components:**\n${results.up_to_date.map(c => `- ${c.component}`).join('\n')}`;
-              }
-            } catch (e) {
-              console.log(`Error reading component results: ${e.message}`);
-              // Continue with empty lists if file doesn't exist or is invalid
-            }
-
-            // Create an issue to notify about the failure
-            const title = `⚠️ Upstream Manifests Update Workflow Failed`;
-            const body = `The scheduled workflow to update upstream manifests has failed.
-
-            **Workflow Run:** ${workflowUrl}
-            **Run ID:** ${context.runId}
-            **Trigger:** ${triggerType}${failedComponentsList}${successfulComponentsList}${upToDateComponentsList}
-
-            Please check the workflow logs to identify and fix the issue.
-
-            ---
-            *This issue was automatically created by the Update Upstream Manifests workflow*`;
-
-            // Check if an open issue with this title already exists
-            const { data: issues } = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              labels: 'automated,workflow-failure'
-            });
-
-            const existingIssue = issues.find(issue => issue.title === title);
-
-            if (existingIssue) {
-              // Add a comment to the existing issue with component information
-              const commentBody = `Workflow failed again on ${new Date().toISOString()}\n\n**Workflow Run:** ${workflowUrl}\n**Run ID:** ${context.runId}\n**Trigger:** ${triggerType}${failedComponentsList}${successfulComponentsList}${upToDateComponentsList}\n\nPlease check the workflow logs to identify and fix the issue.`;
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: existingIssue.number,
-                body: commentBody
-              });
-            } else {
-              // Create a new issue
-              await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title: title,
-                body: body,
-                labels: ['automated', 'workflow-failure']
-              });
-            }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_NAME: Update Upstream Manifests
+        run: |
+          .github/scripts/create-or-update-issue.sh \
+            "⚠️ Upstream Manifests Update Workflow Failed" \
+            "The scheduled workflow to update upstream manifests has failed." \
+            /tmp/component-results.json

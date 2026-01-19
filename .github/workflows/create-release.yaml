@@ -140,12 +140,13 @@ jobs:
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_NAME: Create Release
           # Pass release information from step outputs (may be empty if steps failed)
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
           RELEASE_GIT_REF: ${{ steps.payload.outputs.git_ref }}
           RELEASE_IMAGE_TAG: ${{ steps.payload.outputs.image_tag }}
           RELEASE_SOURCE: ${{ steps.payload.outputs.source }}
-
-
         run: |
-          .github/scripts/create-issue-on-release-failure.sh
+          .github/scripts/create-or-update-issue.sh \
+            "Release Failure" \
+            "Release failed."

@@ -1,0 +1,51 @@
+name: Auto Tag Weekly
+
+on:
+  # Run weekly on Monday at 2 AM UTC (not on weekends as EC might block releases)
+  schedule:
+    - cron: '0 2 * * 1'
+  # Allow manual triggering
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  auto-tag:
+    name: Auto Tag Weekly
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+      - name: Auto tag main branch
+        id: tag
+        working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          .github/scripts/auto-tag-main.sh
+          echo "tag_created=true" >> $GITHUB_OUTPUT
+
+      - name: Notify on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_NAME: Auto Tag Weekly
+        run: |
+          .github/scripts/create-or-update-issue.sh \
+            "⚠️ Auto Tag Weekly Workflow Failed" \
+            "The scheduled workflow to auto-tag the main branch has failed."
