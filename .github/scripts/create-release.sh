@@ -81,6 +81,6 @@ gh release create "$VERSION" \
   $GENERATE_NOTES_FLAG \
   $DRAFT_FLAG \
   "${ARTIFACTS[@]}" \
-  --target "$GIT_REF"
+  --target "$(git rev-parse "$GIT_REF")"
 
 echo "Release created successfully: $VERSION"
