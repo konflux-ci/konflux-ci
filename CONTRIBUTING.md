@@ -20,7 +20,7 @@ need to be updated as well.
 To do that, run the command below and add the produced changes to your PR.
 
 ```bash
-find . -name "*.md" | while read -r file; do
+find . -name "*.md" -not -path "./operator/docs/*" | while read -r file; do
     npx markdown-toc $file -i
 done
 ```
@@ -31,7 +31,7 @@ Please consider running [KubeLinter](https://docs.kubelinter.io/#/?id=usage)
 locally before submitting a PR to this repository.
 
 After [installing KubeLinter](https://docs.kubelinter.io/#/?id=installing-kubelinter)
-and adding it to the $PATH env variable, create a new folder in the base directory 
+and adding it to the $PATH env variable, create a new folder in the base directory
 using `mkdir -p ./.kube-linter/`. Then, run the following Bash script:
 ```
     find . -name "kustomization.yaml" -o -name "kustomization.yml" | while read -r file; do
@@ -66,7 +66,7 @@ Export following environment variables
 export QUAY_ORG="" \
 # quay.io org OAuth access token
 QUAY_TOKEN="" \
-# Content of quay.io credentials config generated (ideally) for the robot account 
+# Content of quay.io credentials config generated (ideally) for the robot account
 # that has access to $QUAY_ORG/test-images repository
 QUAY_DOCKERCONFIGJSON="$(< /path/to/docker/config.json)" \
 # Your GitHub App's ID
