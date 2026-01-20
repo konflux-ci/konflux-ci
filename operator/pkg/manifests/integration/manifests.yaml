@@ -341,7 +341,7 @@ spec:
                       Component/Application GitOps repository resources.
                     properties:
                       env:
-                        description: Env is an array of standard environment variables
+                        description: An array of standard environment variables
                         items:
                           description: EnvVarPair describes environment variables
                             to use for the component
@@ -542,7 +542,7 @@ spec:
                       Component/Application GitOps repository resources.
                     properties:
                       env:
-                        description: Env is an array of standard environment variables
+                        description: An array of standard environment variables
                         items:
                           description: EnvVarPair describes environment variables
                             to use for the component
@@ -1517,7 +1517,7 @@ spec:
         - --leader-elector-retry-period=5s
         command:
         - /manager
-        image: quay.io/konflux-ci/integration-service:8e8e1e4587970c1a453613fccdc89da66005f4af
+        image: quay.io/konflux-ci/integration-service:fade912467b4dfe3d29278b41e547152d70aadd6
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1578,7 +1578,7 @@ spec:
             - --zap-log-level=debug
             - --pr-snapshots-to-keep=70
             - --non-pr-snapshots-to-keep=640
-            image: quay.io/konflux-ci/integration-service:8e8e1e4587970c1a453613fccdc89da66005f4af
+            image: quay.io/konflux-ci/integration-service:fade912467b4dfe3d29278b41e547152d70aadd6
             imagePullPolicy: Always
             name: test-gc
             resources:
