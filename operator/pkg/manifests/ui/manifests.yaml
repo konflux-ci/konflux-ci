@@ -495,7 +495,7 @@ spec:
             secretKeyRef:
               key: cookie-secret
               name: oauth2-proxy-cookie-secret
-        image: quay.io/oauth2-proxy/oauth2-proxy:latest@sha256:56e3daedf765c7a1eea6e366fbe684be7d3084830ade14b6174570d3c7960954
+        image: quay.io/oauth2-proxy/oauth2-proxy:latest@sha256:121cdc6520a02d7a2ddd181af6dbdc0f11f7d0c0d9353a999a69c3998cbfe37e
         name: oauth2-proxy
         ports:
         - containerPort: 6000
