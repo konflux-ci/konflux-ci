@@ -29,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/defaulttenant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/internalregistry"
 )
 
@@ -323,6 +324,173 @@ var _ = Describe("Konflux Controller", func() {
 			By("verifying InternalRegistry CR was deleted")
 			err = k8sClient.Get(ctx, registryTypeNamespacedName, registry)
 			Expect(errors.IsNotFound(err)).To(BeTrue(), "InternalRegistry CR should be deleted when enabled changes to false")
+		})
+	})
+
+	Context("DefaultTenant conditional enablement", func() {
+		const resourceName = "konflux"
+		ctx := context.Background()
+
+		typeNamespacedName := types.NamespacedName{
+			Name: resourceName,
+		}
+		defaultTenantTypeNamespacedName := types.NamespacedName{
+			Name: defaulttenant.CRName,
+		}
+
+		AfterEach(func() {
+			// Cleanup Konflux CR
+			resource := &konfluxv1alpha1.Konflux{}
+			if err := k8sClient.Get(ctx, typeNamespacedName, resource); err == nil {
+				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			}
+
+			// Cleanup DefaultTenant CR if it exists
+			tenant := &konfluxv1alpha1.KonfluxDefaultTenant{}
+			if err := k8sClient.Get(ctx, defaultTenantTypeNamespacedName, tenant); err == nil {
+				Expect(k8sClient.Delete(ctx, tenant)).To(Succeed())
+			}
+		})
+
+		It("should create DefaultTenant CR when defaultTenant is omitted (enabled by default)", func() {
+			By("creating Konflux CR without defaultTenant config")
+			konflux := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: resourceName,
+				},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					// defaultTenant is omitted (nil) - should default to enabled
+				},
+			}
+			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+
+			By("reconciling the Konflux CR")
+			reconciler := &KonfluxReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying DefaultTenant CR was created (enabled by default)")
+			tenant := &konfluxv1alpha1.KonfluxDefaultTenant{}
+			err = k8sClient.Get(ctx, defaultTenantTypeNamespacedName, tenant)
+			Expect(err).NotTo(HaveOccurred(), "DefaultTenant CR should exist when omitted (enabled by default)")
+			Expect(tenant.Name).To(Equal(defaulttenant.CRName))
+		})
+
+		It("should create DefaultTenant CR when enabled is explicitly true", func() {
+			By("creating Konflux CR with defaultTenant.enabled=true")
+			enabled := true
+			konflux := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: resourceName,
+				},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					DefaultTenant: &konfluxv1alpha1.DefaultTenantConfig{
+						Enabled: &enabled,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+
+			By("reconciling the Konflux CR")
+			reconciler := &KonfluxReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying DefaultTenant CR was created")
+			tenant := &konfluxv1alpha1.KonfluxDefaultTenant{}
+			err = k8sClient.Get(ctx, defaultTenantTypeNamespacedName, tenant)
+			Expect(err).NotTo(HaveOccurred(), "DefaultTenant CR should exist when enabled=true")
+		})
+
+		It("should not create DefaultTenant CR when enabled is false", func() {
+			By("creating Konflux CR with defaultTenant.enabled=false")
+			disabled := false
+			konflux := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: resourceName,
+				},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					DefaultTenant: &konfluxv1alpha1.DefaultTenantConfig{
+						Enabled: &disabled,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+
+			By("reconciling the Konflux CR")
+			reconciler := &KonfluxReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying DefaultTenant CR was not created")
+			tenant := &konfluxv1alpha1.KonfluxDefaultTenant{}
+			err = k8sClient.Get(ctx, defaultTenantTypeNamespacedName, tenant)
+			Expect(errors.IsNotFound(err)).To(BeTrue(), "DefaultTenant CR should not exist when enabled=false")
+		})
+
+		It("should delete DefaultTenant CR when enabled changes from true to false", func() {
+			By("creating Konflux CR with defaultTenant.enabled=true")
+			enabled := true
+			konflux := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: resourceName,
+				},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					DefaultTenant: &konfluxv1alpha1.DefaultTenantConfig{
+						Enabled: &enabled,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+
+			By("reconciling to create the DefaultTenant CR")
+			reconciler := &KonfluxReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying DefaultTenant CR was created")
+			tenant := &konfluxv1alpha1.KonfluxDefaultTenant{}
+			err = k8sClient.Get(ctx, defaultTenantTypeNamespacedName, tenant)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("updating Konflux CR to set enabled=false")
+			updatedKonflux := &konfluxv1alpha1.Konflux{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, updatedKonflux)).To(Succeed())
+			disabled := false
+			updatedKonflux.Spec.DefaultTenant = &konfluxv1alpha1.DefaultTenantConfig{
+				Enabled: &disabled,
+			}
+			Expect(k8sClient.Update(ctx, updatedKonflux)).To(Succeed())
+
+			By("reconciling again after disabling")
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying DefaultTenant CR was deleted")
+			err = k8sClient.Get(ctx, defaultTenantTypeNamespacedName, tenant)
+			Expect(errors.IsNotFound(err)).To(BeTrue(), "DefaultTenant CR should be deleted when enabled changes to false")
 		})
 	})
 })

@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-//go:embed all:application-api all:build-service all:enterprise-contract all:image-controller all:integration all:namespace-lister all:rbac all:release all:ui all:info all:cert-manager all:registry
+//go:embed all:application-api all:build-service all:enterprise-contract all:image-controller all:integration all:namespace-lister all:rbac all:release all:ui all:info all:cert-manager all:registry all:default-tenant
 var embeddedFS embed.FS
 
 // Component represents a known upstream component.
@@ -27,6 +27,7 @@ const (
 	ApplicationAPI     Component = "application-api"
 	BuildService       Component = "build-service"
 	CertManager        Component = "cert-manager"
+	DefaultTenant      Component = "default-tenant"
 	EnterpriseContract Component = "enterprise-contract"
 	ImageController    Component = "image-controller"
 	Integration        Component = "integration"
@@ -44,6 +45,7 @@ func AllComponents() []Component {
 		ApplicationAPI,
 		RBAC,
 		CertManager,
+		DefaultTenant,
 		EnterpriseContract,
 		Release,
 		BuildService,

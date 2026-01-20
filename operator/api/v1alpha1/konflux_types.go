@@ -70,6 +70,12 @@ type KonfluxSpec struct {
 	// Enabling internal registry requires trust-manager to be deployed.
 	// +optional
 	InternalRegistry *InternalRegistryConfig `json:"internalRegistry,omitempty"`
+
+	// DefaultTenant configures the default tenant component.
+	// The default tenant provides a namespace accessible by all authenticated users.
+	// The runtime configuration is copied to the KonfluxDefaultTenant CR by the operator.
+	// +optional
+	DefaultTenant *DefaultTenantConfig `json:"defaultTenant,omitempty"`
 }
 
 // ImageControllerConfig defines the configuration for the image-controller component.
@@ -135,6 +141,15 @@ type CertManagerConfig struct {
 type InternalRegistryConfig struct {
 	// Enabled controls whether internal registry resources are deployed.
 	// Defaults to false if not specified.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// DefaultTenantConfig defines the configuration for the default tenant component.
+// The default tenant provides a namespace accessible by all authenticated users.
+type DefaultTenantConfig struct {
+	// Enabled controls whether the default tenant is created.
+	// Defaults to true if not specified.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
 }
@@ -226,6 +241,15 @@ func (k *KonfluxSpec) IsInternalRegistryEnabled() bool {
 		return false
 	}
 	return *k.InternalRegistry.Enabled
+}
+
+// IsDefaultTenantEnabled returns true if the default tenant is enabled.
+// Defaults to true if not specified.
+func (k *KonfluxSpec) IsDefaultTenantEnabled() bool {
+	if k.DefaultTenant == nil || k.DefaultTenant.Enabled == nil {
+		return true
+	}
+	return *k.DefaultTenant.Enabled
 }
 
 func init() {

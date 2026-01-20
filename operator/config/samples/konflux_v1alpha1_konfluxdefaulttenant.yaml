@@ -1,0 +1,11 @@
+# Title: Konflux Default Tenant Configuration
+# Description: KonfluxDefaultTenant configuration for default tenant
+apiVersion: konflux.konflux-ci.dev/v1alpha1
+kind: KonfluxDefaultTenant
+metadata:
+  labels:
+    app.kubernetes.io/name: konflux-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: konfluxdefaulttenant-sample
+spec:
+  # TODO(user): Add fields here
