@@ -1035,5 +1035,5 @@ For an example of configuring GitHub authentication, see the
 * [Configuring GitHub Secrets](./docs/github-secrets.md)
 * [Quay-related Procedures](./docs/quay.md)
 * [Troubleshooting common issues](./docs/troubleshooting.md)
-* [Release guidelines](./RELEASE.md)
+* [Release Process](./RELEASE.md)
 * [Contributing guidelines](./CONTRIBUTING.md)
