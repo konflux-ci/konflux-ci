@@ -1,0 +1,27 @@
+# permissions for end users to edit konfluxdefaulttenants.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: konflux-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: konfluxdefaulttenant-editor-role
+rules:
+- apiGroups:
+  - konflux.konflux-ci.dev
+  resources:
+  - konfluxdefaulttenants
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - konflux.konflux-ci.dev
+  resources:
+  - konfluxdefaulttenants/status
+  verbs:
+  - get

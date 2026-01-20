@@ -33,6 +33,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/applicationapi"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/buildservice"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/certmanager"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/defaulttenant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/enterprisecontract"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/imagecontroller"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/info"
@@ -62,6 +63,8 @@ var konfluxCleanupGVKs = []schema.GroupVersionKind{
 	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxImageController"},
 	// KonfluxInternalRegistry is optional - only created when spec.internalRegistry.enabled is true
 	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxInternalRegistry"},
+	// KonfluxDefaultTenant is optional - only created when spec.defaultTenant.enabled is true (default)
+	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxDefaultTenant"},
 }
 
 // konfluxClusterScopedAllowList restricts which cluster-scoped sub-CRs can be deleted
@@ -74,6 +77,10 @@ var konfluxClusterScopedAllowList = tracking.ClusterScopedAllowList{
 	// KonfluxInternalRegistry is optional - only created when spec.internalRegistry.enabled is true
 	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxInternalRegistry"}: sets.New(
 		"konflux-internal-registry",
+	),
+	// KonfluxDefaultTenant is optional - only created when spec.defaultTenant.enabled is true (default)
+	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxDefaultTenant"}: sets.New(
+		"konflux-default-tenant",
 	),
 }
 
@@ -116,6 +123,9 @@ type KonfluxReconciler struct {
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxcertmanagers,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxcertmanagers/status,verbs=get;patch;update
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxcertmanagers/finalizers,verbs=update
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxdefaulttenants,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxdefaulttenants/status,verbs=get;patch;update
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxdefaulttenants/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -208,6 +218,13 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if konflux.Spec.IsInternalRegistryEnabled() {
 		if err := r.applyKonfluxInternalRegistry(ctx, tc); err != nil {
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxInternalRegistry")
+		}
+	}
+
+	// Apply the KonfluxDefaultTenant CR (enabled by default)
+	if konflux.Spec.IsDefaultTenantEnabled() {
+		if err := r.applyKonfluxDefaultTenant(ctx, tc); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxDefaultTenant")
 		}
 	}
 
@@ -314,6 +331,15 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxInternalRegistry status")
 		}
 		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, registry, "internal-registry"))
+	}
+
+	// Get and copy status from the KonfluxDefaultTenant CR (if enabled)
+	if konflux.Spec.IsDefaultTenantEnabled() {
+		defaultTenantCR := &konfluxv1alpha1.KonfluxDefaultTenant{}
+		if err := r.Get(ctx, client.ObjectKey{Name: defaulttenant.CRName}, defaultTenantCR); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxDefaultTenant status")
+		}
+		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, defaultTenantCR, "default-tenant"))
 	}
 
 	// Set overall Ready condition based on all sub-CRs.
@@ -594,6 +620,25 @@ func (r *KonfluxReconciler) applyKonfluxInternalRegistry(ctx context.Context, tc
 	return tc.ApplyOwned(ctx, registry)
 }
 
+// applyKonfluxDefaultTenant creates or updates the KonfluxDefaultTenant CR.
+// The caller is responsible for checking if default tenant is enabled.
+func (r *KonfluxReconciler) applyKonfluxDefaultTenant(ctx context.Context, tc *tracking.Client) error {
+	log := logf.FromContext(ctx)
+
+	defaultTenantCR := &konfluxv1alpha1.KonfluxDefaultTenant{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: konfluxv1alpha1.GroupVersion.String(),
+			Kind:       "KonfluxDefaultTenant",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: defaulttenant.CRName,
+		},
+	}
+
+	log.Info("Applying KonfluxDefaultTenant CR", "name", defaultTenantCR.Name)
+	return tc.ApplyOwned(ctx, defaultTenantCR)
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
@@ -634,5 +679,8 @@ func (r *KonfluxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// Watch KonfluxInternalRegistry for any changes to copy conditions to Konflux CR
 		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
 		Owns(&konfluxv1alpha1.KonfluxInternalRegistry{}).
+		// Watch KonfluxDefaultTenant for any changes to copy conditions to Konflux CR
+		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
+		Owns(&konfluxv1alpha1.KonfluxDefaultTenant{}).
 		Complete(r)
 }

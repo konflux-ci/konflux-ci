@@ -313,6 +313,18 @@ spec:
                       Defaults to true if not specified.
                     type: boolean
                 type: object
+              defaultTenant:
+                description: |-
+                  DefaultTenant configures the default tenant component.
+                  The default tenant provides a namespace accessible by all authenticated users.
+                  The runtime configuration is copied to the KonfluxDefaultTenant CR by the operator.
+                properties:
+                  enabled:
+                    description: |-
+                      Enabled controls whether the default tenant is created.
+                      Defaults to true if not specified.
+                    type: boolean
+                type: object
               imageController:
                 description: |-
                   ImageController configures the image-controller component.
