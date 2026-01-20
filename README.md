@@ -75,6 +75,68 @@ forwarding is needed for accessing Konflux.
 the remote machine to port `9443` on your local machine to be able to access the UI from
 your local machine.
 
+## Operator-Based Deployment
+
+Konflux can be deployed using the operator-based installer, which supports both local development (Kind) and production deployments on any Kubernetes cluster.
+
+### Local Development (Kind)
+
+For quick local setup on macOS or Linux:
+
+```bash
+# 1. Create configuration from templates
+cp my-konflux.yaml.template my-konflux.yaml
+cp scripts/deploy-local-dev.env.template scripts/deploy-local-dev.env
+
+# 2. Edit scripts/deploy-local-dev.env with your GitHub App credentials
+# See the template file for instructions
+
+# 3. Deploy Konflux
+./scripts/deploy-local-dev.sh my-konflux.yaml
+```
+
+**macOS users:** See [Mac Setup Guide](docs/mac-setup.md) for platform-specific configuration.
+
+This automated script:
+- Creates a Kind cluster with proper configuration
+- Deploys the Konflux operator
+- Applies your Konflux CR configuration
+- Sets up GitHub integration
+- Provides a local OCI registry at `localhost:5001`
+
+Access Konflux at: https://localhost:9443
+
+### Production Deployment (Any Cluster)
+
+For production deployments on OpenShift, EKS, GKE, or other Kubernetes clusters:
+
+```bash
+cd operator
+
+# Install CRDs
+make install
+
+# Deploy operator (use released image or build your own)
+make deploy IMG=quay.io/konflux-ci/konflux-operator:latest
+
+# Apply your Konflux configuration
+kubectl apply -f my-konflux.yaml
+```
+
+See [Operator Deployment Guide](docs/operator-deployment.md) for complete production deployment instructions.
+
+### Key Differences from Legacy Deployment
+
+The operator-based deployment differs from the legacy bootstrap approach:
+
+- **Universal:** Works on any Kubernetes cluster, not just Kind
+- **Declarative:** Configure via Konflux CR, not shell scripts
+- **Production-ready:** Supports HA, custom ingress, and proper secret management
+- **Secure defaults:** No demo users in samples (use OIDC connectors)
+- **Modular:** Enable only the components you need
+
+For the legacy bootstrap approach (Linux x86_64 only), continue to the sections below.
+
 ## Machine Minimum Requirements
 
 The deployment is currently only supported on **x86_64 Linux** platforms.

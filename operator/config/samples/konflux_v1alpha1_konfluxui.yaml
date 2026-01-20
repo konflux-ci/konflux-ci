@@ -128,19 +128,3 @@ spec:
               userMatchers:
                 - userAttr: "DN"
                   groupAttr: "member"
-      staticPasswords:
-        - email: "user1@konflux.dev"
-          # bcrypt hash of the string "password": $(echo password | htpasswd -BinC 10 admin | cut -d: -f2)
-          hash: REDACTED
-          username: "user1"
-          userID: "7138d2fe-724e-4e86-af8a-db7c4b080e20"
-        - email: "user2@konflux.dev"
-          # bcrypt hash of the string "password": $(echo password | htpasswd -BinC 10 admin | cut -d: -f2)
-          hash: REDACTED
-          username: "user2"
-          userID: "ea8e8ee1-2283-4e03-83d4-b00f8b821b64"
-        - email: "admin@konflux.dev"
-          # bcrypt hash of the string "admin": $(echo admin | htpasswd -BinC 10 admin | cut -d: -f2)
-          hash: REDACTED
-          username: "admin"
-          userID: "admin-12345-67890-abcdef"
