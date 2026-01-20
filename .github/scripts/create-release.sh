@@ -73,8 +73,7 @@ if [ ${#ARTIFACTS[@]} -eq 0 ]; then
   exit 1
 fi
 
-# Create release using official GitHub CLI (gh)
-# Uses GITHUB_TOKEN (if permissions are insufficient, we can add GitHub App token later)
+# Create release using GitHub CLI
 gh release create "$VERSION" \
   --title "Release $VERSION" \
   --notes-file "$NOTES_FILE" \

@@ -18,15 +18,15 @@ on:
         required: false
         type: string
       draft:
-        description: 'Create as draft release (for testing - no notifications)'
-        required: false
-        type: boolean
-        default: true
-      generate_notes:
-        description: 'Auto-generate commit history (skip for first release with many commits)'
+        description: 'Create as draft release'
         required: false
         type: boolean
         default: false
+      generate_notes:
+        description: 'Include auto-generated notes with commit history'
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   create-release:
@@ -121,14 +121,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # TODO: Revert to use input when repository_dispatch events support draft flag
-          # Change "true" back to "${{ inputs.draft }}" to restore manual control
           .github/scripts/create-release.sh \
             "${{ steps.version.outputs.version }}" \
             "${{ steps.payload.outputs.git_ref }}" \
             /tmp/release-notes.md \
             operator/dist \
-            "true" \
+            "${{ inputs.draft }}" \
             "${{ inputs.generate_notes }}"
 
       - name: Create issue on release failure
