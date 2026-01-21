@@ -238,6 +238,8 @@ jobs:
         if: ${{ !cancelled() }}
         working-directory: ${{ github.workspace }}
         run: |
+          echo "Konflux CR:"
+          kubectl get konflux konflux -o yaml || :
           ./generate-err-logs.sh
 
       - name: Archive logs
