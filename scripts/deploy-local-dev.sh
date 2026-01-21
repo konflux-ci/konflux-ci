@@ -52,6 +52,11 @@ fi
 # shellcheck disable=SC1090
 source "${ENV_FILE}"
 
+# Export variables so they're available to child scripts
+export KIND_MEMORY_GB PODMAN_MACHINE_NAME REGISTRY_HOST_PORT ENABLE_REGISTRY_PORT
+export INCREASE_PODMAN_PIDS_LIMIT DEPLOY_DEMO_RESOURCES
+export GITHUB_PRIVATE_KEY_PATH GITHUB_APP_ID WEBHOOK_SECRET QUAY_TOKEN
+
 # Validate required secrets
 if [ -z "${GITHUB_PRIVATE_KEY_PATH:-}" ] || [ -z "${GITHUB_APP_ID:-}" ] || [ -z "${WEBHOOK_SECRET:-}" ]; then
     echo "ERROR: Required secrets not configured in ${ENV_FILE}"
@@ -104,36 +109,51 @@ echo "Step 1: Creating Kind cluster"
 echo "========================================="
 "${SCRIPT_DIR}/setup-kind-local-cluster.sh"
 
-# Step 2: Build and load operator image
+# Step 2: Deploy dependencies
 echo ""
 echo "========================================="
-echo "Step 2: Building operator image"
+echo "Step 2: Deploying dependencies"
+echo "========================================="
+echo "Installing Tekton, cert-manager, and other prerequisites..."
+# Skip components managed by the operator
+SKIP_DEX=true \
+SKIP_KONFLUX_INFO=true \
+SKIP_CLUSTER_ISSUER=true \
+SKIP_INTERNAL_REGISTRY=true \
+"${REPO_ROOT}/deploy-deps.sh"
+
+# Step 3: Build and load operator image
+echo ""
+echo "========================================="
+echo "Step 3: Building operator image"
 echo "========================================="
 cd "${REPO_ROOT}/operator"
-make docker-build IMG=konflux-operator:local
+# When using podman, images get tagged with localhost/ prefix
+# Use localhost/konflux-operator:local for consistency
+make docker-build IMG=localhost/konflux-operator:local
 
 echo ""
 echo "Loading operator image into Kind cluster..."
-kind load docker-image konflux-operator:local --name konflux
+kind load docker-image localhost/konflux-operator:local --name konflux
 
-# Step 3: Install CRDs and deploy operator
+# Step 4: Install CRDs and deploy operator
 echo ""
 echo "========================================="
-echo "Step 3: Deploying Konflux operator"
+echo "Step 4: Deploying Konflux operator"
 echo "========================================="
 echo "Installing CRDs..."
 make install
 
 echo ""
 echo "Deploying operator..."
-make deploy IMG=konflux-operator:local
+make deploy IMG=localhost/konflux-operator:local
 
 cd "${REPO_ROOT}"
 
-# Step 4: Wait for operator to be ready
+# Step 5: Wait for operator to be ready
 echo ""
 echo "========================================="
-echo "Step 4: Waiting for operator"
+echo "Step 5: Waiting for operator"
 echo "========================================="
 echo "Waiting for operator deployment..."
 kubectl wait --for=condition=Available \
@@ -143,18 +163,18 @@ kubectl wait --for=condition=Available \
 
 echo "✓ Operator is ready"
 
-# Step 5: Apply Konflux CR
+# Step 6: Apply Konflux CR
 echo ""
 echo "========================================="
-echo "Step 5: Applying Konflux configuration"
+echo "Step 6: Applying Konflux configuration"
 echo "========================================="
 echo "Applying: ${KONFLUX_CR}"
 kubectl apply -f "${KONFLUX_CR}"
 
-# Step 6: Create secrets for GitHub integration
+# Step 7: Create secrets for GitHub integration
 echo ""
 echo "========================================="
-echo "Step 6: Creating GitHub integration secrets"
+echo "Step 7: Creating GitHub integration secrets"
 echo "========================================="
 echo "Creating Pipelines-as-Code secrets..."
 
@@ -183,17 +203,17 @@ done
 
 echo "✓ Secrets created"
 
-# Step 7: Optional demo resources
+# Step 8: Optional demo resources
 if [[ "${DEPLOY_DEMO_RESOURCES:-0}" -eq 1 ]]; then
     echo ""
     echo "========================================="
-    echo "Step 7: Deploying demo resources"
+    echo "Step 8: Deploying demo resources"
     echo "========================================="
     "${SCRIPT_DIR}/deploy-demo-resources.sh"
 else
     echo ""
     echo "========================================="
-    echo "Step 7: Skipping demo resources"
+    echo "Step 8: Skipping demo resources"
     echo "========================================="
     echo "Demo resources deployment is disabled (secure default)"
     echo ""
@@ -201,10 +221,10 @@ else
     echo "Or deploy them separately: ./scripts/deploy-demo-resources.sh"
 fi
 
-# Step 8: Wait for Konflux to be ready
+# Step 9: Wait for Konflux to be ready
 echo ""
 echo "========================================="
-echo "Step 8: Waiting for Konflux to be ready"
+echo "Step 9: Waiting for Konflux to be ready"
 echo "========================================="
 echo "This may take several minutes..."
 
