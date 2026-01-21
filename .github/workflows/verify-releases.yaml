@@ -1,0 +1,58 @@
+name: Verify Releases
+
+on:
+  # Run weekly on Tuesday at 2 AM UTC (one day after auto-tag-weekly)
+  schedule:
+    - cron: '0 2 * * 2'
+  # Allow manual triggering
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  verify-release:
+    name: Verify Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Check for releases and commits
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          .github/scripts/verify-releases.sh ${{ github.repository }}
+
+      - name: Create issue on verification failure
+        if: env.VERIFICATION_FAILED == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_NAME: Verify Releases
+        run: |
+          .github/scripts/create-or-update-issue.sh \
+            "Weekly Release Verification Failed" \
+            "No GitHub release was created in the past 7 days, but ${COMMIT_COUNT} commit(s) were made to the main branch during this period." \
+            /tmp/recent-commits.txt
+
+      - name: Create issue on unexpected failure
+        if: failure() && env.VERIFICATION_FAILED != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_NAME: Verify Releases
+        run: |
+          .github/scripts/create-or-update-issue.sh \
+            "Weekly Release Verification Workflow Failed" \
+            "The weekly release verification workflow encountered an unexpected error. Please check the workflow logs to identify and fix the issue."
