@@ -126,8 +126,8 @@ jobs:
             "${{ steps.payload.outputs.git_ref }}" \
             /tmp/release-notes.md \
             operator/dist \
-            "${{ inputs.draft }}" \
-            "${{ inputs.generate_notes }}"
+            "${{ inputs.draft || false }}" \
+            "${{ inputs.generate_notes != false }}"
 
       - name: Create issue on release failure
         if: failure()
