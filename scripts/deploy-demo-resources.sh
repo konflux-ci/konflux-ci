@@ -16,12 +16,13 @@
 # - user2@konflux.dev / password
 #
 # Prerequisites:
-# - Konflux must be deployed on the cluster
+# - Konflux must be deployed on the cluster (operator-based or bootstrap)
 # - kubectl must be configured to access the cluster
-# - Dex must be running in the 'dex' namespace
 #
 # Usage:
 #   ./scripts/deploy-demo-resources.sh
+#
+# See docs/demo-users.md for more information about demo user configuration.
 
 # Determine the absolute path of the repository root
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
@@ -35,39 +36,70 @@ echo "WARNING: This deploys INSECURE demo users for testing only!"
 echo "Do NOT use these resources in production environments."
 echo ""
 
-# Check if Konflux is deployed
-if ! kubectl get namespace dex &> /dev/null; then
-    echo "ERROR: Dex namespace not found. Is Konflux deployed?"
+# Detect deployment type (operator-based or bootstrap)
+DEPLOYMENT_TYPE=""
+if kubectl get konfluxui konflux-ui -n konflux-ui &> /dev/null; then
+    DEPLOYMENT_TYPE="operator"
+    echo "✓ Detected operator-based Konflux deployment"
+elif kubectl get namespace dex &> /dev/null && kubectl get deployment dex -n dex &> /dev/null; then
+    DEPLOYMENT_TYPE="bootstrap"
+    echo "✓ Detected bootstrap Konflux deployment"
+else
+    echo "ERROR: Konflux deployment not detected."
+    echo ""
+    echo "Could not find either:"
+    echo "  - Operator deployment: KonfluxUI CR in konflux-ui namespace"
+    echo "  - Bootstrap deployment: Dex deployment in dex namespace"
+    echo ""
     echo "Please deploy Konflux before running this script."
     exit 1
 fi
 
-# Check if Dex deployment exists
-if ! kubectl get deployment dex -n dex &> /dev/null; then
-    echo "ERROR: Dex deployment not found in 'dex' namespace."
-    echo "Please ensure Konflux is fully deployed before adding demo resources."
-    exit 1
-fi
-
-echo "✓ Konflux detected - proceeding with demo resource deployment"
 echo ""
 
 # Deploy demo user namespaces and RBAC
 echo "👥 Deploying demo user namespaces and RBAC..."
 kubectl apply -k "${REPO_ROOT}/test/resources/demo-users/user/"
 
-# Deploy Dex configuration with demo users
-echo "🔐 Configuring Dex with demo credentials..."
-kubectl apply -f "${REPO_ROOT}/test/resources/demo-users/dex-users.yaml"
+# Configure demo users based on deployment type
+if [ "$DEPLOYMENT_TYPE" = "operator" ]; then
+    echo "🔐 Configuring demo users via KonfluxUI CR..."
 
-# Patch Dex deployment to use the demo ConfigMap
-echo "🔧 Patching Dex deployment to use demo configmap..."
-kubectl patch deployment dex -n dex --type=json \
-    -p='[{"op": "replace", "path": "/spec/template/spec/volumes/0/configMap/name", "value": "dex"}]'
+    # Patch the KonfluxUI CR to add static passwords
+    kubectl patch konfluxui konflux-ui -n konflux-ui --type=merge -p '
+spec:
+  dex:
+    config:
+      enablePasswordDB: true
+      staticPasswords:
+      - email: "user1@konflux.dev"
+        username: "user1"
+        userID: "7138d2fe-724e-4e86-af8a-db7c4b080e20"
+        hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" # gitleaks:allow
+      - email: "user2@konflux.dev"
+        username: "user2"
+        userID: "ea8e8ee1-2283-4e03-83d4-b00f8b821b64"
+        hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" # gitleaks:allow
+'
 
-# Wait for Dex to restart
-echo "⏳ Waiting for Dex to restart with demo users..."
-kubectl rollout status deployment/dex -n dex --timeout=120s
+    # Wait for Dex to restart with new configuration
+    echo "⏳ Waiting for Dex to restart with demo users..."
+    kubectl rollout status deployment/dex -n konflux-ui --timeout=120s
+
+else
+    # Bootstrap deployment - use ConfigMap approach
+    echo "🔐 Configuring Dex with demo credentials (bootstrap method)..."
+    kubectl apply -f "${REPO_ROOT}/test/resources/demo-users/dex-users.yaml"
+
+    # Patch Dex deployment to use the demo ConfigMap
+    echo "🔧 Patching Dex deployment to use demo configmap..."
+    kubectl patch deployment dex -n dex --type=json \
+        -p='[{"op": "replace", "path": "/spec/template/spec/volumes/0/configMap/name", "value": "dex"}]'
+
+    # Wait for Dex to restart
+    echo "⏳ Waiting for Dex to restart with demo users..."
+    kubectl rollout status deployment/dex -n dex --timeout=120s
+fi
 
 echo ""
 echo "========================================="
@@ -82,3 +114,9 @@ echo "Access Konflux UI at: https://localhost:9443"
 echo "(Port may differ based on your ingress configuration)"
 echo ""
 echo "REMEMBER: These are insecure demo credentials for testing only!"
+echo ""
+if [ "$DEPLOYMENT_TYPE" = "operator" ]; then
+    echo "Note: Demo users are configured via the KonfluxUI custom resource."
+    echo "To remove them, patch the KonfluxUI CR to remove staticPasswords."
+    echo "See docs/demo-users.md for details."
+fi

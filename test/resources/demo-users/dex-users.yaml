@@ -3,6 +3,10 @@
 # WARNING: These are insecure demo credentials for testing purposes only
 # Do not use in production environments
 #
+# NOTE: This file is for BOOTSTRAP DEPLOYMENTS ONLY (legacy pre-operator method).
+# For operator-based deployments, configure demo users via the KonfluxUI CR instead.
+# See docs/demo-users.md for instructions.
+#
 # Default credentials:
 # - user1@konflux.dev / password
 # - user2@konflux.dev / password
