@@ -649,8 +649,7 @@ spec:
     listKind: ComponentList
     plural: components
     shortNames:
-    - hascmp
-    - hc
+    - cmp
     - comp
     singular: component
   scope: Namespaced
@@ -1227,6 +1226,9 @@ spec:
                       Optional.
                       !!! Will be required when we remove old model
                     type: string
+                    x-kubernetes-validations:
+                    - message: Git repository URL cannot be changed
+                      rule: self == oldSelf
                   versions:
                     description: |-
                       List of all versions for this component.
