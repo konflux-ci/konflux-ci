@@ -6,9 +6,11 @@
   * [Step 1: Auto-Tag Creation](#step-1-auto-tag-creation)
   * [Step 2: Konflux Build and Release](#step-2-konflux-build-and-release)
   * [Step 3: GitHub Release Creation](#step-3-github-release-creation)
+  * [Step 4: Community Operator Publication](#step-4-community-operator-publication)
 - [Manual Releases](#manual-releases)
   * [On-Demand Release (Create New Tag)](#on-demand-release-create-new-tag)
   * [Manual Release (Existing Tag and Image)](#manual-release-existing-tag-and-image)
+  * [Manual Community Operator PR](#manual-community-operator-pr)
 - [Release Artifacts](#release-artifacts)
 - [Troubleshooting](#troubleshooting)
 - [Related Documentation](#related-documentation)
@@ -16,7 +18,7 @@
 <!-- tocstop -->
 
 This repository uses an automated release process that creates weekly releases
-when tags are pushed to the repository. The process involves three main steps:
+when tags are pushed to the repository. The process involves four main steps:
 
 1. **Auto-tagging**: A GitHub Actions workflow automatically creates a new tag
    on the main branch
@@ -24,6 +26,9 @@ when tags are pushed to the repository. The process involves three main steps:
    Quay, then sends an event back to GitHub
 3. **GitHub Release Creation**: A GitHub Actions workflow creates the GitHub
    release with artifacts
+4. **Community Operator Publication**: A GitHub Actions workflow creates a PR to
+   the Red Hat Community Operators repository to publish the operator in the
+   OpenShift catalog
 
 # Automated Release Flow
 
@@ -67,6 +72,58 @@ The `repository_dispatch` event triggers the
 - Prepares release notes
 - Creates the GitHub release with all artifacts
 
+## Step 4: Community Operator Publication
+
+When a GitHub release is published, the
+[Community Operator PR workflow](.github/workflows/community-operator-pr.yaml)
+automatically creates a pull request to the
+[Red Hat Community Operators repository](https://github.com/redhat-openshift-ecosystem/community-operators-prod)
+to publish the Konflux operator in the OpenShift catalog.
+
+The workflow:
+
+- Downloads the OLM bundle files (`bundle.tar.gz`) from the release artifacts
+- Extracts the bundle contents (manifests, metadata, Dockerfile, release-config.yaml)
+- Creates a PR to [operators/konflux](https://github.com/redhat-openshift-ecosystem/community-operators-prod/tree/main/operators/konflux)
+  in the community-operators-prod repository
+
+**Catalog Configuration:**
+
+- The `release-config.yaml` file (generated in
+  [generate-release-artifacts.sh](.github/scripts/generate-release-artifacts.sh))
+  specifies the OLM channel (`Stable`) for the bundle
+- The [ci.yaml](https://github.com/redhat-openshift-ecosystem/community-operators-prod/blob/main/operators/konflux/ci.yaml)
+  file in the upstream repository defines which OpenShift catalog versions the
+  operator is published to (catalog versions correspond to OpenShift versions)
+
+**Adding Support for a New OpenShift Version:**
+
+To publish the operator to a new OpenShift catalog version, update the
+[ci.yaml](https://github.com/redhat-openshift-ecosystem/community-operators-prod/blob/main/operators/konflux/ci.yaml)
+file in the community-operators-prod repository by adding the new version to the
+`catalog_names` list:
+
+```yaml
+fbc:
+  enabled: true
+  catalog_mapping:
+    - template_name: semver.yaml
+      type: olm.semver
+      catalog_names:
+        - v4.20
+        - v4.21  # Add new OpenShift version here
+```
+
+This change must be submitted as a PR to the
+[community-operators-prod](https://github.com/redhat-openshift-ecosystem/community-operators-prod)
+repository.
+
+**Example PR:** [community-operators-prod#8626](https://github.com/redhat-openshift-ecosystem/community-operators-prod/pull/8626)
+
+For more information about the community catalog automation and FBC (File-Based
+Catalog) workflow, see the
+[Operator Pipelines documentation](https://redhat-openshift-ecosystem.github.io/operator-pipelines/).
+
 # Manual Releases
 
 The release process can be triggered on demand in two ways:
@@ -94,6 +151,15 @@ Optional parameters:
 - **generate_notes**: Include auto-generated notes with commit history (default:
   `true`)
 
+## Manual Community Operator PR
+
+If a GitHub release already exists and you need to manually trigger the
+community operator PR (e.g., if the automatic trigger failed), you can use the
+[Community Operator PR workflow](.github/workflows/community-operator-pr.yaml)
+via `workflow_dispatch`. You must provide:
+
+- **release_tag**: GitHub release tag (e.g., `v0.0.4`)
+
 # Release Artifacts
 
 Each release includes the following artifacts:
@@ -117,3 +183,7 @@ for more information.
 - [Create Release Workflow](.github/workflows/create-release.yaml)
 - [Notify and Trigger GitHub Release Pipeline](pipelines/notify-and-trigger-github-release/notify-and-trigger-github-release.yaml)
 - [Send GitHub Release Event Task](tasks/send-github-release-event/send-github-release-event.yaml)
+- [Community Operator PR Workflow](.github/workflows/community-operator-pr.yaml)
+- [Create Community Operator PR Script](.github/scripts/create-community-operator-pr.sh)
+- [Operator Pipelines Documentation](https://redhat-openshift-ecosystem.github.io/operator-pipelines/) (external)
+- [Konflux Operator in Community Catalog](https://github.com/redhat-openshift-ecosystem/community-operators-prod/tree/main/operators/konflux) (external)
