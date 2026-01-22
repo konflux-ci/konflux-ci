@@ -16,6 +16,11 @@ spec:
   # UI component
   ui:
     spec:
+      # Configure NodePort for Kind cluster access
+      # This exposes the UI at https://localhost:9443 (maps to NodePort 30011)
+      ingress:
+        nodePortService:
+          httpsPort: 30011
       proxy:
         replicas: 1
         nginx:
