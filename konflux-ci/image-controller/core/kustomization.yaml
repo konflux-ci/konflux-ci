@@ -29,3 +29,7 @@ patches:
       kind: CronJob
       name: image-controller-image-pruner-cronjob
     path: replace-pruner-image.yaml
+  - target:
+      kind: Deployment
+      name: image-controller-controller-manager
+    path: image-controller-env-patch.yaml
