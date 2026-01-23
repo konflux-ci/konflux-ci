@@ -16,7 +16,7 @@
 # - user2@konflux.dev / password
 #
 # Prerequisites:
-# - Konflux must be deployed on the cluster (operator-based or bootstrap)
+# - Operator-based Konflux deployment must be installed on the cluster
 # - kubectl must be configured to access the cluster
 #
 # Usage:
@@ -36,37 +36,30 @@ echo "WARNING: This deploys INSECURE demo users for testing only!"
 echo "Do NOT use these resources in production environments."
 echo ""
 
-# Detect deployment type (operator-based or bootstrap)
-DEPLOYMENT_TYPE=""
-if kubectl get konfluxui konflux-ui -n konflux-ui &> /dev/null; then
-    DEPLOYMENT_TYPE="operator"
-    echo "✓ Detected operator-based Konflux deployment"
-elif kubectl get namespace dex &> /dev/null && kubectl get deployment dex -n dex &> /dev/null; then
-    DEPLOYMENT_TYPE="bootstrap"
-    echo "✓ Detected bootstrap Konflux deployment"
-else
-    echo "ERROR: Konflux deployment not detected."
+# Verify operator-based Konflux deployment exists
+if ! kubectl get konfluxui konflux-ui -n konflux-ui &> /dev/null; then
+    echo "ERROR: Operator-based Konflux deployment not found."
     echo ""
-    echo "Could not find either:"
-    echo "  - Operator deployment: KonfluxUI CR in konflux-ui namespace"
-    echo "  - Bootstrap deployment: Dex deployment in dex namespace"
+    echo "This script requires a KonfluxUI custom resource in the konflux-ui namespace."
     echo ""
-    echo "Please deploy Konflux before running this script."
+    echo "Please deploy Konflux using the operator before running this script:"
+    echo "  ./scripts/deploy-local-dev.sh my-konflux.yaml"
+    echo ""
+    echo "For more information, see README.md and docs/operator-deployment.md"
     exit 1
 fi
 
+echo "✓ Detected operator-based Konflux deployment"
 echo ""
 
 # Deploy demo user namespaces and RBAC
 echo "👥 Deploying demo user namespaces and RBAC..."
 kubectl apply -k "${REPO_ROOT}/test/resources/demo-users/user/"
 
-# Configure demo users based on deployment type
-if [ "$DEPLOYMENT_TYPE" = "operator" ]; then
-    echo "🔐 Configuring demo users via KonfluxUI CR..."
+echo "🔐 Configuring demo users via KonfluxUI CR..."
 
-    # Patch the KonfluxUI CR to add static passwords
-    kubectl patch konfluxui konflux-ui -n konflux-ui --type=merge -p '
+# Patch the KonfluxUI CR to add static passwords
+kubectl patch konfluxui konflux-ui -n konflux-ui --type=merge -p '
 spec:
   dex:
     config:
@@ -82,24 +75,9 @@ spec:
         hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" # gitleaks:allow
 '
 
-    # Wait for Dex to restart with new configuration
-    echo "⏳ Waiting for Dex to restart with demo users..."
-    kubectl rollout status deployment/dex -n konflux-ui --timeout=120s
-
-else
-    # Bootstrap deployment - use ConfigMap approach
-    echo "🔐 Configuring Dex with demo credentials (bootstrap method)..."
-    kubectl apply -f "${REPO_ROOT}/test/resources/demo-users/dex-users.yaml"
-
-    # Patch Dex deployment to use the demo ConfigMap
-    echo "🔧 Patching Dex deployment to use demo configmap..."
-    kubectl patch deployment dex -n dex --type=json \
-        -p='[{"op": "replace", "path": "/spec/template/spec/volumes/0/configMap/name", "value": "dex"}]'
-
-    # Wait for Dex to restart
-    echo "⏳ Waiting for Dex to restart with demo users..."
-    kubectl rollout status deployment/dex -n dex --timeout=120s
-fi
+# Wait for Dex to restart with new configuration
+echo "⏳ Waiting for Dex to restart with demo users..."
+kubectl rollout status deployment/dex -n konflux-ui --timeout=120s
 
 echo ""
 echo "========================================="
@@ -115,8 +93,7 @@ echo "(Port may differ based on your ingress configuration)"
 echo ""
 echo "REMEMBER: These are insecure demo credentials for testing only!"
 echo ""
-if [ "$DEPLOYMENT_TYPE" = "operator" ]; then
-    echo "Note: Demo users are configured via the KonfluxUI custom resource."
-    echo "To remove them, patch the KonfluxUI CR to remove staticPasswords."
-    echo "See docs/demo-users.md for details."
-fi
+echo "Note: Demo users are configured via the KonfluxUI custom resource."
+echo "To remove them, patch the KonfluxUI CR to remove staticPasswords."
+echo "See docs/demo-users.md for details."
+echo ""

@@ -20,13 +20,12 @@ Use the deployment script to automatically configure demo users:
 ```
 
 This script:
-- Auto-detects your deployment type (operator-based or bootstrap)
-- Configures demo users using the appropriate method
+- Configures demo users via the KonfluxUI custom resource
 - Deploys demo namespaces and RBAC for testing
 
-### Manual Configuration (Operator Deployment)
+### Manual Configuration
 
-For operator-based deployments, configure demo users via the `KonfluxUI` custom resource:
+Configure demo users via the `KonfluxUI` custom resource:
 
 ```bash
 kubectl patch konfluxui konflux-ui -n konflux-ui --type=merge -p '
@@ -71,11 +70,9 @@ spec:
   # ... rest of your Konflux configuration
 ```
 
-## Deployment Types
+## How It Works
 
-### Operator-Based Deployment (Current)
-
-The operator manages Dex configuration through the `KonfluxUI` custom resource. Demo users are configured by:
+The Konflux operator manages Dex configuration through the `KonfluxUI` custom resource. Demo users are configured by:
 
 1. Setting `spec.dex.config.enablePasswordDB: true`
 2. Adding entries to `spec.dex.config.staticPasswords[]`
@@ -86,14 +83,6 @@ The operator automatically:
 - Maintains the configuration (manual patches to Dex will be reverted)
 
 **Do NOT manually patch the Dex deployment or ConfigMap** - the operator owns these resources and will revert changes.
-
-### Bootstrap Deployment (Legacy)
-
-For clusters deployed with the bootstrap method (pre-operator):
-
-- Dex runs in the `dex` namespace
-- Configuration is via a manually managed ConfigMap
-- See `test/resources/demo-users/dex-users.yaml` for the ConfigMap structure
 
 ## Adding Custom Demo Users
 
@@ -216,20 +205,6 @@ kubectl apply -k test/resources/demo-users/user/
 **Explanation:** This is expected behavior. The operator owns Dex resources and reconciles them to match the `KonfluxUI` CR specification.
 
 **Solution:** Always configure Dex through the `KonfluxUI` CR, never manually.
-
-### Wrong Namespace for Bootstrap Deployment
-
-**Symptom:** Script fails looking for `konflux-ui` namespace but you have `dex` namespace.
-
-**Explanation:** You have a bootstrap deployment (pre-operator).
-
-**Solution:** The script auto-detects this. If it fails, check:
-```bash
-kubectl get namespace dex
-kubectl get deployment dex -n dex
-```
-
-For bootstrap deployments, demo users are configured via ConfigMap in the `dex` namespace.
 
 ## Security Considerations
 
