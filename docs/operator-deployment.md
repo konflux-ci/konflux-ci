@@ -295,6 +295,22 @@ imageController:
 - Production resource requests (100m+ CPU, 256Mi+ memory)
 - Horizontal scaling based on load
 
+### Kind Cluster Configuration
+
+For Kind clusters, the UI requires NodePort service configuration to be accessible from the host. The `my-konflux.yaml.template` includes this configuration:
+
+```yaml
+ui:
+  spec:
+    ingress:
+      nodePortService:
+        httpsPort: 30011  # Matches kind-config-arm64.yaml port mapping
+```
+
+**How it works:** Kind maps container port 30011 to host port 9443 (configured in `kind-config-arm64.yaml`). The operator creates a NodePort service on port 30011, making the UI accessible at `https://localhost:9443`.
+
+**For other clusters:** Use standard Ingress configuration instead of NodePort.
+
 ## Authentication
 
 Konflux uses Dex for authentication. Production deployments should use OIDC connectors.
@@ -411,6 +427,33 @@ kubectl get konflux konflux -o jsonpath='{.status.conditions}' | jq
 # Check operator events
 kubectl get events -n konflux-operator --sort-by='.lastTimestamp'
 ```
+
+### UI Not Accessible (Kind)
+
+**Symptom:** Cannot reach `https://localhost:9443`
+
+**Cause:** Missing NodePort configuration in Konflux CR.
+
+**Solution:** Verify your `my-konflux.yaml` includes:
+```yaml
+ui:
+  spec:
+    ingress:
+      nodePortService:
+        httpsPort: 30011
+```
+
+If missing, patch the KonfluxUI CR:
+```bash
+kubectl patch konfluxui konflux-ui -n konflux-ui --type=merge -p '
+spec:
+  ingress:
+    nodePortService:
+      httpsPort: 30011
+'
+```
+
+**Note:** Browser must use `https://` not `http://`. Typing `localhost:9443` defaults to HTTP and fails.
 
 ### Port 5000 Conflict (macOS)
 
