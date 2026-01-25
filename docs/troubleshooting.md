@@ -1,271 +1,716 @@
-Troubleshooting Common Issues
-===
+# Troubleshooting Common Issues
 
-<!-- toc -->
+This guide covers common problems across all Konflux deployment types.
 
-- [Using Podman with Kind while also having Docker Installed](#using-podman-with-kind-while-also-having-docker-installed)
-- [Unknown Field "replacements"](#unknown-field-replacements)
-- [Restarting the Cluster](#restarting-the-cluster)
-- [Unable to Create Application with Component Using the Konflux UI](#unable-to-create-application-with-component-using-the-konflux-ui)
-- [PR changes are not Triggering Pipelines](#pr-changes-are-not-triggering-pipelines)
-- [PR Fails when Webhook Secret was not Added](#pr-fails-when-webhook-secret-was-not-added)
-- [Setup Scripts Fail or Pipeline Execution Stuck or Fails](#setup-scripts-fail-or-pipeline-execution-stuck-or-fails)
-  * [Running out of Resources](#running-out-of-resources)
-  * [Unable to Bind PVCs](#unable-to-bind-pvcs)
-  * [Release Fails](#release-fails)
-    + [Common Release Issues](#common-release-issues)
-      - [Unfinished string at EOF](#unfinished-string-at-eof)
-      - [400 Bad Request](#400-bad-request)
+## Deployment Issues
 
-<!-- tocstop -->
+### Operator Not Starting
 
-# Using Podman with Kind while also having Docker Installed
+The operator fails to start or becomes unavailable after installation.
 
-If you have docker installed, Kind will try to use it by default. If you prefer,
-you can set it to use Podman instead.
+Check operator logs for errors:
 
-:gear: Create the cluster on Podman:
+```bash
+kubectl logs -n konflux-operator deployment/konflux-operator-controller-manager
+```
+
+Verify CRDs installed correctly:
+
+```bash
+kubectl get crds | grep konflux
+```
+
+Missing CRDs indicate incomplete operator installation. Run `make install` from the operator directory.
+
+Check for resource constraints on the operator pod:
+
+```bash
+kubectl describe pod -n konflux-operator -l control-plane=controller-manager
+```
+
+### Components Not Deploying
+
+Konflux CR is applied but components fail to deploy.
+
+Check the Konflux status for error conditions:
+
+```bash
+kubectl get konflux konflux -o jsonpath='{.status.conditions}' | jq
+```
+
+Review operator events for detailed error messages:
+
+```bash
+kubectl get events -n konflux-operator --sort-by='.lastTimestamp'
+```
+
+Common causes include missing secrets (verify GitHub App secrets exist in required namespaces), insufficient cluster resources (check node capacity with `kubectl describe nodes`), invalid CR configuration (compare against sample configurations), or prerequisite operators not running (ensure Tekton and cert-manager are installed and ready).
+
+### UI Not Accessible
+
+**Kind clusters:** The UI requires NodePort configuration to be accessible from the host.
+
+Verify NodePort configuration in your Konflux CR or KonfluxUI resource:
+
+```yaml
+ui:
+  spec:
+    ingress:
+      nodePortService:
+        httpsPort: 30011
+```
+
+Patch the KonfluxUI CR if configuration is missing:
+
+```bash
+kubectl patch konfluxui konflux-ui -n konflux-ui --type=merge -p '
+spec:
+  ingress:
+    nodePortService:
+      httpsPort: 30011
+'
+```
+
+Verify the Kind configuration includes the port mapping. Check `kind-config-arm64.yaml`:
+
+```yaml
+extraPortMappings:
+  - containerPort: 30011
+    hostPort: 9443
+    protocol: TCP
+```
+
+Check that you're using `https://localhost:9443` not `http://localhost:9443`. Browsers default to HTTP when you type `localhost:9443` without the protocol, which fails.
+
+**Production clusters:** Verify ingress configuration matches your ingress controller.
+
+Check ingress resource status:
+
+```bash
+kubectl get ingress -n konflux-ui
+kubectl describe ingress -n konflux-ui
+```
+
+Ensure your ingress controller is running and the host resolves correctly.
+
+### Insufficient Resources
+
+Pods fail to schedule or remain in pending state due to insufficient cluster resources.
+
+Check node resource availability:
+
+```bash
+kubectl top nodes
+kubectl describe nodes | grep -A 5 "Allocated resources"
+```
+
+List pods stuck in pending state:
+
+```bash
+kubectl get pods -A | grep Pending
+kubectl describe pod <pod-name> -n <namespace>
+```
+
+Look for scheduling failures in pod events. Common messages include "Insufficient memory," "Insufficient cpu," or "0/1 nodes available."
+
+**For Kind clusters:** Increase system limits before creating the cluster:
+
+```bash
+sudo sysctl fs.inotify.max_user_watches=524288
+sudo sysctl fs.inotify.max_user_instances=512
+```
+
+Increase PID limit on the Kind container:
+
+```bash
+# Podman
+podman update --pids-limit 4096 konflux-control-plane
+
+# Docker
+docker update --pids-limit 4096 konflux-control-plane
+```
+
+Edit `kind-config.yaml` to reserve more memory under `kubeletExtraArgs`:
+
+```yaml
+kubeadmConfigPatches:
+- |
+  kind: InitConfiguration
+  nodeRegistration:
+    kubeletExtraArgs:
+      node-labels: "ingress-ready=true"
+      system-reserved: memory=12Gi
+```
+
+**For macOS users:** Verify Podman machine has sufficient memory:
+
+```bash
+podman machine inspect | grep Memory
+```
+
+See [Mac Setup Guide](mac-setup.md#insufficient-memory) for detailed memory configuration.
+
+### PVCs Unable to Bind
+
+The `deploy-deps.sh` script verifies PVC binding on the default storage class. Binding failures indicate storage provisioning issues.
+
+For Kind clusters, restart the cluster container:
+
+```bash
+# Podman
+podman restart konflux-control-plane
+
+# Docker
+docker restart konflux-control-plane
+```
+
+For other clusters, verify a storage provisioner is installed and the default storage class exists:
+
+```bash
+kubectl get storageclass
+kubectl get pv
+```
+
+### Using Podman with Docker Installed
+
+Kind defaults to Docker when both Docker and Podman are installed. Force Kind to use Podman:
 
 ```bash
 KIND_EXPERIMENTAL_PROVIDER=podman kind create cluster --name konflux --config kind-config.yaml
 ```
 
-# Unknown Field "replacements"
+### Unknown Field "replacements"
 
-If you get the following error: `error: json: unknown field "replacements"`, while
-executing any of the setup scripts, you will need to update your `kubectl`.
-
-:gear: Install the latest kubectl: https://kubernetes.io/docs/tasks/tools/#kubectl
-
-# Restarting the Cluster
-
-When running on Kind, and the host has been restarted or taken out of sleep mode, or if
-you're unable to troubleshoot some other issues, you may need to restart the container
-on which the Kind cluster runs.
-
-If you do that, you'd have to, once more, **increase the PID limit** for that container
-and the **open files limit** for the host (if the host was restarted), as explained in
-the [cluster setup instructions](../README.md#bootstrapping-the-cluster).
-
-:gear: Restart the container (if using Docker, replace `podman` with `docker`):
+This error appears when kubectl is too old to support Kustomize features. Install kubectl v1.31.4 or newer:
 
 ```bash
-podman restart konflux-control-plane
+# macOS
+brew upgrade kubectl
+
+# Linux - see https://kubernetes.io/docs/tasks/tools/#kubectl
 ```
 
-:gear: Increase the [PID limit](../README.md#bootstrapping-the-cluster).
+## GitHub Integration Issues
 
-**Note:** It might take a few minutes for the UI to become available once the container
-is restarted.
+### Pipelines Not Triggering
 
-# Unable to Create Application with Component Using the Konflux UI
+Pull request events don't trigger pipeline runs.
 
-If you see error `404 Not Found` when trying to create an Application with a Component
-using the Konflux UI, this is most probably because image-controller was not properly
-installed before trying to onboard the application. Refer to the Quay.io application
-[setup step](../README.md#option-1-onboard-application-with-the-konflux-ui) and try
-again.
+Verify GitHub App installation. Navigate to your GitHub App settings and confirm the app is installed on the repository. Check that webhook events are configured and the webhook URL points to your smee channel (for Kind) or cluster ingress (for production).
 
-# PR changes are not Triggering Pipelines
+Confirm events reach the smee channel. For Kind clusters, navigate to your smee channel URL in a browser. After creating a PR, verify events appear (look for `pull_request` and `check_run` events).
 
-Follow this procedure if you create a PR or make changes to a PR and a pipeline is not
-triggered:
-
-1. :gear: Confirm that events were logged to the smee channel. if not, verify your steps
-   for setting up the GitHub app and installing the app to your fork repository.
-
-2. Confirm that events are being relayed by the smee client:
-
-   :gear: List the pods under the `smee-client` namespace and check the logs of the pod
-   on the namespace. Those should have mentions of the channel events being forwarded to
-   pipelines-as-code.
+Check smee client logs:
 
 ```bash
 kubectl get pods -n smee-client
-kubectl logs -n smee-client gosmee-client-<some-id>
+kubectl logs -n smee-client gosmee-client-<pod-id>
 ```
 
-3. :gear: If the pod is not there or the logs do not include the mentioned entries,
-   confirm you properly set the **smee channel** on the smee-client manifest and that
-   you deploy the manifest to your cluster.
+The logs should show events being forwarded to pipelines-as-code.
+
+If the smee client is not running or not logging events, verify the smee channel URL is correctly configured:
 
 ```bash
-kubectl delete -f ./smee/smee-client.yaml
-<fix the manifests>
-kubectl create -f ./smee/smee-client.yaml
+kubectl get configmap -n smee-client gosmee-client -o yaml
 ```
 
-**Note:** if the host machine goes to sleep mode, the smee client might stop responding
-to events on the smee channel, once the host is up again. This can be addressed by
-deleting the client pod and waiting for it to be recreated.
-
-:gear: Delete the smee client:
+Fix and redeploy if needed:
 
 ```bash
-kubectl get pods -n smee-client
-kubectl delete pods -n smee-client gosmee-client-<some-id>
+kubectl delete -f ./dependencies/smee/smee-client.yaml
+# Fix the manifest
+kubectl create -f ./dependencies/smee/smee-client.yaml
 ```
 
-4. Check the pipelines-as-code **controller** logs to see that events are being properly
-   linked to the Repository resource. If you see log entries mentioning a repository
-   resource cannot be found, compare the repository mentioned on the logs to the one
-   deployed when creating the application and component resources. Fix the Repository
-   resource manifest and redeploy it.
-
-   **Note:** this should only be relevant if the application was onboarded manually
-   (i.e. not using the Konflux UI).
-
-   :gear: Identify the pod and examine the logs:
+Examine pipelines-as-code controller logs:
 
 ```bash
 kubectl get pods -n pipelines-as-code
-kubectl logs -n pipelines-as-code pipelines-as-code-controller-<some-id>
-<fix the manifests>
-kubectl apply -f ./test/resources/demo-users/user/ns2/application-and-component.yaml
+kubectl logs -n pipelines-as-code pipelines-as-code-controller-<pod-id>
 ```
 
-5. If the pipelines-as-code logs mention secret `pipelines-as-code-secret` is
-   missing/malformed, make sure you created the secret for the GitHub app, providing
-   values for fields `github-private-key`, `github-application-id` and `webhook.secret`
-   for the app your created.
+Look for errors related to repository matching or webhook processing.
 
-   :gear: If the secret needs to be fixed, delete it (see command below) and deploy it
-   once more based on the Pipelines as Code
-   [instructions](../README.md#enable-pipelines-triggering-via-webhooks).
+Verify the Repository resource matches the repository in GitHub:
+
+```bash
+kubectl get repository -A
+kubectl describe repository <repository-name> -n <namespace>
+```
+
+The repository URL in the Resource must match the repository URL in GitHub events.
+
+Check for missing or incorrect secrets:
+
+```bash
+kubectl get secret pipelines-as-code-secret -n pipelines-as-code
+kubectl get secret pipelines-as-code-secret -n build-service
+kubectl get secret pipelines-as-code-secret -n integration-service
+```
+
+If secrets are missing or incorrect, delete and recreate them:
 
 ```bash
 kubectl delete secret pipelines-as-code-secret -n pipelines-as-code
+
+kubectl create secret generic pipelines-as-code-secret \
+  -n pipelines-as-code \
+  --from-file=github-private-key=/path/to/github-app.pem \
+  --from-literal=github-application-id="123456" \
+  --from-literal=webhook.secret="your-webhook-secret"
 ```
 
-6. :gear: On the PR page, type `/retest` on the comment box and post the comment.
-   Observe the behavior once more.
+Repeat for build-service and integration-service namespaces.
 
-# PR Fails when Webhook Secret was not Added
+Add a `/retest` comment to your PR to trigger a new build.
 
-If a webhook secret is not added when creating a Github App, PR pipelines will fail
-and the following error will show up in the PR logs:
+### Webhook Secret Missing
 
-```
-There was an issue validating the commit: "could not validate payload, check your webhook secret?: no signature has been detected, for security reason we are not allowing webhooks that has no secret"
-```
+Pipelines fail with the error "could not validate payload, check your webhook secret?"
 
-To resolve this issue, go to the Github App you created and check Webhook Secret is
-added there. Please refer to 
-[this document](https://pipelinesascode.com/docs/install/github_apps/#manual-setup)
-on how to create webhook secret.
+This indicates the GitHub App webhook secret is missing. Navigate to your GitHub App settings, verify a webhook secret is configured, then update the Kubernetes secrets with the correct value.
 
-# Setup Scripts Fail or Pipeline Execution Stuck or Fails
+See the [Pipelines-as-Code documentation](https://pipelinesascode.com/docs/install/github_apps/#manual-setup) for webhook secret generation instructions.
 
-## Running out of Resources
+### Smee Client Not Responding
 
-If setup scripts fail or pipelines are stuck or tend to fail at relatively random
-stages, it might be that the cluster is running out of resources.
+The smee client may stop responding after the host machine sleeps or restarts.
 
-That could be:
-
-* Open files limit.
-* Open threads limit.
-* Cluster running out of memory.
-
-The symptoms may include:
-
-* Setup scripts fail.
-* Pipelines are triggered, but seem stuck and listing the pods on the user namespace
-  (e.g. running `kubectl get pods -n user-ns2`) shows pods stuck in pending for a long
-  time. Checking the detailed output of pods with pending status `kubectl describe
-  pods/<pod name with pending status> -n user-ns2`, shows following error:
-  ```
-  Warning  FailedScheduling  5m59s  default-scheduler  running PreBind plugin "VolumeBinding": binding volumes: context deadline exceeded
-  ```
-* Pipelines fail at inconsistent stages.
-
-:gear: For mitigation steps, consult the notes at the top of the
-[cluster setup instructions](../README.md#bootstrapping-the-cluster).
-
-:gear: As last resort, you could restart the container running the cluster node. To do
-that, refer to the instructions for [restarting the cluster](#restarting-the-cluster).
-
-## Unable to Bind PVCs
-The `deploy-deps.sh` script includes a check to verify whether PVCs on the default
-storage class can be bind. If volume claims are unable to be fulfilled, the script will
-fail, displaying:
+Delete the smee client pod to force recreation:
 
 ```bash
-error: timed out waiting for the condition on persistentvolumeclaims/test-pvc
-... Test PVC unable to bind on default storage class
+kubectl get pods -n smee-client
+kubectl delete pod -n smee-client gosmee-client-<pod-id>
 ```
 
-:gear: If using Kind, try to [restart the container](#restarting-the-cluster).
+Kubernetes automatically creates a new pod that reconnects to the smee channel.
 
-:gear: Otherwise, ensure that PVCs (Persistent Volume Claims) can be allocated for the
-cluster's default storage class.
+## Authentication Issues
 
-## Release Fails
+### Demo Login Fails
 
-If a release is triggered, but then fails, check the logs of the pods on the managed
-namespace (e.g. `managed-ns2`).
+Demo users are configured but login fails at the UI.
 
-:gear: List the pods and look for ones with status `Error`:
+Verify demo users are configured in the KonfluxUI CR:
+
+```bash
+kubectl get konfluxui konflux-ui -n konflux-ui -o jsonpath='{.spec.dex.config.staticPasswords}' | jq
+```
+
+If empty, demo users are not configured. See [Demo Users Configuration](demo-users.md) for setup instructions.
+
+Check Dex pod status and logs:
+
+```bash
+kubectl get pods -n konflux-ui -l app=dex
+kubectl logs -n konflux-ui deployment/dex
+```
+
+Verify the Dex ConfigMap contains static passwords:
+
+```bash
+kubectl get configmap -n konflux-ui -o name | grep dex
+kubectl get configmap <dex-configmap-name> -n konflux-ui -o yaml | grep -A 10 staticPasswords
+```
+
+If the ConfigMap doesn't match the KonfluxUI CR, the operator may not be reconciling. Check operator logs:
+
+```bash
+kubectl logs -n konflux-operator deployment/konflux-operator-controller-manager
+```
+
+### Connector Authentication Fails
+
+GitHub OAuth or other connector authentication fails.
+
+Verify connector configuration in the KonfluxUI CR:
+
+```bash
+kubectl get konfluxui konflux-ui -n konflux-ui -o jsonpath='{.spec.dex.config.connectors}' | jq
+```
+
+Check that client ID and client secret are correct. Verify the redirect URI matches your OAuth application configuration (should be `https://your-host/idp/callback`).
+
+Examine Dex logs for authentication errors:
+
+```bash
+kubectl logs -n konflux-ui deployment/dex | grep -i error
+```
+
+Common issues include incorrect client credentials, misconfigured redirect URI, or network connectivity issues between Dex and the identity provider.
+
+### Locked Out After Disabling Password DB
+
+You disabled the password database without configuring a connector.
+
+Re-enable the password database temporarily through a CR patch:
+
+```bash
+kubectl patch konfluxui konflux-ui -n konflux-ui --type=merge -p '
+spec:
+  dex:
+    config:
+      enablePasswordDB: true
+      staticPasswords:
+      - email: "admin@konflux.dev"
+        username: "admin"
+        userID: "temp-admin"
+        hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" # gitleaks:allow
+'
+```
+
+Wait for Dex to restart, log in, configure a proper connector, test the connector works, then disable the password database again.
+
+## Pipeline Execution Issues
+
+### Pipelines Stuck or Fail Randomly
+
+Pipelines become stuck in pending state or fail inconsistently at different stages.
+
+This usually indicates resource exhaustion. Check inotify limits, PID limits, and available cluster memory as described in the [Insufficient Resources](#insufficient-resources) section.
+
+For Kind clusters, verify system limits are increased and the PID limit is set on the cluster container.
+
+For macOS users, ensure the Podman machine has sufficient memory allocated. See [Mac Setup Guide](mac-setup.md#insufficient-memory).
+
+Monitor resource usage during pipeline execution:
+
+```bash
+kubectl top nodes
+kubectl top pods -n <user-namespace>
+```
+
+### Builds Fail Due to Resource Limits
+
+TaskRuns fail with OOMKilled status or CPU throttling.
+
+Kyverno policies reduce resource requirements for known tasks. Verify Kyverno is running:
+
+```bash
+kubectl get pods -n kyverno
+```
+
+Check Kyverno policies:
+
+```bash
+kubectl get clusterpolicy
+```
+
+Add policies for additional resource-intensive tasks by matching pod labels. See [this example](../dependencies/kyverno/policy/pod-requests-del.yaml) for reference.
+
+Alternatively, increase cluster resources or reduce concurrent pipeline execution.
+
+## Application Onboarding Issues
+
+### Unable to Create Application via UI
+
+The UI returns "404 Not Found" when creating an application with a component.
+
+This indicates image-controller is not properly configured. Verify image-controller is enabled in your Konflux CR:
+
+```yaml
+imageController:
+  enabled: true
+```
+
+Verify the Quay token secret exists:
+
+```bash
+kubectl get secret -n image-controller quay-token
+```
+
+See [automatic repository provisioning documentation](registry-configuration.md#automatic-repository-provisioning-quayio) for image-controller configuration.
+
+### Repository Resource Not Found
+
+Pipelines-as-code controller logs show "repository resource cannot be found."
+
+This occurs when the Repository resource name doesn't match the repository referenced in webhook events.
+
+List Repository resources:
+
+```bash
+kubectl get repository -A
+```
+
+Describe the resource to see its configuration:
+
+```bash
+kubectl describe repository <name> -n <namespace>
+```
+
+Edit the Repository resource to match the repository URL in GitHub:
+
+```bash
+kubectl edit repository <name> -n <namespace>
+```
+
+Or redeploy the application-and-component manifest with the corrected URL:
+
+```bash
+kubectl apply -f ./test/resources/demo-users/user/ns2/application-and-component.yaml
+```
+
+## Release Issues
+
+### Release Fails to Complete
+
+A release is triggered but fails during execution.
+
+List pods in the managed namespace to find failed pods:
 
 ```bash
 kubectl get pods -n managed-ns2
 ```
 
-:gear: Check the logs of the pods with status `Error`:
+Check logs of pods with Error status:
 
 ```bash
-kubectl logs -n managed-ns2 managed-7lxdn-push-snapshot-pod
+kubectl logs -n managed-ns2 <pod-name>
 ```
 
-Compare the logs to the [common release issues](#common-release-issues) below.
+Common release failures include:
 
-:gear: Once you addressed the issue, create a PR and merge it, or directly push a change
-to the main branch, so that the on-push pipeline is triggered.
+**Unfinished string at EOF:** The `repository` field in ReleasePlanAdmission is empty or malformed.
 
-### Common Release Issues
-
-#### Unfinished string at EOF
-
-The logs contain statements similar to this:
+Verify the ReleasePlanAdmission configuration:
 
 ```bash
-++ jq -r .containerImage
-parse error: Unfinished string at EOF at line 2, column 0
+kubectl get releaseplanadmission -n managed-ns2 -o yaml
 ```
 
-**Solution**:
+Fix the `repository` field under `mapping.components`:
 
-:gear: Verify that you provided a value to the `repository` field inside
-the [rpa.yaml file](../test/resources/demo-users/user/managed-ns2/rpa.yaml).
+```yaml
+mapping:
+  components:
+    - name: test-component
+      repository: quay.io/my-user/my-component
+```
 
-:gear: Complete the value and redeploy the manifest:
+Redeploy:
 
 ```bash
 kubectl apply -k ./test/resources/demo-users/user/managed-ns2
 ```
 
-#### 400 Bad Request
+**400 Bad Request from registry:** The push secret is missing or incorrect in the managed namespace.
 
-The logs contain statements similar to this:
+Verify the secret exists:
 
 ```bash
-Error: PUT https://quay.io/...: unexpected status code 400 Bad Request: <html>
-<head><title>400 Bad Request</title></head>
-<body>
-<center><h1>400 Bad Request</h1></center>
-</body>
-</html>
-
-main.go:74: error during command execution: PUT https://quay.io/...: unexpected status code 400 Bad Request: <html>
-<head><title>400 Bad Request</title></head>
-<body>
-<center><h1>400 Bad Request</h1></center>
-</body>
-</html>
+kubectl get secret -n managed-ns2
 ```
 
-**Solution**:
+Create the push secret following [registry secret instructions](registry-configuration.md#configuring-a-push-secret-for-the-release-pipeline).
 
-:gear: verify that you
-[created the registry secret](./quay.md#configuring-a-push-secret-for-the-release-pipeline)
-also for the managed namespace.
+Trigger a new release by pushing a commit or merging a PR.
+
+## Platform-Specific Issues
+
+### macOS Port Conflicts
+
+macOS uses port 5000 for the AirPlay Receiver service, which conflicts with the default registry port used by some container tools.
+
+**Disable AirPlay Receiver:** Open System Settings, navigate to General → AirDrop & Handoff, and turn off AirPlay Receiver. This frees port 5000 for other uses.
+
+**Use Alternative Port:** The Konflux templates default to port 5001 to avoid this conflict. Verify your `scripts/deploy-local-dev.env` contains:
+
+```bash
+REGISTRY_HOST_PORT=5001
+```
+
+The internal registry becomes accessible at localhost:5001 from your host machine.
+
+**Disable Port Binding:** To make the registry accessible only from within the cluster, disable host port binding:
+
+```bash
+ENABLE_REGISTRY_PORT=0
+```
+
+This prevents port conflicts but requires accessing the registry through kubectl port-forwarding.
+
+**Verify Port Availability:** Check if a port is in use before deployment:
+
+```bash
+lsof -i :5000
+lsof -i :5001
+```
+
+No output indicates the port is available. If you see output, another process is using the port.
+
+### macOS Memory Issues
+
+Podman machine runs out of memory during builds.
+
+Check current memory allocation:
+
+```bash
+podman machine inspect | grep Memory
+```
+
+Create a new machine with more memory:
+
+```bash
+podman machine stop
+podman machine rm konflux-dev
+podman machine init --memory 20480 --cpus 6 --rootful konflux-dev
+podman machine start konflux-dev
+```
+
+Configure the deployment to use the new machine:
+
+```bash
+# In scripts/deploy-local-dev.env
+PODMAN_MACHINE_NAME="konflux-dev"
+```
+
+See [Mac Setup Guide](mac-setup.md#memory-and-cpu-recommendations) for detailed sizing guidance.
+
+### macOS ARM64 Issues
+
+Deployment automatically detects ARM64 architecture and uses the appropriate Kind configuration.
+
+Verify detection:
+
+```bash
+uname -m
+# Should show: arm64
+```
+
+Verify the correct Kind config is being used:
+
+```bash
+ls -l kind-config-arm64.yaml
+```
+
+If you encounter architecture-related issues, explicitly specify the Kind config:
+
+```bash
+kind create cluster --name konflux --config kind-config-arm64.yaml
+```
+
+### Kind Cluster Creation Fails
+
+If cluster creation hangs or fails, verify your container runtime is running.
+
+**Podman users:**
+
+```bash
+podman machine list
+```
+
+Restart the Podman machine:
+
+```bash
+podman machine stop
+podman machine start
+```
+
+**Docker users:**
+
+Verify Docker Desktop is running and healthy.
+
+**Clean up and retry:**
+
+```bash
+kind delete cluster --name konflux
+./scripts/deploy-local-dev.sh my-konflux.yaml
+```
+
+## Cluster Restart Issues
+
+### Cluster Needs Restart
+
+The host machine was restarted, went to sleep, or the cluster is experiencing persistent issues.
+
+Restart the Kind cluster container:
+
+```bash
+# Podman
+podman restart konflux-control-plane
+
+# Docker
+docker restart konflux-control-plane
+```
+
+Reapply system limits after restart:
+
+```bash
+# Increase inotify limits (if host was restarted)
+sudo sysctl fs.inotify.max_user_watches=524288
+sudo sysctl fs.inotify.max_user_instances=512
+
+# Increase PID limit
+podman update --pids-limit 4096 konflux-control-plane
+```
+
+Wait several minutes for the UI to become available. The cluster components need time to restart.
+
+## Docker Rate Limiting
+
+Docker Hub enforces rate limits on image pulls. When you exceed these limits, deployments fail with "toomanyrequests" errors. You can detect this issue by checking Kubernetes events for rate limiting messages, then pre-load affected images into your Kind cluster to avoid pulling from Docker Hub.
+
+### Detecting Rate Limit Errors
+
+Check your cluster events for rate limiting messages:
+
+```bash
+kubectl get events -A | grep toomanyrequests
+```
+
+If this command returns any events, you're experiencing Docker Hub rate limiting.
+
+### Pre-loading Images
+
+Pre-load the affected image into your Kind cluster to bypass Docker Hub pulls. This example demonstrates the process with the registry image, but you can apply the same steps to any rate-limited image.
+
+First, authenticate with Docker Hub (optional but recommended to increase your rate limit):
+
+```bash
+podman login docker.io
+```
+
+Then pull and load the image into your Kind cluster:
+
+```bash
+# Pull the image (uses authentication if configured)
+podman pull registry:2
+
+# Load it into your Kind cluster
+kind load docker-image registry:2 --name konflux
+```
+
+Once the image is pre-loaded, continue with your normal deployment:
+
+```bash
+./deploy-deps.sh
+```
+
+The deployment will now use the pre-loaded image instead of pulling from Docker Hub, avoiding rate limit issues.
+
+## Getting Help
+
+If you encounter issues not covered in this guide:
+
+1. Check the [operator logs](#operator-not-starting) for error messages
+2. Review [component-specific logs](#components-not-deploying) for failure details
+3. Verify your configuration against the [sample Konflux CRs](../operator/config/samples/)
+4. Search existing [GitHub issues](https://github.com/konflux-ci/konflux-ci/issues)
+5. Create a new issue with relevant logs and configuration
+
+Include these details when reporting issues:
+
+- Kubernetes version and platform (Kind, OpenShift, EKS, etc.)
+- Operator version
+- Relevant CR configuration (sanitized to remove secrets)
+- Error messages from operator and component logs
+- Output of `kubectl get konflux konflux -o yaml`
+
+## Related Documentation
+
+- [Operator Deployment Guide](operator-deployment.md) - Deployment instructions
+- [Mac Setup Guide](mac-setup.md) - macOS-specific configuration
+- [Demo Users Configuration](demo-users.md) - Authentication setup
+- [Konflux Operator Samples](../operator/config/samples/) - Example configurations
