@@ -1,31 +1,47 @@
 # Demo Users Configuration
 
-Demo users provide a simple authentication method for local development and testing of Konflux. They use static passwords stored in the Dex configuration.
+**WARNING:** Demo users are for TESTING ONLY and must NEVER be used in production environments.
 
-**WARNING:** Demo users are for **TESTING ONLY**. Never use them in production environments.
+Demo users use publicly known passwords that provide no security. Anyone with access to this documentation knows the credentials. Use demo users only for local development, testing authentication flows, and demonstration environments that contain no sensitive data.
 
-## Default Demo Credentials
+## Security Considerations
 
-- **user1@konflux.dev** / password
-- **user2@konflux.dev** / password
+Demo users create these security risks:
 
-## Quick Start
+Hardcoded passwords that everyone knows ("password"), credentials stored in public Git repositories where anyone can read the bcrypt hashes, no password rotation mechanism, no audit logging to track who used which demo account, and shared credentials used by multiple people.
 
-### Automated Setup
+**Production authentication:** Configure proper identity providers through the Konflux CR. Use GitHub OAuth for GitHub accounts, Google OIDC for Google Workspace, LDAP for corporate directories, or OpenShift's built-in authentication on OpenShift clusters.
 
-Use the deployment script to automatically configure demo users:
+See the [Operator Deployment Guide](operator-deployment.md#authentication) for connector configuration examples.
+
+## Default Credentials
+
+The automated deployment creates two demo users:
+
+- Username: `user1@konflux.dev` / Password: `password`
+- Username: `user2@konflux.dev` / Password: `password`
+
+Each user has a corresponding namespace (`user-ns1`, `user-ns2`) and managed namespace (`managed-ns1`, `managed-ns2`) for testing releases.
+
+## Automated Deployment
+
+The local development script deploys demo users by default for convenience.
+
+Deploy using the script:
 
 ```bash
 ./scripts/deploy-demo-resources.sh
 ```
 
-This script:
-- Configures demo users via the KonfluxUI custom resource
-- Deploys demo namespaces and RBAC for testing
+This script configures demo users in the KonfluxUI custom resource, creates demo namespaces with appropriate labels, deploys RBAC resources granting demo users access to their namespaces, and creates managed namespaces for testing releases.
 
-### Manual Configuration
+To disable demo user deployment, set `DEPLOY_DEMO_RESOURCES=0` in `scripts/deploy-local-dev.env` before running `./scripts/deploy-local-dev.sh`.
 
-Configure demo users via the `KonfluxUI` custom resource:
+## Manual Configuration
+
+Configure demo users manually through the KonfluxUI custom resource rather than patching Dex directly.
+
+Patch the existing KonfluxUI resource:
 
 ```bash
 kubectl patch konfluxui konflux-ui -n konflux-ui --type=merge -p '
@@ -45,7 +61,7 @@ spec:
 '
 ```
 
-Alternatively, include `staticPasswords` in your Konflux CR when deploying:
+Or include `staticPasswords` in your Konflux CR during deployment:
 
 ```yaml
 apiVersion: konflux.konflux-ci.dev/v1alpha1
@@ -67,28 +83,19 @@ spec:
             username: "user2"
             userID: "ea8e8ee1-2283-4e03-83d4-b00f8b821b64"
             hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" # gitleaks:allow
-  # ... rest of your Konflux configuration
 ```
 
-## How It Works
+The operator manages Dex configuration through the KonfluxUI custom resource. When you update the CR, the operator generates a new Dex ConfigMap and restarts Dex automatically.
 
-The Konflux operator manages Dex configuration through the `KonfluxUI` custom resource. Demo users are configured by:
-
-1. Setting `spec.dex.config.enablePasswordDB: true`
-2. Adding entries to `spec.dex.config.staticPasswords[]`
-
-The operator automatically:
-- Generates a Dex ConfigMap with the static passwords
-- Restarts Dex when the configuration changes
-- Maintains the configuration (manual patches to Dex will be reverted)
-
-**Do NOT manually patch the Dex deployment or ConfigMap** - the operator owns these resources and will revert changes.
+**Do not manually patch the Dex deployment or ConfigMap.** The operator owns these resources and reverts manual changes during reconciliation.
 
 ## Adding Custom Demo Users
 
+Create additional demo users for specific testing scenarios.
+
 ### Generate Password Hash
 
-Demo users require bcrypt-hashed passwords. Generate a hash:
+Demo users require bcrypt-hashed passwords. Generate a hash using htpasswd:
 
 ```bash
 echo "your-password" | htpasswd -BinC 10 admin | cut -d: -f2
@@ -100,7 +107,17 @@ Or using Python:
 python3 -c 'import bcrypt; print(bcrypt.hashpw(b"your-password", bcrypt.gensalt(10)).decode())'
 ```
 
-### Add to KonfluxUI CR
+### Generate Unique User ID
+
+Create a unique UUID for the user:
+
+```bash
+uuidgen | tr '[:upper:]' '[:lower:]'
+```
+
+### Add to Configuration
+
+Patch the KonfluxUI CR with the new user:
 
 ```bash
 kubectl patch konfluxui konflux-ui -n konflux-ui --type=merge -p '
@@ -115,121 +132,35 @@ spec:
 '
 ```
 
-### Generate Unique User ID
-
-```bash
-uuidgen | tr '[:upper:]' '[:lower:]'
-```
-
-## Removing Demo Users
-
-### Remove All Demo Users
-
-```bash
-kubectl patch konfluxui konflux-ui -n konflux-ui --type=json -p='[
-  {"op": "remove", "path": "/spec/dex/config/staticPasswords"}
-]'
-```
-
-### Remove Specific Demo User
-
-View current users:
-
-```bash
-kubectl get konfluxui konflux-ui -n konflux-ui -o jsonpath='{.spec.dex.config.staticPasswords}' | jq
-```
-
-Update with only the users you want to keep:
-
-```bash
-kubectl patch konfluxui konflux-ui -n konflux-ui --type=merge -p '
-spec:
-  dex:
-    config:
-      staticPasswords:
-      - email: "user1@konflux.dev"
-        # ... only users you want to keep
-'
-```
+This merges the new user into the existing `staticPasswords` array without removing existing users.
 
 ## Demo Namespaces and RBAC
 
-The demo resources script also deploys test namespaces and RBAC:
+Demo resources include namespaces and role bindings for testing.
 
-- **ns1**, **ns2** - User namespaces for demo users
-- **managed-ns1**, **managed-ns2** - Managed namespaces for release testing
-- **ClusterRoles** - Permissions for demo users to create components, applications, etc.
+The deployment creates these resources:
 
-These are defined in `test/resources/demo-users/user/`.
+- **user-ns1**, **user-ns2** - Development namespaces where demo users create applications and components
+- **managed-ns1**, **managed-ns2** - Managed namespaces simulating production environments for release testing
+- **ClusterRoles** - Permissions allowing demo users to create Konflux resources
 
-To deploy only the namespaces without demo users:
+These resources are defined in `test/resources/demo-users/user/`.
+
+Deploy only the namespaces without configuring demo users:
 
 ```bash
 kubectl apply -k test/resources/demo-users/user/
 ```
 
-## Troubleshooting
+This creates the namespace structure and RBAC while leaving authentication configuration unchanged.
 
-### Demo Login Fails After Configuration
+## Removing Demo Users
 
-**Symptom:** Login with demo credentials fails even after patching KonfluxUI CR.
+Remove demo users completely or selectively based on your needs.
 
-**Solutions:**
+### Remove All Demo Users
 
-1. Verify the configuration was applied:
-   ```bash
-   kubectl get konfluxui konflux-ui -n konflux-ui -o jsonpath='{.spec.dex.config.staticPasswords}' | jq
-   ```
-
-2. Check if Dex has restarted:
-   ```bash
-   kubectl get pods -n konflux-ui -l app=dex
-   kubectl rollout status deployment/dex -n konflux-ui
-   ```
-
-3. Verify the Dex ConfigMap contains static passwords:
-   ```bash
-   kubectl get configmap -n konflux-ui | grep dex
-   kubectl get configmap <dex-configmap-name> -n konflux-ui -o yaml | grep -A 10 staticPasswords
-   ```
-
-4. Check Dex logs for authentication errors:
-   ```bash
-   kubectl logs -n konflux-ui deployment/dex
-   ```
-
-### Operator Reverts Manual Changes
-
-**Symptom:** Manual patches to Dex deployment or ConfigMap are reverted.
-
-**Explanation:** This is expected behavior. The operator owns Dex resources and reconciles them to match the `KonfluxUI` CR specification.
-
-**Solution:** Always configure Dex through the `KonfluxUI` CR, never manually.
-
-## Security Considerations
-
-### Why Demo Users Are Insecure
-
-1. **Hardcoded passwords** - Everyone knows "password"
-2. **Stored in Git** - Hashes are public in the repository
-3. **No password rotation** - Static credentials never change
-4. **No audit logging** - Can't track who used which demo account
-5. **Shared credentials** - Multiple people use the same accounts
-
-### Production Authentication
-
-For production or shared environments, use real identity providers:
-
-- **GitHub OAuth** - Authenticate with GitHub accounts
-- **Google OAuth** - Authenticate with Google accounts
-- **LDAP** - Authenticate against corporate directory
-- **OpenShift** - Use cluster's built-in authentication (on OpenShift)
-
-See `operator/config/samples/konflux_v1alpha1_konfluxui.yaml` for connector examples.
-
-### Disabling Password Database
-
-To disable local password authentication entirely:
+Disable the password database entirely:
 
 ```bash
 kubectl patch konfluxui konflux-ui -n konflux-ui --type=merge -p '
@@ -240,11 +171,124 @@ spec:
 '
 ```
 
-Note: Ensure you have at least one connector configured before disabling the password database.
+Or remove the `staticPasswords` array while keeping the password database enabled:
+
+```bash
+kubectl patch konfluxui konflux-ui -n konflux-ui --type=json -p='[
+  {"op": "remove", "path": "/spec/dex/config/staticPasswords"}
+]'
+```
+
+Ensure you have at least one connector configured before disabling the password database, or you will lock yourself out.
+
+### Remove Specific Demo User
+
+View current users:
+
+```bash
+kubectl get konfluxui konflux-ui -n konflux-ui -o jsonpath='{.spec.dex.config.staticPasswords}' | jq
+```
+
+Update the CR with only the users you want to keep:
+
+```bash
+kubectl patch konfluxui konflux-ui -n konflux-ui --type=merge -p '
+spec:
+  dex:
+    config:
+      staticPasswords:
+      - email: "user1@konflux.dev"
+        username: "user1"
+        userID: "7138d2fe-724e-4e86-af8a-db7c4b080e20"
+        hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" # gitleaks:allow
+'
+```
+
+This replaces the entire `staticPasswords` array with your specified users.
+
+### Remove Demo Namespaces
+
+Delete the demo user namespaces and RBAC:
+
+```bash
+kubectl delete namespace user-ns1 user-ns2 managed-ns1 managed-ns2
+kubectl delete clusterrole konflux-admin-user-actions
+kubectl delete -k test/resources/demo-users/user/
+```
+
+## Troubleshooting
+
+### Demo Login Fails
+
+Verify the configuration was applied to the KonfluxUI CR:
+
+```bash
+kubectl get konfluxui konflux-ui -n konflux-ui -o jsonpath='{.spec.dex.config.staticPasswords}' | jq
+```
+
+Check if Dex restarted after the configuration change:
+
+```bash
+kubectl get pods -n konflux-ui -l app=dex
+kubectl rollout status deployment/dex -n konflux-ui
+```
+
+Verify the Dex ConfigMap contains static passwords. The operator generates this ConfigMap from the KonfluxUI CR:
+
+```bash
+kubectl get configmap -n konflux-ui -o name | grep dex
+kubectl get configmap <dex-configmap-name> -n konflux-ui -o yaml | grep -A 10 staticPasswords
+```
+
+Check Dex logs for authentication errors:
+
+```bash
+kubectl logs -n konflux-ui deployment/dex
+```
+
+### Operator Reverts Manual Changes
+
+The operator owns the Dex deployment and ConfigMap. It reconciles these resources to match the KonfluxUI CR specification. Manual patches to Dex resources are reverted automatically.
+
+Always configure Dex through the KonfluxUI CR. Never manually edit the Dex deployment, ConfigMap, or service.
+
+### Password Hash Not Working
+
+Verify you generated the hash correctly. The hash must use bcrypt with cost factor 10:
+
+```bash
+# Test your hash
+python3 -c 'import bcrypt; print(bcrypt.checkpw(b"password", b"$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"))'
+# Should print: True
+```
+
+Ensure the hash in your CR includes the full bcrypt string including the `$2a$10$` prefix.
+
+### Cannot Access UI After Disabling Demo Users
+
+If you disabled the password database without configuring a connector, you locked yourself out.
+
+Re-enable the password database temporarily:
+
+```bash
+kubectl patch konfluxui konflux-ui -n konflux-ui --type=merge -p '
+spec:
+  dex:
+    config:
+      enablePasswordDB: true
+      staticPasswords:
+      - email: "admin@konflux.dev"
+        username: "admin"
+        userID: "temporary-admin-id"
+        hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" # gitleaks:allow
+'
+```
+
+Configure your desired connector, test that it works, then disable the password database again.
 
 ## References
 
-- [Dex Documentation](https://dexidp.io/docs/)
-- [Dex Static Password Configuration](https://dexidp.io/docs/connectors/local/)
-- [KonfluxUI CRD Reference](../operator/config/crd/bases/konflux.konflux-ci.dev_konfluxuis.yaml)
-- [Demo User Resources](../test/resources/demo-users/)
+- [Dex Documentation](https://dexidp.io/docs/) - Complete Dex reference
+- [Dex Static Password Configuration](https://dexidp.io/docs/connectors/local/) - Password connector details
+- [Dex Connectors](https://dexidp.io/docs/connectors/) - Production identity providers
+- [Operator Deployment Guide](operator-deployment.md#authentication) - Connector examples

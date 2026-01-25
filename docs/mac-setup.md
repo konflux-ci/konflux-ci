@@ -1,16 +1,6 @@
 # Konflux Setup Guide for macOS
 
-This guide covers macOS-specific setup for running Konflux locally using Kind and Podman.
-
-## Table of Contents
-
-- [Prerequisites](#prerequisites)
-- [Podman Installation](#podman-installation)
-- [Podman Machine Configuration](#podman-machine-configuration)
-- [Port 5000 Conflict Resolution](#port-5000-conflict-resolution)
-- [Architecture Support](#architecture-support)
-- [Memory and CPU Recommendations](#memory-and-cpu-recommendations)
-- [Common Issues](#common-issues)
+This guide covers macOS-specific configuration for running Konflux locally using Kind and Podman.
 
 ## Prerequisites
 
@@ -20,212 +10,127 @@ Install required tools using Homebrew:
 brew install kind kubectl podman
 ```
 
-## Podman Installation
+## Podman on macOS
 
-Podman replaces Docker on macOS for running Konflux. It provides a lightweight, daemonless container runtime.
+Podman provides a lightweight, daemonless alternative to Docker. On macOS, Podman runs containers inside a Linux virtual machine.
 
-### Basic Setup
+### Installation
+
+Install Podman from Homebrew:
 
 ```bash
-# Install Podman
 brew install podman
+```
 
-# Initialize default Podman machine
+Initialize the default Podman machine:
+
+```bash
 podman machine init
-
-# Start the machine
 podman machine start
 ```
 
-### Verify Installation
+Verify the installation:
 
 ```bash
-# Check Podman version
 podman version
-
-# List Podman machines
 podman machine list
-
-# Test Podman
 podman run hello-world
 ```
 
 ## Podman Machine Configuration
 
-For Konflux, you need a Podman machine with sufficient resources.
+Konflux requires a Podman machine with sufficient resources to run the Kind cluster and Konflux components.
 
-### Create Dedicated Podman Machine
+### Creating a Dedicated Machine
+
+Stop the default machine and create a dedicated machine with appropriate resources:
 
 ```bash
-# Stop default machine if running
 podman machine stop
-
-# Create new machine with proper resources
 podman machine init \
   --memory 16384 \
   --cpus 6 \
   --disk-size 100 \
   --rootful \
   konflux-dev
-
-# Start the machine
 podman machine start konflux-dev
-
-# Set as default
 podman system connection default konflux-dev
 ```
 
-### Resource Sizing
+The `--rootful` flag creates a machine running as root, which Kind requires for proper cluster operation. Memory is set to 16GB (16384 MB), CPUs to 6 cores, and disk size to 100GB.
 
-**Minimum Configuration:**
-- Memory: 12GB (12288 MB)
-- CPUs: 4
-- Disk: 50GB
+### Resource Requirements
 
-**Recommended Configuration:**
-- Memory: 16GB (16384 MB)
-- CPUs: 6
-- Disk: 100GB
+Minimum configuration requires 12GB memory (12288 MB), 4 CPU cores, and 50GB disk space. This supports basic Konflux operation with limited concurrent builds.
 
-**Why these resources?**
-- Kind cluster needs ~8GB for Konflux components
-- Podman VM overhead: ~4GB
-- Build pipelines: Additional memory/CPU during builds
+Recommended configuration uses 16GB memory (16384 MB), 6 CPU cores, and 100GB disk space. This provides comfortable headroom for multiple concurrent builds and smoother UI operation.
 
-### Using Specific Podman Machine
+The Kind cluster itself needs approximately 8GB for Konflux components. The Podman VM adds 4GB overhead. Build pipelines require additional memory and CPU during execution.
 
-If you have multiple Podman machines, specify which one to use:
+### Using a Specific Machine
+
+If you maintain multiple Podman machines, specify which one the deployment should use. Set `PODMAN_MACHINE_NAME` in `scripts/deploy-local-dev.env`:
 
 ```bash
-# In scripts/deploy-local-dev.env
 PODMAN_MACHINE_NAME="konflux-dev"
 ```
 
-The setup script will automatically switch to this machine and restore your default afterward.
+The deployment script switches to this machine automatically and restores your default connection afterward.
 
-### Check Current Machine Resources
+Check your current machine configuration:
 
 ```bash
-# View machine configuration
 podman machine inspect konflux-dev | grep -E '"Memory"|"CPUs"'
-
-# View running machine
 podman machine list
 ```
 
-## Port 5000 Conflict Resolution
+## Port Conflicts
 
-macOS uses port 5000 for the AirPlay Receiver service, which conflicts with the default registry port.
-
-### Option 1: Disable AirPlay Receiver (Recommended)
-
-1. Open System Settings
-2. Navigate to: **General → AirDrop & Handoff**
-3. Turn off: **AirPlay Receiver**
-
-### Option 2: Use Different Port
-
-```bash
-# In scripts/deploy-local-dev.env
-REGISTRY_HOST_PORT=5001
-```
-
-The default template already uses 5001 to avoid this conflict.
-
-### Option 3: Disable Port Binding
-
-```bash
-# In scripts/deploy-local-dev.env
-ENABLE_REGISTRY_PORT=0
-```
-
-Registry will only be accessible from within the cluster (not from host).
-
-### Verify Port Availability
-
-```bash
-# Check if port is in use
-lsof -i :5000
-lsof -i :5001
-
-# If port is free, no output is shown
-```
+For port conflicts on macOS, see [macOS Port Conflicts](troubleshooting.md#macos-port-conflicts).
 
 ## Architecture Support
 
-Konflux supports both Intel (x86_64) and Apple Silicon (ARM64) Macs.
-
-### Apple Silicon (M1/M2/M3)
-
-The setup scripts automatically detect ARM64 and use the appropriate Kind configuration.
-
-**Automatic Detection:**
-- Uses `kind-config-arm64.yaml` on ARM64 systems
-- No manual configuration needed
-
-**Verification:**
-
-```bash
-# Check architecture
-uname -m
-# Output: arm64 (Apple Silicon) or x86_64 (Intel)
-
-# Verify Kind config
-cat kind-config-arm64.yaml
-```
-
-### Intel Macs
-
-Intel Macs use the standard `kind-config.yaml` automatically.
-
-### Cross-Platform Builds
-
-For building images that work on both architectures:
-
-```bash
-# Build multi-arch image
-podman build --platform=linux/amd64,linux/arm64 -t myimage .
-
-# Or specify single platform
-podman build --platform=linux/arm64 -t myimage .
-```
+Konflux on macOS requires Apple Silicon (ARM64) Macs. The deployment scripts automatically detect ARM64 architecture and use `kind-config-arm64.yaml`. The ARM64 configuration includes architecture-specific container runtime settings and NodePort mappings optimized for Apple Silicon.
 
 ## Memory and CPU Recommendations
 
-### Development Workload
+Resource allocation depends on your development workload and available system resources.
 
-**Light Usage** (UI testing, single component):
-- KIND_MEMORY_GB: 8
-- Podman Memory: 12GB
-- Podman CPUs: 4
+### Light Development
 
-**Medium Usage** (multiple components, occasional builds):
-- KIND_MEMORY_GB: 12
-- Podman Memory: 16GB
-- Podman CPUs: 6
+For UI testing and building a single component, allocate 8GB to the Kind cluster and 12GB to the Podman machine with 4 CPU cores. Set `KIND_MEMORY_GB=8` in `scripts/deploy-local-dev.env`.
 
-**Heavy Usage** (full stack, frequent builds):
-- KIND_MEMORY_GB: 16
-- Podman Memory: 20GB
-- Podman CPUs: 8
+### Medium Development
 
-### Configure Memory
+For multiple components with occasional builds, allocate 12GB to the Kind cluster and 16GB to the Podman machine with 6 CPU cores. Set `KIND_MEMORY_GB=12`.
+
+### Heavy Development
+
+For full stack development with frequent builds, allocate 16GB to the Kind cluster and 20GB to the Podman machine with 8 CPU cores. Set `KIND_MEMORY_GB=16`.
+
+Configure memory allocation in `scripts/deploy-local-dev.env`:
 
 ```bash
-# In scripts/deploy-local-dev.env
 KIND_MEMORY_GB=12
-
-# Ensure Podman machine has enough (KIND_MEMORY_GB + 4GB overhead)
-podman machine init --memory 16384 ...
 ```
 
-### Monitor Resource Usage
+Ensure your Podman machine has sufficient memory to accommodate the Kind cluster plus overhead. The Podman machine needs KIND_MEMORY_GB plus 4GB for VM overhead.
+
+Initialize a Podman machine with 16GB memory:
 
 ```bash
-# View Podman machine resource usage
+podman machine init --memory 16384 --cpus 6 --rootful konflux-dev
+```
+
+### Monitoring Resources
+
+Monitor resource usage to identify bottlenecks:
+
+```bash
+# Inside Podman VM
 podman machine ssh -- top
 
-# View Kind node resources
+# Kubernetes node resources
 kubectl top nodes
 kubectl top pods -A
 ```
@@ -234,162 +139,113 @@ kubectl top pods -A
 
 ### Podman Machine Won't Start
 
-**Symptom:** `podman machine start` fails
-
-**Solution:**
+If `podman machine start` fails, the machine may be corrupted. Remove and recreate it:
 
 ```bash
-# Remove corrupted machine
 podman machine rm konflux-dev
-
-# Recreate
 podman machine init --memory 16384 --cpus 6 --disk-size 100 --rootful konflux-dev
 podman machine start konflux-dev
 ```
 
-### Insufficient Memory Error
+### Insufficient Memory
 
-**Symptom:** "ERROR: Insufficient Podman machine memory"
-
-**Solution:**
+The deployment script checks for sufficient Podman machine memory. If you see "ERROR: Insufficient Podman machine memory," check the current allocation:
 
 ```bash
-# Check current memory
 podman machine inspect | grep Memory
+```
 
-# Create new machine with more memory
+Create a new machine with more memory:
+
+```bash
 podman machine init --memory 20480 --cpus 6 --rootful konflux-large
 podman machine start konflux-large
-
-# Use it in deployment
-# In scripts/deploy-local-dev.env:
-PODMAN_MACHINE_NAME="konflux-large"
 ```
+
+Configure the deployment to use this machine by setting `PODMAN_MACHINE_NAME="konflux-large"` in `scripts/deploy-local-dev.env`.
 
 ### Kind Cluster Creation Fails
 
-**Symptom:** "kind create cluster" hangs or fails
-
-**Solution:**
-
-```bash
-# Verify Podman is running
-podman machine list
-
-# Restart Podman machine
-podman machine stop
-podman machine start
-
-# Clean up and retry
-kind delete cluster --name konflux
-./scripts/deploy-local-dev.sh
-```
-
-### Registry Port Already in Use
-
-**Symptom:** "ERROR: Port 5001 is already in use"
-
-**Solution:**
-
-```bash
-# Find what's using the port
-lsof -i :5001
-
-# Stop the service or use different port
-# In scripts/deploy-local-dev.env:
-REGISTRY_HOST_PORT=5002
-```
+See [Kind Cluster Creation Fails](troubleshooting.md#kind-cluster-creation-fails) for detailed troubleshooting steps.
 
 ### PID Limit Exhausted
 
-**Symptom:** Tekton pipelines fail with "cannot fork" errors
-
-**Solution:**
-
-The setup script automatically increases PID limits. If still seeing errors:
+Tekton pipelines may fail with "cannot fork" errors if the PID limit is too low. The deployment script increases the limit automatically, but if you still see errors, increase it manually:
 
 ```bash
-# Manually increase PID limit
 podman update --pids-limit 8192 konflux-control-plane
-
-# Or disable auto-increase and set manually
-# In scripts/deploy-local-dev.env:
-INCREASE_PODMAN_PIDS_LIMIT=0
 ```
+
+To disable automatic PID limit adjustment and set it manually, use `INCREASE_PODMAN_PIDS_LIMIT=0` in `scripts/deploy-local-dev.env`.
 
 ### Slow Performance
 
-**Symptom:** Builds are slow, UI is sluggish
+Builds run slowly or the UI feels sluggish when the system lacks resources. First, increase Podman machine resources:
 
-**Solutions:**
+```bash
+podman machine init --memory 20480 --cpus 8 --rootful konflux-large
+```
 
-1. **Increase Podman resources:**
-   ```bash
-   podman machine init --memory 20480 --cpus 8 ...
-   ```
+Second, reduce replica counts in `my-konflux.yaml` to consume fewer resources:
 
-2. **Reduce replica counts:**
-   ```yaml
-   # In my-konflux.yaml
-   ui:
-     spec:
-       proxy:
-         replicas: 1  # Instead of 2-3
-   ```
+```yaml
+ui:
+  spec:
+    proxy:
+      replicas: 1
+```
 
-3. **Close other applications** to free memory
+Third, close other applications to free system memory.
 
-4. **Monitor activity:**
-   ```bash
-   kubectl top pods -A
-   ```
+Monitor activity to identify resource bottlenecks:
+
+```bash
+kubectl top pods -A
+```
 
 ## Best Practices
 
 ### Resource Management
 
-- Use dedicated Podman machine for Konflux
-- Set `PODMAN_MACHINE_NAME` if you have multiple machines
-- Monitor memory usage: `kubectl top nodes`
-- Clean up old clusters: `kind delete cluster --name old-cluster`
+Use a dedicated Podman machine for Konflux development. Set `PODMAN_MACHINE_NAME` if you maintain multiple machines. Monitor memory usage with `kubectl top nodes`. Clean up old clusters with `kind delete cluster --name old-cluster`.
 
 ### Port Management
 
-- Use port 5001 (not 5000) for registry
-- Document custom ports in your team wiki
-- Check port availability before deployment
+Use port 5001 (not 5000) for the registry to avoid macOS conflicts. Document custom ports if you use non-standard configurations. Check port availability before deployment with `lsof -i :5001`.
 
 ### Multiple Environments
 
-Create separate Podman machines for different projects:
+Create separate Podman machines for different projects. For Konflux development, use `podman machine init --memory 16384 konflux-dev`. For other projects, use `podman machine init --memory 8192 other-project`.
+
+Switch between machines as needed:
 
 ```bash
-# Konflux development
-podman machine init --memory 16384 konflux-dev
-
-# Other projects
-podman machine init --memory 8192 other-project
-
-# Switch between them
 podman machine start konflux-dev
 podman system connection default konflux-dev
 ```
 
 ### Cleanup
 
+Remove the Kind cluster when not in use:
+
 ```bash
-# Remove Kind cluster
 kind delete cluster --name konflux
+```
 
-# Stop Podman machine (frees system resources)
+Stop the Podman machine to free system resources:
+
+```bash
 podman machine stop konflux-dev
+```
 
-# Remove Podman machine (full cleanup)
+Remove the Podman machine for complete cleanup:
+
+```bash
 podman machine rm konflux-dev
 ```
 
 ## Related Documentation
 
-- [Operator Deployment Guide](operator-deployment.md) - Full deployment instructions
-- [Konflux Documentation](https://konflux-ci.dev/docs/) - Official docs
-- [Podman Documentation](https://podman.io/docs) - Podman reference
+- [Operator Deployment Guide](operator-deployment.md) - Complete deployment instructions
+- [Troubleshooting Guide](troubleshooting.md) - Common issues across all platforms
+- [Podman Documentation](https://podman.io/docs) - Official Podman reference
