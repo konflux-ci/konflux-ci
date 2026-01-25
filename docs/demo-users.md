@@ -84,6 +84,18 @@ The operator automatically:
 
 **Do NOT manually patch the Dex deployment or ConfigMap** - the operator owns these resources and will revert changes.
 
+Verify the Dex configuration was applied:
+
+```bash
+# Check that Dex pods restarted
+kubectl get pods -n konflux-ui -l app=dex
+
+# Verify the configuration includes your static passwords
+kubectl get konfluxui konflux-ui -n konflux-ui -o jsonpath='{.spec.dex.config.staticPasswords}' | jq
+```
+
+Test the login at https://localhost:9443 with the demo credentials (`user1@konflux.dev` / `password`).
+
 ## Adding Custom Demo Users
 
 ### Generate Password Hash
