@@ -89,7 +89,42 @@ jobs:
         with:
           files: |
             operator/**
+            dependencies/**
             .github/workflows/operator-test-e2e.yaml
+
+  # Lightweight jobs that create status checks when tests are skipped
+  # These use the same matrix structure and job names as the test jobs to ensure
+  # status checks are always created. Since the 'if' conditions are mutually exclusive,
+  # only one of test-skip or test will run, so there's no conflict with duplicate status check names.
+  test-skip:
+    name: ${{ matrix.job_name }}
+    runs-on: ubuntu-slim
+    needs: [check-prerequisites, check-changes]
+    if: needs.check-changes.outputs.operator != 'true'
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+            kind_binary: kind-linux-amd64
+            kubectl_arch: amd64
+            image_suffix: ""
+            cluster_suffix: ""
+            test_scope: "integration+e2e"
+            job_name: "Run Operator E2E Tests"
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            kind_binary: kind-linux-arm64
+            kubectl_arch: arm64
+            image_suffix: "-arm64"
+            cluster_suffix: "-arm"
+            test_scope: "integration"
+            job_name: "Run Operator Integration Tests (ARM64)"
+    steps:
+      - name: Skip test - no operator changes
+        run: |
+          echo "No operator-related changes detected. Skipping tests."
+          echo "This check passes when there are no operator changes to test."
 
   test:
     name: ${{ matrix.job_name }}
