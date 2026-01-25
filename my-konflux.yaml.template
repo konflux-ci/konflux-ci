@@ -49,6 +49,9 @@ spec:
   # Build service
   buildService:
     spec:
+      # Manage build-pipeline-config ConfigMap (default: true)
+      # Set to false if you want to provide your own pipeline configuration
+      # managePipelineConfig: false
       buildControllerManager:
         replicas: 1
 

@@ -725,6 +725,75 @@ spec:
 
 See the [sample Konflux CR](../operator/config/samples/konflux_v1alpha1_konflux.yaml) for examples across all components. The [Konflux Operator API Reference](https://konflux-ci.dev/konflux-ci/docs/reference/) provides complete field documentation.
 
+### Pipeline Configuration Management
+
+The build-service manages pipeline configurations through a ConfigMap named `build-pipeline-config` in the build-service namespace. By default, the operator creates and maintains this ConfigMap with references to the standard Konflux pipeline bundles (docker-build-oci-ta, fbc-builder, etc.).
+
+For advanced use cases requiring custom pipeline bundles, you can disable operator management and provide your own ConfigMap.
+
+**Use cases for custom pipeline management:**
+
+Users implementing custom workflows, organizations maintaining proprietary pipeline bundles, or environments using external configuration management tools (Helm, ArgoCD) may need direct control over pipeline definitions.
+
+**Transition to self-managed pipeline configuration:**
+
+Update your Konflux CR to disable operator management:
+
+```yaml
+apiVersion: konflux.konflux-ci.dev/v1alpha1
+kind: Konflux
+metadata:
+  name: konflux
+spec:
+  buildService:
+    spec:
+      managePipelineConfig: false
+      buildControllerManager:
+        # ... your other configuration
+```
+
+Apply the change:
+
+```bash
+kubectl apply -f my-konflux.yaml
+```
+
+Delete the operator-managed ConfigMap:
+
+```bash
+kubectl delete configmap build-pipeline-config -n build-service
+```
+
+Create your custom pipeline configuration:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: build-pipeline-config
+  namespace: build-service
+data:
+  config.yaml: |
+    default-pipeline-name: my-custom-pipeline
+    pipelines:
+    - name: my-custom-pipeline
+      bundle: quay.io/my-org/my-pipeline@sha256:abc123...
+    - name: docker-build-oci-ta
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta@sha256:...
+```
+
+Apply your custom configuration:
+
+```bash
+kubectl apply -f my-pipeline-config.yaml
+```
+
+**Important notes:**
+
+The ConfigMap must be named `build-pipeline-config` and exist in the `build-service` namespace. The operator will not create or update the ConfigMap when `managePipelineConfig: false` is set. You are responsible for maintaining and updating pipeline bundle references. To return to operator-managed configuration, set `managePipelineConfig: true` (or remove the field) and delete your custom ConfigMap.
+
+See the [Konflux sample CR](../operator/config/samples/konflux_v1alpha1_konflux.yaml) for a complete configuration example. The [KonfluxBuildService sample CR](../operator/config/samples/konflux_v1alpha1_konfluxbuildservice.yaml) shows additional details about the build service configuration and pipeline management.
+
 ### Pipeline Workloads
 
 Tekton TaskRuns create pods that may not specify resource requirements. Use [Kyverno](https://kyverno.io/) policies to mutate pod resource requests at creation time.

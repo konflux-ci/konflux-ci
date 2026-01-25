@@ -31,3 +31,31 @@ spec:
             secretKeyRef:
               name: build-service-secret
               key: secret-key
+
+  # Pipeline Configuration Management
+  # managePipelineConfig: true   # Default: operator manages build-pipeline-config ConfigMap
+  # managePipelineConfig: false  # Advanced: user manages custom pipeline bundles
+  #
+  # Use managePipelineConfig: false when you need custom pipeline bundles
+  # (e.g., for slsa-konflux-example or other specialized pipelines).
+  #
+  # Workflow to transition from operator-managed to self-managed:
+  # 1. Update this CR: set managePipelineConfig: false
+  # 2. Wait for reconciliation, then delete the existing ConfigMap:
+  #    kubectl delete configmap build-pipeline-config -n build-service
+  # 3. Create your custom ConfigMap with your pipeline definitions:
+  #    kubectl apply -f my-custom-pipeline-config.yaml
+  #
+  # Example custom ConfigMap structure:
+  # ---
+  # apiVersion: v1
+  # kind: ConfigMap
+  # metadata:
+  #   name: build-pipeline-config
+  #   namespace: build-service
+  # data:
+  #   config.yaml: |
+  #     default-pipeline-name: my-custom-pipeline
+  #     pipelines:
+  #     - name: my-custom-pipeline
+  #       bundle: quay.io/my-org/my-pipeline@sha256:abc123...

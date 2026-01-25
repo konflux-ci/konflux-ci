@@ -172,6 +172,17 @@ func (r *KonfluxBuildServiceReconciler) applyManifests(ctx context.Context, tc *
 			}
 		}
 
+		// Skip build-pipeline-config ConfigMap when managePipelineConfig is false
+		if configMap, ok := obj.(*corev1.ConfigMap); ok {
+			if configMap.Name == "build-pipeline-config" && !shouldManagePipelineConfig(owner.Spec) {
+				log.Info("Skipping build-pipeline-config ConfigMap: managePipelineConfig is false",
+					"namespace", configMap.Namespace,
+					"name", configMap.Name,
+				)
+				continue
+			}
+		}
+
 		// Skip OpenShift SecurityContextConstraints when not running on OpenShift
 		if _, isSCC := obj.(*securityv1.SecurityContextConstraints); isSCC {
 			if r.ClusterInfo == nil || !r.ClusterInfo.IsOpenShift() {
@@ -232,6 +243,16 @@ func buildBuildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerD
 			customization.WithLeaderElection(),
 		),
 	)
+}
+
+// shouldManagePipelineConfig returns true if the operator should manage the build-pipeline-config ConfigMap.
+// Returns true when ManagePipelineConfig is nil (default) or explicitly set to true.
+func shouldManagePipelineConfig(spec konfluxv1alpha1.KonfluxBuildServiceSpec) bool {
+	// Default to true when not specified
+	if spec.ManagePipelineConfig == nil {
+		return true
+	}
+	return *spec.ManagePipelineConfig
 }
 
 // SetupWithManager sets up the controller with the Manager.
