@@ -87,6 +87,18 @@ spec:
 
 The operator manages Dex configuration through the KonfluxUI custom resource. When you update the CR, the operator generates a new Dex ConfigMap and restarts Dex automatically.
 
+Verify the Dex configuration was applied:
+
+```bash
+# Check that Dex pods restarted
+kubectl get pods -n konflux-ui -l app=dex
+
+# Verify the configuration includes your static passwords
+kubectl get konfluxui konflux-ui -n konflux-ui -o jsonpath='{.spec.dex.config.staticPasswords}' | jq
+```
+
+Test the login at https://localhost:9443 with the demo credentials (`user1@konflux.dev` / `password`).
+
 **Do not manually patch the Dex deployment or ConfigMap.** The operator owns these resources and reverts manual changes during reconciliation.
 
 ## Adding Custom Demo Users
