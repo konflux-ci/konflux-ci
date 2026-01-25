@@ -715,6 +715,9 @@ spec:
     - jsonPath: .spec.application
       name: Application
       type: string
+    - jsonPath: .spec.componentGroup
+      name: ComponentGroup
+      type: string
     name: v1beta2
     schema:
       openAPIV3Schema:
@@ -740,11 +743,25 @@ spec:
           metadata:
             type: object
           spec:
-            description: IntegrationTestScenarioSpec defines the desired state of
-              IntegrationScenario
+            description: |-
+              IntegrationTestScenarioSpec defines the desired state of IntegrationScenario
+              Exactly one of Application or ComponentGroup must be specified.
+            oneOf:
+            - required:
+              - application
+            - required:
+              - componentGroup
             properties:
               application:
-                description: Application that's associated with the IntegrationTestScenario
+                description: |-
+                  Application that's associated with the IntegrationTestScenario.
+                  Mutually exclusive with ComponentGroup - exactly one must be specified.
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                type: string
+              componentGroup:
+                description: |-
+                  ComponentGroup that's associated with the IntegrationTestScenario.
+                  Mutually exclusive with Application - exactly one must be specified.
                 pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                 type: string
               contexts:
@@ -827,7 +844,6 @@ spec:
                 - resolver
                 type: object
             required:
-            - application
             - resolverRef
             type: object
           status:
@@ -1131,8 +1147,19 @@ rules:
   - appstudio.redhat.com
   resources:
   - applications/status
+  - componentgroups/status
   verbs:
   - get
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - componentgroups
+  - environments
+  - releaseplans
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
   - appstudio.redhat.com
   resources:
@@ -1156,15 +1183,6 @@ rules:
   - get
   - patch
   - update
-- apiGroups:
-  - appstudio.redhat.com
-  resources:
-  - environments
-  - releaseplans
-  verbs:
-  - get
-  - list
-  - watch
 - apiGroups:
   - pipelinesascode.tekton.dev
   resources:
@@ -1517,7 +1535,7 @@ spec:
         - --leader-elector-retry-period=5s
         command:
         - /manager
-        image: quay.io/konflux-ci/integration-service:fade912467b4dfe3d29278b41e547152d70aadd6
+        image: quay.io/konflux-ci/integration-service:1fc818ac08a6605b81bb2e0e63a8ac0261cc1f58
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1578,7 +1596,7 @@ spec:
             - --zap-log-level=debug
             - --pr-snapshots-to-keep=70
             - --non-pr-snapshots-to-keep=640
-            image: quay.io/konflux-ci/integration-service:fade912467b4dfe3d29278b41e547152d70aadd6
+            image: quay.io/konflux-ci/integration-service:1fc818ac08a6605b81bb2e0e63a8ac0261cc1f58
             imagePullPolicy: Always
             name: test-gc
             resources:
