@@ -36,6 +36,8 @@ This deploys test users (`user1@konflux.dev` / `password`) to any cluster runnin
 
 **WARNING:** Demo users are insecure and must never be used in production.
 
+See [Demo Users Guide](../../docs/demo-users.md) for detailed instructions on configuring, adding, or removing demo users.
+
 ### For Production: OIDC Connectors
 
 Configure authentication using real OIDC providers. Example:
@@ -59,5 +61,6 @@ See [Operator Deployment Guide](../../docs/operator-deployment.md) for complete 
 ## Related Documentation
 
 - [Operator Deployment Guide](../../docs/operator-deployment.md) - Full deployment instructions
+- [Demo Users Guide](../../docs/demo-users.md) - Configure demo users for testing
 - [Mac Setup Guide](../../docs/mac-setup.md) - macOS-specific setup
 - [Root README](../../README.md) - Quick start guides
