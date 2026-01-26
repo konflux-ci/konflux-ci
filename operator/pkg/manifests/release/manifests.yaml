@@ -501,6 +501,12 @@ spec:
                         description: Resolver is the name of a Tekton resolver to
                           be used (e.g. git)
                         type: string
+                      useEmptyDir:
+                        description: |-
+                          UseEmptyDir specifies whether to use an empty dir volume for the workspace.
+                          When true, the PipelineRun will use an empty dir volume. Otherwise, it will
+                          use a volume claim template by default.
+                        type: boolean
                     required:
                     - params
                     - resolver
@@ -1589,6 +1595,12 @@ spec:
                         description: Resolver is the name of a Tekton resolver to
                           be used (e.g. git)
                         type: string
+                      useEmptyDir:
+                        description: |-
+                          UseEmptyDir specifies whether to use an empty dir volume for the workspace.
+                          When true, the PipelineRun will use an empty dir volume. Otherwise, it will
+                          use a volume claim template by default.
+                        type: boolean
                     required:
                     - params
                     - resolver
@@ -2472,6 +2484,12 @@ spec:
                         description: Resolver is the name of a Tekton resolver to
                           be used (e.g. git)
                         type: string
+                      useEmptyDir:
+                        description: |-
+                          UseEmptyDir specifies whether to use an empty dir volume for the workspace.
+                          When true, the PipelineRun will use an empty dir volume. Otherwise, it will
+                          use a volume claim template by default.
+                        type: boolean
                     required:
                     - params
                     - resolver
@@ -4379,9 +4397,16 @@ metadata:
   name: release-service-tekton-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - pods/log
+  verbs:
+  - get
+- apiGroups:
   - tekton.dev
   resources:
   - pipelineruns
+  - taskruns
   verbs:
   - create
   - delete
@@ -4723,7 +4748,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: quay.io/konflux-ci/release-service:de746b25e1ee8cfdea50763d05ebb7df499df1da
+        image: quay.io/konflux-ci/release-service:712630b35e2151e62ad2a1853001c4b16411687b
         livenessProbe:
           httpGet:
             path: /healthz
