@@ -68,6 +68,59 @@ generate_logs() {
         echo ""
     } > "$logs_dir/cluster-resources.log"
 
+    # Verify-conforma pods: collect per-container logs FIRST (release-service may delete failed pipelines quickly).
+    # Run before the long namespace loop to maximize chance pods still exist.
+    {
+        echo "=== VERIFY-CONFORMA PODS (per-container logs) ==="
+        echo "Date: $(date)"
+        echo ""
+
+        local vc_pods
+        vc_pods=$(kubectl get pods -A -l "tekton.dev/task=verify-conforma-konflux-ta" -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
+        if [ -n "$vc_pods" ]; then
+            echo "$vc_pods" | while IFS=$'\t' read -r ns name; do
+                [ -z "$ns" ] && continue
+                echo "--- Pod: $ns/$name ---"
+                local containers
+                containers=$(kubectl get pod -n "$ns" "$name" -o jsonpath='{range .spec.containers[*]}{.name}{"\n"}{end}' 2>/dev/null || true)
+                for container in $containers; do
+                    [ -z "$container" ] && continue
+                    echo ">>> Container: $container <<<"
+                    kubectl logs -n "$ns" "$name" -c "$container" --tail=2000 2>&1 || echo "Failed to get logs for $container"
+                    echo ""
+                done
+            done
+        else
+            echo "No verify-conforma pods found by label (tekton.dev/task=verify-conforma-konflux-ta)."
+            echo "Trying TaskRuns for pod names (pods may already be deleted by release-service cleanup)..."
+            echo ""
+            local tr_list
+            tr_list=$(kubectl get taskruns -A -l "tekton.dev/task=verify-conforma-konflux-ta" -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.status.podName}{"\n"}{end}' 2>/dev/null || true)
+            if [ -n "$tr_list" ]; then
+                echo "$tr_list" | while IFS=$'\t' read -r ns podname; do
+                    [ -z "$ns" ] || [ -z "$podname" ] && continue
+                    echo "--- TaskRun pod: $ns/$podname ---"
+                    local containers
+                    containers=$(kubectl get pod -n "$ns" "$podname" -o jsonpath='{range .spec.containers[*]}{.name}{"\n"}{end}' 2>/dev/null || true)
+                    if [ -n "$containers" ]; then
+                        for container in $containers; do
+                            [ -z "$container" ] && continue
+                            echo ">>> Container: $container <<<"
+                            kubectl logs -n "$ns" "$podname" -c "$container" --tail=2000 2>&1 || echo "Failed to get logs for $container"
+                            echo ""
+                        done
+                    else
+                        echo "(Pod $podname no longer exists or could not be read)"
+                        echo ""
+                    fi
+                done
+            else
+                echo "No verify-conforma TaskRuns found either. Pods were likely deleted by release-service cleanup before this step ran."
+            fi
+        fi
+        echo ""
+    } > "$logs_dir/verify-conforma-pod-logs.log" 2>&1 || true
+
     # Capture pods matching Kyverno policy labels
     {
         echo "=== PODS MATCHING KYVERNO POLICY LABELS ==="
@@ -80,6 +133,10 @@ generate_logs() {
 
         echo "--- Pods with label: tekton.dev/task=verify-enterprise-contract ---"
         kubectl get pods --all-namespaces -l "tekton.dev/task=verify-enterprise-contract" --show-labels -o wide 2>&1 || echo "No pods found with tekton.dev/task=verify-enterprise-contract label"
+        echo ""
+
+        echo "--- Pods with label: tekton.dev/task=verify-conforma-konflux-ta ---"
+        kubectl get pods --all-namespaces -l "tekton.dev/task=verify-conforma-konflux-ta" --show-labels -o wide 2>&1 || echo "No pods found with tekton.dev/task=verify-conforma-konflux-ta label"
         echo ""
 
         echo "--- All build pipeline pods (broader search) ---"
@@ -105,6 +162,12 @@ generate_logs() {
 
         echo "--- Pod definitions with label: tekton.dev/task=verify-enterprise-contract ---"
         kubectl get pods --all-namespaces -l "tekton.dev/task=verify-enterprise-contract" -o yaml 2>&1 || echo "No pods found with tekton.dev/task=verify-enterprise-contract label"
+        echo ""
+        echo "---"
+        echo ""
+
+        echo "--- Pod definitions with label: tekton.dev/task=verify-conforma-konflux-ta ---"
+        kubectl get pods --all-namespaces -l "tekton.dev/task=verify-conforma-konflux-ta" -o yaml 2>&1 || echo "No pods found with tekton.dev/task=verify-conforma-konflux-ta label"
         echo ""
         echo "---"
         echo ""
