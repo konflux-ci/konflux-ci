@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -80,6 +81,7 @@ type KonfluxCertManagerReconciler struct {
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxcertmanagers/finalizers,verbs=update
 // +kubebuilder:rbac:groups=cert-manager.io,resources=clusterissuers,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -110,6 +112,10 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	// Apply manifests only if createClusterIssuer is enabled (defaults to true)
 	if certManager.Spec.ShouldCreateClusterIssuer() {
+		// Ensure the cert-manager namespace exists before applying resources
+		if err := r.ensureNamespaceExists(ctx, tc); err != nil {
+			return errHandler.HandleApplyError(ctx, err)
+		}
 		if err := r.applyManifests(ctx, tc); err != nil {
 			return errHandler.HandleApplyError(ctx, err)
 		}
@@ -141,11 +147,26 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	return ctrl.Result{}, nil
 }
 
+// ensureNamespaceExists ensures the cert-manager namespace exists before creating resources.
+func (r *KonfluxCertManagerReconciler) ensureNamespaceExists(ctx context.Context, tc *tracking.Client) error {
+	namespace := &corev1.Namespace{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Namespace",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cert-manager",
+		},
+	}
+	if err := tc.ApplyOwned(ctx, namespace); err != nil {
+		return fmt.Errorf("failed to apply cert-manager namespace: %w", err)
+	}
+	return nil
+}
+
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
 func (r *KonfluxCertManagerReconciler) applyManifests(ctx context.Context, tc *tracking.Client) error {
-	log := logf.FromContext(ctx)
-
 	objects, err := r.ObjectStore.GetForComponent(manifests.CertManager)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for CertManager: %w", err)
@@ -153,20 +174,6 @@ func (r *KonfluxCertManagerReconciler) applyManifests(ctx context.Context, tc *t
 
 	for _, obj := range objects {
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
-			// Only skip if it's specifically a "CRD not installed" error.
-			// This prevents masking real reconciliation failures like RBAC denials,
-			// validation errors, or resource conflicts.
-			if tracking.IsNoKindMatchError(err) {
-				gvk := obj.GetObjectKind().GroupVersionKind()
-				log.Info("Skipping resource: CRD not installed (test environment)",
-					"kind", gvk.Kind,
-					"apiVersion", gvk.GroupVersion().String(),
-					"namespace", obj.GetNamespace(),
-					"name", obj.GetName(),
-				)
-				continue
-			}
-			// All other errors should fail the reconciliation
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
 				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), manifests.CertManager, err)
 		}

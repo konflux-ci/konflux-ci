@@ -108,25 +108,64 @@ func (i *Info) K8sVersion() *version.Info {
 }
 
 // HasResource checks if a specific resource kind exists in the given API group version.
+// Returns true if the resource exists, false if it doesn't exist.
+// If an error occurs (e.g., RBAC, network issues), it returns false with the error
+// to allow callers to distinguish between "not found" and "check failed".
 func (i *Info) HasResource(groupVersion, kind string) (bool, error) {
+	has, err := i.HasAllResources(groupVersion, []string{kind})
+	if err != nil {
+		return false, err
+	}
+	return has, nil
+}
+
+// HasAllResources checks if all specified resource kinds exist in the given API group version.
+// Returns true only if ALL specified kinds exist, false if any are missing.
+// If an error occurs (e.g., RBAC, network issues), it returns false with the error
+// to allow callers to distinguish between "not found" and "check failed".
+// This method makes a single API call, making it more efficient than calling HasResource
+// multiple times for resources in the same group version.
+func (i *Info) HasAllResources(groupVersion string, kinds []string) (bool, error) {
 	resourceList, err := i.client.ServerResourcesForGroupVersion(groupVersion)
 	if err != nil {
-		// If the group doesn't exist, the resource doesn't exist
-		return false, nil
+		// If NotFound, the resources don't exist
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		// Other errors (RBAC, network) should be propagated
+		return false, fmt.Errorf("failed to check %s resources: %w", groupVersion, err)
 	}
 
+	// Build a set of available resource kinds
+	availableKinds := make(map[string]bool)
 	for _, resource := range resourceList.APIResources {
-		if resource.Kind == kind {
-			return true, nil
+		availableKinds[resource.Kind] = true
+	}
+
+	// Check if all required kinds exist
+	for _, kind := range kinds {
+		if !availableKinds[kind] {
+			return false, nil
 		}
 	}
 
-	return false, nil
+	return true, nil
 }
 
 // HasTekton checks if Tekton Pipelines is installed.
 func (i *Info) HasTekton() (bool, error) {
 	return i.HasResource("tekton.dev/v1", "Pipeline")
+}
+
+// HasCertManager checks if cert-manager is installed by verifying that all required
+// cert-manager resources exist. Returns true only if ALL required resources are present:
+// - Certificate (cert-manager.io/v1)
+// - Issuer (cert-manager.io/v1)
+// - ClusterIssuer (cert-manager.io/v1)
+//
+// This function uses HasAllResources to check all required resources in a single API call.
+func (i *Info) HasCertManager() (bool, error) {
+	return i.HasAllResources("cert-manager.io/v1", []string{"Certificate", "Issuer", "ClusterIssuer"})
 }
 
 // detectOpenShift checks if the operator is running on OpenShift by
