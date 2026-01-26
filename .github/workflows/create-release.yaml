@@ -127,7 +127,7 @@ jobs:
             /tmp/release-notes.md \
             operator/dist \
             "${{ inputs.draft || false }}" \
-            "${{ inputs.generate_notes != false }}"
+            "${{ inputs.generate_notes || 'true' }}"
 
       - name: Create issue on release failure
         if: failure()
