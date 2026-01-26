@@ -202,6 +202,20 @@
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "kubernetes/kubernetes",
       "extractVersionTemplate": "^v?(?<version>.*)$"
+    },
+    {
+      "description": "Track release-service-catalog development branch SHA in test/e2e/vars.sh",
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["test/e2e/vars.sh"],
+      "matchStrings": [
+        "# renovate: datasource=git-refs depName=https://github.com/konflux-ci/release-service-catalog",
+        "RELEASE_SERVICE_CATALOG_REVISION=\"(?<currentDigest>[a-f0-9]{40})\""
+      ],
+      "datasourceTemplate": "git-refs",
+      "depNameTemplate": "https://github.com/konflux-ci/release-service-catalog",
+      "currentValueTemplate": "development",
+      "autoReplaceStringTemplate": "RELEASE_SERVICE_CATALOG_REVISION=\"{{newDigest}}\""
     }
   ]
 }
