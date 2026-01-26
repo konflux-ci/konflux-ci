@@ -30,6 +30,11 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
+const (
+	testConsoleURL         = "https://konflux.example.com"
+	testConsoleURLTemplate = "https://konflux.example.com/ns/{{ .Namespace }}/pipelinerun/{{ .PipelineRunName }}"
+)
+
 // getIntegrationServiceDeployment returns a deep copy of the IntegrationService controller-manager deployment from the manifests.
 func getIntegrationServiceDeployment(t *testing.T) *appsv1.Deployment {
 	t.Helper()
@@ -53,14 +58,14 @@ func getIntegrationServiceDeployment(t *testing.T) *appsv1.Deployment {
 func TestBuildControllerManagerOverlay(t *testing.T) {
 	t.Run("nil spec returns empty overlay", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		overlay := buildControllerManagerOverlay(nil)
+		overlay := buildControllerManagerOverlay(nil, "")
 		g.Expect(overlay).NotTo(gomega.BeNil())
 	})
 
 	t.Run("empty spec returns overlay without customizations", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{}
-		overlay := buildControllerManagerOverlay(spec)
+		overlay := buildControllerManagerOverlay(spec, "")
 		g.Expect(overlay).NotTo(gomega.BeNil())
 	})
 
@@ -82,7 +87,7 @@ func TestBuildControllerManagerOverlay(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		overlay := buildControllerManagerOverlay(spec)
+		overlay := buildControllerManagerOverlay(spec, "")
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -111,7 +116,7 @@ func TestBuildControllerManagerOverlay(t *testing.T) {
 		g.Expect(managerContainer).NotTo(gomega.BeNil(), "manager container must exist in controller-manager deployment")
 		originalImage := managerContainer.Image
 
-		overlay := buildControllerManagerOverlay(spec)
+		overlay := buildControllerManagerOverlay(spec, "")
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -137,7 +142,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec)
+		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
@@ -172,7 +177,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 			},
 		}
 
-		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec)
+		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic and container should be unchanged
@@ -186,7 +191,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec)
+		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
@@ -199,7 +204,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{}
 
 		deployment := getIntegrationServiceDeployment(t)
-		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec)
+		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
@@ -215,7 +220,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec)
+		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).NotTo(gomega.BeNil())
@@ -231,7 +236,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec)
+		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).NotTo(gomega.BeNil())
@@ -246,7 +251,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 
 		deployment := getIntegrationServiceDeployment(t)
 		originalReplicas := deployment.Spec.Replicas
-		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec)
+		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).To(gomega.Equal(originalReplicas))
@@ -268,7 +273,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec)
+		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Check replicas
@@ -307,7 +312,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations_ResourceMerging(t *test
 			},
 		}
 
-		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec)
+		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
@@ -341,7 +346,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations_ResourceMerging(t *test
 			},
 		}
 
-		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec)
+		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
@@ -349,5 +354,222 @@ func TestApplyIntegrationServiceDeploymentCustomizations_ResourceMerging(t *test
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
 		g.Expect(managerContainer.Resources.Limits.Memory().String()).To(gomega.Equal("512Mi"))
 		g.Expect(managerContainer.Resources.Requests.Cpu().String()).To(gomega.Equal("100m"))
+	})
+}
+
+// findEnvVar finds an environment variable by name in a container's env array.
+func findEnvVar(env []corev1.EnvVar, name string) *corev1.EnvVar {
+	for i := range env {
+		if env[i].Name == name {
+			return &env[i]
+		}
+	}
+	return nil
+}
+
+func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
+	t.Run("injects CONSOLE_URL when provided", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{}
+
+		deployment := getIntegrationServiceDeployment(t)
+		overlay := buildControllerManagerOverlay(spec, testConsoleURL)
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		envVar := findEnvVar(managerContainer.Env, "CONSOLE_URL")
+		g.Expect(envVar).NotTo(gomega.BeNil())
+		g.Expect(envVar.Value).To(gomega.Equal(testConsoleURLTemplate))
+	})
+
+	t.Run("injects CONSOLE_URL when provided with nil spec", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		deployment := getIntegrationServiceDeployment(t)
+		overlay := buildControllerManagerOverlay(nil, testConsoleURL)
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		envVar := findEnvVar(managerContainer.Env, "CONSOLE_URL")
+		g.Expect(envVar).NotTo(gomega.BeNil())
+		g.Expect(envVar.Value).To(gomega.Equal(testConsoleURLTemplate))
+	})
+
+	t.Run("injects CONSOLE_URL with empty value when URL not available", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{}
+
+		deployment := getIntegrationServiceDeployment(t)
+		overlay := buildControllerManagerOverlay(spec, "")
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		// CONSOLE_URL should be present with empty value
+		envVar := findEnvVar(managerContainer.Env, "CONSOLE_URL")
+		g.Expect(envVar).NotTo(gomega.BeNil())
+		g.Expect(envVar.Value).To(gomega.Equal(""))
+	})
+
+	t.Run("system-provided CONSOLE_URL overrides user-provided CONSOLE_URL", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		userConsoleURL := "https://user-override.example.com"
+		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+			Manager: &konfluxv1alpha1.ContainerSpec{
+				Env: []corev1.EnvVar{
+					{Name: "CONSOLE_URL", Value: userConsoleURL},
+					{Name: "OTHER_VAR", Value: "other-value"},
+				},
+			},
+		}
+
+		deployment := getIntegrationServiceDeployment(t)
+		overlay := buildControllerManagerOverlay(spec, testConsoleURL)
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		// System-provided CONSOLE_URL should override user-provided one
+		envVar := findEnvVar(managerContainer.Env, "CONSOLE_URL")
+		g.Expect(envVar).NotTo(gomega.BeNil())
+		g.Expect(envVar.Value).To(gomega.Equal(testConsoleURLTemplate))
+
+		// Other user-provided env vars should still be present
+		otherVar := findEnvVar(managerContainer.Env, "OTHER_VAR")
+		g.Expect(otherVar).NotTo(gomega.BeNil())
+		g.Expect(otherVar.Value).To(gomega.Equal("other-value"))
+	})
+
+	t.Run("CONSOLE_URL works together with other environment variables", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+			Manager: &konfluxv1alpha1.ContainerSpec{
+				Env: []corev1.EnvVar{
+					{Name: "CUSTOM_VAR", Value: "custom-value"},
+				},
+			},
+		}
+
+		deployment := getIntegrationServiceDeployment(t)
+		overlay := buildControllerManagerOverlay(spec, testConsoleURL)
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		// Both CONSOLE_URL and user-provided env vars should be present
+		consoleURLVar := findEnvVar(managerContainer.Env, "CONSOLE_URL")
+		g.Expect(consoleURLVar).NotTo(gomega.BeNil())
+		g.Expect(consoleURLVar.Value).To(gomega.Equal(testConsoleURLTemplate))
+
+		customVar := findEnvVar(managerContainer.Env, "CUSTOM_VAR")
+		g.Expect(customVar).NotTo(gomega.BeNil())
+		g.Expect(customVar.Value).To(gomega.Equal("custom-value"))
+	})
+
+	t.Run("preserves Resources when Env is nil with CONSOLE_URL", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+			Manager: &konfluxv1alpha1.ContainerSpec{
+				Resources: &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU: resource.MustParse("500m"),
+					},
+				},
+				// Env is nil (zero value) - this tests the defensive copy fix
+			},
+		}
+
+		deployment := getIntegrationServiceDeployment(t)
+		overlay := buildControllerManagerOverlay(spec, testConsoleURL)
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		// Resources should be preserved
+		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
+
+		// CONSOLE_URL should be injected
+		consoleURLVar := findEnvVar(managerContainer.Env, "CONSOLE_URL")
+		g.Expect(consoleURLVar).NotTo(gomega.BeNil())
+		g.Expect(consoleURLVar.Value).To(gomega.Equal(testConsoleURLTemplate))
+	})
+
+	t.Run("preserves Resources when Env is empty slice with CONSOLE_URL", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+			Manager: &konfluxv1alpha1.ContainerSpec{
+				Resources: &corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceMemory: resource.MustParse("256Mi"),
+					},
+				},
+				Env: []corev1.EnvVar{}, // Empty slice, not nil
+			},
+		}
+
+		deployment := getIntegrationServiceDeployment(t)
+		overlay := buildControllerManagerOverlay(spec, testConsoleURL)
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		// Resources should be preserved
+		g.Expect(managerContainer.Resources.Requests.Memory().String()).To(gomega.Equal("256Mi"))
+
+		// CONSOLE_URL should be injected
+		consoleURLVar := findEnvVar(managerContainer.Env, "CONSOLE_URL")
+		g.Expect(consoleURLVar).NotTo(gomega.BeNil())
+		g.Expect(consoleURLVar.Value).To(gomega.Equal(testConsoleURLTemplate))
+	})
+
+	t.Run("updates CONSOLE_URL when console URL changes", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		oldConsoleURL := "https://old.example.com"
+		oldConsoleURLTemplate := "https://old.example.com/ns/{{ .Namespace }}/pipelinerun/{{ .PipelineRunName }}"
+
+		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{}
+
+		// First, apply with old console URL
+		deployment := getIntegrationServiceDeployment(t)
+		overlay := buildControllerManagerOverlay(spec, oldConsoleURL)
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		// Verify old URL template is set
+		envVar := findEnvVar(managerContainer.Env, "CONSOLE_URL")
+		g.Expect(envVar).NotTo(gomega.BeNil())
+		g.Expect(envVar.Value).To(gomega.Equal(oldConsoleURLTemplate))
+
+		// Now apply with new console URL (simulating KonfluxUI ingress URL change)
+		overlay = buildControllerManagerOverlay(spec, testConsoleURL)
+		err = overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		// Verify URL was updated to new value
+		envVar = findEnvVar(managerContainer.Env, "CONSOLE_URL")
+		g.Expect(envVar).NotTo(gomega.BeNil())
+		g.Expect(envVar.Value).To(gomega.Equal(testConsoleURLTemplate))
 	})
 }

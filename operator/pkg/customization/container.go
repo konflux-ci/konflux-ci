@@ -70,6 +70,23 @@ func WithEnv(env ...corev1.EnvVar) ContainerOption {
 	}
 }
 
+// WithEnvOverride adds an environment variable that will override any existing variable
+// with the same name. The variable is always added, even with an empty value.
+// This is useful when system-provided values should take precedence over user-provided ones.
+func WithEnvOverride(name, value string) ContainerOption {
+	return func(c *corev1.Container, _ DeploymentContext) {
+		// Filter out existing env var with same name
+		filtered := make([]corev1.EnvVar, 0, len(c.Env))
+		for _, env := range c.Env {
+			if env.Name != name {
+				filtered = append(filtered, env)
+			}
+		}
+		// Add the new env var
+		c.Env = append(filtered, corev1.EnvVar{Name: name, Value: value})
+	}
+}
+
 // WithResources sets resource requirements for the container.
 func WithResources(resources corev1.ResourceRequirements) ContainerOption {
 	return func(c *corev1.Container, _ DeploymentContext) {

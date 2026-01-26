@@ -202,6 +202,80 @@ func TestWithEnv(t *testing.T) {
 	})
 }
 
+func TestWithEnvOverride(t *testing.T) {
+	ctx := DeploymentContext{Replicas: 1}
+
+	t.Run("adds environment variable when none exists", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		c := NewContainerOverlay(ctx, WithEnvOverride("VAR1", "value1"))
+		g.Expect(c.Env).To(gomega.HaveLen(1))
+		g.Expect(c.Env[0].Name).To(gomega.Equal("VAR1"))
+		g.Expect(c.Env[0].Value).To(gomega.Equal("value1"))
+	})
+
+	t.Run("overrides existing environment variable", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		c := NewContainerOverlay(ctx,
+			WithEnv(corev1.EnvVar{Name: "VAR1", Value: "original"}),
+			WithEnvOverride("VAR1", "override"),
+		)
+		g.Expect(c.Env).To(gomega.HaveLen(1))
+		g.Expect(c.Env[0].Name).To(gomega.Equal("VAR1"))
+		g.Expect(c.Env[0].Value).To(gomega.Equal("override"))
+	})
+
+	t.Run("preserves other environment variables when overriding", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		c := NewContainerOverlay(ctx,
+			WithEnv(
+				corev1.EnvVar{Name: "VAR1", Value: "value1"},
+				corev1.EnvVar{Name: "VAR2", Value: "value2"},
+				corev1.EnvVar{Name: "VAR3", Value: "value3"},
+			),
+			WithEnvOverride("VAR2", "override"),
+		)
+		g.Expect(c.Env).To(gomega.HaveLen(3))
+		// VAR1 and VAR3 should be preserved, VAR2 should be at the end with new value
+		var var1, var2, var3 *corev1.EnvVar
+		for i := range c.Env {
+			switch c.Env[i].Name {
+			case "VAR1":
+				var1 = &c.Env[i]
+			case "VAR2":
+				var2 = &c.Env[i]
+			case "VAR3":
+				var3 = &c.Env[i]
+			}
+		}
+		g.Expect(var1).NotTo(gomega.BeNil())
+		g.Expect(var1.Value).To(gomega.Equal("value1"))
+		g.Expect(var2).NotTo(gomega.BeNil())
+		g.Expect(var2.Value).To(gomega.Equal("override"))
+		g.Expect(var3).NotTo(gomega.BeNil())
+		g.Expect(var3.Value).To(gomega.Equal("value3"))
+	})
+
+	t.Run("overrides with empty value", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		c := NewContainerOverlay(ctx,
+			WithEnv(corev1.EnvVar{Name: "VAR1", Value: "original"}),
+			WithEnvOverride("VAR1", ""),
+		)
+		// Original should be overridden with empty value
+		g.Expect(c.Env).To(gomega.HaveLen(1))
+		g.Expect(c.Env[0].Name).To(gomega.Equal("VAR1"))
+		g.Expect(c.Env[0].Value).To(gomega.Equal(""))
+	})
+
+	t.Run("adds variable with empty value when none exists", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		c := NewContainerOverlay(ctx, WithEnvOverride("VAR1", ""))
+		g.Expect(c.Env).To(gomega.HaveLen(1))
+		g.Expect(c.Env[0].Name).To(gomega.Equal("VAR1"))
+		g.Expect(c.Env[0].Value).To(gomega.Equal(""))
+	})
+}
+
 func TestWithResources(t *testing.T) {
 	ctx := DeploymentContext{Replicas: 1}
 

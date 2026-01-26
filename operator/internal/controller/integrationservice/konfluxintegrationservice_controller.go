@@ -19,20 +19,24 @@ package integrationservice
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/ui"
 	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
@@ -74,6 +78,7 @@ type KonfluxIntegrationServiceReconciler struct {
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxintegrationservices,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxintegrationservices/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxintegrationservices/finalizers,verbs=update
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxuis,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;patch
@@ -119,8 +124,19 @@ func (r *KonfluxIntegrationServiceReconciler) Reconcile(ctx context.Context, req
 		FieldManager:      FieldManager,
 	})
 
+	// Fetch KonfluxUI to get console URL
+	konfluxUI := &konfluxv1alpha1.KonfluxUI{}
+	consoleURL := ""
+	if err := r.Get(ctx, types.NamespacedName{Name: ui.CRName}, konfluxUI); err != nil {
+		// Log warning but don't fail - URL might not be available yet
+		log.Info("KonfluxUI not found, console URL will not be set", "error", err)
+	} else if konfluxUI.Status.Ingress != nil && konfluxUI.Status.Ingress.URL != "" {
+		consoleURL = konfluxUI.Status.Ingress.URL
+		log.Info("Found console URL from KonfluxUI", "url", consoleURL)
+	}
+
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, tc, integrationService); err != nil {
+	if err := r.applyManifests(ctx, tc, integrationService, consoleURL); err != nil {
 		return errHandler.HandleApplyError(ctx, err)
 	}
 
@@ -147,7 +163,7 @@ func (r *KonfluxIntegrationServiceReconciler) Reconcile(ctx context.Context, req
 
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
-func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxIntegrationService) error {
+func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxIntegrationService, consoleURL string) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.Integration)
@@ -158,7 +174,7 @@ func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context
 	for _, obj := range objects {
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
-			if err := applyIntegrationServiceDeploymentCustomizations(deployment, owner.Spec); err != nil {
+			if err := applyIntegrationServiceDeploymentCustomizations(deployment, owner.Spec, consoleURL); err != nil {
 				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
 			}
 		}
@@ -185,13 +201,13 @@ func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context
 }
 
 // applyIntegrationServiceDeploymentCustomizations applies user-defined customizations to IntegrationService deployments.
-func applyIntegrationServiceDeploymentCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxIntegrationServiceSpec) error {
+func applyIntegrationServiceDeploymentCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxIntegrationServiceSpec, consoleURL string) error {
 	switch deployment.Name {
 	case controllerManagerDeploymentName:
 		if spec.IntegrationControllerManager != nil {
 			deployment.Spec.Replicas = &spec.IntegrationControllerManager.Replicas
 		}
-		if err := buildControllerManagerOverlay(spec.IntegrationControllerManager).ApplyToDeployment(deployment); err != nil {
+		if err := buildControllerManagerOverlay(spec.IntegrationControllerManager, consoleURL).ApplyToDeployment(deployment); err != nil {
 			return err
 		}
 	}
@@ -199,19 +215,38 @@ func applyIntegrationServiceDeploymentCustomizations(deployment *appsv1.Deployme
 }
 
 // buildControllerManagerOverlay builds the pod overlay for the controller-manager deployment.
-func buildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploymentSpec) *customization.PodOverlay {
-	if spec == nil {
-		return customization.NewPodOverlay()
+func buildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploymentSpec, consoleURL string) *customization.PodOverlay {
+	// Build console URL template for pipeline run links in the UI.
+	// Format: https://<host>/ns/{{ .Namespace }}/pipelinerun/{{ .PipelineRunName }}
+	consoleURLTemplate := ""
+	if consoleURL != "" {
+		consoleURLTemplate = fmt.Sprintf("%s/ns/{{ .Namespace }}/pipelinerun/{{ .PipelineRunName }}",
+			strings.TrimSuffix(consoleURL, "/"))
+	}
+
+	// Determine replicas and manager spec (default replicas to 1 if no spec)
+	replicas := int32(1)
+	var managerSpec *konfluxv1alpha1.ContainerSpec
+	if spec != nil {
+		replicas = spec.Replicas
+		managerSpec = spec.Manager
 	}
 
 	return customization.BuildPodOverlay(
-		customization.DeploymentContext{Replicas: spec.Replicas},
+		customization.DeploymentContext{Replicas: replicas},
 		customization.WithContainerBuilder(
 			managerContainerName,
-			customization.FromContainerSpec(spec.Manager),
+			customization.FromContainerSpec(managerSpec),
 			customization.WithLeaderElection(),
+			customization.WithEnvOverride("CONSOLE_URL", consoleURLTemplate),
 		),
 	)
+}
+
+// mapKonfluxUIToIntegrationService maps KonfluxUI events to KonfluxIntegrationService reconcile requests.
+func (r *KonfluxIntegrationServiceReconciler) mapKonfluxUIToIntegrationService(_ context.Context, _ client.Object) []ctrl.Request {
+	// Return reconcile request for the singleton KonfluxIntegrationService CR
+	return []ctrl.Request{{NamespacedName: types.NamespacedName{Name: CRName}}}
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -230,5 +265,9 @@ func (r *KonfluxIntegrationServiceReconciler) SetupWithManager(mgr ctrl.Manager)
 		Owns(&rbacv1.RoleBinding{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Owns(&rbacv1.ClusterRole{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Owns(&rbacv1.ClusterRoleBinding{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
+		// Watch KonfluxUI CR for ingress status changes to update console URL
+		Watches(&konfluxv1alpha1.KonfluxUI{},
+			handler.EnqueueRequestsFromMapFunc(r.mapKonfluxUIToIntegrationService),
+			builder.WithPredicates(predicate.KonfluxUIIngressStatusChangedPredicate)).
 		Complete(r)
 }
