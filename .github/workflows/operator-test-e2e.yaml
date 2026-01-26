@@ -287,6 +287,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           QUAY_DOCKERCONFIGJSON: ${{ secrets.QUAY_DOCKERCONFIGJSON }}
           RELEASE_SERVICE_CATALOG_REVISION: ${{ secrets.RELEASE_SERVICE_CATALOG_REVISION }}
+          RELEASE_CATALOG_TA_QUAY_TOKEN: ${{ secrets.RELEASE_CATALOG_TA_QUAY_TOKEN }}
         run: |
           ./test/e2e/run-e2e.sh
 
