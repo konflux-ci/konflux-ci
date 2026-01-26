@@ -1,0 +1,66 @@
+apiVersion: konflux.konflux-ci.dev/v1alpha1
+kind: Konflux
+metadata:
+  name: konflux
+spec:
+  # Internal registry for local development
+  # Provides OCI registry accessible at localhost:5001 (if ENABLE_REGISTRY_PORT=1)
+  internalRegistry:
+    enabled: true
+
+  # Image controller (OPTIONAL - requires QUAY_TOKEN)
+  # Uncomment to enable image management features
+  # imageController:
+  #   enabled: true
+
+  # UI component
+  ui:
+    spec:
+      proxy:
+        replicas: 1
+        nginx:
+          resources:
+            requests:
+              cpu: 30m
+              memory: 128Mi
+
+  # Integration service
+  integrationService:
+    spec:
+      integrationControllerManager:
+        replicas: 1
+        manager:
+          resources:
+            requests:
+              cpu: 30m
+              memory: 128Mi
+
+  # Release service
+  releaseService:
+    spec:
+      releaseControllerManager:
+        replicas: 1
+
+  # Build service
+  buildService:
+    spec:
+      buildControllerManager:
+        replicas: 1
+
+  # Namespace lister
+  namespaceLister:
+    spec:
+      namespaceLister:
+        replicas: 1
+
+  # Public info service
+  info:
+    spec:
+      publicInfo:
+        environment: development
+        visibility: public
+
+  # Certificate manager
+  # Creates cluster issuer for TLS certificates
+  certManager:
+    createClusterIssuer: true
