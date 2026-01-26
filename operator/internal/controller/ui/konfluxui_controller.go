@@ -269,8 +269,6 @@ func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, tc *tra
 // dexConfigMapName is the name of the Dex ConfigMap to use (empty if not configured).
 // endpoint is the base URL used to configure oauth2-proxy.
 func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, dexConfigMapName string, endpoint *url.URL) error {
-	log := logf.FromContext(ctx)
-
 	objects, err := r.ObjectStore.GetForComponent(manifests.UI)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for UI: %w", err)
@@ -290,18 +288,6 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 		}
 
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
-			gvk := obj.GetObjectKind().GroupVersionKind()
-			if gvk.Group == constant.CertManagerGroup || gvk.Group == constant.KyvernoGroup {
-				// TODO: Remove this once we decide how to install cert-manager crds in envtest
-				// TODO: Remove this once we decide if we want to have a dependency on Kyverno
-				log.Info("Skipping resource: CRD not installed",
-					"kind", gvk.Kind,
-					"apiVersion", gvk.GroupVersion().String(),
-					"namespace", obj.GetNamespace(),
-					"name", obj.GetName(),
-				)
-				continue
-			}
 			return fmt.Errorf("failed to apply object %s/%s (%s): %w",
 				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), err)
 		}

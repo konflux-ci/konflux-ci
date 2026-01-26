@@ -67,4 +67,13 @@ const (
 
 	// ReasonSubCRStatusFailed indicates that fetching sub-CR status failed.
 	ReasonSubCRStatusFailed = "SubCRStatusFailed"
+
+	// ReasonCertManagerNotInstalled indicates that cert-manager CRDs are not installed.
+	ReasonCertManagerNotInstalled = "CertManagerNotInstalled"
+
+	// ReasonCertManagerInstallationCheckFailed indicates that checking cert-manager availability failed.
+	ReasonCertManagerInstallationCheckFailed = "CertManagerInstallationCheckFailed"
+
+	// ReasonCertManagerInstalled indicates that cert-manager CRDs are installed.
+	ReasonCertManagerInstalled = "CertManagerInstalled"
 )

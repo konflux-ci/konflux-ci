@@ -23,6 +23,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,7 +36,47 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
 
-var _ = Describe("KonfluxCertManager Controller", func() {
+var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
+	// "When the cert-manager namespace does not exist" runs first so the namespace
+	// has never been created by another test's BeforeEach.
+	Context("When the cert-manager namespace does not exist", func() {
+		ctx := context.Background()
+		typeNamespacedName := types.NamespacedName{Name: CRName}
+
+		It("should fail apply and report error when createClusterIssuer is enabled", func() {
+			By("creating the custom resource with createClusterIssuer enabled")
+			enabled := true
+			resource := &konfluxv1alpha1.KonfluxCertManager{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxCertManagerSpec{
+					CreateClusterIssuer: &enabled,
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			reconciler := &KonfluxCertManagerReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ObjectStore: objectStore,
+			}
+
+			By("reconciling fails because the cert-manager namespace does not exist")
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("cert-manager"))
+			Expect(err.Error()).To(ContainSubstring("not found"))
+
+			By("status reflects the apply failure")
+			updated := &konfluxv1alpha1.KonfluxCertManager{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, updated)).To(Succeed())
+			readyCond := meta.FindStatusCondition(updated.Status.Conditions, condition.TypeReady)
+			Expect(readyCond).NotTo(BeNil())
+			Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(readyCond.Reason).To(Equal(condition.ReasonApplyFailed))
+			Expect(readyCond.Message).To(ContainSubstring("apply manifests"))
+		})
+	})
+
 	Context("When reconciling a resource", func() {
 		ctx := context.Background()
 
@@ -46,6 +87,17 @@ var _ = Describe("KonfluxCertManager Controller", func() {
 		var reconciler *KonfluxCertManagerReconciler
 
 		BeforeEach(func() {
+			// Simulate cert-manager being installed: the cert-manager namespace must exist
+			// (the controller no longer creates it; whoever installs cert-manager creates it).
+			ns := &corev1.Namespace{}
+			ns.Name = "cert-manager"
+			getErr := k8sClient.Get(ctx, types.NamespacedName{Name: ns.Name}, ns)
+			if errors.IsNotFound(getErr) {
+				Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+			} else {
+				Expect(getErr).NotTo(HaveOccurred())
+			}
+
 			// Ensure cleanup of any existing resource from previous test runs
 			resource := &konfluxv1alpha1.KonfluxCertManager{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
