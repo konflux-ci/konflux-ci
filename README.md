@@ -346,9 +346,12 @@ to configure a Quay.io application and deploy `image-controller`.
 4. Provide a name to the application and click "Add a component"
 5. Under `Git repository url`, copy the **https** link to your fork. This should
    be something similar to `https://github.com/<your-name>/testrepo.git`.
-6. Leave `Docker file` blank. The default value of `Dockerfile` will be used.
-7. Under the Pipeline drop-down list, select `docker-build-oci-ta`.
-8. Click `Create application`.
+6. Uncheck the "Should the image produced be private" checkbox. If left checked, Pull Request
+   pipelines will not start because image-controller will fail to provision the image
+   repository.
+7. Leave `Docker file` blank. The default value of `Dockerfile` will be used.
+8. Under the Pipeline drop-down list, select `docker-build-oci-ta`.
+9. Click `Create application`.
 
 **NOTE:** If you encounter `404 Not Found` error, refer to the
 [troubleshooting guide](./docs/troubleshooting.md#unable-to-create-application-with-component-using-the-konflux-ui).
