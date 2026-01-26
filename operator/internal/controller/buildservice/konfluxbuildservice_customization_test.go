@@ -351,3 +351,37 @@ func TestApplyBuildServiceDeploymentCustomizations_ResourceMerging(t *testing.T)
 		g.Expect(managerContainer.Resources.Requests.Cpu().String()).To(gomega.Equal("100m"))
 	})
 }
+
+func TestShouldManagePipelineConfig(t *testing.T) {
+	t.Run("returns true when ManagePipelineConfig is nil (default)", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			ManagePipelineConfig: nil,
+		}
+		g.Expect(shouldManagePipelineConfig(spec)).To(gomega.BeTrue())
+	})
+
+	t.Run("returns true when ManagePipelineConfig is explicitly true", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		trueVal := true
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			ManagePipelineConfig: &trueVal,
+		}
+		g.Expect(shouldManagePipelineConfig(spec)).To(gomega.BeTrue())
+	})
+
+	t.Run("returns false when ManagePipelineConfig is explicitly false", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		falseVal := false
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			ManagePipelineConfig: &falseVal,
+		}
+		g.Expect(shouldManagePipelineConfig(spec)).To(gomega.BeFalse())
+	})
+
+	t.Run("returns true for empty spec (default)", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+		g.Expect(shouldManagePipelineConfig(spec)).To(gomega.BeTrue())
+	})
+}

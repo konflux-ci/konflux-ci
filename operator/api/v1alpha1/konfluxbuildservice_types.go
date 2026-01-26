@@ -28,6 +28,29 @@ type KonfluxBuildServiceSpec struct {
 	// BuildControllerManager defines customizations for the controller-manager deployment.
 	// +optional
 	BuildControllerManager *ControllerManagerDeploymentSpec `json:"buildControllerManager,omitempty"`
+
+	// ManagePipelineConfig controls whether the operator manages the build-pipeline-config ConfigMap
+	// in the build-service namespace.
+	//
+	// Default behavior (true or unset):
+	//   The operator creates and manages the build-pipeline-config ConfigMap containing
+	//   the default pipeline bundle references (docker-build-oci-ta, fbc-builder, etc.).
+	//   The ConfigMap is automatically updated when the operator is upgraded.
+	//
+	// Self-managed behavior (false):
+	//   The operator skips ConfigMap creation and management entirely.
+	//   Users must create and maintain their own build-pipeline-config ConfigMap.
+	//   This is useful for advanced scenarios like custom pipeline bundles or
+	//   integration with external configuration management (e.g., slsa-konflux-example).
+	//
+	// Transition workflow (managed → self-managed):
+	//   1. Set managePipelineConfig: false in the KonfluxBuildService CR
+	//   2. Delete the existing operator-managed ConfigMap
+	//   3. Create your custom build-pipeline-config ConfigMap with your pipeline definitions
+	//
+	// +optional
+	// +kubebuilder:default:=true
+	ManagePipelineConfig *bool `json:"managePipelineConfig,omitempty"`
 }
 
 // KonfluxBuildServiceStatus defines the observed state of KonfluxBuildService
