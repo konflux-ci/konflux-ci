@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	securityv1 "github.com/openshift/api/security/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -210,6 +211,136 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 
 			By("verifying the SCC was NOT created")
 			Expect(sccExists(ctx)).To(BeFalse())
+		})
+	})
+
+	Context("ManagePipelineConfig", func() {
+		const configMapName = "build-pipeline-config"
+		const configMapNamespace = "build-service"
+
+		var (
+			ctx                context.Context
+			buildService       *konfluxv1alpha1.KonfluxBuildService
+			reconciler         *KonfluxBuildServiceReconciler
+			typeNamespacedName types.NamespacedName
+		)
+
+		configMapExists := func(ctx context.Context) bool {
+			cm := &corev1.ConfigMap{}
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name:      configMapName,
+				Namespace: configMapNamespace,
+			}, cm)
+			return err == nil
+		}
+
+		reconcileBuildService := func(ctx context.Context) {
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+		}
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			typeNamespacedName = types.NamespacedName{
+				Name:      CRName,
+				Namespace: "default",
+			}
+
+			By("cleaning up any existing ConfigMap from previous tests")
+			existingCM := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      configMapName,
+					Namespace: configMapNamespace,
+				},
+			}
+			_ = k8sClient.Delete(ctx, existingCM)
+
+			reconciler = &KonfluxBuildServiceReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ObjectStore: objectStore,
+				ClusterInfo: nil,
+			}
+		})
+
+		AfterEach(func() {
+			By("cleaning up the ConfigMap")
+			existingCM := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      configMapName,
+					Namespace: configMapNamespace,
+				},
+			}
+			_ = k8sClient.Delete(ctx, existingCM)
+
+			By("cleaning up KonfluxBuildService resource")
+			if buildService != nil {
+				_ = k8sClient.Delete(ctx, buildService)
+			}
+		})
+
+		It("Should create ConfigMap when managePipelineConfig is not set (default true)", func() {
+			By("creating KonfluxBuildService with managePipelineConfig unset")
+			buildService = &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      CRName,
+					Namespace: "default",
+				},
+				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+					// ManagePipelineConfig not set, should default to true
+				},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+
+			By("reconciling the resource")
+			reconcileBuildService(ctx)
+
+			By("verifying the ConfigMap was created")
+			Expect(configMapExists(ctx)).To(BeTrue())
+		})
+
+		It("Should create ConfigMap when managePipelineConfig is explicitly true", func() {
+			By("creating KonfluxBuildService with managePipelineConfig: true")
+			trueVal := true
+			buildService = &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      CRName,
+					Namespace: "default",
+				},
+				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+					ManagePipelineConfig: &trueVal,
+				},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+
+			By("reconciling the resource")
+			reconcileBuildService(ctx)
+
+			By("verifying the ConfigMap was created")
+			Expect(configMapExists(ctx)).To(BeTrue())
+		})
+
+		It("Should NOT create ConfigMap when managePipelineConfig is false", func() {
+			By("creating KonfluxBuildService with managePipelineConfig: false")
+			falseVal := false
+			buildService = &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      CRName,
+					Namespace: "default",
+				},
+				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+					ManagePipelineConfig: &falseVal,
+				},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+
+			By("reconciling the resource")
+			reconcileBuildService(ctx)
+
+			By("verifying the ConfigMap was NOT created")
+			Expect(configMapExists(ctx)).To(BeFalse())
 		})
 	})
 })
