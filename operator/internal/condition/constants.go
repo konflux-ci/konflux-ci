@@ -67,4 +67,7 @@ const (
 
 	// ReasonSubCRStatusFailed indicates that fetching sub-CR status failed.
 	ReasonSubCRStatusFailed = "SubCRStatusFailed"
+
+	// ReasonCertManagerMissing indicates that cert-manager CRDs are not installed.
+	ReasonCertManagerMissing = "CertManagerMissing"
 )
