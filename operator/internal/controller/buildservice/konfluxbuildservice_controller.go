@@ -185,18 +185,6 @@ func (r *KonfluxBuildServiceReconciler) applyManifests(ctx context.Context, tc *
 
 		// Apply with ownership using the tracking client
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
-			gvk := obj.GetObjectKind().GroupVersionKind()
-			if gvk.Group == constant.CertManagerGroup || gvk.Group == constant.KyvernoGroup {
-				// TODO: Remove this once we decide how to install cert-manager crds in envtest
-				// TODO: Remove this once we decide if we want to have a dependency on Kyverno
-				log.Info("Skipping resource: CRD not installed",
-					"kind", gvk.Kind,
-					"apiVersion", gvk.GroupVersion().String(),
-					"namespace", obj.GetNamespace(),
-					"name", obj.GetName(),
-				)
-				continue
-			}
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
 				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), manifests.BuildService, err)
 		}

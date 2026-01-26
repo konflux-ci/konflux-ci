@@ -315,3 +315,37 @@ func UpdateComponentStatuses(
 
 	return nil
 }
+
+// DependencyOverride defines how a dependency condition should override Ready status.
+type DependencyOverride struct {
+	// ConditionType is the type of the dependency condition to check (e.g., "CertManagerAvailable").
+	ConditionType string
+	// Reason is the reason to use when overriding Ready to False.
+	Reason string
+	// Message is the message to use when overriding Ready to False.
+	Message string
+}
+
+// OverrideReadyIfDependencyFalse checks if any dependency conditions are explicitly False
+// and overrides Ready to False if so. Only checks conditions that are explicitly False,
+// not Unknown, to allow Ready to remain True when dependencies are uncertain.
+func OverrideReadyIfDependencyFalse(
+	obj konfluxv1alpha1.ConditionAccessor,
+	dependencies []DependencyOverride,
+) {
+	for _, dep := range dependencies {
+		cond := apimeta.FindStatusCondition(obj.GetConditions(), dep.ConditionType)
+		if cond != nil && cond.Status == metav1.ConditionFalse {
+			// Dependency is explicitly missing, override Ready to False
+			SetCondition(obj, metav1.Condition{
+				Type:    TypeReady,
+				Status:  metav1.ConditionFalse,
+				Reason:  dep.Reason,
+				Message: dep.Message,
+			})
+			// Only override with the first False dependency found
+			// (in case multiple dependencies are False, use the first one's reason/message)
+			return
+		}
+	}
+}

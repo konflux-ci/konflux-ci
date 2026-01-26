@@ -134,8 +134,6 @@ func (r *KonfluxRBACReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
 func (r *KonfluxRBACReconciler) applyManifests(ctx context.Context, tc *tracking.Client) error {
-	log := logf.FromContext(ctx)
-
 	objects, err := r.ObjectStore.GetForComponent(manifests.RBAC)
 	if err != nil {
 		return fmt.Errorf("failed to get manifests for RBAC: %w", err)
@@ -144,18 +142,6 @@ func (r *KonfluxRBACReconciler) applyManifests(ctx context.Context, tc *tracking
 	for _, obj := range objects {
 		// Apply with ownership using the tracking client
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
-			gvk := obj.GetObjectKind().GroupVersionKind()
-			// TODO: Remove this once we decide how to install cert-manager crds in envtest
-			// TODO: Remove this once we decide if we want to have a dependency on Kyverno
-			if gvk.Group == constant.CertManagerGroup || gvk.Group == constant.KyvernoGroup {
-				log.Info("Skipping resource: CRD not installed",
-					"kind", gvk.Kind,
-					"apiVersion", gvk.GroupVersion().String(),
-					"namespace", obj.GetNamespace(),
-					"name", obj.GetName(),
-				)
-				continue
-			}
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
 				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), manifests.RBAC, err)
 		}

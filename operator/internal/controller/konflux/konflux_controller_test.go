@@ -23,7 +23,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,6 +33,7 @@ import (
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/defaulttenant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/internalregistry"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 )
 
 var _ = Describe("Konflux Controller", func() {
@@ -68,9 +71,11 @@ var _ = Describe("Konflux Controller", func() {
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
+			clusterInfo := createTestClusterInfo()
 			controllerReconciler := &KonfluxReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ClusterInfo: clusterInfo,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -198,9 +203,11 @@ var _ = Describe("Konflux Controller", func() {
 			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
 
 			By("reconciling the Konflux CR")
+			clusterInfo := createTestClusterInfo()
 			reconciler := &KonfluxReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ClusterInfo: clusterInfo,
 			}
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
@@ -229,9 +236,11 @@ var _ = Describe("Konflux Controller", func() {
 			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
 
 			By("reconciling the Konflux CR")
+			clusterInfo := createTestClusterInfo()
 			reconciler := &KonfluxReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ClusterInfo: clusterInfo,
 			}
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
@@ -260,9 +269,11 @@ var _ = Describe("Konflux Controller", func() {
 			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
 
 			By("reconciling the Konflux CR")
+			clusterInfo := createTestClusterInfo()
 			reconciler := &KonfluxReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ClusterInfo: clusterInfo,
 			}
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
@@ -292,9 +303,11 @@ var _ = Describe("Konflux Controller", func() {
 			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
 
 			By("reconciling to create the InternalRegistry CR")
+			clusterInfo := createTestClusterInfo()
 			reconciler := &KonfluxReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ClusterInfo: clusterInfo,
 			}
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
@@ -365,9 +378,11 @@ var _ = Describe("Konflux Controller", func() {
 			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
 
 			By("reconciling the Konflux CR")
+			clusterInfo := createTestClusterInfo()
 			reconciler := &KonfluxReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ClusterInfo: clusterInfo,
 			}
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
@@ -397,9 +412,11 @@ var _ = Describe("Konflux Controller", func() {
 			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
 
 			By("reconciling the Konflux CR")
+			clusterInfo := createTestClusterInfo()
 			reconciler := &KonfluxReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ClusterInfo: clusterInfo,
 			}
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
@@ -428,9 +445,11 @@ var _ = Describe("Konflux Controller", func() {
 			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
 
 			By("reconciling the Konflux CR")
+			clusterInfo := createTestClusterInfo()
 			reconciler := &KonfluxReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ClusterInfo: clusterInfo,
 			}
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
@@ -459,9 +478,11 @@ var _ = Describe("Konflux Controller", func() {
 			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
 
 			By("reconciling to create the DefaultTenant CR")
+			clusterInfo := createTestClusterInfo()
 			reconciler := &KonfluxReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ClusterInfo: clusterInfo,
 			}
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
@@ -494,3 +515,30 @@ var _ = Describe("Konflux Controller", func() {
 		})
 	})
 })
+
+// createTestClusterInfo creates a minimal ClusterInfo for testing
+func createTestClusterInfo() *clusterinfo.Info {
+	mockClient := &testMockDiscoveryClient{
+		resources:     map[string]*metav1.APIResourceList{},
+		serverVersion: &version.Info{GitVersion: "v1.30.0"},
+	}
+	info, _ := clusterinfo.DetectWithClient(mockClient)
+	return info
+}
+
+// testMockDiscoveryClient implements clusterinfo.DiscoveryClient for general testing
+type testMockDiscoveryClient struct {
+	resources     map[string]*metav1.APIResourceList
+	serverVersion *version.Info
+}
+
+func (m *testMockDiscoveryClient) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
+	if r, ok := m.resources[groupVersion]; ok {
+		return r, nil
+	}
+	return nil, errors.NewNotFound(schema.GroupResource{Group: groupVersion}, "")
+}
+
+func (m *testMockDiscoveryClient) ServerVersion() (*version.Info, error) {
+	return m.serverVersion, nil
+}
