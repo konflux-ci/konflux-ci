@@ -8,3 +8,14 @@ dependencies/smee/smee-channel-id.yaml
 kube-linter
 kube-linter-*.tar.gz
 kubelinter.log
+
+# Secrets - never commit these
+scripts/*.env
+!scripts/*.env.template
+*.pem
+*.private-key.pem
+
+# User-specific configurations
+my-konflux.yaml
+konflux-local.yaml
+scripts/smee-channel-id.yaml

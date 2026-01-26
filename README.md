@@ -5,6 +5,10 @@ Konflux-CI
 
 - [Document Conventions](#document-conventions)
 - [Trying Out Konflux](#trying-out-konflux)
+  * [Operator-Based Deployment](#operator-based-deployment)
+    + [Local Development (Kind)](#local-development-kind)
+    + [Production Deployment (Any Cluster)](#production-deployment-any-cluster)
+    + [Key Differences from Legacy Deployment](#key-differences-from-legacy-deployment)
   * [Machine Minimum Requirements](#machine-minimum-requirements)
   * [Installing Software Dependencies](#installing-software-dependencies)
   * [Bootstrapping the Cluster](#bootstrapping-the-cluster)
@@ -74,6 +78,67 @@ forwarding is needed for accessing Konflux.
 **Note:** If using a remote machine for setup, you'd need to port-forward port `9443` on
 the remote machine to port `9443` on your local machine to be able to access the UI from
 your local machine.
+
+## Operator-Based Deployment
+
+Konflux can be deployed using the operator-based installer, which supports both local development (Kind) and production deployments on any Kubernetes cluster.
+
+### Local Development (Kind)
+
+For quick local setup on macOS or Linux:
+
+```bash
+# 1. Create configuration from templates
+cp scripts/deploy-local.env.template scripts/deploy-local.env
+
+# 2. Edit scripts/deploy-local.env with your GitHub App credentials
+# See the template file for instructions
+
+# 3. Deploy Konflux
+./scripts/deploy-local.sh
+```
+
+**macOS users:** The script handles macOS-specific configuration automatically. See `scripts/deploy-local.env.template` for available options.
+
+This automated script:
+- Creates a Kind cluster with proper configuration
+- Deploys the Konflux operator
+- Applies your Konflux CR configuration
+- Sets up GitHub integration
+- Provides a local OCI registry at `localhost:5001`
+
+Access Konflux at: https://localhost:9443
+
+### Production Deployment (Any Cluster)
+
+For production deployments on OpenShift, EKS, GKE, or other Kubernetes clusters:
+
+```bash
+# 1. Install the operator
+kubectl apply -f https://github.com/konflux-ci/konflux-ci/releases/latest/download/install.yaml
+
+# 2. Create your Konflux CR (based on samples - see link below)
+kubectl apply -f my-konflux.yaml
+
+# 3. Create required secrets (GitHub App, Quay tokens, etc.)
+# See deployment guide for details
+```
+
+**Important:** Do not use the sample with demo users (`konflux_v1alpha1_konflux.yaml`) for production - configure OIDC authentication instead.
+
+See [Operator Deployment Guide](docs/operator-deployment.md) for complete instructions and [sample configurations](operator/config/samples/).
+
+### Key Differences from Legacy Deployment
+
+The operator-based deployment differs from the legacy bootstrap approach:
+
+- **Universal:** Works on any Kubernetes cluster, not just Kind
+- **Declarative:** Configure via Konflux CR, not shell scripts
+- **Production-ready:** Supports HA, custom ingress, and proper secret management
+- **Secure defaults:** No demo users in samples (use OIDC connectors)
+- **Modular:** Enable only the components you need
+
+For the legacy bootstrap approach (Linux x86_64 only), continue to the sections below.
 
 ## Machine Minimum Requirements
 
@@ -190,13 +255,20 @@ kubectl wait --for=condition=Available deployment/konflux-operator-controller-ma
 
 4. :gear: Deploy Konflux using the Operator
 
-Create a Konflux Custom Resource to deploy Konflux. You can use the sample configuration:
+Create a Konflux Custom Resource to deploy Konflux. This is the **only CR you need** - the operator manages all components from this single resource.
+
+For local testing, you can use the sample configuration with demo users:
 
 ```bash
 kubectl apply -f <(curl -L \
   https://github.com/konflux-ci/konflux-ci/releases/latest/download/samples.tar.gz | \
   tar -xzO ./konflux_v1alpha1_konflux.yaml)
 ```
+
+> [!WARNING]
+> This sample includes **demo users with insecure static passwords** (user1@konflux.dev / password) for local testing only.
+> **Never use this sample for production deployments.** For production, configure OIDC authentication instead.
+> See [operator/config/samples/konflux-with-github-auth.yaml](operator/config/samples/konflux-with-github-auth.yaml) for a production example.
 
 > [!NOTE]
 > To use a specific version instead of the latest, replace `latest` with the version tag:

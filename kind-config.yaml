@@ -22,3 +22,7 @@ nodes:
   - containerPort: 30012
     hostPort: 8180
     protocol: TCP
+    # Registry (port 5001 to avoid macOS port 5000 conflict)
+  - containerPort: 30001
+    hostPort: 5001
+    protocol: TCP
