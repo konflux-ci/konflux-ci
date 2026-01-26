@@ -1,5 +1,13 @@
 # Title: Konflux Configuration
 # Description: Complete Konflux configuration with all components (UI, Build Service, Integration Service, Release Service, etc.)
+#
+# This sample is used in CI tests and local development. It includes demo users with static passwords
+# for testing purposes. For production deployments, remove the staticPasswords section and configure
+# OIDC authentication (GitHub, Google, LDAP, etc.) instead.
+#
+# Usage:
+#   CI: Used automatically by .github/workflows/operator-test-e2e.yaml
+#   Local: ./scripts/deploy-local.sh (uses this file by default)
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: Konflux
 metadata:
@@ -27,6 +35,9 @@ spec:
         config:
           enablePasswordDB: true
           passwordConnector: local
+          # WARNING: Demo users for CI and local development ONLY
+          # For production, remove staticPasswords and configure OIDC connectors
+          # See docs/operator-deployment.md for production authentication examples
           staticPasswords:
           - email: "user1@konflux.dev"
             # bcrypt hash of the string "password": $(echo password | htpasswd -BinC 10 admin | cut -d: -f2)
@@ -93,8 +104,9 @@ spec:
         visibility: public
       banner:
         items:
-          - summary: "Welcome to Konflux-CI! This is a development environment for testing and development purposes."
-            type: info
+          # Display a banner at the top of the Konflux UI to all users.
+          - summary: "Welcome to Konflux-CI! This development and testing environment has been deployed with default insecure passwords!"
+            type: danger
   certManager:
     # CreateClusterIssuer controls whether cluster issuer resources are created
     # Defaults to true if not specified
@@ -102,4 +114,5 @@ spec:
   internalRegistry:
     # Enabled controls whether internal registry resources are deployed
     # Defaults to false if not specified
+    # For local development on Kind, this provides an OCI registry at localhost:5001
     enabled: true

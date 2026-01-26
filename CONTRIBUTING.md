@@ -5,6 +5,9 @@ Contributing Guidelines
 
 - [Editing Markdown Files](#editing-markdown-files)
 - [Using KubeLinter](#using-kubelinter)
+- [Operator Development](#operator-development)
+  * [Building the Operator Locally](#building-the-operator-locally)
+  * [Operator Development Commands](#operator-development-commands)
 - [CI/CD and Testing](#cicd-and-testing)
   * [Automated E2E Tests](#automated-e2e-tests)
   * [ARM64 Testing](#arm64-testing)
@@ -49,6 +52,58 @@ finally, run `kube-linter lint ./.kube-linter` to recursively apply KubeLinter c
 It may be also recommended to create a configuration file. To do so please check
 [KubeLinter config documentation](https://docs.kubelinter.io/#/configuring-kubelinter)
 this file will allow you to ignore or include specific KubeLinter checks.
+
+# Operator Development
+
+If you're working on the Konflux operator itself and need to test your changes:
+
+## Building the Operator Locally
+
+Use the `build` installation method with the local deployment script:
+
+```bash
+# Configure environment
+cp scripts/deploy-local.env.template scripts/deploy-local.env
+# Edit deploy-local.env with your secrets
+
+# Deploy with locally built operator
+OPERATOR_INSTALL_METHOD=build ./scripts/deploy-local.sh
+```
+
+This will:
+1. Build the operator image from your local changes
+2. Load the image into the Kind cluster
+3. Install CRDs using `make install`
+4. Deploy the operator using `make deploy`
+
+## Operator Development Commands
+
+```bash
+cd operator
+
+# Run tests
+make test
+
+# Build operator binary
+make build
+
+# Build operator image
+make docker-build IMG=localhost/konflux-operator:dev
+
+# Install CRDs
+make install
+
+# Deploy operator to cluster
+make deploy IMG=localhost/konflux-operator:dev
+
+# Uninstall CRDs
+make uninstall
+
+# Undeploy operator
+make undeploy
+```
+
+See the [operator README](operator/README.md) for more development commands.
 
 # CI/CD and Testing
 
