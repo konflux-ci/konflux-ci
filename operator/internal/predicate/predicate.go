@@ -22,6 +22,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 )
 
 // GenerationChangedPredicate filters out events where the generation hasn't changed
@@ -97,6 +99,50 @@ var LabelsOrAnnotationsChangedPredicate = predicate.Funcs{
 		// Also check labels and annotations for resources without generation updates
 		return !reflect.DeepEqual(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels()) ||
 			!reflect.DeepEqual(e.ObjectOld.GetAnnotations(), e.ObjectNew.GetAnnotations())
+	},
+	CreateFunc: func(e event.CreateEvent) bool {
+		return true
+	},
+	DeleteFunc: func(e event.DeleteEvent) bool {
+		return true
+	},
+	GenericFunc: func(e event.GenericEvent) bool {
+		return true
+	},
+}
+
+// KonfluxUIIngressStatusChangedPredicate triggers reconciliation only when the Status.Ingress field changes in KonfluxUI CR.
+// This predicate filters out status updates that don't affect the ingress configuration.
+var KonfluxUIIngressStatusChangedPredicate = predicate.Funcs{
+	UpdateFunc: func(e event.UpdateEvent) bool {
+		if e.ObjectOld == nil || e.ObjectNew == nil {
+			return true
+		}
+		// Always reconcile on spec changes
+		if e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration() {
+			return true
+		}
+		// Check for ingress status changes
+		oldUI, ok1 := e.ObjectOld.(*konfluxv1alpha1.KonfluxUI)
+		newUI, ok2 := e.ObjectNew.(*konfluxv1alpha1.KonfluxUI)
+		if !ok1 || !ok2 {
+			return true
+		}
+		// Compare ingress status fields
+		oldIngress := oldUI.Status.Ingress
+		newIngress := newUI.Status.Ingress
+		// If both are nil, no change
+		if oldIngress == nil && newIngress == nil {
+			return false
+		}
+		// If one is nil and the other is not, there's a change
+		if oldIngress == nil || newIngress == nil {
+			return true
+		}
+		// Compare ingress status fields
+		return oldIngress.Enabled != newIngress.Enabled ||
+			oldIngress.Hostname != newIngress.Hostname ||
+			oldIngress.URL != newIngress.URL
 	},
 	CreateFunc: func(e event.CreateEvent) bool {
 		return true
