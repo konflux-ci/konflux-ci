@@ -16,7 +16,7 @@ set -euo pipefail
 #
 # The script sets the following environment variables (via GITHUB_ENV):
 #   COMMIT_COUNT         - Number of commits found in the past 7 days
-#   VERIFICATION_FAILED  - "true" if verification failed (no release but commits exist), unset otherwise
+#   VERIFICATION_FAILED  - "true" if verification failed (no release but commits exist), "false" otherwise
 #
 # Exit Codes:
 #   0 - Success (release exists OR no commits)
@@ -55,16 +55,17 @@ echo "Checking for releases in the past 7 days..."
 START_TIMESTAMP=$(date -u --date='7 days ago' +%s)
 
 # Check for releases in the past 7 days using gh release list
-# Use --arg to safely pass the bash variable into the jq query
-# shellcheck disable=SC2016
-# $start is a jq variable (passed via --arg), not a bash variable, so single quotes are correct
+# Get JSON output first, then pipe to jq with --arg to safely pass the timestamp
 # Wrap in error handling to catch unexpected failures
-if ! RELEASE_COUNT=$(gh release list --repo "$REPOSITORY" --limit 100 \
-  --json publishedAt \
-  --jq --arg start "$START_TIMESTAMP" 'map(select((.publishedAt | fromdate) > ($start | tonumber))) | length' 2>&1); then
-  echo "Error: Failed to check releases - ${RELEASE_COUNT}"
+RELEASES_JSON=$(gh release list --repo "$REPOSITORY" --limit 100 --json publishedAt 2>&1) || {
+  echo "Error: Failed to fetch releases - ${RELEASES_JSON}"
   exit 1
-fi
+}
+
+RELEASE_COUNT=$(echo "$RELEASES_JSON" | jq --arg start "$START_TIMESTAMP" 'map(select((.publishedAt | fromdate) > ($start | tonumber))) | length') || {
+  echo "Error: Failed to process releases data"
+  exit 1
+}
 
 if [ "$RELEASE_COUNT" -gt 0 ]; then
   echo "Found $RELEASE_COUNT release(s) in the past 7 days"
