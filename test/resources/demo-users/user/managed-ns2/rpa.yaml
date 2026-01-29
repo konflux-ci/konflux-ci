@@ -19,11 +19,12 @@ spec:
   pipeline:
     pipelineRef:
       resolver: git
+      ociStorage: registry-service.kind-registry/test-component-release-ta
       params:
         - name: url
           value: "https://github.com/konflux-ci/release-service-catalog.git"
         - name: revision
-          value: 0cbe8aebf8b85763b724dc292641d2c587f13b6e
+          value: development
         - name: pathInRepo
           value: "pipelines/managed/push-to-external-registry/push-to-external-registry.yaml"
     serviceAccountName: release-pipeline

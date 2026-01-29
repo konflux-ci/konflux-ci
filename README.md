@@ -726,7 +726,8 @@ For more details you can examine the manifests under the
 
 To do all that, follow these steps:
 
-:gear: Edit the [release plan](./test/resources/demo-users/user/ns2/release-plan.yaml)
+:gear: Edit the `ReleasePlan` manifest at
+[test/resources/demo-users/user/ns2/release-plan.yaml](./test/resources/demo-users/user/ns2/release-plan.yaml)
 and verify that the `application` field contains the name of your application.
 
 :gear: Deploy the Release Plan under the development team namespace (`user-ns2`):
@@ -735,8 +736,8 @@ and verify that the `application` field contains the name of your application.
 kubectl create -f ./test/resources/demo-users/user/ns2/release-plan.yaml
 ```
 
-Edit the `ReleasePlanAdmission`
-[manifest](./test/resources/demo-users/user/managed-ns2/rpa.yaml):
+Edit the `ReleasePlanAdmission` manifest at
+[test/resources/demo-users/user/managed-ns2/rpa.yaml](./test/resources/demo-users/user/managed-ns2/rpa.yaml):
 
 **NOTE:** if you're using the in-cluster registry, you should not be required to make
 any of the changes to the `ReleasePlanAdmission` manifest described below before
@@ -760,6 +761,22 @@ deploying it.
         - name: test-component
           repository: quay.io/my-user/my-konflux-component-release
 ```
+
+3. :gear: The example release pipeline requires a repository into which trusted
+   artifacts will be written as a manner of passing data between tasks in the pipeline.
+
+   The **ociStorage** field tells the pipeline where to have that stored.
+
+   For example, if your release repository was
+   `quay.io/my-user/my-konflux-component-release`, you could set your TA repository
+   like this:
+
+```yaml
+    ociStorage: registry-service.kind-registry/test-component-release-ta
+```
+
+   For more details, see
+   [Trusted Artifacts (ociStorage)](./docs/quay.md#trusted-artifacts-ocistorage).
 
 :gear: Deploy the managed environment team's namespace, along with the resources
 mentioned above:
