@@ -133,8 +133,9 @@ done
 For image-controller (if enabled):
 
 ```bash
-kubectl -n image-controller create secret generic quay-token \
-  --from-literal=token="your-quay-token"
+kubectl -n image-controller create secret generic quaytoken \
+  --from-literal=quaytoken="your-quay-token" \
+  --from-literal=organization="your-quay-organization"
 ```
 
 ### Step 5: Verify Deployment
