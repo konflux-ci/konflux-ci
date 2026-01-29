@@ -62,7 +62,7 @@ source "${ENV_FILE}"
 # Export variables so they're available to child scripts
 export KIND_MEMORY_GB PODMAN_MACHINE_NAME REGISTRY_HOST_PORT ENABLE_REGISTRY_PORT
 export INCREASE_PODMAN_PIDS_LIMIT
-export GITHUB_PRIVATE_KEY_PATH GITHUB_APP_ID WEBHOOK_SECRET QUAY_TOKEN
+export GITHUB_PRIVATE_KEY_PATH GITHUB_APP_ID WEBHOOK_SECRET QUAY_TOKEN QUAY_ORGANIZATION
 
 # Validate required secrets
 if [ -z "${GITHUB_PRIVATE_KEY_PATH:-}" ] || [ -z "${GITHUB_APP_ID:-}" ] || [ -z "${WEBHOOK_SECRET:-}" ]; then
@@ -239,6 +239,35 @@ done
 
 echo "✓ Secrets created"
 
+# Step 6b: Create image-controller secret (optional)
+if [ -n "${QUAY_TOKEN}" ] && [ -n "${QUAY_ORGANIZATION}" ]; then
+    echo ""
+    echo "Creating image-controller Quay secret..."
+
+    # Wait for image-controller namespace
+    echo "Waiting for namespace: image-controller"
+    timeout=60
+    while ! kubectl get namespace image-controller &> /dev/null && [ $timeout -gt 0 ]; do
+        sleep 2
+        timeout=$((timeout - 2))
+    done
+
+    if [ $timeout -le 0 ]; then
+        echo "WARNING: Namespace image-controller not created after 60 seconds"
+        echo "         Secret will need to be created manually"
+    else
+        echo "Creating secret in image-controller..."
+        kubectl -n image-controller create secret generic quaytoken \
+            --from-literal=quaytoken="${QUAY_TOKEN}" \
+            --from-literal=organization="${QUAY_ORGANIZATION}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+        echo "✓ Image-controller secret created"
+    fi
+elif [ -n "${QUAY_TOKEN}" ] || [ -n "${QUAY_ORGANIZATION}" ]; then
+    echo ""
+    echo "WARNING: Both QUAY_TOKEN and QUAY_ORGANIZATION must be set to create image-controller secret"
+    echo "         Image-controller secret not created"
+fi
 
 # Step 7: Wait for Konflux to be ready
 echo ""
