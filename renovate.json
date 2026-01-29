@@ -22,7 +22,9 @@
       "automerge": true
     },
     {
-      "matchPackageNames": ["https://github.com/cert-manager/cert-manager"],
+      "matchPackageNames": [
+        "https://github.com/cert-manager/cert-manager"
+      ],
       "enabled": false,
       "description": "Disable until we're able to auto-update trust-manager as well"
     },
@@ -35,13 +37,21 @@
       "description": "Group core Tekton components for coordinated updates. Note: tektoncd/results is managed by the operator and its version is determined by the operator version."
     }
   ],
-  "enabledManagers": ["regex", "kustomize", "github-actions", "gomod", "dockerfile"],
+  "enabledManagers": [
+    "custom.regex",
+    "kustomize",
+    "github-actions",
+    "gomod",
+    "dockerfile"
+  ],
   "customManagers": [
     {
       "customType": "regex",
-      "fileMatch": ["(^|\/)kustomization\\.(yaml|yml)$"],
+      "managerFilePatterns": [
+        "/(^|/)kustomization\\.(yaml|yml)$/"
+      ],
       "matchStrings": [
-        "- (?<packageName>https:\/\/github\\.com\/[^/]+\/[^/]+)\/.*\\?ref=(?<currentDigest>[a-f0-9]{40})"
+        "- (?<packageName>https://github\\.com/[^/]+/[^/]+)/.*\\?ref=(?<currentDigest>[a-f0-9]{40})"
       ],
       "datasourceTemplate": "git-refs",
       "currentValueTemplate": "main"
@@ -49,9 +59,11 @@
     {
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["(^|\/)kustomization\\.(yaml|yml)$"],
+      "managerFilePatterns": [
+        "/(^|/)kustomization\\.(yaml|yml)$/"
+      ],
       "matchStrings": [
-        "- (?<packageName>https:\/\/github\\.com\/[^/]+\/[^/]+)\/.*\\?ref=[a-f0-9]{40}",
+        "- (?<packageName>https://github\\.com/[^/]+/[^/]+)/.*\\?ref=[a-f0-9]{40}",
         "newTag:\\s+(?<currentDigest>[a-f0-9]{40})"
       ],
       "datasourceTemplate": "git-refs",
@@ -59,9 +71,9 @@
     },
     {
       "customType": "regex",
-      "fileMatch": [
-        "konflux-ci/enterprise-contract/core/kustomization.yaml",
-        "operator/upstream-kustomizations/enterprise-contract/core/kustomization.yaml"
+      "managerFilePatterns": [
+        "/konflux-ci/enterprise-contract/core/kustomization.yaml/",
+        "/operator/upstream-kustomizations/enterprise-contract/core/kustomization.yaml/"
       ],
       "matchStrings": [
         "- verify_ec_task_bundle=(?<depName>quay\\.io/enterprise-contract/ec-task-bundle)@(?<currentDigest>sha256:[a-f0-9]{64})"
@@ -73,12 +85,12 @@
     {
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": [
-        "konflux-ci/enterprise-contract/core/kustomization.yaml",
-        "operator/upstream-kustomizations/enterprise-contract/core/kustomization.yaml"
+      "managerFilePatterns": [
+        "/konflux-ci/enterprise-contract/core/kustomization.yaml/",
+        "/operator/upstream-kustomizations/enterprise-contract/core/kustomization.yaml/"
       ],
       "matchStrings": [
-        "- verify_ec_task_git_url=(?<packageName>https:\/\/github\\.com\/enterprise-contract\/ec-cli)\\.git",
+        "- verify_ec_task_git_url=(?<packageName>https://github\\.com/enterprise-contract/ec-cli)\\.git",
         "- verify_ec_task_git_revision=(?<currentDigest>[a-f0-9]{40})"
       ],
       "datasourceTemplate": "git-refs",
@@ -86,9 +98,9 @@
     },
     {
       "customType": "regex",
-      "fileMatch": [
-        "konflux-ci/build-service/core/build-pipeline-config.yaml",
-        "operator/upstream-kustomizations/build-service/core/build-pipeline-config.yaml"
+      "managerFilePatterns": [
+        "/konflux-ci/build-service/core/build-pipeline-config.yaml/",
+        "/operator/upstream-kustomizations/build-service/core/build-pipeline-config.yaml/"
       ],
       "matchStrings": [
         "bundle: (?<depName>quay\\.io/konflux-ci/tekton-catalog/pipeline-[^@]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
@@ -99,7 +111,9 @@
     },
     {
       "customType": "regex",
-      "fileMatch": ["test/e2e/vars.sh"],
+      "managerFilePatterns": [
+        "/test/e2e/vars.sh/"
+      ],
       "matchStrings": [
         "E2E_TEST_IMAGE=(?<depName>quay\\.io/redhat-user-workloads/konflux-qe-team-tenant/konflux-e2e/konflux-e2e-tests)@(?<currentDigest>sha256:[a-f0-9]{64})"
       ],
@@ -110,7 +124,9 @@
     {
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["(^|\/)kustomization\\.(yaml|yml)$"],
+      "managerFilePatterns": [
+        "/(^|/)kustomization\\.(yaml|yml)$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=git-refs depName=(?<packageName>https:\\/\\/github\\.com\\/[^\\s]+)",
         "- https:\\/\\/github\\.com\\/[^/]+\\/[^/]+\\/releases\\/download\\/v(?<currentValue>[^/]+)\\/"
@@ -121,7 +137,9 @@
     {
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["(^|\/)kustomization\\.(yaml|yml)$"],
+      "managerFilePatterns": [
+        "/(^|/)kustomization\\.(yaml|yml)$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=git-refs depName=(?<packageName>https:\\/\\/github\\.com\\/[^\\s]+)",
         "- https:\\/\\/infra\\.tekton\\.dev\\/tekton-releases\\/[^/]+\\/previous\\/v(?<currentValue>[^/]+)\\/"
@@ -131,9 +149,9 @@
     },
     {
       "customType": "regex",
-      "fileMatch": [
-        "konflux-ci/enterprise-contract/policies/.*\\.yaml$",
-        "operator/upstream-kustomizations/enterprise-contract/policies/.*\\.yaml$"
+      "managerFilePatterns": [
+        "/konflux-ci/enterprise-contract/policies/.*\\.yaml$/",
+        "/operator/upstream-kustomizations/enterprise-contract/policies/.*\\.yaml$/"
       ],
       "matchStrings": [
         "- oci::(?<depName>quay\\.io/conforma/[^:]+):konflux@(?<currentDigest>sha256:[a-f0-9]{64})"
@@ -145,7 +163,9 @@
       "description": "Track kind version in GitHub Actions workflows",
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["^\\.github/workflows/.*\\.ya?ml$"],
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.*\\.ya?ml$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=github-releases depName=kubernetes-sigs/kind",
         "KIND_VERSION:\\s*\"(?<currentValue>[^\"]+)\""
@@ -158,7 +178,9 @@
       "description": "Track curl image version in e2e tests",
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["operator/test/e2e/.*\\.go$"],
+      "managerFilePatterns": [
+        "/operator/test/e2e/.*\\.go$/"
+      ],
       "matchStrings": [
         "// renovate: datasource=docker depName=curlimages/curl",
         "const curlImageVersion = \"(?<currentValue>[^\"]+)\""
@@ -170,7 +192,9 @@
       "description": "Track kube-linter version in shell scripts",
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["\\.github/scripts/.*\\.sh$"],
+      "managerFilePatterns": [
+        "/\\.github/scripts/.*\\.sh$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=github-releases depName=(?<depName>[^\\s]+)",
         "KUBE_LINTER_VERSION=\"(?<currentValue>[^\"]+)\""
@@ -181,7 +205,9 @@
       "description": "Track kustomize version in GitHub Actions workflows",
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["^\\.github/workflows/.*\\.ya?ml$"],
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.*\\.ya?ml$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=github-releases depName=kubernetes-sigs/kustomize",
         "KUSTOMIZE_VERSION:\\s*\"(?<currentValue>[^\"]+)\""
@@ -194,7 +220,9 @@
       "description": "Track kubectl version in GitHub Actions workflows",
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["^\\.github/workflows/.*\\.ya?ml$"],
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.*\\.ya?ml$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=github-releases depName=kubernetes/kubernetes",
         "KUBECTL_VERSION:\\s*\"(?<currentValue>[^\"]+)\""
@@ -207,7 +235,9 @@
       "description": "Track release-service-catalog development branch SHA in test/e2e/vars.sh",
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["test/e2e/vars.sh"],
+      "managerFilePatterns": [
+        "/test/e2e/vars.sh/"
+      ],
       "matchStrings": [
         "# renovate: datasource=git-refs depName=https://github.com/konflux-ci/release-service-catalog",
         "RELEASE_SERVICE_CATALOG_REVISION=\"(?<currentDigest>[a-f0-9]{40})\""
