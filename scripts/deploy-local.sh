@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/usr/bin/env bash
 
 # Deploy Konflux for Local Development
 #
@@ -37,56 +37,61 @@
 #   build          - Build operator image locally and install (for operator developers)
 #   release        - Install from latest GitHub release
 
-set -o pipefail
+set -euo pipefail
 
 # Determine the absolute path of the repository root
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 REPO_ROOT=$(dirname "$SCRIPT_DIR")
 
-# Check for environment file
+# Optional: Load environment configuration from file if it exists
 ENV_FILE="${SCRIPT_DIR}/deploy-local.env"
-if [ ! -f "${ENV_FILE}" ]; then
-    echo "ERROR: Configuration file not found: ${ENV_FILE}"
-    echo ""
-    echo "Please create it from the template:"
-    echo "  cp scripts/deploy-local.env.template scripts/deploy-local.env"
-    echo ""
-    echo "Then edit scripts/deploy-local.env and fill in your secrets."
+if [ -f "${ENV_FILE}" ]; then
+    echo "Loading configuration from ${ENV_FILE}"
+    # shellcheck disable=SC1090
+    source "${ENV_FILE}"
+fi
+
+# Validate REQUIRED variables
+GITHUB_APP_ID="${GITHUB_APP_ID:?GitHub App ID is required. Set GITHUB_APP_ID}"
+WEBHOOK_SECRET="${WEBHOOK_SECRET:?Webhook secret is required. Set WEBHOOK_SECRET}"
+
+# Validate that at least one private key option is provided
+if [ -z "${GITHUB_PRIVATE_KEY:-}" ] && [ -z "${GITHUB_PRIVATE_KEY_PATH:-}" ]; then
+    echo "ERROR: GitHub private key is required" >&2
+    echo "" >&2
+    echo "Set one of:" >&2
+    echo "  - GITHUB_PRIVATE_KEY (literal key content)" >&2
+    echo "  - GITHUB_PRIVATE_KEY_PATH (path to .pem file)" >&2
     exit 1
 fi
 
-# Load environment configuration
-# shellcheck disable=SC1090
-source "${ENV_FILE}"
+# Validate private key file exists if path is provided
+if [ -n "${GITHUB_PRIVATE_KEY_PATH:-}" ] && [ ! -f "${GITHUB_PRIVATE_KEY_PATH}" ]; then
+    echo "ERROR: GitHub private key file not found: ${GITHUB_PRIVATE_KEY_PATH}" >&2
+    exit 1
+fi
 
-# Export variables so they're available to child scripts
-export KIND_MEMORY_GB PODMAN_MACHINE_NAME REGISTRY_HOST_PORT ENABLE_REGISTRY_PORT
+# Optional variables with defaults (using :- pattern)
+KIND_CLUSTER="${KIND_CLUSTER:-konflux}"
+KIND_MEMORY_GB="${KIND_MEMORY_GB:-8}"
+REGISTRY_HOST_PORT="${REGISTRY_HOST_PORT:-5001}"
+ENABLE_REGISTRY_PORT="${ENABLE_REGISTRY_PORT:-1}"
+INCREASE_PODMAN_PIDS_LIMIT="${INCREASE_PODMAN_PIDS_LIMIT:-1}"
+OPERATOR_INSTALL_METHOD="${OPERATOR_INSTALL_METHOD:-local}"
+OPERATOR_IMAGE="${OPERATOR_IMAGE:-quay.io/konflux-ci/konflux-operator:latest}"
+
+# Export variables for child scripts
+export KIND_CLUSTER KIND_MEMORY_GB PODMAN_MACHINE_NAME REGISTRY_HOST_PORT ENABLE_REGISTRY_PORT
 export INCREASE_PODMAN_PIDS_LIMIT
-export GITHUB_PRIVATE_KEY_PATH GITHUB_APP_ID WEBHOOK_SECRET QUAY_TOKEN QUAY_ORGANIZATION
+export GITHUB_PRIVATE_KEY GITHUB_APP_ID WEBHOOK_SECRET QUAY_TOKEN QUAY_ORGANIZATION
 
-# Validate required secrets
-if [ -z "${GITHUB_PRIVATE_KEY_PATH:-}" ] || [ -z "${GITHUB_APP_ID:-}" ] || [ -z "${WEBHOOK_SECRET:-}" ]; then
-    echo "ERROR: Required secrets not configured in ${ENV_FILE}"
-    echo ""
-    echo "Please set the following variables:"
-    echo "  - GITHUB_PRIVATE_KEY_PATH"
-    echo "  - GITHUB_APP_ID"
-    echo "  - WEBHOOK_SECRET"
-    echo ""
-    echo "See the template file for instructions on obtaining these values."
-    exit 1
+# Get Konflux CR file path (env var, command-line arg, or default)
+KONFLUX_CR="${KONFLUX_CR:-${1:-${REPO_ROOT}/operator/config/samples/konflux_v1alpha1_konflux.yaml}}"
+
+# Convert relative path to absolute (if not already absolute)
+if [[ "${KONFLUX_CR}" != /* ]]; then
+    KONFLUX_CR="${REPO_ROOT}/${KONFLUX_CR}"
 fi
-
-# Validate GitHub private key file exists
-if [ ! -f "${GITHUB_PRIVATE_KEY_PATH}" ]; then
-    echo "ERROR: GitHub private key file not found: ${GITHUB_PRIVATE_KEY_PATH}"
-    echo ""
-    echo "Please update GITHUB_PRIVATE_KEY_PATH in ${ENV_FILE} to point to your .pem file"
-    exit 1
-fi
-
-# Get Konflux CR file path (default: CI/local development sample)
-KONFLUX_CR="${1:-${REPO_ROOT}/operator/config/samples/konflux_v1alpha1_konflux.yaml}"
 
 if [ ! -f "${KONFLUX_CR}" ]; then
     echo "ERROR: Konflux CR file not found: ${KONFLUX_CR}"
@@ -116,6 +121,16 @@ echo "========================================="
 echo "Step 2: Deploying dependencies"
 echo "========================================="
 echo "Installing Tekton, cert-manager, and other prerequisites..."
+
+# Pre-configure Smee channel if specified (E2E tests or local dev with specific channel)
+if [ -n "${SMEE_CHANNEL:-}" ]; then
+    echo "Configuring Smee channel: ${SMEE_CHANNEL}"
+    SMEE_DIR="${REPO_ROOT}/dependencies/smee"
+    sed "s|https://smee.io/CHANNELID|${SMEE_CHANNEL}|g" \
+        "${SMEE_DIR}/smee-channel-id.tpl" \
+        > "${SMEE_DIR}/smee-channel-id.yaml"
+fi
+
 # Skip components managed by the operator
 SKIP_DEX=true \
 SKIP_KONFLUX_INFO=true \
@@ -162,7 +177,7 @@ case "${INSTALL_METHOD}" in
         make docker-build IMG="${OPERATOR_IMG}"
 
         echo "Loading operator image into Kind cluster..."
-        kind load docker-image "${OPERATOR_IMG}" --name konflux
+        kind load docker-image "${OPERATOR_IMG}" --name "${KIND_CLUSTER}"
 
         echo "Installing CRDs..."
         make install
@@ -230,11 +245,22 @@ for ns in pipelines-as-code build-service integration-service; do
     fi
 
     echo "Creating secret in ${ns}..."
-    kubectl -n "${ns}" create secret generic pipelines-as-code-secret \
-        --from-file=github-private-key="${GITHUB_PRIVATE_KEY_PATH}" \
-        --from-literal=github-application-id="${GITHUB_APP_ID}" \
-        --from-literal=webhook.secret="${WEBHOOK_SECRET}" \
-        --dry-run=client -o yaml | kubectl apply -f -
+    # Use different kubectl syntax based on how private key is provided:
+    # - File path: use --from-file (local dev with .pem file)
+    # - Literal value: use --from-literal (CI with env var, matches prepare-e2e.sh)
+    if [ -n "${GITHUB_PRIVATE_KEY_PATH:-}" ] && [ -f "${GITHUB_PRIVATE_KEY_PATH}" ]; then
+        kubectl -n "$ns" create secret generic pipelines-as-code-secret \
+            --from-file=github-private-key="${GITHUB_PRIVATE_KEY_PATH}" \
+            --from-literal github-application-id="$GITHUB_APP_ID" \
+            --from-literal webhook.secret="$WEBHOOK_SECRET" \
+            --dry-run=client -o yaml | kubectl apply -f -
+    else
+        kubectl -n "$ns" create secret generic pipelines-as-code-secret \
+            --from-literal github-private-key="$GITHUB_PRIVATE_KEY" \
+            --from-literal github-application-id="$GITHUB_APP_ID" \
+            --from-literal webhook.secret="$WEBHOOK_SECRET" \
+            --dry-run=client -o yaml | kubectl apply -f -
+    fi
 done
 
 echo "✓ Secrets created"
@@ -262,6 +288,16 @@ if [ -n "${QUAY_TOKEN}" ] && [ -n "${QUAY_ORGANIZATION}" ]; then
             --from-literal=organization="${QUAY_ORGANIZATION}" \
             --dry-run=client -o yaml | kubectl apply -f -
         echo "✓ Image-controller secret created"
+
+        # Wait for image-controller pods to be ready
+        echo "Waiting for image-controller pods to be ready..."
+        if kubectl wait --for=condition=Ready --timeout=240s \
+            -l control-plane=controller-manager -n image-controller pod 2>/dev/null; then
+            echo "✓ Image-controller is ready"
+        else
+            echo "WARNING: Image-controller pods did not become ready within 4 minutes"
+            echo "         This may cause E2E test failures"
+        fi
     fi
 elif [ -n "${QUAY_TOKEN}" ] || [ -n "${QUAY_ORGANIZATION}" ]; then
     echo ""

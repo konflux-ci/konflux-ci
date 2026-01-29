@@ -114,7 +114,8 @@ if [[ "$(uname)" == "Darwin" ]] && command -v podman &> /dev/null; then
 fi
 
 # Delete existing cluster if present
-kind delete cluster --name konflux || echo "No existing cluster to delete."
+KIND_CLUSTER="${KIND_CLUSTER:-konflux}"
+kind delete cluster --name "${KIND_CLUSTER}" || echo "No existing cluster to delete."
 
 # Check for port conflicts if registry port binding is enabled
 if [[ "${ENABLE_REGISTRY_PORT}" -eq 1 ]]; then
@@ -178,8 +179,9 @@ else
 fi
 
 # Create the Kind cluster
-echo "Creating Kind cluster 'konflux'..."
-kind create cluster --name konflux --config "${KIND_CONFIG}"
+KIND_CLUSTER="${KIND_CLUSTER:-konflux}"
+echo "Creating Kind cluster '${KIND_CLUSTER}'..."
+kind create cluster --name "${KIND_CLUSTER}" --config "${KIND_CONFIG}"
 
 # Revert kind config changes
 echo "Reverting kind config to original state..."

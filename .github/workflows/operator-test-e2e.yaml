@@ -137,6 +137,7 @@ jobs:
             image_suffix: ""
             cluster_suffix: ""
             test_scope: "integration+e2e"
+            konflux_cr: "operator/config/samples/konflux-e2e.yaml"
             job_name: "Run Operator E2E Tests"
           - arch: arm64
             runner: ubuntu-24.04-arm
@@ -145,6 +146,7 @@ jobs:
             image_suffix: "-arm64"
             cluster_suffix: "-arm"
             test_scope: "integration"
+            konflux_cr: "operator/config/samples/konflux_v1alpha1_konflux.yaml"
             job_name: "Run Operator Integration Tests (ARM64)"
     steps:
       - name: Skip test - no operator changes
@@ -167,6 +169,7 @@ jobs:
             image_suffix: ""
             cluster_suffix: ""
             test_scope: "integration+e2e"
+            konflux_cr: "operator/config/samples/konflux-e2e.yaml"
             job_name: "Run Operator E2E Tests"
           - arch: arm64
             runner: ubuntu-24.04-arm
@@ -175,6 +178,7 @@ jobs:
             image_suffix: "-arm64"
             cluster_suffix: "-arm"
             test_scope: "integration"
+            konflux_cr: "operator/config/samples/konflux_v1alpha1_konflux.yaml"
             job_name: "Run Operator Integration Tests (ARM64)"
     env:
       # renovate: datasource=github-releases depName=kubernetes-sigs/kind
@@ -235,48 +239,34 @@ jobs:
       - name: Verify kind installation
         run: kind version
 
-      - name: Deploy kind cluster
-        run: |
-          make setup-test-e2e
+      - name: Deploy Konflux using deploy-local.sh
+        working-directory: ${{ github.workspace }}
+        env:
+          # Cluster configuration
+          KIND_CLUSTER: ${{ env.KIND_CLUSTER }}
+          OPERATOR_INSTALL_METHOD: "build"
+          OPERATOR_IMAGE: ${{ env.OPERATOR_IMAGE }}
+
+          KONFLUX_CR: ${{ matrix.konflux_cr }}
+
+          # GitHub App secrets (standardized names)
+          GITHUB_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+          GITHUB_APP_ID: ${{ secrets.APP_ID }}
+          WEBHOOK_SECRET: ${{ secrets.APP_WEBHOOK_SECRET }}
+
+          # Quay secrets for E2E tests (standardized names)
+          QUAY_TOKEN: ${{ matrix.test_scope == 'integration+e2e' && secrets.QUAY_TOKEN || '' }}
+          QUAY_ORGANIZATION: ${{ matrix.test_scope == 'integration+e2e' && secrets.QUAY_ORG || '' }}
+
+          # Smee webhook forwarding for E2E tests only
+          SMEE_CHANNEL: ${{ matrix.test_scope == 'integration+e2e' && secrets.SMEE_CHANNEL || '' }}
+        run: ./scripts/deploy-local.sh
 
       - name: Show version information
+        working-directory: operator
         run: |
           kubectl version
           kind version
-
-      - name: Deploying Dependencies
-        working-directory: ${{ github.workspace }}
-        env:
-          SKIP_DEX: "true"
-          SKIP_KONFLUX_INFO: "true"
-          SKIP_CLUSTER_ISSUER: "true"
-          SKIP_INTERNAL_REGISTRY: "true"
-        run: |
-          ./deploy-deps.sh
-
-      - name: Build Operator Image (${{ matrix.arch }})
-        run: |
-          make docker-build IMG=$OPERATOR_IMAGE
-
-      - name: Load Operator Image to Kind
-        run: |
-          kind load docker-image $OPERATOR_IMAGE --name $KIND_CLUSTER
-
-      - name: Install Operator CRDs
-        run: make install
-
-      - name: Deploy Operator Controller
-        run: |
-          make deploy IMG=$OPERATOR_IMAGE
-
-      - name: Wait for Operator to be Ready
-        run: |
-          kubectl wait --for=condition=Available deployment/konflux-operator-controller-manager -n konflux-operator --timeout=5m
-
-      - name: Create Konflux CR Instance
-        working-directory: ${{ github.workspace }}
-        run: |
-          kubectl apply -f operator/config/samples/konflux_v1alpha1_konflux.yaml
 
       - name: Wait for Konflux CR to be Ready
         run: |
@@ -302,19 +292,6 @@ jobs:
         run: |
           cd test/go-tests
           go test ./...
-
-      - name: Prepare resources for E2E tests
-        if: matrix.test_scope == 'integration+e2e'
-        working-directory: ${{ github.workspace }}
-        env:
-          APP_ID: ${{ secrets.APP_ID }}
-          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
-          APP_WEBHOOK_SECRET: ${{ secrets.APP_WEBHOOK_SECRET }}
-          QUAY_ORG: ${{ secrets.QUAY_ORG }}
-          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
-          SMEE_CHANNEL: ${{ secrets.SMEE_CHANNEL }}
-        run: |
-          ./test/e2e/prepare-e2e.sh
 
       - name: Run E2E tests
         if: matrix.test_scope == 'integration+e2e'

@@ -46,8 +46,9 @@ you're unable to troubleshoot some other issues, you may need to restart the con
 on which the Kind cluster runs.
 
 If you do that, you'd have to, once more, **increase the PID limit** for that container
-and the **open files limit** for the host (if the host was restarted), as explained in
-the [cluster setup instructions](../README.md#bootstrapping-the-cluster).
+and the **open files limit** for the host (if the host was restarted). If using
+`deploy-local.sh`, these are handled automatically. For manual setup, see the
+[cluster setup instructions](../README.md#bootstrapping-the-cluster).
 
 :gear: Restart the container (if using Docker, replace `podman` with `docker`):
 
