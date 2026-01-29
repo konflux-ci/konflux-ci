@@ -38,7 +38,7 @@ spec:
                   key: clientSecret
         config:
           connectors:
-          # Add a GitHub connector to the Dex configuration - https://dexidp.io/docs/connectors/github/
+          # See the Dex documentation for available connector configuration - https://dexidp.io/docs/connectors
             - type: github
               id: github
               name: GitHub
