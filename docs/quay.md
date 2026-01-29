@@ -107,12 +107,36 @@ Please follow the following steps for configuring it:
    - Administer Repositories
    - Create Repositories
 
-4. :gear: Run the `deploy-image-controller.sh` script:
+4. :gear: Enable image-controller in your Konflux CR and create the Quay token secret.
 
-`$TOKEN` - the token for the application you've created on step 3.
+**Option A: Using deploy-local.sh (recommended for local development)**
 
-`$ORGANIZATION` - the name of the organization you created on step 2.
+Set these environment variables before running `deploy-local.sh`:
 
 ```bash
-./deploy-image-controller.sh $TOKEN $ORGANIZATION
+export QUAY_TOKEN="<token from step 3>"
+export QUAY_ORGANIZATION="<organization from step 2>"
+./scripts/deploy-local.sh
+```
+
+**Option B: Manual setup (for existing clusters)**
+
+First, ensure image-controller is enabled in your Konflux CR:
+
+```yaml
+apiVersion: konflux.konflux-ci.dev/v1alpha1
+kind: Konflux
+metadata:
+  name: konflux
+spec:
+  imageController:
+    enabled: true
+```
+
+Then create the secret:
+
+```bash
+kubectl -n image-controller create secret generic quaytoken \
+    --from-literal=quaytoken="<token from step 3>" \
+    --from-literal=organization="<organization from step 2>"
 ```

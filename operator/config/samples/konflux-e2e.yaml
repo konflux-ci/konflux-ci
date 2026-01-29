@@ -1,13 +1,12 @@
-# Title: Konflux Configuration
-# Description: Complete Konflux configuration with all components (UI, Build Service, Integration Service, Release Service, etc.)
+# Title: Konflux E2E Test Configuration
+# Description: Konflux configuration for E2E tests with image-controller enabled
 #
-# This sample is used in CI tests and local development. It includes demo users with static passwords
-# for testing purposes. For production deployments, remove the staticPasswords section and configure
-# OIDC authentication (GitHub, Google, LDAP, etc.) instead.
+# This sample extends the base configuration with image-controller enabled,
+# which is required for E2E tests but optional for local development.
 #
 # Usage:
-#   CI: Used automatically by .github/workflows/operator-test-e2e.yaml
-#   Local: ./scripts/deploy-local.sh (uses this file by default)
+#   E2E CI: Used by .github/workflows/operator-test-e2e.yaml
+#   Local E2E testing: KONFLUX_CR=operator/config/samples/konflux-e2e.yaml ./scripts/deploy-local.sh
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: Konflux
 metadata:
@@ -116,10 +115,10 @@ spec:
     # Defaults to false if not specified
     # For local development on Kind, this provides an OCI registry at localhost:5001
     enabled: true
-  # Default tenant creates a shared namespace ("default-tenant") accessible by all authenticated users.
-  # All authenticated users get maintainer permissions in this namespace.
-  # Appropriate for local development and testing. For production multi-tenant environments where
-  # you need strict namespace isolation, set enabled: false and create per-team tenant namespaces.
-  # Defaults to true if not specified.
+  # Default tenant creates a shared namespace accessible by all authenticated users.
+  # Needed for E2E tests. See konflux_v1alpha1_konflux.yaml for detailed documentation.
   defaultTenant:
+    enabled: true
+  # E2E-specific: Enable image-controller for E2E tests
+  imageController:
     enabled: true
