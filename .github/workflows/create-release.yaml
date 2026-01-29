@@ -116,10 +116,22 @@ jobs:
             /tmp/release-notes.md
           echo "notes_file=/tmp/release-notes.md" >> $GITHUB_OUTPUT
 
+      # Use a GitHub App token so that:
+      # 1) The release event triggers other workflows (GITHUB_TOKEN would not).
+      # 2) The token has workflow scope, required when the release target commit touches workflow files.
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-workflows: write
+
       - name: Create GitHub Release
         working-directory: ${{ github.workspace }}
         env:
-          GH_TOKEN: ${{ secrets.KONFLUX_CI_BOT_PAT }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           .github/scripts/create-release.sh \
             "${{ steps.version.outputs.version }}" \
