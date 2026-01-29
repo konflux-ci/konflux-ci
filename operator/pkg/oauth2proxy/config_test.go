@@ -26,11 +26,11 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 )
 
-// applyOption is a test helper that applies a ContainerOption and returns the resulting env vars.
-func applyOption(opt customization.ContainerOption) []corev1.EnvVar {
+// applyOption is a test helper that applies a ContainerOption and returns the resulting container.
+func applyOption(opt customization.ContainerOption) *corev1.Container {
 	c := &corev1.Container{}
 	opt(c, customization.DeploymentContext{})
-	return c.Env
+	return c
 }
 
 // envVarsToMap converts a slice of EnvVar to a map for easier testing.
@@ -45,8 +45,8 @@ func envVarsToMap(envVars []corev1.EnvVar) map[string]string {
 func TestWithProvider(t *testing.T) {
 	g := NewGomegaWithT(t)
 
-	envVars := applyOption(WithProvider())
-	envMap := envVarsToMap(envVars)
+	c := applyOption(WithProvider())
+	envMap := envVarsToMap(c.Env)
 
 	g.Expect(envMap["OAUTH2_PROXY_PROVIDER"]).To(Equal("oidc"))
 	g.Expect(envMap["OAUTH2_PROXY_PROVIDER_DISPLAY_NAME"]).To(Equal("Dex OIDC"))
@@ -95,8 +95,8 @@ func TestWithOIDCURLs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewGomegaWithT(t)
 
-			envVars := applyOption(WithOIDCURLs(tt.endpoint))
-			envMap := envVarsToMap(envVars)
+			c := applyOption(WithOIDCURLs(tt.endpoint))
+			envMap := envVarsToMap(c.Env)
 
 			for key, wantValue := range tt.want {
 				g.Expect(envMap[key]).To(Equal(wantValue), "env var %s", key)
@@ -108,8 +108,8 @@ func TestWithOIDCURLs(t *testing.T) {
 func TestWithInternalDexURLs(t *testing.T) {
 	g := NewGomegaWithT(t)
 
-	envVars := applyOption(WithInternalDexURLs())
-	envMap := envVarsToMap(envVars)
+	c := applyOption(WithInternalDexURLs())
+	envMap := envVarsToMap(c.Env)
 
 	g.Expect(envMap["OAUTH2_PROXY_SKIP_OIDC_DISCOVERY"]).To(Equal("true"))
 	g.Expect(envMap["OAUTH2_PROXY_REDEEM_URL"]).To(Equal("https://dex.konflux-ui.svc.cluster.local:9443/idp/token"))
@@ -119,8 +119,8 @@ func TestWithInternalDexURLs(t *testing.T) {
 func TestWithCookieConfig(t *testing.T) {
 	g := NewGomegaWithT(t)
 
-	envVars := applyOption(WithCookieConfig())
-	envMap := envVarsToMap(envVars)
+	c := applyOption(WithCookieConfig())
+	envMap := envVarsToMap(c.Env)
 
 	g.Expect(envMap["OAUTH2_PROXY_COOKIE_SECURE"]).To(Equal("true"))
 	g.Expect(envMap["OAUTH2_PROXY_COOKIE_NAME"]).To(Equal("__Host-konflux-ci-cookie"))
@@ -129,28 +129,39 @@ func TestWithCookieConfig(t *testing.T) {
 func TestWithAuthSettings(t *testing.T) {
 	g := NewGomegaWithT(t)
 
-	envVars := applyOption(WithAuthSettings())
-	envMap := envVarsToMap(envVars)
+	c := applyOption(WithAuthSettings())
+	envMap := envVarsToMap(c.Env)
 
 	g.Expect(envMap["OAUTH2_PROXY_EMAIL_DOMAINS"]).To(Equal("*"))
 	g.Expect(envMap["OAUTH2_PROXY_SET_XAUTHREQUEST"]).To(Equal("true"))
 	g.Expect(envMap["OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS"]).To(Equal("true"))
 }
 
-func TestWithTLSSkipVerify(t *testing.T) {
+func TestWithOAuth2ProxyCA(t *testing.T) {
 	g := NewGomegaWithT(t)
 
-	envVars := applyOption(WithTLSSkipVerify())
-	envMap := envVarsToMap(envVars)
+	c := applyOption(WithOAuth2ProxyCA())
 
-	g.Expect(envMap["OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY"]).To(Equal("true"))
+	// Verify the SSL_CERT_FILE environment variable is set
+	g.Expect(c.Env).To(ContainElement(corev1.EnvVar{
+		Name:  "SSL_CERT_FILE",
+		Value: OAuth2ProxyCAMountPath,
+	}))
+
+	// Verify the volume mount is configured correctly
+	g.Expect(c.VolumeMounts).To(HaveLen(1))
+	mount := c.VolumeMounts[0]
+	g.Expect(mount.Name).To(Equal(OAuth2ProxyCAVolumeName))
+	g.Expect(mount.MountPath).To(Equal(OAuth2ProxyCAMountPath))
+	g.Expect(mount.SubPath).To(Equal(OAuth2ProxyCACertFileName))
+	g.Expect(mount.ReadOnly).To(BeTrue())
 }
 
 func TestWithAllowUnverifiedEmail(t *testing.T) {
 	g := NewGomegaWithT(t)
 
-	envVars := applyOption(WithAllowUnverifiedEmail())
-	envMap := envVarsToMap(envVars)
+	c := applyOption(WithAllowUnverifiedEmail())
+	envMap := envVarsToMap(c.Env)
 
 	g.Expect(envMap["OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL"]).To(Equal("true"))
 }
@@ -177,8 +188,8 @@ func TestWithWhitelistDomain(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewGomegaWithT(t)
 
-			envVars := applyOption(WithWhitelistDomain(tt.endpoint))
-			envMap := envVarsToMap(envVars)
+			c := applyOption(WithWhitelistDomain(tt.endpoint))
+			envMap := envVarsToMap(c.Env)
 
 			g.Expect(envMap["OAUTH2_PROXY_WHITELIST_DOMAINS"]).To(Equal(tt.want))
 		})

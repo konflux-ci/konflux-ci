@@ -35,7 +35,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	ctrlpredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
@@ -79,6 +82,17 @@ const (
 	dexConfigKey           = "config.yaml"
 	dexConfigMapLabel      = "app.kubernetes.io/managed-by-konflux-ui-reconciler"
 	dexConfigMapVolumeName = "dex"
+
+	// Dex CA certificate ConfigMap constants
+	// This ConfigMap contains the CA certificate bundle used by oauth2-proxy to trust Dex.
+	// The controller automatically extracts ca.crt from the dex-cert secret and syncs it
+	// to this ConfigMap, ensuring oauth2-proxy can verify Dex's TLS certificate.
+	// Security: Using a ConfigMap (not Secret) signals that CA certificates are public data.
+	// oauth2-proxy only accesses the public CA bundle, never the dex-cert secret which
+	// contains Dex's private key. This eliminates both the secret sharing concern and
+	// the certificate minting attack vector (no Issuer needed).
+	dexCABundleConfigMapName = "dex-ca-bundle"
+	dexCertSecretName        = "dex-cert"
 )
 
 // UICleanupGVKs defines which resource types should be cleaned up when they are
@@ -186,8 +200,16 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return errHandler.HandleWithReason(ctx, err, condition.ReasonConfigMapFailed, "reconcile Dex ConfigMap")
 	}
 
+	// Reconcile Dex CA bundle ConfigMap by syncing ca.crt from dex-cert secret
+	// This must happen before applyManifests so oauth2-proxy can mount the CA certificate
+	// Returns the hashed ConfigMap name to trigger automatic pod restarts when CA is renewed
+	dexCABundleConfigMapName, err := r.reconcileDexCABundle(ctx, ui)
+	if err != nil {
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonConfigMapFailed, "reconcile Dex CA bundle")
+	}
+
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, tc, ui, dexConfigMapName, endpoint); err != nil {
+	if err := r.applyManifests(ctx, tc, ui, dexConfigMapName, dexCABundleConfigMapName, endpoint); err != nil {
 		return errHandler.HandleApplyError(ctx, err)
 	}
 
@@ -267,8 +289,9 @@ func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, tc *tra
 // applyManifests loads and applies all embedded manifests to the cluster.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
 // dexConfigMapName is the name of the Dex ConfigMap to use (empty if not configured).
+// dexCABundleConfigMapName is the name of the hashed Dex CA bundle ConfigMap (empty if not available).
 // endpoint is the base URL used to configure oauth2-proxy.
-func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, dexConfigMapName string, endpoint *url.URL) error {
+func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, dexConfigMapName, dexCABundleConfigMapName string, endpoint *url.URL) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.UI)
@@ -279,7 +302,7 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 	for _, obj := range objects {
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
-			if err := applyUIDeploymentCustomizations(deployment, ui, r.ClusterInfo, dexConfigMapName, endpoint); err != nil {
+			if err := applyUIDeploymentCustomizations(deployment, ui, r.ClusterInfo, dexConfigMapName, dexCABundleConfigMapName, endpoint); err != nil {
 				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
 			}
 		}
@@ -310,16 +333,16 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 }
 
 // applyUIDeploymentCustomizations applies user-defined customizations to UI deployments.
-func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv1alpha1.KonfluxUI, clusterInfo *clusterinfo.Info, dexConfigMapName string, endpoint *url.URL) error {
+func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv1alpha1.KonfluxUI, clusterInfo *clusterinfo.Info, dexConfigMapName, dexCABundleConfigMapName string, endpoint *url.URL) error {
 	openShiftLoginEnabled := isOpenShiftLoginEnabled(ui, clusterInfo)
 
 	switch deployment.Name {
 	case proxyDeploymentName:
 		proxySpec := ui.Spec.GetProxy()
 		deployment.Spec.Replicas = &proxySpec.Replicas
-		// Build oauth2-proxy options based on endpoint URL and OpenShift login state
-		oauth2ProxyOpts := buildOAuth2ProxyOptions(endpoint, openShiftLoginEnabled)
-		if err := buildProxyOverlay(ui.Spec.Proxy, oauth2ProxyOpts...).ApplyToDeployment(deployment); err != nil {
+		// Build oauth2-proxy options based on endpoint URL, CA ConfigMap name, and OpenShift login state
+		oauth2ProxyOpts := buildOAuth2ProxyOptions(endpoint, dexCABundleConfigMapName, openShiftLoginEnabled)
+		if err := buildProxyOverlay(ui.Spec.Proxy, dexCABundleConfigMapName, oauth2ProxyOpts...).ApplyToDeployment(deployment); err != nil {
 			return err
 		}
 	case dexDeploymentName:
@@ -357,43 +380,91 @@ func applyUIServiceCustomizations(service *corev1.Service, ui *konfluxv1alpha1.K
 	}
 }
 
-// buildProxyOverlay builds the pod overlay for the proxy deployment.
-// oauth2ProxyOpts are applied to the oauth2-proxy container before user-provided overrides.
-func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, oauth2ProxyOpts ...customization.ContainerOption) *customization.PodOverlay {
-	if spec == nil {
-		return customization.BuildPodOverlay(
-			customization.DeploymentContext{},
-			customization.WithContainerBuilder(oauth2ProxyContainerName, oauth2ProxyOpts...),
-		)
+// buildOAuth2ProxyCAVolume creates the volume definition for oauth2-proxy's CA certificate.
+// This volume provides the CA certificate from the hashed dex-ca-bundle ConfigMap,
+// which is automatically synced from the dex-cert secret by the controller.
+// configMapName is the hashed ConfigMap name (e.g., "dex-ca-bundle-abc123").
+// Security: Using a ConfigMap signals that CA certificates are public data.
+// oauth2-proxy only accesses the public CA bundle (ca.crt), never the dex-cert
+// secret which contains Dex's private key. This approach eliminates both the
+// secret sharing concern and the certificate minting attack vector.
+func buildOAuth2ProxyCAVolume(configMapName string) customization.PodOverlayOption {
+	// If no ConfigMap name provided, return a no-op option
+	if configMapName == "" {
+		return func(overlay *customization.PodOverlay) {}
 	}
 
-	// Append user overrides after oauth2proxy options
-	oauth2ProxyOpts = append(oauth2ProxyOpts, customization.FromContainerSpec(spec.OAuth2Proxy))
-
-	return customization.BuildPodOverlay(
-		customization.DeploymentContext{Replicas: spec.Replicas},
-		customization.WithContainerBuilder(
-			nginxContainerName,
-			customization.FromContainerSpec(spec.Nginx),
-		),
-		customization.WithContainerBuilder(
-			oauth2ProxyContainerName,
-			oauth2ProxyOpts...,
-		),
+	return customization.WithVolumes(
+		corev1.Volume{
+			Name: oauth2proxy.OAuth2ProxyCAVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: configMapName,
+					},
+					Items: []corev1.KeyToPath{
+						{
+							Key:  oauth2proxy.OAuth2ProxyCACertFileName,
+							Path: oauth2proxy.OAuth2ProxyCACertFileName,
+						},
+					},
+				},
+			},
+		},
 	)
 }
 
+// buildProxyOverlay builds the pod overlay for the proxy deployment.
+// dexCABundleConfigMapName is the hashed ConfigMap name for the Dex CA bundle (empty if not available).
+// oauth2ProxyOpts are applied to the oauth2-proxy container before user-provided overrides.
+func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, dexCABundleConfigMapName string, oauth2ProxyOpts ...customization.ContainerOption) *customization.PodOverlay {
+	oauth2ProxyCAVolume := buildOAuth2ProxyCAVolume(dexCABundleConfigMapName)
+
+	var overlay *customization.PodOverlay
+	if spec == nil {
+		overlay = customization.BuildPodOverlay(
+			customization.DeploymentContext{},
+			customization.WithContainerBuilder(oauth2ProxyContainerName, oauth2ProxyOpts...),
+		)
+	} else {
+		// Append user overrides after oauth2proxy options
+		oauth2ProxyOpts = append(oauth2ProxyOpts, customization.FromContainerSpec(spec.OAuth2Proxy))
+
+		overlay = customization.BuildPodOverlay(
+			customization.DeploymentContext{Replicas: spec.Replicas},
+			customization.WithContainerBuilder(
+				nginxContainerName,
+				customization.FromContainerSpec(spec.Nginx),
+			),
+			customization.WithContainerBuilder(
+				oauth2ProxyContainerName,
+				oauth2ProxyOpts...,
+			),
+		)
+	}
+
+	// Add oauth2-proxy CA volume to the overlay
+	oauth2ProxyCAVolume(overlay)
+	return overlay
+}
+
 // buildOAuth2ProxyOptions builds the container options for oauth2-proxy configuration.
+// dexCABundleConfigMapName is the hashed ConfigMap name for the Dex CA bundle (empty if not available).
 // openShiftLoginEnabled controls whether to allow unverified emails (needed for OpenShift OAuth).
-func buildOAuth2ProxyOptions(endpoint *url.URL, openShiftLoginEnabled bool) []customization.ContainerOption {
+func buildOAuth2ProxyOptions(endpoint *url.URL, dexCABundleConfigMapName string, openShiftLoginEnabled bool) []customization.ContainerOption {
 	opts := []customization.ContainerOption{
 		oauth2proxy.WithProvider(),
 		oauth2proxy.WithOIDCURLs(endpoint),
 		oauth2proxy.WithInternalDexURLs(),
 		oauth2proxy.WithCookieConfig(),
 		oauth2proxy.WithAuthSettings(),
-		oauth2proxy.WithTLSSkipVerify(),
 		oauth2proxy.WithWhitelistDomain(endpoint),
+	}
+
+	// Only add CA configuration if we have a ConfigMap name
+	// (i.e., dex-cert secret exists and CA bundle has been synced)
+	if dexCABundleConfigMapName != "" {
+		opts = append(opts, oauth2proxy.WithOAuth2ProxyCA())
 	}
 
 	// Allow unverified emails when using OpenShift OAuth
@@ -548,6 +619,54 @@ func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *kon
 	return result.ConfigMapName, nil
 }
 
+// reconcileDexCABundle syncs the Dex CA certificate from the dex-cert secret to a hashed dex-ca-bundle ConfigMap.
+// This ConfigMap is mounted by oauth2-proxy to verify Dex's TLS certificate.
+// It generates a content-based hash suffix for the ConfigMap name (like kustomize),
+// cleans up old ConfigMaps, and returns the new ConfigMap name.
+// Using a hashed name triggers automatic pod restarts when the CA certificate is renewed by cert-manager.
+func (r *KonfluxUIReconciler) reconcileDexCABundle(ctx context.Context, ui *konfluxv1alpha1.KonfluxUI) (string, error) {
+	log := logf.FromContext(ctx)
+
+	// Get the dex-cert secret
+	secret := &corev1.Secret{}
+	secretKey := client.ObjectKey{
+		Namespace: uiNamespace,
+		Name:      dexCertSecretName,
+	}
+
+	if err := r.Get(ctx, secretKey, secret); err != nil {
+		// If the secret doesn't exist yet, it's okay - cert-manager will create it
+		// We'll retry when the secret watcher triggers reconciliation
+		log.Info("dex-cert secret not found, will retry when secret is created", "secret", dexCertSecretName)
+		return "", nil
+	}
+
+	// Extract ca.crt from the secret
+	caCert, ok := secret.Data["ca.crt"]
+	if !ok || len(caCert) == 0 {
+		return "", fmt.Errorf("dex-cert secret is missing ca.crt field or it is empty")
+	}
+
+	// Use hashedconfigmap to apply the ConfigMap with content-based hash suffix
+	hcm := hashedconfigmap.New(
+		r.Client,
+		r.Scheme,
+		dexCABundleConfigMapName,
+		uiNamespace,
+		"ca.crt",
+		dexConfigMapLabel, // Reuse the same label for consistent cleanup
+		FieldManager,
+	)
+
+	result, err := hcm.Apply(ctx, string(caCert), ui)
+	if err != nil {
+		return "", err
+	}
+
+	log.Info("Successfully synced Dex CA bundle", "configmap", result.ConfigMapName)
+	return result.ConfigMapName, nil
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
@@ -565,6 +684,19 @@ func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&rbacv1.ClusterRole{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Owns(&rbacv1.ClusterRoleBinding{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Owns(&networkingv1.Ingress{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
+		// Watch the dex-cert secret (created by cert-manager) to sync its CA to dex-ca-bundle ConfigMap
+		// When cert-manager renews the cert, this triggers reconciliation to update the ConfigMap
+		Watches(
+			&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				// Only reconcile if this is the dex-cert secret in konflux-ui namespace
+				if obj.GetNamespace() == uiNamespace && obj.GetName() == dexCertSecretName {
+					return []reconcile.Request{{NamespacedName: client.ObjectKey{Name: CRName}}}
+				}
+				return nil
+			}),
+			builder.WithPredicates(ctrlpredicate.ResourceVersionChangedPredicate{}),
+		).
 		Complete(r)
 }
 

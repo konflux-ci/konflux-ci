@@ -628,6 +628,7 @@ spec:
   dnsNames:
   - localhost
   - dex.konflux-ui
+  - dex.konflux-ui.svc.cluster.local
   isCA: true
   issuerRef:
     kind: ClusterIssuer
