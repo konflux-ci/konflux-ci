@@ -19,7 +19,7 @@ This guide covers deploying Konflux using the operator-based approach on any Kub
   * [Step 4: Create Secrets](#step-4-create-secrets)
   * [Step 5: Verify Deployment](#step-5-verify-deployment)
 - [Resource Sizing](#resource-sizing)
-- [Authentication](#authentication)
+- [Production Considerations](#production-considerations)
 - [Troubleshooting](#troubleshooting)
   * [Operator Not Starting](#operator-not-starting)
   * [Components Not Deploying](#components-not-deploying)
@@ -52,16 +52,17 @@ For local development on Kind clusters (macOS or Linux).
 - [podman](https://podman.io/docs/installation) or [docker](https://docs.docker.com/engine/install/)
 - GitHub App with private key
 
-**macOS users:** The deployment script automatically handles macOS-specific configuration (Podman machines, port conflicts, memory validation). See `scripts/deploy-local.env.template` for available configuration options.
-
 ### Setup
 
-Follow the instructions for deploying the local instance in the [deploy-local.sh](../scripts/deploy-local.sh) script
-then run it
+The deployment script requires environment variables for GitHub App integration. To assist with setting these, you may copy the template and configure your values as `scripts/deploy-local.env` will be sourced by default if present:
 
 ```bash
+cp scripts/deploy-local.env.template scripts/deploy-local.env
+# Edit scripts/deploy-local.env with your secrets
 ./scripts/deploy-local.sh
 ```
+
+See `scripts/deploy-local.env.template` for all available configuration options.
 
 After this, you should be able to open https://localhost:9443 and log in with:
   - Username: `user1@konflux.dev`
@@ -163,15 +164,9 @@ kubectl wait --for=condition=Ready konflux/konflux --timeout=15m
 - Production resource requests (100m+ CPU, 256Mi+ memory)
 - Horizontal scaling based on load
 
-## Authentication
+## Production Considerations
 
-Konflux uses Dex for authentication. Production deployments must configure OIDC connectors - **never use staticPasswords in production.**
-
-**Configuration resources:**
-- [konflux-with-github-auth.yaml](../operator/config/samples/konflux-with-github-auth.yaml) - Production example with GitHub OIDC connector
-- [Dex Connectors Documentation](https://dexidp.io/docs/connectors/) - Complete reference for all supported connectors (GitHub, Google, LDAP, SAML, etc.)
-
-Configure connectors in the Konflux CR under `spec.ui.spec.dex.config.connectors`. See the sample file and Dex documentation for connector-specific configuration options.
+For authentication configuration and other production considerations including default configuration and user access, see the [configuration samples README](../operator/config/samples/README.md#production-considerations).
 
 ## Troubleshooting
 
