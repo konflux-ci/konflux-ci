@@ -227,19 +227,6 @@ spec:
       protocol: TCP
     - port: 443
       protocol: TCP
-    to:
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: kube-system
-      podSelector:
-        matchLabels:
-          component: kube-apiserver
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: openshift-kube-apiserver
-      podSelector:
-        matchLabels:
-          app: openshift-kube-apiserver
   podSelector:
     matchLabels:
       apps: namespace-lister
