@@ -79,6 +79,9 @@ const (
 	dexConfigKey           = "config.yaml"
 	dexConfigMapLabel      = "app.kubernetes.io/managed-by-konflux-ui-reconciler"
 	dexConfigMapVolumeName = "dex"
+
+	// Dex CA certificate constants
+	dexCertSecretName = "dex-cert"
 )
 
 // UICleanupGVKs defines which resource types should be cleaned up when they are
@@ -357,30 +360,59 @@ func applyUIServiceCustomizations(service *corev1.Service, ui *konfluxv1alpha1.K
 	}
 }
 
+// buildDexCAVolume creates the volume definition for the Dex CA certificate.
+// This volume provides the CA certificate from the dex-cert secret so oauth2-proxy
+// can verify the Dex service's TLS certificate.
+func buildDexCAVolume() customization.PodOverlayOption {
+	return customization.WithVolumes(
+		corev1.Volume{
+			Name: oauth2proxy.DexCAVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: dexCertSecretName,
+					Items: []corev1.KeyToPath{
+						{
+							Key:  oauth2proxy.DexCACertFileName,
+							Path: oauth2proxy.DexCACertFileName,
+						},
+					},
+				},
+			},
+		},
+	)
+}
+
 // buildProxyOverlay builds the pod overlay for the proxy deployment.
 // oauth2ProxyOpts are applied to the oauth2-proxy container before user-provided overrides.
 func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, oauth2ProxyOpts ...customization.ContainerOption) *customization.PodOverlay {
+	dexCAVolume := buildDexCAVolume()
+
+	var overlay *customization.PodOverlay
 	if spec == nil {
-		return customization.BuildPodOverlay(
+		overlay = customization.BuildPodOverlay(
 			customization.DeploymentContext{},
 			customization.WithContainerBuilder(oauth2ProxyContainerName, oauth2ProxyOpts...),
 		)
+	} else {
+		// Append user overrides after oauth2proxy options
+		oauth2ProxyOpts = append(oauth2ProxyOpts, customization.FromContainerSpec(spec.OAuth2Proxy))
+
+		overlay = customization.BuildPodOverlay(
+			customization.DeploymentContext{Replicas: spec.Replicas},
+			customization.WithContainerBuilder(
+				nginxContainerName,
+				customization.FromContainerSpec(spec.Nginx),
+			),
+			customization.WithContainerBuilder(
+				oauth2ProxyContainerName,
+				oauth2ProxyOpts...,
+			),
+		)
 	}
 
-	// Append user overrides after oauth2proxy options
-	oauth2ProxyOpts = append(oauth2ProxyOpts, customization.FromContainerSpec(spec.OAuth2Proxy))
-
-	return customization.BuildPodOverlay(
-		customization.DeploymentContext{Replicas: spec.Replicas},
-		customization.WithContainerBuilder(
-			nginxContainerName,
-			customization.FromContainerSpec(spec.Nginx),
-		),
-		customization.WithContainerBuilder(
-			oauth2ProxyContainerName,
-			oauth2ProxyOpts...,
-		),
-	)
+	// Add Dex CA volume to the overlay
+	dexCAVolume(overlay)
+	return overlay
 }
 
 // buildOAuth2ProxyOptions builds the container options for oauth2-proxy configuration.
@@ -392,7 +424,7 @@ func buildOAuth2ProxyOptions(endpoint *url.URL, openShiftLoginEnabled bool) []cu
 		oauth2proxy.WithInternalDexURLs(),
 		oauth2proxy.WithCookieConfig(),
 		oauth2proxy.WithAuthSettings(),
-		oauth2proxy.WithTLSSkipVerify(),
+		oauth2proxy.WithDexCA(),
 		oauth2proxy.WithWhitelistDomain(endpoint),
 	}
 

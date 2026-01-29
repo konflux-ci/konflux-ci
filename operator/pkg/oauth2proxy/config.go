@@ -100,11 +100,29 @@ func WithAuthSettings() customization.ContainerOption {
 
 // --- TLS Configuration ---
 
-// WithTLSSkipVerify configures TLS to skip certificate verification.
-// This is needed for communication with internal Dex using self-signed certificates.
-func WithTLSSkipVerify() customization.ContainerOption {
-	return customization.WithEnv(
-		corev1.EnvVar{Name: "OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY", Value: "true"},
+const (
+	// DexCAVolumeName is the name of the volume containing the Dex CA certificate.
+	// This should match the volume name used when creating the pod volume.
+	DexCAVolumeName = "dex-ca"
+	// DexCAMountPath is where the Dex CA certificate is mounted in the oauth2-proxy container.
+	// This path is in the standard Linux CA certificate directory.
+	DexCAMountPath = "/etc/ssl/certs/dex-ca.crt"
+	// DexCACertFileName is the filename of the CA certificate in the secret and volume.
+	// This is used as the key in the secret, path in KeyToPath, and subpath in volume mount.
+	DexCACertFileName = "ca.crt"
+)
+
+// WithDexCA mounts the Dex CA certificate for TLS verification.
+// This mounts the CA certificate from the dex-cert secret so oauth2-proxy
+// can verify the Dex service's TLS certificate when communicating over HTTPS.
+func WithDexCA() customization.ContainerOption {
+	return customization.WithVolumeMounts(
+		corev1.VolumeMount{
+			Name:      DexCAVolumeName,
+			MountPath: DexCAMountPath,
+			SubPath:   DexCACertFileName,
+			ReadOnly:  true,
+		},
 	)
 }
 
