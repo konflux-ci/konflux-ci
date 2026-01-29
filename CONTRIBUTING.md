@@ -150,36 +150,40 @@ In order to validate changes quicker, it is possible to run E2E test, which vali
 * quay.io organization that has `test-images` repository created, with robot account that has admin access to that repo
 
 ## Setup
-Export following environment variables
+
+Create the deploy-local.sh configuration:
+```bash
+cp scripts/deploy-local.env.template scripts/deploy-local.env
+# Edit scripts/deploy-local.env with your GitHub App credentials
 ```
+
+Or just export the E2E test environment variables:
+```bash
 # quay.io org where the built and released image will be pushed to
-export QUAY_ORG="" \
+export QUAY_ORGANIZATION=""
 # quay.io org OAuth access token
-QUAY_TOKEN="" \
-# Content of quay.io credentials config generated (ideally) for the robot account
-# that has access to $QUAY_ORG/test-images repository
-QUAY_DOCKERCONFIGJSON="$(< /path/to/docker/config.json)" \
-# Your GitHub App's ID
-APP_ID="" \
-# Your GitHub App's private key
-APP_PRIVATE_KEY="" \
-# Your GitHub App's webhook secret
-APP_WEBHOOK_SECRET="" \
+export QUAY_TOKEN=""
+# Content of quay.io credentials config for the robot account with access to $QUAY_ORGANIZATION/test-images
+export QUAY_DOCKERCONFIGJSON="$(< /path/to/docker/config.json)"
 # URL of the smee.io channel you created
-SMEE_CHANNEL="" \
-# Name of the GitHub org/username where the https://github.com/konflux-ci/testrepo is forked
-GH_ORG="" \
+export SMEE_CHANNEL=""
+# Name of the GitHub org/username where https://github.com/konflux-ci/testrepo is forked
+export GH_ORG=""
 # GitHub token with permissions to merge PRs in your GH_ORG
-GH_TOKEN=""
+export GH_TOKEN=""
 ```
 
 ## Running the test
 
 Run (from the root of the repository directory):
-```
+```bash
+./scripts/deploy-local.sh
 ./deploy-test-resources.sh
-./test/e2e/prepare-e2e.sh
 ./test/e2e/run-e2e.sh
 ```
+
+Note: The `deploy-local.sh` script reads `SMEE_CHANNEL`, `QUAY_TOKEN`, and
+`QUAY_ORGANIZATION` from the environment or from `scripts/deploy-local.env` to
+configure E2E prerequisites (secrets, Smee, image-controller).
 
 The source code of the test is located [.](https://github.com/konflux-ci/e2e-tests/tree/main/tests/konflux-demo)
