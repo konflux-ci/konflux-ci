@@ -6,6 +6,7 @@ Quay.io Configurations
 - [Configuring a Push Secret for the Build Pipeline](#configuring-a-push-secret-for-the-build-pipeline)
   * [Example - Extract Quay Push Secret:](#example---extract-quay-push-secret)
 - [Configuring a Push Secret for the Release Pipeline](#configuring-a-push-secret-for-the-release-pipeline)
+  * [Trusted Artifacts (ociStorage)](#trusted-artifacts-ocistorage)
 - [Automatically Provision Quay Repositories for Container Images](#automatically-provision-quay-repositories-for-container-images)
 
 <!-- tocstop -->
@@ -29,8 +30,6 @@ and named `build-pipeline-<component-name>`.
 Replace $NS with the correct namespace. For example:
 - for user1, specify 'user-ns1'
 - for user2, specify 'user-ns2'
-- for managed1, specify 'managed-ns1'
-- for managed2, specify 'managed-ns2'
 
 ```bash
 kubectl create -n $NS secret generic regcred \
@@ -68,11 +67,25 @@ for creating the secret. If not using quay, apply your registry's equivalent pro
 # Configuring a Push Secret for the Release Pipeline
 
 If the release pipeline needs to push images to a container registry, it needs to be
-configured with a push secret as well.
+configured with a push secret as well. The release pipeline runs as the service account
+named in the ReleasePlanAdmission (e.g. **release-pipeline** in the demo resources).
 
-:gear: In the `managed` namespace, repeat the same steps mentioned
-[above](#configuring-a-push-secret-for-the-build-pipeline) for configuring the push
-secret.
+1. :gear: In the **managed** namespace, create the secret as in step 1
+   [above](#configuring-a-push-secret-for-the-build-pipeline). Replace $NS with the
+   managed namespace (e.g. `managed-ns1`, `managed-ns2`).
+
+2. :gear: Add the secret to the release pipeline service account:
+
+```bash
+kubectl patch -n $NS serviceaccount release-pipeline -p '{"secrets": [{"name": "regcred"}]}'
+```
+
+## Trusted Artifacts (ociStorage)
+
+If the release pipeline uploads Trusted Artifacts, set the **ociStorage** field in your
+ReleasePlanAdmission to your own OCI storage URL (e.g. your registry path). Ensure the
+**release-pipeline** service account has credentials to push to that location (e.g. an
+additional registry secret or Quay token linked to that service account).
 
 # Automatically Provision Quay Repositories for Container Images
 
