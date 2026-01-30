@@ -12,6 +12,7 @@ spec:
   dnsNames:
   - localhost
   - dex.konflux-ui
+  - dex.konflux-ui.svc.cluster.local
   issuerRef:
     kind: ClusterIssuer
     name: self-signed-cluster-issuer

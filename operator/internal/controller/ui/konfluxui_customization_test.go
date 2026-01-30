@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/onsi/gomega"
+	"github.com/onsi/gomega/gstruct"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -30,6 +31,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/oauth2proxy"
 )
 
 // testEndpoint is the default test endpoint URL.
@@ -69,7 +71,6 @@ var requiredOAuth2ProxyEnvVars = []string{
 	"OAUTH2_PROXY_EMAIL_DOMAINS",
 	"OAUTH2_PROXY_SET_XAUTHREQUEST",
 	"OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS",
-	"OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY",
 	"OAUTH2_PROXY_WHITELIST_DOMAINS",
 }
 
@@ -244,6 +245,40 @@ func TestBuildProxyOverlay(t *testing.T) {
 		g.Expect(nginxContainer).NotTo(gomega.BeNil())
 		g.Expect(nginxContainer.Image).To(gomega.Equal(originalImage))
 	})
+
+	t.Run("adds dex-ca volume to deployment", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		deployment := getUIDeployment(t, proxyDeploymentName)
+		overlay := buildProxyOverlay(nil, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// Verify the dex-ca volume is present
+		var dexCAVolume *corev1.Volume
+		for i := range deployment.Spec.Template.Spec.Volumes {
+			if deployment.Spec.Template.Spec.Volumes[i].Name == oauth2proxy.DexCAVolumeName {
+				dexCAVolume = &deployment.Spec.Template.Spec.Volumes[i]
+				break
+			}
+		}
+		g.Expect(dexCAVolume).NotTo(gomega.BeNil(), "dex-ca volume should be present")
+		g.Expect(dexCAVolume.Secret).NotTo(gomega.BeNil())
+		g.Expect(dexCAVolume.Secret.SecretName).To(gomega.Equal(dexCertSecretName))
+		g.Expect(dexCAVolume.Secret.Items).To(gomega.HaveLen(1))
+		g.Expect(dexCAVolume.Secret.Items[0].Key).To(gomega.Equal(oauth2proxy.DexCACertFileName))
+		g.Expect(dexCAVolume.Secret.Items[0].Path).To(gomega.Equal(oauth2proxy.DexCACertFileName))
+
+		// Verify the oauth2-proxy container has the volume mount
+		oauth2ProxyContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
+		g.Expect(oauth2ProxyContainer).NotTo(gomega.BeNil())
+		g.Expect(oauth2ProxyContainer.VolumeMounts).To(gomega.ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
+			"Name":      gomega.Equal(oauth2proxy.DexCAVolumeName),
+			"MountPath": gomega.Equal(oauth2proxy.DexCAMountPath),
+			"SubPath":   gomega.Equal(oauth2proxy.DexCACertFileName),
+			"ReadOnly":  gomega.BeTrue(),
+		})))
+	})
 }
 
 func TestBuildOAuth2ProxyOptions(t *testing.T) {
@@ -297,8 +332,15 @@ func TestBuildOAuth2ProxyOptions(t *testing.T) {
 		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_EMAIL_DOMAINS"))
 		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_SET_XAUTHREQUEST"))
 		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS"))
-		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY"))
 		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_WHITELIST_DOMAINS"))
+
+		// Verify the Dex CA volume mount is configured
+		g.Expect(c.VolumeMounts).To(gomega.ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
+			"Name":      gomega.Equal(oauth2proxy.DexCAVolumeName),
+			"MountPath": gomega.Equal(oauth2proxy.DexCAMountPath),
+			"SubPath":   gomega.Equal(oauth2proxy.DexCACertFileName),
+			"ReadOnly":  gomega.BeTrue(),
+		})))
 	})
 
 	t.Run("includes allow unverified email when OpenShift login enabled", func(t *testing.T) {
