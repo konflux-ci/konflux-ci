@@ -18,7 +18,9 @@ package konflux
 
 import (
 	"context"
+	"time"
 
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -43,6 +45,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/rbac"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/releaseservice"
 	uictrl "github.com/konflux-ci/konflux-ci/operator/internal/controller/ui"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/dependencies"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
 
@@ -126,6 +129,7 @@ type KonfluxReconciler struct {
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxdefaulttenants,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxdefaulttenants/status,verbs=get;patch;update
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxdefaulttenants/finalizers,verbs=update
+// +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -147,6 +151,41 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// Create error handler for consistent error reporting
 	errHandler := condition.NewReconcileErrorHandler(log, r.Status(), konflux, crKind)
+
+	// Check if cert-manager CRDs are installed before proceeding
+	// Several components (UI, Integration Service, Release Service, etc.) require
+	// cert-manager to create Certificate resources for TLS.
+	certManagerInstalled, err := dependencies.IsCertManagerInstalled(ctx, r.Client)
+	var shouldRequeue bool
+	var requeueAfter time.Duration
+	if err != nil {
+		log.Error(err, "Failed to check if cert-manager is installed")
+		// Don't fail reconciliation, but log the error
+		// Requeue to retry the check (transient errors like RBAC/network)
+		shouldRequeue = true
+		requeueAfter = 30 * time.Second
+	} else if !certManagerInstalled {
+		log.Info("cert-manager CRDs not found - some components may fail to create Certificate resources")
+		// Set a condition indicating cert-manager is missing
+		condition.SetCondition(konflux, metav1.Condition{
+			Type:    constant.ConditionTypeCertManagerAvailable,
+			Status:  metav1.ConditionFalse,
+			Reason:  condition.ReasonCertManagerMissing,
+			Message: "cert-manager CRDs are not installed. Several Konflux components require cert-manager to create Certificate resources for TLS. Please install cert-manager before proceeding.",
+		})
+		// Requeue to check again when cert-manager might be installed
+		// This also triggers sub-CR reconciliation via server-side apply updates
+		shouldRequeue = true
+		requeueAfter = 1 * time.Minute
+	} else {
+		// cert-manager is installed, set condition to True
+		condition.SetCondition(konflux, metav1.Condition{
+			Type:    constant.ConditionTypeCertManagerAvailable,
+			Status:  metav1.ConditionTrue,
+			Reason:  "CertManagerInstalled",
+			Message: "cert-manager CRDs are installed",
+		})
+	}
 
 	// Initialize tracking client for declarative resource management
 	tc := tracking.NewClientWithOwnership(r.Client, tracking.OwnershipConfig{
@@ -346,6 +385,24 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// All deployments are managed by component-specific reconcilers, so we only aggregate sub-CR statuses.
 	condition.SetAggregatedReadyCondition(konflux, subCRStatuses)
 
+	// If cert-manager is not available, ensure Ready status is False
+	// even if all sub-CRs are ready, since components that depend on cert-manager
+	// will fail to create Certificate resources.
+	certManagerAvailable := condition.IsConditionTrue(konflux, constant.ConditionTypeCertManagerAvailable)
+	if !certManagerAvailable {
+		// Check if the condition exists (it might not exist if the check failed)
+		certManagerCond := apimeta.FindStatusCondition(konflux.GetConditions(), constant.ConditionTypeCertManagerAvailable)
+		if certManagerCond != nil && certManagerCond.Status == metav1.ConditionFalse {
+			// cert-manager is explicitly missing, override Ready to False
+			condition.SetCondition(konflux, metav1.Condition{
+				Type:    constant.ConditionTypeReady,
+				Status:  metav1.ConditionFalse,
+				Reason:  condition.ReasonCertManagerMissing,
+				Message: "cert-manager CRDs are not installed. Some components require cert-manager to function properly.",
+			})
+		}
+	}
+
 	// Update the status subresource with all collected conditions
 	if err := r.Status().Update(ctx, konflux); err != nil {
 		log.Error(err, "Failed to update Konflux status")
@@ -353,6 +410,15 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	log.Info("Successfully reconciled Konflux")
+
+	// Requeue if unwatched resources are missing
+	// This ensures we periodically check for the resources and
+	// trigger sub-CR reconciliation (via server-side apply updates) so they
+	// can retry creating the resources when they become available.
+	if shouldRequeue {
+		return ctrl.Result{RequeueAfter: requeueAfter}, nil
+	}
+
 	return ctrl.Result{}, nil
 }
 
