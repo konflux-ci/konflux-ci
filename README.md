@@ -140,9 +140,17 @@ The operator-based deployment differs from the legacy bootstrap approach:
 
 For the legacy bootstrap approach (Linux x86_64 only), continue to the sections below.
 
+> [!WARNING]
+> The sections below describe the **legacy deployment method** which will be removed in a future release.
+> Use the [Operator-Based Deployment](#operator-based-deployment) above for new installations.
+
 ## Machine Minimum Requirements
 
-The deployment is currently only supported on **x86_64 Linux** platforms.
+> [!NOTE]
+> These requirements apply to the legacy deployment method. The operator-based deployment
+> works on macOS, Linux (x86_64 and arm64), and any Kubernetes cluster.
+
+The legacy deployment is currently only supported on **x86_64 Linux** platforms.
 
 The deployment requires the following **free** resources:
 
@@ -163,6 +171,11 @@ additional resources.
 * `openssl` (`v3.0.13` or newer)
 
 ## Bootstrapping the Cluster
+
+> [!WARNING]
+> This section describes the **legacy manual bootstrap** process.
+> For new installations, use [deploy-local.sh](#local-development-kind) instead.
+
 :gear: Clone this repository:
 
  ```bash

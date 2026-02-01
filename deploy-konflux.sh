@@ -1,4 +1,12 @@
 #!/bin/bash -e
+#
+# DEPRECATED: This script is deprecated and will be removed in a future release.
+# Use the operator-based deployment instead: ./scripts/deploy-local.sh
+#
+# This script deploys Konflux using raw manifests from the konflux-ci/ directory.
+# It remains for compatibility with environments (e.g., Fedora cluster) that still
+# use this deployment method. New deployments should use the Konflux operator.
+#
 
 script_path="$(dirname -- "${BASH_SOURCE[0]}")"
 
