@@ -1,0 +1,10 @@
+# Set privateKey.rotationPolicy explicitly to silence cert-manager >= v1.18 warning
+# (default changed from Never to Always) and document intended behavior.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: trust-manager
+  namespace: cert-manager
+spec:
+  privateKey:
+    rotationPolicy: Always

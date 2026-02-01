@@ -3,3 +3,12 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - trust-manager.yaml
+patches:
+  - path: deployment-annotation-patch.yaml
+    target:
+      kind: Deployment
+      name: trust-manager
+  - path: certificate-rotation-policy-patch.yaml
+    target:
+      kind: Certificate
+      name: trust-manager
