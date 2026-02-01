@@ -1554,10 +1554,6 @@ spec:
                   - type
                   type: object
                 type: array
-              containerImage:
-                description: ContainerImage stores the associated built container
-                  image for the component
-                type: string
               devfile:
                 description: |-
                   The devfile model for the Component CR
