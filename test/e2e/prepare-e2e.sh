@@ -1,4 +1,12 @@
 #!/bin/bash -e
+#
+# DEPRECATED: This script is deprecated and will be removed in a future release.
+# All functionality has been consolidated into scripts/deploy-local.sh
+#
+# This script remains for compatibility with the main branch CI workflow
+# (operator-test-e2e.yaml uses pull_request_target which runs workflow from main).
+# Once the updated workflow merges to main, this script can be deleted.
+#
 
 script_path="$(dirname -- "${BASH_SOURCE[0]}")"
 
