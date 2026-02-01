@@ -11,6 +11,8 @@ Troubleshooting Common Issues
 - [PR Fails when Webhook Secret was not Added](#pr-fails-when-webhook-secret-was-not-added)
 - [Setup Scripts Fail or Pipeline Execution Stuck or Fails](#setup-scripts-fail-or-pipeline-execution-stuck-or-fails)
   * [Running out of Resources](#running-out-of-resources)
+    + [For Podman Users (macOS/Linux)](#for-podman-users-macoslinux)
+    + [For All Platforms](#for-all-platforms)
   * [Unable to Bind PVCs](#unable-to-bind-pvcs)
   * [Release Fails](#release-fails)
     + [Common Release Issues](#common-release-issues)
@@ -44,8 +46,9 @@ you're unable to troubleshoot some other issues, you may need to restart the con
 on which the Kind cluster runs.
 
 If you do that, you'd have to, once more, **increase the PID limit** for that container
-and the **open files limit** for the host (if the host was restarted), as explained in
-the [cluster setup instructions](../README.md#bootstrapping-the-cluster).
+and the **open files limit** for the host (if the host was restarted). If using
+`deploy-local.sh`, these are handled automatically. For manual setup, see the
+[cluster setup instructions](../README.md#bootstrapping-the-cluster).
 
 :gear: Restart the container (if using Docker, replace `podman` with `docker`):
 
@@ -179,7 +182,49 @@ The symptoms may include:
   ```
 * Pipelines fail at inconsistent stages.
 
-:gear: For mitigation steps, consult the notes at the top of the
+### For Podman Users (macOS/Linux)
+
+**Check Podman machine memory:**
+
+```bash
+podman machine inspect | grep Memory
+```
+
+**If insufficient, create new machine with more resources:**
+
+```bash
+podman machine stop
+podman machine init --memory 20480 --cpus 8 --rootful konflux-large
+podman machine start konflux-large
+
+# Configure deployment script to use it
+# In scripts/deploy-local.env:
+PODMAN_MACHINE_NAME="konflux-large"
+```
+
+**PID limit issues** (Tekton pipelines fail with "cannot fork" errors):
+
+The setup script automatically increases PID limits. If issues persist:
+
+```bash
+podman update --pids-limit 8192 konflux-control-plane
+```
+
+**Performance tuning:**
+
+If builds are slow or UI is sluggish, you can reduce resource requirements by lowering replica counts in your Konflux CR:
+
+```yaml
+spec:
+  ui:
+    spec:
+      proxy:
+        replicas: 1  # Instead of 2-3
+```
+
+### For All Platforms
+
+:gear: For general mitigation steps, consult the notes at the top of the
 [cluster setup instructions](../README.md#bootstrapping-the-cluster).
 
 :gear: As last resort, you could restart the container running the cluster node. To do
