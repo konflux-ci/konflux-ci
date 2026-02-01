@@ -1,0 +1,8 @@
+# Preserve linter annotation when regenerating trust-manager.yaml with Helm.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trust-manager
+  namespace: cert-manager
+  annotations:
+    ignore-check.kube-linter.io/readiness-port: "Keeping upstream configs"

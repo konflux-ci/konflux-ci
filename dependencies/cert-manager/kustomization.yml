@@ -2,47 +2,10 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  # Disabled in renovate.json until we're able to auto-update trust-manager as well.
-  # renovate: datasource=git-refs depName=https://github.com/cert-manager/cert-manager versioning=semver
-  - https://github.com/cert-manager/cert-manager/releases/download/v1.14.4/cert-manager.yaml
-
+  - namespace.yaml
+  - cert-manager.yaml
 patches:
-  - patch: |
-      - op: add
-        path: /spec/template/spec/containers/0/resources
-        value:
-          requests:
-            cpu: 90m
-            memory: 90Mi
-          limits:
-            cpu: 120m
-            memory: 120Mi
+  - path: startupapicheck-job-patch.yaml
     target:
-      kind: Deployment
-      name: cert-manager
-  - patch: |
-      - op: add
-        path: /spec/template/spec/containers/0/resources
-        value:
-          requests:
-            cpu: 90m
-            memory: 90Mi
-          limits:
-            cpu: 120m
-            memory: 120Mi
-    target:
-      kind: Deployment
-      name: cert-manager-cainjector
-  - patch: |
-      - op: add
-        path: /spec/template/spec/containers/0/resources
-        value:
-          requests:
-            cpu: 90m
-            memory: 90Mi
-          limits:
-            cpu: 120m
-            memory: 120Mi
-    target:
-      kind: Deployment
-      name: cert-manager-webhook
+      kind: Job
+      name: cert-manager-startupapicheck

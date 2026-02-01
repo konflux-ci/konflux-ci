@@ -1,0 +1,9 @@
+# Kube-linter: set ttlSecondsAfterFinished (not exposed by cert-manager Helm chart).
+# startupapicheck.resources are set via Helm in update-third-party-manifests.sh.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cert-manager-startupapicheck
+  namespace: cert-manager
+spec:
+  ttlSecondsAfterFinished: 300

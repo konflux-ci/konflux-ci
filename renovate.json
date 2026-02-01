@@ -22,17 +22,18 @@
       "automerge": true
     },
     {
-      "matchPackageNames": ["https://github.com/cert-manager/cert-manager"],
-      "enabled": false,
-      "description": "Disable until we're able to auto-update trust-manager as well"
-    },
-    {
       "groupName": "tekton-core",
       "matchPackageNames": [
         "https://github.com/tektoncd/operator",
         "https://github.com/tektoncd/pipeline"
       ],
       "description": "Group core Tekton components for coordinated updates. Note: tektoncd/results is managed by the operator and its version is determined by the operator version."
+    },
+    {
+      "description": "Use Jetstack Helm repo for cert-manager and trust-manager charts",
+      "matchDatasources": ["helm"],
+      "matchPackageNames": ["cert-manager", "trust-manager"],
+      "registryUrls": ["https://charts.jetstack.io"]
     }
   ],
   "enabledManagers": ["regex", "kustomize", "github-actions", "gomod", "dockerfile"],
@@ -216,6 +217,28 @@
       "depNameTemplate": "https://github.com/konflux-ci/release-service-catalog",
       "currentValueTemplate": "development",
       "autoReplaceStringTemplate": "RELEASE_SERVICE_CATALOG_REVISION=\"{{newDigest}}\""
+    },
+    {
+      "description": "Track cert-manager Helm chart in Update Third-Party Manifests workflow",
+      "customType": "regex",
+      "fileMatch": [".github/workflows/update-third-party-manifests.yaml"],
+      "matchStrings": [
+        "# renovate: datasource=helm depName=jetstack/cert-manager versioning=semver\\s+CERT_MANAGER_VERSION:\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "helm",
+      "depNameTemplate": "cert-manager",
+      "extractVersionTemplate": "^v?(?<version>.*)$"
+    },
+    {
+      "description": "Track trust-manager Helm chart in Update Third-Party Manifests workflow",
+      "customType": "regex",
+      "fileMatch": [".github/workflows/update-third-party-manifests.yaml"],
+      "matchStrings": [
+        "# renovate: datasource=helm depName=jetstack/trust-manager versioning=semver\\s+TRUST_MANAGER_VERSION:\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "helm",
+      "depNameTemplate": "trust-manager",
+      "extractVersionTemplate": "^v?(?<version>.*)$"
     }
   ]
 }

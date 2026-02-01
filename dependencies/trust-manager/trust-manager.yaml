@@ -406,6 +406,7 @@ rules:
   - "bundles"
   # We also need patch here so we can perform migrations from old CSA to SSA.
   verbs: ["get", "list", "watch", "patch"]
+
 # Permissions to update finalizers are required for trust-manager to work correctly
 # on OpenShift, even though we don't directly use finalizers at the time of writing
 - apiGroups:
@@ -603,8 +604,6 @@ metadata:
     app.kubernetes.io/instance: trust-manager
     app.kubernetes.io/version: "v0.12.0"
     app.kubernetes.io/managed-by: Helm
-  annotations:
-    ignore-check.kube-linter.io/readiness-port: "Keeping upstream configs"
 spec:
   replicas: 1
   selector:
@@ -643,12 +642,12 @@ spec:
           seccompProfile:
             type: RuntimeDefault
         resources:
-          requests:
-            cpu: 10m
-            memory: 50Mi
           limits:
             cpu: 100m
             memory: 250Mi
+          requests:
+            cpu: 10m
+            memory: 50Mi
       containers:
       - name: trust-manager
         image: "quay.io/jetstack/trust-manager:v0.12.0"
@@ -685,12 +684,12 @@ spec:
           name: packages
           readOnly: true
         resources:
-          requests:
-            cpu: 10m
-            memory: 50Mi
-          limits:
-            cpu: 100m
-            memory: 250Mi
+            limits:
+              cpu: 100m
+              memory: 250Mi
+            requests:
+              cpu: 10m
+              memory: 50Mi
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -764,6 +763,8 @@ metadata:
 
   annotations:
     cert-manager.io/inject-ca-from: "cert-manager/trust-manager"
+
+
 webhooks:
   - name: trust.cert-manager.io
     rules:

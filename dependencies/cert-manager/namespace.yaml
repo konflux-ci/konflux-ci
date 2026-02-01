@@ -1,0 +1,11 @@
+# Namespace for cert-manager (and trust-manager). The Helm chart does not
+# emit a Namespace when using helm template; --create-namespace only applies
+# at install time. This file ensures the namespace exists before applying
+# namespace-scoped resources.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager
+  labels:
+    app.kubernetes.io/name: cert-manager
