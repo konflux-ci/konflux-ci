@@ -1,3 +1,9 @@
+# DEPRECATED: This workflow tests the legacy (non-operator) deployment method.
+# It will be removed once all environments (e.g., Fedora cluster) migrate to
+# the operator-based deployment tested by operator-test-e2e.yaml.
+#
+# For new deployments, use the Konflux operator via scripts/deploy-local.sh
+
 name: Sanity Test
 
 on:
