@@ -386,10 +386,12 @@ spec:
             description: ReleasePlanAdmissionSpec defines the desired state of ReleasePlanAdmission.
             properties:
               applications:
-                description: Applications is a list of references to applications
-                  to be released in the managed namespace
+                description: |-
+                  Applications is a list of references to applications to be released in the managed namespace.
+                  Either applications or componentGroups must be specified, but not both.
                 items:
                   type: string
+                minItems: 1
                 type: array
               collectors:
                 description: Collectors contains all the information of the collectors
@@ -451,6 +453,14 @@ spec:
                 required:
                 - items
                 type: object
+              componentGroups:
+                description: |-
+                  ComponentGroups is a list of references to component groups to be released in the managed namespace.
+                  Either applications or componentGroups must be specified, but not both.
+                items:
+                  type: string
+                minItems: 1
+                type: array
               data:
                 description: Data is an unstructured key used for providing data for
                   the managed Release Pipeline
@@ -1332,10 +1342,12 @@ spec:
                 pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                 type: string
             required:
-            - applications
             - origin
             - policy
             type: object
+            x-kubernetes-validations:
+            - message: exactly one of applications or componentGroups must be specified
+              rule: has(self.applications) != has(self.componentGroups)
           status:
             description: ReleasePlanAdmissionStatus defines the observed state of
               ReleasePlanAdmission.
@@ -1444,6 +1456,9 @@ spec:
     - jsonPath: .spec.application
       name: Application
       type: string
+    - jsonPath: .spec.componentGroup
+      name: ComponentGroup
+      type: string
     - jsonPath: .spec.target
       name: Target
       type: string
@@ -1473,8 +1488,10 @@ spec:
             description: ReleasePlanSpec defines the desired state of ReleasePlan.
             properties:
               application:
-                description: Application is a reference to the application to be released
-                  in the managed namespace
+                description: |-
+                  Application is a reference to the application to be released in the managed namespace.
+                  Either application or componentGroup must be specified, but not both.
+                maxLength: 63
                 pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                 type: string
               collectors:
@@ -1537,6 +1554,13 @@ spec:
                 required:
                 - items
                 type: object
+              componentGroup:
+                description: |-
+                  ComponentGroup is a reference to the component group to be released in the managed namespace.
+                  Either application or componentGroup must be specified, but not both.
+                maxLength: 63
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                type: string
               data:
                 description: Data is an unstructured key used for providing data for
                   the managed Release Pipeline
@@ -3310,9 +3334,10 @@ spec:
                 required:
                 - pipelineRef
                 type: object
-            required:
-            - application
             type: object
+            x-kubernetes-validations:
+            - message: exactly one of application or componentGroup must be specified
+              rule: has(self.application) != has(self.componentGroup)
           status:
             description: ReleasePlanStatus defines the observed state of ReleasePlan.
             properties:
@@ -4748,7 +4773,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: quay.io/konflux-ci/release-service:b4796f06798a961aa1bca9c8087655e71846e334
+        image: quay.io/konflux-ci/release-service:55f9aedab7233572995a537f167646a776a8b837
         livenessProbe:
           httpGet:
             path: /healthz
