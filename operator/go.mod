@@ -1,6 +1,6 @@
 module github.com/konflux-ci/konflux-ci/operator
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/cert-manager/cert-manager v1.16.3
@@ -11,7 +11,7 @@ require (
 	golang.org/x/sync v0.19.0
 	k8s.io/api v0.34.1
 	k8s.io/apiextensions-apiserver v0.34.1
-	k8s.io/apimachinery v0.34.1
+	k8s.io/apimachinery v0.35.0
 	k8s.io/client-go v0.34.1
 	k8s.io/utils v0.0.0-20260108192941-914a6e750570
 	sigs.k8s.io/controller-runtime v0.22.4
