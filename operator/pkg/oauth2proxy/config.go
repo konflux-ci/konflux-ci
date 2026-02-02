@@ -30,6 +30,17 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 )
 
+const (
+	// CABundleVolumeName is the name of the volume containing the CA bundle
+	CABundleVolumeName = "ca-bundle"
+	// CABundleSecretName is the name of the Secret containing the CA bundle
+	CABundleSecretName = "ca-bundle-secret"
+	// CABundleMountPath is the path where the CA bundle is mounted in the container
+	CABundleMountPath = "/etc/ssl/certs/ca-bundle.crt"
+	// CABundleSecretKey is the key in the Secret containing the CA certificate
+	CABundleSecretKey = "ca.crt"
+)
+
 var (
 	// dexInternalURL is the internal Dex service URL used for token redemption and JWKS.
 	dexInternalURL = &url.URL{
@@ -100,12 +111,22 @@ func WithAuthSettings() customization.ContainerOption {
 
 // --- TLS Configuration ---
 
-// WithTLSSkipVerify configures TLS to skip certificate verification.
-// This is needed for communication with internal Dex using self-signed certificates.
-func WithTLSSkipVerify() customization.ContainerOption {
-	return customization.WithEnv(
-		corev1.EnvVar{Name: "OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY", Value: "true"},
-	)
+// WithCABundle configures TLS to use a custom CA bundle for certificate verification.
+// Adds the volume mount and environment variable for the CA bundle.
+func WithCABundle() customization.ContainerOption {
+	return func(c *corev1.Container, ctx customization.DeploymentContext) {
+		// Add volume mount for CA bundle
+		customization.WithVolumeMounts(corev1.VolumeMount{
+			Name:      CABundleVolumeName,
+			MountPath: CABundleMountPath,
+			SubPath:   CABundleSecretKey,
+			ReadOnly:  true,
+		})(c, ctx)
+		// Set SSL_CERT_FILE environment variable
+		customization.WithEnv(
+			corev1.EnvVar{Name: "SSL_CERT_FILE", Value: CABundleMountPath},
+		)(c, ctx)
+	}
 }
 
 // --- Email Verification ---

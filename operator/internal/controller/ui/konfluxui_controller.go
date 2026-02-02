@@ -360,26 +360,40 @@ func applyUIServiceCustomizations(service *corev1.Service, ui *konfluxv1alpha1.K
 // buildProxyOverlay builds the pod overlay for the proxy deployment.
 // oauth2ProxyOpts are applied to the oauth2-proxy container before user-provided overrides.
 func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, oauth2ProxyOpts ...customization.ContainerOption) *customization.PodOverlay {
+	// Create CA bundle volume that will be mounted in oauth2-proxy container.
+	// The Secret is created by cert-manager from the ca-bundle-cert Certificate resource
+	// (see operator/upstream-kustomizations/ui/dex/dex.yaml).
+	caVolume := corev1.Volume{
+		Name: oauth2proxy.CABundleVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: oauth2proxy.CABundleSecretName,
+			},
+		},
+	}
+
 	if spec == nil {
-		return customization.BuildPodOverlay(
-			customization.DeploymentContext{},
-			customization.WithContainerBuilder(oauth2ProxyContainerName, oauth2ProxyOpts...),
+		return customization.NewPodOverlay(
+			customization.WithVolumes(caVolume),
+			customization.WithContainerBuilder(oauth2ProxyContainerName, oauth2ProxyOpts...)(
+				customization.DeploymentContext{},
+			),
 		)
 	}
 
 	// Append user overrides after oauth2proxy options
 	oauth2ProxyOpts = append(oauth2ProxyOpts, customization.FromContainerSpec(spec.OAuth2Proxy))
 
-	return customization.BuildPodOverlay(
-		customization.DeploymentContext{Replicas: spec.Replicas},
+	return customization.NewPodOverlay(
+		customization.WithVolumes(caVolume),
 		customization.WithContainerBuilder(
 			nginxContainerName,
 			customization.FromContainerSpec(spec.Nginx),
-		),
+		)(customization.DeploymentContext{Replicas: spec.Replicas}),
 		customization.WithContainerBuilder(
 			oauth2ProxyContainerName,
 			oauth2ProxyOpts...,
-		),
+		)(customization.DeploymentContext{Replicas: spec.Replicas}),
 	)
 }
 
@@ -392,7 +406,7 @@ func buildOAuth2ProxyOptions(endpoint *url.URL, openShiftLoginEnabled bool) []cu
 		oauth2proxy.WithInternalDexURLs(),
 		oauth2proxy.WithCookieConfig(),
 		oauth2proxy.WithAuthSettings(),
-		oauth2proxy.WithTLSSkipVerify(),
+		oauth2proxy.WithCABundle(),
 		oauth2proxy.WithWhitelistDomain(endpoint),
 	}
 

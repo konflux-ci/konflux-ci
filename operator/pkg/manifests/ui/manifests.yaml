@@ -622,16 +622,31 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
+  name: ca-bundle-cert
+  namespace: konflux-ui
+spec:
+  dnsNames:
+  - localhost
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: ca-issuer
+  secretName: ca-bundle-secret
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
   name: dex-cert
   namespace: konflux-ui
 spec:
   dnsNames:
   - localhost
   - dex.konflux-ui
+  - dex.konflux-ui.svc.cluster.local
   isCA: true
   issuerRef:
     kind: ClusterIssuer
-    name: self-signed-cluster-issuer
+    name: ca-issuer
   secretName: dex-cert
   subject:
     organizations:
@@ -649,5 +664,5 @@ spec:
   - proxy.konflux-ui.svc.cluster.local
   issuerRef:
     kind: ClusterIssuer
-    name: self-signed-cluster-issuer
+    name: ca-issuer
   secretName: serving-cert
