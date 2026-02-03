@@ -64,33 +64,27 @@ spec:
                   description: ComponentReference references a Component and its specific
                     branch/version
                   properties:
-                    componentBranch:
+                    componentVersion:
                       description: |-
-                        ComponentBranch references the ComponentBranch for this Component.
-                        The ComponentBranch CRD will be implemented by the build team as part of STONEBLD-3604.
+                        ComponentVersion references the ComponentVersion for this Component.
+                        The ComponentVersion CRD will be implemented by the build team as part of STONEBLD-3604.
                         For now, this contains the branch name and GCL (Global Candidate List) information.
                       properties:
-                        lastBuildTime:
+                        context:
                           description: |-
-                            LastBuildTime is the timestamp when the last build was completed.
-                            Format: RFC3339 (e.g., "2025-08-13T12:00:00Z")
-                          format: date-time
-                          type: string
-                        lastPromotedCommit:
-                          description: |-
-                            LastPromotedCommit is the git commit SHA of the last promoted image.
-                            Example: 6a7c81802e785aa869f82301afe61f4e9775772b
-                          type: string
-                        lastPromotedImage:
-                          description: |-
-                            LastPromotedImage is the latest "good" container image for this ComponentBranch.
-                            This is part of the Global Candidate List (GCL) tracking.
-                            Example: quay.io/sampleorg/first-component@sha256:1b29...
+                            Name of the context directory for the component version. Used
+                            with Revision
                           type: string
                         name:
                           description: |-
-                            Name is the name of the ComponentBranch (typically the branch name like "main", "v1", etc.)
-                            This will reference the ComponentBranch CRD once it's implemented.
+                            Name is the name of the ComponentVersion (typically the branch name like "main", "v1", etc.)
+                            This will reference the ComponentVersion CRD once it's implemented.
+                          type: string
+                        version:
+                          description: |-
+                            Name of the git revision for the component version. Used as a
+                            fallback if the `appstudio.openshift.io/version` label is not
+                            set on the build PLR
                           type: string
                       required:
                       - name
@@ -100,7 +94,7 @@ spec:
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                       type: string
                   required:
-                  - componentBranch
+                  - componentVersion
                   - name
                   type: object
                 type: array
@@ -235,6 +229,39 @@ spec:
                   - reason
                   - status
                   - type
+                  type: object
+                type: array
+              globalCandidateList:
+                description: |-
+                  The list of recently promoted Components which the integration service
+                  uses to create Snapshots
+                items:
+                  properties:
+                    lastPromotedBuildTime:
+                      description: |-
+                        Timestamp for build of the LastPromotedImage.  Used to prevent
+                        regressions resulting from race conditions
+                        Format: RFC3339 (e.g., "2025-08-13T12:00:00Z")
+                      format: date-time
+                      type: string
+                    lastPromotedCommit:
+                      description: Git commit associated with the build of LastPromotedImage
+                      type: string
+                    lastPromotedImage:
+                      description: |-
+                        Location of the last image for this Component to be promoted. If no
+                        image has been promoted then the field will be blank
+                      type: string
+                    name:
+                      description: Name of the Component
+                      type: string
+                    version:
+                      description: |-
+                        Version of the Component. Only required if multiple version of the same
+                        Component are in the ComponentGroup
+                      type: string
+                  required:
+                  - name
                   type: object
                 type: array
             required:
@@ -1535,7 +1562,7 @@ spec:
         - --leader-elector-retry-period=5s
         command:
         - /manager
-        image: quay.io/konflux-ci/integration-service:e26deec2f858143b2426651de9c9a3dfc3bdea6c
+        image: quay.io/konflux-ci/integration-service:ac35b5ce647b09c66d674c8423009acf51d0911a
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1596,7 +1623,7 @@ spec:
             - --zap-log-level=debug
             - --pr-snapshots-to-keep=70
             - --non-pr-snapshots-to-keep=640
-            image: quay.io/konflux-ci/integration-service:e26deec2f858143b2426651de9c9a3dfc3bdea6c
+            image: quay.io/konflux-ci/integration-service:ac35b5ce647b09c66d674c8423009acf51d0911a
             imagePullPolicy: Always
             name: test-gc
             resources:
