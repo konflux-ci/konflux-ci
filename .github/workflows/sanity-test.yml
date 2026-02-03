@@ -74,6 +74,13 @@ jobs:
   sanity-test:
     needs: check-prerequisites
     runs-on: ubuntu-latest
+    # Use e2e-tests environment (Required reviewers) only for human PRs; bots and
+    # merge_group use no env so they run without approval
+    environment: >-
+      ${{ github.event_name == 'pull_request_target' &&
+      !contains(',renovate[bot],red-hat-konflux[bot],github-actions[bot],konflux-ci-update-bot[bot],',
+      format(',{0},', github.event.pull_request.user.login)) &&
+      'e2e-tests' || '' }}
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main

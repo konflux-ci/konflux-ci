@@ -75,6 +75,14 @@ jobs:
   check-changes:
     name: Check for relevant changes
     runs-on: ubuntu-slim
+    needs: [check-prerequisites]
+    # Use e2e-tests environment (Required reviewers) only for human PRs; bots and
+    # merge_group use no env so they run without approval.
+    environment: >-
+      ${{ github.event_name == 'pull_request_target' &&
+      !contains(',renovate[bot],red-hat-konflux[bot],github-actions[bot],konflux-ci-update-bot[bot],',
+      format(',{0},', github.event.pull_request.user.login)) &&
+      'e2e-tests' || '' }}
     outputs:
       operator: ${{ steps.changed-files.outputs.any_changed }}
     steps:
@@ -101,6 +109,11 @@ jobs:
     name: ${{ matrix.job_name }}
     runs-on: ubuntu-slim
     needs: [check-prerequisites, check-changes]
+    environment: >-
+      ${{ github.event_name == 'pull_request_target' &&
+      !contains(',renovate[bot],red-hat-konflux[bot],github-actions[bot],konflux-ci-update-bot[bot],',
+      format(',{0},', github.event.pull_request.user.login)) &&
+      'e2e-tests' || '' }}
     if: needs.check-changes.outputs.operator != 'true'
     strategy:
       matrix:
@@ -131,6 +144,11 @@ jobs:
     name: ${{ matrix.job_name }}
     runs-on: ${{ matrix.runner }}
     needs: [check-prerequisites, check-changes]
+    environment: >-
+      ${{ github.event_name == 'pull_request_target' &&
+      !contains(',renovate[bot],red-hat-konflux[bot],github-actions[bot],konflux-ci-update-bot[bot],',
+      format(',{0},', github.event.pull_request.user.login)) &&
+      'e2e-tests' || '' }}
     if: needs.check-changes.outputs.operator == 'true'
     strategy:
       matrix:
