@@ -5,9 +5,9 @@ name: Update Third-Party Manifests
 
 env:
   # renovate: datasource=helm depName=jetstack/cert-manager versioning=semver
-  CERT_MANAGER_VERSION: "v1.19.1"
+  CERT_MANAGER_VERSION: "1.19.1"
   # renovate: datasource=helm depName=jetstack/trust-manager versioning=semver
-  TRUST_MANAGER_VERSION: "v0.20.2"
+  TRUST_MANAGER_VERSION: "0.20.2"
 
 on:
   schedule:
@@ -42,15 +42,15 @@ jobs:
 
       - name: Generate third-party manifests
         env:
-          CERT_MANAGER_VERSION: ${{ env.CERT_MANAGER_VERSION }}
-          TRUST_MANAGER_VERSION: ${{ env.TRUST_MANAGER_VERSION }}
+          CERT_MANAGER_VERSION: "v${{ env.CERT_MANAGER_VERSION }}"
+          TRUST_MANAGER_VERSION: "v${{ env.TRUST_MANAGER_VERSION }}"
         run: .github/scripts/update-third-party-manifests.sh
 
       - name: Create or update PR if changed
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-          CERT_MANAGER_VERSION: ${{ env.CERT_MANAGER_VERSION }}
-          TRUST_MANAGER_VERSION: ${{ env.TRUST_MANAGER_VERSION }}
+          CERT_MANAGER_VERSION: "v${{ env.CERT_MANAGER_VERSION }}"
+          TRUST_MANAGER_VERSION: "v${{ env.TRUST_MANAGER_VERSION }}"
         run: .github/scripts/create-third-party-manifests-pr.sh
 
       - name: Notify on failure
