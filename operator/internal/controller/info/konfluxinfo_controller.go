@@ -54,7 +54,41 @@ const (
 	infoConfigMapName = "konflux-public-info"
 	// bannerConfigMapName is the name of the banner ConfigMap
 	bannerConfigMapName = "konflux-banner-configmap"
+	// clusterConfigMapName is the name of the cluster-config ConfigMap
+	clusterConfigMapName = "cluster-config"
 )
+
+// ConfigMap key constants for cluster-config.
+// WARNING: Changing these key names is a BREAKING CHANGE.
+// These keys are read by PipelineRuns via kubectl, so any changes will break
+// existing pipelines that depend on these keys. If you need to change a key name,
+// you must:
+// 1. Add the new key alongside the old one
+// 2. Deprecate the old key in documentation
+// 3. Remove the old key only in a major version release
+const (
+	// ClusterConfigKeyDefaultOIDCIssuer is the ConfigMap key for default OIDC issuer URL.
+	ClusterConfigKeyDefaultOIDCIssuer = "defaultOIDCIssuer"
+	// ClusterConfigKeyFulcioInternalUrl is the ConfigMap key for internal Fulcio URL.
+	ClusterConfigKeyFulcioInternalUrl = "fulcioInternalUrl"
+	// ClusterConfigKeyFulcioExternalUrl is the ConfigMap key for external Fulcio URL.
+	ClusterConfigKeyFulcioExternalUrl = "fulcioExternalUrl"
+	// ClusterConfigKeyRekorInternalUrl is the ConfigMap key for internal Rekor URL.
+	ClusterConfigKeyRekorInternalUrl = "rekorInternalUrl"
+	// ClusterConfigKeyRekorExternalUrl is the ConfigMap key for external Rekor URL.
+	ClusterConfigKeyRekorExternalUrl = "rekorExternalUrl"
+	// ClusterConfigKeyTufInternalUrl is the ConfigMap key for internal TUF URL.
+	ClusterConfigKeyTufInternalUrl = "tufInternalUrl"
+	// ClusterConfigKeyTufExternalUrl is the ConfigMap key for external TUF URL.
+	ClusterConfigKeyTufExternalUrl = "tufExternalUrl"
+)
+
+// ClusterConfigDiscoverer is an interface for discovering cluster configuration values.
+// Implementations can detect values from the cluster environment, service discovery,
+// or other sources. Used for dependency injection in tests and production.
+type ClusterConfigDiscoverer interface {
+	Discover(ctx context.Context) konfluxv1alpha1.ClusterConfigData
+}
 
 // InfoCleanupGVKs defines which resource types should be cleaned up when they are
 // no longer part of the desired state. All resources managed by this controller are always
@@ -74,6 +108,10 @@ type KonfluxInfoReconciler struct {
 	client.Client
 	Scheme      *runtime.Scheme
 	ObjectStore *manifests.ObjectStore
+	// DiscoverClusterConfig is an optional discoverer for cluster configuration values.
+	// If nil, a defaultClusterConfigDiscoverer will be used (returns empty values).
+	// This field allows injecting a custom discovery implementation for testing.
+	DiscoverClusterConfig ClusterConfigDiscoverer
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxinfoes,verbs=get;list;watch;create;update;patch;delete
@@ -126,6 +164,10 @@ func (r *KonfluxInfoReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	if err := r.reconcileBannerConfigMap(ctx, tc, konfluxInfo); err != nil {
 		return errHandler.HandleWithReason(ctx, err, condition.ReasonConfigMapFailed, "reconcile banner ConfigMap")
+	}
+
+	if err := r.reconcileClusterConfigConfigMap(ctx, tc, konfluxInfo); err != nil {
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonConfigMapFailed, "reconcile cluster-config ConfigMap")
 	}
 
 	// Apply all embedded manifests
@@ -341,6 +383,39 @@ func (r *KonfluxInfoReconciler) reconcileBannerConfigMap(ctx context.Context, tc
 	}
 
 	log.Info("Applying banner ConfigMap", "name", configMap.Name, "namespace", configMap.Namespace)
+	if err := tc.ApplyOwned(ctx, configMap); err != nil {
+		return fmt.Errorf("failed to apply ConfigMap: %w", err)
+	}
+
+	return nil
+}
+
+// reconcileClusterConfigConfigMap creates or updates the cluster-config ConfigMap.
+// User-provided values from the CR take precedence over any auto-detected values.
+func (r *KonfluxInfoReconciler) reconcileClusterConfigConfigMap(ctx context.Context, tc *tracking.Client, info *konfluxv1alpha1.KonfluxInfo) error {
+	log := logf.FromContext(ctx)
+
+	// Merge discovered and user-provided values (user-provided takes precedence)
+	var discovered konfluxv1alpha1.ClusterConfigData
+	if r.DiscoverClusterConfig != nil {
+		discovered = r.DiscoverClusterConfig.Discover(ctx)
+	}
+	userProvided := info.Spec.GetClusterConfigData()
+	configData := userProvided.MergeOver(discovered)
+
+	configMap := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterConfigMapName,
+			Namespace: infoNamespace,
+		},
+		Data: configData,
+	}
+
+	log.Info("Applying cluster-config ConfigMap", "name", configMap.Name, "namespace", configMap.Namespace)
 	if err := tc.ApplyOwned(ctx, configMap); err != nil {
 		return fmt.Errorf("failed to apply ConfigMap: %w", err)
 	}
