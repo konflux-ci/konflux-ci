@@ -71,6 +71,7 @@ jobs:
             *)                  ref=$(jq -r '.pull_request.head.sha' $GITHUB_EVENT_PATH) ;;
           esac
           echo "ref=$ref" >> $GITHUB_OUTPUT
+          echo "Trigger: ${{ github.event_name }} → checkout ref: $ref"
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
         with:
