@@ -5,83 +5,72 @@ on:
     types: [opened, synchronize, reopened, labeled, unlabeled]
   merge_group:
     types: [checks_requested]
+  repository_dispatch:
+    types: [e2e]
+
 jobs:
+  # Gate: bots, repo collaborators (write+), or repository_dispatch/merge_group. Others need /run from a maintainer.
   check-prerequisites:
     runs-on: ubuntu-latest
     steps:
-    - name: Check prerequisites for running Sanity test
+    - name: Check prerequisites
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        PR_AUTHOR: ${{ github.event.pull_request.user.login }}
       run: |
-        if [ "${{ github.event_name }}" != 'pull_request_target' ]; then
-          echo "The workflow is not triggered from PR, but ${{ github.event_name }} - skipping further checks."
+        # 1. Allow Manual Dispatch or Merge Queue
+        if [[ "${{ github.event_name }}" == 'repository_dispatch' || "${{ github.event_name }}" == 'merge_group' ]]; then
+          echo "✅ Trigger is ${{ github.event_name }} (Trusted Context). Allowed."
           exit 0
         fi
 
-        WHITELISTED_BOT_NAMES=(
+        # 2. Check Bot Whitelist
+        declare -a WHITELISTED_BOTS=(
           "renovate[bot]"
           "red-hat-konflux[bot]"
           "github-actions[bot]"
           "konflux-ci-update-bot[bot]"
         )
-        REQUIRED_LABEL_NAME="ok-to-test"
 
-        ORG="${{ github.repository_owner }}"
-        PR_AUTHOR=$(jq --raw-output .pull_request.user.login $GITHUB_EVENT_PATH)
-        echo "PR author: $PR_AUTHOR"
-        PR_LABELS=$(jq --raw-output .pull_request.labels[].name $GITHUB_EVENT_PATH)
-
-        # Check if PR author is in the whitelisted bots list
-        BOT_WHITELISTED=false
-        for BOT_NAME in "${WHITELISTED_BOT_NAMES[@]}"; do
-          if [ "$PR_AUTHOR" == "$BOT_NAME" ]; then
-            BOT_WHITELISTED=true
-            echo "PR author is $BOT_NAME, skipping further checks."
-            break
+        for BOT in "${WHITELISTED_BOTS[@]}"; do
+          if [[ "$PR_AUTHOR" == "$BOT" ]]; then
+            echo "✅ Author is whitelisted bot ($BOT). Allowed."
+            exit 0
           fi
         done
 
-        if [ "$BOT_WHITELISTED" == "true" ]; then
+        # 3. Check Repository Permissions (works with private org membership)
+        USER_PERM=$(gh api "/repos/${{ github.repository }}/collaborators/$PR_AUTHOR/permission" --jq .permission 2>/dev/null || echo "none")
+
+        if [[ "$USER_PERM" =~ ^(admin|write|maintain)$ ]]; then
+          echo "✅ Author ($PR_AUTHOR) has '$USER_PERM' access. Allowed."
           exit 0
         fi
 
-        if [[ "$PR_LABELS" == *$REQUIRED_LABEL_NAME* ]]; then
-          echo "PR has '$REQUIRED_LABEL_NAME' label, skipping further checks."
-          exit 0
-        fi
+        # 4. Fail and Instruct
+        echo "❌ Blocked: Untrusted author ($PR_AUTHOR) with permission '$USER_PERM'."
 
-        if gh api "/orgs/$ORG/members/$PR_AUTHOR"; then
-          echo "PR author is a member of $ORG GitHub organization, skipping further checks"
-          exit 0
-        fi
-
-        # Create comma-separated list for error message
-        BOT_LIST=$(IFS=','; echo "${WHITELISTED_BOT_NAMES[*]}")
-
-        ERROR_SUMMARY=$(cat <<EOF
-
-        ### ❌ Cannot run Sanity test - at least one of the following conditions must be met:
-        * PR author is one of: $BOT_LIST
-        * PR has label '$REQUIRED_LABEL_NAME'
-        * PR author is a public member of '$ORG' GitHub organization
+        cat <<EOF >> $GITHUB_STEP_SUMMARY
+        ### 🛑 CI Approval Required
+        The PR author is not a maintainer or whitelisted bot.
+        **Action Required:** A maintainer must comment \`/run\` on this PR to trigger tests.
         EOF
-        )
-        echo "$ERROR_SUMMARY" >> $GITHUB_STEP_SUMMARY
-        echo "$ERROR_SUMMARY"
 
         exit 1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
 
   sanity-test:
     needs: check-prerequisites
     runs-on: ubuntu-latest
-    # Use e2e-tests environment (Required reviewers) only for human PRs; bots and
-    # merge_group use no env so they run without approval
-    environment: >-
-      ${{ github.event_name == 'pull_request_target' &&
-      !contains(',renovate[bot],red-hat-konflux[bot],github-actions[bot],konflux-ci-update-bot[bot],',
-      format(',{0},', github.event.pull_request.user.login)) &&
-      'e2e-tests' || '' }}
     steps:
+      - name: Set checkout ref
+        id: set-ref
+        run: |
+          case "${{ github.event_name }}" in
+            repository_dispatch) ref=$(jq -r '.client_payload.head_sha' $GITHUB_EVENT_PATH) ;;
+            merge_group)        ref=$(jq -r '.merge_group.head_sha' $GITHUB_EVENT_PATH) ;;
+            *)                  ref=$(jq -r '.pull_request.head.sha' $GITHUB_EVENT_PATH) ;;
+          esac
+          echo "ref=$ref" >> $GITHUB_OUTPUT
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
         with:
@@ -93,7 +82,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v6
         with:
-          ref: "${{ github.event.pull_request.head.sha }}"
+          ref: ${{ steps.set-ref.outputs.ref }}
 
       - name: Disable AppArmor
         # works around a change in ubuntu 24.04 that restricts Linux namespace access
