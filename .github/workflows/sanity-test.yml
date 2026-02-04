@@ -9,7 +9,7 @@ on:
     types: [e2e]
 
 jobs:
-  # Gate: bots, repo collaborators (write+), or repository_dispatch/merge_group. Others need /run from a maintainer.
+  # Gate: bots, repo collaborators (write+), or repository_dispatch/merge_group. Others need /allow from a maintainer.
   check-prerequisites:
     runs-on: ubuntu-latest
     steps:
@@ -53,7 +53,7 @@ jobs:
         cat <<EOF >> $GITHUB_STEP_SUMMARY
         ### 🛑 CI Approval Required
         The PR author is not a maintainer or whitelisted bot.
-        **Action Required:** A maintainer must comment \`/run\` on this PR to trigger tests.
+        **Action Required:** A maintainer must comment \`/allow\` on this PR to trigger tests.
         EOF
 
         exit 1

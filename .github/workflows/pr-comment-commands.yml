@@ -1,4 +1,4 @@
-# Org members can trigger E2E runs on any PR by commenting /run.
+# Org members can trigger E2E runs on any PR by commenting /allow.
 # One comment = one run of both Operator E2E and Sanity workflows.
 #
 # How it works:
@@ -7,7 +7,7 @@
 #   workflow runs (check-changes, then test or test-skip). No comment needed.
 # - Non-member pushes → same trigger, but check-prerequisites runs, sees PR author
 #   is not bot and not org member → exits 1 → workflow fails there. No later jobs
-#   run. To run CI, an org member must comment /run → pr-comment-commands dispatches
+#   run. To run CI, an org member must comment /allow → pr-comment-commands dispatches
 #   "e2e" → both workflows run via repository_dispatch (they skip the PR gate).
 
 name: PR Comment Commands
@@ -18,7 +18,7 @@ on:
 
 jobs:
   handle-command:
-    name: Handle /run
+    name: Handle /allow
     runs-on: ubuntu-latest
     permissions:
       contents: write   # required for repos.createDispatchEvent
@@ -26,7 +26,7 @@ jobs:
       issues: write    # for reactions.createForIssueComment
     if: |
       github.event.issue.pull_request &&
-      startsWith(github.event.comment.body, '/run') &&
+      startsWith(github.event.comment.body, '/allow') &&
       contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
     steps:
       - name: Get PR details
