@@ -160,6 +160,7 @@ jobs:
     steps:
       - name: Set checkout ref
         id: set-ref
+        working-directory: ${{ github.workspace }}
         run: |
           case "${{ github.event_name }}" in
             repository_dispatch) ref=$(jq -r '.client_payload.head_sha' $GITHUB_EVENT_PATH) ;;
