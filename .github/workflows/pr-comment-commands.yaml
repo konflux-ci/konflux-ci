@@ -26,7 +26,7 @@ jobs:
     steps:
       - name: Verify Security & Get PR Details
         id: pr
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             // 1. Fetch PR to get the current HEAD SHA
@@ -80,7 +80,7 @@ jobs:
             core.setOutput('head_sha', headSha);
 
       - name: Trigger E2E workflows
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           PR_NUMBER: ${{ steps.pr.outputs.number }}
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
