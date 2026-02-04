@@ -61,6 +61,8 @@ jobs:
   sanity-test:
     needs: check-prerequisites
     runs-on: ubuntu-latest
+    outputs:
+      check_run_id: ${{ steps.create-check.outputs.check_run_id }}
     steps:
       - name: Set checkout ref
         id: set-ref
@@ -72,6 +74,21 @@ jobs:
           esac
           echo "ref=$ref" >> $GITHUB_OUTPUT
           echo "Trigger: ${{ github.event_name }} → checkout ref: $ref"
+      - name: Create check run (comment-triggered)
+        if: github.event_name == 'repository_dispatch'
+        id: create-check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const head_sha = '${{ steps.set-ref.outputs.ref }}';
+            const { data } = await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'Sanity Test',
+              head_sha,
+              status: 'in_progress'
+            });
+            core.setOutput('check_run_id', data.id);
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
         with:
@@ -164,3 +181,29 @@ jobs:
         with:
           name: logs
           path: logs
+
+  # Report check result to PR when triggered by /allow (so the run appears on the PR and can gate it)
+  report-sanity-status:
+    if: always() && needs.sanity-test.outputs.check_run_id != ''
+    needs: [sanity-test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update check run
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const checkRunId = parseInt(process.env.CHECK_RUN_ID);
+            const result = process.env.SANITY_RESULT;
+            let conclusion = 'failure';
+            if (result === 'success') conclusion = 'success';
+            else if (result === 'cancelled') conclusion = 'cancelled';
+            await github.rest.checks.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              check_run_id: checkRunId,
+              status: 'completed',
+              conclusion
+            });
+        env:
+          CHECK_RUN_ID: ${{ needs.sanity-test.outputs.check_run_id }}
+          SANITY_RESULT: ${{ needs.sanity-test.result }}
