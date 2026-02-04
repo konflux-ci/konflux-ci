@@ -68,6 +68,7 @@ jobs:
     outputs:
       operator: ${{ steps.changed-files.outputs.any_changed }}
       check_run_id: ${{ steps.create-check.outputs.check_run_id }}
+      check_run_id_arm64: ${{ steps.create-check.outputs.check_run_id_arm64 }}
     steps:
       - name: Set checkout ref
         id: set-ref
@@ -86,14 +87,22 @@ jobs:
         with:
           script: |
             const head_sha = '${{ steps.set-ref.outputs.ref }}';
-            const { data } = await github.rest.checks.create({
+            const { data: e2e } = await github.rest.checks.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               name: 'Run Operator E2E Tests',
               head_sha,
               status: 'in_progress'
             });
-            core.setOutput('check_run_id', data.id);
+            const { data: arm64 } = await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'Run Operator Integration Tests (ARM64)',
+              head_sha,
+              status: 'in_progress'
+            });
+            core.setOutput('check_run_id', e2e.id);
+            core.setOutput('check_run_id_arm64', arm64.id);
       - name: Checkout PR branch
         uses: actions/checkout@v6
         with:
@@ -341,24 +350,22 @@ jobs:
     permissions:
       checks: write
     steps:
-      - name: Update check run
+      - name: Update check runs
         uses: actions/github-script@v7
         with:
           script: |
             const checkRunId = parseInt(process.env.CHECK_RUN_ID);
+            const checkRunIdArm64 = parseInt(process.env.CHECK_RUN_ID_ARM64);
             const testResult = process.env.TEST_RESULT;
             const testSkipResult = process.env.TEST_SKIP_RESULT;
             let conclusion = 'failure';
             if (testResult === 'success' || testSkipResult === 'success') conclusion = 'success';
             else if (testResult === 'cancelled' || testSkipResult === 'cancelled') conclusion = 'cancelled';
-            await github.rest.checks.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              check_run_id: checkRunId,
-              status: 'completed',
-              conclusion
-            });
+            const update = { owner: context.repo.owner, repo: context.repo.repo, status: 'completed', conclusion };
+            await github.rest.checks.update({ ...update, check_run_id: checkRunId });
+            await github.rest.checks.update({ ...update, check_run_id: checkRunIdArm64 });
         env:
           CHECK_RUN_ID: ${{ needs.check-changes.outputs.check_run_id }}
+          CHECK_RUN_ID_ARM64: ${{ needs.check-changes.outputs.check_run_id_arm64 }}
           TEST_RESULT: ${{ needs.test.result }}
           TEST_SKIP_RESULT: ${{ needs.test-skip.result }}
