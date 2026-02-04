@@ -62,6 +62,9 @@ jobs:
     name: Check for relevant changes
     runs-on: ubuntu-slim
     needs: [check-prerequisites]
+    permissions:
+      contents: read
+      checks: write
     outputs:
       operator: ${{ steps.changed-files.outputs.any_changed }}
       check_run_id: ${{ steps.create-check.outputs.check_run_id }}
@@ -335,6 +338,8 @@ jobs:
     if: always() && needs.check-changes.outputs.check_run_id != ''
     needs: [check-changes, test-skip, test]
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
     steps:
       - name: Update check run
         uses: actions/github-script@v7
