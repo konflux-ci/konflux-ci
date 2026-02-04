@@ -1,18 +1,8 @@
-# Org members can trigger E2E runs on any PR by commenting /allow.
-# One comment = one run of both Operator E2E and Sanity workflows.
+# For fork PRs only: org members trigger E2E runs by commenting /allow on the PR.
+# (Same-repo PRs from collaborators run CI automatically via pull_request_target.)
 #
-# How it works:
-# - Bot or org member pushes to a PR branch → workflow runs on pull_request_target.
-#   check-prerequisites runs, sees PR author is bot/org member → exits 0 → rest of
-#   workflow runs (check-changes, then test or test-skip). No comment needed.
-# - Non-member pushes → same trigger, but check-prerequisites runs, sees PR author
-#   is not bot and not org member → exits 1 → workflow fails there. No later jobs
-#   run. To run CI, an org member must comment /allow → pr-comment-commands dispatches
-#   "e2e" → both workflows run via repository_dispatch (they skip the PR gate).
-#
-# Security: We verify the PR head was pushed before the /allow comment (GraphQL pushedDate
-# vs comment created_at). If someone pushes after the comment, we abort so we don't test
-# unreviewed code (TOCTOU).
+# Flow: Maintainer comments /allow → we verify the head SHA was seen by GitHub before
+# the comment (TOCTOU using check suite created_at; server-side, not spoofable), then dispatch "e2e".
 
 name: PR Comment Commands
 
@@ -27,6 +17,7 @@ jobs:
     permissions:
       contents: write   # required for repos.createDispatchEvent
       pull-requests: read
+      checks: read      # list check suites for ref (when GitHub first saw this SHA)
       issues: write     # for reactions and posting error comments
     if: |
       github.event.issue.pull_request &&
@@ -38,7 +29,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            // 1. Fetch the PR to get the current HEAD SHA
+            // 1. Fetch PR to get the current HEAD SHA
             const pr = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -48,54 +39,40 @@ jobs:
             const headSha = pr.data.head.sha;
             console.log(`Checking SHA: ${headSha}`);
 
-            // 2. Use GraphQL to get the TRUSTED 'pushedDate'
-            // REST API 'committer.date' is user-controlled and can be spoofed.
-            const query = `
-              query($owner: String!, $repo: String!, $sha: GitObjectID!) {
-                repository(owner: $owner, name: $repo) {
-                  object(oid: $sha) {
-                    ... on Commit {
-                      pushedDate
-                    }
-                  }
-                }
-              }
-            `;
-
-            const data = await github.graphql(query, {
+            // 2. When did GitHub first see this SHA? Use check suite created_at (server-side, not spoofable).
+            const { data: suitesData } = await github.rest.checks.listSuitesForRef({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              sha: headSha
+              ref: headSha,
+              per_page: 100
             });
 
-            if (!data.repository.object?.pushedDate) {
-              core.setFailed("❌ Security Error: Could not determine verified push time for this commit.");
-              return;
+            let shaFirstSeenAt;
+            if (suitesData.total_count > 0 && suitesData.check_suites.length > 0) {
+              const createdDates = suitesData.check_suites.map(s => new Date(s.created_at).getTime());
+              shaFirstSeenAt = new Date(Math.min(...createdDates));
+            } else {
+              shaFirstSeenAt = new Date();
             }
 
-            const pushedDate = new Date(data.repository.object.pushedDate);
-            const commentDate = new Date(context.payload.comment.created_at);
+            const commentTime = new Date(context.payload.comment.created_at);
+            console.log(`Comment: ${commentTime.toISOString()}, SHA first seen: ${shaFirstSeenAt.toISOString()}`);
 
-            console.log(`Comment Time (Trusted): ${commentDate.toISOString()}`);
-            console.log(`Push Time (Trusted):    ${pushedDate.toISOString()}`);
-
-            // 3. Abort if code was pushed AFTER the comment (unreviewed code)
-            if (pushedDate > commentDate) {
+            // 3. If SHA appeared after the comment, abort. Small buffer for server clock skew only.
+            if (shaFirstSeenAt > new Date(commentTime.getTime() + 2000)) {
               const message = [
-                "⚠️ **Security Halt:** The PR code was updated AFTER your `/allow` command.",
+                "⚠️ **Security Halt:** The code revision is newer than your `/allow` command.",
                 "",
                 "To prevent testing unreviewed code, this run has been aborted.",
                 "Please review the new changes and comment `/allow` again."
               ].join("\n");
-
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
                 body: message
               });
-
-              core.setFailed("Aborting: TOCTOU race condition detected (Push > Comment).");
+              core.setFailed("Aborting: TOCTOU (SHA is newer than comment).");
               return;
             }
 
