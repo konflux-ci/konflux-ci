@@ -83,7 +83,7 @@ jobs:
       - name: Create check run (comment-triggered)
         if: github.event_name == 'repository_dispatch'
         id: create-check
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const head_sha = '${{ steps.set-ref.outputs.ref }}';
@@ -351,7 +351,7 @@ jobs:
       checks: write
     steps:
       - name: Update check runs
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const checkRunId = parseInt(process.env.CHECK_RUN_ID);
