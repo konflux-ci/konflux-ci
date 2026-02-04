@@ -20,6 +20,10 @@ jobs:
   handle-command:
     name: Handle /run
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # required for repos.createDispatchEvent
+      pull-requests: read
+      issues: write    # for reactions.createForIssueComment
     if: |
       github.event.issue.pull_request &&
       startsWith(github.event.comment.body, '/run') &&
