@@ -1,0 +1,122 @@
+# Org members can trigger E2E runs on any PR by commenting /allow.
+# One comment = one run of both Operator E2E and Sanity workflows.
+#
+# How it works:
+# - Bot or org member pushes to a PR branch → workflow runs on pull_request_target.
+#   check-prerequisites runs, sees PR author is bot/org member → exits 0 → rest of
+#   workflow runs (check-changes, then test or test-skip). No comment needed.
+# - Non-member pushes → same trigger, but check-prerequisites runs, sees PR author
+#   is not bot and not org member → exits 1 → workflow fails there. No later jobs
+#   run. To run CI, an org member must comment /allow → pr-comment-commands dispatches
+#   "e2e" → both workflows run via repository_dispatch (they skip the PR gate).
+#
+# Security: We verify the PR head was pushed before the /allow comment (GraphQL pushedDate
+# vs comment created_at). If someone pushes after the comment, we abort so we don't test
+# unreviewed code (TOCTOU).
+
+name: PR Comment Commands
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  handle-command:
+    name: Handle /allow
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # required for repos.createDispatchEvent
+      pull-requests: read
+      issues: write     # for reactions and posting error comments
+    if: |
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/allow') &&
+      contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+    steps:
+      - name: Verify Security & Get PR Details
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // 1. Fetch the PR to get the current HEAD SHA
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+
+            const headSha = pr.data.head.sha;
+            console.log(`Checking SHA: ${headSha}`);
+
+            // 2. Use GraphQL to get the TRUSTED 'pushedDate'
+            // REST API 'committer.date' is user-controlled and can be spoofed.
+            const query = `
+              query($owner: String!, $repo: String!, $sha: GitObjectID!) {
+                repository(owner: $owner, name: $repo) {
+                  object(oid: $sha) {
+                    ... on Commit {
+                      pushedDate
+                    }
+                  }
+                }
+              }
+            `;
+
+            const data = await github.graphql(query, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: headSha
+            });
+
+            if (!data.repository.object?.pushedDate) {
+              core.setFailed("❌ Security Error: Could not determine verified push time for this commit.");
+              return;
+            }
+
+            const pushedDate = new Date(data.repository.object.pushedDate);
+            const commentDate = new Date(context.payload.comment.created_at);
+
+            console.log(`Comment Time (Trusted): ${commentDate.toISOString()}`);
+            console.log(`Push Time (Trusted):    ${pushedDate.toISOString()}`);
+
+            // 3. Abort if code was pushed AFTER the comment (unreviewed code)
+            if (pushedDate > commentDate) {
+              const message = [
+                "⚠️ **Security Halt:** The PR code was updated AFTER your `/allow` command.",
+                "",
+                "To prevent testing unreviewed code, this run has been aborted.",
+                "Please review the new changes and comment `/allow` again."
+              ].join("\n");
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: message
+              });
+
+              core.setFailed("Aborting: TOCTOU race condition detected (Push > Comment).");
+              return;
+            }
+
+            core.setOutput('number', pr.data.number);
+            core.setOutput('head_sha', headSha);
+
+      - name: Trigger E2E workflows
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          TRIGGERED_BY: ${{ github.event.comment.user.login }}
+        with:
+          script: |
+            await github.rest.repos.createDispatchEvent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              event_type: 'e2e',
+              client_payload: {
+                pr_number: parseInt(process.env.PR_NUMBER),
+                head_sha: process.env.HEAD_SHA,
+                triggered_by: process.env.TRIGGERED_BY
+              }
+            });
