@@ -281,12 +281,12 @@ parse error: Unfinished string at EOF at line 2, column 0
 **Solution**:
 
 :gear: Verify that you provided a value to the `repository` field inside
-the [rpa.yaml file](../test/resources/demo-users/user/managed-ns2/rpa.yaml).
+the [rpa.yaml file](../test/resources/demo-users/user/sample-components/managed-ns2/rpa.yaml).
 
 :gear: Complete the value and redeploy the manifest:
 
 ```bash
-kubectl apply -k ./test/resources/demo-users/user/managed-ns2
+kubectl apply -k ./test/resources/demo-users/user/sample-components/managed-ns2
 ```
 
 #### 400 Bad Request

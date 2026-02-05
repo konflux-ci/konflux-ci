@@ -466,7 +466,7 @@ the pipelines to run using Konflux.
 To do that:
 
 1. :gear: Use a text editor to edit your local copy of the
-   [example application manifests](./test/resources/demo-users/user/ns2/application-and-component.yaml):
+   [example application manifests](./test/resources/demo-users/user/sample-components/ns2/application-and-component.yaml):
 
    Under the `Component` and `Repository` resources, change the `url` fields so they
    point to your newly-created fork.
@@ -477,7 +477,7 @@ To do that:
    Deploy the manifests:
 
 ```bash
-kubectl create -f ./test/resources/demo-users/user/ns2/application-and-component.yaml
+kubectl create -f ./test/resources/demo-users/user/sample-components/ns2/application-and-component.yaml
 ```
 2. :gear: Log into the Konflux UI as `user2@konflux.dev` (password: `password`). You
    should be able
@@ -669,12 +669,12 @@ Kubernetes resource.
 pre-installed.
 
 In our case, the resource is defined in
-`test/resources/demo-users/user/ns2/ec-integration-test.yaml`.
+`test/resources/demo-users/user/sample-components/ns2/ec-integration-test.yaml`.
 
 :gear: Apply the resource manifest:
 
 ```bash
-kubectl create -f test/resources/demo-users/user/ns2/ec-integration-test.yaml
+kubectl create -f test/resources/demo-users/user/sample-components/ns2/ec-integration-test.yaml
 ```
 
 Alternatively, you can provide the content from that YAML using the UI:
@@ -751,14 +751,14 @@ To add it through the Konflux UI:
 5. :gear: Click `Add Integration test`.
 
 Alternatively, you can create it using `kubectl`. The manifest is stored in
-`test/resources/demo-users/user/ns2/integration-test-hello.yaml`:
+`test/resources/demo-users/user/sample-components/ns2/integration-test-hello.yaml`:
 
 1. :gear: Verify the `application` field contains your application name.
 
 2. :gear: Deploy the manifest:
 
 ```bash
-kubectl create -f ./test/resources/demo-users/user/ns2/integration-test-hello.yaml
+kubectl create -f ./test/resources/demo-users/user/sample-components/ns2/integration-test-hello.yaml
 ```
 
 :gear: Post a `/retest` comment on your GitHub PR, and once the `pull-request`
@@ -807,22 +807,22 @@ The `ReleasePlanAdmission` resource makes use of an Enterprise Contract (EC) pol
 which defines criteria for gating releases.
 
 For more details you can examine the manifests under the
-[managed-ns2 directory](./test/resources/demo-users/user/managed-ns2/).
+[managed-ns2 directory](./test/resources/demo-users/user/sample-components/managed-ns2/).
 
 To do all that, follow these steps:
 
 :gear: Edit the `ReleasePlan` manifest at
-[test/resources/demo-users/user/ns2/release-plan.yaml](./test/resources/demo-users/user/ns2/release-plan.yaml)
+[test/resources/demo-users/user/sample-components/ns2/release-plan.yaml](./test/resources/demo-users/user/sample-components/ns2/release-plan.yaml)
 and verify that the `application` field contains the name of your application.
 
 :gear: Deploy the Release Plan under the development team namespace (`user-ns2`):
 
 ```bash
-kubectl create -f ./test/resources/demo-users/user/ns2/release-plan.yaml
+kubectl create -f ./test/resources/demo-users/user/sample-components/ns2/release-plan.yaml
 ```
 
 Edit the `ReleasePlanAdmission` manifest at
-[test/resources/demo-users/user/managed-ns2/rpa.yaml](./test/resources/demo-users/user/managed-ns2/rpa.yaml):
+[test/resources/demo-users/user/sample-components/managed-ns2/rpa.yaml](./test/resources/demo-users/user/sample-components/managed-ns2/rpa.yaml):
 
 **NOTE:** if you're using the in-cluster registry, you should not be required to make
 any of the changes to the `ReleasePlanAdmission` manifest described below before
@@ -863,11 +863,10 @@ deploying it.
    For more details, see
    [Trusted Artifacts (ociStorage)](./docs/quay.md#trusted-artifacts-ocistorage).
 
-:gear: Deploy the managed environment team's namespace, along with the resources
-mentioned above:
+Deploy the managed environment team's namespace:
 
 ```bash
-kubectl create -k ./test/resources/demo-users/user/managed-ns2
+kubectl apply -k ./test/resources/demo-users/user/sample-components/managed-ns2
 ```
 
 At this point, you can click **Releases** on the left pane in the UI. The status

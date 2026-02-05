@@ -284,6 +284,8 @@ jobs:
 
       - name: Deploy Test Resources
         working-directory: ${{ github.workspace }}
+        env:
+          SKIP_SAMPLE_COMPONENTS: "true"
         run: |
           ./deploy-test-resources.sh
 
