@@ -129,7 +129,9 @@ func TestDetectWithClient_ServerVersionError(t *testing.T) {
 		versionErr: errors.New("connection refused"),
 	}
 
-	_, err := DetectWithClient(mock)
+	info, err := DetectWithClient(mock)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	_, err = info.K8sVersion()
 	g.Expect(err).To(gomega.HaveOccurred())
 }
 
@@ -167,9 +169,12 @@ func TestInfo_K8sVersion(t *testing.T) {
 
 	info, err := DetectWithClient(mock)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	g.Expect(info.K8sVersion().GitVersion).To(gomega.Equal(expectedVersion.GitVersion))
-	g.Expect(info.K8sVersion().Major).To(gomega.Equal(expectedVersion.Major))
-	g.Expect(info.K8sVersion().Minor).To(gomega.Equal(expectedVersion.Minor))
+	v, err := info.K8sVersion()
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	g.Expect(v).NotTo(gomega.BeNil())
+	g.Expect(v.GitVersion).To(gomega.Equal(expectedVersion.GitVersion))
+	g.Expect(v.Major).To(gomega.Equal(expectedVersion.Major))
+	g.Expect(v.Minor).To(gomega.Equal(expectedVersion.Minor))
 }
 
 func TestInfo_HasResource(t *testing.T) {

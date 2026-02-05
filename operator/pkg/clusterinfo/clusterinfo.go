@@ -49,11 +49,10 @@ func (p Platform) IsOpenShift() bool {
 	return p == OpenShift
 }
 
-// Info holds cluster environment information including platform, version, and capabilities.
+// Info holds cluster environment information including platform and capabilities.
 type Info struct {
-	platform   Platform
-	k8sVersion *version.Info
-	client     DiscoveryClient
+	platform Platform
+	client   DiscoveryClient
 }
 
 // Detect discovers cluster information by querying the Kubernetes API.
@@ -83,13 +82,6 @@ func DetectWithClient(client DiscoveryClient) (*Info, error) {
 		info.platform = Default
 	}
 
-	// Get K8s version
-	serverVersion, err := client.ServerVersion()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get server version: %w", err)
-	}
-	info.k8sVersion = serverVersion
-
 	return info, nil
 }
 
@@ -104,8 +96,8 @@ func (i *Info) IsOpenShift() bool {
 }
 
 // K8sVersion returns the Kubernetes version info.
-func (i *Info) K8sVersion() *version.Info {
-	return i.k8sVersion
+func (i *Info) K8sVersion() (*version.Info, error) {
+	return i.client.ServerVersion()
 }
 
 // HasResource checks if a specific resource kind exists in the given API group version.

@@ -20,22 +20,29 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 	"sigs.k8s.io/yaml"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/version"
@@ -112,6 +119,7 @@ type KonfluxInfoReconciler struct {
 	// If nil, a defaultClusterConfigDiscoverer will be used (returns empty values).
 	// This field allows injecting a custom discovery implementation for testing.
 	DiscoverClusterConfig ClusterConfigDiscoverer
+	ClusterInfo           *clusterinfo.Info
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxinfoes,verbs=get;list;watch;create;update;patch;delete
@@ -214,8 +222,43 @@ func (r *KonfluxInfoReconciler) applyManifests(ctx context.Context, tc *tracking
 	return nil
 }
 
+// versionPollerInterval is how often the VersionPoller checks for cluster version changes.
+const versionPollerInterval = 10 * time.Minute
+
+// enqueueKonfluxInfoForVersionChange returns reconcile requests for all KonfluxInfo instances.
+// Used when the version poller detects a cluster version change so the info ConfigMap is refreshed.
+func (r *KonfluxInfoReconciler) enqueueKonfluxInfoForVersionChange(ctx context.Context, _ client.Object) []reconcile.Request {
+	list := &konfluxv1alpha1.KonfluxInfoList{}
+	if err := r.List(ctx, list); err != nil {
+		return nil
+	}
+	reqs := make([]reconcile.Request, len(list.Items))
+	for i := range list.Items {
+		reqs[i] = reconcile.Request{NamespacedName: types.NamespacedName{Name: list.Items[i].Name}}
+	}
+	return reqs
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxInfoReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Channel for version poller to trigger reconciles when cluster version changes (buffered so poller never blocks).
+	upgradeEvents := make(chan event.TypedGenericEvent[client.Object], 1)
+
+	if r.ClusterInfo != nil {
+		if err := mgr.Add(&VersionPoller{
+			ClusterInfo:  r.ClusterInfo,
+			Interval:     versionPollerInterval,
+			EventChannel: upgradeEvents,
+		}); err != nil {
+			return err
+		}
+	}
+
+	channelSource := source.Channel(
+		upgradeEvents,
+		handler.EnqueueRequestsFromMapFunc(r.enqueueKonfluxInfoForVersionChange),
+	)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&konfluxv1alpha1.KonfluxInfo{}).
 		Named("konfluxinfo").
@@ -224,6 +267,7 @@ func (r *KonfluxInfoReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&rbacv1.Role{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Owns(&rbacv1.RoleBinding{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Owns(&corev1.ConfigMap{}, builder.WithPredicates(predicate.LabelsOrAnnotationsChangedPredicate)).
+		WatchesRawSource(channelSource).
 		Complete(r)
 }
 
@@ -252,19 +296,20 @@ func (r *KonfluxInfoReconciler) ensureNamespaceExists(ctx context.Context, tc *t
 }
 
 // generateInfoJSON generates info.json content from PublicInfo.
-// Provides defaults if fields are missing.
-func (r *KonfluxInfoReconciler) generateInfoJSON(config *konfluxv1alpha1.PublicInfo) ([]byte, error) {
-	info := r.applyInfoDefaults(config)
+// Provides defaults if fields are missing. k8sVersion is the current cluster Kubernetes version (non-cached).
+func (r *KonfluxInfoReconciler) generateInfoJSON(config *konfluxv1alpha1.PublicInfo, k8sVersion string) ([]byte, error) {
+	info := r.applyInfoDefaults(config, k8sVersion)
 	return json.MarshalIndent(info, "", "    ")
 }
 
 // applyInfoDefaults applies default values to PublicInfo if not specified.
-func (r *KonfluxInfoReconciler) applyInfoDefaults(config *konfluxv1alpha1.PublicInfo) *infoJSON {
+func (r *KonfluxInfoReconciler) applyInfoDefaults(config *konfluxv1alpha1.PublicInfo, k8sVersion string) *infoJSON {
 	info := &infoJSON{
-		Environment:    "development",
-		Visibility:     "public",
-		KonfluxVersion: version.Version,
-		RBAC:           getDefaultRBACRoles(),
+		Environment:       "development",
+		Visibility:        "public",
+		KonfluxVersion:    version.Version,
+		KubernetesVersion: k8sVersion,
+		RBAC:              getDefaultRBACRoles(),
 	}
 
 	if config == nil {
@@ -308,16 +353,23 @@ func (r *KonfluxInfoReconciler) generateBannerYAML(config *konfluxv1alpha1.Banne
 func (r *KonfluxInfoReconciler) reconcileInfoConfigMap(ctx context.Context, tc *tracking.Client, info *konfluxv1alpha1.KonfluxInfo) error {
 	log := logf.FromContext(ctx)
 
+	k8sVersion := ""
+	if r.ClusterInfo != nil {
+		if v, err := r.ClusterInfo.K8sVersion(); err == nil && v != nil {
+			k8sVersion = v.GitVersion
+		}
+	}
+
 	var infoJSON []byte
 	var err error
 	if info.Spec.PublicInfo != nil {
-		infoJSON, err = r.generateInfoJSON(info.Spec.PublicInfo)
+		infoJSON, err = r.generateInfoJSON(info.Spec.PublicInfo, k8sVersion)
 		if err != nil {
 			return fmt.Errorf("failed to generate info.json: %w", err)
 		}
 	} else {
 		// Use default development config
-		infoJSON, err = r.generateInfoJSON(nil)
+		infoJSON, err = r.generateInfoJSON(nil, k8sVersion)
 		if err != nil {
 			return fmt.Errorf("failed to generate default info.json: %w", err)
 		}
@@ -411,12 +463,13 @@ func (r *KonfluxInfoReconciler) reconcileClusterConfigConfigMap(ctx context.Cont
 
 // infoJSON is the internal representation of info.json for serialization
 type infoJSON struct {
-	Environment    string                              `json:"environment"`
-	Visibility     string                              `json:"visibility"`
-	KonfluxVersion string                              `json:"konfluxVersion,omitempty"`
-	Integrations   *konfluxv1alpha1.IntegrationsConfig `json:"integrations,omitempty"`
-	StatusPageUrl  string                              `json:"statusPageUrl,omitempty"`
-	RBAC           []rbacRoleJSON                      `json:"rbac,omitempty"`
+	Environment       string                              `json:"environment"`
+	Visibility        string                              `json:"visibility"`
+	KonfluxVersion    string                              `json:"konfluxVersion,omitempty"`
+	KubernetesVersion string                              `json:"kubernetesVersion,omitempty"`
+	Integrations      *konfluxv1alpha1.IntegrationsConfig `json:"integrations,omitempty"`
+	StatusPageUrl     string                              `json:"statusPageUrl,omitempty"`
+	RBAC              []rbacRoleJSON                      `json:"rbac,omitempty"`
 }
 
 type rbacRoleJSON struct {
