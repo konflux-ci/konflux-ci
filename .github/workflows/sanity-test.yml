@@ -151,6 +151,8 @@ jobs:
           kubectl get namespace
 
       - name: Deploy test resources
+        env:
+          SKIP_SAMPLE_COMPONENTS: "true"
         run: |
           ./deploy-test-resources.sh
 
