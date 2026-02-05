@@ -31,6 +31,7 @@ import (
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/version"
 )
 
 func TestKonfluxInfoReconciliation(t *testing.T) {
@@ -120,6 +121,9 @@ func TestKonfluxInfoReconciliation(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(infoJSON["environment"]).To(gomega.Equal("development"))
 		g.Expect(infoJSON["visibility"]).To(gomega.Equal("public"))
+		g.Expect(infoJSON).To(gomega.HaveKey("konfluxVersion"))
+		g.Expect(infoJSON["konfluxVersion"]).To(
+			gomega.Equal(version.Version), "ConfigMap konfluxVersion must match version package")
 		g.Expect(infoJSON).To(gomega.HaveKey("rbac"))
 
 		// Verify banner ConfigMap
