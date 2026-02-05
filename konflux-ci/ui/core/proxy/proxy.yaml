@@ -84,7 +84,7 @@ spec:
             cpu: 10m
             memory: 64Mi
       containers:
-      - image: registry.access.redhat.com/ubi9/nginx-124@sha256:b924363ff07ee0f8fd4f680497da774ac0721722a119665998ff5b2111098ad1
+      - image: registry.access.redhat.com/ubi9/nginx-124@sha256:a75f10d71969dd2451914df6539dea28f8e2c88506f691ea211768a0bd0746d1
         name: nginx
         command:
           - nginx

@@ -5,6 +5,10 @@ Konflux-CI
 
 - [Document Conventions](#document-conventions)
 - [Trying Out Konflux](#trying-out-konflux)
+  * [Operator-Based Deployment](#operator-based-deployment)
+    + [Local Development (Kind)](#local-development-kind)
+    + [Production Deployment (Any Cluster)](#production-deployment-any-cluster)
+    + [Key Differences from Legacy Deployment](#key-differences-from-legacy-deployment)
   * [Machine Minimum Requirements](#machine-minimum-requirements)
   * [Installing Software Dependencies](#installing-software-dependencies)
   * [Bootstrapping the Cluster](#bootstrapping-the-cluster)
@@ -75,9 +79,78 @@ forwarding is needed for accessing Konflux.
 the remote machine to port `9443` on your local machine to be able to access the UI from
 your local machine.
 
+## Operator-Based Deployment
+
+Konflux can be deployed using the operator-based installer, which supports both local development (Kind) and production deployments on any Kubernetes cluster.
+
+### Local Development (Kind)
+
+For quick local setup on macOS or Linux:
+
+```bash
+# 1. Create configuration from templates
+cp scripts/deploy-local.env.template scripts/deploy-local.env
+
+# 2. Edit scripts/deploy-local.env with your GitHub App credentials
+# See the template file for instructions
+
+# 3. Deploy Konflux
+./scripts/deploy-local.sh
+```
+
+**macOS users:** The script handles macOS-specific configuration automatically. See `scripts/deploy-local.env.template` for available options.
+
+This automated script:
+- Creates a Kind cluster with proper configuration
+- Deploys the Konflux operator
+- Applies your Konflux CR configuration
+- Sets up GitHub integration
+- Provides a local OCI registry at `localhost:5001`
+
+Access Konflux at: https://localhost:9443
+
+### Production Deployment (Any Cluster)
+
+For production deployments on OpenShift, EKS, GKE, or other Kubernetes clusters:
+
+```bash
+# 1. Install the operator
+kubectl apply -f https://github.com/konflux-ci/konflux-ci/releases/latest/download/install.yaml
+
+# 2. Create your Konflux CR (based on samples - see link below)
+kubectl apply -f my-konflux.yaml
+
+# 3. Create required secrets (GitHub App, Quay tokens, etc.)
+# See deployment guide for details
+```
+
+**Important:** Do not use the sample with demo users (`konflux_v1alpha1_konflux.yaml`) for production - configure OIDC authentication instead.
+
+See [Operator Deployment Guide](docs/operator-deployment.md) for complete instructions and [sample configurations](operator/config/samples/).
+
+### Key Differences from Legacy Deployment
+
+The operator-based deployment differs from the legacy bootstrap approach:
+
+- **Universal:** Works on any Kubernetes cluster, not just Kind
+- **Declarative:** Configure via Konflux CR, not shell scripts
+- **Production-ready:** Supports HA, custom ingress, and proper secret management
+- **Secure defaults:** No demo users in samples (use OIDC connectors)
+- **Modular:** Enable only the components you need
+
+For the legacy bootstrap approach (Linux x86_64 only), continue to the sections below.
+
+> [!WARNING]
+> The sections below describe the **legacy deployment method** which will be removed in a future release.
+> Use the [Operator-Based Deployment](#operator-based-deployment) above for new installations.
+
 ## Machine Minimum Requirements
 
-The deployment is currently only supported on **x86_64 Linux** platforms.
+> [!NOTE]
+> These requirements apply to the legacy deployment method. The operator-based deployment
+> works on macOS, Linux (x86_64 and arm64), and any Kubernetes cluster.
+
+The legacy deployment is currently only supported on **x86_64 Linux** platforms.
 
 The deployment requires the following **free** resources:
 
@@ -98,6 +171,11 @@ additional resources.
 * `openssl` (`v3.0.13` or newer)
 
 ## Bootstrapping the Cluster
+
+> [!WARNING]
+> This section describes the **legacy manual bootstrap** process.
+> For new installations, use [deploy-local.sh](#local-development-kind) instead.
+
 :gear: Clone this repository:
 
  ```bash
@@ -190,13 +268,20 @@ kubectl wait --for=condition=Available deployment/konflux-operator-controller-ma
 
 4. :gear: Deploy Konflux using the Operator
 
-Create a Konflux Custom Resource to deploy Konflux. You can use the sample configuration:
+Create a Konflux Custom Resource to deploy Konflux. This is the **only CR you need** - the operator manages all components from this single resource.
+
+For local testing, you can use the sample configuration with demo users:
 
 ```bash
 kubectl apply -f <(curl -L \
   https://github.com/konflux-ci/konflux-ci/releases/latest/download/samples.tar.gz | \
   tar -xzO ./konflux_v1alpha1_konflux.yaml)
 ```
+
+> [!WARNING]
+> This sample includes **demo users with insecure static passwords** (user1@konflux.dev / password) for local testing only.
+> **Never use this sample for production deployments.** For production, configure OIDC authentication instead.
+> See [operator/config/samples/konflux-with-github-auth.yaml](operator/config/samples/konflux-with-github-auth.yaml) for a production example.
 
 > [!NOTE]
 > To use a specific version instead of the latest, replace `latest` with the version tag:
@@ -381,7 +466,7 @@ the pipelines to run using Konflux.
 To do that:
 
 1. :gear: Use a text editor to edit your local copy of the
-   [example application manifests](./test/resources/demo-users/user/ns2/application-and-component.yaml):
+   [example application manifests](./test/resources/demo-users/user/sample-components/ns2/application-and-component.yaml):
 
    Under the `Component` and `Repository` resources, change the `url` fields so they
    point to your newly-created fork.
@@ -392,7 +477,7 @@ To do that:
    Deploy the manifests:
 
 ```bash
-kubectl create -f ./test/resources/demo-users/user/ns2/application-and-component.yaml
+kubectl create -f ./test/resources/demo-users/user/sample-components/ns2/application-and-component.yaml
 ```
 2. :gear: Log into the Konflux UI as `user2@konflux.dev` (password: `password`). You
    should be able
@@ -584,12 +669,12 @@ Kubernetes resource.
 pre-installed.
 
 In our case, the resource is defined in
-`test/resources/demo-users/user/ns2/ec-integration-test.yaml`.
+`test/resources/demo-users/user/sample-components/ns2/ec-integration-test.yaml`.
 
 :gear: Apply the resource manifest:
 
 ```bash
-kubectl create -f test/resources/demo-users/user/ns2/ec-integration-test.yaml
+kubectl create -f test/resources/demo-users/user/sample-components/ns2/ec-integration-test.yaml
 ```
 
 Alternatively, you can provide the content from that YAML using the UI:
@@ -666,14 +751,14 @@ To add it through the Konflux UI:
 5. :gear: Click `Add Integration test`.
 
 Alternatively, you can create it using `kubectl`. The manifest is stored in
-`test/resources/demo-users/user/ns2/integration-test-hello.yaml`:
+`test/resources/demo-users/user/sample-components/ns2/integration-test-hello.yaml`:
 
 1. :gear: Verify the `application` field contains your application name.
 
 2. :gear: Deploy the manifest:
 
 ```bash
-kubectl create -f ./test/resources/demo-users/user/ns2/integration-test-hello.yaml
+kubectl create -f ./test/resources/demo-users/user/sample-components/ns2/integration-test-hello.yaml
 ```
 
 :gear: Post a `/retest` comment on your GitHub PR, and once the `pull-request`
@@ -727,13 +812,13 @@ For more details you can examine the manifests under the
 To do all that, follow these steps:
 
 :gear: Edit the `ReleasePlan` manifest at
-[test/resources/demo-users/user/ns2/release-plan.yaml](./test/resources/demo-users/user/ns2/release-plan.yaml)
+[test/resources/demo-users/user/sample-components/ns2/release-plan.yaml](./test/resources/demo-users/user/sample-components/ns2/release-plan.yaml)
 and verify that the `application` field contains the name of your application.
 
 :gear: Deploy the Release Plan under the development team namespace (`user-ns2`):
 
 ```bash
-kubectl create -f ./test/resources/demo-users/user/ns2/release-plan.yaml
+kubectl create -f ./test/resources/demo-users/user/sample-components/ns2/release-plan.yaml
 ```
 
 Edit the `ReleasePlanAdmission` manifest at
@@ -778,11 +863,11 @@ deploying it.
    For more details, see
    [Trusted Artifacts (ociStorage)](./docs/quay.md#trusted-artifacts-ocistorage).
 
-:gear: Deploy the managed environment team's namespace, along with the resources
-mentioned above:
+The managed namespace (`managed-ns2`) and its resources are automatically deployed
+by `deploy-test-resources.sh`. If you haven't run it yet, do so now, or apply manually:
 
 ```bash
-kubectl create -k ./test/resources/demo-users/user/managed-ns2
+kubectl apply -k ./test/resources/demo-users/user/managed-ns2
 ```
 
 At this point, you can click **Releases** on the left pane in the UI. The status
