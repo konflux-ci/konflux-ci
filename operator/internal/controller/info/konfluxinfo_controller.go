@@ -38,6 +38,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/version"
 )
 
 const (
@@ -232,9 +233,10 @@ func (r *KonfluxInfoReconciler) generateInfoJSON(config *konfluxv1alpha1.PublicI
 // applyInfoDefaults applies default values to PublicInfo if not specified.
 func (r *KonfluxInfoReconciler) applyInfoDefaults(config *konfluxv1alpha1.PublicInfo) *infoJSON {
 	info := &infoJSON{
-		Environment: "development",
-		Visibility:  "public",
-		RBAC:        getDefaultRBACRoles(),
+		Environment:    "development",
+		Visibility:     "public",
+		KonfluxVersion: version.Version,
+		RBAC:           getDefaultRBACRoles(),
 	}
 
 	if config == nil {
@@ -348,11 +350,12 @@ func (r *KonfluxInfoReconciler) reconcileBannerConfigMap(ctx context.Context, tc
 
 // infoJSON is the internal representation of info.json for serialization
 type infoJSON struct {
-	Environment   string                              `json:"environment"`
-	Visibility    string                              `json:"visibility"`
-	Integrations  *konfluxv1alpha1.IntegrationsConfig `json:"integrations,omitempty"`
-	StatusPageUrl string                              `json:"statusPageUrl,omitempty"`
-	RBAC          []rbacRoleJSON                      `json:"rbac,omitempty"`
+	Environment    string                              `json:"environment"`
+	Visibility     string                              `json:"visibility"`
+	KonfluxVersion string                              `json:"konfluxVersion,omitempty"`
+	Integrations   *konfluxv1alpha1.IntegrationsConfig `json:"integrations,omitempty"`
+	StatusPageUrl  string                              `json:"statusPageUrl,omitempty"`
+	RBAC           []rbacRoleJSON                      `json:"rbac,omitempty"`
 }
 
 type rbacRoleJSON struct {
