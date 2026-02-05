@@ -2,10 +2,10 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ns.yaml
-  - ../../../../../konflux-ci/enterprise-contract/policies
+  - ../../../../../../konflux-ci/enterprise-contract/policies
+  - custom-build-pipeline-sa.yaml
   - release-pipeline-sa.yaml
-  - pvc.yaml
   - rbac.yaml
   - role-binding.yaml
   - rpa.yaml
-namespace: managed-ns1
+namespace: managed-ns2
