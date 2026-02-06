@@ -77,7 +77,7 @@ your local machine.
 
 ## Machine Minimum Requirements
 
-The deployment is currently only supported on **x86_64 Linux** platforms.
+The deployment is supported on **x86_64/ARM64 Linux** and **macOS** platforms.
 
 The deployment requires the following **free** resources:
 
@@ -97,6 +97,16 @@ additional resources.
 * `git` (`v2.46` or newer)
 * `openssl` (`v3.0.13` or newer)
 
+> [!NOTE]
+> **macOS with Podman:** The default Podman machine has insufficient resources.
+> Before creating the cluster, configure the Podman machine with adequate resources:
+>
+> ```bash
+> podman machine stop
+> podman machine set --memory 8192 --cpus 4
+> podman machine start
+> ```
+
 ## Bootstrapping the Cluster
 :gear: Clone this repository:
 
@@ -105,15 +115,16 @@ git clone https://github.com/konflux-ci/konflux-ci.git
 cd konflux-ci
 ```
 
-**Note:** It is recommended that you increase the `inotify` resource limits in order to
-avoid issues related to
-[too many open files](https://kind.sigs.k8s.io/docs/user/known-issues/#pod-errors-due-to-too-many-open-files). To increase the limits temporarily, run the
-following commands:
-
-```bash
-sudo sysctl fs.inotify.max_user_watches=524288
-sudo sysctl fs.inotify.max_user_instances=512
-```
+> [!NOTE]
+> **Linux only:** It is recommended that you increase the `inotify` resource limits
+> in order to avoid issues related to
+> [too many open files](https://kind.sigs.k8s.io/docs/user/known-issues/#pod-errors-due-to-too-many-open-files).
+> macOS users can skip this step. To increase the limits temporarily, run:
+>
+> ```bash
+> sudo sysctl fs.inotify.max_user_watches=524288
+> sudo sysctl fs.inotify.max_user_instances=512
+> ```
 
 From the root of this repository, run the setup scripts:
 
@@ -123,13 +134,20 @@ From the root of this repository, run the setup scripts:
 kind create cluster --name konflux --config kind-config.yaml
 ```
 
-**Note:** When using Podman, it is recommended that you increase the PID limit on the
-container running the cluster, as the default might not be enough when the cluster
-becomes busy:
-
-```bash
-podman update --pids-limit 4096 konflux-control-plane
-```
+> [!NOTE]
+> **Podman users:** Set the provider environment variable before creating the cluster:
+>
+> ```bash
+> export KIND_EXPERIMENTAL_PROVIDER=podman
+> kind create cluster --name konflux --config kind-config.yaml
+> ```
+>
+> After creating the cluster, increase the PID limit as the default might not be enough
+> when the cluster becomes busy:
+>
+> ```bash
+> podman update --pids-limit 4096 konflux-control-plane
+> ```
 
 **Note:** If pods still fail to start due to missing resources, you may need to reserve
 additional resources to the Kind cluster. Edit [kind-config.yaml](./kind-config.yaml)
