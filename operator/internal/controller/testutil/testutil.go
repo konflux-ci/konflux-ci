@@ -86,6 +86,7 @@ func SetupTestEnv(basePath string) *TestEnv {
 	testEnv := &envtest.Environment{
 		CRDDirectoryPaths: []string{
 			filepath.Join(basePath, "config", "crd", "bases"),
+			filepath.Join(basePath, "test", "crds", "cert-manager"),
 			filepath.Join(GetGoModuleDir("github.com/openshift/api"), "console", "v1", "zz_generated.crd-manifests"),
 			filepath.Join(GetGoModuleDir("github.com/openshift/api"), "security", "v1", "zz_generated.crd-manifests"),
 		},

@@ -291,6 +291,230 @@ func TestInfo_HasTekton(t *testing.T) {
 	}
 }
 
+func TestInfo_HasAllResources(t *testing.T) {
+	tests := []struct {
+		name           string
+		resources      map[string]*metav1.APIResourceList
+		resourceErrors map[string]error
+		groupVersion   string
+		kinds          []string
+		expectedResult bool
+		expectErr      bool
+	}{
+		{
+			name: "all kinds present",
+			resources: map[string]*metav1.APIResourceList{
+				"example.com/v1": {
+					APIResources: []metav1.APIResource{
+						{Kind: "Foo"},
+						{Kind: "Bar"},
+					},
+				},
+			},
+			groupVersion:   "example.com/v1",
+			kinds:          []string{"Foo", "Bar"},
+			expectedResult: true,
+		},
+		{
+			name: "one kind missing",
+			resources: map[string]*metav1.APIResourceList{
+				"example.com/v1": {
+					APIResources: []metav1.APIResource{
+						{Kind: "Foo"},
+					},
+				},
+			},
+			groupVersion:   "example.com/v1",
+			kinds:          []string{"Foo", "Bar"},
+			expectedResult: false,
+		},
+		{
+			name: "empty kinds returns true",
+			resources: map[string]*metav1.APIResourceList{
+				"example.com/v1": {APIResources: []metav1.APIResource{}},
+			},
+			groupVersion:   "example.com/v1",
+			kinds:          []string{},
+			expectedResult: true,
+		},
+		{
+			name:           "NotFound returns false without error",
+			resources:      map[string]*metav1.APIResourceList{},
+			groupVersion:   "missing.io/v1",
+			kinds:          []string{"Something"},
+			expectedResult: false,
+		},
+		{
+			name:      "non-NotFound error is propagated",
+			resources: map[string]*metav1.APIResourceList{},
+			resourceErrors: map[string]error{
+				"example.com/v1": apierrors.NewForbidden(
+					schema.GroupResource{Group: "example.com"}, "", errors.New("RBAC")),
+			},
+			groupVersion:   "example.com/v1",
+			kinds:          []string{"Foo"},
+			expectedResult: false,
+			expectErr:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+
+			mock := &mockDiscoveryClient{
+				resources:      tt.resources,
+				resourceErrors: tt.resourceErrors,
+				serverVersion:  &version.Info{GitVersion: "v1.29.0"},
+			}
+			info, err := DetectWithClient(mock)
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+
+			result, err := info.HasAllResources(tt.groupVersion, tt.kinds)
+
+			if tt.expectErr {
+				g.Expect(err).To(gomega.HaveOccurred())
+				g.Expect(result).To(gomega.BeFalse())
+				return
+			}
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+			g.Expect(result).To(gomega.Equal(tt.expectedResult))
+		})
+	}
+}
+
+func TestInfo_HasCertManager(t *testing.T) {
+	tests := []struct {
+		name             string
+		setupClusterInfo func() *Info
+		expectedResult   bool
+	}{
+		{
+			name: "cert-manager installed - all resources exist",
+			setupClusterInfo: func() *Info {
+				mockClient := &mockDiscoveryClient{
+					resources: map[string]*metav1.APIResourceList{
+						"cert-manager.io/v1": {
+							GroupVersion: "cert-manager.io/v1",
+							APIResources: []metav1.APIResource{
+								{Kind: "Certificate"},
+								{Kind: "Issuer"},
+								{Kind: "ClusterIssuer"},
+							},
+						},
+					},
+					serverVersion: &version.Info{GitVersion: "v1.30.0"},
+				}
+				info, _ := DetectWithClient(mockClient)
+				return info
+			},
+			expectedResult: true,
+		},
+		{
+			name: "cert-manager not installed - only Certificate exists",
+			setupClusterInfo: func() *Info {
+				mockClient := &mockDiscoveryClient{
+					resources: map[string]*metav1.APIResourceList{
+						"cert-manager.io/v1": {
+							GroupVersion: "cert-manager.io/v1",
+							APIResources: []metav1.APIResource{
+								{Kind: "Certificate"},
+							},
+						},
+					},
+					serverVersion: &version.Info{GitVersion: "v1.30.0"},
+				}
+				info, _ := DetectWithClient(mockClient)
+				return info
+			},
+			expectedResult: false,
+		},
+		{
+			name: "cert-manager not installed - only Issuer exists",
+			setupClusterInfo: func() *Info {
+				mockClient := &mockDiscoveryClient{
+					resources: map[string]*metav1.APIResourceList{
+						"cert-manager.io/v1": {
+							GroupVersion: "cert-manager.io/v1",
+							APIResources: []metav1.APIResource{
+								{Kind: "Issuer"},
+							},
+						},
+					},
+					serverVersion: &version.Info{GitVersion: "v1.30.0"},
+				}
+				info, _ := DetectWithClient(mockClient)
+				return info
+			},
+			expectedResult: false,
+		},
+		{
+			name: "cert-manager not installed - only ClusterIssuer exists",
+			setupClusterInfo: func() *Info {
+				mockClient := &mockDiscoveryClient{
+					resources: map[string]*metav1.APIResourceList{
+						"cert-manager.io/v1": {
+							GroupVersion: "cert-manager.io/v1",
+							APIResources: []metav1.APIResource{
+								{Kind: "ClusterIssuer"},
+							},
+						},
+					},
+					serverVersion: &version.Info{GitVersion: "v1.30.0"},
+				}
+				info, _ := DetectWithClient(mockClient)
+				return info
+			},
+			expectedResult: false,
+		},
+		{
+			name: "cert-manager not installed - two resources exist but one missing",
+			setupClusterInfo: func() *Info {
+				mockClient := &mockDiscoveryClient{
+					resources: map[string]*metav1.APIResourceList{
+						"cert-manager.io/v1": {
+							GroupVersion: "cert-manager.io/v1",
+							APIResources: []metav1.APIResource{
+								{Kind: "Certificate"},
+								{Kind: "Issuer"},
+								// ClusterIssuer is missing
+							},
+						},
+					},
+					serverVersion: &version.Info{GitVersion: "v1.30.0"},
+				}
+				info, _ := DetectWithClient(mockClient)
+				return info
+			},
+			expectedResult: false,
+		},
+		{
+			name: "cert-manager not installed - no resources exist",
+			setupClusterInfo: func() *Info {
+				mockClient := &mockDiscoveryClient{
+					resources:     map[string]*metav1.APIResourceList{},
+					serverVersion: &version.Info{GitVersion: "v1.30.0"},
+				}
+				info, _ := DetectWithClient(mockClient)
+				return info
+			},
+			expectedResult: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+
+			clusterInfo := tt.setupClusterInfo()
+			result, err := clusterInfo.HasCertManager()
+
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+			g.Expect(result).To(gomega.Equal(tt.expectedResult))
+		})
+	}
+}
+
 func TestPlatform_IsOpenShift(t *testing.T) {
 	tests := []struct {
 		platform Platform
