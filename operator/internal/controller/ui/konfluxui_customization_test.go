@@ -30,6 +30,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/oauth2proxy"
 )
 
 // testEndpoint is the default test endpoint URL.
@@ -69,7 +70,7 @@ var requiredOAuth2ProxyEnvVars = []string{
 	"OAUTH2_PROXY_EMAIL_DOMAINS",
 	"OAUTH2_PROXY_SET_XAUTHREQUEST",
 	"OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS",
-	"OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY",
+	"SSL_CERT_FILE",
 	"OAUTH2_PROXY_WHITELIST_DOMAINS",
 }
 
@@ -124,6 +125,44 @@ func TestBuildProxyOverlay(t *testing.T) {
 		g.Expect(container).NotTo(gomega.BeNil())
 		assertNoConflictingEnvVars(g, container)
 		assertOAuth2ProxyEnvVarsSet(g, container)
+	})
+
+	t.Run("adds CA bundle volume and mount", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		overlay := buildProxyOverlay(nil, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		g.Expect(overlay).NotTo(gomega.BeNil())
+
+		deployment := getUIDeployment(t, proxyDeploymentName)
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// Verify CA bundle volume exists
+		var caVolume *corev1.Volume
+		for i := range deployment.Spec.Template.Spec.Volumes {
+			if deployment.Spec.Template.Spec.Volumes[i].Name == oauth2proxy.CABundleVolumeName {
+				caVolume = &deployment.Spec.Template.Spec.Volumes[i]
+				break
+			}
+		}
+		g.Expect(caVolume).NotTo(gomega.BeNil(), "ca-bundle volume should exist")
+		g.Expect(caVolume.Secret).NotTo(gomega.BeNil(), "ca-bundle volume should be a Secret")
+		g.Expect(caVolume.Secret.SecretName).To(gomega.Equal(oauth2proxy.CABundleSecretName))
+
+		// Verify CA bundle mount in oauth2-proxy container
+		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+
+		var caMount *corev1.VolumeMount
+		for i := range container.VolumeMounts {
+			if container.VolumeMounts[i].Name == oauth2proxy.CABundleVolumeName {
+				caMount = &container.VolumeMounts[i]
+				break
+			}
+		}
+		g.Expect(caMount).NotTo(gomega.BeNil(), "ca-bundle mount should exist")
+		g.Expect(caMount.MountPath).To(gomega.Equal(oauth2proxy.CABundleMountPath))
+		g.Expect(caMount.SubPath).To(gomega.Equal(oauth2proxy.CABundleSecretKey))
+		g.Expect(caMount.ReadOnly).To(gomega.BeTrue())
 	})
 
 	t.Run("nginx resources are applied", func(t *testing.T) {
@@ -297,7 +336,8 @@ func TestBuildOAuth2ProxyOptions(t *testing.T) {
 		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_EMAIL_DOMAINS"))
 		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_SET_XAUTHREQUEST"))
 		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS"))
-		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY"))
+		g.Expect(envMap).To(gomega.HaveKey("SSL_CERT_FILE"))
+		g.Expect(envMap["SSL_CERT_FILE"]).To(gomega.Equal(oauth2proxy.CABundleMountPath))
 		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_WHITELIST_DOMAINS"))
 	})
 

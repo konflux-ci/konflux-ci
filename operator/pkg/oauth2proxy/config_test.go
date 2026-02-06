@@ -137,13 +137,22 @@ func TestWithAuthSettings(t *testing.T) {
 	g.Expect(envMap["OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS"]).To(Equal("true"))
 }
 
-func TestWithTLSSkipVerify(t *testing.T) {
+func TestWithCABundle(t *testing.T) {
 	g := NewGomegaWithT(t)
 
-	envVars := applyOption(WithTLSSkipVerify())
-	envMap := envVarsToMap(envVars)
+	c := &corev1.Container{}
+	WithCABundle()(c, customization.DeploymentContext{})
 
-	g.Expect(envMap["OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY"]).To(Equal("true"))
+	// Check environment variable
+	envMap := envVarsToMap(c.Env)
+	g.Expect(envMap["SSL_CERT_FILE"]).To(Equal(CABundleMountPath))
+
+	// Check volume mount
+	g.Expect(c.VolumeMounts).To(HaveLen(1))
+	g.Expect(c.VolumeMounts[0].Name).To(Equal(CABundleVolumeName))
+	g.Expect(c.VolumeMounts[0].MountPath).To(Equal(CABundleMountPath))
+	g.Expect(c.VolumeMounts[0].SubPath).To(Equal(CABundleSecretKey))
+	g.Expect(c.VolumeMounts[0].ReadOnly).To(BeTrue())
 }
 
 func TestWithAllowUnverifiedEmail(t *testing.T) {
