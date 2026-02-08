@@ -279,7 +279,6 @@ metadata:
   annotations:
     cert-manager.io/inject-ca-from: integration-service/serving-cert
     controller-gen.kubebuilder.io/version: v0.17.2
-    service.beta.openshift.io/inject-cabundle: "true"
   name: integrationtestscenarios.appstudio.redhat.com
 spec:
   conversion:
@@ -1514,8 +1513,6 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  annotations:
-    service.beta.openshift.io/serving-cert-secret-name: webhook-server-cert
   labels:
     app.kubernetes.io/component: webhook
     app.kubernetes.io/created-by: integration-service
@@ -1730,7 +1727,6 @@ kind: MutatingWebhookConfiguration
 metadata:
   annotations:
     cert-manager.io/inject-ca-from: integration-service/serving-cert
-    service.beta.openshift.io/inject-cabundle: "true"
   name: integration-service-mutating-webhook-configuration
 webhooks:
 - admissionReviewVersions:
@@ -1779,7 +1775,6 @@ kind: ValidatingWebhookConfiguration
 metadata:
   annotations:
     cert-manager.io/inject-ca-from: integration-service/serving-cert
-    service.beta.openshift.io/inject-cabundle: "true"
   name: integration-service-validating-webhook-configuration
 webhooks:
 - admissionReviewVersions:
