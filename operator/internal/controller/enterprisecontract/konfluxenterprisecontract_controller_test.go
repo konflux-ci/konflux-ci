@@ -18,6 +18,7 @@ package enterprisecontract
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -73,10 +74,13 @@ var _ = Describe("KonfluxEnterpriseContract Controller", func() {
 				ObjectStore: objectStore,
 			}
 
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			By("Waiting for reconciliation to succeed (CRD may need to establish first)")
+			Eventually(func() error {
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				return err
+			}).WithTimeout(15 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
 			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
 			// Example: If you expect a certain status condition after reconciliation, verify it here.
 		})
