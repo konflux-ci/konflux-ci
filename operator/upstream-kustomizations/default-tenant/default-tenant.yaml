@@ -7,14 +7,6 @@ metadata:
     konflux-ci.dev/type: tenant
 ---
 apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: trusted-ca
-  namespace: default-tenant
-  labels:
-    config.openshift.io/inject-trusted-cabundle: "true"
----
-apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: konflux-integration-runner

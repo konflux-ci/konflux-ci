@@ -63,18 +63,6 @@ metadata:
     konflux-ci.dev/type: tenant
 EOF
 
-# Create the trusted-ca ConfigMap
-echo "🔐 Creating trusted-ca ConfigMap..."
-kubectl apply -f - <<EOF
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: trusted-ca
-  namespace: ${NAMESPACE}
-  labels:
-    config.openshift.io/inject-trusted-cabundle: "true"
-EOF
-
 # Create the konflux-integration-runner ServiceAccount
 echo "👤 Creating konflux-integration-runner ServiceAccount..."
 kubectl apply -f - <<EOF
@@ -125,7 +113,6 @@ echo "✅ Tenant namespace '${NAMESPACE}' created successfully!"
 echo ""
 echo "Resources created:"
 echo "  - Namespace: ${NAMESPACE} (with label konflux-ci.dev/type: tenant)"
-echo "  - ConfigMap: trusted-ca"
 echo "  - ServiceAccount: konflux-integration-runner"
 echo "  - RoleBinding: konflux-integration-runner -> ClusterRole/konflux-integration-runner"
 echo "  - RoleBinding: ${ADMIN_USER%%@*}-konflux-admin -> ClusterRole/konflux-admin-user-actions"

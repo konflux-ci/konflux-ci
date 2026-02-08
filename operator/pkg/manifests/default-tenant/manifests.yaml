@@ -38,11 +38,3 @@ subjects:
 - kind: ServiceAccount
   name: konflux-integration-runner
   namespace: default-tenant
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  labels:
-    config.openshift.io/inject-trusted-cabundle: "true"
-  name: trusted-ca
-  namespace: default-tenant
