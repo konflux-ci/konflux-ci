@@ -1,6 +1,0 @@
-[tools]
-kind = "0.22.0"
-kubectl = "1.30.0"
-go = "1.21.9"
-"go:golang.org/x/tools/cmd/stringer" = "0.22.0"
-"go:github.com/onsi/ginkgo/v2/ginkgo" = "2.19.0"
