@@ -56,8 +56,14 @@ const (
 	// OpenShift-specific annotations for TLS re-encryption
 	annotationOpenShiftDestCACertSecret = "route.openshift.io/destination-ca-certificate-secret"
 	annotationOpenShiftTermination      = "route.openshift.io/termination"
-	servingCertSecretName               = "serving-cert"
 	terminationReencrypt                = "reencrypt"
+
+	// destinationCASecretName is the name of the Secret containing the CA certificate
+	// for TLS re-encryption on OpenShift. The Ingress-to-Route controller reads tls.crt
+	// from this Secret to populate the Route's destinationCACertificate.
+	// This Secret is created by cert-manager from the ui-ca Certificate resource
+	// (see operator/upstream-kustomizations/ui/certmanager/certificate.yaml).
+	destinationCASecretName = "ui-ca"
 )
 
 // Config holds the configuration for building an Ingress resource.
@@ -86,7 +92,7 @@ func Build(cfg Config) *networkingv1.Ingress {
 
 	// Start with the required OpenShift annotations for TLS re-encryption
 	annotations := map[string]string{
-		annotationOpenShiftDestCACertSecret: servingCertSecretName,
+		annotationOpenShiftDestCACertSecret: destinationCASecretName,
 		annotationOpenShiftTermination:      terminationReencrypt,
 	}
 

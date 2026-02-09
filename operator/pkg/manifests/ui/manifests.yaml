@@ -631,8 +631,8 @@ spec:
   - dex.konflux-ui.svc.cluster.local
   isCA: true
   issuerRef:
-    kind: ClusterIssuer
-    name: ca-issuer
+    kind: Issuer
+    name: ui-ca-issuer
   secretName: dex-cert
   subject:
     organizations:
@@ -647,9 +647,8 @@ spec:
   dnsNames:
   - localhost
   issuerRef:
-    group: cert-manager.io
-    kind: ClusterIssuer
-    name: ca-issuer
+    kind: Issuer
+    name: ui-ca-issuer
   secretName: oauth2-proxy-cert
 ---
 apiVersion: cert-manager.io/v1
@@ -663,6 +662,32 @@ spec:
   - proxy.konflux-ui.svc
   - proxy.konflux-ui.svc.cluster.local
   issuerRef:
-    kind: ClusterIssuer
-    name: ca-issuer
+    kind: Issuer
+    name: ui-ca-issuer
   secretName: serving-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ui-ca
+  namespace: konflux-ui
+spec:
+  commonName: ui-ca
+  isCA: true
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: self-signed-cluster-issuer
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  secretName: ui-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: ui-ca-issuer
+  namespace: konflux-ui
+spec:
+  ca:
+    secretName: ui-ca
