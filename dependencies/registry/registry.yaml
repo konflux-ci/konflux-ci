@@ -26,7 +26,8 @@ spec:
     spec:
       containers:
       - name: registry
-        image: registry:2
+        image: ghcr.io/project-zot/zot:v2.1.13
+        args: ["serve", "/etc/zot/config.json"]
         resources:
           requests:
             cpu: 10m
@@ -36,18 +37,24 @@ spec:
             memory: 250Mi
         ports:
         - containerPort: 5000
-        env:
-        - name: REGISTRY_HTTP_TLS_CERTIFICATE
-          value: "/certs/tls.crt"
-        - name: REGISTRY_HTTP_TLS_KEY
-          value: "/certs/tls.key"
         volumeMounts:
         - name: certs
           mountPath: /certs
+          readOnly: true
+        - name: zot-config
+          mountPath: /etc/zot
+          readOnly: true
+        - name: storage
+          mountPath: /var/lib/registry
       volumes:
         - name: certs
           secret:
             secretName: local-registry-tls
+        - name: zot-config
+          configMap:
+            name: zot-config
+        - name: storage
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

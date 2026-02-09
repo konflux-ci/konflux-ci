@@ -4,6 +4,31 @@ metadata:
   name: kind-registry
 ---
 apiVersion: v1
+data:
+  config.json: |
+    {
+      "distSpecVersion": "1.1.1",
+      "storage": {
+        "rootDirectory": "/var/lib/registry"
+      },
+      "http": {
+        "address": "0.0.0.0",
+        "port": 5000,
+        "tls": {
+          "cert": "/certs/tls.crt",
+          "key": "/certs/tls.key"
+        }
+      },
+      "log": {
+        "level": "info"
+      }
+    }
+kind: ConfigMap
+metadata:
+  name: zot-config
+  namespace: kind-registry
+---
+apiVersion: v1
 kind: Service
 metadata:
   name: registry-service
@@ -40,15 +65,13 @@ spec:
         run: registry
     spec:
       containers:
-      - env:
-        - name: REGISTRY_HTTP_TLS_CERTIFICATE
-          value: /certs/tls.crt
-        - name: REGISTRY_HTTP_TLS_KEY
-          value: /certs/tls.key
-        image: registry:2
+      - args:
+        - serve
+        - /etc/zot/config.json
+        image: ghcr.io/project-zot/zot:v2.1.13
         livenessProbe:
           httpGet:
-            path: /
+            path: /v2/
             port: 5000
             scheme: HTTPS
           initialDelaySeconds: 15
@@ -58,7 +81,7 @@ spec:
         - containerPort: 5000
         readinessProbe:
           httpGet:
-            path: /
+            path: /v2/
             port: 5000
             scheme: HTTPS
           initialDelaySeconds: 5
@@ -73,10 +96,21 @@ spec:
         volumeMounts:
         - mountPath: /certs
           name: certs
+          readOnly: true
+        - mountPath: /etc/zot
+          name: zot-config
+          readOnly: true
+        - mountPath: /var/lib/registry
+          name: storage
       volumes:
       - name: certs
         secret:
           secretName: local-registry-tls
+      - configMap:
+          name: zot-config
+        name: zot-config
+      - emptyDir: {}
+        name: storage
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
