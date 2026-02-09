@@ -10,5 +10,5 @@ spec:
   - proxy.konflux-ui.svc.cluster.local
   issuerRef:
     kind: ClusterIssuer
-    name: ca-issuer
+    name: self-signed-cluster-issuer
   secretName: serving-cert
