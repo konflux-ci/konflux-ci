@@ -429,7 +429,7 @@ spec:
         - daemon off;
         - -c
         - /etc/nginx/nginx.conf
-        image: registry.access.redhat.com/ubi9/nginx-124@sha256:b9c2c8657761ea521f49ade5b330e5f81ac03372a093588f142de736e13336af
+        image: registry.access.redhat.com/ubi9/nginx-124@sha256:ece0c2d70199f0bcd3316d6913ef4b8e815d0229693156dee4bad8d69b13edc6
         livenessProbe:
           failureThreshold: 3
           httpGet:
@@ -498,7 +498,7 @@ spec:
             secretKeyRef:
               key: cookie-secret
               name: oauth2-proxy-cookie-secret
-        image: quay.io/oauth2-proxy/oauth2-proxy:latest@sha256:121cdc6520a02d7a2ddd181af6dbdc0f11f7d0c0d9353a999a69c3998cbfe37e
+        image: quay.io/konflux-ci/oauth2-proxy:1422fa87ad5d68f490e76c2f9bb5b5fdadfc56c0
         name: oauth2-proxy
         ports:
         - containerPort: 6000

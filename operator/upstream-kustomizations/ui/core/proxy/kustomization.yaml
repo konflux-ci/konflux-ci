@@ -8,9 +8,9 @@ images:
 - name: quay.io/konflux-ci/konflux-ui
   newName: quay.io/konflux-ci/konflux-ui
   newTag: fa9b7642f2bb87ad9f599cf5b17ae2aa23ffb57e
-- name: quay.io/oauth2-proxy/oauth2-proxy
-  newName: quay.io/oauth2-proxy/oauth2-proxy
-  newTag: latest@sha256:121cdc6520a02d7a2ddd181af6dbdc0f11f7d0c0d9353a999a69c3998cbfe37e
+- name: quay.io/konflux-ci/oauth2-proxy
+  newName: quay.io/konflux-ci/oauth2-proxy
+  newTag: 1422fa87ad5d68f490e76c2f9bb5b5fdadfc56c0
 - name: registry.access.redhat.com/ubi9/nginx-124
   digest: sha256:ece0c2d70199f0bcd3316d6913ef4b8e815d0229693156dee4bad8d69b13edc6
 
