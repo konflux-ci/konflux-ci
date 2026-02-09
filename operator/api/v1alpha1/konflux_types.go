@@ -20,9 +20,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // KonfluxSpec defines the desired state of Konflux.
 type KonfluxSpec struct {
 	// ImageController configures the image-controller component.
@@ -76,6 +73,14 @@ type KonfluxSpec struct {
 	// The runtime configuration is copied to the KonfluxDefaultTenant CR by the operator.
 	// +optional
 	DefaultTenant *DefaultTenantConfig `json:"defaultTenant,omitempty"`
+
+	// Telemetry configures the user-facing telemetry component
+	// (internally backed by segment-bridge).
+	// When enabled, the operator deploys a CronJob that collects anonymized usage
+	// data from the cluster and sends it to Segment for analysis.
+	// The runtime configuration is copied to the KonfluxSegmentBridge CR by the operator.
+	// +optional
+	Telemetry *TelemetryConfig `json:"telemetry,omitempty"`
 }
 
 // ImageControllerConfig defines the configuration for the image-controller component.
@@ -152,6 +157,21 @@ type DefaultTenantConfig struct {
 	// Defaults to true if not specified.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// TelemetryConfig defines the user-facing telemetry configuration.
+// Internally, this configures the segment-bridge component.
+// The Enabled field controls whether the component is deployed.
+// The Spec field is the runtime configuration passed to the KonfluxSegmentBridge CR.
+type TelemetryConfig struct {
+	// Enabled controls whether the telemetry CronJob is deployed.
+	// Defaults to false if not specified.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Spec configures the telemetry component.
+	// +optional
+	Spec *KonfluxSegmentBridgeSpec `json:"spec,omitempty"`
 }
 
 // KonfluxInfoConfig defines the configuration for the info component.
@@ -250,6 +270,14 @@ func (k *KonfluxSpec) IsDefaultTenantEnabled() bool {
 		return true
 	}
 	return *k.DefaultTenant.Enabled
+}
+
+// IsTelemetryEnabled returns true if telemetry is enabled.
+// Defaults to false if not specified.
+// NOTE: OpenShift console telemetry flag detection is deferred to a future iteration.
+// Once implemented, unspecified will match the OpenShift console telemetry state.
+func (k *KonfluxSpec) IsTelemetryEnabled() bool {
+	return k.Telemetry != nil && k.Telemetry.Enabled != nil && *k.Telemetry.Enabled
 }
 
 func init() {
