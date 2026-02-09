@@ -1,0 +1,25 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zot-config
+  namespace: kind-registry
+data:
+  config.json: |
+    {
+      "distSpecVersion": "1.1.1",
+      "storage": {
+        "rootDirectory": "/var/lib/registry"
+      },
+      "http": {
+        "address": "0.0.0.0",
+        "port": 5000,
+        "tls": {
+          "cert": "/certs/tls.crt",
+          "key": "/certs/tls.key"
+        }
+      },
+      "log": {
+        "level": "info"
+      }
+    }
