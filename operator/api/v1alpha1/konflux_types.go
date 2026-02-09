@@ -20,9 +20,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // KonfluxSpec defines the desired state of Konflux.
 type KonfluxSpec struct {
 	// ImageController configures the image-controller component.
@@ -76,6 +73,13 @@ type KonfluxSpec struct {
 	// The runtime configuration is copied to the KonfluxDefaultTenant CR by the operator.
 	// +optional
 	DefaultTenant *DefaultTenantConfig `json:"defaultTenant,omitempty"`
+
+	// SegmentBridge configures the segment-bridge telemetry component.
+	// When enabled, the operator deploys a CronJob that collects anonymized usage
+	// data from the cluster and sends it to Segment for analysis.
+	// The runtime configuration is copied to the KonfluxSegmentBridge CR by the operator.
+	// +optional
+	SegmentBridge *SegmentBridgeConfig `json:"segmentBridge,omitempty"`
 }
 
 // ImageControllerConfig defines the configuration for the image-controller component.
@@ -152,6 +156,29 @@ type DefaultTenantConfig struct {
 	// Defaults to true if not specified.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// SegmentBridgeConfig defines the configuration for the segment-bridge telemetry component.
+// The Enabled field controls whether the component is deployed (top-level concern).
+// Other fields are runtime configuration passed to the KonfluxSegmentBridge CR.
+type SegmentBridgeConfig struct {
+	// Enabled controls whether the segment-bridge telemetry CronJob is deployed.
+	// Defaults to false if not specified.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// SegmentKey is the write key used to authenticate with the Segment API.
+	// When not specified, a default key baked into the operator build is used,
+	// routing telemetry data to the Konflux dev team's Segment project.
+	// +optional
+	SegmentKey string `json:"segmentKey,omitempty"`
+
+	// SegmentAPIURL is the URL of the Segment API endpoint.
+	// When not specified, the default Segment API URL is used.
+	// Users may override this to route telemetry to their own Segment project
+	// or to another system that implements the Segment API.
+	// +optional
+	SegmentAPIURL string `json:"segmentAPIURL,omitempty"`
 }
 
 // KonfluxInfoConfig defines the configuration for the info component.
@@ -250,6 +277,14 @@ func (k *KonfluxSpec) IsDefaultTenantEnabled() bool {
 		return true
 	}
 	return *k.DefaultTenant.Enabled
+}
+
+// IsSegmentBridgeEnabled returns true if the segment-bridge telemetry component is enabled.
+// Defaults to false if not specified.
+// NOTE: OpenShift console telemetry flag detection is deferred to a future iteration.
+// Once implemented, unspecified will match the OpenShift console telemetry state.
+func (k *KonfluxSpec) IsSegmentBridgeEnabled() bool {
+	return k.SegmentBridge != nil && k.SegmentBridge.Enabled != nil && *k.SegmentBridge.Enabled
 }
 
 func init() {
