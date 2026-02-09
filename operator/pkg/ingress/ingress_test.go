@@ -73,7 +73,7 @@ func TestBuild(t *testing.T) {
 		ing := Build(cfg)
 
 		g.Expect(ing.Annotations).To(gomega.HaveKeyWithValue(
-			"route.openshift.io/destination-ca-certificate-secret", "serving-cert"))
+			"route.openshift.io/destination-ca-certificate-secret", "ui-ca"))
 		g.Expect(ing.Annotations).To(gomega.HaveKeyWithValue(
 			"route.openshift.io/termination", "reencrypt"))
 	})
@@ -97,7 +97,7 @@ func TestBuild(t *testing.T) {
 
 		// Should have default OpenShift annotations
 		g.Expect(ing.Annotations).To(gomega.HaveKeyWithValue(
-			"route.openshift.io/destination-ca-certificate-secret", "serving-cert"))
+			"route.openshift.io/destination-ca-certificate-secret", "ui-ca"))
 		g.Expect(ing.Annotations).To(gomega.HaveKeyWithValue(
 			"route.openshift.io/termination", "reencrypt"))
 		// Should have custom annotation
