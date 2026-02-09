@@ -141,14 +141,21 @@ kubectl -n image-controller create secret generic quaytoken \
 
 ### Step 5: Verify Deployment
 
+Check Konflux status:
+
 ```bash
-# Check Konflux status
 kubectl get konflux konflux -o yaml
+```
 
-# Check component pods
+Check component pods:
+
+```bash
 kubectl get pods -A | grep konflux
+```
 
-# Wait for Ready condition
+Wait for Ready condition:
+
+```bash
 kubectl wait --for=condition=Ready konflux/konflux --timeout=15m
 ```
 

@@ -113,9 +113,21 @@ if [[ "$(uname)" == "Darwin" ]] && command -v podman &> /dev/null; then
     echo "Podman machine has sufficient memory: ${PODMAN_MEMORY}MB >= ${REQUIRED_MEMORY_MB}MB"
 fi
 
-# Delete existing cluster if present
+# Check for existing cluster
 KIND_CLUSTER="${KIND_CLUSTER:-konflux}"
-kind delete cluster --name "${KIND_CLUSTER}" || echo "No existing cluster to delete."
+if kind get clusters 2>/dev/null | grep -q "^${KIND_CLUSTER}$"; then
+    # Cluster exists - check if it's usable
+    if kubectl --context "kind-${KIND_CLUSTER}" cluster-info &>/dev/null; then
+        echo "Kind cluster '${KIND_CLUSTER}' already exists and is usable."
+        echo "Skipping cluster creation. Delete it first if you want to recreate:"
+        echo "  kind delete cluster --name ${KIND_CLUSTER}"
+        exit 0
+    else
+        echo "Kind cluster '${KIND_CLUSTER}' exists but is not responding."
+        echo "Deleting and recreating..."
+        kind delete cluster --name "${KIND_CLUSTER}"
+    fi
+fi
 
 # Check for port conflicts if registry port binding is enabled
 if [[ "${ENABLE_REGISTRY_PORT}" -eq 1 ]]; then

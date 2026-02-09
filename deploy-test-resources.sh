@@ -9,11 +9,11 @@ main() {
 
 deploy() {
     echo "Setting up demo users..." >&2
-    kubectl apply -k "${script_path}/test/resources/demo-users/user/"
+    kubectl apply --server-side --force-conflicts -k "${script_path}/test/resources/demo-users/user/"
 
     if [[ "${SKIP_SAMPLE_COMPONENTS:-}" != "true" ]]; then
         echo "Deploying sample components..." >&2
-        kubectl apply -k "${script_path}/test/resources/demo-users/user/sample-components/"
+        kubectl apply --server-side --force-conflicts -k "${script_path}/test/resources/demo-users/user/sample-components/"
     else
         echo "Skipping sample components (SKIP_SAMPLE_COMPONENTS=true)" >&2
     fi

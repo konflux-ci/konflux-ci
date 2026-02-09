@@ -87,14 +87,18 @@ Konflux can be deployed using the operator-based installer, which supports both 
 
 For quick local setup on macOS or Linux:
 
+:gear: Create configuration from template:
+
 ```bash
-# 1. Create configuration from templates
 cp scripts/deploy-local.env.template scripts/deploy-local.env
+```
 
-# 2. Edit scripts/deploy-local.env with your GitHub App credentials
-# See the template file for instructions
+:gear: Edit `scripts/deploy-local.env` with your GitHub App credentials.
+See the template file for instructions on required values.
 
-# 3. Deploy Konflux
+:gear: Deploy Konflux:
+
+```bash
 ./scripts/deploy-local.sh
 ```
 
@@ -113,20 +117,21 @@ Access Konflux at: https://localhost:9443
 
 For production deployments on OpenShift, EKS, GKE, or other Kubernetes clusters:
 
+:gear: Install the operator:
+
 ```bash
-# 1. Install the operator
 kubectl apply -f https://github.com/konflux-ci/konflux-ci/releases/latest/download/install.yaml
+```
 
-# 2. Create your Konflux CR (based on samples - see link below)
+:gear: Create your Konflux CR based on the [sample configurations](operator/config/samples/):
+
+```bash
 kubectl apply -f my-konflux.yaml
-
-# 3. Create required secrets (GitHub App, Quay tokens, etc.)
-# See deployment guide for details
 ```
 
 **Important:** Do not use the sample with demo users (`konflux_v1alpha1_konflux.yaml`) for production - configure OIDC authentication instead.
 
-See [Operator Deployment Guide](docs/operator-deployment.md) for complete instructions and [sample configurations](operator/config/samples/).
+:gear: Create required secrets (GitHub App, Quay tokens, etc.). See the [Operator Deployment Guide](docs/operator-deployment.md) for details.
 
 ### Key Differences from Legacy Deployment
 
