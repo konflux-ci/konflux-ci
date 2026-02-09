@@ -14,7 +14,8 @@
 #  4. Creates secrets for GitHub integration
 #
 # Prerequisites:
-#  - kind, kubectl, kustomize, podman (or docker)
+#  - kind, kubectl, podman (or docker)
+#  - kustomize (only for 'local' install method)
 #  - Configuration file: scripts/deploy-local.env
 #
 # Usage:
@@ -33,9 +34,15 @@
 #   ./scripts/deploy-local.sh my-konflux.yaml
 #
 # Operator Installation Methods (OPERATOR_INSTALL_METHOD):
-#   local (default) - Install from current commit using kustomize
-#   build          - Build operator image locally and install (for operator developers)
-#   release        - Install from latest GitHub release
+#   release (default) - Install from latest GitHub release
+#   local             - Install from current checkout using kustomize (see note below)
+#   build             - Build operator image locally and install (for operator developers)
+#
+# NOTE: The 'local' method applies manifests from your checkout with the latest
+# released image, which may cause mismatches if your checkout differs from the
+# release. To avoid this, checkout a specific release tag first:
+#   git checkout v1.0.0  # or the desired release tag
+#   OPERATOR_INSTALL_METHOD=local ./scripts/deploy-local.sh
 
 set -euo pipefail
 
@@ -77,7 +84,7 @@ KIND_MEMORY_GB="${KIND_MEMORY_GB:-8}"
 REGISTRY_HOST_PORT="${REGISTRY_HOST_PORT:-5001}"
 ENABLE_REGISTRY_PORT="${ENABLE_REGISTRY_PORT:-1}"
 INCREASE_PODMAN_PIDS_LIMIT="${INCREASE_PODMAN_PIDS_LIMIT:-1}"
-OPERATOR_INSTALL_METHOD="${OPERATOR_INSTALL_METHOD:-local}"
+OPERATOR_INSTALL_METHOD="${OPERATOR_INSTALL_METHOD:-release}"
 OPERATOR_IMAGE="${OPERATOR_IMAGE:-quay.io/konflux-ci/konflux-operator:latest}"
 
 # Export variables for child scripts
@@ -151,17 +158,9 @@ case "${INSTALL_METHOD}" in
     local)
         echo "Installing from current commit using kustomize..."
         cd "${REPO_ROOT}/operator"
-        # Set default operator image if not specified
         OPERATOR_IMG="${OPERATOR_IMAGE:-quay.io/konflux-ci/konflux-operator:latest}"
 
-        # Update kustomization with operator image (will be reverted after)
-        cd config/manager
-        kustomize edit set image controller="${OPERATOR_IMG}"
-        cd ../..
-
-        # Generate and apply manifests
-        echo "Generating manifests..."
-        kustomize build config/default | kubectl apply -f -
+        make deploy IMG="${OPERATOR_IMG}"
 
         # Reset kustomization changes to avoid leaving modified files
         git checkout config/manager/kustomization.yaml 2>/dev/null || true
@@ -312,9 +311,7 @@ echo "Step 7: Waiting for Konflux to be ready"
 echo "========================================="
 echo "This may take several minutes..."
 
-if ! kubectl wait --for=jsonpath='{.status.conditions[?(@.type=="Ready")].status}'=True \
-    konflux/konflux \
-    --timeout=15m 2>/dev/null; then
+if ! kubectl wait --for=condition=Ready=True konflux konflux --timeout=15m 2>/dev/null; then
     echo ""
     echo "WARNING: Konflux CR did not become Ready within 15 minutes"
     echo "         This may be normal if deploying all components"
@@ -322,7 +319,7 @@ if ! kubectl wait --for=jsonpath='{.status.conditions[?(@.type=="Ready")].status
     echo ""
     echo "To monitor progress:"
     echo "  kubectl get pods -A"
-    echo "  kubectl get konflux konflux -o jsonpath='{.status.conditions}' | jq"
+    echo "  kubectl get konflux konflux -o jsonpath='{.status.conditions}'"
 else
     echo "✓ Konflux is ready"
 fi

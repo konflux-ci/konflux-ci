@@ -274,8 +274,7 @@ jobs:
           # If the operator deployment is ready and the CR is ready, the operator should have
           # ensured all underlying services (webhooks, CRDs, etc.) are ready
           echo "Waiting for Konflux CR to be ready..."
-          kubectl wait --for=jsonpath='{.status.conditions[?(@.type=="Ready")].status}'=True \
-            konflux/konflux --timeout=15m
+          kubectl wait --for=condition=Ready=True konflux konflux --timeout=15m
           echo "Konflux CR is ready!"
 
       - name: List namespaces

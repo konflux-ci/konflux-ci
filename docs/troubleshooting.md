@@ -11,7 +11,8 @@ Troubleshooting Common Issues
 - [PR Fails when Webhook Secret was not Added](#pr-fails-when-webhook-secret-was-not-added)
 - [Setup Scripts Fail or Pipeline Execution Stuck or Fails](#setup-scripts-fail-or-pipeline-execution-stuck-or-fails)
   * [Running out of Resources](#running-out-of-resources)
-    + [For Podman Users (macOS/Linux)](#for-podman-users-macoslinux)
+    + [For Podman Users (macOS)](#for-podman-users-macos)
+    + [For Podman Users (Linux)](#for-podman-users-linux)
     + [For All Platforms](#for-all-platforms)
   * [Unable to Bind PVCs](#unable-to-bind-pvcs)
   * [Release Fails](#release-fails)
@@ -182,7 +183,9 @@ The symptoms may include:
   ```
 * Pipelines fail at inconsistent stages.
 
-### For Podman Users (macOS/Linux)
+### For Podman Users (macOS)
+
+On macOS, Podman runs in a virtual machine. Check and configure VM resources:
 
 **Check Podman machine memory:**
 
@@ -196,11 +199,18 @@ podman machine inspect | grep Memory
 podman machine stop
 podman machine init --memory 20480 --cpus 8 --rootful konflux-large
 podman machine start konflux-large
+```
 
-# Configure deployment script to use it
-# In scripts/deploy-local.env:
+**Configure deployment script to use the new machine** (in `scripts/deploy-local.env`):
+
+```bash
 PODMAN_MACHINE_NAME="konflux-large"
 ```
+
+### For Podman Users (Linux)
+
+On Linux, Podman runs natively without a VM. Ensure your system has sufficient
+resources (8GB+ RAM recommended). No Podman machine configuration is needed.
 
 **PID limit issues** (Tekton pipelines fail with "cannot fork" errors):
 

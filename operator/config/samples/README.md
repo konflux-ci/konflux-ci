@@ -15,7 +15,13 @@ This directory contains sample YAML files for Konflux Custom Resources (CRs).
 
 ## Functional Samples
 
-**konflux_v1alpha1_konflux.yaml** - Used in CI tests and local development. Represents a complete Konflux CR configuration with all components, realistic resource limits, and demo users for testing. Includes helpful comments for common configurations.
+**konflux_v1alpha1_konflux.yaml** - Used in CI tests and local development.
+Represents a complete Konflux CR configuration with all components, realistic
+resource limits, and demo users for testing. Includes helpful comments for
+common configurations.
+
+**konflux-e2e.yaml** - Extends the base configuration with image-controller
+enabled, which is required for E2E tests. Used by the CI E2E workflow.
 
 **konflux-empty-cr.yaml** - Minimal empty spec using all default values.
 

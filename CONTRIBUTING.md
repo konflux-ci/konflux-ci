@@ -3,11 +3,10 @@ Contributing Guidelines
 
 <!-- toc -->
 
+- [Documentation Conventions](#documentation-conventions)
 - [Editing Markdown Files](#editing-markdown-files)
 - [Using KubeLinter](#using-kubelinter)
 - [Operator Development](#operator-development)
-  * [Building the Operator Locally](#building-the-operator-locally)
-  * [Operator Development Commands](#operator-development-commands)
 - [CI/CD and Testing](#cicd-and-testing)
   * [Automated E2E Tests](#automated-e2e-tests)
   * [ARM64 Testing](#arm64-testing)
@@ -17,6 +16,30 @@ Contributing Guidelines
   * [Running the test](#running-the-test)
 
 <!-- tocstop -->
+
+# Documentation Conventions
+
+When writing user-facing documentation (README, deployment guides, etc.):
+
+- **Gear icon (:gear:)**: Use `:gear:` to mark steps where the user must take action. This makes action items visually distinct from explanatory text.
+- **One command per code block**: Split bash code blocks so each contains a single copyable command. This allows users to use the copy button on each block rather than manually selecting lines.
+- **Descriptive text between blocks**: Add a brief description before each code block explaining what the command does.
+
+Example:
+
+```markdown
+:gear: Create configuration from template:
+
+\`\`\`bash
+cp scripts/deploy-local.env.template scripts/deploy-local.env
+\`\`\`
+
+:gear: Deploy Konflux:
+
+\`\`\`bash
+./scripts/deploy-local.sh
+\`\`\`
+```
 
 # Editing Markdown Files
 
@@ -55,55 +78,9 @@ this file will allow you to ignore or include specific KubeLinter checks.
 
 # Operator Development
 
-If you're working on the Konflux operator itself and need to test your changes:
-
-## Building the Operator Locally
-
-Use the `build` installation method with the local deployment script:
-
-```bash
-# Configure environment
-cp scripts/deploy-local.env.template scripts/deploy-local.env
-# Edit deploy-local.env with your secrets
-
-# Deploy with locally built operator
-OPERATOR_INSTALL_METHOD=build ./scripts/deploy-local.sh
-```
-
-This will:
-1. Build the operator image from your local changes
-2. Load the image into the Kind cluster
-3. Install CRDs using `make install`
-4. Deploy the operator using `make deploy`
-
-## Operator Development Commands
-
-```bash
-cd operator
-
-# Run tests
-make test
-
-# Build operator binary
-make build
-
-# Build operator image
-make docker-build IMG=localhost/konflux-operator:dev
-
-# Install CRDs
-make install
-
-# Deploy operator to cluster
-make deploy IMG=localhost/konflux-operator:dev
-
-# Uninstall CRDs
-make uninstall
-
-# Undeploy operator
-make undeploy
-```
-
-See the [operator README](operator/README.md) for more development commands.
+For building and running the operator from source, see the
+[operator README](operator/README.md). To deploy a locally built operator on a
+Kind cluster, use `OPERATOR_INSTALL_METHOD=build` with `deploy-local.sh`.
 
 # CI/CD and Testing
 
