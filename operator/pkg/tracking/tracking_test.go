@@ -23,6 +23,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,6 +34,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 )
 
 const (
@@ -1501,5 +1504,95 @@ func setupScheme(g *WithT) *runtime.Scheme {
 	scheme := runtime.NewScheme()
 	err := corev1.AddToScheme(scheme)
 	g.Expect(err).NotTo(HaveOccurred())
+	err = apiextensionsv1.AddToScheme(scheme)
+	g.Expect(err).NotTo(HaveOccurred())
 	return scheme
+}
+
+func TestIsCustomResourceDefinition(t *testing.T) {
+	g := NewWithT(t)
+
+	t.Run("returns true for CustomResourceDefinition", func(t *testing.T) {
+		crd := &apiextensionsv1.CustomResourceDefinition{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "apiextensions.k8s.io/v1",
+				Kind:       "CustomResourceDefinition",
+			},
+			ObjectMeta: metav1.ObjectMeta{Name: "applications.appstudio.redhat.com"},
+		}
+		g.Expect(kubernetes.IsCustomResourceDefinition(crd)).To(BeTrue())
+	})
+
+	t.Run("returns false for ConfigMap", func(t *testing.T) {
+		cm := &corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test",
+				Namespace: testNamespace,
+			},
+		}
+		g.Expect(kubernetes.IsCustomResourceDefinition(cm)).To(BeFalse())
+	})
+
+	t.Run("returns false for empty GVK", func(t *testing.T) {
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test",
+				Namespace: testNamespace,
+			},
+		}
+		// Clear TypeMeta so GVK is typically empty when not from scheme
+		cm.APIVersion = ""
+		cm.Kind = ""
+		g.Expect(kubernetes.IsCustomResourceDefinition(cm)).To(BeFalse())
+	})
+}
+
+func TestClient_SetOwnership_DoesNotSetControllerReferenceOnCRD(t *testing.T) {
+	g := NewWithT(t)
+	ctx := context.Background()
+
+	scheme := setupScheme(g)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	// Use a cluster-scoped owner (Namespace) so that owning a CRD would be valid if we set it.
+	owner := &corev1.Namespace{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
+		ObjectMeta: metav1.ObjectMeta{Name: "test-owner-namespace", UID: "owner-uid"},
+	}
+	err := fakeClient.Create(ctx, owner)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	tc := NewClientWithOwnership(fakeClient, OwnershipConfig{
+		Owner:             owner,
+		OwnerLabelKey:     testOwnerLabel,
+		ComponentLabelKey: testComponentLabel,
+		Component:         testComponent,
+		FieldManager:      testFieldManager,
+	})
+
+	crd := &apiextensionsv1.CustomResourceDefinition{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "apiextensions.k8s.io/v1",
+			Kind:       "CustomResourceDefinition",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "applications.appstudio.redhat.com",
+		},
+		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+			Group: "appstudio.redhat.com",
+			Names: apiextensionsv1.CustomResourceDefinitionNames{Kind: "Application", Plural: "applications"},
+			Scope: apiextensionsv1.ClusterScoped,
+		},
+	}
+
+	err = tc.SetOwnership(crd)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Labels should be set
+	g.Expect(crd.Labels).To(HaveKeyWithValue(testOwnerLabel, "test-owner-namespace"))
+	g.Expect(crd.Labels).To(HaveKeyWithValue(testComponentLabel, testComponent))
+
+	// Controller reference must NOT be set on CRDs so they are not cascade-deleted when the CR is removed.
+	g.Expect(crd.OwnerReferences).To(BeEmpty())
 }
