@@ -20,15 +20,18 @@ import (
 	"context"
 	"fmt"
 
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
+	crdhandler "github.com/konflux-ci/konflux-ci/operator/internal/controller/handler"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
@@ -58,7 +61,7 @@ type KonfluxApplicationAPIReconciler struct {
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxapplicationapis/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxapplicationapis/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=list
-// +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;create;patch
+// +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -133,10 +136,15 @@ func (r *KonfluxApplicationAPIReconciler) applyManifests(ctx context.Context, tc
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxApplicationAPIReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	crdMapFunc, err := crdhandler.MapCRDToRequest(r.ObjectStore, manifests.ApplicationAPI, CRName)
+	if err != nil {
+		return err
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&konfluxv1alpha1.KonfluxApplicationAPI{}).
 		Named("konfluxapplicationapi").
-		// ApplicationAPI only installs CRDs, so no need to watch Deployments, Services, etc.
-		// The reconciler will reapply CRDs if they are deleted.
+		// Watch CRDs so that out-of-band deletion triggers reconcile and re-apply.
+		Watches(&apiextensionsv1.CustomResourceDefinition{},
+			handler.EnqueueRequestsFromMapFunc(crdMapFunc)).
 		Complete(r)
 }
