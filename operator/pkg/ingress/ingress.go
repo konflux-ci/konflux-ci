@@ -195,7 +195,9 @@ func GetOpenShiftIngressDomain(ctx context.Context, c client.Client) (string, er
 }
 
 // DetermineEndpointURL determines the endpoint URL for the UI based on ingress configuration.
-// If ingress is enabled and host is specified, use that host.
+// If host is explicitly specified, use that host regardless of whether ingress is enabled.
+// This allows users who manage their own external routing (e.g., Gateway API, hardware LB)
+// to configure the endpoint without the operator managing an Ingress resource.
 // If ingress is enabled on OpenShift without a host, use the default OpenShift ingress domain.
 // Otherwise, use the default localhost configuration.
 // The namespace parameter is used for generating the OpenShift hostname convention.
@@ -209,6 +211,16 @@ func DetermineEndpointURL(
 ) (*url.URL, error) {
 	ingressSpec := ui.Spec.GetIngress()
 
+	// If host is explicitly specified, always use it (no port for TLS on 443).
+	// This takes priority over the ingress-enabled check so that users who manage
+	// their own routing can set a hostname without the operator creating an Ingress.
+	if ingressSpec.Host != "" {
+		return &url.URL{
+			Scheme: "https",
+			Host:   ingressSpec.Host,
+		}, nil
+	}
+
 	// Determine if ingress is effectively enabled:
 	// - Explicitly enabled (true), OR
 	// - Unset (nil) AND on OpenShift (defaults to true on OpenShift)
@@ -220,14 +232,6 @@ func DetermineEndpointURL(
 		return &url.URL{
 			Scheme: "https",
 			Host:   fmt.Sprintf("%s:%s", DefaultProxyHostname, DefaultProxyPort),
-		}, nil
-	}
-
-	// If host is explicitly specified, use it (no port for ingress, TLS on 443)
-	if ingressSpec.Host != "" {
-		return &url.URL{
-			Scheme: "https",
-			Host:   ingressSpec.Host,
 		}, nil
 	}
 

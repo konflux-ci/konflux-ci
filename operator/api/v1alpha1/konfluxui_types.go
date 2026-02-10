@@ -45,7 +45,10 @@ type IngressSpec struct {
 	// IngressClassName specifies which IngressClass to use for the ingress.
 	// +optional
 	IngressClassName *string `json:"ingressClassName,omitempty"`
-	// Host is the hostname to use for the ingress.
+	// Host is the hostname used as the endpoint for configuring oauth2-proxy, dex, and related components.
+	// When set, this hostname is always used regardless of whether ingress is enabled,
+	// allowing users who manage their own external routing (e.g., Gateway API, hardware LB)
+	// to configure the endpoint without the operator managing an Ingress resource.
 	// On OpenShift, if empty, the default ingress domain and naming convention will be used.
 	// +optional
 	Host string `json:"host,omitempty"`
