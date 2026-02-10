@@ -15,6 +15,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 )
 
 //go:embed all:application-api all:build-service all:enterprise-contract all:image-controller all:integration all:namespace-lister all:rbac all:release all:ui all:info all:cert-manager all:registry all:default-tenant
@@ -177,6 +179,23 @@ func (s *ObjectStore) GetForComponent(component Component) ([]client.Object, err
 		return nil, fmt.Errorf("unknown component: %s", component)
 	}
 	return deepCopyObjects(objects), nil
+}
+
+// GetCRDNamesForComponent returns the names of CustomResourceDefinitions
+// that are part of the component's manifests. Used to watch CRDs and enqueue
+// the component's CR when a managed CRD is deleted out of band.
+func (s *ObjectStore) GetCRDNamesForComponent(component Component) ([]string, error) {
+	objects, ok := s.objects[component]
+	if !ok {
+		return nil, fmt.Errorf("unknown component: %s", component)
+	}
+	var names []string
+	for _, obj := range objects {
+		if kubernetes.IsCustomResourceDefinition(obj) {
+			names = append(names, obj.GetName())
+		}
+	}
+	return names, nil
 }
 
 // ParsedManifestInfo contains parsed manifest information.

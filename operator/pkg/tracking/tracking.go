@@ -74,6 +74,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 )
 
 var _ client.Client = &Client{}
@@ -224,6 +226,7 @@ func (c *Client) ApplyOwned(ctx context.Context, obj client.Object, opts ...clie
 // SetOwnership sets ownership labels and owner reference on the object without applying it.
 // This is useful for CreateOrUpdate patterns where ownership must be set in the mutate function.
 // The client must be created with NewClientWithOwnership.
+// Do not set controller reference on CRDs so they are not cascade-deleted when the CR is removed.
 func (c *Client) SetOwnership(obj client.Object) error {
 	if c.ownership == nil {
 		return fmt.Errorf("SetOwnership called but client was not created with ownership config; use NewClientWithOwnership")
@@ -237,6 +240,10 @@ func (c *Client) SetOwnership(obj client.Object) error {
 	labels[c.ownership.OwnerLabelKey] = c.ownership.Owner.GetName()
 	labels[c.ownership.ComponentLabelKey] = c.ownership.Component
 	obj.SetLabels(labels)
+
+	if kubernetes.IsCustomResourceDefinition(obj) {
+		return nil
+	}
 
 	// Set owner reference for garbage collection and watch triggers
 	if err := controllerutil.SetControllerReference(c.ownership.Owner, obj, c.Scheme()); err != nil {
