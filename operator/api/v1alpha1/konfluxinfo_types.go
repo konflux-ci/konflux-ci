@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	"maps"
+	"strconv"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -222,6 +223,11 @@ type ClusterConfigData struct {
 	// +optional
 	DefaultOIDCIssuer string `json:"defaultOIDCIssuer,omitempty"`
 
+	// EnableKeylessSigning determines if pipelines should perform/validate keyless signing.
+	// When nil, the key is omitted from the ConfigMap (unset).
+	// +optional
+	EnableKeylessSigning *bool `json:"enableKeylessSigning,omitempty"`
+
 	// FulcioInternalUrl is the internal Fulcio URL.
 	// +optional
 	FulcioInternalUrl string `json:"fulcioInternalUrl,omitempty"`
@@ -245,6 +251,14 @@ type ClusterConfigData struct {
 	// TufExternalUrl is the external TUF URL.
 	// +optional
 	TufExternalUrl string `json:"tufExternalUrl,omitempty"`
+
+	// TrustifyServerInternalUrl is the internal URL for the Trustify server.
+	// +optional
+	TrustifyServerInternalUrl string `json:"trustifyServerInternalUrl,omitempty"`
+
+	// TrustifyServerExternalUrl is the external URL for the Trustify server.
+	// +optional
+	TrustifyServerExternalUrl string `json:"trustifyServerExternalUrl,omitempty"`
 }
 
 // All is an iterator that yields all non-empty key-value pairs from ClusterConfigData.
@@ -253,6 +267,11 @@ type ClusterConfigData struct {
 func (d ClusterConfigData) All(yield func(key, value string) bool) {
 	if d.DefaultOIDCIssuer != "" {
 		if !yield("defaultOIDCIssuer", d.DefaultOIDCIssuer) {
+			return
+		}
+	}
+	if d.EnableKeylessSigning != nil {
+		if !yield("enableKeylessSigning", strconv.FormatBool(*d.EnableKeylessSigning)) {
 			return
 		}
 	}
@@ -283,6 +302,16 @@ func (d ClusterConfigData) All(yield func(key, value string) bool) {
 	}
 	if d.TufExternalUrl != "" {
 		if !yield("tufExternalUrl", d.TufExternalUrl) {
+			return
+		}
+	}
+	if d.TrustifyServerInternalUrl != "" {
+		if !yield("trustifyServerInternalUrl", d.TrustifyServerInternalUrl) {
+			return
+		}
+	}
+	if d.TrustifyServerExternalUrl != "" {
+		if !yield("trustifyServerExternalUrl", d.TrustifyServerExternalUrl) {
 			return
 		}
 	}

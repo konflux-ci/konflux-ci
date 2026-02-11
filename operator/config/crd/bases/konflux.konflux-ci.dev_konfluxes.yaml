@@ -424,6 +424,11 @@ spec:
                                 description: DefaultOIDCIssuer is the default OIDC
                                   issuer URL.
                                 type: string
+                              enableKeylessSigning:
+                                description: |-
+                                  EnableKeylessSigning determines if pipelines should perform/validate keyless signing.
+                                  When nil, the key is omitted from the ConfigMap (unset).
+                                type: boolean
                               fulcioExternalUrl:
                                 description: FulcioExternalUrl is the external Fulcio
                                   URL.
@@ -439,6 +444,14 @@ spec:
                               rekorInternalUrl:
                                 description: RekorInternalUrl is the internal Rekor
                                   URL.
+                                type: string
+                              trustifyServerExternalUrl:
+                                description: TrustifyServerExternalUrl is the external
+                                  URL for the Trustify server.
+                                type: string
+                              trustifyServerInternalUrl:
+                                description: TrustifyServerInternalUrl is the internal
+                                  URL for the Trustify server.
                                 type: string
                               tufExternalUrl:
                                 description: TufExternalUrl is the external TUF URL.

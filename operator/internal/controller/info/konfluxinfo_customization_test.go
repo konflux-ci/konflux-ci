@@ -935,11 +935,14 @@ func TestKonfluxInfoClusterConfig(t *testing.T) {
 		g.Expect(clusterConfigMap.Data).To(gomega.HaveKey("rekorExternalUrl"))
 		g.Expect(clusterConfigMap.Data["rekorExternalUrl"]).To(gomega.Equal("https://rekor-external.example.com"))
 		// Verify empty fields are not present
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey("enableKeylessSigning"))
 		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey("fulcioInternalUrl"))
 		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey("fulcioExternalUrl"))
 		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey("rekorInternalUrl"))
 		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey("tufInternalUrl"))
 		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey("tufExternalUrl"))
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey("trustifyServerInternalUrl"))
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey("trustifyServerExternalUrl"))
 	})
 
 	t.Run("should update cluster-config ConfigMap when ClusterConfig values change", func(t *testing.T) {

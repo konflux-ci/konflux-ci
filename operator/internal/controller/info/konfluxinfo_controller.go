@@ -76,6 +76,8 @@ const (
 const (
 	// ClusterConfigKeyDefaultOIDCIssuer is the ConfigMap key for default OIDC issuer URL.
 	ClusterConfigKeyDefaultOIDCIssuer = "defaultOIDCIssuer"
+	// ClusterConfigKeyEnableKeylessSigning is the ConfigMap key for enabling keyless signing.
+	ClusterConfigKeyEnableKeylessSigning = "enableKeylessSigning"
 	// ClusterConfigKeyFulcioInternalUrl is the ConfigMap key for internal Fulcio URL.
 	ClusterConfigKeyFulcioInternalUrl = "fulcioInternalUrl"
 	// ClusterConfigKeyFulcioExternalUrl is the ConfigMap key for external Fulcio URL.
@@ -88,6 +90,10 @@ const (
 	ClusterConfigKeyTufInternalUrl = "tufInternalUrl"
 	// ClusterConfigKeyTufExternalUrl is the ConfigMap key for external TUF URL.
 	ClusterConfigKeyTufExternalUrl = "tufExternalUrl"
+	// ClusterConfigKeyTrustifyServerInternalUrl is the ConfigMap key for internal Trustify server URL.
+	ClusterConfigKeyTrustifyServerInternalUrl = "trustifyServerInternalUrl"
+	// ClusterConfigKeyTrustifyServerExternalUrl is the ConfigMap key for external Trustify server URL.
+	ClusterConfigKeyTrustifyServerExternalUrl = "trustifyServerExternalUrl"
 )
 
 // ClusterConfigDiscoverer is an interface for discovering cluster configuration values.
