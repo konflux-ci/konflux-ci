@@ -5,6 +5,6 @@ resources:
   - dex.yaml
 
 images:
-  - name: ghcr.io/dexidp/dex
-    newName: ghcr.io/dexidp/dex
-    newTag: v2.44.0
+  - name: quay.io/konflux-ci/dex
+    newName: quay.io/konflux-ci/dex
+    newTag: af0f83bb04f8b92e5234d6cd4c853cbc0658033be7a8fc7516ed18c37d0d8383

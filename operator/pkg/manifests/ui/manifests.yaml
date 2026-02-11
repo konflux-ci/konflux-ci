@@ -357,7 +357,7 @@ spec:
             secretKeyRef:
               key: client-secret
               name: oauth2-proxy-client-secret
-        image: ghcr.io/dexidp/dex:v2.44.0
+        image: quay.io/redhat-user-workloads/konflux-vanguard-tenant/dex:on-pr-7c4d79d392626bfebd6d5e65aacb23d74a6d21bb
         name: dex
         ports:
         - containerPort: 9443
@@ -369,6 +369,8 @@ spec:
           httpGet:
             path: /healthz/ready
             port: telemetry
+          initialDelaySeconds: 10
+          periodSeconds: 10
         resources:
           limits:
             cpu: 50m
