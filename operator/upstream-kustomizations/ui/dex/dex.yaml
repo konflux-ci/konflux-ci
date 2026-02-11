@@ -53,7 +53,7 @@ spec:
     spec:
       serviceAccountName: dex # This is created below
       containers:
-      - image: ghcr.io/dexidp/dex:latest
+      - image: quay.io/konflux-ci/dex:latest
         name: dex
         command: ["/usr/local/bin/dex", "serve", "/etc/dex/cfg/config.yaml"]
         securityContext:
