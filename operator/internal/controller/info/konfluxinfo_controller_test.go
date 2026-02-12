@@ -19,7 +19,7 @@ package info
 import (
 	"context"
 
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -42,7 +42,7 @@ var _ = Describe("KonfluxInfo Controller", func() {
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind KonfluxInfo")
 			err := k8sClient.Get(ctx, typeNamespacedName, konfluxinfo)
-			if err != nil && errors.IsNotFound(err) {
+			if err != nil && apierrors.IsNotFound(err) {
 				resource := &konfluxv1alpha1.KonfluxInfo{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: CRName,
