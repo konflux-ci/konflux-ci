@@ -108,6 +108,8 @@ jobs:
       - name: Prepare release notes
         id: release-notes
         working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           .github/scripts/prepare-release-notes.sh \
             "${{ steps.version.outputs.version }}" \

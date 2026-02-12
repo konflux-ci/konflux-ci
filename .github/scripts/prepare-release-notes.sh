@@ -28,6 +28,18 @@ IMAGE_TAG="$2"
 GIT_REF="$3"
 OUTPUT_FILE="$4"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# get_previous_tag finds the most recent existing tag by creation date.
+# The current release's tag does not exist yet (it is created by the "Create
+# GitHub Release" step later in the workflow), so the latest existing tag is
+# the previous release. We sort by creation date rather than version number
+# because the repo has legacy tags (v0.1-v0.4) that sort higher than the
+# current v0.0.x series in version comparison.
+get_previous_tag() {
+  git tag --sort=-creatordate | head -1
+}
+
 # Generate release notes
 cat > "${OUTPUT_FILE}" <<EOF
 ## Release ${VERSION}
@@ -50,5 +62,19 @@ kubectl apply -f https://github.com/konflux-ci/konflux-ci/releases/download/${VE
 ### Documentation
 - [README.md](https://github.com/konflux-ci/konflux-ci/blob/main/README.md) - Installation and usage instructions
 EOF
+
+# Append upstream changelog (failures here must never block the release)
+PREVIOUS_TAG=$(get_previous_tag "$VERSION")
+if [ -n "$PREVIOUS_TAG" ]; then
+  # Use HEAD (not $VERSION) as the new ref because the version tag has not been
+  # created yet — it is created by the "Create GitHub Release" step later.
+  echo "Generating upstream changelog: ${PREVIOUS_TAG} -> HEAD" >&2
+  changelog=$("${SCRIPT_DIR}/generate-changelog.sh" "$PREVIOUS_TAG" HEAD) || true
+  if [ -n "$changelog" ]; then
+    printf '\n%s\n' "$changelog" >> "${OUTPUT_FILE}"
+  fi
+else
+  echo "No previous tag found, skipping upstream changelog" >&2
+fi
 
 echo "Release notes generated at: ${OUTPUT_FILE}"
