@@ -4,7 +4,7 @@
   "description": "Documentation for Konflux Operator",
   "devDependencies": {
     "postcss": "^8.4.0",
-    "postcss-cli": "^10.0.0",
+    "postcss-cli": "^11.0.0",
     "autoprefixer": "^10.4.0"
   }
 }

@@ -108,7 +108,9 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 		FieldManager:      FieldManager,
 	})
 
-	// Apply manifests only if createClusterIssuer is enabled (defaults to true)
+	// Apply manifests only if createClusterIssuer is enabled (defaults to true).
+	// The cert-manager namespace must already exist (created by whoever installs cert-manager);
+	// if it does not, applyManifests will fail and the error is reported via the status.
 	if certManager.Spec.ShouldCreateClusterIssuer() {
 		if err := r.applyManifests(ctx, tc); err != nil {
 			return errHandler.HandleApplyError(ctx, err)
@@ -144,8 +146,6 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
 func (r *KonfluxCertManagerReconciler) applyManifests(ctx context.Context, tc *tracking.Client) error {
-	log := logf.FromContext(ctx)
-
 	objects, err := r.ObjectStore.GetForComponent(manifests.CertManager)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for CertManager: %w", err)
@@ -153,20 +153,6 @@ func (r *KonfluxCertManagerReconciler) applyManifests(ctx context.Context, tc *t
 
 	for _, obj := range objects {
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
-			// Only skip if it's specifically a "CRD not installed" error.
-			// This prevents masking real reconciliation failures like RBAC denials,
-			// validation errors, or resource conflicts.
-			if tracking.IsNoKindMatchError(err) {
-				gvk := obj.GetObjectKind().GroupVersionKind()
-				log.Info("Skipping resource: CRD not installed (test environment)",
-					"kind", gvk.Kind,
-					"apiVersion", gvk.GroupVersion().String(),
-					"namespace", obj.GetNamespace(),
-					"name", obj.GetName(),
-				)
-				continue
-			}
-			// All other errors should fail the reconciliation
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
 				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), manifests.CertManager, err)
 		}

@@ -126,7 +126,7 @@ deploy_tekton() {
 deploy_cert_manager() {
     kubectl apply -k "${script_path}/dependencies/cert-manager"
     sleep 5
-    retry "kubectl wait --for=condition=Ready --timeout=120s -l app.kubernetes.io/instance=cert-manager -n cert-manager pod" \
+    retry "kubectl wait --for=condition=Available --timeout=120s deployment -l app.kubernetes.io/instance=cert-manager -n cert-manager" \
           "Cert manager did not become available within the allocated time"
 }
 

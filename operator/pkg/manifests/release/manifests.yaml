@@ -871,6 +871,18 @@ spec:
                               description: HostNetwork specifies whether the pod may
                                 use the node network namespace
                               type: boolean
+                            hostUsers:
+                              description: |-
+                                HostUsers indicates whether the pod will use the host's user namespace.
+                                Optional: Default to true.
+                                If set to true or not present, the pod will be run in the host user namespace, useful
+                                for when the pod needs a feature only available to the host user namespace, such as
+                                loading a kernel module with CAP_SYS_MODULE.
+                                When set to false, a new user namespace is created for the pod. Setting false
+                                is useful to mitigating container breakout vulnerabilities such as allowing
+                                containers to run as root without their user having root privileges on the host.
+                                This field depends on the kubernetes feature gate UserNamespacesSupport being enabled.
+                              type: boolean
                             imagePullSecrets:
                               description: ImagePullSecrets gives the name of the
                                 secret used by the pod to pull the image if specified
@@ -1979,6 +1991,18 @@ spec:
                               description: HostNetwork specifies whether the pod may
                                 use the node network namespace
                               type: boolean
+                            hostUsers:
+                              description: |-
+                                HostUsers indicates whether the pod will use the host's user namespace.
+                                Optional: Default to true.
+                                If set to true or not present, the pod will be run in the host user namespace, useful
+                                for when the pod needs a feature only available to the host user namespace, such as
+                                loading a kernel module with CAP_SYS_MODULE.
+                                When set to false, a new user namespace is created for the pod. Setting false
+                                is useful to mitigating container breakout vulnerabilities such as allowing
+                                containers to run as root without their user having root privileges on the host.
+                                This field depends on the kubernetes feature gate UserNamespacesSupport being enabled.
+                              type: boolean
                             imagePullSecrets:
                               description: ImagePullSecrets gives the name of the
                                 secret used by the pod to pull the image if specified
@@ -2867,6 +2891,18 @@ spec:
                             hostNetwork:
                               description: HostNetwork specifies whether the pod may
                                 use the node network namespace
+                              type: boolean
+                            hostUsers:
+                              description: |-
+                                HostUsers indicates whether the pod will use the host's user namespace.
+                                Optional: Default to true.
+                                If set to true or not present, the pod will be run in the host user namespace, useful
+                                for when the pod needs a feature only available to the host user namespace, such as
+                                loading a kernel module with CAP_SYS_MODULE.
+                                When set to false, a new user namespace is created for the pod. Setting false
+                                is useful to mitigating container breakout vulnerabilities such as allowing
+                                containers to run as root without their user having root privileges on the host.
+                                This field depends on the kubernetes feature gate UserNamespacesSupport being enabled.
                               type: boolean
                             imagePullSecrets:
                               description: ImagePullSecrets gives the name of the
@@ -4709,8 +4745,6 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  annotations:
-    service.beta.openshift.io/serving-cert-secret-name: webhook-server-cert
   name: release-service-webhook-service
   namespace: release-service
 spec:
@@ -4773,7 +4807,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: quay.io/konflux-ci/release-service:6b2de30f1d4431b6eac46a593a325cd15013d6e8
+        image: quay.io/konflux-ci/release-service:3b8b17ba29770613d4cf9e1a576a48804f2c7c08
         livenessProbe:
           httpGet:
             path: /healthz
@@ -4858,7 +4892,6 @@ kind: MutatingWebhookConfiguration
 metadata:
   annotations:
     cert-manager.io/inject-ca-from: release-service/serving-cert
-    service.beta.openshift.io/inject-cabundle: "true"
   name: release-service-mutating-webhook-configuration
 webhooks:
 - admissionReviewVersions:
@@ -4945,7 +4978,6 @@ kind: ValidatingWebhookConfiguration
 metadata:
   annotations:
     cert-manager.io/inject-ca-from: release-service/serving-cert
-    service.beta.openshift.io/inject-cabundle: "true"
   name: release-service-validating-webhook-configuration
 webhooks:
 - admissionReviewVersions:

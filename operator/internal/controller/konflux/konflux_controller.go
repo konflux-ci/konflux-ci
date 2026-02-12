@@ -18,6 +18,7 @@ package konflux
 
 import (
 	"context"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -43,6 +44,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/rbac"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/releaseservice"
 	uictrl "github.com/konflux-ci/konflux-ci/operator/internal/controller/ui"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
 
@@ -87,7 +89,8 @@ var konfluxClusterScopedAllowList = tracking.ClusterScopedAllowList{
 // KonfluxReconciler reconciles a Konflux object
 type KonfluxReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme      *runtime.Scheme
+	ClusterInfo *clusterinfo.Info
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxes,verbs=get;list;watch;create;update;patch;delete
@@ -346,6 +349,9 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// All deployments are managed by component-specific reconcilers, so we only aggregate sub-CR statuses.
 	condition.SetAggregatedReadyCondition(konflux, subCRStatuses)
 
+	// Check cert-manager availability, set CertManagerAvailable condition, and override Ready if missing.
+	certManagerResult := r.checkCertManagerAvailability(ctx, konflux)
+
 	// Update the status subresource with all collected conditions
 	if err := r.Status().Update(ctx, konflux); err != nil {
 		log.Error(err, "Failed to update Konflux status")
@@ -353,7 +359,62 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	log.Info("Successfully reconciled Konflux")
-	return ctrl.Result{}, nil
+
+	// Requeue when cert-manager check failed (transient error) or cert-manager is missing,
+	// so we periodically re-run the check and status self-heals when cert-manager is installed.
+	return certManagerResult, nil
+}
+
+// checkCertManagerAvailability checks if cert-manager CRDs are installed, sets the
+// CertManagerAvailable condition on the Konflux CR, and overrides Ready to False
+// when cert-manager is explicitly missing. Returns a ctrl.Result to requeue when
+// the check should be retried (transient error) or when cert-manager is missing.
+// Call this after SetAggregatedReadyCondition so the override applies to the aggregated Ready.
+func (r *KonfluxReconciler) checkCertManagerAvailability(
+	ctx context.Context, konflux *konfluxv1alpha1.Konflux,
+) ctrl.Result {
+	log := logf.FromContext(ctx)
+	var result ctrl.Result
+	certManagerInstalled, err := r.ClusterInfo.HasCertManager()
+	if err != nil {
+		log.Error(err, "Failed to check if cert-manager is installed")
+		// Set condition to Unknown since we couldn't determine availability
+		// This allows Ready to remain True if sub-CRs are ready, since we don't
+		// know for certain that cert-manager is missing.
+		condition.SetCondition(konflux, metav1.Condition{
+			Type:    constant.ConditionTypeCertManagerAvailable,
+			Status:  metav1.ConditionUnknown,
+			Reason:  condition.ReasonCertManagerInstallationCheckFailed,
+			Message: "Failed to check cert-manager availability: " + err.Error(),
+		})
+		result = ctrl.Result{RequeueAfter: 30 * time.Second}
+	} else if !certManagerInstalled {
+		log.Info("cert-manager CRDs not found - some components may fail to create Certificate resources")
+		condition.SetCondition(konflux, metav1.Condition{
+			Type:    constant.ConditionTypeCertManagerAvailable,
+			Status:  metav1.ConditionFalse,
+			Reason:  condition.ReasonCertManagerNotInstalled,
+			Message: "cert-manager CRDs are not installed. Several Konflux components require cert-manager to create Certificate resources for TLS. Please install cert-manager before proceeding.",
+		})
+		result = ctrl.Result{RequeueAfter: 1 * time.Minute}
+	} else {
+		condition.SetCondition(konflux, metav1.Condition{
+			Type:    constant.ConditionTypeCertManagerAvailable,
+			Status:  metav1.ConditionTrue,
+			Reason:  condition.ReasonCertManagerInstalled,
+			Message: "cert-manager CRDs are installed",
+		})
+		result = ctrl.Result{}
+	}
+	// Override Ready to False when cert-manager is explicitly missing (Unknown is allowed).
+	condition.OverrideReadyIfDependencyFalse(konflux, []condition.DependencyOverride{
+		{
+			ConditionType: constant.ConditionTypeCertManagerAvailable,
+			Reason:        condition.ReasonCertManagerNotInstalled,
+			Message:       "cert-manager CRDs are not installed. Some components require cert-manager to function properly.",
+		},
+	})
+	return result
 }
 
 // applyKonfluxBuildService creates or updates the KonfluxBuildService CR.

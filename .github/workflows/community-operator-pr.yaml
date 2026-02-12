@@ -36,3 +36,19 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.KONFLUX_CI_BOT_PAT }}
         run: |
           .github/scripts/create-community-operator-pr.sh "${{ steps.release.outputs.tag }}"
+
+      - name: Create issue on failure
+        if: failure()
+        working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_NAME: Community Operator PR
+          RELEASE_VERSION: ${{ steps.release.outputs.tag }}
+        run: |
+          .github/scripts/create-or-update-issue.sh \
+            "Community Operator PR Failure" \
+            "Creating the Community Operator PR failed."

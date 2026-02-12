@@ -273,14 +273,19 @@ func main() {
 		setupLog.Error(err, "unable to detect cluster info")
 		os.Exit(1)
 	}
+	k8sVer := "unknown"
+	if v, err := clusterInfo.K8sVersion(); err == nil && v != nil {
+		k8sVer = v.GitVersion
+	}
 	setupLog.Info("Detected cluster info",
 		"platform", clusterInfo.Platform(),
-		"k8sVersion", clusterInfo.K8sVersion().GitVersion,
+		"k8sVersion", k8sVer,
 	)
 
 	if err := (&konflux.KonfluxReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		ClusterInfo: clusterInfo,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Konflux")
 		os.Exit(1)
@@ -363,6 +368,7 @@ func main() {
 		Client:      mgr.GetClient(),
 		Scheme:      mgr.GetScheme(),
 		ObjectStore: objectStore,
+		ClusterInfo: clusterInfo,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxInfo")
 		os.Exit(1)

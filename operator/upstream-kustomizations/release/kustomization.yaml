@@ -15,6 +15,25 @@ patches:
       - op: add
         path: /spec/progressDeadlineSeconds
         value: 2147483647
+  # Remove OpenShift-specific annotations as cert-manager is used for creating and injecting TLS secrets
+  - target:
+      kind: ValidatingWebhookConfiguration
+      name: release-service-validating-webhook-configuration
+    patch: |-
+      - op: remove
+        path: /metadata/annotations/service.beta.openshift.io~1inject-cabundle
+  - target:
+      kind: MutatingWebhookConfiguration
+      name: release-service-mutating-webhook-configuration
+    patch: |-
+      - op: remove
+        path: /metadata/annotations/service.beta.openshift.io~1inject-cabundle
+  - target:
+      kind: Service
+      name: release-service-webhook-service
+    patch: |-
+      - op: remove
+        path: /metadata/annotations/service.beta.openshift.io~1serving-cert-secret-name
 
 replacements:
   - source: # Add cert-manager annotation to ValidatingWebhookConfiguration, MutatingWebhookConfiguration and CRDs

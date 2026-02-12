@@ -143,20 +143,23 @@ func (r *KonfluxInternalRegistryReconciler) applyManifests(ctx context.Context, 
 	for _, obj := range objects {
 		// Apply with ownership - automatically sets labels, owner reference, and tracks
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
-			// Only skip if it's specifically a "CRD not installed" error.
+			// Only skip if it's specifically a "CRD not installed" error for trust-manager (Bundle).
 			// This prevents masking real reconciliation failures like RBAC denials,
 			// validation errors, or resource conflicts.
+			// Note: cert-manager errors should propagate (CRDs are installed in test environment).
 			if tracking.IsNoKindMatchError(err) {
 				gvk := obj.GetObjectKind().GroupVersionKind()
-				log.Info("Skipping resource: CRD not installed (test environment)",
-					"kind", gvk.Kind,
-					"apiVersion", gvk.GroupVersion().String(),
-					"namespace", obj.GetNamespace(),
-					"name", obj.GetName(),
-				)
-				continue
+				// Only ignore trust-manager (Bundle) errors, not cert-manager errors
+				if gvk.Group == "trust.cert-manager.io" {
+					log.Info("Skipping resource: CRD not installed (test environment)",
+						"kind", gvk.Kind,
+						"apiVersion", gvk.GroupVersion().String(),
+						"namespace", obj.GetNamespace(),
+						"name", obj.GetName(),
+					)
+					continue
+				}
 			}
-			// All other errors should fail the reconciliation
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
 				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), manifests.Registry, err)
 		}

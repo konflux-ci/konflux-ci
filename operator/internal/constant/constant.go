@@ -24,6 +24,8 @@ const (
 	KonfluxComponentLabel = "konflux.konflux-ci.dev/component"
 	// ConditionTypeReady is the condition type for overall readiness
 	ConditionTypeReady = "Ready"
+	// ConditionTypeCertManagerAvailable is the condition type for cert-manager availability
+	ConditionTypeCertManagerAvailable = "CertManagerAvailable"
 	// CertManagerGroup is the API group for cert-manager resources
 	CertManagerGroup = "cert-manager.io"
 	// KyvernoGroup is the API group for Kyverno resources

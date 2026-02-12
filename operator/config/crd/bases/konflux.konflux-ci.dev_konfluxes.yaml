@@ -405,6 +405,62 @@ spec:
                               type: object
                             type: array
                         type: object
+                      clusterConfig:
+                        description: |-
+                          ClusterConfig defines cluster-wide key-value configuration.
+                          The key-value pairs will be stored in a ConfigMap named "cluster-config"
+                          in the "konflux-info" namespace, readable by all authenticated users.
+                          User-provided values take precedence over auto-detected values.
+                        properties:
+                          data:
+                            description: |-
+                              Data contains structured cluster-wide configuration values.
+                              These values will be stored in the "cluster-config" ConfigMap in the "konflux-info" namespace.
+                              The ConfigMap keys are stable and part of the public API consumed by PipelineRuns.
+                              WARNING: Changing field names or JSON tags is a BREAKING CHANGE that will affect
+                              all PipelineRuns reading from the ConfigMap. Field names must remain stable.
+                            properties:
+                              defaultOIDCIssuer:
+                                description: DefaultOIDCIssuer is the default OIDC
+                                  issuer URL.
+                                type: string
+                              enableKeylessSigning:
+                                description: |-
+                                  EnableKeylessSigning determines if pipelines should perform/validate keyless signing.
+                                  When nil, the key is omitted from the ConfigMap (unset).
+                                type: boolean
+                              fulcioExternalUrl:
+                                description: FulcioExternalUrl is the external Fulcio
+                                  URL.
+                                type: string
+                              fulcioInternalUrl:
+                                description: FulcioInternalUrl is the internal Fulcio
+                                  URL.
+                                type: string
+                              rekorExternalUrl:
+                                description: RekorExternalUrl is the external Rekor
+                                  URL.
+                                type: string
+                              rekorInternalUrl:
+                                description: RekorInternalUrl is the internal Rekor
+                                  URL.
+                                type: string
+                              trustifyServerExternalUrl:
+                                description: TrustifyServerExternalUrl is the external
+                                  URL for the Trustify server.
+                                type: string
+                              trustifyServerInternalUrl:
+                                description: TrustifyServerInternalUrl is the internal
+                                  URL for the Trustify server.
+                                type: string
+                              tufExternalUrl:
+                                description: TufExternalUrl is the external TUF URL.
+                                type: string
+                              tufInternalUrl:
+                                description: TufInternalUrl is the internal TUF URL.
+                                type: string
+                            type: object
+                        type: object
                       publicInfo:
                         description: |-
                           PublicInfo defines the configuration for the info.json ConfigMap.
@@ -1731,7 +1787,10 @@ spec:
                             type: boolean
                           host:
                             description: |-
-                              Host is the hostname to use for the ingress.
+                              Host is the hostname used as the endpoint for configuring oauth2-proxy, dex, and related components.
+                              When set, this hostname is always used regardless of whether ingress is enabled,
+                              allowing users who manage their own external routing (e.g., Gateway API, hardware LB)
+                              to configure the endpoint without the operator managing an Ingress resource.
                               On OpenShift, if empty, the default ingress domain and naming convention will be used.
                             type: string
                           ingressClassName:

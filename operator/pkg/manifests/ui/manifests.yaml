@@ -429,7 +429,7 @@ spec:
         - daemon off;
         - -c
         - /etc/nginx/nginx.conf
-        image: registry.access.redhat.com/ubi9/nginx-124@sha256:f3e0afbc6e1459a63b87ded4666b6ea3fa59a5d146d6bfa39995af936b1fb9f3
+        image: registry.access.redhat.com/ubi9/nginx-124@sha256:b9c2c8657761ea521f49ade5b330e5f81ac03372a093588f142de736e13336af
         livenessProbe:
           failureThreshold: 3
           httpGet:
@@ -628,14 +628,28 @@ spec:
   dnsNames:
   - localhost
   - dex.konflux-ui
+  - dex.konflux-ui.svc.cluster.local
   isCA: true
   issuerRef:
-    kind: ClusterIssuer
-    name: self-signed-cluster-issuer
+    kind: Issuer
+    name: ui-ca-issuer
   secretName: dex-cert
   subject:
     organizations:
     - konflux
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: oauth2-proxy-cert
+  namespace: konflux-ui
+spec:
+  dnsNames:
+  - localhost
+  issuerRef:
+    kind: Issuer
+    name: ui-ca-issuer
+  secretName: oauth2-proxy-cert
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -648,6 +662,32 @@ spec:
   - proxy.konflux-ui.svc
   - proxy.konflux-ui.svc.cluster.local
   issuerRef:
+    kind: Issuer
+    name: ui-ca-issuer
+  secretName: serving-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ui-ca
+  namespace: konflux-ui
+spec:
+  commonName: ui-ca
+  isCA: true
+  issuerRef:
+    group: cert-manager.io
     kind: ClusterIssuer
     name: self-signed-cluster-issuer
-  secretName: serving-cert
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  secretName: ui-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: ui-ca-issuer
+  namespace: konflux-ui
+spec:
+  ca:
+    secretName: ui-ca

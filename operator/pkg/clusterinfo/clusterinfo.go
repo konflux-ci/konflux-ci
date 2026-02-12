@@ -21,6 +21,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
@@ -48,11 +49,10 @@ func (p Platform) IsOpenShift() bool {
 	return p == OpenShift
 }
 
-// Info holds cluster environment information including platform, version, and capabilities.
+// Info holds cluster environment information including platform and capabilities.
 type Info struct {
-	platform   Platform
-	k8sVersion *version.Info
-	client     DiscoveryClient
+	platform Platform
+	client   DiscoveryClient
 }
 
 // Detect discovers cluster information by querying the Kubernetes API.
@@ -82,13 +82,6 @@ func DetectWithClient(client DiscoveryClient) (*Info, error) {
 		info.platform = Default
 	}
 
-	// Get K8s version
-	serverVersion, err := client.ServerVersion()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get server version: %w", err)
-	}
-	info.k8sVersion = serverVersion
-
 	return info, nil
 }
 
@@ -103,30 +96,69 @@ func (i *Info) IsOpenShift() bool {
 }
 
 // K8sVersion returns the Kubernetes version info.
-func (i *Info) K8sVersion() *version.Info {
-	return i.k8sVersion
+func (i *Info) K8sVersion() (*version.Info, error) {
+	return i.client.ServerVersion()
 }
 
 // HasResource checks if a specific resource kind exists in the given API group version.
+// Returns true if the resource exists, false if it doesn't exist.
+// If an error occurs (e.g., RBAC, network issues), it returns false with the error
+// to allow callers to distinguish between "not found" and "check failed".
 func (i *Info) HasResource(groupVersion, kind string) (bool, error) {
+	has, err := i.HasAllResources(groupVersion, []string{kind})
+	if err != nil {
+		return false, err
+	}
+	return has, nil
+}
+
+// HasAllResources checks if all specified resource kinds exist in the given API group version.
+// Returns true only if ALL specified kinds exist, false if any are missing.
+// If an error occurs (e.g., RBAC, network issues), it returns false with the error
+// to allow callers to distinguish between "not found" and "check failed".
+// This method makes a single API call, making it more efficient than calling HasResource
+// multiple times for resources in the same group version.
+func (i *Info) HasAllResources(groupVersion string, kinds []string) (bool, error) {
 	resourceList, err := i.client.ServerResourcesForGroupVersion(groupVersion)
 	if err != nil {
-		// If the group doesn't exist, the resource doesn't exist
-		return false, nil
+		// If NotFound, the resources don't exist
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		// Other errors (RBAC, network) should be propagated
+		return false, fmt.Errorf("failed to check %s resources: %w", groupVersion, err)
 	}
 
+	// Build a set of available resource kinds
+	availableKinds := sets.New[string]()
 	for _, resource := range resourceList.APIResources {
-		if resource.Kind == kind {
-			return true, nil
+		availableKinds.Insert(resource.Kind)
+	}
+
+	// Check if all required kinds exist
+	for _, kind := range kinds {
+		if !availableKinds.Has(kind) {
+			return false, nil
 		}
 	}
 
-	return false, nil
+	return true, nil
 }
 
 // HasTekton checks if Tekton Pipelines is installed.
 func (i *Info) HasTekton() (bool, error) {
 	return i.HasResource("tekton.dev/v1", "Pipeline")
+}
+
+// HasCertManager checks if cert-manager is installed by verifying that all required
+// cert-manager resources exist. Returns true only if ALL required resources are present:
+// - Certificate (cert-manager.io/v1)
+// - Issuer (cert-manager.io/v1)
+// - ClusterIssuer (cert-manager.io/v1)
+//
+// This function uses HasAllResources to check all required resources in a single API call.
+func (i *Info) HasCertManager() (bool, error) {
+	return i.HasAllResources("cert-manager.io/v1", []string{"Certificate", "Issuer", "ClusterIssuer"})
 }
 
 // detectOpenShift checks if the operator is running on OpenShift by

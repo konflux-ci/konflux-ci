@@ -748,7 +748,7 @@ spec:
                   Application is the name of the application resource that the component belongs to.
                   Optional.
                   !!! Will be removed when we remove old model
-                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                 type: string
               build-nudges-ref:
                 description: |-
@@ -764,7 +764,7 @@ spec:
                   Optional.
                   !!! Will be removed when we remove old model
                 maxLength: 63
-                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                 type: string
               containerImage:
                 description: |-

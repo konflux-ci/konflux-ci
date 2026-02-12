@@ -299,6 +299,255 @@ var _ = Describe("Conditions Helper Functions", func() {
 			Expect(condition.Reason).To(Equal("ComponentsNotReady"))
 			Expect(condition.Message).To(ContainSubstring("component-2 is not ready"))
 		})
+
+		It("should set Ready to True when all components are ready, even with Unknown dependency condition", func() {
+			// Simulate a scenario where a dependency check failed (Unknown status)
+			// but all sub-CRs are ready. Ready should be True based on sub-CR statuses.
+			SetCondition(testObject, metav1.Condition{
+				Type:    "DependencyAvailable",
+				Status:  metav1.ConditionUnknown,
+				Reason:  "DependencyCheckFailed",
+				Message: "Failed to check dependency availability",
+			})
+
+			subCRStatuses := []SubCRStatus{
+				{Name: "component-1", Ready: true},
+				{Name: "component-2", Ready: true},
+			}
+
+			SetAggregatedReadyCondition(testObject, subCRStatuses)
+
+			// Ready should be True because all sub-CRs are ready
+			// Unknown dependency status should not block Ready
+			readyCondition := apimeta.FindStatusCondition(testObject.GetConditions(), TypeReady)
+			Expect(readyCondition).NotTo(BeNil())
+			Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(readyCondition.Reason).To(Equal("AllComponentsReady"))
+			Expect(readyCondition.Message).To(Equal("All 2 components are ready"))
+
+			// Verify the Unknown dependency condition is still present
+			dependencyCondition := apimeta.FindStatusCondition(testObject.GetConditions(), "DependencyAvailable")
+			Expect(dependencyCondition).NotTo(BeNil())
+			Expect(dependencyCondition.Status).To(Equal(metav1.ConditionUnknown))
+		})
+
+		It("should set Ready to False when dependency condition is False, even if all components are ready", func() {
+			// Simulate a scenario where a dependency is explicitly missing (False status)
+			// Ready should be False even if all sub-CRs are ready.
+			SetCondition(testObject, metav1.Condition{
+				Type:    "DependencyAvailable",
+				Status:  metav1.ConditionFalse,
+				Reason:  "DependencyMissing",
+				Message: "Required dependency is not installed",
+			})
+
+			subCRStatuses := []SubCRStatus{
+				{Name: "component-1", Ready: true},
+				{Name: "component-2", Ready: true},
+			}
+
+			SetAggregatedReadyCondition(testObject, subCRStatuses)
+
+			// Ready should be True initially based on sub-CRs
+			readyCondition := apimeta.FindStatusCondition(testObject.GetConditions(), TypeReady)
+			Expect(readyCondition).NotTo(BeNil())
+			Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(readyCondition.Reason).To(Equal("AllComponentsReady"))
+
+			// Now test the override logic
+			OverrideReadyIfDependencyFalse(testObject, []DependencyOverride{
+				{
+					ConditionType: "DependencyAvailable",
+					Reason:        "DependencyMissing",
+					Message:       "Required dependency is not installed",
+				},
+			})
+
+			// Ready should now be False due to dependency override
+			readyCondition = apimeta.FindStatusCondition(testObject.GetConditions(), TypeReady)
+			Expect(readyCondition).NotTo(BeNil())
+			Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(readyCondition.Reason).To(Equal("DependencyMissing"))
+			Expect(readyCondition.Message).To(Equal("Required dependency is not installed"))
+		})
+	})
+
+	Describe("OverrideReadyIfDependencyFalse", func() {
+		var testObject *konfluxv1alpha1.KonfluxRBAC
+
+		BeforeEach(func() {
+			testObject = &konfluxv1alpha1.KonfluxRBAC{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-rbac",
+					Namespace:  "default",
+					Generation: 1,
+				},
+			}
+		})
+
+		It("should override Ready to False when dependency condition is False", func() {
+			// Set Ready to True first
+			SetCondition(testObject, metav1.Condition{
+				Type:    TypeReady,
+				Status:  metav1.ConditionTrue,
+				Reason:  ReasonAllComponentsReady,
+				Message: "All components are ready",
+			})
+
+			// Set dependency condition to False
+			SetCondition(testObject, metav1.Condition{
+				Type:    "CertManagerAvailable",
+				Status:  metav1.ConditionFalse,
+				Reason:  ReasonCertManagerNotInstalled,
+				Message: "cert-manager is not installed",
+			})
+
+			OverrideReadyIfDependencyFalse(testObject, []DependencyOverride{
+				{
+					ConditionType: "CertManagerAvailable",
+					Reason:        ReasonCertManagerNotInstalled,
+					Message:       "cert-manager CRDs are not installed",
+				},
+			})
+
+			readyCondition := apimeta.FindStatusCondition(testObject.GetConditions(), TypeReady)
+			Expect(readyCondition).NotTo(BeNil())
+			Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(readyCondition.Reason).To(Equal(ReasonCertManagerNotInstalled))
+			Expect(readyCondition.Message).To(Equal("cert-manager CRDs are not installed"))
+		})
+
+		It("should not override Ready when dependency condition is Unknown", func() {
+			// Set Ready to True first
+			SetCondition(testObject, metav1.Condition{
+				Type:    TypeReady,
+				Status:  metav1.ConditionTrue,
+				Reason:  ReasonAllComponentsReady,
+				Message: "All components are ready",
+			})
+
+			// Set dependency condition to Unknown
+			SetCondition(testObject, metav1.Condition{
+				Type:    "CertManagerAvailable",
+				Status:  metav1.ConditionUnknown,
+				Reason:  ReasonCertManagerInstallationCheckFailed,
+				Message: "Failed to check cert-manager availability",
+			})
+
+			OverrideReadyIfDependencyFalse(testObject, []DependencyOverride{
+				{
+					ConditionType: "CertManagerAvailable",
+					Reason:        ReasonCertManagerNotInstalled,
+					Message:       "cert-manager CRDs are not installed",
+				},
+			})
+
+			// Ready should remain True
+			readyCondition := apimeta.FindStatusCondition(testObject.GetConditions(), TypeReady)
+			Expect(readyCondition).NotTo(BeNil())
+			Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(readyCondition.Reason).To(Equal(ReasonAllComponentsReady))
+		})
+
+		It("should not override Ready when dependency condition is True", func() {
+			// Set Ready to True first
+			SetCondition(testObject, metav1.Condition{
+				Type:    TypeReady,
+				Status:  metav1.ConditionTrue,
+				Reason:  ReasonAllComponentsReady,
+				Message: "All components are ready",
+			})
+
+			// Set dependency condition to True
+			SetCondition(testObject, metav1.Condition{
+				Type:    "CertManagerAvailable",
+				Status:  metav1.ConditionTrue,
+				Reason:  "CertManagerInstalled",
+				Message: "cert-manager is installed",
+			})
+
+			OverrideReadyIfDependencyFalse(testObject, []DependencyOverride{
+				{
+					ConditionType: "CertManagerAvailable",
+					Reason:        ReasonCertManagerNotInstalled,
+					Message:       "cert-manager CRDs are not installed",
+				},
+			})
+
+			// Ready should remain True
+			readyCondition := apimeta.FindStatusCondition(testObject.GetConditions(), TypeReady)
+			Expect(readyCondition).NotTo(BeNil())
+			Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(readyCondition.Reason).To(Equal(ReasonAllComponentsReady))
+		})
+
+		It("should not override Ready when dependency condition does not exist", func() {
+			// Set Ready to True first
+			SetCondition(testObject, metav1.Condition{
+				Type:    TypeReady,
+				Status:  metav1.ConditionTrue,
+				Reason:  ReasonAllComponentsReady,
+				Message: "All components are ready",
+			})
+
+			OverrideReadyIfDependencyFalse(testObject, []DependencyOverride{
+				{
+					ConditionType: "CertManagerAvailable",
+					Reason:        ReasonCertManagerNotInstalled,
+					Message:       "cert-manager CRDs are not installed",
+				},
+			})
+
+			// Ready should remain True
+			readyCondition := apimeta.FindStatusCondition(testObject.GetConditions(), TypeReady)
+			Expect(readyCondition).NotTo(BeNil())
+			Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(readyCondition.Reason).To(Equal(ReasonAllComponentsReady))
+		})
+
+		It("should override with first False dependency when multiple dependencies are provided", func() {
+			// Set Ready to True first
+			SetCondition(testObject, metav1.Condition{
+				Type:    TypeReady,
+				Status:  metav1.ConditionTrue,
+				Reason:  ReasonAllComponentsReady,
+				Message: "All components are ready",
+			})
+
+			// Set multiple dependency conditions to False
+			SetCondition(testObject, metav1.Condition{
+				Type:    "Dependency1Available",
+				Status:  metav1.ConditionFalse,
+				Reason:  "Dependency1Missing",
+				Message: "Dependency 1 is not installed",
+			})
+			SetCondition(testObject, metav1.Condition{
+				Type:    "Dependency2Available",
+				Status:  metav1.ConditionFalse,
+				Reason:  "Dependency2Missing",
+				Message: "Dependency 2 is not installed",
+			})
+
+			OverrideReadyIfDependencyFalse(testObject, []DependencyOverride{
+				{
+					ConditionType: "Dependency1Available",
+					Reason:        "Dependency1Missing",
+					Message:       "Dependency 1 is not installed",
+				},
+				{
+					ConditionType: "Dependency2Available",
+					Reason:        "Dependency2Missing",
+					Message:       "Dependency 2 is not installed",
+				},
+			})
+
+			// Ready should be False with first dependency's reason/message
+			readyCondition := apimeta.FindStatusCondition(testObject.GetConditions(), TypeReady)
+			Expect(readyCondition).NotTo(BeNil())
+			Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(readyCondition.Reason).To(Equal("Dependency1Missing"))
+			Expect(readyCondition.Message).To(Equal("Dependency 1 is not installed"))
+		})
 	})
 
 	Describe("SetFailedCondition", func() {

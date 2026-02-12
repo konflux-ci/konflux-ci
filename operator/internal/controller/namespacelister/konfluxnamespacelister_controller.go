@@ -163,9 +163,8 @@ func (r *KonfluxNamespaceListerReconciler) applyManifests(ctx context.Context, t
 		// Apply with ownership using the tracking client
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			gvk := obj.GetObjectKind().GroupVersionKind()
-			if gvk.Group == constant.CertManagerGroup || gvk.Group == constant.KyvernoGroup {
-				// TODO: Remove this once we decide how to install cert-manager crds in envtest
-				// TODO: Remove this once we decide if we want to have a dependency on Kyverno
+			// TODO: Remove this once we decide if we want to have a dependency on Kyverno
+			if gvk.Group == constant.KyvernoGroup {
 				log.Info("Skipping resource: CRD not installed",
 					"kind", gvk.Kind,
 					"apiVersion", gvk.GroupVersion().String(),

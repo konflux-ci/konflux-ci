@@ -588,7 +588,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			By("verifying the Ingress has OpenShift TLS annotations")
 			ing := getIngress(ctx)
 			Expect(ing.Annotations).To(HaveKeyWithValue(
-				"route.openshift.io/destination-ca-certificate-secret", "serving-cert"))
+				"route.openshift.io/destination-ca-certificate-secret", "ui-ca"))
 			Expect(ing.Annotations).To(HaveKeyWithValue(
 				"route.openshift.io/termination", "reencrypt"))
 		})

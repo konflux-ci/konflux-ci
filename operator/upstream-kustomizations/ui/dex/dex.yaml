@@ -12,10 +12,27 @@ spec:
   dnsNames:
   - localhost
   - dex.konflux-ui
+  - dex.konflux-ui.svc.cluster.local
   issuerRef:
-    kind: ClusterIssuer
-    name: self-signed-cluster-issuer
+    kind: Issuer
+    name: ui-ca-issuer
   secretName: dex-cert
+---
+# CA Bundle Certificate for oauth2-proxy to verify Dex's TLS certificate.
+# This minimal certificate provides the CA (ca.crt) needed by oauth2-proxy for proper TLS verification.
+# Uses the same namespace CA Issuer as dex-cert so that ca.crt contains the
+# correct CA for verifying Dex's TLS chain.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: oauth2-proxy-cert
+spec:
+  secretName: oauth2-proxy-cert
+  issuerRef:
+    name: ui-ca-issuer
+    kind: Issuer
+  dnsNames:
+    - localhost
 ---
 apiVersion: apps/v1
 kind: Deployment

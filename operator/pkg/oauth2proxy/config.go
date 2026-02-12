@@ -30,6 +30,22 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 )
 
+const (
+	// CABundleVolumeName is the name of the volume containing the CA bundle
+	CABundleVolumeName = "ca-bundle"
+	// CABundleSecretName is the name of the Secret containing the CA bundle
+	CABundleSecretName = "oauth2-proxy-cert"
+	// CABundleSecretKey is the key in the Secret containing the CA certificate
+	CABundleSecretKey = "ca.crt"
+	// CABundleFilename is the filename used in the projected volume for the CA certificate
+	CABundleFilename = "ca-bundle.crt"
+	// CABundleMountDir is the directory where the CA bundle is mounted
+	CABundleMountDir = "/etc/ssl/certs"
+	// CABundleMountPath is the full path where the CA bundle file is located in the container
+	// The file is projected into a directory mount to enable automatic rotation
+	CABundleMountPath = CABundleMountDir + "/" + CABundleFilename
+)
+
 var (
 	// dexInternalURL is the internal Dex service URL used for token redemption and JWKS.
 	dexInternalURL = &url.URL{
@@ -100,12 +116,24 @@ func WithAuthSettings() customization.ContainerOption {
 
 // --- TLS Configuration ---
 
-// WithTLSSkipVerify configures TLS to skip certificate verification.
-// This is needed for communication with internal Dex using self-signed certificates.
-func WithTLSSkipVerify() customization.ContainerOption {
-	return customization.WithEnv(
-		corev1.EnvVar{Name: "OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY", Value: "true"},
-	)
+// WithCABundle configures TLS to use a custom CA bundle for certificate verification.
+// Adds the volume mount and environment variable for the CA bundle.
+func WithCABundle() customization.ContainerOption {
+	return func(c *corev1.Container, ctx customization.DeploymentContext) {
+		// Add volume mount for CA bundle.
+		// Mount to directory (not subPath) to enable automatic certificate rotation.
+		// The projected volume ensures only ca.crt is accessible (not tls.key).
+		customization.WithVolumeMounts(corev1.VolumeMount{
+			Name:      CABundleVolumeName,
+			MountPath: CABundleMountDir,
+			ReadOnly:  true,
+		})(c, ctx)
+		// Set OAUTH2_PROXY_PROVIDER_CA_FILES to trust the CA for OIDC provider (Dex) connections.
+		// Points to the specific file within the mounted directory.
+		customization.WithEnv(
+			corev1.EnvVar{Name: "OAUTH2_PROXY_PROVIDER_CA_FILES", Value: CABundleMountPath},
+		)(c, ctx)
+	}
 }
 
 // --- Email Verification ---

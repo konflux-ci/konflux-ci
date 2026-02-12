@@ -17,6 +17,9 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"maps"
+	"strconv"
+
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -35,6 +38,13 @@ type KonfluxInfoSpec struct {
 	// If not specified, an empty banner array will be used.
 	// +optional
 	Banner *Banner `json:"banner,omitempty"`
+
+	// ClusterConfig defines cluster-wide key-value configuration.
+	// The key-value pairs will be stored in a ConfigMap named "cluster-config"
+	// in the "konflux-info" namespace, readable by all authenticated users.
+	// User-provided values take precedence over auto-detected values.
+	// +optional
+	ClusterConfig *ClusterConfig `json:"clusterConfig,omitempty"`
 }
 
 // Banner contains banner configuration
@@ -193,6 +203,134 @@ type BannerItem struct {
 	DayOfMonth *int `json:"dayOfMonth,omitempty"`
 }
 
+// ClusterConfig contains cluster-wide key-value configuration.
+type ClusterConfig struct {
+	// Data contains structured cluster-wide configuration values.
+	// These values will be stored in the "cluster-config" ConfigMap in the "konflux-info" namespace.
+	// The ConfigMap keys are stable and part of the public API consumed by PipelineRuns.
+	// WARNING: Changing field names or JSON tags is a BREAKING CHANGE that will affect
+	// all PipelineRuns reading from the ConfigMap. Field names must remain stable.
+	// +optional
+	Data *ClusterConfigData `json:"data,omitempty"`
+}
+
+// ClusterConfigData contains the structured fields for cluster configuration.
+// The field names (and their JSON tags) directly map to ConfigMap keys that are
+// read by PipelineRuns. These keys are part of the stable API and must not change
+// without a major version release.
+type ClusterConfigData struct {
+	// DefaultOIDCIssuer is the default OIDC issuer URL.
+	// +optional
+	DefaultOIDCIssuer string `json:"defaultOIDCIssuer,omitempty"`
+
+	// EnableKeylessSigning determines if pipelines should perform/validate keyless signing.
+	// When nil, the key is omitted from the ConfigMap (unset).
+	// +optional
+	EnableKeylessSigning *bool `json:"enableKeylessSigning,omitempty"`
+
+	// FulcioInternalUrl is the internal Fulcio URL.
+	// +optional
+	FulcioInternalUrl string `json:"fulcioInternalUrl,omitempty"`
+
+	// FulcioExternalUrl is the external Fulcio URL.
+	// +optional
+	FulcioExternalUrl string `json:"fulcioExternalUrl,omitempty"`
+
+	// RekorInternalUrl is the internal Rekor URL.
+	// +optional
+	RekorInternalUrl string `json:"rekorInternalUrl,omitempty"`
+
+	// RekorExternalUrl is the external Rekor URL.
+	// +optional
+	RekorExternalUrl string `json:"rekorExternalUrl,omitempty"`
+
+	// TufInternalUrl is the internal TUF URL.
+	// +optional
+	TufInternalUrl string `json:"tufInternalUrl,omitempty"`
+
+	// TufExternalUrl is the external TUF URL.
+	// +optional
+	TufExternalUrl string `json:"tufExternalUrl,omitempty"`
+
+	// TrustifyServerInternalUrl is the internal URL for the Trustify server.
+	// +optional
+	TrustifyServerInternalUrl string `json:"trustifyServerInternalUrl,omitempty"`
+
+	// TrustifyServerExternalUrl is the external URL for the Trustify server.
+	// +optional
+	TrustifyServerExternalUrl string `json:"trustifyServerExternalUrl,omitempty"`
+}
+
+// All is an iterator that yields all non-empty key-value pairs from ClusterConfigData.
+// This enables using maps.Collect to convert the struct to a map[string]string.
+// The keys match the ConfigMap keys used in the cluster-config ConfigMap.
+func (d ClusterConfigData) All(yield func(key, value string) bool) {
+	if d.DefaultOIDCIssuer != "" {
+		if !yield("defaultOIDCIssuer", d.DefaultOIDCIssuer) {
+			return
+		}
+	}
+	if d.EnableKeylessSigning != nil {
+		if !yield("enableKeylessSigning", strconv.FormatBool(*d.EnableKeylessSigning)) {
+			return
+		}
+	}
+	if d.FulcioInternalUrl != "" {
+		if !yield("fulcioInternalUrl", d.FulcioInternalUrl) {
+			return
+		}
+	}
+	if d.FulcioExternalUrl != "" {
+		if !yield("fulcioExternalUrl", d.FulcioExternalUrl) {
+			return
+		}
+	}
+	if d.RekorInternalUrl != "" {
+		if !yield("rekorInternalUrl", d.RekorInternalUrl) {
+			return
+		}
+	}
+	if d.RekorExternalUrl != "" {
+		if !yield("rekorExternalUrl", d.RekorExternalUrl) {
+			return
+		}
+	}
+	if d.TufInternalUrl != "" {
+		if !yield("tufInternalUrl", d.TufInternalUrl) {
+			return
+		}
+	}
+	if d.TufExternalUrl != "" {
+		if !yield("tufExternalUrl", d.TufExternalUrl) {
+			return
+		}
+	}
+	if d.TrustifyServerInternalUrl != "" {
+		if !yield("trustifyServerInternalUrl", d.TrustifyServerInternalUrl) {
+			return
+		}
+	}
+	if d.TrustifyServerExternalUrl != "" {
+		if !yield("trustifyServerExternalUrl", d.TrustifyServerExternalUrl) {
+			return
+		}
+	}
+}
+
+// MergeOver merges this ClusterConfigData over the base, returning a map.
+// Values from this struct override values from base when both are non-empty.
+// This is useful for merging discovered values (base) with user-provided values (this).
+// The returned map can be directly used as ConfigMap.Data.
+func (d ClusterConfigData) MergeOver(base ClusterConfigData) map[string]string {
+	baseMap := maps.Collect(base.All)
+	overrideMap := maps.Collect(d.All)
+
+	result := make(map[string]string)
+	maps.Copy(result, baseMap)
+	maps.Copy(result, overrideMap)
+	return result
+}
+
 // KonfluxInfoStatus defines the observed state of KonfluxInfo.
 type KonfluxInfoStatus struct {
 	// Conditions represent the latest available observations of the KonfluxInfo state
@@ -232,6 +370,20 @@ func (k *KonfluxInfo) GetConditions() []metav1.Condition {
 // SetConditions sets the conditions on the KonfluxInfo status.
 func (k *KonfluxInfo) SetConditions(conditions []metav1.Condition) {
 	k.Status.Conditions = conditions
+}
+
+// -----------------------------------------------------------------------------
+// Spec Accessor Methods
+// These methods provide safe access to optional fields with sensible defaults,
+// reducing nil checks throughout the codebase.
+// -----------------------------------------------------------------------------
+
+// GetClusterConfigData returns the ClusterConfigData with safe defaults if nil.
+func (s *KonfluxInfoSpec) GetClusterConfigData() ClusterConfigData {
+	if s.ClusterConfig == nil || s.ClusterConfig.Data == nil {
+		return ClusterConfigData{}
+	}
+	return *s.ClusterConfig.Data
 }
 
 func init() {

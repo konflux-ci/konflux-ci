@@ -36,7 +36,9 @@
       "registryUrls": ["https://charts.jetstack.io"]
     }
   ],
-  "enabledManagers": ["regex", "kustomize", "github-actions", "gomod", "dockerfile"],
+  "tekton": {
+    "fileMatch": ["^\\.tekton/.*\\.ya?ml$"]
+  },
   "customManagers": [
     {
       "customType": "regex",

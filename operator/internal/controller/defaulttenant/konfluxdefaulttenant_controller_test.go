@@ -144,28 +144,6 @@ var _ = Describe("KonfluxDefaultTenant Controller", func() {
 			Expect(ns.Labels).To(HaveKeyWithValue("konflux-ci.dev/type", "tenant"))
 		})
 
-		It("should create the trusted-ca ConfigMap", func() {
-			By("creating the custom resource")
-			resource := &konfluxv1alpha1.KonfluxDefaultTenant{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: CRName,
-				},
-			}
-			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-
-			By("Reconciling the created resource")
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Verifying the trusted-ca ConfigMap was created")
-			cm := &corev1.ConfigMap{}
-			err = k8sClient.Get(ctx, types.NamespacedName{Name: "trusted-ca", Namespace: "default-tenant"}, cm)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cm.Labels).To(HaveKeyWithValue("config.openshift.io/inject-trusted-cabundle", "true"))
-		})
-
 		It("should create the konflux-integration-runner ServiceAccount", func() {
 			By("creating the custom resource")
 			resource := &konfluxv1alpha1.KonfluxDefaultTenant{

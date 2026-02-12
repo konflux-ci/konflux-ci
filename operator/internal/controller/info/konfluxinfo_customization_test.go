@@ -735,6 +735,393 @@ func TestKonfluxInfoEdgeCases(t *testing.T) {
 	})
 }
 
+func TestKonfluxInfoClusterConfig(t *testing.T) {
+	// Skip if k8sClient is not initialized (tests need to run as part of Ginkgo suite)
+	if k8sClient == nil || objectStore == nil {
+		t.Skip("Skipping test: k8sClient or objectStore not initialized. Run tests via Ginkgo suite.")
+	}
+
+	ctx := context.Background()
+	typeNamespacedName := types.NamespacedName{
+		Name: CRName,
+	}
+
+	t.Run("should create cluster-config ConfigMap with user-provided values", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		// Create KonfluxInfo with ClusterConfig
+		resource := &konfluxv1alpha1.KonfluxInfo{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+			},
+			Spec: konfluxv1alpha1.KonfluxInfoSpec{
+				ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+					Data: &konfluxv1alpha1.ClusterConfigData{
+						DefaultOIDCIssuer: "https://oidc.example.com",
+						FulcioInternalUrl: "https://fulcio-internal.example.com",
+						FulcioExternalUrl: "https://fulcio-external.example.com",
+						RekorInternalUrl:  "https://rekor-internal.example.com",
+						RekorExternalUrl:  "https://rekor-external.example.com",
+						TufInternalUrl:    "https://tuf-internal.example.com",
+						TufExternalUrl:    "https://tuf-external.example.com",
+					},
+				},
+			},
+		}
+		err := k8sClient.Create(ctx, resource)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		defer func() {
+			_ = k8sClient.Delete(ctx, resource)
+		}()
+
+		// Reconcile
+		controllerReconciler := &KonfluxInfoReconciler{
+			Client:      k8sClient,
+			Scheme:      k8sClient.Scheme(),
+			ObjectStore: objectStore,
+		}
+		_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: typeNamespacedName,
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// Verify cluster-config ConfigMap was created
+		clusterConfigMap := &corev1.ConfigMap{}
+		err = k8sClient.Get(ctx, types.NamespacedName{
+			Name:      clusterConfigMapName,
+			Namespace: infoNamespace,
+		}, clusterConfigMap)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKey("defaultOIDCIssuer"))
+		g.Expect(clusterConfigMap.Data["defaultOIDCIssuer"]).To(gomega.Equal("https://oidc.example.com"))
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKey("fulcioInternalUrl"))
+		g.Expect(clusterConfigMap.Data["fulcioInternalUrl"]).To(gomega.Equal("https://fulcio-internal.example.com"))
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKey("fulcioExternalUrl"))
+		g.Expect(clusterConfigMap.Data["fulcioExternalUrl"]).To(gomega.Equal("https://fulcio-external.example.com"))
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKey("rekorInternalUrl"))
+		g.Expect(clusterConfigMap.Data["rekorInternalUrl"]).To(gomega.Equal("https://rekor-internal.example.com"))
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKey("rekorExternalUrl"))
+		g.Expect(clusterConfigMap.Data["rekorExternalUrl"]).To(gomega.Equal("https://rekor-external.example.com"))
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKey("tufInternalUrl"))
+		g.Expect(clusterConfigMap.Data["tufInternalUrl"]).To(gomega.Equal("https://tuf-internal.example.com"))
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKey("tufExternalUrl"))
+		g.Expect(clusterConfigMap.Data["tufExternalUrl"]).To(gomega.Equal("https://tuf-external.example.com"))
+	})
+
+	t.Run("should create empty cluster-config ConfigMap when ClusterConfig is not specified", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		// Create KonfluxInfo without ClusterConfig
+		resource := &konfluxv1alpha1.KonfluxInfo{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+			},
+			Spec: konfluxv1alpha1.KonfluxInfoSpec{},
+		}
+		err := k8sClient.Create(ctx, resource)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		defer func() {
+			_ = k8sClient.Delete(ctx, resource)
+		}()
+
+		// Reconcile
+		controllerReconciler := &KonfluxInfoReconciler{
+			Client:      k8sClient,
+			Scheme:      k8sClient.Scheme(),
+			ObjectStore: objectStore,
+		}
+		_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: typeNamespacedName,
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// Verify cluster-config ConfigMap exists with empty data
+		clusterConfigMap := &corev1.ConfigMap{}
+		err = k8sClient.Get(ctx, types.NamespacedName{
+			Name:      clusterConfigMapName,
+			Namespace: infoNamespace,
+		}, clusterConfigMap)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.BeNil())
+		g.Expect(clusterConfigMap.Data).To(gomega.BeEmpty())
+	})
+
+	t.Run("should create cluster-config ConfigMap with empty Data struct", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		// Create KonfluxInfo with ClusterConfig but empty Data
+		resource := &konfluxv1alpha1.KonfluxInfo{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+			},
+			Spec: konfluxv1alpha1.KonfluxInfoSpec{
+				ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+					Data: &konfluxv1alpha1.ClusterConfigData{},
+				},
+			},
+		}
+		err := k8sClient.Create(ctx, resource)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		defer func() {
+			_ = k8sClient.Delete(ctx, resource)
+		}()
+
+		// Reconcile
+		controllerReconciler := &KonfluxInfoReconciler{
+			Client:      k8sClient,
+			Scheme:      k8sClient.Scheme(),
+			ObjectStore: objectStore,
+		}
+		_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: typeNamespacedName,
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// Verify cluster-config ConfigMap exists with empty data
+		clusterConfigMap := &corev1.ConfigMap{}
+		err = k8sClient.Get(ctx, types.NamespacedName{
+			Name:      clusterConfigMapName,
+			Namespace: infoNamespace,
+		}, clusterConfigMap)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.BeNil())
+		g.Expect(clusterConfigMap.Data).To(gomega.BeEmpty())
+	})
+
+	t.Run("should create cluster-config ConfigMap with partial values", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		// Create KonfluxInfo with ClusterConfig containing only some fields
+		resource := &konfluxv1alpha1.KonfluxInfo{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+			},
+			Spec: konfluxv1alpha1.KonfluxInfoSpec{
+				ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+					Data: &konfluxv1alpha1.ClusterConfigData{
+						DefaultOIDCIssuer: "https://oidc.example.com",
+						RekorExternalUrl:  "https://rekor-external.example.com",
+						// Other fields are empty and should not be added to ConfigMap
+					},
+				},
+			},
+		}
+		err := k8sClient.Create(ctx, resource)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		defer func() {
+			_ = k8sClient.Delete(ctx, resource)
+		}()
+
+		// Reconcile
+		controllerReconciler := &KonfluxInfoReconciler{
+			Client:      k8sClient,
+			Scheme:      k8sClient.Scheme(),
+			ObjectStore: objectStore,
+		}
+		_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: typeNamespacedName,
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// Verify cluster-config ConfigMap contains only non-empty values
+		clusterConfigMap := &corev1.ConfigMap{}
+		err = k8sClient.Get(ctx, types.NamespacedName{
+			Name:      clusterConfigMapName,
+			Namespace: infoNamespace,
+		}, clusterConfigMap)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKey("defaultOIDCIssuer"))
+		g.Expect(clusterConfigMap.Data["defaultOIDCIssuer"]).To(gomega.Equal("https://oidc.example.com"))
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKey("rekorExternalUrl"))
+		g.Expect(clusterConfigMap.Data["rekorExternalUrl"]).To(gomega.Equal("https://rekor-external.example.com"))
+		// Verify empty fields are not present
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey("enableKeylessSigning"))
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey("fulcioInternalUrl"))
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey("fulcioExternalUrl"))
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey("rekorInternalUrl"))
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey("tufInternalUrl"))
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey("tufExternalUrl"))
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey("trustifyServerInternalUrl"))
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey("trustifyServerExternalUrl"))
+	})
+
+	t.Run("should update cluster-config ConfigMap when ClusterConfig values change", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		// Create KonfluxInfo with initial ClusterConfig
+		resource := &konfluxv1alpha1.KonfluxInfo{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+			},
+			Spec: konfluxv1alpha1.KonfluxInfoSpec{
+				ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+					Data: &konfluxv1alpha1.ClusterConfigData{
+						DefaultOIDCIssuer: "https://oidc.example.com",
+						FulcioInternalUrl: "https://fulcio-internal.example.com",
+					},
+				},
+			},
+		}
+		err := k8sClient.Create(ctx, resource)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		defer func() {
+			_ = k8sClient.Delete(ctx, resource)
+		}()
+
+		// Reconcile to create initial resources
+		controllerReconciler := &KonfluxInfoReconciler{
+			Client:      k8sClient,
+			Scheme:      k8sClient.Scheme(),
+			ObjectStore: objectStore,
+		}
+		_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: typeNamespacedName,
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// Update KonfluxInfo with new ClusterConfig values
+		info := &konfluxv1alpha1.KonfluxInfo{}
+		err = k8sClient.Get(ctx, typeNamespacedName, info)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		info.Spec.ClusterConfig.Data = &konfluxv1alpha1.ClusterConfigData{
+			DefaultOIDCIssuer: "https://oidc-updated.example.com",
+			FulcioInternalUrl: "https://fulcio-internal-updated.example.com",
+			RekorExternalUrl:  "https://rekor-external.example.com",
+		}
+		err = k8sClient.Update(ctx, info)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// Reconcile the updated resource
+		_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: typeNamespacedName,
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// Verify ConfigMap was updated
+		clusterConfigMap := &corev1.ConfigMap{}
+		err = k8sClient.Get(ctx, types.NamespacedName{
+			Name:      clusterConfigMapName,
+			Namespace: infoNamespace,
+		}, clusterConfigMap)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(clusterConfigMap.Data["defaultOIDCIssuer"]).To(gomega.Equal("https://oidc-updated.example.com"))
+		g.Expect(clusterConfigMap.Data["fulcioInternalUrl"]).To(gomega.Equal("https://fulcio-internal-updated.example.com"))
+		g.Expect(clusterConfigMap.Data["rekorExternalUrl"]).To(gomega.Equal("https://rekor-external.example.com"))
+		// Verify that removed fields are not present
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey("fulcioExternalUrl"))
+	})
+
+	t.Run("should include cluster-config in RBAC Role resourceNames", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		// Create KonfluxInfo resource
+		resource := &konfluxv1alpha1.KonfluxInfo{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+			},
+			Spec: konfluxv1alpha1.KonfluxInfoSpec{},
+		}
+		err := k8sClient.Create(ctx, resource)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		defer func() {
+			_ = k8sClient.Delete(ctx, resource)
+		}()
+
+		// Reconcile
+		controllerReconciler := &KonfluxInfoReconciler{
+			Client:      k8sClient,
+			Scheme:      k8sClient.Scheme(),
+			ObjectStore: objectStore,
+		}
+		_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: typeNamespacedName,
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// Verify Role includes cluster-config in resourceNames
+		role := &rbacv1.Role{}
+		err = k8sClient.Get(ctx, types.NamespacedName{
+			Name:      "konflux-public-info-view-role",
+			Namespace: infoNamespace,
+		}, role)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(role.Rules).ToNot(gomega.BeEmpty())
+		g.Expect(role.Rules[0].ResourceNames).To(gomega.ContainElement(clusterConfigMapName))
+	})
+
+	t.Run("should merge discovered values with user-provided values", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		// Create KonfluxInfo with some user-provided values
+		resource := &konfluxv1alpha1.KonfluxInfo{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+			},
+			Spec: konfluxv1alpha1.KonfluxInfoSpec{
+				ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+					Data: &konfluxv1alpha1.ClusterConfigData{
+						DefaultOIDCIssuer: "https://user-oidc.example.com", // User overrides discovered
+						RekorExternalUrl:  "https://user-rekor-external.example.com",
+						// User doesn't provide FulcioInternalUrl, so discovered value should be used
+					},
+				},
+			},
+		}
+		err := k8sClient.Create(ctx, resource)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		defer func() {
+			_ = k8sClient.Delete(ctx, resource)
+		}()
+
+		// Create a reconciler with injected discovery implementation
+		controllerReconciler := &KonfluxInfoReconciler{
+			Client:      k8sClient,
+			Scheme:      k8sClient.Scheme(),
+			ObjectStore: objectStore,
+			DiscoverClusterConfig: &testClusterConfigDiscoverer{
+				discovered: konfluxv1alpha1.ClusterConfigData{
+					DefaultOIDCIssuer: "https://discovered-oidc.example.com",
+					FulcioInternalUrl: "https://discovered-fulcio-internal.example.com",
+					TufExternalUrl:    "https://discovered-tuf-external.example.com",
+				},
+			},
+		}
+
+		// Reconcile
+		_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: typeNamespacedName,
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// Verify ConfigMap contains merged values
+		clusterConfigMap := &corev1.ConfigMap{}
+		err = k8sClient.Get(ctx, types.NamespacedName{
+			Name:      clusterConfigMapName,
+			Namespace: infoNamespace,
+		}, clusterConfigMap)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// User-provided values should override discovered values
+		g.Expect(clusterConfigMap.Data["defaultOIDCIssuer"]).To(gomega.Equal("https://user-oidc.example.com"))
+		g.Expect(clusterConfigMap.Data["rekorExternalUrl"]).To(gomega.Equal("https://user-rekor-external.example.com"))
+
+		// Discovered values should be present when user doesn't provide them
+		g.Expect(clusterConfigMap.Data["fulcioInternalUrl"]).To(gomega.Equal("https://discovered-fulcio-internal.example.com"))
+		g.Expect(clusterConfigMap.Data["tufExternalUrl"]).To(gomega.Equal("https://discovered-tuf-external.example.com"))
+	})
+}
+
+// testClusterConfigDiscoverer is a test implementation of ClusterConfigDiscoverer
+type testClusterConfigDiscoverer struct {
+	discovered konfluxv1alpha1.ClusterConfigData
+}
+
+// Discover returns the pre-configured discovered values
+func (d *testClusterConfigDiscoverer) Discover(ctx context.Context) konfluxv1alpha1.ClusterConfigData {
+	return d.discovered
+}
+
 // Helper function to find a condition by type
 func findCondition(conditions []metav1.Condition, conditionType string) *metav1.Condition {
 	for i := range conditions {

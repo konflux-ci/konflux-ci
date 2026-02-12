@@ -73,7 +73,7 @@ func TestBuild(t *testing.T) {
 		ing := Build(cfg)
 
 		g.Expect(ing.Annotations).To(gomega.HaveKeyWithValue(
-			"route.openshift.io/destination-ca-certificate-secret", "serving-cert"))
+			"route.openshift.io/destination-ca-certificate-secret", "ui-ca"))
 		g.Expect(ing.Annotations).To(gomega.HaveKeyWithValue(
 			"route.openshift.io/termination", "reencrypt"))
 	})
@@ -97,7 +97,7 @@ func TestBuild(t *testing.T) {
 
 		// Should have default OpenShift annotations
 		g.Expect(ing.Annotations).To(gomega.HaveKeyWithValue(
-			"route.openshift.io/destination-ca-certificate-secret", "serving-cert"))
+			"route.openshift.io/destination-ca-certificate-secret", "ui-ca"))
 		g.Expect(ing.Annotations).To(gomega.HaveKeyWithValue(
 			"route.openshift.io/termination", "reencrypt"))
 		// Should have custom annotation
@@ -391,6 +391,29 @@ func TestDetermineEndpointURL(t *testing.T) {
 		g.Expect(endpoint.Port()).To(gomega.Equal(DefaultProxyPort))
 	})
 
+	t.Run("returns explicit host when ingress is disabled but host is specified", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		ui := &konfluxv1alpha1.KonfluxUI{
+			Spec: konfluxv1alpha1.KonfluxUISpec{
+				Ingress: &konfluxv1alpha1.IngressSpec{
+					Enabled: ptr.To(false),
+					Host:    "my-custom-host.example.com",
+				},
+			},
+		}
+
+		// Even with ingress disabled, explicit host should be honored
+		// (e.g., user managing their own Gateway API or external routing)
+		endpoint, err := DetermineEndpointURL(
+			context.Background(), nil, ui, "konflux-ui", nil)
+
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(endpoint.Hostname()).To(gomega.Equal("my-custom-host.example.com"))
+		g.Expect(endpoint.Port()).To(gomega.Equal("")) // No port for standard TLS
+		g.Expect(endpoint.String()).To(gomega.Equal("https://my-custom-host.example.com"))
+	})
+
 	t.Run("returns explicit host when ingress is enabled with host specified", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
@@ -409,6 +432,30 @@ func TestDetermineEndpointURL(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(endpoint.Hostname()).To(gomega.Equal("my-custom-host.example.com"))
 		g.Expect(endpoint.Port()).To(gomega.Equal("")) // No port for standard ingress TLS
+		g.Expect(endpoint.String()).To(gomega.Equal("https://my-custom-host.example.com"))
+	})
+
+	t.Run("returns explicit host on OpenShift instead of generating hostname", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		ui := &konfluxv1alpha1.KonfluxUI{
+			Spec: konfluxv1alpha1.KonfluxUISpec{
+				Ingress: &konfluxv1alpha1.IngressSpec{
+					Enabled: ptr.To(true),
+					Host:    "my-custom-host.example.com",
+				},
+			},
+		}
+
+		openShiftClusterInfo := createOpenShiftClusterInfo()
+
+		// Even on OpenShift, explicit host should take priority over auto-generated hostname
+		endpoint, err := DetermineEndpointURL(
+			context.Background(), nil, ui, "konflux-ui", openShiftClusterInfo)
+
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(endpoint.Hostname()).To(gomega.Equal("my-custom-host.example.com"))
+		g.Expect(endpoint.Port()).To(gomega.Equal(""))
 		g.Expect(endpoint.String()).To(gomega.Equal("https://my-custom-host.example.com"))
 	})
 

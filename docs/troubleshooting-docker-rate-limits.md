@@ -27,11 +27,11 @@ podman login docker.io
 :gear: Pre-load the registry image:
 
 ```bash
-# Pull the image (uses authentication if configured)
-podman pull registry:2
+# Pull the zot image
+podman pull ghcr.io/project-zot/zot:v2.1.13
 
 # Load it into your Kind cluster
-kind load docker-image registry:2 --name konflux
+kind load docker-image ghcr.io/project-zot/zot:v2.1.13 --name konflux
 ```
 
 :gear: Continue with normal deployment:

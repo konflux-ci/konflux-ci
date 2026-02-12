@@ -269,8 +269,6 @@ func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, tc *tra
 // dexConfigMapName is the name of the Dex ConfigMap to use (empty if not configured).
 // endpoint is the base URL used to configure oauth2-proxy.
 func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, dexConfigMapName string, endpoint *url.URL) error {
-	log := logf.FromContext(ctx)
-
 	objects, err := r.ObjectStore.GetForComponent(manifests.UI)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for UI: %w", err)
@@ -290,18 +288,6 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 		}
 
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
-			gvk := obj.GetObjectKind().GroupVersionKind()
-			if gvk.Group == constant.CertManagerGroup || gvk.Group == constant.KyvernoGroup {
-				// TODO: Remove this once we decide how to install cert-manager crds in envtest
-				// TODO: Remove this once we decide if we want to have a dependency on Kyverno
-				log.Info("Skipping resource: CRD not installed",
-					"kind", gvk.Kind,
-					"apiVersion", gvk.GroupVersion().String(),
-					"namespace", obj.GetNamespace(),
-					"name", obj.GetName(),
-				)
-				continue
-			}
 			return fmt.Errorf("failed to apply object %s/%s (%s): %w",
 				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), err)
 		}
@@ -360,26 +346,57 @@ func applyUIServiceCustomizations(service *corev1.Service, ui *konfluxv1alpha1.K
 // buildProxyOverlay builds the pod overlay for the proxy deployment.
 // oauth2ProxyOpts are applied to the oauth2-proxy container before user-provided overrides.
 func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, oauth2ProxyOpts ...customization.ContainerOption) *customization.PodOverlay {
+	// Create CA bundle volume that will be mounted in oauth2-proxy container.
+	// The Secret is created by cert-manager from the oauth2-proxy-cert Certificate resource
+	// (see operator/upstream-kustomizations/ui/dex/dex.yaml).
+	// Uses Projected volume to:
+	// 1. Only expose ca.crt (not tls.key or tls.crt) for security
+	// 2. Enable automatic certificate rotation via symlinks (subPath blocks updates)
+	caVolume := corev1.Volume{
+		Name: oauth2proxy.CABundleVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			Projected: &corev1.ProjectedVolumeSource{
+				Sources: []corev1.VolumeProjection{
+					{
+						Secret: &corev1.SecretProjection{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: oauth2proxy.CABundleSecretName,
+							},
+							Items: []corev1.KeyToPath{
+								{
+									Key:  oauth2proxy.CABundleSecretKey, // "ca.crt"
+									Path: oauth2proxy.CABundleFilename,  // Filename in mounted directory
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
 	if spec == nil {
-		return customization.BuildPodOverlay(
-			customization.DeploymentContext{},
-			customization.WithContainerBuilder(oauth2ProxyContainerName, oauth2ProxyOpts...),
+		return customization.NewPodOverlay(
+			customization.WithVolumes(caVolume),
+			customization.WithContainerBuilder(oauth2ProxyContainerName, oauth2ProxyOpts...)(
+				customization.DeploymentContext{},
+			),
 		)
 	}
 
 	// Append user overrides after oauth2proxy options
 	oauth2ProxyOpts = append(oauth2ProxyOpts, customization.FromContainerSpec(spec.OAuth2Proxy))
 
-	return customization.BuildPodOverlay(
-		customization.DeploymentContext{Replicas: spec.Replicas},
+	return customization.NewPodOverlay(
+		customization.WithVolumes(caVolume),
 		customization.WithContainerBuilder(
 			nginxContainerName,
 			customization.FromContainerSpec(spec.Nginx),
-		),
+		)(customization.DeploymentContext{Replicas: spec.Replicas}),
 		customization.WithContainerBuilder(
 			oauth2ProxyContainerName,
 			oauth2ProxyOpts...,
-		),
+		)(customization.DeploymentContext{Replicas: spec.Replicas}),
 	)
 }
 
@@ -392,7 +409,7 @@ func buildOAuth2ProxyOptions(endpoint *url.URL, openShiftLoginEnabled bool) []cu
 		oauth2proxy.WithInternalDexURLs(),
 		oauth2proxy.WithCookieConfig(),
 		oauth2proxy.WithAuthSettings(),
-		oauth2proxy.WithTLSSkipVerify(),
+		oauth2proxy.WithCABundle(),
 		oauth2proxy.WithWhitelistDomain(endpoint),
 	}
 
