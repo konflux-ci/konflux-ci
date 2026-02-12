@@ -39,10 +39,17 @@ NEW_TAG="$2"
 shift 2
 
 # Component configuration
-# Format: "kustomization_path|github_org/repo|display_name"
+# Format: "kustomization_path|image_name|github_org/repo|display_name"
+#
+# - kustomization_path: Path to the kustomization file containing the image reference
+# - image_name:         Image name in the kustomization `images:` section (used to extract newTag)
+# - github_org/repo:    GitHub repository for the Compare API call
+# - display_name:       Human-readable name for the changelog section
+#
 # Add new components here to extend changelog coverage.
 declare -A COMPONENT_CONFIG=(
-  ["release-service"]="operator/upstream-kustomizations/release/core/kustomization.yaml|konflux-ci/release-service|release-service"
+  ["release-service"]="operator/upstream-kustomizations/release/core/kustomization.yaml|quay.io/konflux-ci/release-service|konflux-ci/release-service|release-service"
+  ["ui"]="operator/upstream-kustomizations/ui/core/proxy/kustomization.yaml|quay.io/konflux-ci/konflux-ui|konflux-ci/konflux-ui|UI"
 )
 
 # Bot authors to exclude from changelog
@@ -55,22 +62,29 @@ else
   COMPONENTS=("${!COMPONENT_CONFIG[@]}")
 fi
 
-# extract_sha_from_kustomization extracts the ?ref=<sha> from a kustomization file
-# at a given git tag.
-# Args: $1=tag, $2=kustomization_path, $3=github_repo (org/name)
+# extract_sha_from_kustomization extracts the newTag for a given image from a
+# kustomization file at a given git ref (tag, branch, or HEAD).
+#
+# This uses the `images:` section (newTag field) rather than `?ref=` URL parameters,
+# which allows it to work for components that don't have git resource references
+# (e.g., UI only has image references, no ?ref= URLs).
+#
+# Args: $1=ref, $2=kustomization_path, $3=image_name
 extract_sha_from_kustomization() {
-  local tag="$1"
+  local ref="$1"
   local kustomization_path="$2"
-  local github_repo="$3"
+  local image_name="$3"
 
   local content
-  content=$(git show "${tag}:${kustomization_path}" 2>/dev/null) || {
+  content=$(git show "${ref}:${kustomization_path}" 2>/dev/null) || {
     echo "" # Return empty on failure
     return
   }
 
-  # Extract the ref= parameter from the GitHub URL for this component
-  echo "$content" | grep -oP "github\.com/${github_repo}[^?]*\?ref=\K[a-f0-9]+" | head -1 || true
+  # Find the image entry by name, then extract the newTag value.
+  # Uses -F for fixed-string matching (image names contain dots).
+  # -A3 captures the newTag line which follows name/newName.
+  echo "$content" | grep -F -A3 "$image_name" | grep -oP 'newTag:\s*\K[a-f0-9]+' | head -1 || true
 }
 
 # format_commit formats a single commit as a markdown list item.
@@ -96,15 +110,15 @@ generate_component_changelog() {
   local component="$1"
   local config="${COMPONENT_CONFIG[$component]}"
 
-  local kustomization_path github_repo display_name
-  IFS='|' read -r kustomization_path github_repo display_name <<< "$config"
+  local kustomization_path image_name github_repo display_name
+  IFS='|' read -r kustomization_path image_name github_repo display_name <<< "$config"
 
   echo "Processing component: ${display_name} (${github_repo})" >&2
 
   # Extract SHAs at each tag
   local old_sha new_sha
-  old_sha=$(extract_sha_from_kustomization "$OLD_TAG" "$kustomization_path" "$github_repo")
-  new_sha=$(extract_sha_from_kustomization "$NEW_TAG" "$kustomization_path" "$github_repo")
+  old_sha=$(extract_sha_from_kustomization "$OLD_TAG" "$kustomization_path" "$image_name")
+  new_sha=$(extract_sha_from_kustomization "$NEW_TAG" "$kustomization_path" "$image_name")
 
   if [ -z "$old_sha" ]; then
     echo "  Warning: Could not extract SHA from ${kustomization_path} at tag ${OLD_TAG}" >&2
