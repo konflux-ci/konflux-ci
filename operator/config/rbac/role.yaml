@@ -158,6 +158,14 @@ rules:
 - apiGroups:
   - config.openshift.io
   resources:
+  - clusterversions
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - config.openshift.io
+  resources:
   - ingresses
   verbs:
   - get

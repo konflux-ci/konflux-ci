@@ -17,14 +17,19 @@ limitations under the License.
 package clusterinfo
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/onsi/gomega"
+	configv1 "github.com/openshift/api/config/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/version"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 // mockDiscoveryClient implements DiscoveryClient for testing.
@@ -534,6 +539,177 @@ func TestPlatform_IsOpenShift(t *testing.T) {
 		t.Run(string(tt.platform), func(t *testing.T) {
 			g := gomega.NewWithT(t)
 			g.Expect(tt.platform.IsOpenShift()).To(gomega.Equal(tt.expected))
+		})
+	}
+}
+
+func TestGetOpenShiftVersion(t *testing.T) {
+	tests := []struct {
+		name            string
+		clusterVersion  *configv1.ClusterVersion
+		expectedVersion string
+		expectError     bool
+		errorContains   string
+	}{
+		{
+			name: "Stable cluster - completed version",
+			clusterVersion: &configv1.ClusterVersion{
+				ObjectMeta: metav1.ObjectMeta{Name: "version"},
+				Status: configv1.ClusterVersionStatus{
+					Desired: configv1.Release{
+						Version: "4.15.3",
+					},
+					History: []configv1.UpdateHistory{
+						{Version: "4.15.3", State: configv1.CompletedUpdate},
+					},
+				},
+			},
+			expectedVersion: "4.15.3",
+			expectError:     false,
+		},
+		{
+			name: "Upgrade in progress - skip Partial state",
+			clusterVersion: &configv1.ClusterVersion{
+				ObjectMeta: metav1.ObjectMeta{Name: "version"},
+				Status: configv1.ClusterVersionStatus{
+					Desired: configv1.Release{
+						Version: "4.16.0",
+					},
+					History: []configv1.UpdateHistory{
+						{Version: "4.16.0", State: configv1.PartialUpdate},   // Skip this - upgrade in progress
+						{Version: "4.15.3", State: configv1.CompletedUpdate}, // Use this - actually running
+					},
+				},
+			},
+			expectedVersion: "4.15.3",
+			expectError:     false,
+		},
+		{
+			name: "Multiple history entries - pick first completed",
+			clusterVersion: &configv1.ClusterVersion{
+				ObjectMeta: metav1.ObjectMeta{Name: "version"},
+				Status: configv1.ClusterVersionStatus{
+					Desired: configv1.Release{
+						Version: "4.16.0",
+					},
+					History: []configv1.UpdateHistory{
+						{Version: "4.16.0", State: configv1.PartialUpdate},
+						{Version: "4.15.3", State: configv1.CompletedUpdate},
+						{Version: "4.14.1", State: configv1.CompletedUpdate}, // Older, should not be picked
+					},
+				},
+			},
+			expectedVersion: "4.15.3",
+			expectError:     false,
+		},
+		{
+			name:            "ClusterVersion resource not found",
+			clusterVersion:  nil,
+			expectedVersion: UnknownVersion,
+			expectError:     true,
+			errorContains:   "not found",
+		},
+		{
+			name: "No completed version in history",
+			clusterVersion: &configv1.ClusterVersion{
+				ObjectMeta: metav1.ObjectMeta{Name: "version"},
+				Status: configv1.ClusterVersionStatus{
+					Desired: configv1.Release{
+						Version: "4.15.3",
+					},
+					History: []configv1.UpdateHistory{
+						{Version: "4.15.3", State: configv1.PartialUpdate}, // Only partial, no completed
+					},
+				},
+			},
+			expectedVersion: UnknownVersion,
+			expectError:     true,
+			errorContains:   "completed",
+		},
+		{
+			name: "Completed entry with empty version - data corruption",
+			clusterVersion: &configv1.ClusterVersion{
+				ObjectMeta: metav1.ObjectMeta{Name: "version"},
+				Status: configv1.ClusterVersionStatus{
+					Desired: configv1.Release{
+						Version: "4.15.3",
+					},
+					History: []configv1.UpdateHistory{
+						{Version: "", State: configv1.CompletedUpdate}, // Completed but empty version - data corruption
+					},
+				},
+			},
+			expectedVersion: UnknownVersion,
+			expectError:     true,
+			errorContains:   "empty version",
+		},
+		{
+			name: "Completed with empty version but valid older entry",
+			clusterVersion: &configv1.ClusterVersion{
+				ObjectMeta: metav1.ObjectMeta{Name: "version"},
+				Status: configv1.ClusterVersionStatus{
+					Desired: configv1.Release{
+						Version: "4.15.3",
+					},
+					History: []configv1.UpdateHistory{
+						{Version: "", State: configv1.CompletedUpdate},       // Completed but empty - error immediately
+						{Version: "4.14.1", State: configv1.CompletedUpdate}, // Valid but should not be reached
+					},
+				},
+			},
+			expectedVersion: UnknownVersion,
+			expectError:     true,
+			errorContains:   "empty version",
+		},
+		{
+			name: "Empty history array",
+			clusterVersion: &configv1.ClusterVersion{
+				ObjectMeta: metav1.ObjectMeta{Name: "version"},
+				Status: configv1.ClusterVersionStatus{
+					Desired: configv1.Release{
+						Version: "4.15.3",
+					},
+					History: []configv1.UpdateHistory{},
+				},
+			},
+			expectedVersion: UnknownVersion,
+			expectError:     true,
+			errorContains:   "completed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+
+			// Create scheme and fake client
+			scheme := runtime.NewScheme()
+			_ = configv1.Install(scheme)
+
+			var fakeClient client.Client
+			if tt.clusterVersion != nil {
+				fakeClient = fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(tt.clusterVersion).
+					Build()
+			} else {
+				fakeClient = fake.NewClientBuilder().
+					WithScheme(scheme).
+					Build()
+			}
+
+			// Call the standalone function directly
+			version, err := GetOpenShiftVersion(context.Background(), fakeClient)
+
+			if tt.expectError {
+				g.Expect(err).To(gomega.HaveOccurred())
+				if tt.errorContains != "" {
+					g.Expect(err.Error()).To(gomega.ContainSubstring(tt.errorContains))
+				}
+			} else {
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			}
+			g.Expect(version).To(gomega.Equal(tt.expectedVersion))
 		})
 	}
 }
