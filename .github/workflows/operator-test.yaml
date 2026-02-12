@@ -44,8 +44,10 @@ jobs:
         with:
           go-version-file: operator/go.mod
 
+      - name: Verify go.sum is up to date
+        run: go mod tidy -diff
+
       - name: Running Tests
         run: |
-          go mod tidy
           make test
 

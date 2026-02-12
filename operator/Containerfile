@@ -24,7 +24,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
     go build -a \
     -ldflags "-X github.com/konflux-ci/konflux-ci/operator/pkg/version.Version=${OPERATOR_VERSION:-unknown} \
               -X github.com/konflux-ci/konflux-ci/operator/pkg/version.GitCommit=${GIT_COMMIT:-unknown}" \
-    -o /opt/app-root/manager cmd/main.go
+    -o /opt/app-root/manager ./cmd/main.go
 
 # Use UBI minimal as base image
 FROM registry.access.redhat.com/ubi10/ubi-minimal@sha256:a74a7a92d3069bfac09c6882087771fc7db59fa9d8e16f14f4e012fe7288554c
