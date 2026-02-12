@@ -5,4 +5,4 @@ resources:
 
 images:
   - name: quay.io/konflux-ci/appstudio-utils
-    digest: sha256:8eb51c72530f629af00c97c6a4ce1dc0818276d15185f7c5147f8cc228fb7fb3
+    digest: sha256:ffd50ed69b1ebe54651c2a7e13d9891a3b27f0d3faff4109cd1e4e9d5faf9cdd
