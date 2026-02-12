@@ -32,12 +32,27 @@ INCREASE_PODMAN_PIDS_LIMIT="${INCREASE_PODMAN_PIDS_LIMIT:-1}"
 ENABLE_REGISTRY_PORT="${ENABLE_REGISTRY_PORT:-1}"
 REGISTRY_HOST_PORT="${REGISTRY_HOST_PORT:-5001}"
 
-# Increase inotify limits on Linux
+# Increase inotify limits on Linux (only if current values are lower than required)
 if [[ "$(uname)" == "Linux" ]]; then
-    echo "Increasing inotify limits for Kind cluster..."
-    echo "You may be prompted for your password."
-    sudo sysctl fs.inotify.max_user_watches=524288
-    sudo sysctl fs.inotify.max_user_instances=512
+    WATCHES_REQUIRED=524288
+    INSTANCES_REQUIRED=512
+    WATCHES_CURRENT=$(cat /proc/sys/fs/inotify/max_user_watches 2>/dev/null || echo 0)
+    INSTANCES_CURRENT=$(cat /proc/sys/fs/inotify/max_user_instances 2>/dev/null || echo 0)
+    if [[ "$WATCHES_CURRENT" -lt "$WATCHES_REQUIRED" ]] || [[ "$INSTANCES_CURRENT" -lt "$INSTANCES_REQUIRED" ]]; then
+        echo "Increasing inotify limits for Kind cluster..."
+        echo "  Current:  max_user_watches=${WATCHES_CURRENT}, max_user_instances=${INSTANCES_CURRENT}"
+        echo "  Required: max_user_watches=${WATCHES_REQUIRED}, max_user_instances=${INSTANCES_REQUIRED}"
+        echo ""
+        echo "You may be prompted for your password. If you prefer, cancel and run"
+        echo "these commands yourself, then rerun this script:"
+        echo "  sudo sysctl fs.inotify.max_user_watches=${WATCHES_REQUIRED}"
+        echo "  sudo sysctl fs.inotify.max_user_instances=${INSTANCES_REQUIRED}"
+        echo ""
+        sudo sysctl fs.inotify.max_user_watches="${WATCHES_REQUIRED}"
+        sudo sysctl fs.inotify.max_user_instances="${INSTANCES_REQUIRED}"
+    else
+        echo "inotify limits already sufficient (watches=${WATCHES_CURRENT}, instances=${INSTANCES_CURRENT})."
+    fi
 fi
 
 # Podman machine setup and validation on macOS
