@@ -146,7 +146,7 @@ jobs:
             image_suffix: "-arm64"
             cluster_suffix: "-arm"
             test_scope: "integration"
-            konflux_cr: "operator/config/samples/konflux_v1alpha1_konflux.yaml"
+            konflux_cr: "operator/config/samples/konflux-e2e.yaml"
             job_name: "Run Operator Integration Tests (ARM64)"
     steps:
       - name: Skip test - no operator changes
@@ -178,7 +178,7 @@ jobs:
             image_suffix: "-arm64"
             cluster_suffix: "-arm"
             test_scope: "integration"
-            konflux_cr: "operator/config/samples/konflux_v1alpha1_konflux.yaml"
+            konflux_cr: "operator/config/samples/konflux-e2e.yaml"
             job_name: "Run Operator Integration Tests (ARM64)"
     env:
       # renovate: datasource=github-releases depName=kubernetes-sigs/kind
@@ -254,9 +254,9 @@ jobs:
           GITHUB_APP_ID: ${{ secrets.APP_ID }}
           WEBHOOK_SECRET: ${{ secrets.APP_WEBHOOK_SECRET }}
 
-          # Quay secrets for E2E tests (standardized names)
-          QUAY_TOKEN: ${{ matrix.test_scope == 'integration+e2e' && secrets.QUAY_TOKEN || '' }}
-          QUAY_ORGANIZATION: ${{ matrix.test_scope == 'integration+e2e' && secrets.QUAY_ORG || '' }}
+          # Quay secrets for image-controller (required by konflux-e2e.yaml CR)
+          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+          QUAY_ORGANIZATION: ${{ secrets.QUAY_ORG }}
 
           # Smee webhook forwarding for E2E tests only
           SMEE_CHANNEL: ${{ matrix.test_scope == 'integration+e2e' && secrets.SMEE_CHANNEL || '' }}
