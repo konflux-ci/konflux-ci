@@ -275,6 +275,60 @@ spec:
                     minimum: 1
                     type: integer
                 type: object
+              pipelineConfig:
+                description: |-
+                  PipelineConfig controls the contents of the build-pipeline-config ConfigMap.
+                  The operator always manages this ConfigMap; use this field to customize which
+                  pipelines are included.
+
+                  Default behavior (nil or empty):
+                    The operator applies the full set of default pipeline bundle references.
+
+                  Merge behavior:
+                    When set, the operator merges user-specified pipelines with the defaults.
+                    Pipelines with matching names override the defaults.
+                    Pipelines with removed: true exclude the matching default.
+                    Set removeDefaults: true to discard all defaults and use only user-specified pipelines.
+                properties:
+                  pipelines:
+                    description: |-
+                      Pipelines specifies user-provided pipeline overrides or additions.
+                      Entries with matching names override operator defaults.
+                    items:
+                      description: PipelineSpec defines a single pipeline entry in
+                        the build-pipeline-config ConfigMap.
+                      properties:
+                        bundle:
+                          description: Bundle is the Tekton bundle reference for this
+                            pipeline.
+                          type: string
+                        name:
+                          description: Name is the pipeline identifier. Must match
+                            a default pipeline name to override it.
+                          minLength: 1
+                          type: string
+                        removed:
+                          description: |-
+                            Removed excludes this pipeline from the final configuration.
+                            Use to remove a specific operator-provided default pipeline.
+                            When true, bundle must not be set.
+                          type: boolean
+                      required:
+                      - name
+                      type: object
+                      x-kubernetes-validations:
+                      - message: bundle must not be set when removed is true
+                        rule: '!has(self.bundle) || !has(self.removed) || !self.removed'
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  removeDefaults:
+                    description: |-
+                      RemoveDefaults disables all operator-provided default pipelines.
+                      When true, only user-specified pipelines in the Pipelines list are included.
+                    type: boolean
+                type: object
             type: object
           status:
             description: KonfluxBuildServiceStatus defines the observed state of KonfluxBuildService

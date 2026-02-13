@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	securityv1 "github.com/openshift/api/security/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -210,6 +211,181 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 
 			By("verifying the SCC was NOT created")
 			Expect(sccExists(ctx)).To(BeFalse())
+		})
+	})
+
+	Context("PipelineConfig", func() {
+		const configMapName = "build-pipeline-config"
+		const configMapNamespace = "build-service"
+
+		var (
+			ctx                context.Context
+			buildService       *konfluxv1alpha1.KonfluxBuildService
+			reconciler         *KonfluxBuildServiceReconciler
+			typeNamespacedName types.NamespacedName
+		)
+
+		getConfigMap := func(ctx context.Context) *corev1.ConfigMap {
+			cm := &corev1.ConfigMap{}
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name:      configMapName,
+				Namespace: configMapNamespace,
+			}, cm)
+			if err != nil {
+				return nil
+			}
+			return cm
+		}
+
+		reconcileBuildService := func(ctx context.Context) {
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+		}
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			typeNamespacedName = types.NamespacedName{
+				Name:      CRName,
+				Namespace: "default",
+			}
+
+			By("cleaning up any existing ConfigMap from previous tests")
+			existingCM := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      configMapName,
+					Namespace: configMapNamespace,
+				},
+			}
+			_ = k8sClient.Delete(ctx, existingCM)
+
+			reconciler = &KonfluxBuildServiceReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ObjectStore: objectStore,
+				ClusterInfo: nil,
+			}
+		})
+
+		AfterEach(func() {
+			By("cleaning up the ConfigMap")
+			existingCM := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      configMapName,
+					Namespace: configMapNamespace,
+				},
+			}
+			_ = k8sClient.Delete(ctx, existingCM)
+
+			By("cleaning up KonfluxBuildService resource")
+			if buildService != nil {
+				_ = k8sClient.Delete(ctx, buildService)
+			}
+		})
+
+		It("Should create ConfigMap with defaults when pipelineConfig is not set", func() {
+			By("creating KonfluxBuildService with no pipelineConfig")
+			buildService = &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      CRName,
+					Namespace: "default",
+				},
+				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+
+			By("reconciling the resource")
+			reconcileBuildService(ctx)
+
+			By("verifying the ConfigMap was created with defaults")
+			cm := getConfigMap(ctx)
+			Expect(cm).NotTo(BeNil())
+			Expect(cm.Data["config.yaml"]).To(ContainSubstring("docker-build-oci-ta"))
+			Expect(cm.Data["config.yaml"]).To(ContainSubstring("fbc-builder"))
+		})
+
+		It("Should merge custom pipelines with defaults", func() {
+			By("creating KonfluxBuildService with a custom pipeline")
+			buildService = &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      CRName,
+					Namespace: "default",
+				},
+				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
+						Pipelines: []konfluxv1alpha1.PipelineSpec{
+							{Name: "my-custom", Bundle: "quay.io/myorg/pipeline:latest"},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+
+			By("reconciling the resource")
+			reconcileBuildService(ctx)
+
+			By("verifying the ConfigMap contains defaults and custom pipeline")
+			cm := getConfigMap(ctx)
+			Expect(cm).NotTo(BeNil())
+			Expect(cm.Data["config.yaml"]).To(ContainSubstring("fbc-builder"))
+			Expect(cm.Data["config.yaml"]).To(ContainSubstring("my-custom"))
+		})
+
+		It("Should remove specific default pipelines when removed: true", func() {
+			By("creating KonfluxBuildService removing fbc-builder")
+			buildService = &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      CRName,
+					Namespace: "default",
+				},
+				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
+						Pipelines: []konfluxv1alpha1.PipelineSpec{
+							{Name: "fbc-builder", Removed: true},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+
+			By("reconciling the resource")
+			reconcileBuildService(ctx)
+
+			By("verifying the ConfigMap does not contain fbc-builder")
+			cm := getConfigMap(ctx)
+			Expect(cm).NotTo(BeNil())
+			Expect(cm.Data["config.yaml"]).NotTo(ContainSubstring("fbc-builder"))
+			Expect(cm.Data["config.yaml"]).To(ContainSubstring("docker-build-oci-ta"))
+		})
+
+		It("Should apply only user pipelines when removeDefaults is true", func() {
+			By("creating KonfluxBuildService with removeDefaults and custom pipeline")
+			buildService = &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      CRName,
+					Namespace: "default",
+				},
+				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
+						RemoveDefaults: true,
+						Pipelines: []konfluxv1alpha1.PipelineSpec{
+							{Name: "my-custom", Bundle: "quay.io/myorg/pipeline:latest"},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+
+			By("reconciling the resource")
+			reconcileBuildService(ctx)
+
+			By("verifying the ConfigMap contains only the custom pipeline")
+			cm := getConfigMap(ctx)
+			Expect(cm).NotTo(BeNil())
+			Expect(cm.Data["config.yaml"]).NotTo(ContainSubstring("- name: fbc-builder"))
+			Expect(cm.Data["config.yaml"]).NotTo(ContainSubstring("- name: docker-build-oci-ta"))
+			Expect(cm.Data["config.yaml"]).To(ContainSubstring("my-custom"))
 		})
 	})
 })

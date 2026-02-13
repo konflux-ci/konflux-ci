@@ -9,6 +9,7 @@ This directory contains sample YAML files for Konflux Custom Resources (CRs).
 - [Production Considerations](#production-considerations)
   * [Authentication](#authentication)
   * [Default Tenant](#default-tenant)
+  * [Pipeline Configuration](#pipeline-configuration)
 - [Related Documentation](#related-documentation)
 
 <!-- tocstop -->
@@ -68,6 +69,17 @@ kubectl label namespace org-user-1-tenant konflux-ci.dev/type=tenant
 kubectl create rolebinding org-user-1-tenant-maintainer --clusterrole konflux-maintainer-user-actions \
   --user user@example.com -n org-user-1-tenant
 ```
+
+### Pipeline Configuration
+
+The operator manages the `build-pipeline-config` ConfigMap in the build-service
+namespace, which defines the default pipeline bundles (docker-build-oci-ta,
+fbc-builder, etc.). Use the `pipelineConfig` field in the KonfluxBuildService spec
+to customize pipeline configuration: override defaults by name, remove specific
+defaults, discard all defaults, or add custom pipelines.
+
+See `konflux_v1alpha1_konfluxbuildservice.yaml` for configuration details and the
+transition workflow.
 
 ## Related Documentation
 

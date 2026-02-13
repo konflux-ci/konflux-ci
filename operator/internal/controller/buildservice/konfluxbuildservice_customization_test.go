@@ -351,3 +351,204 @@ func TestApplyBuildServiceDeploymentCustomizations_ResourceMerging(t *testing.T)
 		g.Expect(managerContainer.Resources.Requests.Cpu().String()).To(gomega.Equal("100m"))
 	})
 }
+
+func makeConfigMap() *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		Data: map[string]string{
+			"config.yaml": defaultConfigYAML,
+		},
+	}
+}
+
+const defaultConfigYAML = `default-pipeline-name: docker-build-oci-ta
+pipelines:
+- name: fbc-builder
+  bundle: quay.io/konflux-ci/tekton-catalog/pipeline-fbc-builder@sha256:abc123
+- name: docker-build-oci-ta
+  bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta@sha256:def456
+`
+
+func TestApplyPipelineConfigMerge(t *testing.T) {
+	t.Run("nil pipelineConfig leaves defaults unchanged", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := makeConfigMap()
+		err := applyPipelineConfigMerge(cm, nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(cm.Data["config.yaml"]).To(gomega.Equal(defaultConfigYAML))
+	})
+
+	t.Run("empty pipelineConfig leaves defaults unchanged", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := makeConfigMap()
+		err := applyPipelineConfigMerge(cm, &konfluxv1alpha1.PipelineConfigSpec{})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("fbc-builder"))
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("docker-build-oci-ta"))
+	})
+
+	t.Run("removeDefaults with custom pipelines only", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := makeConfigMap()
+		err := applyPipelineConfigMerge(cm, &konfluxv1alpha1.PipelineConfigSpec{
+			RemoveDefaults: true,
+			Pipelines: []konfluxv1alpha1.PipelineSpec{
+				{Name: "my-custom", Bundle: "quay.io/myorg/pipeline:latest"},
+			},
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(cm.Data["config.yaml"]).NotTo(gomega.ContainSubstring("- name: fbc-builder"))
+		g.Expect(cm.Data["config.yaml"]).NotTo(gomega.ContainSubstring("- name: docker-build-oci-ta"))
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("my-custom"))
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("quay.io/myorg/pipeline:latest"))
+	})
+
+	t.Run("removeDefaults with no pipelines yields empty list", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := makeConfigMap()
+		err := applyPipelineConfigMerge(cm, &konfluxv1alpha1.PipelineConfigSpec{
+			RemoveDefaults: true,
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("pipelines: []"))
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("default-pipeline-name"))
+	})
+
+	t.Run("individual pipeline removal via removed: true", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := makeConfigMap()
+		err := applyPipelineConfigMerge(cm, &konfluxv1alpha1.PipelineConfigSpec{
+			Pipelines: []konfluxv1alpha1.PipelineSpec{
+				{Name: "fbc-builder", Removed: true},
+			},
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(cm.Data["config.yaml"]).NotTo(gomega.ContainSubstring("fbc-builder"))
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("docker-build-oci-ta"))
+	})
+
+	t.Run("removing nonexistent pipeline is a no-op", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := makeConfigMap()
+		err := applyPipelineConfigMerge(cm, &konfluxv1alpha1.PipelineConfigSpec{
+			Pipelines: []konfluxv1alpha1.PipelineSpec{
+				{Name: "nonexistent", Removed: true},
+			},
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("fbc-builder"))
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("docker-build-oci-ta"))
+	})
+
+	t.Run("pipeline override replaces bundle", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := makeConfigMap()
+		err := applyPipelineConfigMerge(cm, &konfluxv1alpha1.PipelineConfigSpec{
+			Pipelines: []konfluxv1alpha1.PipelineSpec{
+				{Name: "fbc-builder", Bundle: "quay.io/myorg/fbc:v2"},
+			},
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("quay.io/myorg/fbc:v2"))
+		g.Expect(cm.Data["config.yaml"]).NotTo(gomega.ContainSubstring("sha256:abc123"))
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("docker-build-oci-ta"))
+	})
+
+	t.Run("adding new pipelines alongside defaults", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := makeConfigMap()
+		err := applyPipelineConfigMerge(cm, &konfluxv1alpha1.PipelineConfigSpec{
+			Pipelines: []konfluxv1alpha1.PipelineSpec{
+				{Name: "my-custom", Bundle: "quay.io/myorg/pipeline:latest"},
+			},
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("fbc-builder"))
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("docker-build-oci-ta"))
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("my-custom"))
+	})
+
+	t.Run("preserves default-pipeline-name", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := makeConfigMap()
+		err := applyPipelineConfigMerge(cm, &konfluxv1alpha1.PipelineConfigSpec{
+			Pipelines: []konfluxv1alpha1.PipelineSpec{
+				{Name: "fbc-builder", Removed: true},
+			},
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("default-pipeline-name: docker-build-oci-ta"))
+	})
+
+	t.Run("missing config.yaml key returns error", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := &corev1.ConfigMap{Data: map[string]string{}}
+		err := applyPipelineConfigMerge(cm, &konfluxv1alpha1.PipelineConfigSpec{})
+		g.Expect(err).To(gomega.HaveOccurred())
+		g.Expect(err.Error()).To(gomega.ContainSubstring("missing config.yaml"))
+	})
+}
+
+func TestMergePipelines(t *testing.T) {
+	defaults := []pipelineEntryYAML{
+		{Name: "pipeline-a", Bundle: "bundle-a"},
+		{Name: "pipeline-b", Bundle: "bundle-b"},
+		{Name: "pipeline-c", Bundle: "bundle-c"},
+	}
+
+	t.Run("does not modify defaults slice", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		originalLen := len(defaults)
+		_ = mergePipelines(defaults, &konfluxv1alpha1.PipelineConfigSpec{
+			Pipelines: []konfluxv1alpha1.PipelineSpec{
+				{Name: "pipeline-a", Removed: true},
+			},
+		})
+		g.Expect(defaults).To(gomega.HaveLen(originalLen))
+	})
+
+	t.Run("removeDefaults ignores defaults", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		result := mergePipelines(defaults, &konfluxv1alpha1.PipelineConfigSpec{
+			RemoveDefaults: true,
+			Pipelines: []konfluxv1alpha1.PipelineSpec{
+				{Name: "custom", Bundle: "custom-bundle"},
+			},
+		})
+		g.Expect(result).To(gomega.HaveLen(1))
+		g.Expect(result[0].Name).To(gomega.Equal("custom"))
+	})
+
+	t.Run("upsert replaces by name", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		result := mergePipelines(defaults, &konfluxv1alpha1.PipelineConfigSpec{
+			Pipelines: []konfluxv1alpha1.PipelineSpec{
+				{Name: "pipeline-b", Bundle: "new-bundle-b"},
+			},
+		})
+		g.Expect(result).To(gomega.HaveLen(3))
+		for _, p := range result {
+			if p.Name == "pipeline-b" {
+				g.Expect(p.Bundle).To(gomega.Equal("new-bundle-b"))
+			}
+		}
+	})
+
+	t.Run("remove then add same name", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		result := mergePipelines(defaults, &konfluxv1alpha1.PipelineConfigSpec{
+			Pipelines: []konfluxv1alpha1.PipelineSpec{
+				{Name: "pipeline-a", Removed: true},
+				{Name: "pipeline-a", Bundle: "replacement"},
+			},
+		})
+		g.Expect(result).To(gomega.HaveLen(3))
+		found := false
+		for _, p := range result {
+			if p.Name == "pipeline-a" {
+				g.Expect(p.Bundle).To(gomega.Equal("replacement"))
+				found = true
+			}
+		}
+		g.Expect(found).To(gomega.BeTrue())
+	})
+}

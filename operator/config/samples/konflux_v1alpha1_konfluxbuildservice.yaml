@@ -1,5 +1,14 @@
 # Title: Konflux Build Service Configuration
-# Description: KonfluxBuildService configuration with custom resource limits and environment variables
+# Description: KonfluxBuildService configuration with custom resource limits, environment variables,
+#              and pipeline configuration options.
+#
+# Pipeline Configuration:
+#   pipelineConfig controls the contents of the build-pipeline-config ConfigMap.
+#   The operator always manages this ConfigMap. Use pipelineConfig to customize it:
+#     - Override a default pipeline by specifying the same name with a different bundle
+#     - Remove a specific default with removed: true
+#     - Discard all defaults with removeDefaults: true
+#     - Add new pipelines alongside or instead of defaults
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: KonfluxBuildService
 metadata:
@@ -8,6 +17,13 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: konflux-build-service
 spec:
+  # pipelineConfig:
+  #   # removeDefaults: true  # Discard all operator-provided default pipelines
+  #   pipelines:
+  #     - name: fbc-builder
+  #       removed: true  # Remove this specific default pipeline
+  #     - name: my-custom-pipeline
+  #       bundle: quay.io/myorg/pipeline:latest
   buildControllerManager:
     replicas: 2
     manager:
