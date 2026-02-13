@@ -1,10 +1,23 @@
-Quay.io Configurations
+Container Registry Configuration
 ===
+
+Konflux supports any OCI-compliant container registry for storing built images.
+
+For local development on Kind, the internal registry
+(`registry-service.kind-registry.svc.cluster.local`, exposed on `localhost:5001`)
+works out of the box with no authentication required. Note that images stored in the
+internal registry are lost when the Kind cluster is deleted.
+
+For production deployments, use an external registry which can be accomplished by
+manually creating and linking the secrets as described below. To fully onboard
+components through the Konflux UI, you must configure the
+[image-controller](#automatically-provision-quay-repositories-for-container-images)
+which automatically provisions Quay.io repositories when components are created.
 
 <!-- toc -->
 
 - [Configuring a Push Secret for the Build Pipeline](#configuring-a-push-secret-for-the-build-pipeline)
-  * [Example - Extract Quay Push Secret:](#example---extract-quay-push-secret)
+  * [Obtaining Registry Credentials](#obtaining-registry-credentials)
 - [Configuring a Push Secret for the Release Pipeline](#configuring-a-push-secret-for-the-release-pipeline)
   * [Trusted Artifacts (ociStorage)](#trusted-artifacts-ocistorage)
 - [Automatically Provision Quay Repositories for Container Images](#automatically-provision-quay-repositories-for-container-images)
@@ -23,9 +36,9 @@ service account.
 The service account used for running the pipelines is created by Build Service operator
 and named `build-pipeline-<component-name>`.
 
-1. :gear: Create the secret in the pipeline's namespace (see the
-   [example below](#example---extract-quay-push-secret) for extracting the
-   secret):
+1. :gear: Create the secret in the pipeline's namespace (see
+   [obtaining registry credentials](#obtaining-registry-credentials) for creating
+   the config.json file):
 
 Replace $NS with the correct namespace. For example:
 - for user1, specify 'user-ns1'
@@ -43,10 +56,11 @@ kubectl create -n $NS secret generic regcred \
 kubectl patch -n $NS serviceaccount "build-pipeline-${COMPONENT_NAME}" -p '{"secrets": [{"name": "regcred"}]}'
 ```
 
-## Example - Extract Quay Push Secret:
+## Obtaining Registry Credentials
 
-If using Quay.io, you can follow the procedure below to obtain the config.json file used
-for creating the secret. If not using quay, apply your registry's equivalent procedure.
+The push secret requires a Docker config.json file with credentials for your registry.
+
+**Quay.io:**
 
 1. :gear: Log into quay.io and click your user icon on the top-right corner.
 
@@ -63,6 +77,26 @@ for creating the secret. If not using quay, apply your registry's equivalent pro
 
 7. :gear: Replace `<path/to/.docker/config.json>` on the `kubectl create secret` command
    with this path.
+
+**Docker Hub:**
+
+1. :gear: Log in to Docker Hub and navigate to Account Settings > Security.
+
+2. :gear: Create a new access token with read/write permissions.
+
+3. :gear: Authenticate locally to generate a config.json:
+
+```bash
+podman login docker.io
+```
+
+4. :gear: The config file will be at `${XDG_RUNTIME_DIR}/containers/auth.json` (Podman)
+   or `~/.docker/config.json` (Docker). Use this path in the `kubectl create secret`
+   command.
+
+**Other registries:** Follow your registry provider's documentation to obtain a Docker
+config.json file with authentication credentials. Most registries support
+`podman login` or `docker login` to generate the file.
 
 # Configuring a Push Secret for the Release Pipeline
 

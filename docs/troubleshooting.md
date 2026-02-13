@@ -19,6 +19,7 @@ Troubleshooting Common Issues
     + [Common Release Issues](#common-release-issues)
       - [Unfinished string at EOF](#unfinished-string-at-eof)
       - [400 Bad Request](#400-bad-request)
+- [Docker Hub Rate Limits](#docker-hub-rate-limits)
 
 <!-- tocstop -->
 
@@ -322,5 +323,29 @@ main.go:74: error during command execution: PUT https://quay.io/...: unexpected 
 **Solution**:
 
 :gear: verify that you
-[created the registry secret](./quay.md#configuring-a-push-secret-for-the-release-pipeline)
+[created the registry secret](./registry-configuration.md#configuring-a-push-secret-for-the-release-pipeline)
 also for the managed namespace.
+
+# Docker Hub Rate Limits
+
+Docker Hub enforces rate limits on image pulls. If you encounter script failures related
+to rate limiting, you can pre-load images locally to avoid those issues.
+
+:gear: Check for rate limit events:
+
+```bash
+kubectl get events -A | grep toomanyrequests
+```
+
+If the command returns results, you are hitting Docker Hub rate limits.
+
+:gear: Pre-load the affected images into your Kind cluster to avoid pulling from
+Docker Hub:
+
+```bash
+podman login docker.io
+podman pull ghcr.io/project-zot/zot:v2.1.13
+kind load docker-image ghcr.io/project-zot/zot:v2.1.13 --name konflux
+```
+
+:gear: Continue with normal deployment after pre-loading images.

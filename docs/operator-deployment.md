@@ -85,6 +85,7 @@ For deploying Konflux on real Kubernetes clusters (OpenShift, EKS, GKE, etc.).
 - Kubernetes cluster (1.28+)
 - kubectl configured for cluster access
 - Cluster admin permissions
+- [GitHub App](github-secrets.md#creating-a-github-app) with private key
 
 ### Step 1: Deploy the Operator
 
@@ -120,24 +121,14 @@ kubectl apply -f konflux.yaml
 
 ### Step 4: Create Secrets
 
-Create GitHub integration secrets:
+Create the GitHub App secrets using the values from your GitHub App (see
+[prerequisites](#prerequisites-1)). See
+[Configuring GitHub Application Secrets](github-secrets.md#creating-the-secrets)
+for the full procedure including webhook proxy setup for non-exposed clusters.
 
-```bash
-for ns in pipelines-as-code build-service integration-service; do
-  kubectl -n "${ns}" create secret generic pipelines-as-code-secret \
-    --from-file=github-private-key=/path/to/github-app.pem \
-    --from-literal=github-application-id="123456" \
-    --from-literal=webhook.secret="your-webhook-secret"
-done
-```
-
-For image-controller (if enabled):
-
-```bash
-kubectl -n image-controller create secret generic quaytoken \
-  --from-literal=quaytoken="your-quay-token" \
-  --from-literal=organization="your-quay-organization"
-```
+For image-controller (if enabled), see
+[registry configuration](registry-configuration.md#automatically-provision-quay-repositories-for-container-images)
+for creating the Quay token secret.
 
 ### Step 5: Verify Deployment
 
@@ -179,21 +170,29 @@ For authentication configuration and other production considerations including d
 
 ### Operator Not Starting
 
-```bash
-# Check operator logs
-kubectl logs -n konflux-operator deployment/konflux-operator-controller-manager
+:gear: Check the operator logs:
 
-# Verify CRDs installed
+```bash
+kubectl logs -n konflux-operator deployment/konflux-operator-controller-manager
+```
+
+:gear: Verify CRDs are installed:
+
+```bash
 kubectl get crds | grep konflux
 ```
 
 ### Components Not Deploying
 
-```bash
-# Check Konflux status
-kubectl get konflux konflux -o jsonpath='{.status.conditions}' | jq
+:gear: Check the Konflux status conditions:
 
-# Check operator events
+```bash
+kubectl get konflux konflux -o jsonpath='{.status.conditions}' | jq
+```
+
+:gear: Check operator events for errors:
+
+```bash
 kubectl get events -n konflux-operator --sort-by='.lastTimestamp'
 ```
 
@@ -202,39 +201,49 @@ kubectl get events -n konflux-operator --sort-by='.lastTimestamp'
 Port 5000 is often used by macOS AirPlay Receiver.
 
 **Solution 1:** Disable AirPlay Receiver
-- System Settings → General → AirDrop & Handoff → AirPlay Receiver → Off
+
+:gear: System Settings → General → AirDrop & Handoff → AirPlay Receiver → Off
 
 **Solution 2:** Use a different port
 
+:gear: In `scripts/deploy-local.env`, set:
+
 ```bash
-# In scripts/deploy-local.env
 REGISTRY_HOST_PORT=5001
 ```
 
 ### Insufficient Memory (Kind)
 
-```bash
-# Check Podman machine memory
-podman machine inspect | grep Memory
+:gear: Check Podman machine memory:
 
-# Increase memory
+```bash
+podman machine inspect | grep Memory
+```
+
+:gear: If insufficient, create a new machine with more resources:
+
+```bash
 podman machine init --memory 16384 --cpus 6 --rootful konflux-dev
 podman machine start konflux-dev
 ```
 
 ### Dex Not Starting
 
-```bash
-# Check Dex logs
-kubectl logs -n dex deployment/dex
+:gear: Check Dex logs:
 
-# Verify Dex configuration
+```bash
+kubectl logs -n dex deployment/dex
+```
+
+:gear: Verify Dex configuration:
+
+```bash
 kubectl get configmap dex -n dex -o yaml
 ```
 
 ### Secrets Not Found
 
-Verify secrets exist in the correct namespaces:
+:gear: Verify secrets exist in the correct namespaces:
 
 ```bash
 kubectl get secrets -n pipelines-as-code
@@ -242,10 +251,12 @@ kubectl get secrets -n build-service
 kubectl get secrets -n integration-service
 ```
 
-Recreate if missing (see Step 4 in Production Deployment).
+:gear: Recreate if missing (see [GitHub Application Secrets](github-secrets.md#creating-the-secrets)).
 
 ## Related Documentation
 
 - [Operator Samples](../operator/config/samples/README.md) - Example Konflux CRs
+- [Konflux Tutorial](tutorial.md) - Onboarding, building, testing, and releasing
+- [Registry Configuration](registry-configuration.md) - Container registry setup
 - [Troubleshooting Guide](troubleshooting.md) - Common issues and solutions
 - [Konflux Documentation](https://konflux-ci.dev/docs/) - Full Konflux documentation
