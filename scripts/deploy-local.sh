@@ -116,6 +116,20 @@ echo "  Environment: ${ENV_FILE}"
 echo "  Konflux CR:  ${KONFLUX_CR}"
 echo ""
 
+INSTALL_METHOD="${OPERATOR_INSTALL_METHOD:-local}"
+
+# For 'build' method, build the operator image before creating the cluster to reduce peak memory (no Kind container during go build)
+if [ "${INSTALL_METHOD}" = "build" ]; then
+    echo "========================================="
+    echo "Building operator image (before cluster)"
+    echo "========================================="
+    cd "${REPO_ROOT}/operator"
+    OPERATOR_IMG="localhost/konflux-operator:local"
+    make docker-build IMG="${OPERATOR_IMG}"
+    cd "${REPO_ROOT}"
+    echo ""
+fi
+
 # Step 1: Setup Kind cluster
 echo "========================================="
 echo "Step 1: Creating Kind cluster"
@@ -150,8 +164,6 @@ echo ""
 echo "========================================="
 echo "Step 3: Deploying Konflux operator"
 echo "========================================="
-
-INSTALL_METHOD="${OPERATOR_INSTALL_METHOD:-local}"
 echo "Using installation method: ${INSTALL_METHOD}"
 
 case "${INSTALL_METHOD}" in
@@ -168,14 +180,8 @@ case "${INSTALL_METHOD}" in
         ;;
 
     build)
-        echo "Building operator locally..."
-        cd "${REPO_ROOT}/operator"
-        OPERATOR_IMG="localhost/konflux-operator:local"
-
-        echo "Building operator image..."
-        make docker-build IMG="${OPERATOR_IMG}"
-
         echo "Loading operator image into Kind cluster..."
+        cd "${REPO_ROOT}/operator"
         kind load docker-image "${OPERATOR_IMG}" --name "${KIND_CLUSTER}"
 
         echo "Installing CRDs..."
