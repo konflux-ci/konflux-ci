@@ -184,7 +184,7 @@ jobs:
       # renovate: datasource=github-releases depName=kubernetes-sigs/kind
       KIND_VERSION: "0.31.0"
       # renovate: datasource=github-releases depName=kubernetes/kubernetes
-      KUBECTL_VERSION: "1.35.0"
+      KUBECTL_VERSION: "1.35.1"
       OPERATOR_IMAGE: example.com/konflux-operator:v0.0.1${{ matrix.image_suffix }}
       KIND_CLUSTER: konflux-operator-test-e2e${{ matrix.cluster_suffix }}
     defaults:
