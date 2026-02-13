@@ -9,6 +9,7 @@ This directory contains sample YAML files for Konflux Custom Resources (CRs).
 - [Production Considerations](#production-considerations)
   * [Authentication](#authentication)
   * [Default Tenant](#default-tenant)
+  * [Registry Configuration](#registry-configuration)
 - [Related Documentation](#related-documentation)
 
 <!-- tocstop -->
@@ -68,6 +69,15 @@ kubectl label namespace org-user-1-tenant konflux-ci.dev/type=tenant
 kubectl create rolebinding org-user-1-tenant-maintainer --clusterrole konflux-maintainer-user-actions \
   --user user@example.com -n org-user-1-tenant
 ```
+
+### Registry Configuration
+
+For production deployments, use an external container registry. To fully onboard
+components through the Konflux UI, enable the image-controller in your Konflux CR
+and configure a Quay.io token. For other registries, configure push secrets manually.
+
+See the [Registry Configuration Guide](../../docs/registry-configuration.md) for
+setup instructions covering Quay.io, Docker Hub, and other OCI-compliant registries.
 
 ## Related Documentation
 
