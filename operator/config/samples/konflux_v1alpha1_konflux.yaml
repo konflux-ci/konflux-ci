@@ -18,6 +18,10 @@ metadata:
 spec:
   ui:
     spec:
+      # NodePort exposes the UI on the host for Kind clusters.
+      # Kind maps container port 30011 to host port 9443 (see kind-config.yaml).
+      # Access the UI at https://localhost:9443 (HTTPS required).
+      # For non-Kind clusters, use Ingress instead (see konflux_v1alpha1_konfluxui.yaml).
       ingress:
         nodePortService:
           httpsPort: 30011
