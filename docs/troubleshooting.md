@@ -9,6 +9,7 @@ Troubleshooting Common Issues
 - [Unable to Create Application with Component Using the Konflux UI](#unable-to-create-application-with-component-using-the-konflux-ui)
 - [PR changes are not Triggering Pipelines](#pr-changes-are-not-triggering-pipelines)
 - [PR Fails when Webhook Secret was not Added](#pr-fails-when-webhook-secret-was-not-added)
+- [UI Not Accessible (Kind)](#ui-not-accessible-kind)
 - [Setup Scripts Fail or Pipeline Execution Stuck or Fails](#setup-scripts-fail-or-pipeline-execution-stuck-or-fails)
   * [Running out of Resources](#running-out-of-resources)
     + [For Podman Users (macOS)](#for-podman-users-macos)
@@ -157,6 +158,29 @@ To resolve this issue, go to the Github App you created and check Webhook Secret
 added there. Please refer to 
 [this document](https://pipelinesascode.com/docs/install/github_apps/#manual-setup)
 on how to create webhook secret.
+
+# UI Not Accessible (Kind)
+
+If you cannot reach `https://localhost:9443` on a Kind cluster, verify that your Konflux
+CR includes the NodePort configuration. The
+[default sample CR](../operator/config/samples/konflux_v1alpha1_konflux.yaml) sets
+`httpsPort: 30011`, which Kind maps to host port 9443 via `kind-config.yaml`.
+
+:gear: If the configuration is missing, patch the Konflux CR:
+
+```bash
+kubectl patch konflux konflux --type=merge -p '
+spec:
+  ui:
+    spec:
+      ingress:
+        nodePortService:
+          httpsPort: 30011
+'
+```
+
+**Note:** The browser must use `https://` — typing `localhost:9443` without the scheme
+defaults to HTTP and fails.
 
 # Setup Scripts Fail or Pipeline Execution Stuck or Fails
 
