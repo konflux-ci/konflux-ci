@@ -92,8 +92,20 @@ export KIND_CLUSTER KIND_MEMORY_GB PODMAN_MACHINE_NAME REGISTRY_HOST_PORT ENABLE
 export INCREASE_PODMAN_PIDS_LIMIT
 export GITHUB_PRIVATE_KEY GITHUB_APP_ID WEBHOOK_SECRET QUAY_TOKEN QUAY_ORGANIZATION
 
-# Get Konflux CR file path (env var, command-line arg, or default)
-KONFLUX_CR="${KONFLUX_CR:-${1:-${REPO_ROOT}/operator/config/samples/konflux_v1alpha1_konflux.yaml}}"
+# Get Konflux CR file path (precedence, high->low: command-line arg, env var, default)
+KONFLUX_CR="${1:-$KONFLUX_CR}"
+
+# Auto-select e2e CR when Quay credentials are configured but no explicit CR specified
+if [ -n "${QUAY_TOKEN:-}" ] && [ -n "${QUAY_ORGANIZATION:-}" ] && [ -z "${KONFLUX_CR}" ]; then
+    KONFLUX_CR="${REPO_ROOT}/operator/config/samples/konflux-e2e.yaml"
+    echo ""
+    echo "INFO: Auto-selecting konflux-e2e.yaml because QUAY_TOKEN/QUAY_ORGANIZATION are set"
+    echo "      This CR enables image-controller required for Quay integration"
+    echo "      To use a different CR, set KONFLUX_CR environment variable or pass as argument"
+    echo ""
+else
+    KONFLUX_CR="${KONFLUX_CR:-${REPO_ROOT}/operator/config/samples/konflux_v1alpha1_konflux.yaml}"
+fi
 
 # Convert relative path to absolute (if not already absolute)
 if [[ "${KONFLUX_CR}" != /* ]]; then
