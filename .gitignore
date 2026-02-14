@@ -19,3 +19,6 @@ scripts/*.env
 my-konflux.yaml
 konflux-local.yaml
 scripts/smee-channel-id.yaml
+
+# Git worktrees
+.worktrees/
