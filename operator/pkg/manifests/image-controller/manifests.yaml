@@ -743,14 +743,18 @@ data:
             },
         )
 
-        with urlopen(request) as resp:
-            if resp.status != 200:
-                # do not fail the job if we can't fetch notifications
-                # for single repository
-                LOGGER.warning("Failed to fetch notifications for %s/%s", namespace, name)
-                json_data = {}
-            else:
-                json_data = json.loads(resp.read())
+        try:
+            with urlopen(request) as resp:
+                if resp.status != 200:
+                    # do not fail the job if we can't fetch notifications
+                    # for single repository
+                    LOGGER.warning("Failed to fetch notifications for %s/%s", namespace, name)
+                    json_data = {}
+                else:
+                    json_data = json.loads(resp.read())
+        except HTTPError:
+            LOGGER.warning("Failed to fetch notifications for %s/%s", namespace, name)
+            json_data = {}
 
         return json_data.get("notifications", [])
 
@@ -918,7 +922,7 @@ data:
         main()
 kind: ConfigMap
 metadata:
-  name: image-controller-notification-resetter-configmap-b2kb8hg596
+  name: image-controller-notification-resetter-configmap-tfm9h79698
   namespace: image-controller
 ---
 apiVersion: v1
@@ -968,7 +972,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/konflux-ci/image-controller:a324ba1ca6c3f2322a15c8f1cfbcf20623c3ebce
+        image: quay.io/konflux-ci/image-controller:0489fa4f7ffbabcf9bc8b86b950cd7ba5b3f8696
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1115,7 +1119,7 @@ spec:
             runAsNonRoot: true
           volumes:
           - configMap:
-              name: image-controller-notification-resetter-configmap-b2kb8hg596
+              name: image-controller-notification-resetter-configmap-tfm9h79698
             name: notification-resetter-volume
           - name: quaytoken
             secret:
