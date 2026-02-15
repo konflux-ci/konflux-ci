@@ -480,6 +480,13 @@ spec:
                 description: Pipeline contains all the information about the managed
                   Pipeline
                 properties:
+                  maxRetries:
+                    description: |-
+                      MaxRetries sets the retry limit for the pipeline overriding the value in
+                      ReleaseServiceConfig when specified. When unset the ReleaseServiceConfig
+                      value is used and 0 disables retries for the pipeline.
+                    minimum: 0
+                    type: integer
                   pipelineRef:
                     description: PipelineRef is the reference to the Pipeline
                     properties:
@@ -1582,6 +1589,13 @@ spec:
                 description: FinalPipeline contains all the information about the
                   final Pipeline
                 properties:
+                  maxRetries:
+                    description: |-
+                      MaxRetries sets the retry limit for the pipeline overriding the value in
+                      ReleaseServiceConfig when specified. When unset the ReleaseServiceConfig
+                      value is used and 0 disables retries for the pipeline.
+                    minimum: 0
+                    type: integer
                   params:
                     description: Params is a slice of parameters to be passed to the
                       Pipeline
@@ -2483,6 +2497,13 @@ spec:
                 description: TenantPipeline contains all the information about the
                   tenant Pipeline
                 properties:
+                  maxRetries:
+                    description: |-
+                      MaxRetries sets the retry limit for the pipeline overriding the value in
+                      ReleaseServiceConfig when specified. When unset the ReleaseServiceConfig
+                      value is used and 0 disables retries for the pipeline.
+                    minimum: 0
+                    type: integer
                   params:
                     description: Params is a slice of parameters to be passed to the
                       Pipeline
@@ -3975,6 +3996,149 @@ spec:
                       tasks
                     type: string
                 type: object
+              retryablePipelines:
+                description: RetryablePipelines is a list of pipelines that are safe
+                  to automatically retry on failure.
+                items:
+                  description: RetryablePipeline is a pipeline that is safe to automatically
+                    retry on failure.
+                  properties:
+                    pathInRepo:
+                      description: |-
+                        PathInRepo is the path within the git repository where the Pipeline definition
+                        can be found.
+                      type: string
+                    retryPolicy:
+                      description: RetryPolicy defines how and when the pipeline is
+                        retried after a failure.
+                      properties:
+                        disableOn:
+                          description: DisableOn defines conditions that disable automatic
+                            retries.
+                          properties:
+                            tags:
+                              description: |-
+                                Tags is a list of values which disable retries when present in the ReleasePlanAdmission
+                                mapping data.
+                              items:
+                                type: string
+                              type: array
+                          type: object
+                        maxRetries:
+                          description: MaxRetries is the maximum number of retries
+                            allowed for a pipeline.
+                          minimum: 0
+                          type: integer
+                        mitigations:
+                          description: Mitigations defines adjustment strategies to
+                            apply on retry based on failure type
+                          properties:
+                            oomKill:
+                              description: OOMKill defines adjustment for out-of-memory
+                                failures
+                              properties:
+                                maxComputeResources:
+                                  description: MaxComputeResources sets a upper limit
+                                    on resources across retries.
+                                  properties:
+                                    claims:
+                                      description: |-
+                                        Claims lists the names of resources, defined in spec.resourceClaims,
+                                        that are used by this container.
+
+                                        This field depends on the
+                                        DynamicResourceAllocation feature gate.
+
+                                        This field is immutable. It can only be set for containers.
+                                      items:
+                                        description: ResourceClaim references one
+                                          entry in PodSpec.ResourceClaims.
+                                        properties:
+                                          name:
+                                            description: |-
+                                              Name must match the name of one entry in pod.spec.resourceClaims of
+                                              the Pod where this field is used. It makes that resource available
+                                              inside a container.
+                                            type: string
+                                          request:
+                                            description: |-
+                                              Request is the name chosen for a request in the referenced claim.
+                                              If empty, everything from the claim is made available, otherwise
+                                              only the result of this request.
+                                            type: string
+                                        required:
+                                        - name
+                                        type: object
+                                      type: array
+                                      x-kubernetes-list-map-keys:
+                                      - name
+                                      x-kubernetes-list-type: map
+                                    limits:
+                                      additionalProperties:
+                                        anyOf:
+                                        - type: integer
+                                        - type: string
+                                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                        x-kubernetes-int-or-string: true
+                                      description: |-
+                                        Limits describes the maximum amount of compute resources allowed.
+                                        More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                      type: object
+                                    requests:
+                                      additionalProperties:
+                                        anyOf:
+                                        - type: integer
+                                        - type: string
+                                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                        x-kubernetes-int-or-string: true
+                                      description: |-
+                                        Requests describes the minimum amount of compute resources required.
+                                        If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                        otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                        More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                      type: object
+                                  type: object
+                                multiplier:
+                                  description: Multiplier is a factor used to multiply
+                                    memory limits on each retry
+                                  pattern: ^[0-9]+(\.[0-9]+)?$
+                                  type: string
+                              required:
+                              - multiplier
+                              type: object
+                            timeout:
+                              description: Timeout defines adjustment for timeout
+                                failures.
+                              properties:
+                                increment:
+                                  description: Increment is the duration to add to
+                                    the timeout on each retry.
+                                  type: string
+                                maxTimeout:
+                                  description: MaxTimeout is the maximum time allowed
+                                    across retries.
+                                  type: string
+                              required:
+                              - increment
+                              type: object
+                          type: object
+                      required:
+                      - maxRetries
+                      type: object
+                    revision:
+                      description: Revision is the git revision where the Pipeline
+                        definition can be found.
+                      type: string
+                    url:
+                      description: Url is the url to the git repo.
+                      type: string
+                  required:
+                  - pathInRepo
+                  - retryPolicy
+                  - revision
+                  - url
+                  type: object
+                type: array
             type: object
           status:
             description: ReleaseServiceConfigStatus defines the observed state of
@@ -4807,7 +4971,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: quay.io/konflux-ci/release-service:3b8b17ba29770613d4cf9e1a576a48804f2c7c08
+        image: quay.io/konflux-ci/release-service:714d204416e842429459066ffdd7f8b6faae0445
         livenessProbe:
           httpGet:
             path: /healthz
