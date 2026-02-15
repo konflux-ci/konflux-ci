@@ -15,54 +15,21 @@ on:
     types: [e2e]
 
 jobs:
-  # Gate: bots, repo collaborators (write+), or repository_dispatch/merge_group. Others need /allow from a maintainer.
+  # Gate: only same-repo PRs run heavy jobs on push. Fork PRs need /allow. Trusted contexts (dispatch, merge_group) always run.
   check-prerequisites:
     runs-on: ubuntu-latest
     steps:
     - name: Check prerequisites
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        PR_AUTHOR: ${{ github.event.pull_request.user.login }}
       run: |
-        # 1. Allow Manual Dispatch or Merge Queue
-        if [[ "${{ github.event_name }}" == 'repository_dispatch' || "${{ github.event_name }}" == 'merge_group' ]]; then
-          echo "✅ Trigger is ${{ github.event_name }} (Trusted Context). Allowed."
-          exit 0
+        # Fork PRs: fail so heavy jobs do not run on push (no secrets). Only /allow can trigger them.
+        if [[ "${{ github.event_name }}" == 'pull_request' && "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.event.pull_request.base.repo.full_name }}" ]]; then
+          echo "❌ Fork PR: heavy jobs do not run on push (no secrets). Comment /allow to trigger tests."
+          echo "### Fork PR" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Tests are not run automatically from forks." >> $GITHUB_STEP_SUMMARY
+          echo "**Action Required:** A maintainer must comment \`/allow\` on this PR to trigger tests." >> $GITHUB_STEP_SUMMARY
+          exit 1
         fi
-
-        # 2. Check Bot Whitelist
-        declare -a WHITELISTED_BOTS=(
-          "renovate[bot]"
-          "red-hat-konflux[bot]"
-          "github-actions[bot]"
-          "konflux-ci-update-bot[bot]"
-        )
-
-        for BOT in "${WHITELISTED_BOTS[@]}"; do
-          if [[ "$PR_AUTHOR" == "$BOT" ]]; then
-            echo "✅ Author is whitelisted bot ($BOT). Allowed."
-            exit 0
-          fi
-        done
-
-        # 3. Check Repository Permissions (works with private org membership)
-        USER_PERM=$(gh api "/repos/${{ github.repository }}/collaborators/$PR_AUTHOR/permission" --jq .permission 2>/dev/null || echo "none")
-
-        if [[ "$USER_PERM" =~ ^(admin|write|maintain)$ ]]; then
-          echo "✅ Author ($PR_AUTHOR) has '$USER_PERM' access. Allowed."
-          exit 0
-        fi
-
-        # 4. Fail and Instruct
-        echo "❌ Blocked: Untrusted author ($PR_AUTHOR) with permission '$USER_PERM'."
-
-        cat <<EOF >> $GITHUB_STEP_SUMMARY
-        ### 🛑 CI Approval Required
-        The PR author is not a maintainer or whitelisted bot.
-        **Action Required:** A maintainer must comment \`/allow\` on this PR to trigger tests.
-        EOF
-
-        exit 1
 
   sanity-test:
     needs: check-prerequisites
