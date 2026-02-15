@@ -93,7 +93,7 @@ jobs:
             const { data } = await github.rest.checks.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              name: 'Sanity Test',
+              name: 'sanity-test',
               head_sha,
               status: 'in_progress'
             });
