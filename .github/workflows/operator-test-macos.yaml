@@ -1,0 +1,121 @@
+name: Operator macOS (Docker setup)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Run Operator E2E Tests (macOS)
+    # Podman machine requires nested virtualization; Intel runners support it.
+    runs-on: macos-15-intel
+    env:
+      # renovate: datasource=github-releases depName=kubernetes-sigs/kind
+      KIND_VERSION: "0.31.0"
+      # renovate: datasource=github-releases depName=kubernetes/kubernetes
+      KUBECTL_VERSION: "1.35.1"
+      OPERATOR_IMAGE: example.com/konflux-operator:v0.0.1-mac
+      KIND_CLUSTER: konflux-operator-test-e2e-mac
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: operator/go.mod
+          cache-dependency-path: operator/go.sum
+
+      - name: Install kind (amd64)
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/v${KIND_VERSION}/kind-darwin-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+
+      - name: Install kubectl (darwin amd64)
+        run: |
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/darwin/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/kubectl
+
+      - name: Verify kind installation
+        run: kind version
+
+      - name: Install Podman
+        run: |
+          brew install podman
+          podman machine init --cpus 4 --memory 12288 --disk-size 30
+          podman machine start
+          echo "KIND_EXPERIMENTAL_PROVIDER=podman" >> $GITHUB_ENV
+
+      - name: Verify Podman
+        run: |
+          podman version
+          podman info
+
+      - name: Deploy Konflux using deploy-local.sh
+        working-directory: ${{ github.workspace }}
+        env:
+          KIND_CLUSTER: ${{ env.KIND_CLUSTER }}
+          OPERATOR_INSTALL_METHOD: "build"
+          OPERATOR_IMAGE: ${{ env.OPERATOR_IMAGE }}
+          KONFLUX_CR: operator/config/samples/konflux-e2e.yaml
+          GITHUB_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+          GITHUB_APP_ID: ${{ secrets.APP_ID }}
+          WEBHOOK_SECRET: ${{ secrets.APP_WEBHOOK_SECRET }}
+          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+          QUAY_ORGANIZATION: ${{ secrets.QUAY_ORG }}
+          SMEE_CHANNEL: ${{ secrets.SMEE_CHANNEL }}
+        run: ./scripts/deploy-local.sh
+
+      - name: Show version information
+        working-directory: operator
+        run: |
+          kubectl version
+          kind version
+
+      - name: Wait for Konflux CR to be Ready
+        run: |
+          echo "Waiting for Konflux CR to be ready..."
+          kubectl wait --for=condition=Ready=True konflux konflux --timeout=15m
+          echo "Konflux CR is ready!"
+
+      - name: List namespaces
+        run: kubectl get namespace
+
+      - name: Deploy Test Resources
+        working-directory: ${{ github.workspace }}
+        env:
+          SKIP_SAMPLE_COMPONENTS: "true"
+        run: ./deploy-test-resources.sh
+
+      - name: Run Konflux Integration Tests
+        working-directory: ${{ github.workspace }}
+        run: |
+          cd test/go-tests
+          go test ./...
+
+      - name: Run E2E tests
+        working-directory: ${{ github.workspace }}
+        env:
+          GH_ORG: ${{ secrets.GH_ORG }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          QUAY_DOCKERCONFIGJSON: ${{ secrets.QUAY_DOCKERCONFIGJSON }}
+          RELEASE_CATALOG_TA_QUAY_TOKEN: ${{ secrets.RELEASE_CATALOG_TA_QUAY_TOKEN }}
+        run: ./test/e2e/run-e2e.sh
+
+      - name: Generate error logs
+        if: ${{ !cancelled() }}
+        working-directory: ${{ github.workspace }}
+        run: |
+          echo "Konflux CR:"
+          kubectl get konflux konflux -o yaml || :
+          ./generate-err-logs.sh
+
+      - name: Archive logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: logs-mac
+          path: logs
