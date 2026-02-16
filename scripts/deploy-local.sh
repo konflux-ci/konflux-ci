@@ -93,7 +93,7 @@ export INCREASE_PODMAN_PIDS_LIMIT
 export GITHUB_PRIVATE_KEY GITHUB_APP_ID WEBHOOK_SECRET QUAY_TOKEN QUAY_ORGANIZATION
 
 # Get Konflux CR file path (precedence, high->low: command-line arg, env var, default)
-KONFLUX_CR="${1:-$KONFLUX_CR}"
+KONFLUX_CR="${1:-${KONFLUX_CR:-}}"
 
 # Auto-select e2e CR when Quay credentials are configured but no explicit CR specified
 if [ -n "${QUAY_TOKEN:-}" ] && [ -n "${QUAY_ORGANIZATION:-}" ] && [ -z "${KONFLUX_CR}" ]; then
