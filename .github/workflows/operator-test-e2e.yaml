@@ -57,14 +57,14 @@ jobs:
             const { data: e2e } = await github.rest.checks.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              name: 'Run Operator E2E Tests',
+              name: 'Run Operator E2E Tests (AMD64)',
               head_sha,
               status: 'in_progress'
             });
             const { data: arm64 } = await github.rest.checks.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              name: 'Run Operator Integration Tests (ARM64)',
+              name: 'Run Operator E2E Tests (ARM64)',
               head_sha,
               status: 'in_progress'
             });
@@ -105,16 +105,16 @@ jobs:
             cluster_suffix: ""
             test_scope: "integration+e2e"
             konflux_cr: "operator/config/samples/konflux-e2e.yaml"
-            job_name: "Run Operator E2E Tests"
+            job_name: "Run Operator E2E Tests (AMD64)"
           - arch: arm64
             runner: ubuntu-24.04-arm
             kind_binary: kind-linux-arm64
             kubectl_arch: arm64
             image_suffix: "-arm64"
             cluster_suffix: "-arm"
-            test_scope: "integration"
+            test_scope: "integration+e2e"
             konflux_cr: "operator/config/samples/konflux-e2e.yaml"
-            job_name: "Run Operator Integration Tests (ARM64)"
+            job_name: "Run Operator E2E Tests (ARM64)"
     steps:
       - name: Skip test - no operator changes
         run: |
@@ -137,16 +137,16 @@ jobs:
             cluster_suffix: ""
             test_scope: "integration+e2e"
             konflux_cr: "operator/config/samples/konflux-e2e.yaml"
-            job_name: "Run Operator E2E Tests"
+            job_name: "Run Operator E2E Tests (AMD64)"
           - arch: arm64
             runner: ubuntu-24.04-arm
             kind_binary: kind-linux-arm64
             kubectl_arch: arm64
             image_suffix: "-arm64"
             cluster_suffix: "-arm"
-            test_scope: "integration"
+            test_scope: "integration+e2e"
             konflux_cr: "operator/config/samples/konflux-e2e.yaml"
-            job_name: "Run Operator Integration Tests (ARM64)"
+            job_name: "Run Operator E2E Tests (ARM64)"
     env:
       # renovate: datasource=github-releases depName=kubernetes-sigs/kind
       KIND_VERSION: "0.31.0"
