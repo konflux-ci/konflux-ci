@@ -235,15 +235,6 @@ jobs:
           kubectl version
           kind version
 
-      - name: Wait for Konflux CR to be Ready
-        run: |
-          # Wait for the Konflux CR to be ready
-          # If the operator deployment is ready and the CR is ready, the operator should have
-          # ensured all underlying services (webhooks, CRDs, etc.) are ready
-          echo "Waiting for Konflux CR to be ready..."
-          kubectl wait --for=condition=Ready=True konflux konflux --timeout=15m
-          echo "Konflux CR is ready!"
-
       - name: List namespaces
         run: |
           kubectl get namespace
