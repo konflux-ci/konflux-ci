@@ -33,7 +33,7 @@ This guide covers deploying Konflux using the operator-based approach on any Kub
 
 ## Overview
 
-Konflux can be deployed on any Kubernetes cluster using the Konflux operator. The operator manages the lifecycle of all Konflux components.
+The Konflux operator deploys and manages all Konflux components on any Kubernetes cluster.
 
 **Two Deployment Approaches:**
 
@@ -54,7 +54,7 @@ For local development on Kind clusters (macOS or Linux).
 
 ### Setup
 
-The deployment script requires environment variables for GitHub App integration. To assist with setting these, you may copy the template and configure your values as `scripts/deploy-local.env` will be sourced by default if present:
+The deployment script requires environment variables for GitHub App integration. Copy the template and configure your values — `scripts/deploy-local.env` is sourced by default if present:
 
 ```bash
 cp scripts/deploy-local.env.template scripts/deploy-local.env
@@ -164,7 +164,7 @@ kubectl wait --for=condition=Ready konflux/konflux --timeout=15m
 
 ## Production Considerations
 
-For authentication configuration and other production considerations including default configuration and user access, see the [configuration samples README](../operator/config/samples/README.md#production-considerations).
+For authentication, default configuration, and user access in production, see the [configuration samples README](../operator/config/samples/README.md#production-considerations).
 
 ## Troubleshooting
 

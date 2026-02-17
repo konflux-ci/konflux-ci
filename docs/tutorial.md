@@ -1,8 +1,8 @@
 Konflux Tutorial
 ===
 
-This document will walk you through some of the common operations in Konflux
-including onboarding repositories, building, testing, and releasing artifacts.
+This tutorial covers common Konflux operations: onboarding repositories,
+building, testing, and releasing artifacts.
 
 *NOTE:* All commands shown in this document assume you are in the repository root.
 
@@ -34,16 +34,16 @@ including onboarding repositories, building, testing, and releasing artifacts.
 
 # Onboard a new Application
 
-The next step is to onboard an application to Konflux on behalf of user2.
+Onboard an application to Konflux on behalf of user2.
 
 This section includes two options for onboarding an application to Konflux.
 
-The first option demonstrates using the Konflux UI to onboard an application and
-releases its builds to quay.io.
+The first option uses the Konflux UI to onboard an application and release
+its builds to Quay.io.
 
-The second option demonstrates using Kubernetes manifests to onboard, and releases
-the builds to a container registry deployed to the cluster. The idea behind this
-scenario is to simplify onboarding in order to demonstrate Konflux with greater ease.
+The second option uses Kubernetes manifests to onboard and releases builds to a
+container registry deployed to the cluster. This approach simplifies onboarding
+to demonstrate Konflux more easily.
 
 Both options will use an example repository containing a Dockerfile to be built by
 Konflux:
@@ -65,11 +65,11 @@ With this approach, Konflux can create:
    onboarded to Konflux.
 2. The Quay.io repositories into which it will push container images.
 
-The former is enabled by creating the
+Pipeline creation requires the
 [GitHub Application Secrets](./github-secrets.md) **on all 3 namespaces** and
 installing your newly-created GitHub app on your repository, as explained above.
 
-To achieve the latter follow the step below:
+To enable Quay.io repository provisioning, follow the step below:
 
 :gear: Create an organization and an application in Quay.io that will allow Konflux to
 create repositories for your applications. To do that,
@@ -122,8 +122,8 @@ the pipelines to run using Konflux.
 
 To do that:
 
-1. :gear: Use a text editor to edit your local copy of the
-   [example application manifests](../test/resources/demo-users/user/sample-components/ns2/application-and-component.yaml):
+1. :gear: Use a text editor to edit your local copy of
+   [`test/resources/demo-users/user/sample-components/ns2/application-and-component.yaml`](../test/resources/demo-users/user/sample-components/ns2/application-and-component.yaml):
 
    Under the `Component` and `Repository` resources, change the `url` fields so they
    point to your newly-created fork.
@@ -464,7 +464,7 @@ The `ReleasePlanAdmission` resource makes use of an Enterprise Contract (EC) pol
 which defines criteria for gating releases.
 
 For more details you can examine the manifests under the
-[managed-ns2 directory](../test/resources/demo-users/user/sample-components/managed-ns2/).
+[`test/resources/demo-users/user/sample-components/managed-ns2/`](../test/resources/demo-users/user/sample-components/managed-ns2/) directory.
 
 To do all that, follow these steps:
 
@@ -572,8 +572,8 @@ registry, instead of the in-cluster one.
 #### Push Pull Request Builds to External Registry
 
 First, configure your application to use an external registry instead of the internal
-one used so far. In order to do that, you'd need to have a repository, on a public
-registry, in which you have push permissions.
+one. To do this, you need a repository on a public registry where you have push
+permissions.
 E.g. [Docker Hub](https://hub.docker.com/), [Quay.io](https://quay.io/repository/):
 
 1. :gear: Create an account on a public registry (unless you have one already).

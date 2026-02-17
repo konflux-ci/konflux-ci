@@ -8,10 +8,9 @@ For local development on Kind, the internal registry
 works out of the box with no authentication required. Note that images stored in the
 internal registry are lost when the Kind cluster is deleted.
 
-For production deployments, use an external registry which can be accomplished by
-manually creating and linking the secrets as described below. To fully onboard
-components through the Konflux UI, you must configure the
-[image-controller](#automatically-provision-quay-repositories-for-container-images)
+For production deployments, use an external registry. Create and link the secrets
+as described below. To fully onboard components through the Konflux UI, configure the
+[image-controller](#automatically-provision-quay-repositories-for-container-images),
 which automatically provisions Quay.io repositories when components are created.
 
 <!-- toc -->
@@ -26,7 +25,7 @@ which automatically provisions Quay.io repositories when components are created.
 
 # Configuring a Push Secret for the Build Pipeline
 
-After the build-pipeline builds an image, it will try to push it to a container registry.
+After the build pipeline builds an image, it pushes it to a container registry.
 If using a registry that requires authentication, the namespace where the pipeline is
 running should be configured with a push secret for the registry.
 
@@ -129,17 +128,21 @@ Konflux integrates with the
 [Image Controller](https://github.com/konflux-ci/image-controller)
 that can automatically create Quay repositories when onboarding a component.
 The image controller requires access to a Quay organization.
-Please follow the following steps for configuring it:
+Configure it with these steps:
 
 1. :gear: [Create a user on Quay.io](https://quay.io/)
 
-2. :gear: [Create Quay Organization](https://docs.projectquay.io/use_quay.html#org-create)
+2. :gear: [Create Quay Organization](https://docs.projectquay.io/quay_io.html#org-create)
 
-3. :gear: [Create Application and OAuth access token](https://docs.projectquay.io/use_quay.html#creating-oauth-access-token).
-   The application should have the following permissions:
-   - Administer Organization
-   - Administer Repositories
-   - Create Repositories
+3. :gear: [Create an OAuth Application and generate an access token](https://docs.projectquay.io/api_quay.html#creating-oauth-access-token):
+   - In your Quay organization, go to Applications → Create New Application
+   - Click on the application name → Generate Token
+   - Select these permissions:
+     - Administer Organization
+     - Administer Repositories
+     - Create Repositories
+   - Click "Generate Access Token" → "Authorize Application"
+   - Copy and save the token (this is your only opportunity to see it)
 
 4. :gear: Enable image-controller in your Konflux CR and create the Quay token secret.
 

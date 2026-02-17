@@ -36,8 +36,8 @@ KIND_EXPERIMENTAL_PROVIDER=podman kind create cluster --name konflux --config ki
 
 # Unknown Field "replacements"
 
-If you get the following error: `error: json: unknown field "replacements"`, while
-executing any of the setup scripts, you will need to update your `kubectl`.
+If you get the error `error: json: unknown field "replacements"` while
+executing any of the setup scripts, update your `kubectl`.
 
 :gear: Install the latest kubectl: https://kubernetes.io/docs/tasks/tools/#kubectl
 
@@ -163,8 +163,8 @@ on how to create webhook secret.
 
 ## Running out of Resources
 
-If setup scripts fail or pipelines are stuck or tend to fail at relatively random
-stages, it might be that the cluster is running out of resources.
+If setup scripts fail or pipelines stall at random stages, the cluster may
+lack resources.
 
 That could be:
 
@@ -243,8 +243,8 @@ that, refer to the instructions for [restarting the cluster](#restarting-the-clu
 
 ## Unable to Bind PVCs
 The `deploy-deps.sh` script includes a check to verify whether PVCs on the default
-storage class can be bind. If volume claims are unable to be fulfilled, the script will
-fail, displaying:
+storage class can be bind. If the cluster cannot fulfill volume claims, the script fails
+with:
 
 ```bash
 error: timed out waiting for the condition on persistentvolumeclaims/test-pvc

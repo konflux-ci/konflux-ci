@@ -56,7 +56,7 @@ done
 
 # Using KubeLinter
 
-Please consider running [KubeLinter](https://docs.kubelinter.io/#/?id=usage)
+Run [KubeLinter](https://docs.kubelinter.io/#/?id=usage)
 locally before submitting a PR to this repository.
 
 After [installing KubeLinter](https://docs.kubelinter.io/#/?id=installing-kubelinter)
@@ -70,9 +70,9 @@ using `mkdir -p ./.kube-linter/`. Then, run the following Bash script:
     kustomize build "$dir" > "./.kube-linter/$output_file.yaml"
     done
 ```
-finally, run `kube-linter lint ./.kube-linter` to recursively apply KubeLinter checks on this folder.
+Finally, run `kube-linter lint ./.kube-linter` to recursively apply KubeLinter checks on this folder.
 
-It may be also recommended to create a configuration file. To do so please check
+Consider creating a configuration file. To do so, check
 [KubeLinter config documentation](https://docs.kubelinter.io/#/configuring-kubelinter)
 this file will allow you to ignore or include specific KubeLinter checks.
 
@@ -115,7 +115,7 @@ Containerfile which automatically detects the build architecture via
 `TARGETARCH` and `TARGETOS` build arguments.
 
 # Running E2E test
-In order to validate changes quicker, it is possible to run E2E test, which validates that:
+To validate changes more quickly, run the E2E test, which validates that:
 * Application and Component can be created
 * Build PipelineRun is triggered and can finish successfully
 * Integration test gets triggered and finishes successfully
