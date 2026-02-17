@@ -17,9 +17,9 @@ set -euo pipefail
 #   prepare-release-notes.sh v0.2025.03 release-sha-abc1234 c515b60f474cb00a11176e5b400205a679b68aac /tmp/release-notes.md
 #   prepare-release-notes.sh v0.2025.03 release-sha-abc1234 main /tmp/release-notes.md
 
-if [ $# -ne 4 ]; then
-  echo "Error: Invalid number of arguments"
-  echo "Usage: $0 <version> <image_tag> <git_ref> <output_file>"
+if [ "$#" -ne 4 ]; then
+  echo "Error: Invalid number of arguments" >&2
+  echo "Usage: $0 <version> <image_tag> <git_ref> <output_file>" >&2
   exit 1
 fi
 
@@ -30,14 +30,13 @@ OUTPUT_FILE="$4"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# get_previous_tag finds the most recent existing tag by creation date.
-# The current release's tag does not exist yet (it is created by the "Create
-# GitHub Release" step later in the workflow), so the latest existing tag is
-# the previous release. We sort by creation date rather than version number
-# because the repo has legacy tags (v0.1-v0.4) that sort higher than the
-# current v0.0.x series in version comparison.
+# get_previous_tag finds the nearest tag reachable from the current commit.
+# git describe walks the commit graph backwards and only finds tags that are
+# ancestors of the current ref. Unlike --sort=-creatordate, this respects
+# branch ancestry, so it works correctly when releasing from multiple branches
+# (e.g., release-0.x and release-1.0 simultaneously).
 get_previous_tag() {
-  git tag --sort=-creatordate | head -1
+  git describe --tags --abbrev=0 2>/dev/null || true
 }
 
 # Generate release notes
@@ -64,12 +63,10 @@ kubectl apply -f https://github.com/konflux-ci/konflux-ci/releases/download/${VE
 EOF
 
 # Append upstream changelog (failures here must never block the release)
-PREVIOUS_TAG=$(get_previous_tag "$VERSION")
+PREVIOUS_TAG=$(get_previous_tag)
 if [ -n "$PREVIOUS_TAG" ]; then
-  # Use HEAD (not $VERSION) as the new ref because the version tag has not been
-  # created yet — it is created by the "Create GitHub Release" step later.
-  echo "Generating upstream changelog: ${PREVIOUS_TAG} -> HEAD" >&2
-  changelog=$("${SCRIPT_DIR}/generate-changelog.sh" "$PREVIOUS_TAG" HEAD) || true
+  echo "Generating upstream changelog: ${PREVIOUS_TAG} -> ${GIT_REF}" >&2
+  changelog=$("${SCRIPT_DIR}/generate-changelog.sh" "$PREVIOUS_TAG" "$GIT_REF") || true
   if [ -n "$changelog" ]; then
     printf '\n%s\n' "$changelog" >> "${OUTPUT_FILE}"
   fi
@@ -77,4 +74,4 @@ else
   echo "No previous tag found, skipping upstream changelog" >&2
 fi
 
-echo "Release notes generated at: ${OUTPUT_FILE}"
+echo "Release notes generated at: ${OUTPUT_FILE}" >&2
