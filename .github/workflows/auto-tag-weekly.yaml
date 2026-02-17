@@ -12,13 +12,60 @@ permissions:
   issues: write
 
 jobs:
-  auto-tag:
-    name: Auto Tag Weekly
+  get-branches:
+    name: List branches to tag
     runs-on: ubuntu-latest
+    outputs:
+      branches: ${{ steps.set.outputs.branches }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          fetch-depth: 0
+
+      - name: List branches
+        id: set
+        run: |
+          BRANCHES=$(.github/scripts/list-release-branches.sh)
+          echo "branches=$BRANCHES" >> "$GITHUB_OUTPUT"
+          echo "Branches to tag: $BRANCHES"
+
+  notify-no-branches:
+    name: Notify when no release branches
+    runs-on: ubuntu-latest
+    needs: get-branches
+    if: needs.get-branches.outputs.branches == '[]'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Open issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_NAME: Auto Tag Weekly
+        run: |
+          .github/scripts/create-or-update-issue.sh \
+            "⚠️ Auto Tag Weekly: No release branches to tag" \
+            "The scheduled workflow found no branches to tag (all release branches may be excluded in \`.github/excluded-release-branches.yaml\`)."
+
+  auto-tag:
+    name: Auto Tag (${{ matrix.branch }})
+    runs-on: ubuntu-latest
+    needs: get-branches
+    if: needs.get-branches.outputs.branches != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: ${{ fromJson(needs.get-branches.outputs.branches) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ matrix.branch }}
           fetch-depth: 0
           fetch-tags: true
 
@@ -27,14 +74,13 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
-      - name: Auto tag main branch
+      - name: Auto tag branch
         id: tag
         working-directory: ${{ github.workspace }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          .github/scripts/auto-tag-main.sh
-          echo "tag_created=true" >> $GITHUB_OUTPUT
+          .github/scripts/auto-tag-branch.sh
 
       - name: Notify on failure
         if: failure()
@@ -47,5 +93,5 @@ jobs:
           WORKFLOW_NAME: Auto Tag Weekly
         run: |
           .github/scripts/create-or-update-issue.sh \
-            "⚠️ Auto Tag Weekly Workflow Failed" \
-            "The scheduled workflow to auto-tag the main branch has failed."
+            "⚠️ Auto Tag Weekly Workflow Failed (${{ matrix.branch }})" \
+            "The scheduled workflow to auto-tag branch **${{ matrix.branch }}** has failed."
