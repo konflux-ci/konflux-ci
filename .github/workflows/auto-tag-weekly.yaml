@@ -13,12 +13,19 @@ permissions:
 
 jobs:
   auto-tag:
-    name: Auto Tag Weekly
+    name: Auto Tag (${{ matrix.branch }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Active branches: main (next minor) and release-x.y (patch releases).
+        # Add or remove support branches here.
+        branch: [main]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          ref: ${{ matrix.branch }}
           fetch-depth: 0
           fetch-tags: true
 
@@ -27,13 +34,14 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
-      - name: Auto tag main branch
+      - name: Auto tag branch
         id: tag
         working-directory: ${{ github.workspace }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ matrix.branch }}
         run: |
-          .github/scripts/auto-tag-main.sh
+          .github/scripts/auto-tag-branch.sh
           echo "tag_created=true" >> $GITHUB_OUTPUT
 
       - name: Notify on failure
@@ -47,5 +55,5 @@ jobs:
           WORKFLOW_NAME: Auto Tag Weekly
         run: |
           .github/scripts/create-or-update-issue.sh \
-            "⚠️ Auto Tag Weekly Workflow Failed" \
-            "The scheduled workflow to auto-tag the main branch has failed."
+            "⚠️ Auto Tag Weekly Workflow Failed (${{ matrix.branch }})" \
+            "The scheduled workflow to auto-tag branch **${{ matrix.branch }}** has failed."
