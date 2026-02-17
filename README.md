@@ -33,18 +33,17 @@ the reader to fulfill an action.
 
 # Trying Out Konflux
 
-This section demonstrates the process for deploying Konflux locally, onboarding users
-and building and releasing an application. The procedure contains two options for the
-user to choose from for onboarding applications to Konflux:
+This section covers deploying Konflux locally, onboarding users,
+and building and releasing an application. Two options exist for
+onboarding applications to Konflux:
 
 - Using the Konflux UI
 - Using Kubernetes manifests
 
-Each of those options has its pros and cons: the procedure described using the UI,
-provides more streamlined user experience once setup is done, but it requires using
-[Quay.io](https://quay.io) for image registry and requires some additional initial setup
-steps comparing to using Kubernetes manifest alone. The latter also supports using any
-image registry.
+Each option has pros and cons: the UI procedure provides a more streamlined
+experience after setup but requires [Quay.io](https://quay.io) for the image registry
+and additional initial setup compared to using Kubernetes manifests alone. The manifest
+approach also supports any image registry.
 
 **Note:** The procedure that is described using the UI can also be fulfilled using CLI
 and Kubernetes manifests.
@@ -307,8 +306,8 @@ ssh -L 9443:localhost:9443 $USER@$VM_IP
 
 `password:` `password`
 
-We now have Konflux up and running. Next, we shall configure Konflux to respond
-to Pull Request webhooks, build a user application and push it to a registry.
+Konflux is now up and running. Next, configure Konflux to respond
+to Pull Request webhooks, build a user application, and push it to a registry.
 
 ## Building and Running the Operator from Source
 
@@ -317,13 +316,13 @@ For instructions on building and running the operator from source, see the
 
 ## Enable Pipelines Triggering via Webhooks
 
-Pipelines Can be triggered by Pull Request activities, and their outcomes will be
-reported back to the PR page in GitHub.
+Pull Request activities trigger pipelines, and Konflux reports
+outcomes on the PR page in GitHub.
 
-A GitHub app is required for creating webhooks that Tekton will listen on. When deployed
-in a local environment like Kind, GitHub will not be able to reach a service within the
-cluster. For that reason, we need to use a proxy that will listen on such events
-from within the cluster and will relay those events internally.
+A GitHub app is required for creating webhooks that Tekton listens on. When deployed
+in a local environment like Kind, GitHub cannot reach services inside the
+cluster. A proxy relays webhook events from within the cluster to
+Tekton internally.
 
 To do that, we rely on [smee](https://smee.io/): We configure a GitHub app to send
 events to a channel we create on a public `smee` server, and we deploy a client
@@ -367,10 +366,9 @@ configuring integration tests, and releasing to registries, see the
 [Konflux Tutorial](./docs/tutorial.md).
 ## Resource (Memory & CPU) Management
 
-The Konflux Kind environment is intended to be deployable on workstations, CI runners
-and other systems which are not oriented towards Konflux performance. On the other hand,
-some of the workloads deployed to the environment were created, tweaked and adjusted
-for performance rather than resource conservation.
+The Konflux Kind environment targets workstations, CI runners,
+and other resource-constrained systems. Some workloads, however, prioritize
+performance over resource conservation.
 
 To run those workloads in Kind, we need to tune them accordingly. This can be done in
 a few different ways, mainly depending on whether the workload is created when deploying
@@ -420,10 +418,10 @@ For complete API reference documentation, see the
 
 ### Workloads Deployed *by* Konflux
 
-Workloads created by Konflux may not reside in this repository and may not even be
-referenced within it. Also, those workloads can be created and destroyed many times
-throughout the lifecycle of the environment, so manipulating the installation manifests
-cannot help us with those.
+Konflux-created workloads often reside outside this repository and may lack any
+reference within it. These workloads are created and destroyed repeatedly
+throughout the environment's lifecycle, so manipulating installation manifests
+has no effect on them.
 
 One prominent example is Tekton TaskRuns and the pods those create.
 
@@ -491,7 +489,7 @@ Together with [oauth2-proxy](https://github.com/oauth2-proxy/oauth2-proxy), it a
 for offloading authentication to different identity providers per the requirement
 of the environment or organization where Konflux is installed.
 
-The Konflux Operator, manages the Dex configurations through the Konflux
+The Konflux Operator manages the Dex configurations through the Konflux
 Custom Resource. For the simple standalone deployment, static passwords are configured
 in the `spec.ui.spec.dex.config` section of the Konflux CR. See the
 [sample Konflux CR](./operator/config/samples/konflux_v1alpha1_konflux.yaml) for an
