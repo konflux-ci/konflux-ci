@@ -290,6 +290,13 @@ spec:
                     Pipelines with removed: true exclude the matching default.
                     Set removeDefaults: true to discard all defaults and use only user-specified pipelines.
                 properties:
+                  defaultPipelineName:
+                    description: |-
+                      DefaultPipelineName specifies which pipeline to use as the default.
+                      The referenced pipeline must exist in the final merged pipeline list.
+                      When not set, the operator-provided default is preserved.
+                    minLength: 1
+                    type: string
                   pipelines:
                     description: |-
                       Pipelines specifies user-provided pipeline overrides or additions.

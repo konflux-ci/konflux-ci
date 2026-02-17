@@ -486,6 +486,97 @@ func TestApplyPipelineConfigMerge(t *testing.T) {
 		g.Expect(err).To(gomega.HaveOccurred())
 		g.Expect(err.Error()).To(gomega.ContainSubstring("missing config.yaml"))
 	})
+
+	t.Run("defaultPipelineName override to existing default pipeline", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := makeConfigMap()
+		err := applyPipelineConfigMerge(cm, &konfluxv1alpha1.PipelineConfigSpec{
+			DefaultPipelineName: "fbc-builder",
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("default-pipeline-name: fbc-builder"))
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("- name: fbc-builder"))
+	})
+
+	t.Run("defaultPipelineName override to custom pipeline", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := makeConfigMap()
+		err := applyPipelineConfigMerge(cm, &konfluxv1alpha1.PipelineConfigSpec{
+			DefaultPipelineName: "my-custom",
+			Pipelines: []konfluxv1alpha1.PipelineSpec{
+				{Name: "my-custom", Bundle: "quay.io/myorg/custom:latest"},
+			},
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("default-pipeline-name: my-custom"))
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("- name: my-custom"))
+	})
+
+	t.Run("defaultPipelineName with removeDefaults: true", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := makeConfigMap()
+		err := applyPipelineConfigMerge(cm, &konfluxv1alpha1.PipelineConfigSpec{
+			RemoveDefaults:      true,
+			DefaultPipelineName: "my-only-pipeline",
+			Pipelines: []konfluxv1alpha1.PipelineSpec{
+				{Name: "my-only-pipeline", Bundle: "quay.io/myorg/custom:latest"},
+			},
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("default-pipeline-name: my-only-pipeline"))
+		g.Expect(cm.Data["config.yaml"]).NotTo(gomega.ContainSubstring("fbc-builder"))
+		g.Expect(cm.Data["config.yaml"]).NotTo(gomega.ContainSubstring("docker-build-oci-ta"))
+	})
+
+	t.Run("error when defaultPipelineName doesn't exist", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := makeConfigMap()
+		err := applyPipelineConfigMerge(cm, &konfluxv1alpha1.PipelineConfigSpec{
+			DefaultPipelineName: "nonexistent-pipeline",
+		})
+		g.Expect(err).To(gomega.HaveOccurred())
+		g.Expect(err.Error()).To(gomega.ContainSubstring("nonexistent-pipeline"))
+		g.Expect(err.Error()).To(gomega.ContainSubstring("not found"))
+	})
+
+	t.Run("error when defaultPipelineName references a removed pipeline", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := makeConfigMap()
+		err := applyPipelineConfigMerge(cm, &konfluxv1alpha1.PipelineConfigSpec{
+			DefaultPipelineName: "fbc-builder",
+			Pipelines: []konfluxv1alpha1.PipelineSpec{
+				{Name: "fbc-builder", Removed: true},
+			},
+		})
+		g.Expect(err).To(gomega.HaveOccurred())
+		g.Expect(err.Error()).To(gomega.ContainSubstring("fbc-builder"))
+		g.Expect(err.Error()).To(gomega.ContainSubstring("not found"))
+	})
+
+	t.Run("preserves existing default when defaultPipelineName field not set", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := makeConfigMap()
+		err := applyPipelineConfigMerge(cm, &konfluxv1alpha1.PipelineConfigSpec{
+			Pipelines: []konfluxv1alpha1.PipelineSpec{
+				{Name: "my-custom", Bundle: "quay.io/myorg/custom:latest"},
+			},
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("default-pipeline-name: docker-build-oci-ta"))
+	})
+
+	t.Run("treats empty string defaultPipelineName as not set", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := makeConfigMap()
+		err := applyPipelineConfigMerge(cm, &konfluxv1alpha1.PipelineConfigSpec{
+			DefaultPipelineName: "",
+			Pipelines: []konfluxv1alpha1.PipelineSpec{
+				{Name: "my-custom", Bundle: "quay.io/myorg/custom:latest"},
+			},
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(cm.Data["config.yaml"]).To(gomega.ContainSubstring("default-pipeline-name: docker-build-oci-ta"))
+	})
 }
 
 func TestMergePipelines(t *testing.T) {
@@ -550,5 +641,88 @@ func TestMergePipelines(t *testing.T) {
 			}
 		}
 		g.Expect(found).To(gomega.BeTrue())
+	})
+}
+
+func TestValidateDefaultPipeline(t *testing.T) {
+	t.Run("returns nil when default pipeline name is empty", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cfg := &pipelineConfigYAML{
+			DefaultPipelineName: "",
+			Pipelines: []pipelineEntryYAML{
+				{Name: "pipeline-a", Bundle: "bundle-a"},
+			},
+		}
+		err := validateDefaultPipeline(cfg)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+	})
+
+	t.Run("returns nil when default pipeline exists in pipelines list", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cfg := &pipelineConfigYAML{
+			DefaultPipelineName: "pipeline-b",
+			Pipelines: []pipelineEntryYAML{
+				{Name: "pipeline-a", Bundle: "bundle-a"},
+				{Name: "pipeline-b", Bundle: "bundle-b"},
+				{Name: "pipeline-c", Bundle: "bundle-c"},
+			},
+		}
+		err := validateDefaultPipeline(cfg)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+	})
+
+	t.Run("returns error when default pipeline not found in pipelines list", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cfg := &pipelineConfigYAML{
+			DefaultPipelineName: "nonexistent-pipeline",
+			Pipelines: []pipelineEntryYAML{
+				{Name: "pipeline-a", Bundle: "bundle-a"},
+				{Name: "pipeline-b", Bundle: "bundle-b"},
+			},
+		}
+		err := validateDefaultPipeline(cfg)
+		g.Expect(err).To(gomega.HaveOccurred())
+		g.Expect(err.Error()).To(gomega.ContainSubstring("nonexistent-pipeline"))
+		g.Expect(err.Error()).To(gomega.ContainSubstring("pipeline-a"))
+		g.Expect(err.Error()).To(gomega.ContainSubstring("pipeline-b"))
+	})
+
+	t.Run("returns error when default pipeline set but no pipelines available", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cfg := &pipelineConfigYAML{
+			DefaultPipelineName: "some-pipeline",
+			Pipelines:           []pipelineEntryYAML{},
+		}
+		err := validateDefaultPipeline(cfg)
+		g.Expect(err).To(gomega.HaveOccurred())
+		g.Expect(err.Error()).To(gomega.ContainSubstring("some-pipeline"))
+		g.Expect(err.Error()).To(gomega.ContainSubstring("no pipelines"))
+	})
+
+	t.Run("returns nil when default pipeline is first in list", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cfg := &pipelineConfigYAML{
+			DefaultPipelineName: "pipeline-a",
+			Pipelines: []pipelineEntryYAML{
+				{Name: "pipeline-a", Bundle: "bundle-a"},
+				{Name: "pipeline-b", Bundle: "bundle-b"},
+			},
+		}
+		err := validateDefaultPipeline(cfg)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+	})
+
+	t.Run("returns nil when default pipeline is last in list", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cfg := &pipelineConfigYAML{
+			DefaultPipelineName: "pipeline-c",
+			Pipelines: []pipelineEntryYAML{
+				{Name: "pipeline-a", Bundle: "bundle-a"},
+				{Name: "pipeline-b", Bundle: "bundle-b"},
+				{Name: "pipeline-c", Bundle: "bundle-c"},
+			},
+		}
+		err := validateDefaultPipeline(cfg)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
 	})
 }

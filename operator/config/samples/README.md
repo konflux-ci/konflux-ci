@@ -10,6 +10,7 @@ This directory contains sample YAML files for Konflux Custom Resources (CRs).
   * [Authentication](#authentication)
   * [Default Tenant](#default-tenant)
   * [Pipeline Configuration](#pipeline-configuration)
+    + [Default Pipeline Selection](#default-pipeline-selection)
 - [Related Documentation](#related-documentation)
 
 <!-- tocstop -->
@@ -74,12 +75,66 @@ kubectl create rolebinding org-user-1-tenant-maintainer --clusterrole konflux-ma
 
 The operator manages the `build-pipeline-config` ConfigMap in the build-service
 namespace, which defines the default pipeline bundles (docker-build-oci-ta,
-fbc-builder, etc.). Use the `pipelineConfig` field in the KonfluxBuildService spec
-to customize pipeline configuration: override defaults by name, remove specific
+fbc-builder, etc.). Use the `pipelineConfig` field in the Konflux CR to
+customize pipeline configuration: override defaults by name, remove specific
 defaults, discard all defaults, or add custom pipelines.
 
-See `konflux_v1alpha1_konfluxbuildservice.yaml` for configuration details and the
-transition workflow.
+```yaml
+spec:
+  buildService:
+    spec:
+      pipelineConfig:
+        pipelines:
+          - name: fbc-builder
+            removed: true  # Remove this specific default pipeline
+          - name: my-custom-pipeline
+            bundle: quay.io/myorg/pipeline:latest
+```
+
+#### Default Pipeline Selection
+
+Use `defaultPipelineName` to specify which pipeline should be selected by default
+when creating new components. This overrides the operator's built-in default
+(docker-build-oci-ta).
+
+Use an existing default pipeline:
+
+```yaml
+spec:
+  buildService:
+    spec:
+      pipelineConfig:
+        defaultPipelineName: fbc-builder
+```
+
+Use a custom pipeline as the default:
+
+```yaml
+spec:
+  buildService:
+    spec:
+      pipelineConfig:
+        pipelines:
+        - name: my-custom-pipeline
+          bundle: quay.io/myorg/pipeline:v1.0
+        defaultPipelineName: my-custom-pipeline
+```
+
+When using `removeDefaults: true`, you must specify a defaultPipelineName:
+
+```yaml
+spec:
+  buildService:
+    spec:
+      pipelineConfig:
+        removeDefaults: true
+        pipelines:
+        - name: only-this-pipeline
+          bundle: quay.io/myorg/pipeline:v1.0
+        defaultPipelineName: only-this-pipeline
+```
+
+See `konflux_v1alpha1_konfluxbuildservice.yaml` for additional configuration examples.
 
 ## Related Documentation
 

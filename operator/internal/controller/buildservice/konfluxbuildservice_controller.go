@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	securityv1 "github.com/openshift/api/security/v1"
+	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -30,7 +31,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/yaml"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
@@ -234,14 +234,14 @@ func buildBuildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerD
 
 // pipelineConfigYAML represents the structure of the config.yaml data in the build-pipeline-config ConfigMap.
 type pipelineConfigYAML struct {
-	DefaultPipelineName string              `json:"default-pipeline-name,omitempty"`
-	Pipelines           []pipelineEntryYAML `json:"pipelines"`
+	DefaultPipelineName string              `yaml:"default-pipeline-name,omitempty"`
+	Pipelines           []pipelineEntryYAML `yaml:"pipelines"`
 }
 
 // pipelineEntryYAML represents a single pipeline entry in the config.yaml.
 type pipelineEntryYAML struct {
-	Name   string `json:"name"`
-	Bundle string `json:"bundle"`
+	Name   string `yaml:"name"`
+	Bundle string `yaml:"bundle"`
 }
 
 // applyPipelineConfigMerge merges user-specified pipeline configuration into the
@@ -263,6 +263,15 @@ func applyPipelineConfigMerge(configMap *corev1.ConfigMap, pipelineConfig *konfl
 	}
 
 	cfg.Pipelines = mergePipelines(cfg.Pipelines, pipelineConfig)
+
+	// Apply defaultPipelineName override if specified
+	if pipelineConfig.DefaultPipelineName != "" {
+		cfg.DefaultPipelineName = pipelineConfig.DefaultPipelineName
+		// Validate that the default pipeline exists when explicitly overridden
+		if err := validateDefaultPipeline(&cfg); err != nil {
+			return err
+		}
+	}
 
 	out, err := yaml.Marshal(&cfg)
 	if err != nil {
@@ -314,6 +323,33 @@ func mergePipelines(defaults []pipelineEntryYAML, spec *konfluxv1alpha1.Pipeline
 	}
 
 	return result
+}
+
+// validateDefaultPipeline ensures the default pipeline name exists in the pipelines list.
+func validateDefaultPipeline(cfg *pipelineConfigYAML) error {
+	if cfg.DefaultPipelineName == "" {
+		return nil
+	}
+
+	for _, p := range cfg.Pipelines {
+		if p.Name == cfg.DefaultPipelineName {
+			return nil
+		}
+	}
+
+	// Provide helpful error with available pipeline names
+	availableNames := make([]string, len(cfg.Pipelines))
+	for i, p := range cfg.Pipelines {
+		availableNames[i] = p.Name
+	}
+
+	if len(availableNames) == 0 {
+		return fmt.Errorf("default pipeline '%s' not found: no pipelines available (hint: check removeDefaults and pipelines configuration)",
+			cfg.DefaultPipelineName)
+	}
+
+	return fmt.Errorf("default pipeline '%s' not found in merged pipeline list (available: %v)",
+		cfg.DefaultPipelineName, availableNames)
 }
 
 // SetupWithManager sets up the controller with the Manager.

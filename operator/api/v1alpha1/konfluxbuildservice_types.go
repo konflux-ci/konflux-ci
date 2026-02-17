@@ -53,6 +53,13 @@ type PipelineConfigSpec struct {
 	// +optional
 	RemoveDefaults bool `json:"removeDefaults,omitempty"`
 
+	// DefaultPipelineName specifies which pipeline to use as the default.
+	// The referenced pipeline must exist in the final merged pipeline list.
+	// When not set, the operator-provided default is preserved.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	DefaultPipelineName string `json:"defaultPipelineName,omitempty"`
+
 	// Pipelines specifies user-provided pipeline overrides or additions.
 	// Entries with matching names override operator defaults.
 	// +optional

@@ -9,6 +9,7 @@
 #     - Remove a specific default with removed: true
 #     - Discard all defaults with removeDefaults: true
 #     - Add new pipelines alongside or instead of defaults
+#     - Set defaultPipelineName to specify which pipeline is selected by default for new components
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: KonfluxBuildService
 metadata:
@@ -24,6 +25,8 @@ spec:
   #       removed: true  # Remove this specific default pipeline
   #     - name: my-custom-pipeline
   #       bundle: quay.io/myorg/pipeline:latest
+  #   # defaultPipelineName: fbc-builder  # Use existing default pipeline as default
+  #   # defaultPipelineName: my-custom-pipeline  # Use custom pipeline as default
   buildControllerManager:
     replicas: 2
     manager:
