@@ -7,4 +7,4 @@ resources:
 images:
   - name: quay.io/konflux-ci/dex
     newName: quay.io/konflux-ci/dex
-    newTag: 8b787ea30e1b202c61edb653f3ebc814bdd93f5d6c4f0cdf419bfd83c8173499
+    newTag: 8f7c435ef3e20b3c6fe647e74c5061db105425a6511b28f9eb7b9ab383898929
