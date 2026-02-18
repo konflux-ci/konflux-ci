@@ -95,6 +95,7 @@ jobs:
     needs: [check-prerequisites, check-changes]
     if: needs.check-changes.outputs.operator != 'true'
     strategy:
+      fail-fast: false
       matrix:
         include:
           - arch: amd64
@@ -127,6 +128,7 @@ jobs:
     needs: [check-prerequisites, check-changes]
     if: needs.check-changes.outputs.operator == 'true'
     strategy:
+      fail-fast: false
       matrix:
         include:
           - arch: amd64
