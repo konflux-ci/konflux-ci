@@ -1,0 +1,55 @@
+name: Create Release Branch
+
+on:
+  workflow_dispatch:
+    inputs:
+      dev_version:
+        description: 'Next dev version X.Y (e.g. 1.2 → tag v1.2.0-rc.0 on main)'
+        required: true
+        type: string
+      release_version:
+        description: 'Release version X.Y (e.g. 1.1)'
+        required: true
+        type: string
+      git_ref:
+        description: 'Ref to create branch from (default: head of main)'
+        required: false
+        type: string
+        default: 'main'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-release-branch:
+    name: Create Release Branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.UPDATE_BOT_APP_ID }}
+          private-key: ${{ secrets.UPDATE_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.git_ref }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Create release branch
+        id: create
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          .github/scripts/create-release-branch-and-pr.sh \
+            "${{ inputs.dev_version }}" \
+            "${{ inputs.release_version }}" \
+            "${{ inputs.git_ref }}" \
+            "origin"
