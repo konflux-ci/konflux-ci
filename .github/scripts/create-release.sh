@@ -19,6 +19,10 @@ set -euo pipefail
 #   create-release.sh v0.2025.01 c5683934bbdf40fc5517d9cf491b381c4a2f049d /tmp/release-notes.md operator/dist true false
 #   create-release.sh v0.2025.01 main /tmp/release-notes.md operator/dist true false
 
+# Version substring that marks a release as prerelease (e.g. candidate).
+# If VERSION contains this, --prerelease is used.
+PRERELEASE_VERSION_SUBSTRING="rc"
+
 if [ $# -ne 6 ]; then
   echo "Error: Invalid number of arguments"
   echo "Usage: $0 <version> <git_ref> <notes_file> <artifact_dir> <draft> <generate_notes>"
@@ -46,6 +50,12 @@ if [ "$GENERATE_NOTES" == "true" ]; then
   echo "Auto-generating commit history"
 else
   echo "Skipping auto-generated commit history (use generate_notes=true for future releases)"
+fi
+
+PRERELEASE_FLAG=""
+if [[ "$VERSION" == *"${PRERELEASE_VERSION_SUBSTRING}"* ]]; then
+  PRERELEASE_FLAG="--prerelease"
+  echo "Version contains '${PRERELEASE_VERSION_SUBSTRING}'; creating as prerelease"
 fi
 
 # Verify files exist
@@ -79,6 +89,7 @@ gh release create "$VERSION" \
   --notes-file "$NOTES_FILE" \
   $GENERATE_NOTES_FLAG \
   $DRAFT_FLAG \
+  $PRERELEASE_FLAG \
   "${ARTIFACTS[@]}" \
   --target "$(git rev-parse "$GIT_REF^{commit}")"
 
