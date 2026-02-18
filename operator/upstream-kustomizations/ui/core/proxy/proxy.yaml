@@ -162,7 +162,7 @@ spec:
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
-      - image: quay.io/oauth2-proxy/oauth2-proxy@sha256:latest
+      - image: quay.io/konflux-ci/oauth2-proxy@sha256:latest
         name: oauth2-proxy
         env:
         # Secrets are configured here; all other config is injected by the controller via env vars
