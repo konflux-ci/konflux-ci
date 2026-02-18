@@ -1,0 +1,75 @@
+name: Create Release Branch
+
+on:
+  workflow_dispatch:
+    inputs:
+      dev_version:
+        description: 'Next dev version X.Y (e.g. 1.2 → tags v1.2.0-rc.1)'
+        required: true
+        type: string
+      release_version:
+        description: 'Release version X.Y (e.g. 1.1 → branch release-1.1, tag v1.1.0)'
+        required: true
+        type: string
+      git_ref:
+        description: 'Ref to create branch from (default: head of main)'
+        required: false
+        type: string
+        default: 'main'
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  create-release-branch:
+    name: Create Release Branch and PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.UPDATE_BOT_APP_ID }}
+          private-key: ${{ secrets.UPDATE_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.git_ref }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Create release branch and open matrix PR
+        id: create
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          .github/scripts/create-release-branch-and-pr.sh \
+            "${{ inputs.dev_version }}" \
+            "${{ inputs.release_version }}" \
+            "${{ inputs.git_ref }}" \
+            "origin"
+
+      - name: Notify on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_NAME: Create Release Branch
+        run: |
+          .github/scripts/create-or-update-issue.sh \
+            "⚠️ Create Release Branch Workflow Failed" \
+            "The workflow to create a release branch and open the Auto Tag Weekly matrix PR has failed.
+
+          **Inputs:**
+          - dev_version: ${{ inputs.dev_version }}
+          - release_version: ${{ inputs.release_version }}
+          - git_ref: ${{ inputs.git_ref }}"
