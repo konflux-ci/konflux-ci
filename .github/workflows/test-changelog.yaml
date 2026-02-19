@@ -1,0 +1,176 @@
+name: Test Changelog Generator
+
+on:
+  pull_request:
+    paths:
+      - '.github/scripts/generate-changelog.sh'
+      - '.github/scripts/prepare-release-notes.sh'
+      - '.github/workflows/test-changelog.yaml'
+
+jobs:
+  test-changelog:
+    name: Demo Changelog Output
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Run generate-changelog.sh against known tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "## Changelog Generator Demo" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "This job runs \`generate-changelog.sh\` against real release tags to demonstrate the output." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # Test 1: Single release range
+          echo "### Test 1: \`v0.0.8\` → \`v0.0.9\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```markdown' >> "$GITHUB_STEP_SUMMARY"
+          .github/scripts/generate-changelog.sh v0.0.8 v0.0.9 2>/tmp/stderr1.log >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "<details><summary>Diagnostics</summary>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/stderr1.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # Test 2: Wider range
+          echo "### Test 2: \`v0.0.6\` → \`v0.0.9\` (wider range)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```markdown' >> "$GITHUB_STEP_SUMMARY"
+          .github/scripts/generate-changelog.sh v0.0.6 v0.0.9 2>/tmp/stderr2.log >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "<details><summary>Diagnostics</summary>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/stderr2.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # Test 3: Same tag (negative test)
+          echo "### Test 3: \`v0.0.8\` → \`v0.0.8\` (same tag, should be empty)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          output=$(.github/scripts/generate-changelog.sh v0.0.8 v0.0.8 2>/tmp/stderr3.log) || true
+          if [ -z "$output" ]; then
+            echo "No output (correct — same SHA)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '```markdown' >> "$GITHUB_STEP_SUMMARY"
+            printf '%s\n' "$output" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "<details><summary>Diagnostics</summary>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/stderr3.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run full prepare-release-notes.sh integration
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LATEST_TAG=$(git tag --merged HEAD --sort=-creatordate | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          NEXT_VERSION=$(echo "$LATEST_TAG" | awk -F. '{printf "%s.%s.%d", $1, $2, $3+1}')
+          echo "### Test 4: Full integration (\`prepare-release-notes.sh ${NEXT_VERSION}\`)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Simulates a release of \`${NEXT_VERSION}\` from HEAD. This is the content written to the release notes file by our scripts (static template + curated upstream changes). In a real release, GitHub's auto-generated commit history would also be appended below by the \`--generate-notes\` flag." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          .github/scripts/prepare-release-notes.sh "$NEXT_VERSION" "release-sha-$(git rev-parse --short HEAD)" "$(git rev-parse HEAD)" /tmp/test-notes.md 2>/tmp/stderr4.log || true
+          # Render the release notes as a blockquote so markdown headers don't
+          # conflict with the job summary structure
+          if [ -f /tmp/test-notes.md ]; then
+            sed 's/^/> /' /tmp/test-notes.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "> (No release notes generated)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "> *In a real release, GitHub's auto-generated commit history (all operator repo commits) would appear below this point. It is kept until the curated changelog covers all upstream components.*" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "<details><summary>Diagnostics</summary>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/stderr4.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run additional changelog tests
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Test 5: ref-type extraction (application-api)
+          echo "### Test 5: \`v0.0.8\` → \`v0.0.9\` (application-api only, ref extraction)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```markdown' >> "$GITHUB_STEP_SUMMARY"
+          .github/scripts/generate-changelog.sh v0.0.8 v0.0.9 application-api 2>/tmp/stderr5.log >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "<details><summary>Diagnostics</summary>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/stderr5.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # Test 6: New component edge case (first tag, component may not exist)
+          FIRST_TAG=$(git tag --sort=creatordate | head -n 1)
+          echo "### Test 6: \`${FIRST_TAG}\` → \`v0.0.9\` (edge case: UI may not exist in old tag)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```markdown' >> "$GITHUB_STEP_SUMMARY"
+          .github/scripts/generate-changelog.sh "$FIRST_TAG" v0.0.9 ui 2>/tmp/stderr6.log >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "<details><summary>Diagnostics</summary>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/stderr6.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # Test 7: UI-specific with a range where the newTag actually changed (v0.0.6 -> v0.0.7)
+          echo "### Test 7: \`v0.0.6\` → \`v0.0.7\` (UI only, newTag extraction with real changes)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```markdown' >> "$GITHUB_STEP_SUMMARY"
+          .github/scripts/generate-changelog.sh v0.0.6 v0.0.7 ui 2>/tmp/stderr7.log >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "<details><summary>Diagnostics</summary>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/stderr7.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # Test 8: Enterprise Contract (ref extraction) - new component detection
+          # The conforma/crds ref has never changed between v0.0.x tags, so we use
+          # the first tag (v0.1) where the EC kustomization doesn't exist yet to
+          # exercise the new-component detection path for ref-type components.
+          echo "### Test 8: \`${FIRST_TAG}\` → \`v0.0.9\` (enterprise-contract only, ref extraction new-component)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```markdown' >> "$GITHUB_STEP_SUMMARY"
+          .github/scripts/generate-changelog.sh "$FIRST_TAG" v0.0.9 enterprise-contract 2>/tmp/stderr8.log >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "<details><summary>Diagnostics</summary>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/stderr8.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "</details>" >> "$GITHUB_STEP_SUMMARY"

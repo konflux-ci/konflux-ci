@@ -17,9 +17,9 @@ set -euo pipefail
 #   prepare-release-notes.sh v0.2025.03 release-sha-abc1234 c515b60f474cb00a11176e5b400205a679b68aac /tmp/release-notes.md
 #   prepare-release-notes.sh v0.2025.03 release-sha-abc1234 main /tmp/release-notes.md
 
-if [ $# -ne 4 ]; then
-  echo "Error: Invalid number of arguments"
-  echo "Usage: $0 <version> <image_tag> <git_ref> <output_file>"
+if [ "$#" -ne 4 ]; then
+  echo "Error: Invalid number of arguments" >&2
+  echo "Usage: $0 <version> <image_tag> <git_ref> <output_file>" >&2
   exit 1
 fi
 
@@ -27,6 +27,19 @@ VERSION="$1"
 IMAGE_TAG="$2"
 GIT_REF="$3"
 OUTPUT_FILE="$4"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# get_previous_tag finds the most recent stable release tag reachable from
+# $GIT_REF. Uses --merged to scope to ancestor tags (respects branch topology),
+# --sort=-creatordate to order by git history, and a strict regex to match only
+# stable semver tags (vX.Y.Z) — excluding pre-release suffixes like -rc, -beta,
+# -alpha, etc.
+get_previous_tag() {
+  git tag --merged "$GIT_REF" --sort=-creatordate 2>/dev/null \
+    | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+    | head -1 || true
+}
 
 # Generate release notes
 cat > "${OUTPUT_FILE}" <<EOF
@@ -51,4 +64,16 @@ kubectl apply -f https://github.com/konflux-ci/konflux-ci/releases/download/${VE
 - [README.md](https://github.com/konflux-ci/konflux-ci/blob/main/README.md) - Installation and usage instructions
 EOF
 
-echo "Release notes generated at: ${OUTPUT_FILE}"
+# Append upstream changelog (failures here must never block the release)
+PREVIOUS_TAG=$(get_previous_tag)
+if [ -n "$PREVIOUS_TAG" ]; then
+  echo "Generating upstream changelog: ${PREVIOUS_TAG} -> ${GIT_REF}" >&2
+  changelog=$("${SCRIPT_DIR}/generate-changelog.sh" "$PREVIOUS_TAG" "$GIT_REF") || true
+  if [ -n "$changelog" ]; then
+    printf '\n%s\n' "$changelog" >> "${OUTPUT_FILE}"
+  fi
+else
+  echo "No previous tag found, skipping upstream changelog" >&2
+fi
+
+echo "Release notes generated at: ${OUTPUT_FILE}" >&2
