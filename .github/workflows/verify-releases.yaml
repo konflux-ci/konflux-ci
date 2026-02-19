@@ -13,23 +13,36 @@ permissions:
 
 jobs:
   verify-release:
-    name: Verify Release
+    name: Verify Release (${{ matrix.branch }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # tag_prefix: scope for this branch (e.g. v1.2.); empty = any tag
+      matrix:
+        include:
+          - branch: main
+            tag_prefix: ""
+          # - branch: release-1.2
+          #   tag_prefix: v1.2.
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          ref: ${{ matrix.branch }}
           fetch-depth: 0
           fetch-tags: true
 
       - name: Check for releases and commits
+        id: verify
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          .github/scripts/verify-releases.sh ${{ github.repository }}
+          .github/scripts/verify-releases.sh \
+            ${{ github.repository }} \
+            ${{ matrix.tag_prefix }}
 
       - name: Create issue on verification failure
-        if: env.VERIFICATION_FAILED == 'true'
+        if: steps.verify.outputs.verification_failed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -39,12 +52,15 @@ jobs:
           WORKFLOW_NAME: Verify Releases
         run: |
           .github/scripts/create-or-update-issue.sh \
-            "Weekly Release Verification Failed" \
-            "No GitHub release was created in the past 7 days, but ${COMMIT_COUNT} commit(s) were made to the main branch during this period." \
+            "Weekly Release Verification Failed (${{ matrix.branch }})" \
+            "No matching release in the past 7 days; ${COMMIT_COUNT} commit(s) on branch.
+
+            **Branch:** ${{ matrix.branch }}
+            **Tag prefix:** ${{ matrix.tag_prefix }}" \
             /tmp/recent-commits.txt
 
       - name: Create issue on unexpected failure
-        if: failure() && env.VERIFICATION_FAILED != 'true'
+        if: failure() && steps.verify.outputs.verification_failed != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
