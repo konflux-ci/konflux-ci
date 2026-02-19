@@ -12,7 +12,7 @@ images:
   newName: quay.io/oauth2-proxy/oauth2-proxy
   newTag: latest@sha256:121cdc6520a02d7a2ddd181af6dbdc0f11f7d0c0d9353a999a69c3998cbfe37e
 - name: registry.access.redhat.com/ubi9/nginx-124
-  digest: sha256:b9c2c8657761ea521f49ade5b330e5f81ac03372a093588f142de736e13336af
+  digest: sha256:ece0c2d70199f0bcd3316d6913ef4b8e815d0229693156dee4bad8d69b13edc6
 
 configMapGenerator:
   - name: proxy
