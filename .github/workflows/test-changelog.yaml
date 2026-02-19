@@ -174,3 +174,105 @@ jobs:
           cat /tmp/stderr8.log >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run scaled component tests
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          FIRST_TAG=$(git tag --sort=creatordate | head -n 1)
+
+          # Test 9: Build Service (newTag extraction, new component)
+          echo "### Test 9: \`v0.0.8\` → \`v0.0.9\` (build-service only, newTag extraction)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```markdown' >> "$GITHUB_STEP_SUMMARY"
+          .github/scripts/generate-changelog.sh v0.0.8 v0.0.9 build-service 2>/tmp/stderr9.log >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "<details><summary>Diagnostics</summary>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/stderr9.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # Test 10: Integration Service (newTag extraction)
+          echo "### Test 10: \`v0.0.8\` → \`v0.0.9\` (integration-service only, newTag extraction)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```markdown' >> "$GITHUB_STEP_SUMMARY"
+          .github/scripts/generate-changelog.sh v0.0.8 v0.0.9 integration-service 2>/tmp/stderr10.log >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "<details><summary>Diagnostics</summary>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/stderr10.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # Test 11: Fallback format verification
+          # Enterprise contract uses non-conventional commits, so if there are changes
+          # between tags, it should produce the fallback "N commits - view diff" format.
+          # If the EC ref hasn't changed, this validates that the script handles same-SHA gracefully.
+          echo "### Test 11: \`v0.0.6\` → \`v0.0.9\` (enterprise-contract, fallback format test)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          output=$(.github/scripts/generate-changelog.sh v0.0.6 v0.0.9 enterprise-contract 2>/tmp/stderr11.log) || true
+          if echo "$output" | grep -q "view diff"; then
+            echo "Fallback format detected (correct)" >> "$GITHUB_STEP_SUMMARY"
+          elif [ -z "$output" ]; then
+            echo "No output (EC ref unchanged between these tags — same SHA)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Conventional commits found (unexpected for EC)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```markdown' >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "$output" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "<details><summary>Diagnostics</summary>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/stderr11.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # Test 12: Internal Services (ref extraction, different org)
+          echo "### Test 12: \`v0.0.8\` → \`v0.0.9\` (internal-services, ref extraction)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```markdown' >> "$GITHUB_STEP_SUMMARY"
+          .github/scripts/generate-changelog.sh v0.0.8 v0.0.9 internal-services 2>/tmp/stderr12.log >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "<details><summary>Diagnostics</summary>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/stderr12.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # Test 13: All 8 components (parallel execution, verify sorted output)
+          echo "### Test 13: \`v0.0.8\` → \`v0.0.9\` (all 8 components, parallel execution)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          output=$(.github/scripts/generate-changelog.sh v0.0.8 v0.0.9 2>/tmp/stderr13.log) || true
+          echo '```markdown' >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "$output" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          # Verify output is alphabetically ordered by checking section headers
+          headers=$(echo "$output" | grep '^### ' | sed 's/^### //')
+          sorted_headers=$(echo "$headers" | sort)
+          if [ "$headers" = "$sorted_headers" ]; then
+            echo "Output sections are alphabetically ordered (correct)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "**WARNING**: Output sections are NOT alphabetically ordered" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "<details><summary>Diagnostics</summary>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/stderr13.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "</details>" >> "$GITHUB_STEP_SUMMARY"

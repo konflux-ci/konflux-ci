@@ -48,12 +48,32 @@ shift 2
 # - display_name:       Human-readable name for the changelog section
 # - extraction_type:    How to extract the SHA: "newTag" (from images[].newTag) or "ref" (from resources[] ?ref=)
 #
+# Conventional Commits Audit (2026-02)
+# =====================================
+# Strong adoption:  release-service, integration-service, ui (konflux-ui)
+# Partial adoption: build-service, image-controller, application-api
+# Not adopted:      enterprise-contract (conforma/crds), internal-services
+#
+# Components without upstream git references (no changelog possible):
+#   rbac, info, cert-manager, default-tenant, registry
+#
+# Edge case: namespace-lister uses digest-based image tracking without a
+# mappable commit SHA and is excluded. If it switches to newTag, add a
+# one-line config entry to enable changelog for it.
+#
+# The script uses runtime detection: if no feat/fix commits are found,
+# it falls back to "N commits - [view diff]" format automatically.
+#
 # Add new components here to extend changelog coverage.
 declare -A COMPONENT_CONFIG=(
-  ["release-service"]="operator/upstream-kustomizations/release/core/kustomization.yaml|quay.io/konflux-ci/release-service|konflux-ci/release-service|release-service|newTag"
-  ["ui"]="operator/upstream-kustomizations/ui/core/proxy/kustomization.yaml|quay.io/konflux-ci/konflux-ui|konflux-ci/konflux-ui|UI|newTag"
   ["application-api"]="operator/upstream-kustomizations/application-api/kustomization.yaml|redhat-appstudio/application-api|konflux-ci/application-api|Application API|ref"
+  ["build-service"]="operator/upstream-kustomizations/build-service/core/kustomization.yaml|quay.io/konflux-ci/build-service|konflux-ci/build-service|Build Service|newTag"
   ["enterprise-contract"]="operator/upstream-kustomizations/enterprise-contract/core/kustomization.yaml|conforma/crds|conforma/crds|Enterprise Contract|ref"
+  ["image-controller"]="operator/upstream-kustomizations/image-controller/core/kustomization.yaml|quay.io/konflux-ci/image-controller|konflux-ci/image-controller|Image Controller|newTag"
+  ["integration-service"]="operator/upstream-kustomizations/integration/core/kustomization.yaml|quay.io/konflux-ci/integration-service|konflux-ci/integration-service|Integration Service|newTag"
+  ["internal-services"]="operator/upstream-kustomizations/release/internal-services/kustomization.yaml|redhat-appstudio/internal-services|redhat-appstudio/internal-services|Internal Services|ref"
+  ["release-service"]="operator/upstream-kustomizations/release/core/kustomization.yaml|quay.io/konflux-ci/release-service|konflux-ci/release-service|Release Service|newTag"
+  ["ui"]="operator/upstream-kustomizations/ui/core/proxy/kustomization.yaml|quay.io/konflux-ci/konflux-ui|konflux-ci/konflux-ui|UI|newTag"
 )
 
 # Bot authors to exclude from changelog
@@ -235,7 +255,15 @@ generate_component_changelog() {
   }
 
   if [ -z "$filtered_commits" ]; then
-    echo "  No conventional commits (feat/fix) found" >&2
+    # Fallback: show commit count and compare URL for repos without conventional commits
+    if [ -n "$total_commits" ] && [ "$total_commits" -gt 0 ]; then
+      echo "  Fallback: ${total_commits} commits, no conventional commits found" >&2
+      echo "### ${display_name}"
+      echo "> ${total_commits} commits since last release - [view diff](https://github.com/${github_repo}/compare/${old_sha}...${new_sha})"
+      echo ""
+      return 0
+    fi
+    echo "  No commits found" >&2
     return 1
   fi
 
@@ -252,25 +280,55 @@ generate_component_changelog() {
   return 0
 }
 
-# Main: generate changelog
-has_changes=false
+# Main: generate changelog with parallel execution
+#
+# Each component is processed in a background job writing to a temp file.
+# Results are aggregated in sorted order for deterministic output.
+# This is safe from race conditions because:
+# - Each job writes to uniquely-named temp files (component keys are unique)
+# - All shared data (config, tags, git repo) is read-only
+# - Aggregation only runs after all jobs complete (wait barrier)
+_tmpdir=$(mktemp -d)
+trap 'rm -rf "$_tmpdir"' EXIT
 
+pids=()
 for component in "${COMPONENTS[@]}"; do
   if [ -z "${COMPONENT_CONFIG[$component]+x}" ]; then
     echo "Warning: Unknown component '${component}', skipping" >&2
     continue
   fi
 
-  section=$(generate_component_changelog "$component") && {
+  (
+    if section=$(generate_component_changelog "$component" 2>"${_tmpdir}/${component}.stderr"); then
+      echo "$section" > "${_tmpdir}/${component}.out"
+    fi
+  ) &
+  pids+=($!)
+done
+
+# Wait for all background jobs to complete before aggregating
+for pid in "${pids[@]}"; do
+  wait "$pid" 2>/dev/null || true
+done
+
+# Aggregate results in sorted order (COMPONENTS is already sorted)
+has_changes=false
+for component in "${COMPONENTS[@]}"; do
+  # Replay stderr for diagnostics
+  if [ -f "${_tmpdir}/${component}.stderr" ]; then
+    cat "${_tmpdir}/${component}.stderr" >&2
+  fi
+
+  if [ -f "${_tmpdir}/${component}.out" ]; then
     if [ "$has_changes" = false ]; then
       echo "## Upstream Changes"
       echo ""
       has_changes=true
     fi
-    echo "$section"
-  }
+    cat "${_tmpdir}/${component}.out"
+  fi
 done
 
 if [ "$has_changes" = false ]; then
-  echo "No upstream conventional commits found between ${OLD_TAG} and ${NEW_TAG}" >&2
+  echo "No upstream changes found between ${OLD_TAG} and ${NEW_TAG}" >&2
 fi
