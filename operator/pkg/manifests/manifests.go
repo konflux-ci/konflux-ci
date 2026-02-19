@@ -8,7 +8,7 @@ import (
 	"embed"
 	"fmt"
 	"io"
-	"path/filepath"
+	"path"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -62,8 +62,8 @@ func AllComponents() []Component {
 
 // GetManifest returns the manifest content for a specific component.
 func GetManifest(component Component) ([]byte, error) {
-	path := filepath.Join(string(component), "manifests.yaml")
-	return embeddedFS.ReadFile(path)
+	manifestPath := path.Join(string(component), "manifests.yaml")
+	return embeddedFS.ReadFile(manifestPath)
 }
 
 // GetAllManifests returns a map of component names to their manifest content.

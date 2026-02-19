@@ -25,11 +25,34 @@ import (
 
 // KonfluxEnterpriseContractSpec defines the desired state of KonfluxEnterpriseContract.
 type KonfluxEnterpriseContractSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// ECDefaults allows overriding the ec-defaults ConfigMap values used by the release service.
+	// When set, these values take precedence over the embedded defaults.
+	// +optional
+	ECDefaults *ECDefaultsConfig `json:"ecDefaults,omitempty"`
+}
 
-	// Foo is an example field of KonfluxEnterpriseContract. Edit konfluxenterprisecontract_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+// ECDefaultsConfig holds overrides for the ec-defaults ConfigMap in the enterprise-contract-service namespace.
+// The release-service reads this ConfigMap to inject verify-conforma task parameters into release PipelineRuns.
+type ECDefaultsConfig struct {
+	// VerifyECTaskBundle overrides the verify_ec_task_bundle value in the ec-defaults ConfigMap.
+	// This is the OCI bundle reference for the Enterprise Contract verification task.
+	// +optional
+	VerifyECTaskBundle string `json:"verifyECTaskBundle,omitempty"`
+
+	// VerifyECTaskGitURL overrides the verify_ec_task_git_url value in the ec-defaults ConfigMap.
+	// This is the Git repository URL containing the Enterprise Contract verification task.
+	// +optional
+	VerifyECTaskGitURL string `json:"verifyECTaskGitURL,omitempty"`
+
+	// VerifyECTaskGitRevision overrides the verify_ec_task_git_revision value in the ec-defaults ConfigMap.
+	// This is the Git revision (commit SHA, branch, or tag) of the verification task.
+	// +optional
+	VerifyECTaskGitRevision string `json:"verifyECTaskGitRevision,omitempty"`
+
+	// VerifyECTaskGitPathInRepo overrides the verify_ec_task_git_pathInRepo value in the ec-defaults ConfigMap.
+	// This is the path within the Git repository to the verification task YAML.
+	// +optional
+	VerifyECTaskGitPathInRepo string `json:"verifyECTaskGitPathInRepo,omitempty"`
 }
 
 // KonfluxEnterpriseContractStatus defines the observed state of KonfluxEnterpriseContract.

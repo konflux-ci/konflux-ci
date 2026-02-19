@@ -115,8 +115,8 @@ func (r *KonfluxEnterpriseContractReconciler) Reconcile(ctx context.Context, req
 		FieldManager:      FieldManager,
 	})
 
-	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, tc); err != nil {
+	// Apply all embedded manifests (with CR-based overrides for ec-defaults)
+	if err := r.applyManifests(ctx, tc, konfluxEnterpriseContract); err != nil {
 		return errHandler.HandleApplyError(ctx, err)
 	}
 
@@ -143,13 +143,19 @@ func (r *KonfluxEnterpriseContractReconciler) Reconcile(ctx context.Context, req
 
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
-func (r *KonfluxEnterpriseContractReconciler) applyManifests(ctx context.Context, tc *tracking.Client) error {
+// If the CR specifies ECDefaults overrides, they are applied to the ec-defaults ConfigMap.
+func (r *KonfluxEnterpriseContractReconciler) applyManifests(ctx context.Context, tc *tracking.Client, cr *konfluxv1alpha1.KonfluxEnterpriseContract) error {
 	objects, err := r.ObjectStore.GetForComponent(manifests.EnterpriseContract)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for EnterpriseContract: %w", err)
 	}
 
 	for _, obj := range objects {
+		// Apply CR-based overrides to the ec-defaults ConfigMap
+		if cm, ok := obj.(*corev1.ConfigMap); ok && cm.Name == "ec-defaults" {
+			applyECDefaultsOverrides(cm, cr)
+		}
+
 		// Apply with ownership using the tracking client
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
@@ -157,6 +163,32 @@ func (r *KonfluxEnterpriseContractReconciler) applyManifests(ctx context.Context
 		}
 	}
 	return nil
+}
+
+// applyECDefaultsOverrides applies CR-specified overrides to the ec-defaults ConfigMap.
+// Only non-empty fields from the CR spec are applied; empty fields retain embedded defaults.
+func applyECDefaultsOverrides(cm *corev1.ConfigMap, cr *konfluxv1alpha1.KonfluxEnterpriseContract) {
+	if cr.Spec.ECDefaults == nil {
+		return
+	}
+
+	if cm.Data == nil {
+		cm.Data = make(map[string]string)
+	}
+
+	ecDefaults := cr.Spec.ECDefaults
+	if ecDefaults.VerifyECTaskBundle != "" {
+		cm.Data["verify_ec_task_bundle"] = ecDefaults.VerifyECTaskBundle
+	}
+	if ecDefaults.VerifyECTaskGitURL != "" {
+		cm.Data["verify_ec_task_git_url"] = ecDefaults.VerifyECTaskGitURL
+	}
+	if ecDefaults.VerifyECTaskGitRevision != "" {
+		cm.Data["verify_ec_task_git_revision"] = ecDefaults.VerifyECTaskGitRevision
+	}
+	if ecDefaults.VerifyECTaskGitPathInRepo != "" {
+		cm.Data["verify_ec_task_git_pathInRepo"] = ecDefaults.VerifyECTaskGitPathInRepo
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.
