@@ -1,0 +1,6 @@
+# Branches excluded from release tagging (auto-tag-weekly) and release verification.
+# Only release-x.y branches are considered; list here the ones to skip.
+# Example: add "release-0.0" to stop auto-tagging and verification for that branch.
+excluded:
+  - release-999.999
+  - release-888.888

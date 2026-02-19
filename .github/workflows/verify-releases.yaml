@@ -12,24 +12,52 @@ permissions:
   issues: write
 
 jobs:
-  verify-release:
-    name: Verify Release
+  get-branches:
+    name: List branches to verify
     runs-on: ubuntu-latest
+    outputs:
+      branches: ${{ steps.set.outputs.branches }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
+      - name: List branches
+        id: set
+        run: |
+          BRANCHES=$(.github/scripts/list-release-branches.sh)
+          echo "branches=$BRANCHES" >> "$GITHUB_OUTPUT"
+          echo "Branches to verify: $BRANCHES"
+
+  verify-release:
+    name: Verify Release (${{ matrix.branch }})
+    runs-on: ubuntu-latest
+    needs: get-branches
+    if: needs.get-branches.outputs.branches != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: ${{ fromJson(needs.get-branches.outputs.branches) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ matrix.branch }}
+          fetch-depth: 0
           fetch-tags: true
 
-      - name: Check for releases and commits
+      - name: Verify releases
+        id: verify
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          .github/scripts/verify-releases.sh ${{ github.repository }}
+          .github/scripts/verify-releases.sh \
+            "${{ github.repository }}" \
+            "${{ matrix.branch }}"
 
       - name: Create issue on verification failure
-        if: env.VERIFICATION_FAILED == 'true'
+        if: steps.verify.outputs.verification_failed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -39,12 +67,12 @@ jobs:
           WORKFLOW_NAME: Verify Releases
         run: |
           .github/scripts/create-or-update-issue.sh \
-            "Weekly Release Verification Failed" \
-            "No GitHub release was created in the past 7 days, but ${COMMIT_COUNT} commit(s) were made to the main branch during this period." \
-            /tmp/recent-commits.txt
+            "Weekly Release Verification Failed (${{ matrix.branch }})" \
+            "Release verification failed for branch **${{ matrix.branch }}**." \
+            /tmp/verification-details.txt
 
       - name: Create issue on unexpected failure
-        if: failure() && env.VERIFICATION_FAILED != 'true'
+        if: failure() && steps.verify.outputs.verification_failed != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
