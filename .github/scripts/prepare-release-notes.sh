@@ -30,13 +30,15 @@ OUTPUT_FILE="$4"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# get_previous_tag finds the nearest tag reachable from the current commit.
-# git describe walks the commit graph backwards and only finds tags that are
-# ancestors of the current ref. Unlike --sort=-creatordate, this respects
-# branch ancestry, so it works correctly when releasing from multiple branches
-# (e.g., release-0.x and release-1.0 simultaneously).
+# get_previous_tag finds the most recent stable release tag reachable from
+# $GIT_REF. Uses --merged to scope to ancestor tags (respects branch topology),
+# --sort=-creatordate to order by git history, and a strict regex to match only
+# stable semver tags (vX.Y.Z) — excluding pre-release suffixes like -rc, -beta,
+# -alpha, etc.
 get_previous_tag() {
-  git describe --tags --abbrev=0 2>/dev/null || true
+  git tag --merged "$GIT_REF" --sort=-creatordate 2>/dev/null \
+    | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+    | head -1 || true
 }
 
 # Generate release notes
