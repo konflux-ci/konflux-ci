@@ -28,11 +28,24 @@ generate_logs() {
         echo ""
 
         echo "--- Host Memory ---"
-        free -h 2>&1 || echo "Failed to get memory info"
+        if command -v free &>/dev/null; then
+            free -h 2>&1
+        elif [[ "$(uname)" == "Darwin" ]]; then
+            vm_stat 2>&1
+            sysctl hw.memsize 2>&1
+        else
+            echo "Failed to get memory info"
+        fi
         echo ""
 
         echo "--- Host CPU ---"
-        lscpu 2>&1 || echo "Failed to get CPU info"
+        if command -v lscpu &>/dev/null; then
+            lscpu 2>&1
+        elif [[ "$(uname)" == "Darwin" ]]; then
+            sysctl -a 2>&1 | grep machdep.cpu
+        else
+            echo "Failed to get CPU info"
+        fi
         echo ""
 
         echo "--- Host Disk Usage ---"
@@ -44,7 +57,11 @@ generate_logs() {
         echo ""
 
         echo "--- Process Resource Usage (Top 20) ---"
-        ps aux --sort=-%mem | head -21 2>&1 || echo "Failed to get process info"
+        if ps aux --sort=-%mem &>/dev/null 2>&1; then
+            ps aux --sort=-%mem | head -21
+        else
+            ps aux 2>&1 | head -21 || echo "Failed to get process info"
+        fi
         echo ""
     } > "$logs_dir/system-resources.log"
 

@@ -36,6 +36,7 @@ jobs:
       operator: ${{ steps.changed-files.outputs.any_changed }}
       check_run_id: ${{ steps.create-check.outputs.check_run_id }}
       check_run_id_arm64: ${{ steps.create-check.outputs.check_run_id_arm64 }}
+      check_run_id_macos: ${{ steps.create-check.outputs.check_run_id_macos }}
     steps:
       - name: Set checkout ref
         id: set-ref
@@ -68,8 +69,16 @@ jobs:
               head_sha,
               status: 'in_progress'
             });
+            const { data: macos } = await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'Run Operator E2E Tests (macOS)',
+              head_sha,
+              status: 'in_progress'
+            });
             core.setOutput('check_run_id', e2e.id);
             core.setOutput('check_run_id_arm64', arm64.id);
+            core.setOutput('check_run_id_macos', macos.id);
       - name: Checkout PR branch
         uses: actions/checkout@v6
         with:
@@ -102,6 +111,7 @@ jobs:
             runner: ubuntu-latest
             kind_binary: kind-linux-amd64
             kubectl_arch: amd64
+            kubectl_os: linux
             image_suffix: ""
             cluster_suffix: ""
             test_scope: "integration+e2e"
@@ -111,11 +121,22 @@ jobs:
             runner: ubuntu-24.04-arm
             kind_binary: kind-linux-arm64
             kubectl_arch: arm64
+            kubectl_os: linux
             image_suffix: "-arm64"
             cluster_suffix: "-arm"
             test_scope: "integration+e2e"
             konflux_cr: "operator/config/samples/konflux-e2e.yaml"
             job_name: "Run Operator E2E Tests (ARM64)"
+          - arch: arm64
+            runner: macos-latest
+            kind_binary: kind-darwin-arm64
+            kubectl_arch: arm64
+            kubectl_os: darwin
+            image_suffix: "-macos"
+            cluster_suffix: "-macos"
+            test_scope: "integration"
+            konflux_cr: "operator/config/samples/konflux-e2e.yaml"
+            job_name: "Run Operator E2E Tests (macOS)"
     steps:
       - name: Skip test - no operator changes
         run: |
@@ -135,6 +156,7 @@ jobs:
             runner: ubuntu-latest
             kind_binary: kind-linux-amd64
             kubectl_arch: amd64
+            kubectl_os: linux
             image_suffix: ""
             cluster_suffix: ""
             test_scope: "integration+e2e"
@@ -144,11 +166,22 @@ jobs:
             runner: ubuntu-24.04-arm
             kind_binary: kind-linux-arm64
             kubectl_arch: arm64
+            kubectl_os: linux
             image_suffix: "-arm64"
             cluster_suffix: "-arm"
             test_scope: "integration+e2e"
             konflux_cr: "operator/config/samples/konflux-e2e.yaml"
             job_name: "Run Operator E2E Tests (ARM64)"
+          - arch: arm64
+            runner: macos-latest
+            kind_binary: kind-darwin-arm64
+            kubectl_arch: arm64
+            kubectl_os: darwin
+            image_suffix: "-macos"
+            cluster_suffix: "-macos"
+            test_scope: "integration"
+            konflux_cr: "operator/config/samples/konflux-e2e.yaml"
+            job_name: "Run Operator E2E Tests (macOS)"
     env:
       # renovate: datasource=github-releases depName=kubernetes-sigs/kind
       KIND_VERSION: "0.31.0"
@@ -172,6 +205,7 @@ jobs:
           echo "ref=$ref" >> $GITHUB_OUTPUT
           echo "Trigger: ${{ github.event_name }} → checkout ref: $ref"
       - name: Free Disk Space (Ubuntu)
+        if: runner.os == 'Linux'
         uses: jlumbroso/free-disk-space@main
         with:
           tool-cache: false
@@ -183,9 +217,19 @@ jobs:
           ref: ${{ steps.set-ref.outputs.ref }}
 
       - name: Disable AppArmor
+        if: runner.os == 'Linux'
         # works around a change in ubuntu 24.04 that restricts Linux namespace access
         # for unprivileged users
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Install Docker (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install docker colima
+          colima start --cpu 4 --memory 8 --disk 60
+          docker context use colima
+          docker info
+          docker version
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -201,7 +245,7 @@ jobs:
 
       - name: Install kubectl (${{ matrix.arch }})
         run: |
-          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${{ matrix.kubectl_arch }}/kubectl"
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/${{ matrix.kubectl_os }}/${{ matrix.kubectl_arch }}/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/kubectl
 
@@ -294,6 +338,7 @@ jobs:
           script: |
             const checkRunId = parseInt(process.env.CHECK_RUN_ID);
             const checkRunIdArm64 = parseInt(process.env.CHECK_RUN_ID_ARM64);
+            const checkRunIdMacos = parseInt(process.env.CHECK_RUN_ID_MACOS);
             const testResult = process.env.TEST_RESULT;
             const testSkipResult = process.env.TEST_SKIP_RESULT;
             let conclusion = 'failure';
@@ -302,8 +347,10 @@ jobs:
             const update = { owner: context.repo.owner, repo: context.repo.repo, status: 'completed', conclusion };
             await github.rest.checks.update({ ...update, check_run_id: checkRunId });
             await github.rest.checks.update({ ...update, check_run_id: checkRunIdArm64 });
+            await github.rest.checks.update({ ...update, check_run_id: checkRunIdMacos });
         env:
           CHECK_RUN_ID: ${{ needs.check-changes.outputs.check_run_id }}
           CHECK_RUN_ID_ARM64: ${{ needs.check-changes.outputs.check_run_id_arm64 }}
+          CHECK_RUN_ID_MACOS: ${{ needs.check-changes.outputs.check_run_id_macos }}
           TEST_RESULT: ${{ needs.test.result }}
           TEST_SKIP_RESULT: ${{ needs.test-skip.result }}
