@@ -20,6 +20,7 @@ Troubleshooting Common Issues
     + [Common Release Issues](#common-release-issues)
       - [Unfinished string at EOF](#unfinished-string-at-eof)
       - [400 Bad Request](#400-bad-request)
+- [Docker Hub Rate Limits](#docker-hub-rate-limits)
 
 <!-- tocstop -->
 
@@ -36,8 +37,8 @@ KIND_EXPERIMENTAL_PROVIDER=podman kind create cluster --name konflux --config ki
 
 # Unknown Field "replacements"
 
-If you get the following error: `error: json: unknown field "replacements"`, while
-executing any of the setup scripts, you will need to update your `kubectl`.
+If you get the error `error: json: unknown field "replacements"` while
+executing any of the setup scripts, update your `kubectl`.
 
 :gear: Install the latest kubectl: https://kubernetes.io/docs/tasks/tools/#kubectl
 
@@ -186,8 +187,8 @@ defaults to HTTP and fails.
 
 ## Running out of Resources
 
-If setup scripts fail or pipelines are stuck or tend to fail at relatively random
-stages, it might be that the cluster is running out of resources.
+If setup scripts fail or pipelines stall at random stages, the cluster may
+lack resources.
 
 That could be:
 
@@ -266,8 +267,8 @@ that, refer to the instructions for [restarting the cluster](#restarting-the-clu
 
 ## Unable to Bind PVCs
 The `deploy-deps.sh` script includes a check to verify whether PVCs on the default
-storage class can be bind. If volume claims are unable to be fulfilled, the script will
-fail, displaying:
+storage class can be bind. If the cluster cannot fulfill volume claims, the script fails
+with:
 
 ```bash
 error: timed out waiting for the condition on persistentvolumeclaims/test-pvc
@@ -346,5 +347,29 @@ main.go:74: error during command execution: PUT https://quay.io/...: unexpected 
 **Solution**:
 
 :gear: verify that you
-[created the registry secret](./quay.md#configuring-a-push-secret-for-the-release-pipeline)
+[created the registry secret](./registry-configuration.md#configuring-a-push-secret-for-the-release-pipeline)
 also for the managed namespace.
+
+# Docker Hub Rate Limits
+
+Docker Hub enforces rate limits on image pulls. If you encounter script failures related
+to rate limiting, you can pre-load images locally to avoid those issues.
+
+:gear: Check for rate limit events:
+
+```bash
+kubectl get events -A | grep toomanyrequests
+```
+
+If the command returns results, you are hitting Docker Hub rate limits.
+
+:gear: Pre-load the affected images into your Kind cluster to avoid pulling from
+Docker Hub:
+
+```bash
+podman login docker.io
+podman pull ghcr.io/project-zot/zot:v2.1.13
+kind load docker-image ghcr.io/project-zot/zot:v2.1.13 --name konflux
+```
+
+:gear: Continue with normal deployment after pre-loading images.

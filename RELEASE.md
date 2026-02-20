@@ -17,8 +17,8 @@
 
 <!-- tocstop -->
 
-This repository uses an automated release process that creates weekly releases
-when tags are pushed to the repository. The process involves four main steps:
+Tags pushed to this repository trigger an automated weekly release process.
+The process involves four main steps:
 
 1. **Auto-tagging**: A GitHub Actions workflow automatically creates a new tag
    on the main branch
