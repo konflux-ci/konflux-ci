@@ -110,7 +110,7 @@ For production deployments, create your own `konflux.yaml` based on the availabl
 - [konflux-empty-cr.yaml](../operator/config/samples/konflux-empty-cr.yaml) - Minimal configuration using defaults
 - [Sample README](../operator/config/samples/README.md) - Complete documentation of all samples
 
-**Important:** Do not use `konflux_v1alpha1_konflux.yaml` for production - it contains demo users with static passwords for testing only. Configure OIDC authentication instead (see Authentication section below).
+**Important:** Do not use `konflux_v1alpha1_konflux_demo.yaml` for production - it contains demo users with static passwords for testing only. Configure OIDC authentication instead (see Authentication section below) using the safe default `konflux_v1alpha1_konflux.yaml`.
 
 ### Step 3: Apply Configuration
 

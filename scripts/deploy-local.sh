@@ -21,7 +21,7 @@
 # Usage:
 #   ./scripts/deploy-local.sh [konflux-cr-file]
 #
-# By default, uses operator/config/samples/konflux_v1alpha1_konflux.yaml
+# By default, uses operator/config/samples/konflux_v1alpha1_konflux_demo.yaml
 #
 # Example:
 #   cp scripts/deploy-local.env.template scripts/deploy-local.env
@@ -29,7 +29,7 @@
 #   ./scripts/deploy-local.sh
 #
 # To customize the Konflux configuration:
-#   cp operator/config/samples/konflux_v1alpha1_konflux.yaml my-konflux.yaml
+#   cp operator/config/samples/konflux_v1alpha1_konflux_demo.yaml my-konflux.yaml
 #   # Edit my-konflux.yaml as needed
 #   ./scripts/deploy-local.sh my-konflux.yaml
 #
@@ -104,7 +104,7 @@ if [ -n "${QUAY_TOKEN:-}" ] && [ -n "${QUAY_ORGANIZATION:-}" ] && [ -z "${KONFLU
     echo "      To use a different CR, set KONFLUX_CR environment variable or pass as argument"
     echo ""
 else
-    KONFLUX_CR="${KONFLUX_CR:-${REPO_ROOT}/operator/config/samples/konflux_v1alpha1_konflux.yaml}"
+    KONFLUX_CR="${KONFLUX_CR:-${REPO_ROOT}/operator/config/samples/konflux_v1alpha1_konflux_demo.yaml}"
 fi
 
 # Convert relative path to absolute (if not already absolute)

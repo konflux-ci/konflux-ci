@@ -1,13 +1,13 @@
 # Title: Konflux Configuration
 # Description: Complete Konflux configuration with all components (UI, Build Service, Integration Service, Release Service, etc.)
 #
-# This sample is used in CI tests and local development. It includes demo users with static passwords
-# for testing purposes. For production deployments, remove the staticPasswords section and configure
-# OIDC authentication (GitHub, Google, LDAP, etc.) instead.
+# This sample provides a secure, minimal default configuration for production deployments.
+# It requires OIDC authentication (GitHub, Google, LDAP, etc.) to be configured via the
+# dex components or elsewhere.
 #
 # Usage:
-#   CI: Used automatically by .github/workflows/operator-test-e2e.yaml
-#   Local: ./scripts/deploy-local.sh (uses this file by default)
+#   Production: Standard deployment (requires OIDC setup)
+#   Local: This file is no longer used by default for local dev. See konflux_v1alpha1_konflux_demo.yaml
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: Konflux
 metadata:
@@ -37,22 +37,9 @@ spec:
               memory: 128Mi
       dex:
         config:
-          enablePasswordDB: true
-          passwordConnector: local
-          # WARNING: Demo users for CI and local development ONLY
-          # For production, remove staticPasswords and configure OIDC connectors
+          enablePasswordDB: false
+          # Configure OIDC connectors here for production.
           # See docs/operator-deployment.md for production authentication examples
-          staticPasswords:
-          - email: "user1@konflux.dev"
-            # bcrypt hash of the string "password": $(echo password | htpasswd -BinC 10 admin | cut -d: -f2)
-            hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" # notsecret
-            username: "user1"
-            userID: "7138d2fe-724e-4e86-af8a-db7c4b080e20"
-          - email: "user2@konflux.dev"
-            # bcrypt hash of the string "password": $(echo password | htpasswd -BinC 10 admin | cut -d: -f2)
-            hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" # notsecret
-            username: "user2"
-            userID: "ea8e8ee1-2283-4e03-83d4-b00f8b821b64"
   integrationService:
     spec:
       integrationControllerManager:
@@ -104,13 +91,8 @@ spec:
   info:
     spec:
       publicInfo:
-        environment: development
+        environment: prod
         visibility: public
-      banner:
-        items:
-          # Display a banner at the top of the Konflux UI to all users.
-          - summary: "Welcome to Konflux-CI! This development and testing environment has been deployed with default insecure passwords!"
-            type: danger
   certManager:
     # CreateClusterIssuer controls whether cluster issuer resources are created
     # Defaults to true if not specified

@@ -15,10 +15,13 @@ This directory contains sample YAML files for Konflux Custom Resources (CRs).
 
 ## Functional Samples
 
-**konflux_v1alpha1_konflux.yaml** - Used in CI tests and local development.
-Represents a complete Konflux CR configuration with all components, realistic
-resource limits, and demo users for testing. Includes helpful comments for
-common configurations.
+**konflux_v1alpha1_konflux.yaml** - Used in standard testing and templates.
+Represents a clean Konflux CR configuration with all components and realistic
+resource limits, without relying on insecure demo features.
+
+**konflux_v1alpha1_konflux_demo.yaml** - Used in CI tests and local development.
+Includes the same base configuration as above but adds demo users with static
+passwords and a warning banner for testing convenience.
 
 **konflux-e2e.yaml** - Extends the base configuration with image-controller
 enabled, which is required for E2E tests. Used by the CI E2E workflow.
@@ -41,9 +44,9 @@ These samples are useful for:
 
 ### Authentication
 
-The main `konflux_v1alpha1_konflux.yaml` sample includes demo users with static passwords for CI testing and local development. **These demo users are for testing only and should never be used in production.**
+The `konflux_v1alpha1_konflux_demo.yaml` sample includes demo users with static passwords for CI testing and local development. **These demo users are for testing only and should never be used in production.**
 
-For production deployments, remove the `staticPasswords` section and configure OIDC connectors (GitHub, Google, LDAP, etc.) for authentication. See `konflux-with-github-auth.yaml` for an example and the [Dex Connectors Documentation](https://dexidp.io/docs/connectors/) for all supported connectors.
+For production deployments, use the `konflux_v1alpha1_konflux.yaml` sample instead. Remove any `staticPasswords` sections if present and configure OIDC connectors (GitHub, Google, LDAP, etc.) for authentication. See `konflux-with-github-auth.yaml` for an example and the [Dex Connectors Documentation](https://dexidp.io/docs/connectors/) for all supported connectors.
 
 ### Default Tenant
 

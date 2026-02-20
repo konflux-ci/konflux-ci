@@ -129,7 +129,7 @@ kubectl apply -f https://github.com/konflux-ci/konflux-ci/releases/latest/downlo
 kubectl apply -f my-konflux.yaml
 ```
 
-**Important:** Do not use the sample with demo users (`konflux_v1alpha1_konflux.yaml`) for production - configure OIDC authentication instead.
+**Important:** Do not use the sample with demo users (`konflux_v1alpha1_konflux_demo.yaml`) for production - configure OIDC authentication instead using the secure `konflux_v1alpha1_konflux.yaml`.
 
 :gear: Create required secrets (GitHub App, Quay tokens, etc.). See the [Operator Deployment Guide](docs/operator-deployment.md) for details.
 
@@ -280,7 +280,7 @@ For local testing, you can use the sample configuration with demo users:
 ```bash
 kubectl apply -f <(curl -L \
   https://github.com/konflux-ci/konflux-ci/releases/latest/download/samples.tar.gz | \
-  tar -xzO ./konflux_v1alpha1_konflux.yaml)
+  tar -xzO ./konflux_v1alpha1_konflux_demo.yaml)
 ```
 
 > [!WARNING]
@@ -293,7 +293,7 @@ kubectl apply -f <(curl -L \
 > ```bash
 > kubectl apply -f <(curl -L \
 >   https://github.com/konflux-ci/konflux-ci/releases/download/v0.0.1/samples.tar.gz | \
->   tar -xzO ./konflux_v1alpha1_konflux.yaml)
+>   tar -xzO ./konflux_v1alpha1_konflux_demo.yaml)
 > ```
 
 Wait for Konflux to be ready:
@@ -1104,7 +1104,7 @@ of the environment or organization where Konflux is installed.
 The Konflux Operator, manages the Dex configurations through the Konflux
 Custom Resource. For the simple standalone deployment, static passwords are configured
 in the `spec.ui.spec.dex.config` section of the Konflux CR. See the
-[sample Konflux CR](./operator/config/samples/konflux_v1alpha1_konflux.yaml) for an
+[sample Konflux Demo CR](./operator/config/samples/konflux_v1alpha1_konflux_demo.yaml) for an
 example configuration with static users.
 
 To add or modify users, edit your Konflux CR and update the `staticPasswords` section:
