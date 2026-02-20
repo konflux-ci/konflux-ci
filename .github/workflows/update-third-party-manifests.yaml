@@ -7,7 +7,7 @@ env:
   # renovate: datasource=helm depName=jetstack/cert-manager versioning=semver
   CERT_MANAGER_VERSION: "1.19.3"
   # renovate: datasource=helm depName=jetstack/trust-manager versioning=semver
-  TRUST_MANAGER_VERSION: "0.20.3"
+  TRUST_MANAGER_VERSION: "0.21.0"
 
 on:
   schedule:
