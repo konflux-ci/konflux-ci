@@ -1,0 +1,27 @@
+name: Test Setup Konflux Action
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      # Step to use the action from the current branch
+      - name: Deploy Konflux using local action
+        uses: ./.github/actions/setup-konflux
+        with:
+          # Mapping secrets to inputs
+          github_app_id: ${{ secrets.APP_ID }}
+          webhook_secret: ${{ secrets.APP_WEBHOOK_SECRET }}
+          github_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+          quay_token: ${{ secrets.QUAY_TOKEN }}
+          quay_organization: ${{ secrets.QUAY_ORG }}
+          install_method: release
+
+      - name: Verify Deployment
+        run: |
+          kubectl get pods -A
+          kubectl get konflux konflux -o yaml
