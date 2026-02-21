@@ -1,12 +1,17 @@
 name: Operator E2E Tests
 
 on:
+  push:
+    branches:
+      - main
+      - 'feat/**'
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
   merge_group:
     types: [checks_requested]
   repository_dispatch:
     types: [e2e]
+  workflow_dispatch:
 
 jobs:
   # Gate: only same-repo PRs run heavy jobs on push. Fork PRs need /allow. Trusted contexts (dispatch, merge_group) always run.
