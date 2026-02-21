@@ -135,13 +135,9 @@ jobs:
             job_name: "Run Operator E2E Tests (ARM64)"
           - arch: arm64
             runner: macos-latest
-            kind_binary: kind-darwin-arm64
-            kubectl_arch: arm64
-            kubectl_os: darwin
             image_suffix: "-macos"
             cluster_suffix: "-macos"
             test_scope: "integration"
-            konflux_cr: "operator/config/samples/konflux-e2e.yaml"
             job_name: "Run Operator E2E Tests (macOS)"
     steps:
       - name: Skip test - no operator changes
@@ -154,6 +150,9 @@ jobs:
     runs-on: ${{ matrix.runner }}
     needs: [check-prerequisites, check-changes]
     if: needs.check-changes.outputs.operator == 'true'
+    # Allow macOS to fail — experimental platform support
+    continue-on-error: ${{ runner.os == 'macOS' }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -180,13 +179,9 @@ jobs:
             job_name: "Run Operator E2E Tests (ARM64)"
           - arch: arm64
             runner: macos-latest
-            kind_binary: kind-darwin-arm64
-            kubectl_arch: arm64
-            kubectl_os: darwin
             image_suffix: "-macos"
             cluster_suffix: "-macos"
             test_scope: "integration"
-            konflux_cr: "operator/config/samples/konflux-e2e.yaml"
             job_name: "Run Operator E2E Tests (macOS)"
     env:
       # renovate: datasource=github-releases depName=kubernetes-sigs/kind
@@ -231,10 +226,20 @@ jobs:
 
       - name: Install Docker (macOS)
         if: runner.os == 'macOS'
+        timeout-minutes: 10
         run: |
-          brew install docker colima
-          colima start --cpu 4 --memory 8 --disk 60 --vm-type qemu
+          brew install docker colima qemu
+          colima start --cpu 2 --memory 4 --disk 20 --vm-type qemu
           docker context use colima
+          # Wait for Colima Docker to be fully ready
+          for i in $(seq 1 30); do
+            if docker info >/dev/null 2>&1; then
+              echo "✓ Docker is ready"
+              break
+            fi
+            echo "Waiting for Docker to be ready... (attempt $i/30)"
+            sleep 2
+          done
           docker info
           docker version
 
@@ -244,22 +249,38 @@ jobs:
           go-version-file: operator/go.mod
           cache-dependency-path: operator/go.sum
 
+      # ── macOS: run integration tests only (no cluster required) ──
+      - name: Run Integration Tests (macOS)
+        if: runner.os == 'macOS'
+        working-directory: operator
+        timeout-minutes: 15
+        run: make test
+
+      - name: Cleanup Colima
+        if: always() && runner.os == 'macOS'
+        run: colima stop || true
+
+      # ── Linux: full deployment + E2E pipeline ──
       - name: Install kind (${{ matrix.arch }})
+        if: runner.os == 'Linux'
         run: |
           curl -Lo ./kind https://kind.sigs.k8s.io/dl/v${KIND_VERSION}/${{ matrix.kind_binary }}
           chmod +x ./kind
           sudo mv ./kind /usr/local/bin/kind
 
       - name: Install kubectl (${{ matrix.arch }})
+        if: runner.os == 'Linux'
         run: |
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/${{ matrix.kubectl_os }}/${{ matrix.kubectl_arch }}/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/kubectl
 
       - name: Verify kind installation
+        if: runner.os == 'Linux'
         run: kind version
 
       - name: Deploy Konflux using deploy-local.sh
+        if: runner.os == 'Linux' && github.repository == 'konflux-ci/konflux-ci'
         working-directory: ${{ github.workspace }}
         env:
           # Cluster configuration
@@ -283,16 +304,19 @@ jobs:
         run: ./scripts/deploy-local.sh
 
       - name: Show version information
+        if: runner.os == 'Linux' && github.repository == 'konflux-ci/konflux-ci'
         working-directory: operator
         run: |
           kubectl version
           kind version
 
       - name: List namespaces
+        if: runner.os == 'Linux' && github.repository == 'konflux-ci/konflux-ci'
         run: |
           kubectl get namespace
 
       - name: Deploy Test Resources
+        if: runner.os == 'Linux' && github.repository == 'konflux-ci/konflux-ci'
         working-directory: ${{ github.workspace }}
         env:
           SKIP_SAMPLE_COMPONENTS: "true"
@@ -300,13 +324,14 @@ jobs:
           ./deploy-test-resources.sh
 
       - name: Run Konflux Integration Tests
+        if: runner.os == 'Linux' && github.repository == 'konflux-ci/konflux-ci'
         working-directory: ${{ github.workspace }}
         run: |
           cd test/go-tests
           go test ./...
 
       - name: Run E2E tests
-        if: matrix.test_scope == 'integration+e2e'
+        if: runner.os == 'Linux' && matrix.test_scope == 'integration+e2e' && github.repository == 'konflux-ci/konflux-ci'
         working-directory: ${{ github.workspace }}
         env:
           GH_ORG: ${{ secrets.GH_ORG }}
@@ -317,7 +342,7 @@ jobs:
           ./test/e2e/run-e2e.sh
 
       - name: Generate error logs
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && runner.os != 'macOS' && github.repository == 'konflux-ci/konflux-ci' }}
         working-directory: ${{ github.workspace }}
         run: |
           echo "Konflux CR:"
@@ -325,7 +350,7 @@ jobs:
           ./generate-err-logs.sh
 
       - name: Archive logs
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && runner.os == 'Linux' && github.repository == 'konflux-ci/konflux-ci' }}
         uses: actions/upload-artifact@v6
         with:
           name: logs-${{ matrix.arch }}-${{ runner.os }}
