@@ -224,25 +224,6 @@ jobs:
         # for unprivileged users
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
-      - name: Install Docker (macOS)
-        if: runner.os == 'macOS'
-        timeout-minutes: 10
-        run: |
-          brew install docker colima qemu
-          colima start --cpu 2 --memory 4 --disk 20 --vm-type qemu
-          docker context use colima
-          # Wait for Colima Docker to be fully ready
-          for i in $(seq 1 30); do
-            if docker info >/dev/null 2>&1; then
-              echo "✓ Docker is ready"
-              break
-            fi
-            echo "Waiting for Docker to be ready... (attempt $i/30)"
-            sleep 2
-          done
-          docker info
-          docker version
-
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
@@ -256,9 +237,6 @@ jobs:
         timeout-minutes: 15
         run: make test
 
-      - name: Cleanup Colima
-        if: always() && runner.os == 'macOS'
-        run: colima stop || true
 
       # ── Linux: full deployment + E2E pipeline ──
       - name: Install kind (${{ matrix.arch }})
