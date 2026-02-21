@@ -49,6 +49,7 @@ jobs:
           case "${{ github.event_name }}" in
             repository_dispatch) ref=$(jq -r '.client_payload.head_sha' $GITHUB_EVENT_PATH) ;;
             merge_group)        ref=$(jq -r '.merge_group.head_sha' $GITHUB_EVENT_PATH) ;;
+            push|workflow_dispatch) ref="${{ github.sha }}" ;;
             *)                  ref=$(jq -r '.pull_request.head.sha' $GITHUB_EVENT_PATH) ;;
           esac
           echo "ref=$ref" >> $GITHUB_OUTPUT
@@ -205,6 +206,7 @@ jobs:
           case "${{ github.event_name }}" in
             repository_dispatch) ref=$(jq -r '.client_payload.head_sha' $GITHUB_EVENT_PATH) ;;
             merge_group)        ref=$(jq -r '.merge_group.head_sha' $GITHUB_EVENT_PATH) ;;
+            push|workflow_dispatch) ref="${{ github.sha }}" ;;
             *)                  ref=$(jq -r '.pull_request.head.sha' $GITHUB_EVENT_PATH) ;;
           esac
           echo "ref=$ref" >> $GITHUB_OUTPUT
