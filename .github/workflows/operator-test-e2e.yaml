@@ -84,6 +84,7 @@ jobs:
             dependencies/**
             test/e2e/**
             .github/workflows/operator-test-e2e.yaml
+            .github/actions/deploy-konflux/**
 
   # Lightweight jobs that create status checks when tests are skipped
   # These use the same matrix structure and job names as the test jobs to ensure
@@ -182,54 +183,28 @@ jobs:
         with:
           ref: ${{ steps.set-ref.outputs.ref }}
 
-      - name: Disable AppArmor
-        # works around a change in ubuntu 24.04 that restricts Linux namespace access
-        # for unprivileged users
-        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
           go-version-file: operator/go.mod
           cache-dependency-path: operator/go.sum
 
-      - name: Install kind (${{ matrix.arch }})
-        run: |
-          curl -Lo ./kind https://kind.sigs.k8s.io/dl/v${KIND_VERSION}/${{ matrix.kind_binary }}
-          chmod +x ./kind
-          sudo mv ./kind /usr/local/bin/kind
-
-      - name: Install kubectl (${{ matrix.arch }})
-        run: |
-          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${{ matrix.kubectl_arch }}/kubectl"
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/kubectl
-
-      - name: Verify kind installation
-        run: kind version
-
-      - name: Deploy Konflux using deploy-local.sh
-        working-directory: ${{ github.workspace }}
-        env:
-          # Cluster configuration
-          KIND_CLUSTER: ${{ env.KIND_CLUSTER }}
-          OPERATOR_INSTALL_METHOD: "build"
-          OPERATOR_IMAGE: ${{ env.OPERATOR_IMAGE }}
-
-          KONFLUX_CR: ${{ matrix.konflux_cr }}
-
-          # GitHub App secrets (standardized names)
-          GITHUB_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
-          GITHUB_APP_ID: ${{ secrets.APP_ID }}
-          WEBHOOK_SECRET: ${{ secrets.APP_WEBHOOK_SECRET }}
-
-          # Quay secrets for image-controller (required by konflux-e2e.yaml CR)
-          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
-          QUAY_ORGANIZATION: ${{ secrets.QUAY_ORG }}
-
-          # Smee webhook forwarding for E2E tests only
-          SMEE_CHANNEL: ${{ matrix.test_scope == 'integration+e2e' && secrets.SMEE_CHANNEL || '' }}
-        run: ./scripts/deploy-local.sh
+      - name: Deploy Konflux on kind cluster
+        uses: ./.github/actions/deploy-konflux
+        with:
+          kind-cluster-name: ${{ env.KIND_CLUSTER }}
+          kind-version: ${{ env.KIND_VERSION }}
+          kubectl-version: ${{ env.KUBECTL_VERSION }}
+          operator-install-method: build
+          operator-image: ${{ env.OPERATOR_IMAGE }}
+          konflux-cr: ${{ matrix.konflux_cr }}
+          github-app-id: ${{ secrets.APP_ID }}
+          github-private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          webhook-secret: ${{ secrets.APP_WEBHOOK_SECRET }}
+          quay-token: ${{ secrets.QUAY_TOKEN }}
+          quay-organization: ${{ secrets.QUAY_ORG }}
+          smee-channel: ${{ matrix.test_scope == 'integration+e2e' && secrets.SMEE_CHANNEL || '' }}
+          konflux-ci-path: ${{ github.workspace }}
 
       - name: Show version information
         working-directory: operator

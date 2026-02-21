@@ -1,0 +1,91 @@
+# Example: How to use the deploy-konflux composite action.
+#
+# This workflow demonstrates deploying Konflux on a kind cluster and running
+# custom steps against it. Trigger it manually to smoke-test the action, or
+# copy the relevant steps into your own workflow.
+#
+# Required repository secrets:
+#   GITHUB_APP_ID        - Your GitHub App's numeric ID
+#   APP_PRIVATE_KEY      - Your GitHub App's private key (.pem file contents)
+#   APP_WEBHOOK_SECRET   - Your GitHub App's webhook secret
+#
+# Optional secrets (uncomment the Quay section to enable the image-controller):
+#   QUAY_TOKEN           - Quay.io OAuth token
+#   QUAY_ORG             - Quay.io organization name
+
+name: Example - Deploy Konflux on kind
+
+on:
+  workflow_dispatch:  # Trigger manually via: gh workflow run example-deploy-konflux.yml
+
+jobs:
+  deploy-and-verify:
+    name: Deploy Konflux and verify
+    runs-on: ubuntu-latest
+
+    steps:
+      # Recommended: free disk space before deploying.
+      # Konflux pulls many container images during deployment; reclaiming space
+      # prevents out-of-disk failures on GitHub-hosted runners (~14 GB free by default).
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          docker-images: false
+
+      # Deploy a full Konflux stack on a kind cluster.
+      # The action installs kind + kubectl, configures the cluster, deploys
+      # the Konflux operator and all components, and creates GitHub App secrets.
+      - name: Deploy Konflux
+        id: deploy-konflux
+        uses: konflux-ci/konflux-ci/.github/actions/deploy-konflux@main
+        with:
+          # Required: GitHub App credentials
+          github-app-id: ${{ secrets.GITHUB_APP_ID }}
+          github-private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          webhook-secret: ${{ secrets.APP_WEBHOOK_SECRET }}
+
+          # Optional: cluster configuration (shown here with their defaults)
+          kind-cluster-name: 'konflux'
+          kind-version: '0.31.0'
+          kubectl-version: '1.35.1'
+          kind-memory-gb: '8'
+
+          # Optional: operator install method
+          # 'release' installs from the latest published GitHub release (recommended)
+          operator-install-method: 'release'
+
+          # Optional: enable image-controller with Quay.io integration
+          # Uncomment both lines and switch konflux-cr when using this:
+          # quay-token: ${{ secrets.QUAY_TOKEN }}
+          # quay-organization: ${{ secrets.QUAY_ORG }}
+          # konflux-cr: 'operator/config/samples/konflux-e2e.yaml'
+
+      # Use the action's outputs to interact with the deployed cluster.
+      - name: Verify Konflux deployment
+        run: |
+          echo "Cluster:    ${{ steps.deploy-konflux.outputs.cluster-name }}"
+          echo "Kubeconfig: ${{ steps.deploy-konflux.outputs.kubeconfig-path }}"
+          kubectl get pods -A
+          kubectl get konflux konflux -o yaml
+
+      # Add your own integration tests here.
+      # The Konflux UI is available at https://localhost:9443 (default credentials:
+      # user1@konflux.dev / user2@konflux.dev, password: "password").
+      - name: Run integration tests
+        run: |
+          echo "Konflux is ready — add your test commands here."
+
+      # Always collect error logs, even on failure, to help diagnose issues.
+      - name: Collect error logs
+        if: always()
+        working-directory: _konflux-ci-action
+        run: ./generate-err-logs.sh || true
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: konflux-logs
+          path: logs/
+          if-no-files-found: ignore

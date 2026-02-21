@@ -1,0 +1,219 @@
+name: 'Deploy Konflux on kind'
+description: >
+  Deploys a full Konflux stack on a local kind (Kubernetes in Docker) cluster.
+  Installs kind and kubectl, configures the cluster, deploys the Konflux operator
+  and all components, and creates the required GitHub App integration secrets.
+
+  Requires an ubuntu-latest or ubuntu-24.04 Linux runner.
+
+  Usage:
+    - uses: konflux-ci/konflux-ci/.github/actions/deploy-konflux@main
+      with:
+        github-app-id: ${{ secrets.GITHUB_APP_ID }}
+        github-private-key: ${{ secrets.APP_PRIVATE_KEY }}
+        webhook-secret: ${{ secrets.APP_WEBHOOK_SECRET }}
+
+branding:
+  icon: 'package'
+  color: 'blue'
+
+inputs:
+  # --- Required: GitHub App credentials ---
+  github-app-id:
+    description: >
+      GitHub App ID used by Pipelines-as-Code for webhook handling.
+      Corresponds to GITHUB_APP_ID in scripts/deploy-local.sh.
+    required: true
+  github-private-key:
+    description: >
+      Content of the GitHub App private key (.pem file contents as a string).
+      Use ${{ secrets.YOUR_PRIVATE_KEY }} from your repo secrets.
+      Corresponds to GITHUB_PRIVATE_KEY in scripts/deploy-local.sh.
+    required: true
+  webhook-secret:
+    description: >
+      GitHub App webhook secret.
+      Corresponds to WEBHOOK_SECRET in scripts/deploy-local.sh.
+    required: true
+
+  # --- Optional: Cluster configuration ---
+  kind-cluster-name:
+    description: >
+      Name for the kind cluster to create.
+      Corresponds to KIND_CLUSTER in scripts/deploy-local.sh.
+    required: false
+    default: 'konflux'
+  kind-version:
+    description: >
+      Version of kind to install (without 'v' prefix, e.g. '0.31.0').
+    required: false
+    # renovate: datasource=github-releases depName=kubernetes-sigs/kind
+    default: '0.31.0'
+  kubectl-version:
+    description: >
+      Version of kubectl to install (without 'v' prefix, e.g. '1.35.1').
+    required: false
+    # renovate: datasource=github-releases depName=kubernetes/kubernetes
+    default: '1.35.1'
+  kind-memory-gb:
+    description: >
+      Memory in GB to allocate to the kind cluster node.
+      Corresponds to KIND_MEMORY_GB in scripts/deploy-local.sh.
+    required: false
+    default: '8'
+
+  # --- Optional: Operator configuration ---
+  operator-install-method:
+    description: >
+      How to install the Konflux operator. One of:
+        release - Install from the latest GitHub release (default, recommended)
+        local   - Apply from the current checkout using kustomize
+        build   - Build the operator image locally (requires Go pre-configured)
+      Corresponds to OPERATOR_INSTALL_METHOD in scripts/deploy-local.sh.
+    required: false
+    default: 'release'
+  operator-image:
+    description: >
+      Operator image to use when operator-install-method is 'local' or 'build'.
+      Corresponds to OPERATOR_IMAGE in scripts/deploy-local.sh.
+    required: false
+    default: 'quay.io/konflux-ci/konflux-operator:latest'
+  konflux-cr:
+    description: >
+      Path to the Konflux CR YAML file, relative to the konflux-ci repository root.
+      Defaults to the full-stack CR without image-controller.
+      Use 'operator/config/samples/konflux-e2e.yaml' to enable image-controller for E2E tests.
+      Corresponds to KONFLUX_CR in scripts/deploy-local.sh.
+    required: false
+    default: 'operator/config/samples/konflux_v1alpha1_konflux.yaml'
+  konflux-ci-path:
+    description: >
+      Absolute path to an existing konflux-ci checkout. When set, the action uses
+      this instead of checking out konflux-ci automatically. Useful when calling
+      this action from within the konflux-ci repository itself.
+    required: false
+    default: ''
+
+  # --- Optional: Quay integration ---
+  quay-token:
+    description: >
+      Quay.io OAuth token. When provided together with quay-organization, enables
+      the image-controller component. Corresponds to QUAY_TOKEN in deploy-local.sh.
+    required: false
+    default: ''
+  quay-organization:
+    description: >
+      Quay.io organization name. Required when quay-token is set.
+      Corresponds to QUAY_ORGANIZATION in scripts/deploy-local.sh.
+    required: false
+    default: ''
+
+  # --- Optional: Smee webhook forwarding ---
+  smee-channel:
+    description: >
+      Full Smee.io channel URL (e.g. https://smee.io/yourChannelId) for forwarding
+      GitHub webhooks to the cluster during E2E tests.
+      Corresponds to SMEE_CHANNEL in scripts/deploy-local.sh.
+    required: false
+    default: ''
+
+outputs:
+  kubeconfig-path:
+    description: >
+      Absolute path to the kubeconfig file for the deployed kind cluster.
+      Example: kubectl --kubeconfig ${{ steps.deploy.outputs.kubeconfig-path }} get pods -A
+    value: ${{ steps.export-info.outputs.kubeconfig-path }}
+  cluster-name:
+    description: 'Name of the kind cluster that was created (matches kind-cluster-name input)'
+    value: ${{ steps.export-info.outputs.cluster-name }}
+
+runs:
+  using: 'composite'
+  steps:
+    # Ubuntu 24.04+ restricts Linux namespace access for unprivileged users by default.
+    # kind requires the ability to create Linux namespaces, so this must be lifted.
+    - name: Disable AppArmor unprivileged namespace restriction
+      shell: bash
+      run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+    # kind clusters require higher inotify limits than the Linux defaults.
+    # Pre-setting these here avoids an interactive sudo prompt inside setup-kind-local-cluster.sh.
+    - name: Configure inotify limits for kind
+      shell: bash
+      run: |
+        sudo sysctl fs.inotify.max_user_watches=524288
+        sudo sysctl fs.inotify.max_user_instances=512
+
+    - name: Install kind v${{ inputs.kind-version }}
+      shell: bash
+      run: |
+        ARCH=$(uname -m)
+        case "$ARCH" in
+          x86_64)  KIND_ARCH="amd64" ;;
+          aarch64) KIND_ARCH="arm64" ;;
+          *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;;
+        esac
+        curl -Lo ./kind "https://kind.sigs.k8s.io/dl/v${{ inputs.kind-version }}/kind-linux-${KIND_ARCH}"
+        chmod +x ./kind
+        sudo mv ./kind /usr/local/bin/kind
+        kind version
+
+    - name: Install kubectl v${{ inputs.kubectl-version }}
+      shell: bash
+      run: |
+        ARCH=$(uname -m)
+        case "$ARCH" in
+          x86_64)  KUBECTL_ARCH="amd64" ;;
+          aarch64) KUBECTL_ARCH="arm64" ;;
+          *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;;
+        esac
+        curl -LO "https://dl.k8s.io/release/v${{ inputs.kubectl-version }}/bin/linux/${KUBECTL_ARCH}/kubectl"
+        chmod +x kubectl
+        sudo mv kubectl /usr/local/bin/kubectl
+        kubectl version --client
+
+    # Skip auto-checkout when the caller provides an existing konflux-ci path.
+    # This is the case when this action is called from within the konflux-ci repo itself.
+    - name: Checkout konflux-ci repository
+      if: inputs.konflux-ci-path == ''
+      uses: actions/checkout@v6
+      with:
+        repository: konflux-ci/konflux-ci
+        path: _konflux-ci-action
+
+    - name: Resolve konflux-ci repository path
+      id: resolve-path
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.konflux-ci-path }}" ]; then
+          RESOLVED="${{ inputs.konflux-ci-path }}"
+        else
+          RESOLVED="${GITHUB_WORKSPACE}/_konflux-ci-action"
+        fi
+        echo "path=${RESOLVED}" >> "$GITHUB_OUTPUT"
+        echo "Using konflux-ci at: ${RESOLVED}"
+
+    - name: Deploy Konflux on kind cluster
+      shell: bash
+      env:
+        KIND_CLUSTER: ${{ inputs.kind-cluster-name }}
+        KIND_MEMORY_GB: ${{ inputs.kind-memory-gb }}
+        OPERATOR_INSTALL_METHOD: ${{ inputs.operator-install-method }}
+        OPERATOR_IMAGE: ${{ inputs.operator-image }}
+        KONFLUX_CR: ${{ inputs.konflux-cr }}
+        GITHUB_APP_ID: ${{ inputs.github-app-id }}
+        GITHUB_PRIVATE_KEY: ${{ inputs.github-private-key }}
+        WEBHOOK_SECRET: ${{ inputs.webhook-secret }}
+        QUAY_TOKEN: ${{ inputs.quay-token }}
+        QUAY_ORGANIZATION: ${{ inputs.quay-organization }}
+        SMEE_CHANNEL: ${{ inputs.smee-channel }}
+      run: |
+        "${{ steps.resolve-path.outputs.path }}/scripts/deploy-local.sh"
+
+    - name: Export deployment info
+      id: export-info
+      shell: bash
+      run: |
+        echo "kubeconfig-path=${HOME}/.kube/config" >> "$GITHUB_OUTPUT"
+        echo "cluster-name=${{ inputs.kind-cluster-name }}" >> "$GITHUB_OUTPUT"
+        kubectl cluster-info --context "kind-${{ inputs.kind-cluster-name }}"
