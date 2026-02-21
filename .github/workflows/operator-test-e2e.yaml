@@ -151,7 +151,7 @@ jobs:
     needs: [check-prerequisites, check-changes]
     if: needs.check-changes.outputs.operator == 'true'
     # Allow macOS to fail — experimental platform support
-    continue-on-error: ${{ runner.os == 'macOS' }}
+    continue-on-error: ${{ contains(matrix.runner, 'macos') }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
