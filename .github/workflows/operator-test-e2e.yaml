@@ -233,7 +233,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew install docker colima
-          colima start --cpu 4 --memory 8 --disk 60
+          colima start --cpu 4 --memory 8 --disk 60 --vm-type qemu
           docker context use colima
           docker info
           docker version
@@ -328,7 +328,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v6
         with:
-          name: logs-${{ matrix.arch }}
+          name: logs-${{ matrix.arch }}-${{ runner.os }}
           path: logs
 
   # Report check result to PR when triggered by /allow (so the run appears on the PR and can gate it)
