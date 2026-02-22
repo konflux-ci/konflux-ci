@@ -13,9 +13,15 @@ main() {
     local catalog_revision="${RELEASE_SERVICE_CATALOG_REVISION:?RELEASE_SERVICE_CATALOG_REVISION must be set in vars.sh or env}"
     local release_catalog_ta_quay_token="${RELEASE_CATALOG_TA_QUAY_TOKEN:-}"
 
+    # Generate proxy kubeconfig
+    local proxy_kubeconfig="${script_path}/proxy.kubeconfig"
+    # Ensure helper script is executable
+    chmod +x "${script_path}/gen-proxy-config.sh"
+    "${script_path}/gen-proxy-config.sh" "$proxy_kubeconfig"
+
     docker run \
         --network=host \
-        -v ~/.kube/config:/kube/config \
+        -v "${proxy_kubeconfig}:/kube/config" \
         --env KUBECONFIG=/kube/config \
         -e GITHUB_TOKEN="$github_token" \
         -e QUAY_TOKEN="$(base64 <<< "$quay_dockerconfig")" \
