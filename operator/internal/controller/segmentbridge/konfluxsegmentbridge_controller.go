@@ -104,13 +104,8 @@ func (r *KonfluxSegmentBridgeReconciler) Reconcile(ctx context.Context, req ctrl
 		return errHandler.HandleApplyError(ctx, err)
 	}
 
-	segmentKey := segmentBridge.Spec.GetSegmentKey()
-	if segmentKey != "" {
-		if err := reconcileSegmentBridgeSecret(ctx, tc, segmentKey); err != nil {
-			return errHandler.HandleWithReason(ctx, err, condition.ReasonSecretCreationFailed, "reconcile segment-bridge secret")
-		}
-	} else {
-		log.Info("No Segment write key configured; skipping Secret creation")
+	if err := reconcileSegmentBridgeSecret(ctx, tc, &segmentBridge.Spec); err != nil {
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonSecretCreationFailed, "reconcile segment-bridge secret")
 	}
 
 	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, segmentBridge.Name, SegmentBridgeCleanupGVKs,
@@ -148,9 +143,20 @@ func (r *KonfluxSegmentBridgeReconciler) applyManifests(ctx context.Context, tc 
 }
 
 // reconcileSegmentBridgeSecret creates the Secret in the segment-bridge namespace
-// that the CronJob reads via envFrom. Contains the Segment write key.
-func reconcileSegmentBridgeSecret(ctx context.Context, tc *tracking.Client, segmentKey string) error {
+// that the CronJob reads via envFrom. Contains both SEGMENT_WRITE_KEY and
+// SEGMENT_BATCH_API (host URL + "/batch").
+//
+// If no write key is available, Secret creation is skipped.
+func reconcileSegmentBridgeSecret(ctx context.Context, tc *tracking.Client, spec *konfluxv1alpha1.KonfluxSegmentBridgeSpec) error {
 	log := logf.FromContext(ctx)
+
+	segmentKey := spec.GetSegmentKey()
+	if segmentKey == "" {
+		log.Info("No Segment write key configured; skipping Secret creation")
+		return nil
+	}
+
+	batchURL := spec.GetSegmentAPIURL() + "/batch"
 
 	secret := &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
@@ -163,10 +169,11 @@ func reconcileSegmentBridgeSecret(ctx context.Context, tc *tracking.Client, segm
 		},
 		StringData: map[string]string{
 			"SEGMENT_WRITE_KEY": segmentKey,
+			"SEGMENT_BATCH_API": batchURL,
 		},
 	}
 
-	log.Info("Applying segment-bridge Secret", "name", secret.Name, "namespace", secret.Namespace)
+	log.Info("Applying segment-bridge Secret", "name", secret.Name, "namespace", secret.Namespace, "batchURL", batchURL)
 	if err := tc.ApplyOwned(ctx, secret); err != nil {
 		return fmt.Errorf("failed to apply Secret: %w", err)
 	}
