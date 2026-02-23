@@ -38,6 +38,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/enterprisecontract"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/imagecontroller"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/info"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/segmentbridge"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/integrationservice"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/internalregistry"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/namespacelister"
@@ -67,6 +68,8 @@ var konfluxCleanupGVKs = []schema.GroupVersionKind{
 	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxInternalRegistry"},
 	// KonfluxDefaultTenant is optional - only created when spec.defaultTenant.enabled is true (default)
 	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxDefaultTenant"},
+	// KonfluxSegmentBridge is optional - only created when spec.segmentBridge.enabled is true
+	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxSegmentBridge"},
 }
 
 // konfluxClusterScopedAllowList restricts which cluster-scoped sub-CRs can be deleted
@@ -83,6 +86,10 @@ var konfluxClusterScopedAllowList = tracking.ClusterScopedAllowList{
 	// KonfluxDefaultTenant is optional - only created when spec.defaultTenant.enabled is true (default)
 	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxDefaultTenant"}: sets.New(
 		"konflux-default-tenant",
+	),
+	// KonfluxSegmentBridge is optional - only created when spec.segmentBridge.enabled is true
+	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxSegmentBridge"}: sets.New(
+		"konflux-segment-bridge",
 	),
 }
 
@@ -129,6 +136,9 @@ type KonfluxReconciler struct {
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxdefaulttenants,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxdefaulttenants/status,verbs=get;patch;update
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxdefaulttenants/finalizers,verbs=update
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxsegmentbridges,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxsegmentbridges/status,verbs=get;patch;update
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxsegmentbridges/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -228,6 +238,13 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if konflux.Spec.IsDefaultTenantEnabled() {
 		if err := r.applyKonfluxDefaultTenant(ctx, tc); err != nil {
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxDefaultTenant")
+		}
+	}
+
+	// Apply the KonfluxSegmentBridge CR (only if enabled)
+	if konflux.Spec.IsSegmentBridgeEnabled() {
+		if err := r.applyKonfluxSegmentBridge(ctx, tc, konflux); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxSegmentBridge")
 		}
 	}
 
@@ -343,6 +360,15 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxDefaultTenant status")
 		}
 		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, defaultTenantCR, "default-tenant"))
+	}
+
+	// Get and copy status from the KonfluxSegmentBridge CR (if enabled)
+	if konflux.Spec.IsSegmentBridgeEnabled() {
+		segmentBridgeCR := &konfluxv1alpha1.KonfluxSegmentBridge{}
+		if err := r.Get(ctx, client.ObjectKey{Name: segmentbridge.CRName}, segmentBridgeCR); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxSegmentBridge status")
+		}
+		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, segmentBridgeCR, "segment-bridge"))
 	}
 
 	// Set overall Ready condition based on all sub-CRs.
@@ -700,6 +726,31 @@ func (r *KonfluxReconciler) applyKonfluxDefaultTenant(ctx context.Context, tc *t
 	return tc.ApplyOwned(ctx, defaultTenantCR)
 }
 
+// applyKonfluxSegmentBridge creates or updates the KonfluxSegmentBridge CR.
+// The caller is responsible for checking if segment-bridge is enabled.
+func (r *KonfluxReconciler) applyKonfluxSegmentBridge(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.Konflux) error {
+	log := logf.FromContext(ctx)
+
+	var spec konfluxv1alpha1.KonfluxSegmentBridgeSpec
+	if owner.Spec.SegmentBridge != nil && owner.Spec.SegmentBridge.Spec != nil {
+		spec = *owner.Spec.SegmentBridge.Spec
+	}
+
+	segmentBridgeCR := &konfluxv1alpha1.KonfluxSegmentBridge{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: konfluxv1alpha1.GroupVersion.String(),
+			Kind:       "KonfluxSegmentBridge",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: segmentbridge.CRName,
+		},
+		Spec: spec,
+	}
+
+	log.Info("Applying KonfluxSegmentBridge CR", "name", segmentBridgeCR.Name)
+	return tc.ApplyOwned(ctx, segmentBridgeCR)
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
@@ -743,5 +794,6 @@ func (r *KonfluxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// Watch KonfluxDefaultTenant for any changes to copy conditions to Konflux CR
 		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
 		Owns(&konfluxv1alpha1.KonfluxDefaultTenant{}).
+		Owns(&konfluxv1alpha1.KonfluxSegmentBridge{}).
 		Complete(r)
 }
