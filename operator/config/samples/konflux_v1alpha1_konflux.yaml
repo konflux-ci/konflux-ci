@@ -103,3 +103,12 @@ spec:
     # Enabled controls whether internal registry resources are deployed
     # Defaults to false if not specified
     enabled: true
+  # segmentBridge:
+  #   # Enabled controls whether segment-bridge telemetry resources are deployed
+  #   # Defaults to false if not specified
+  #   enabled: true
+  #   spec:
+  #     # segmentKey is the Segment write key; omit to use the default dev key
+  #     segmentKey: ""
+  #     # segmentAPIURL is the Segment API endpoint; omit to use the default
+  #     segmentAPIURL: ""

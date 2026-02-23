@@ -57,6 +57,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/namespacelister"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/rbac"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/releaseservice"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/segmentbridge"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/ui"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
@@ -390,6 +391,14 @@ func main() {
 		ObjectStore: objectStore,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxDefaultTenant")
+		os.Exit(1)
+	}
+	if err = (&segmentbridge.KonfluxSegmentBridgeReconciler{
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		ObjectStore: objectStore,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "KonfluxSegmentBridge")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
