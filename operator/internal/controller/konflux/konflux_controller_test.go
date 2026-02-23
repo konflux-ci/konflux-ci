@@ -33,6 +33,7 @@ import (
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/defaulttenant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/internalregistry"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/segmentbridge"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 )
 
@@ -512,6 +513,177 @@ var _ = Describe("Konflux Controller", func() {
 			By("verifying DefaultTenant CR was deleted")
 			err = k8sClient.Get(ctx, defaultTenantTypeNamespacedName, tenant)
 			Expect(errors.IsNotFound(err)).To(BeTrue(), "DefaultTenant CR should be deleted when enabled changes to false")
+		})
+	})
+
+	Context("SegmentBridge conditional enablement", func() {
+		const resourceName = "konflux"
+		ctx := context.Background()
+
+		typeNamespacedName := types.NamespacedName{
+			Name: resourceName,
+		}
+		segmentBridgeTypeNamespacedName := types.NamespacedName{
+			Name: segmentbridge.CRName,
+		}
+
+		AfterEach(func() {
+			resource := &konfluxv1alpha1.Konflux{}
+			if err := k8sClient.Get(ctx, typeNamespacedName, resource); err == nil {
+				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			}
+
+			sb := &konfluxv1alpha1.KonfluxSegmentBridge{}
+			if err := k8sClient.Get(ctx, segmentBridgeTypeNamespacedName, sb); err == nil {
+				Expect(k8sClient.Delete(ctx, sb)).To(Succeed())
+			}
+		})
+
+		It("should not create SegmentBridge CR when telemetry is omitted", func() {
+			By("creating Konflux CR without telemetry config")
+			konflux := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: resourceName,
+				},
+				Spec: konfluxv1alpha1.KonfluxSpec{},
+			}
+			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+
+			By("reconciling the Konflux CR")
+			clusterInfo := createTestClusterInfo()
+			reconciler := &KonfluxReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ClusterInfo: clusterInfo,
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying SegmentBridge CR was not created")
+			sb := &konfluxv1alpha1.KonfluxSegmentBridge{}
+			err = k8sClient.Get(ctx, segmentBridgeTypeNamespacedName, sb)
+			Expect(errors.IsNotFound(err)).To(BeTrue(), "SegmentBridge CR should not exist when telemetry is omitted")
+		})
+
+		It("should not create SegmentBridge CR when telemetry.enabled is false", func() {
+			By("creating Konflux CR with telemetry.enabled=false")
+			disabled := false
+			konflux := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: resourceName,
+				},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					Telemetry: &konfluxv1alpha1.TelemetryConfig{
+						Enabled: &disabled,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+
+			By("reconciling the Konflux CR")
+			clusterInfo := createTestClusterInfo()
+			reconciler := &KonfluxReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ClusterInfo: clusterInfo,
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying SegmentBridge CR was not created")
+			sb := &konfluxv1alpha1.KonfluxSegmentBridge{}
+			err = k8sClient.Get(ctx, segmentBridgeTypeNamespacedName, sb)
+			Expect(errors.IsNotFound(err)).To(BeTrue(), "SegmentBridge CR should not exist when telemetry.enabled=false")
+		})
+
+		It("should create SegmentBridge CR when telemetry.enabled is true", func() {
+			By("creating Konflux CR with telemetry.enabled=true")
+			enabled := true
+			konflux := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: resourceName,
+				},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					Telemetry: &konfluxv1alpha1.TelemetryConfig{
+						Enabled: &enabled,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+
+			By("reconciling the Konflux CR")
+			clusterInfo := createTestClusterInfo()
+			reconciler := &KonfluxReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ClusterInfo: clusterInfo,
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying SegmentBridge CR was created")
+			sb := &konfluxv1alpha1.KonfluxSegmentBridge{}
+			err = k8sClient.Get(ctx, segmentBridgeTypeNamespacedName, sb)
+			Expect(err).NotTo(HaveOccurred(), "SegmentBridge CR should exist when telemetry.enabled=true")
+			Expect(sb.Name).To(Equal(segmentbridge.CRName))
+		})
+
+		It("should delete SegmentBridge CR when enabled changes from true to false", func() {
+			By("creating Konflux CR with telemetry.enabled=true")
+			enabled := true
+			konflux := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: resourceName,
+				},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					Telemetry: &konfluxv1alpha1.TelemetryConfig{
+						Enabled: &enabled,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+
+			By("reconciling to create the SegmentBridge CR")
+			clusterInfo := createTestClusterInfo()
+			reconciler := &KonfluxReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ClusterInfo: clusterInfo,
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying SegmentBridge CR was created")
+			sb := &konfluxv1alpha1.KonfluxSegmentBridge{}
+			err = k8sClient.Get(ctx, segmentBridgeTypeNamespacedName, sb)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("updating Konflux CR to set telemetry.enabled=false")
+			updatedKonflux := &konfluxv1alpha1.Konflux{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, updatedKonflux)).To(Succeed())
+			disabled := false
+			updatedKonflux.Spec.Telemetry = &konfluxv1alpha1.TelemetryConfig{
+				Enabled: &disabled,
+			}
+			Expect(k8sClient.Update(ctx, updatedKonflux)).To(Succeed())
+
+			By("reconciling again after disabling")
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying SegmentBridge CR was deleted")
+			err = k8sClient.Get(ctx, segmentBridgeTypeNamespacedName, sb)
+			Expect(errors.IsNotFound(err)).To(BeTrue(), "SegmentBridge CR should be deleted when enabled changes to false")
 		})
 	})
 })

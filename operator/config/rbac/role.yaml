@@ -226,6 +226,7 @@ rules:
   - konfluxnamespacelisters
   - konfluxrbacs
   - konfluxreleaseservices
+  - konfluxsegmentbridges
   - konfluxuis
   verbs:
   - create
@@ -251,6 +252,7 @@ rules:
   - konfluxnamespacelisters/finalizers
   - konfluxrbacs/finalizers
   - konfluxreleaseservices/finalizers
+  - konfluxsegmentbridges/finalizers
   - konfluxuis/finalizers
   verbs:
   - update
@@ -270,6 +272,7 @@ rules:
   - konfluxnamespacelisters/status
   - konfluxrbacs/status
   - konfluxreleaseservices/status
+  - konfluxsegmentbridges/status
   - konfluxuis/status
   verbs:
   - get
@@ -397,6 +400,14 @@ rules:
   - bind
 - apiGroups:
   - rbac.authorization.k8s.io
+  resourceNames:
+  - segment-bridge
+  resources:
+  - clusterrolebindings
+  verbs:
+  - bind
+- apiGroups:
+  - rbac.authorization.k8s.io
   resources:
   - clusterroles
   verbs:
@@ -511,6 +522,15 @@ rules:
   - release-service-snapshotenvironmentbinding-editor-role
   - release-service-tekton-role
   - releaseserviceconfig-role
+  resources:
+  - clusterroles
+  verbs:
+  - bind
+  - escalate
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - segment-bridge
   resources:
   - clusterroles
   verbs:
