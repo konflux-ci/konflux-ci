@@ -402,7 +402,7 @@ spec:
     - github.com/release-engineering/rhtap-ec-policy//data
     name: Default
     policy:
-    - oci::quay.io/conforma/release-policy:konflux@sha256:736ec48757b3fc1d47cea84bb9b7e97766d15f6e066963660129b691892dd078
+    - oci::quay.io/conforma/release-policy:konflux@sha256:ceb35ca8986aab2484a765ba15c7c36407daaaa542d0701f7b0edbdbce602f17
 ---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: EnterpriseContractPolicy
@@ -427,7 +427,7 @@ spec:
     - github.com/release-engineering/rhtap-ec-policy//data
     name: Default
     policy:
-    - oci::quay.io/conforma/release-policy:konflux@sha256:736ec48757b3fc1d47cea84bb9b7e97766d15f6e066963660129b691892dd078
+    - oci::quay.io/conforma/release-policy:konflux@sha256:ceb35ca8986aab2484a765ba15c7c36407daaaa542d0701f7b0edbdbce602f17
 ---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: EnterpriseContractPolicy
@@ -451,7 +451,7 @@ spec:
     - github.com/release-engineering/rhtap-ec-policy//data
     name: Default
     policy:
-    - oci::quay.io/conforma/release-policy:konflux@sha256:736ec48757b3fc1d47cea84bb9b7e97766d15f6e066963660129b691892dd078
+    - oci::quay.io/conforma/release-policy:konflux@sha256:ceb35ca8986aab2484a765ba15c7c36407daaaa542d0701f7b0edbdbce602f17
 ---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: EnterpriseContractPolicy
@@ -478,7 +478,7 @@ spec:
     - github.com/release-engineering/rhtap-ec-policy//data
     name: Default
     policy:
-    - oci::quay.io/conforma/release-policy:konflux@sha256:736ec48757b3fc1d47cea84bb9b7e97766d15f6e066963660129b691892dd078
+    - oci::quay.io/conforma/release-policy:konflux@sha256:ceb35ca8986aab2484a765ba15c7c36407daaaa542d0701f7b0edbdbce602f17
 ---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: EnterpriseContractPolicy
@@ -497,7 +497,7 @@ spec:
     - github.com/release-engineering/rhtap-ec-policy//data
     name: Default
     policy:
-    - oci::quay.io/conforma/task-policy:konflux@sha256:5c715d610e7da7ca19b4b75d87ada5a383e52c403c3dc7ed712c3243a5084730
+    - oci::quay.io/conforma/task-policy:konflux@sha256:d0d0c6aa5add12c2e83cc5680801a46373a606b6ae618450d199d1009d1a23cc
 ---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: EnterpriseContractPolicy
@@ -523,4 +523,4 @@ spec:
     - github.com/release-engineering/rhtap-ec-policy//data
     name: Default
     policy:
-    - oci::quay.io/conforma/release-policy:konflux@sha256:736ec48757b3fc1d47cea84bb9b7e97766d15f6e066963660129b691892dd078
+    - oci::quay.io/conforma/release-policy:konflux@sha256:ceb35ca8986aab2484a765ba15c7c36407daaaa542d0701f7b0edbdbce602f17
