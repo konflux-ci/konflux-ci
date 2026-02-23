@@ -81,7 +81,7 @@ COMMITS=$(git log --since="@$START_TIMESTAMP" \
   --oneline --no-merges main 2>/dev/null || echo "")
 
 # Count commits
-COMMIT_COUNT=$(echo "$COMMITS" | wc -l | tr -d ' ')
+COMMIT_COUNT=$(printf '%s' "$COMMITS" | wc -l | tr -d ' ')
 
 if [ "$COMMIT_COUNT" -gt 0 ]; then
   echo ""
