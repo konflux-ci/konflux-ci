@@ -17,9 +17,9 @@ set -euo pipefail
 #   prepare-release-notes.sh v0.2025.03 release-sha-abc1234 c515b60f474cb00a11176e5b400205a679b68aac /tmp/release-notes.md
 #   prepare-release-notes.sh v0.2025.03 release-sha-abc1234 main /tmp/release-notes.md
 
-if [ $# -ne 4 ]; then
-  echo "Error: Invalid number of arguments"
-  echo "Usage: $0 <version> <image_tag> <git_ref> <output_file>"
+if [ "$#" -ne 4 ]; then
+  echo "Error: Invalid number of arguments" >&2
+  echo "Usage: $0 <version> <image_tag> <git_ref> <output_file>" >&2
   exit 1
 fi
 
@@ -27,6 +27,33 @@ VERSION="$1"
 IMAGE_TAG="$2"
 GIT_REF="$3"
 OUTPUT_FILE="$4"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# get_comparison_base finds the commit to compare against for changelog generation.
+# First finds the highest previous stable release tag (semantic version sort,
+# strict vX.Y.Z regex excluding pre-release suffixes). Then returns the common
+# ancestor (merge-base) between that tag and GIT_REF.
+#
+# This handles both release models correctly:
+# - Patch releases (z>0): merge-base of two commits on the same branch returns
+#   the older one, equivalent to using the tag directly.
+# - Minor releases (z=0): merge-base returns the divergence point between
+#   release branches, capturing all changes since the branch fork — including
+#   feats/fixes that were also backported to patch releases on the old branch.
+#
+# Excludes $VERSION so re-runs after tag creation still return the correct base.
+get_comparison_base() {
+  local prev_tag
+  prev_tag=$(git tag --sort=-version:refname 2>/dev/null \
+    | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+    | grep -v "^${VERSION}$" \
+    | head -1) || true
+
+  if [ -n "$prev_tag" ]; then
+    git merge-base "$prev_tag" "$GIT_REF" 2>/dev/null || echo "$prev_tag"
+  fi
+}
 
 # Generate release notes
 cat > "${OUTPUT_FILE}" <<EOF
@@ -51,4 +78,16 @@ kubectl apply -f https://github.com/konflux-ci/konflux-ci/releases/download/${VE
 - [README.md](https://github.com/konflux-ci/konflux-ci/blob/main/README.md) - Installation and usage instructions
 EOF
 
-echo "Release notes generated at: ${OUTPUT_FILE}"
+# Append upstream changelog (failures here must never block the release)
+COMPARISON_BASE=$(get_comparison_base)
+if [ -n "$COMPARISON_BASE" ]; then
+  echo "Generating upstream changelog: ${COMPARISON_BASE} -> ${GIT_REF}" >&2
+  changelog=$("${SCRIPT_DIR}/generate-changelog.sh" "$COMPARISON_BASE" "$GIT_REF") || true
+  if [ -n "$changelog" ]; then
+    printf '\n%s\n' "$changelog" >> "${OUTPUT_FILE}"
+  fi
+else
+  echo "No comparison base found, skipping upstream changelog" >&2
+fi
+
+echo "Release notes generated at: ${OUTPUT_FILE}" >&2
