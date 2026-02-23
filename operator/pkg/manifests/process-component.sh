@@ -75,7 +75,7 @@ fi
 mkdir -p "${output_subdir}"
 
 set +e
-if kustomize build "${source_subdir}" > "${output_subdir}/manifests.yaml" 2>&1; then
+if kustomize build "${source_subdir}" > "${output_subdir}/manifests.yaml"; then
     echo "  ✓ Successfully built ${COMPONENT}"
 else
     echo "  ✗ Failed to build ${COMPONENT}" >&2
