@@ -26,8 +26,8 @@ spec:
     spec:
       containers:
       - name: registry
-        image: ghcr.io/project-zot/zot:v2.1.13
-        args: ["serve", "/etc/zot/config.json"]
+        image: quay.io/konflux-ci/zot
+        args: ["/etc/zot/config.json"]
         resources:
           requests:
             cpu: 10m

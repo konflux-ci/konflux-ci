@@ -66,9 +66,8 @@ spec:
     spec:
       containers:
       - args:
-        - serve
         - /etc/zot/config.json
-        image: ghcr.io/project-zot/zot:v2.1.13
+        image: quay.io/konflux-ci/zot:208b9a64ab9ef4682e838945a1a1582fafe600ae
         livenessProbe:
           httpGet:
             path: /v2/

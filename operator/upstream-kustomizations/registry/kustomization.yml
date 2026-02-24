@@ -6,3 +6,8 @@ resources:
   - certificate.yaml
   - trust-bundle.yaml
   - zot-config.yaml
+
+images:
+  - name: quay.io/konflux-ci/zot
+    newName: quay.io/konflux-ci/zot
+    newTag: 208b9a64ab9ef4682e838945a1a1582fafe600ae
