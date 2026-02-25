@@ -4,8 +4,10 @@ set -euo pipefail
 # Create Release Branch
 # 1. Creates the release branch at git_ref (no tag on the branch; periodic workflow will tag it).
 # 2. Updates .tekton files for per-release resources (application, component, branch, tag trigger).
-# 3. Creates a PR to main that adds the dev version to the on-tag pipeline trigger.
+# 3. Creates or updates a PR to main that adds the dev version to the on-tag pipeline trigger.
 # 4. Tags main with v{dev_version}.0-rc.0.
+# If the release branch already exists on the remote, skips (1)–(2) and only runs (3)–(4) so re-running
+# the workflow updates the PR branch with the current script (e.g. after fixing CEL).
 #
 # Usage:
 #   create-release-branch-and-pr.sh <dev_version> <release_version> <git_ref> <remote_name>
@@ -62,27 +64,29 @@ fi
 TARGET_SHA=$(git rev-parse HEAD)
 echo "Target commit: ${TARGET_SHA}"
 
+RELEASE_BRANCH_EXISTS=false
 if git ls-remote --heads "${REMOTE_NAME}" "${RELEASE_BRANCH}" | grep -q .; then
-  echo "Error: Branch ${RELEASE_BRANCH} already exists on ${REMOTE_NAME}."
-  exit 1
+  RELEASE_BRANCH_EXISTS=true
+  echo "Branch ${RELEASE_BRANCH} already exists on ${REMOTE_NAME}; skipping creation, will update PR branch and tag only."
 fi
 
-# --- 1. Create release branch at git_ref ---
-git checkout -b "${RELEASE_BRANCH}"
-echo "Created branch ${RELEASE_BRANCH}"
-
-# --- 2. Update .tekton for per-release resources (using yq) ---
 if ! command -v yq &>/dev/null; then
   echo "Error: yq is required but not installed."
   exit 1
 fi
 
+if [ "${RELEASE_BRANCH_EXISTS}" = false ]; then
+# --- 1. Create release branch at git_ref ---
+git checkout -b "${RELEASE_BRANCH}"
+echo "Created branch ${RELEASE_BRANCH}"
+
+# --- 2. Update .tekton for per-release resources (using yq) ---
 echo "Updating pipelineRuns on branch ${RELEASE_BRANCH}..."
 
-RELEASE_ESC="${RELEASE_VERSION//./\\.}"
-# CEL strings for yq env(); exported for child process only (not re-interpreted by shell) - shellcheck SC2089/SC2090 false positive
+# Use [.] for literal dot in regex to avoid CEL string escape issues.
+RELEASE_TAG_PATTERN="refs/tags/v${RELEASE_VERSION//./[.]}[.].*"
 # shellcheck disable=SC2089,SC2090
-TAG_CEL='event == "push" && target_branch.matches("refs/tags/v'"${RELEASE_ESC}"'\\.*")'
+TAG_CEL='event == "push" && target_branch.matches("'"${RELEASE_TAG_PATTERN}"'")'
 # shellcheck disable=SC2089
 PUSH_CEL='event == "push" && target_branch == "'"${RELEASE_BRANCH}"'"'
 # shellcheck disable=SC2089
@@ -121,14 +125,17 @@ git commit -m "tekton: per-release resources for ${RELEASE_BRANCH}
 
 git push "${REMOTE_NAME}" "${RELEASE_BRANCH}"
 
+fi
+
 # --- 4. PR to main: add dev version to on-tag pipeline trigger ---
 echo "Updating pipelineRuns for main..."
 git fetch "${REMOTE_NAME}" main
-git checkout -b "${MAIN_TAG_TRIGGER_BRANCH}" "${REMOTE_NAME}/main"
+git checkout -B "${MAIN_TAG_TRIGGER_BRANCH}" "${REMOTE_NAME}/main"
 
-DEV_ESC="${DEV_VERSION//./\\.}"
+# Use [.] for literal dot in regex to avoid CEL string escape issues (\. is invalid in CEL string literals).
+DEV_TAG_PATTERN="refs/tags/v${DEV_VERSION//./[.]}[.].*"
 # shellcheck disable=SC2089,SC2090
-NEW_CEL='event == "push" && target_branch.matches("refs/tags/v'"${DEV_ESC}"'\\.*")'
+NEW_CEL='event == "push" && target_branch.matches("'"${DEV_TAG_PATTERN}"'")'
 # shellcheck disable=SC2090
 export NEW_CEL
 yq -i '.metadata.annotations["pipelinesascode.tekton.dev/on-cel-expression"] = env(NEW_CEL)' "${TAG_PIPELINE}"
@@ -142,7 +149,7 @@ git commit -m "tekton: trigger on-tag pipeline for dev version v${DEV_VERSION}.*
 git push "${REMOTE_NAME}" "${MAIN_TAG_TRIGGER_BRANCH}" --force-with-lease
 
 PR_TITLE="tekton: trigger on-tag pipeline for dev version v${DEV_VERSION}.*"
-PR_BODY="Adds tag pattern \`refs/tags/v${DEV_VERSION}.*\` to the on-tag PipelineRun so that tags like \`v${TAG_DEV_RC}\` trigger the pipeline.
+PR_BODY="Adds tag pattern \`refs/tags/v${DEV_VERSION}.*\` to the on-tag PipelineRun so that tags like \`${TAG_DEV_RC}\` trigger the pipeline.
 
 ---
 *Created by the [Create Release Branch workflow](.github/workflows/create-release-branch.yaml)*"
