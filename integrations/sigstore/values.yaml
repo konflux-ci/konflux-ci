@@ -1,0 +1,139 @@
+# Sigstore scaffold Helm chart values
+# Minimal resource configuration for local/dev deployment
+# Fulcio is configured with the Kubernetes service account issuer (chart default)
+
+# -- Fulcio: certificate authority for code signing
+fulcio:
+  config:
+    contents:
+      OIDCIssuers:
+        https://kubernetes.default.svc:
+          IssuerURL: https://kubernetes.default.svc
+          ClientID: sigstore
+          Type: kubernetes
+  server:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 256Mi
+  createcerts:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+# -- CT Log: certificate transparency log
+ctlog:
+  createctconfig:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+  createtree:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+# -- Rekor: transparency log for supply chain metadata
+rekor:
+  server:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 256Mi
+    initContainerResources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+  redis:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+  createtree:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+# -- TUF: root of trust distribution (needed by cosign)
+tuf:
+  enabled: true
+
+# -- TSA: timestamp authority (required for TUF secret projection)
+tsa:
+  enabled: true
+  server:
+    args:
+      signer: memory
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 256Mi
+
+# -- Secret copying: copies component secrets into tuf-system namespace
+copySecretJob:
+  enabled: true
+
+# -- Trillian: merkle tree backend
+trillian:
+  logServer:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 256Mi
+  logSigner:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 256Mi
+  mysql:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  createdb:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
