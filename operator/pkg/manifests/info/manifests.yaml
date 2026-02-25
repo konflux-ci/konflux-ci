@@ -15,8 +15,17 @@ rules:
   - konflux-public-info
   - konflux-banner-configmap
   - cluster-config
+  - cluster-info
   resources:
   - configmaps
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resourceNames:
+  - segment-bridge-key
+  resources:
+  - secrets
   verbs:
   - get
 ---

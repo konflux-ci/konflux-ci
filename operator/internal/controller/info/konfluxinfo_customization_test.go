@@ -27,6 +27,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
@@ -1106,6 +1107,202 @@ func TestKonfluxInfoClusterConfig(t *testing.T) {
 		// Discovered values should be present when user doesn't provide them
 		g.Expect(clusterConfigMap.Data["fulcioInternalUrl"]).To(gomega.Equal("https://discovered-fulcio-internal.example.com"))
 		g.Expect(clusterConfigMap.Data["tufExternalUrl"]).To(gomega.Equal("https://discovered-tuf-external.example.com"))
+	})
+}
+
+func TestKonfluxInfoSegmentIntegration(t *testing.T) {
+	if k8sClient == nil || objectStore == nil {
+		t.Skip("Skipping test: k8sClient or objectStore not initialized. Run tests via Ginkgo suite.")
+	}
+
+	ctx := context.Background()
+	typeNamespacedName := types.NamespacedName{
+		Name: CRName,
+	}
+
+	t.Run("should create segment Secret and ConfigMap when Segment is configured", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		resource := &konfluxv1alpha1.KonfluxInfo{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+			},
+			Spec: konfluxv1alpha1.KonfluxInfoSpec{
+				Segment: &konfluxv1alpha1.SegmentIntegrationConfig{
+					WriteKey: "test-write-key-abc123",
+					APIURL:   "https://custom-segment.example.com",
+				},
+			},
+		}
+		err := k8sClient.Create(ctx, resource)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		defer func() {
+			_ = k8sClient.Delete(ctx, resource)
+		}()
+
+		controllerReconciler := &KonfluxInfoReconciler{
+			Client:      k8sClient,
+			Scheme:      k8sClient.Scheme(),
+			ObjectStore: objectStore,
+		}
+		_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: typeNamespacedName,
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// Verify segment Secret
+		secret := &corev1.Secret{}
+		err = k8sClient.Get(ctx, types.NamespacedName{
+			Name:      segmentSecretName,
+			Namespace: infoNamespace,
+		}, secret)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(secret.Data).To(gomega.HaveKey("key"))
+		g.Expect(string(secret.Data["key"])).To(gomega.Equal("test-write-key-abc123"))
+
+		// Verify segment ConfigMap
+		cm := &corev1.ConfigMap{}
+		err = k8sClient.Get(ctx, types.NamespacedName{
+			Name:      segmentConfigMapName,
+			Namespace: infoNamespace,
+		}, cm)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(cm.Data).To(gomega.HaveKey("telemetry-api-url"))
+		g.Expect(cm.Data["telemetry-api-url"]).To(gomega.Equal("https://custom-segment.example.com"))
+	})
+
+	t.Run("should use default Segment API URL when APIURL is empty", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		resource := &konfluxv1alpha1.KonfluxInfo{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+			},
+			Spec: konfluxv1alpha1.KonfluxInfoSpec{
+				Segment: &konfluxv1alpha1.SegmentIntegrationConfig{
+					WriteKey: "test-key",
+				},
+			},
+		}
+		err := k8sClient.Create(ctx, resource)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		defer func() {
+			_ = k8sClient.Delete(ctx, resource)
+		}()
+
+		controllerReconciler := &KonfluxInfoReconciler{
+			Client:      k8sClient,
+			Scheme:      k8sClient.Scheme(),
+			ObjectStore: objectStore,
+		}
+		_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: typeNamespacedName,
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		cm := &corev1.ConfigMap{}
+		err = k8sClient.Get(ctx, types.NamespacedName{
+			Name:      segmentConfigMapName,
+			Namespace: infoNamespace,
+		}, cm)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(cm.Data["telemetry-api-url"]).To(gomega.Equal(konfluxv1alpha1.DefaultSegmentAPIURL))
+	})
+
+	t.Run("should not create segment resources when Segment is nil", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		resource := &konfluxv1alpha1.KonfluxInfo{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+			},
+			Spec: konfluxv1alpha1.KonfluxInfoSpec{},
+		}
+		err := k8sClient.Create(ctx, resource)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		defer func() {
+			_ = k8sClient.Delete(ctx, resource)
+		}()
+
+		controllerReconciler := &KonfluxInfoReconciler{
+			Client:      k8sClient,
+			Scheme:      k8sClient.Scheme(),
+			ObjectStore: objectStore,
+		}
+		_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: typeNamespacedName,
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// Verify segment Secret does NOT exist
+		secret := &corev1.Secret{}
+		err = k8sClient.Get(ctx, types.NamespacedName{
+			Name:      segmentSecretName,
+			Namespace: infoNamespace,
+		}, secret)
+		g.Expect(err).To(gomega.HaveOccurred())
+		g.Expect(client.IgnoreNotFound(err)).To(gomega.Succeed())
+
+		// Verify segment ConfigMap does NOT exist
+		cm := &corev1.ConfigMap{}
+		err = k8sClient.Get(ctx, types.NamespacedName{
+			Name:      segmentConfigMapName,
+			Namespace: infoNamespace,
+		}, cm)
+		g.Expect(err).To(gomega.HaveOccurred())
+		g.Expect(client.IgnoreNotFound(err)).To(gomega.Succeed())
+	})
+
+	t.Run("should include segment resources in RBAC Role", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		resource := &konfluxv1alpha1.KonfluxInfo{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+			},
+			Spec: konfluxv1alpha1.KonfluxInfoSpec{},
+		}
+		err := k8sClient.Create(ctx, resource)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		defer func() {
+			_ = k8sClient.Delete(ctx, resource)
+		}()
+
+		controllerReconciler := &KonfluxInfoReconciler{
+			Client:      k8sClient,
+			Scheme:      k8sClient.Scheme(),
+			ObjectStore: objectStore,
+		}
+		_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: typeNamespacedName,
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		role := &rbacv1.Role{}
+		err = k8sClient.Get(ctx, types.NamespacedName{
+			Name:      "konflux-public-info-view-role",
+			Namespace: infoNamespace,
+		}, role)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// Verify configmaps rule includes cluster-info
+		var configMapRule *rbacv1.PolicyRule
+		var secretRule *rbacv1.PolicyRule
+		for i := range role.Rules {
+			for _, res := range role.Rules[i].Resources {
+				if res == "configmaps" {
+					configMapRule = &role.Rules[i]
+				}
+				if res == "secrets" {
+					secretRule = &role.Rules[i]
+				}
+			}
+		}
+		g.Expect(configMapRule).NotTo(gomega.BeNil())
+		g.Expect(configMapRule.ResourceNames).To(gomega.ContainElement(segmentConfigMapName))
+
+		g.Expect(secretRule).NotTo(gomega.BeNil())
+		g.Expect(secretRule.ResourceNames).To(gomega.ContainElement(segmentSecretName))
 	})
 }
 

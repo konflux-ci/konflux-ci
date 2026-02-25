@@ -56,6 +56,10 @@ const (
 	bannerConfigMapName = "konflux-banner-configmap"
 	// clusterConfigMapName is the name of the cluster-config ConfigMap
 	clusterConfigMapName = "cluster-config"
+	// segmentSecretName is the name of the Secret containing the Segment write key
+	segmentSecretName = "segment-bridge-key"
+	// segmentConfigMapName is the name of the ConfigMap containing the Segment API URL
+	segmentConfigMapName = "cluster-info"
 )
 
 // ConfigMap key constants for cluster-config.
@@ -91,9 +95,13 @@ type ClusterConfigDiscoverer interface {
 }
 
 // InfoCleanupGVKs defines which resource types should be cleaned up when they are
-// no longer part of the desired state. All resources managed by this controller are always
-// applied, so no cleanup GVKs are needed (they're always tracked and never become orphans).
-var InfoCleanupGVKs = []schema.GroupVersionKind{}
+// no longer part of the desired state. Secrets and ConfigMaps are included because
+// the segment-bridge integration conditionally creates resources that must be removed
+// when segment-bridge is disabled.
+var InfoCleanupGVKs = []schema.GroupVersionKind{
+	{Group: "", Version: "v1", Kind: "Secret"},
+	{Group: "", Version: "v1", Kind: "ConfigMap"},
+}
 
 // InfoClusterScopedAllowList restricts which cluster-scoped resources can be deleted
 // during orphan cleanup. This is a security measure to prevent attackers from
@@ -120,6 +128,7 @@ type KonfluxInfoReconciler struct {
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=list
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=get;list;watch;create;patch
 
@@ -168,6 +177,15 @@ func (r *KonfluxInfoReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	if err := r.reconcileClusterConfigConfigMap(ctx, tc, konfluxInfo); err != nil {
 		return errHandler.HandleWithReason(ctx, err, condition.ReasonConfigMapFailed, "reconcile cluster-config ConfigMap")
+	}
+
+	if konfluxInfo.Spec.Segment != nil {
+		if err := r.reconcileSegmentSecret(ctx, tc, konfluxInfo.Spec.Segment); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonSecretCreationFailed, "reconcile segment Secret")
+		}
+		if err := r.reconcileSegmentConfigMap(ctx, tc, konfluxInfo.Spec.Segment); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonConfigMapFailed, "reconcile segment ConfigMap")
+		}
 	}
 
 	// Apply all embedded manifests
@@ -224,6 +242,7 @@ func (r *KonfluxInfoReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&rbacv1.Role{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Owns(&rbacv1.RoleBinding{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Owns(&corev1.ConfigMap{}, builder.WithPredicates(predicate.LabelsOrAnnotationsChangedPredicate)).
+		Owns(&corev1.Secret{}, builder.WithPredicates(predicate.LabelsOrAnnotationsChangedPredicate)).
 		Complete(r)
 }
 
@@ -402,6 +421,65 @@ func (r *KonfluxInfoReconciler) reconcileClusterConfigConfigMap(ctx context.Cont
 	}
 
 	log.Info("Applying cluster-config ConfigMap", "name", configMap.Name, "namespace", configMap.Namespace)
+	if err := tc.ApplyOwned(ctx, configMap); err != nil {
+		return fmt.Errorf("failed to apply ConfigMap: %w", err)
+	}
+
+	return nil
+}
+
+// reconcileSegmentSecret creates or updates the segment-bridge-key Secret
+// containing the Segment write key for UI telemetry integration.
+func (r *KonfluxInfoReconciler) reconcileSegmentSecret(ctx context.Context, tc *tracking.Client, segment *konfluxv1alpha1.SegmentIntegrationConfig) error {
+	log := logf.FromContext(ctx)
+
+	secret := &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Secret",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      segmentSecretName,
+			Namespace: infoNamespace,
+		},
+		StringData: map[string]string{
+			"key": segment.WriteKey,
+		},
+	}
+
+	log.Info("Applying segment Secret", "name", secret.Name, "namespace", secret.Namespace)
+	if err := tc.ApplyOwned(ctx, secret); err != nil {
+		return fmt.Errorf("failed to apply Secret: %w", err)
+	}
+
+	return nil
+}
+
+// reconcileSegmentConfigMap creates or updates the cluster-info ConfigMap
+// containing the Segment API URL for UI telemetry integration.
+func (r *KonfluxInfoReconciler) reconcileSegmentConfigMap(ctx context.Context, tc *tracking.Client, segment *konfluxv1alpha1.SegmentIntegrationConfig) error {
+	log := logf.FromContext(ctx)
+
+	apiURL := segment.APIURL
+	if apiURL == "" {
+		apiURL = konfluxv1alpha1.DefaultSegmentAPIURL
+	}
+
+	configMap := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      segmentConfigMapName,
+			Namespace: infoNamespace,
+		},
+		Data: map[string]string{
+			"telemetry-api-url": apiURL,
+		},
+	}
+
+	log.Info("Applying segment ConfigMap", "name", configMap.Name, "namespace", configMap.Namespace)
 	if err := tc.ApplyOwned(ctx, configMap); err != nil {
 		return fmt.Errorf("failed to apply ConfigMap: %w", err)
 	}

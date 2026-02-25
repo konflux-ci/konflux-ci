@@ -570,6 +570,14 @@ func (r *KonfluxReconciler) applyKonfluxInfo(ctx context.Context, tc *tracking.C
 		spec.Banner = nil
 	}
 
+	// Inject Segment telemetry config so KonfluxInfo creates UI-facing resources
+	if owner.Spec.IsSegmentBridgeEnabled() && owner.Spec.SegmentBridge != nil {
+		spec.Segment = &konfluxv1alpha1.SegmentIntegrationConfig{
+			WriteKey: owner.Spec.SegmentBridge.SegmentKey,
+			APIURL:   owner.Spec.SegmentBridge.SegmentAPIURL,
+		}
+	}
+
 	konfluxInfo := &konfluxv1alpha1.KonfluxInfo{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: konfluxv1alpha1.GroupVersion.String(),

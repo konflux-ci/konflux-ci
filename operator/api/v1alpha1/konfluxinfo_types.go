@@ -44,6 +44,15 @@ type KonfluxInfoSpec struct {
 	// User-provided values take precedence over auto-detected values.
 	// +optional
 	ClusterConfig *ClusterConfig `json:"clusterConfig,omitempty"`
+
+	// Segment contains Segment telemetry configuration for UI integration.
+	// When set, the controller creates a Secret (segment-bridge-key) and
+	// ConfigMap (cluster-info) in the konflux-info namespace so the UI can
+	// send anonymized usage data to Segment.
+	// This field is populated by the top-level Konflux controller when
+	// segment-bridge is enabled.
+	// +optional
+	Segment *SegmentIntegrationConfig `json:"segment,omitempty"`
 }
 
 // Banner contains banner configuration
@@ -140,6 +149,18 @@ type InfoNotificationConfig struct {
 	//     email: "team@example.com"
 	// +kubebuilder:pruning:PreserveUnknownFields
 	Config apiextensionsv1.JSON `json:"config"`
+}
+
+// SegmentIntegrationConfig contains Segment telemetry configuration
+// for creating UI-facing resources in the konflux-info namespace.
+type SegmentIntegrationConfig struct {
+	// WriteKey is the Segment write key for authenticating with the Segment API.
+	// +optional
+	WriteKey string `json:"writeKey,omitempty"`
+
+	// APIURL is the Segment HTTP API endpoint URL.
+	// +optional
+	APIURL string `json:"apiURL,omitempty"`
 }
 
 // RBACRole contains RBAC role definition
