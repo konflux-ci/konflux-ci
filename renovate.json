@@ -34,6 +34,18 @@
       "matchDatasources": ["helm"],
       "matchPackageNames": ["cert-manager", "trust-manager"],
       "registryUrls": ["https://charts.jetstack.io"]
+    },
+    {
+      "description": "Use Sigstore Helm repo for scaffold chart",
+      "matchDatasources": ["helm"],
+      "matchPackageNames": ["scaffold"],
+      "registryUrls": ["https://sigstore.github.io/helm-charts"]
+    },
+    {
+      "description": "Sigstore scaffold chart is an optional integration",
+      "matchDatasources": ["helm"],
+      "matchPackageNames": ["scaffold"],
+      "additionalBranchPrefix": "integrations/"
     }
   ],
   "tekton": {
@@ -247,6 +259,16 @@
       "datasourceTemplate": "helm",
       "depNameTemplate": "trust-manager",
       "extractVersionTemplate": "^v?(?<version>.*)$"
+    },
+    {
+      "description": "Track sigstore scaffold Helm chart version in install script",
+      "customType": "regex",
+      "fileMatch": ["integrations/sigstore/install\\.sh$"],
+      "matchStrings": [
+        "# renovate: datasource=helm registryUrl=https://sigstore\\.github\\.io/helm-charts depName=scaffold\\nSCAFFOLD_VERSION=\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "helm",
+      "depNameTemplate": "scaffold"
     }
   ]
 }
