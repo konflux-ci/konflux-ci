@@ -37,12 +37,17 @@
 #   release (default) - Install from latest GitHub release
 #   local             - Install from current checkout using kustomize (see note below)
 #   build             - Build operator image locally and install (for operator developers)
+#   none              - Skip operator install and Konflux CR (for running operator locally)
 #
 # NOTE: The 'local' method applies manifests from your checkout with the latest
 # released image, which may cause mismatches if your checkout differs from the
 # release. To avoid this, checkout a specific release tag first:
 #   git checkout v1.0.0  # or the desired release tag
 #   OPERATOR_INSTALL_METHOD=local ./scripts/deploy-local.sh
+#
+# For 'none' method, the script sets up Kind + dependencies + secrets, then exits.
+# You then run the operator yourself:
+#   cd operator && make install && make run
 
 set -euo pipefail
 
@@ -130,6 +135,30 @@ echo ""
 
 INSTALL_METHOD="${OPERATOR_INSTALL_METHOD:-local}"
 
+# Ensure a namespace exists: in 'none' mode, pre-create it immediately;
+# otherwise wait up to 60 s for the operator to create it.
+# Usage: wait_or_create_namespace <namespace> <install_method>
+# Returns 0 on success, 1 if the namespace was not found in time.
+wait_or_create_namespace() {
+    local ns="$1"
+    local method="$2"
+    if [ "${method}" = "none" ]; then
+        echo "Pre-creating namespace: ${ns}"
+        kubectl create namespace "${ns}" --dry-run=client -o yaml | kubectl apply -f -
+    else
+        echo "Waiting for namespace: ${ns}"
+        local timeout=60
+        while ! kubectl get namespace "${ns}" &> /dev/null && [ $timeout -gt 0 ]; do
+            sleep 2
+            timeout=$((timeout - 2))
+        done
+        if [ $timeout -le 0 ]; then
+            echo "WARNING: Namespace ${ns} not created after 60 seconds"
+            return 1
+        fi
+    fi
+}
+
 # For 'build' method, build the operator image before creating the cluster to reduce peak memory (no Kind container during go build)
 if [ "${INSTALL_METHOD}" = "build" ]; then
     echo "========================================="
@@ -211,33 +240,46 @@ case "${INSTALL_METHOD}" in
         kubectl apply -f "${RELEASE_URL}"
         ;;
 
+    none)
+        echo "Skipping operator installation (OPERATOR_INSTALL_METHOD=none)"
+        echo "You will need to run the operator manually after deployment completes:"
+        echo "  cd operator && make install && make run"
+        ;;
+
     *)
         echo "ERROR: Invalid OPERATOR_INSTALL_METHOD: ${INSTALL_METHOD}"
-        echo "Valid options: local, build, release"
+        echo "Valid options: local, build, release, none"
         exit 1
         ;;
 esac
 
-# Step 4: Wait for operator to be ready
-echo ""
-echo "========================================="
-echo "Step 4: Waiting for operator"
-echo "========================================="
-echo "Waiting for operator deployment..."
-kubectl wait --for=condition=Available \
-    deployment/konflux-operator-controller-manager \
-    -n konflux-operator \
-    --timeout=5m
+if [ "${INSTALL_METHOD}" != "none" ]; then
+    # Step 4: Wait for operator to be ready
+    echo ""
+    echo "========================================="
+    echo "Step 4: Waiting for operator"
+    echo "========================================="
+    echo "Waiting for operator deployment..."
+    kubectl wait --for=condition=Available \
+        deployment/konflux-operator-controller-manager \
+        -n konflux-operator \
+        --timeout=5m
 
-echo "✓ Operator is ready"
+    echo "✓ Operator is ready"
 
-# Step 5: Apply Konflux CR
-echo ""
-echo "========================================="
-echo "Step 5: Applying Konflux configuration"
-echo "========================================="
-echo "Applying: ${KONFLUX_CR}"
-kubectl apply -f "${KONFLUX_CR}"
+    # Step 5: Apply Konflux CR
+    echo ""
+    echo "========================================="
+    echo "Step 5: Applying Konflux configuration"
+    echo "========================================="
+    echo "Applying: ${KONFLUX_CR}"
+    kubectl apply -f "${KONFLUX_CR}"
+else
+    echo ""
+    echo "========================================="
+    echo "Steps 4-5: Skipped (operator not installed)"
+    echo "========================================="
+fi
 
 # Step 6: Create secrets for GitHub integration
 echo ""
@@ -246,17 +288,8 @@ echo "Step 6: Creating GitHub integration secrets"
 echo "========================================="
 echo "Creating Pipelines-as-Code secrets..."
 
-# Wait for namespaces to be created by operator
 for ns in pipelines-as-code build-service integration-service; do
-    echo "Waiting for namespace: ${ns}"
-    timeout=60
-    while ! kubectl get namespace "${ns}" &> /dev/null && [ $timeout -gt 0 ]; do
-        sleep 2
-        timeout=$((timeout - 2))
-    done
-
-    if [ $timeout -le 0 ]; then
-        echo "WARNING: Namespace ${ns} not created after 60 seconds"
+    if ! wait_or_create_namespace "${ns}" "${INSTALL_METHOD}"; then
         echo "         Secrets will need to be created manually"
         continue
     fi
@@ -287,16 +320,7 @@ if [ -n "${QUAY_TOKEN}" ] && [ -n "${QUAY_ORGANIZATION}" ]; then
     echo ""
     echo "Creating image-controller Quay secret..."
 
-    # Wait for image-controller namespace
-    echo "Waiting for namespace: image-controller"
-    timeout=60
-    while ! kubectl get namespace image-controller &> /dev/null && [ $timeout -gt 0 ]; do
-        sleep 2
-        timeout=$((timeout - 2))
-    done
-
-    if [ $timeout -le 0 ]; then
-        echo "WARNING: Namespace image-controller not created after 60 seconds"
+    if ! wait_or_create_namespace "image-controller" "${INSTALL_METHOD}"; then
         echo "         Secret will need to be created manually"
     else
         echo "Creating secret in image-controller..."
@@ -306,14 +330,16 @@ if [ -n "${QUAY_TOKEN}" ] && [ -n "${QUAY_ORGANIZATION}" ]; then
             --dry-run=client -o yaml | kubectl apply -f -
         echo "✓ Image-controller secret created"
 
-        # Wait for image-controller pods to be ready
-        echo "Waiting for image-controller pods to be ready..."
-        if kubectl wait --for=condition=Ready --timeout=240s \
-            -l control-plane=controller-manager -n image-controller pod 2>/dev/null; then
-            echo "✓ Image-controller is ready"
-        else
-            echo "WARNING: Image-controller pods did not become ready within 4 minutes"
-            echo "         This may cause E2E test failures"
+        # Wait for image-controller pods to be ready (skip in 'none' mode - no pods yet)
+        if [ "${INSTALL_METHOD}" != "none" ]; then
+            echo "Waiting for image-controller pods to be ready..."
+            if kubectl wait --for=condition=Ready --timeout=240s \
+                -l control-plane=controller-manager -n image-controller pod 2>/dev/null; then
+                echo "✓ Image-controller is ready"
+            else
+                echo "WARNING: Image-controller pods did not become ready within 4 minutes"
+                echo "         This may cause E2E test failures"
+            fi
         fi
     fi
 elif [ -n "${QUAY_TOKEN}" ] || [ -n "${QUAY_ORGANIZATION}" ]; then
@@ -322,24 +348,31 @@ elif [ -n "${QUAY_TOKEN}" ] || [ -n "${QUAY_ORGANIZATION}" ]; then
     echo "         Image-controller secret not created"
 fi
 
-# Step 7: Wait for Konflux to be ready
-echo ""
-echo "========================================="
-echo "Step 7: Waiting for Konflux to be ready"
-echo "========================================="
-echo "This may take several minutes..."
+if [ "${INSTALL_METHOD}" != "none" ]; then
+    # Step 7: Wait for Konflux to be ready
+    echo ""
+    echo "========================================="
+    echo "Step 7: Waiting for Konflux to be ready"
+    echo "========================================="
+    echo "This may take several minutes..."
 
-if ! kubectl wait --for=condition=Ready=True konflux konflux --timeout=15m 2>/dev/null; then
-    echo ""
-    echo "WARNING: Konflux CR did not become Ready within 15 minutes"
-    echo "         This may be normal if deploying all components"
-    echo "         Check status with: kubectl get konflux konflux -o yaml"
-    echo ""
-    echo "To monitor progress:"
-    echo "  kubectl get pods -A"
-    echo "  kubectl get konflux konflux -o jsonpath='{.status.conditions}'"
+    if ! kubectl wait --for=condition=Ready=True konflux konflux --timeout=15m 2>/dev/null; then
+        echo ""
+        echo "WARNING: Konflux CR did not become Ready within 15 minutes"
+        echo "         This may be normal if deploying all components"
+        echo "         Check status with: kubectl get konflux konflux -o yaml"
+        echo ""
+        echo "To monitor progress:"
+        echo "  kubectl get pods -A"
+        echo "  kubectl get konflux konflux -o jsonpath='{.status.conditions}'"
+    else
+        echo "✓ Konflux is ready"
+    fi
 else
-    echo "✓ Konflux is ready"
+    echo ""
+    echo "========================================="
+    echo "Step 7: Skipped (operator not installed)"
+    echo "========================================="
 fi
 
 # Final status
@@ -348,16 +381,30 @@ echo "========================================="
 echo "✅ Deployment Complete!"
 echo "========================================="
 echo ""
-echo "Konflux is now running on your local Kind cluster"
-echo ""
-echo "Access the UI:"
-echo "  https://localhost:9443"
-echo ""
 
-echo "Demo user credentials:"
-echo "  user1@konflux.dev / password"
-echo "  user2@konflux.dev / password"
-echo ""
+if [ "${INSTALL_METHOD}" = "none" ]; then
+    echo "Kind cluster and dependencies are ready."
+    echo ""
+    echo "Next steps - run the operator:"
+    echo "  cd operator"
+    echo "  make install   # Install CRDs"
+    echo "  make run       # Run the operator locally"
+    echo ""
+    echo "Then, in another terminal, apply the Konflux CR:"
+    echo "  kubectl apply -f ${KONFLUX_CR}"
+    echo ""
+else
+    echo "Konflux is now running on your local Kind cluster"
+    echo ""
+    echo "Access the UI:"
+    echo "  https://localhost:9443"
+    echo ""
+
+    echo "Demo user credentials:"
+    echo "  user1@konflux.dev / password"
+    echo "  user2@konflux.dev / password"
+    echo ""
+fi
 
 if [[ "${ENABLE_REGISTRY_PORT:-1}" -eq 1 ]]; then
     echo "Internal registry:"
