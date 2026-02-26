@@ -103,7 +103,70 @@ test_pvc_binding(){
 }
 
 deploy_tekton() {
-    echo "  🐱 Installing Tekton Operator..." >&2
+    : "${USE_OPENSHIFT_PIPELINES:=false}"
+    if [[ "${USE_OPENSHIFT_PIPELINES}" == "true" ]]; then
+        echo "  🐱 Installing Tekton via OpenShift Pipelines Operator..." >&2
+        deploy_openshift_pipelines
+    else
+        echo "  🐱 Installing Tekton via upstream Operator..." >&2
+        deploy_upstream_tekton
+    fi
+}
+
+deploy_openshift_pipelines() {
+    # Install OpenShift Pipelines Operator via OLM
+    kubectl apply -k "${script_path}/dependencies/openshift-pipelines-subscription"
+
+    # Wait for TektonConfig CRD to be available (timeout: 10 minutes)
+    echo "  ⏳ Waiting for TektonConfig CRD..." >&2
+    local crd_timeout=600
+    local crd_waited=0
+    until kubectl get crd tektonconfigs.operator.tekton.dev &>/dev/null; do
+        if [[ $crd_waited -ge $crd_timeout ]]; then
+            echo "ERROR: TektonConfig CRD not available after ${crd_timeout}s" >&2
+            exit 1
+        fi
+        sleep 10
+        crd_waited=$((crd_waited + 10))
+    done
+
+    # Wait for TektonConfig resource to be created (timeout: 10 minutes)
+    echo "  ⏳ Waiting for TektonConfig to be ready..." >&2
+    local config_timeout=600
+    local config_waited=0
+    until kubectl get tektonconfig config &>/dev/null; do
+        if [[ $config_waited -ge $config_timeout ]]; then
+            echo "ERROR: TektonConfig resource not created after ${config_timeout}s" >&2
+            exit 1
+        fi
+        sleep 10
+        config_waited=$((config_waited + 10))
+    done
+    retry "kubectl wait --for=condition=Ready tektonconfig/config --timeout=600s" \
+          "TektonConfig did not become ready within the allocated time"
+
+    # Wait for Tekton webhook services (timeout: 5 minutes)
+    echo "  ⏳ Waiting for Tekton webhook services..." >&2
+    local webhook_timeout=300
+    local webhook_waited=0
+    until kubectl get service tekton-operator-proxy-webhook -n openshift-pipelines &>/dev/null; do
+        if [[ $webhook_waited -ge $webhook_timeout ]]; then
+            echo "ERROR: Tekton webhook service not available after ${webhook_timeout}s" >&2
+            exit 1
+        fi
+        sleep 10
+        webhook_waited=$((webhook_waited + 10))
+    done
+    retry "kubectl wait --for=condition=Available deployment/tekton-operator-proxy-webhook -n openshift-pipelines --timeout=120s" \
+          "Tekton webhook did not become available within the allocated time"
+
+    # Apply Tekton Chains RBAC (same as upstream Tekton)
+    kubectl apply -k "${script_path}/dependencies/tekton-chains-rbac"
+
+    echo "  ✅ OpenShift Pipelines is ready!" >&2
+}
+
+deploy_upstream_tekton() {
     # Operator
     kubectl apply -k "${script_path}/dependencies/tekton-operator"
     retry "kubectl wait --for=condition=Ready -l app=tekton-operator -n tekton-operator pod --timeout=240s" \
@@ -177,6 +240,11 @@ deploy_registry() {
 }
 
 deploy_smee() {
+    : "${SKIP_SMEE:=false}"
+    if [[ "${SKIP_SMEE}" == "true" ]]; then
+        echo "⏭️  Skipping Smee deployment (not needed for OCP CI)" >&2
+        return 0
+    fi
     local patch="${script_path}/dependencies/smee/smee-channel-id.yaml"
     if [ ! -f "$patch" ]; then
         echo "Randomizing smee-channel ID"
