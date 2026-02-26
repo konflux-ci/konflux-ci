@@ -23,7 +23,7 @@ spec:
     - name: revision
       value: '{{revision}}'
     - name: output-image
-      value: quay.io/redhat-user-workloads/konflux-vanguard-tenant/konflux-operator:{{revision}}-{{git_tag}}
+      value: quay.io/redhat-user-workloads/konflux-vanguard-tenant/konflux-operator-0-0:{{revision}}-{{git_tag}}
     - name: dockerfile
       value: Containerfile
     - name: path-context
