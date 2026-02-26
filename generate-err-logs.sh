@@ -28,11 +28,24 @@ generate_logs() {
         echo ""
 
         echo "--- Host Memory ---"
-        free -h 2>&1 || echo "Failed to get memory info"
+        if [[ "$(uname)" == "Darwin" ]]; then
+            # macOS: use vm_stat and sysctl for memory info
+            sysctl hw.memsize 2>&1 || echo "Failed to get total memory"
+            vm_stat 2>&1 || echo "Failed to get memory stats"
+        else
+            free -h 2>&1 || echo "Failed to get memory info"
+        fi
         echo ""
 
         echo "--- Host CPU ---"
-        lscpu 2>&1 || echo "Failed to get CPU info"
+        if [[ "$(uname)" == "Darwin" ]]; then
+            # macOS: use sysctl for CPU info
+            sysctl -n machdep.cpu.brand_string 2>&1 || echo "Failed to get CPU brand"
+            sysctl -n hw.logicalcpu 2>&1 || echo "Failed to get logical CPU count"
+            sysctl -n hw.physicalcpu 2>&1 || echo "Failed to get physical CPU count"
+        else
+            lscpu 2>&1 || echo "Failed to get CPU info"
+        fi
         echo ""
 
         echo "--- Host Disk Usage ---"
@@ -44,7 +57,12 @@ generate_logs() {
         echo ""
 
         echo "--- Process Resource Usage (Top 20) ---"
-        ps aux --sort=-%mem | head -21 2>&1 || echo "Failed to get process info"
+        if [[ "$(uname)" == "Darwin" ]]; then
+            # macOS: BSD ps does not support --sort; use -m to sort by memory
+            ps aux -m | head -21 2>&1 || echo "Failed to get process info"
+        else
+            ps aux --sort=-%mem | head -21 2>&1 || echo "Failed to get process info"
+        fi
         echo ""
     } > "$logs_dir/system-resources.log"
 
