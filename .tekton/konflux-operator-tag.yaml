@@ -7,8 +7,8 @@ metadata:
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/cancel-in-progress: "false"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "push" && target_branch.startsWith("refs/tags/")
+    pipelinesascode.tekton.dev/on-cel-expression: |-
+      event == "push" && target_branch.matches("refs/tags/v0[.]1[.].*")
   creationTimestamp: null
   labels:
     appstudio.openshift.io/application: konflux-operator
@@ -18,32 +18,32 @@ metadata:
   namespace: konflux-vanguard-tenant
 spec:
   params:
-  - name: git-url
-    value: '{{source_url}}'
-  - name: revision
-    value: '{{revision}}'
-  - name: output-image
-    value: quay.io/redhat-user-workloads/konflux-vanguard-tenant/konflux-operator:{{revision}}-{{git_tag}}
-  - name: dockerfile
-    value: Containerfile
-  - name: path-context
-    value: operator
-  - name: build-platforms
-    value:
-    - linux/x86_64
-    - linux/arm64
-  - name: rebuild
-    value: "true"
-  - name: build-args
-    value:
-    - "OPERATOR_VERSION={{git_tag}}"
-    - "GIT_COMMIT={{revision}}"
+    - name: git-url
+      value: '{{source_url}}'
+    - name: revision
+      value: '{{revision}}'
+    - name: output-image
+      value: quay.io/redhat-user-workloads/konflux-vanguard-tenant/konflux-operator:{{revision}}-{{git_tag}}
+    - name: dockerfile
+      value: Containerfile
+    - name: path-context
+      value: operator
+    - name: build-platforms
+      value:
+        - linux/x86_64
+        - linux/arm64
+    - name: rebuild
+      value: "true"
+    - name: build-args
+      value:
+        - "OPERATOR_VERSION={{git_tag}}"
+        - "GIT_COMMIT={{revision}}"
   pipelineRef:
     name: build-pipeline
   taskRunTemplate:
     serviceAccountName: build-pipeline-konflux-operator
   workspaces:
-  - name: git-auth
-    secret:
-      secretName: '{{ git_auth_secret }}'
+    - name: git-auth
+      secret:
+        secretName: '{{ git_auth_secret }}'
 status: {}
