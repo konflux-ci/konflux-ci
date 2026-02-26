@@ -102,6 +102,11 @@ for f in "${TEKTON_DIR}"/konflux-operator-push.yaml "${TEKTON_DIR}"/konflux-oper
   ' "$f"
 done
 
+# Set output-image param so builds push to the versioned repo (e.g. konflux-operator-0-0) matching the ImageRepository.
+[ -f "${TEKTON_DIR}/konflux-operator-push.yaml" ] && yq -i '(.spec.params[] | select(.name == "output-image")) |= .value = "quay.io/redhat-user-workloads/konflux-vanguard-tenant/" + env(APP_COMPONENT) + ":{{revision}}"' "${TEKTON_DIR}/konflux-operator-push.yaml"
+[ -f "${TEKTON_DIR}/konflux-operator-pull-request.yaml" ] && yq -i '(.spec.params[] | select(.name == "output-image")) |= .value = "quay.io/redhat-user-workloads/konflux-vanguard-tenant/" + env(APP_COMPONENT) + ":on-pr-{{revision}}"' "${TEKTON_DIR}/konflux-operator-pull-request.yaml"
+[ -f "${TEKTON_DIR}/konflux-operator-tag.yaml" ] && yq -i '(.spec.params[] | select(.name == "output-image")) |= .value = "quay.io/redhat-user-workloads/konflux-vanguard-tenant/" + env(APP_COMPONENT) + ":{{revision}}-{{git_tag}}"' "${TEKTON_DIR}/konflux-operator-tag.yaml"
+
 # shellcheck disable=SC2090
 export PUSH_CEL
 yq -i '.metadata.name = env(APP_COMPONENT) + "-on-push" | .metadata.annotations["pipelinesascode.tekton.dev/on-cel-expression"] = env(PUSH_CEL)' "${TEKTON_DIR}/konflux-operator-push.yaml"
