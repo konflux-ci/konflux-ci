@@ -101,7 +101,57 @@ test_pvc_binding(){
 }
 
 deploy_tekton() {
-    echo "  🐱 Installing Tekton Operator..." >&2
+    : "${USE_OPENSHIFT_PIPELINES:=false}"
+    if [[ "${USE_OPENSHIFT_PIPELINES}" == "true" ]]; then
+        echo "  🐱 Installing Tekton via OpenShift Pipelines Operator..." >&2
+        deploy_openshift_pipelines
+    else
+        echo "  🐱 Installing Tekton via upstream Operator..." >&2
+        deploy_upstream_tekton
+    fi
+}
+
+deploy_openshift_pipelines() {
+    # Install OpenShift Pipelines Operator via OLM
+    cat <<EOF | kubectl apply -f -
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: openshift-pipelines-operator
+  namespace: openshift-operators
+spec:
+  channel: latest
+  name: openshift-pipelines-operator-rh
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+EOF
+
+    # Wait for TektonConfig CRD to be available
+    echo "  ⏳ Waiting for TektonConfig CRD..." >&2
+    until kubectl get crd tektonconfigs.operator.tekton.dev &>/dev/null; do
+        sleep 10
+    done
+
+    # Wait for TektonConfig resource to be created and ready
+    echo "  ⏳ Waiting for TektonConfig to be ready..." >&2
+    until kubectl get tektonconfig config &>/dev/null; do
+        sleep 10
+    done
+    retry "kubectl wait --for=condition=Ready tektonconfig/config --timeout=600s" \
+          "TektonConfig did not become ready within the allocated time"
+
+    # Wait for Tekton webhook services (TektonConfig Ready doesn't guarantee this)
+    echo "  ⏳ Waiting for Tekton webhook services..." >&2
+    until kubectl get service tekton-operator-proxy-webhook -n openshift-pipelines &>/dev/null; do
+        sleep 10
+    done
+    retry "kubectl wait --for=condition=Available deployment/tekton-operator-proxy-webhook -n openshift-pipelines --timeout=120s" \
+          "Tekton webhook did not become available within the allocated time"
+
+    echo "  ✅ OpenShift Pipelines is ready!" >&2
+}
+
+deploy_upstream_tekton() {
     # Operator
     kubectl apply -k "${script_path}/dependencies/tekton-operator"
     retry "kubectl wait --for=condition=Ready -l app=tekton-operator -n tekton-operator pod --timeout=240s" \
@@ -175,6 +225,11 @@ deploy_registry() {
 }
 
 deploy_smee() {
+    : "${SKIP_SMEE:=false}"
+    if [[ "${SKIP_SMEE}" == "true" ]]; then
+        echo "⏭️  Skipping Smee deployment (not needed for OCP CI)" >&2
+        return 0
+    fi
     local patch="${script_path}/dependencies/smee/smee-channel-id.yaml"
     if [ ! -f "$patch" ]; then
         echo "Randomizing smee-channel ID"
