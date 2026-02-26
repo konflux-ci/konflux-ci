@@ -101,6 +101,11 @@ test_pvc_binding(){
 }
 
 deploy_tekton() {
+    : "${SKIP_TEKTON:=false}"
+    if [[ "${SKIP_TEKTON}" == "true" ]]; then
+        echo "⏭️  Skipping Tekton deployment (using OpenShift Pipelines)" >&2
+        return 0
+    fi
     echo "  🐱 Installing Tekton Operator..." >&2
     # Operator
     kubectl apply -k "${script_path}/dependencies/tekton-operator"
@@ -175,6 +180,11 @@ deploy_registry() {
 }
 
 deploy_smee() {
+    : "${SKIP_SMEE:=false}"
+    if [[ "${SKIP_SMEE}" == "true" ]]; then
+        echo "⏭️  Skipping Smee deployment (not needed for OCP CI)" >&2
+        return 0
+    fi
     local patch="${script_path}/dependencies/smee/smee-channel-id.yaml"
     if [ ! -f "$patch" ]; then
         echo "Randomizing smee-channel ID"
