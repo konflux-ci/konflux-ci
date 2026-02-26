@@ -19,6 +19,7 @@ package segmentbridge
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -156,7 +157,10 @@ func reconcileSegmentBridgeSecret(ctx context.Context, tc *tracking.Client, spec
 		return nil
 	}
 
-	batchURL := spec.GetSegmentAPIURL() + "/batch"
+	batchURL, err := url.JoinPath(spec.GetSegmentAPIURL(), "batch")
+	if err != nil {
+		return fmt.Errorf("invalid segment API URL: %w", err)
+	}
 
 	secret := &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
@@ -173,7 +177,7 @@ func reconcileSegmentBridgeSecret(ctx context.Context, tc *tracking.Client, spec
 		},
 	}
 
-	log.Info("Applying segment-bridge Secret", "name", secret.Name, "namespace", secret.Namespace, "batchURL", batchURL)
+	log.V(1).Info("Applying segment-bridge Secret", "name", secret.Name, "namespace", secret.Namespace, "batchURL", batchURL)
 	if err := tc.ApplyOwned(ctx, secret); err != nil {
 		return fmt.Errorf("failed to apply Secret: %w", err)
 	}
