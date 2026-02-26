@@ -1,0 +1,92 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quay
+  namespace: quay
+  labels:
+    app: quay
+  annotations:
+    ignore-check.kube-linter.io/no-read-only-root-fs: >-
+      Quay writes to system CA trust store paths at startup
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quay
+  template:
+    metadata:
+      labels:
+        app: quay
+    spec:
+      containers:
+      - name: quay
+        image: quay.io/projectquay/quay
+        securityContext:
+          runAsNonRoot: true
+        resources:
+          requests:
+            cpu: 200m
+            memory: 4Gi
+          limits:
+            cpu: 4000m
+            memory: 8Gi
+        startupProbe:
+          httpGet:
+            path: /health/instance
+            port: 8443
+            scheme: HTTPS
+          periodSeconds: 10
+          failureThreshold: 30
+        readinessProbe:
+          httpGet:
+            path: /health/instance
+            port: 8443
+            scheme: HTTPS
+          periodSeconds: 10
+          failureThreshold: 3
+        ports:
+        - containerPort: 8443
+          name: https
+        - containerPort: 8080
+          name: http
+        volumeMounts:
+        - name: config-stack
+          mountPath: /conf/stack
+          readOnly: true
+        - name: storage
+          mountPath: /datastorage
+      volumes:
+      - name: config-stack
+        projected:
+          sources:
+          - secret:
+              name: quay-config
+              items:
+              - key: config.yaml
+                path: config.yaml
+          - secret:
+              name: quay-tls
+              items:
+              - key: tls.crt
+                path: ssl.cert
+              - key: tls.key
+                path: ssl.key
+      - name: storage
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quay-service
+  namespace: quay
+spec:
+  type: NodePort
+  selector:
+    app: quay
+  ports:
+  - name: https
+    protocol: TCP
+    nodePort: 30002
+    port: 443
+    targetPort: 8443

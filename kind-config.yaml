@@ -26,3 +26,7 @@ nodes:
   - containerPort: 30001
     hostPort: 5001
     protocol: TCP
+    # Quay
+  - containerPort: 30002
+    hostPort: 8443
+    protocol: TCP

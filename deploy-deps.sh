@@ -87,6 +87,8 @@ deploy() {
     deploy_kyverno
     echo "📋 Deploying Konflux Info..." >&2
     deploy_konflux_info
+    echo "🐳 Deploying Quay..." >&2
+    deploy_quay
 }
 
 test_pvc_binding(){
@@ -201,6 +203,48 @@ deploy_konflux_info() {
         return 0
     fi
     kubectl apply -k "${script_path}/dependencies/konflux-info"
+}
+
+deploy_quay() {
+    : "${SKIP_QUAY:=true}"
+    if [[ "${SKIP_QUAY}" == "true" ]]; then
+        echo "⏭️  Skipping Quay deployment" >&2
+        return 0
+    fi
+    kubectl apply -k "${script_path}/dependencies/quay"
+
+    local POSTGRES_PASSWORD
+    if ! kubectl get secret quay-postgres-creds -n quay &>/dev/null; then
+        echo "🔑 Creating quay-postgres-creds secret" >&2
+        POSTGRES_PASSWORD="$(openssl rand -base64 20 | tr '+/' '-_' | tr -d '\n' | tr -d '=')"
+        kubectl create secret generic quay-postgres-creds \
+            --namespace=quay \
+            --from-literal=password="$POSTGRES_PASSWORD"
+    else
+        POSTGRES_PASSWORD="$(kubectl get secret quay-postgres-creds -n quay \
+            -o jsonpath='{.data.password}' | base64 -d)"
+    fi
+
+    if ! kubectl get secret quay-config -n quay &>/dev/null; then
+        echo "🔑 Creating quay-config secret" >&2
+        local DATABASE_SECRET_KEY SECRET_KEY config
+        DATABASE_SECRET_KEY="$(openssl rand -hex 16)"
+        SECRET_KEY="$(openssl rand -hex 16)"
+        config="$(sed -e "s|\${POSTGRES_PASSWORD}|${POSTGRES_PASSWORD}|g" \
+                      -e "s|\${DATABASE_SECRET_KEY}|${DATABASE_SECRET_KEY}|g" \
+                      -e "s|\${SECRET_KEY}|${SECRET_KEY}|g" \
+                      "${script_path}/dependencies/quay/quay-config.yaml.tpl")"
+        kubectl create secret generic quay-config \
+            --namespace=quay \
+            --from-literal=config.yaml="$config"
+    fi
+
+    retry "kubectl wait --for=condition=Ready --timeout=240s -n quay -l app=quay-postgres pod" \
+          "Quay Postgres did not become available within the allocated time"
+    retry "kubectl wait --for=condition=Ready --timeout=240s -n quay -l app=quay-redis pod" \
+          "Quay Redis did not become available within the allocated time"
+    retry "kubectl wait --for=condition=Ready --timeout=240s -n quay -l app=quay pod" \
+          "Quay did not become available within the allocated time"
 }
 
 retry() {
