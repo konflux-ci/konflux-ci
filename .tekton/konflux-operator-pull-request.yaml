@@ -8,44 +8,43 @@ metadata:
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "pull_request" && target_branch == "main" ||
-      event == "push" && target_branch.startsWith("gh-readonly-queue/main/")
+    pipelinesascode.tekton.dev/on-cel-expression: |-
+      event == "pull_request" && target_branch == "release-0.0" || event == "push" && target_branch.startsWith("gh-readonly-queue/release-0.0/")
   creationTimestamp: null
   labels:
-    appstudio.openshift.io/application: konflux-operator
-    appstudio.openshift.io/component: konflux-operator
+    appstudio.openshift.io/application: konflux-operator-0-0
+    appstudio.openshift.io/component: konflux-operator-0-0
     pipelines.appstudio.openshift.io/type: build
-  name: konflux-operator-on-pull-request
+  name: konflux-operator-0-0-on-pull-request
   namespace: konflux-vanguard-tenant
 spec:
   params:
-  - name: git-url
-    value: '{{source_url}}'
-  - name: revision
-    value: '{{revision}}'
-  - name: output-image
-    value: quay.io/redhat-user-workloads/konflux-vanguard-tenant/konflux-operator:on-pr-{{revision}}
-  - name: image-expires-after
-    value: 5d
-  - name: dockerfile
-    value: Containerfile
-  - name: path-context
-    value: operator
-  - name: build-platforms
-    value:
-    - linux/x86_64
-    - linux/arm64
-  - name: build-args
-    value:
-    - "OPERATOR_VERSION={{revision}}"
-    - "GIT_COMMIT={{revision}}"
+    - name: git-url
+      value: '{{source_url}}'
+    - name: revision
+      value: '{{revision}}'
+    - name: output-image
+      value: quay.io/redhat-user-workloads/konflux-vanguard-tenant/konflux-operator-0-0:on-pr-{{revision}}
+    - name: image-expires-after
+      value: 5d
+    - name: dockerfile
+      value: Containerfile
+    - name: path-context
+      value: operator
+    - name: build-platforms
+      value:
+        - linux/x86_64
+        - linux/arm64
+    - name: build-args
+      value:
+        - "OPERATOR_VERSION={{revision}}"
+        - "GIT_COMMIT={{revision}}"
   pipelineRef:
     name: build-pipeline
   taskRunTemplate:
-    serviceAccountName: build-pipeline-konflux-operator
+    serviceAccountName: build-pipeline-konflux-operator-0-0
   workspaces:
-  - name: git-auth
-    secret:
-      secretName: '{{ git_auth_secret }}'
+    - name: git-auth
+      secret:
+        secretName: '{{ git_auth_secret }}'
 status: {}
