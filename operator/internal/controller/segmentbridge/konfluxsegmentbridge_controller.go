@@ -173,7 +173,7 @@ func reconcileSegmentBridgeSecret(ctx context.Context, tc *tracking.Client, spec
 		},
 	}
 
-	log.Info("Applying segment-bridge Secret", "name", secret.Name, "namespace", secret.Namespace, "batchURL", batchURL)
+	log.V(1).Info("Applying segment-bridge Secret", "name", secret.Name, "namespace", secret.Namespace, "batchURL", batchURL)
 	if err := tc.ApplyOwned(ctx, secret); err != nil {
 		return fmt.Errorf("failed to apply Secret: %w", err)
 	}
