@@ -10,9 +10,9 @@ metadata:
     app.kubernetes.io/name: "cert-manager"
     app.kubernetes.io/instance: "cert-manager"
     app.kubernetes.io/component: "crds"
-    app.kubernetes.io/version: "v1.19.3"
+    app.kubernetes.io/version: "v1.19.4"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: cert-manager-v1.19.3
+    helm.sh/chart: cert-manager-v1.19.4
 spec:
   group: acme.cert-manager.io
   names:
@@ -3295,9 +3295,9 @@ metadata:
     app.kubernetes.io/name: "cert-manager"
     app.kubernetes.io/instance: "cert-manager"
     app.kubernetes.io/component: "crds"
-    app.kubernetes.io/version: "v1.19.3"
+    app.kubernetes.io/version: "v1.19.4"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: cert-manager-v1.19.3
+    helm.sh/chart: cert-manager-v1.19.4
 spec:
   group: acme.cert-manager.io
   names:
@@ -3573,9 +3573,9 @@ metadata:
     app.kubernetes.io/name: "cert-manager"
     app.kubernetes.io/instance: "cert-manager"
     app.kubernetes.io/component: "crds"
-    app.kubernetes.io/version: "v1.19.3"
+    app.kubernetes.io/version: "v1.19.4"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: cert-manager-v1.19.3
+    helm.sh/chart: cert-manager-v1.19.4
 spec:
   group: cert-manager.io
   names:
@@ -3896,9 +3896,9 @@ metadata:
     app.kubernetes.io/name: "cert-manager"
     app.kubernetes.io/instance: "cert-manager"
     app.kubernetes.io/component: "crds"
-    app.kubernetes.io/version: "v1.19.3"
+    app.kubernetes.io/version: "v1.19.4"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: cert-manager-v1.19.3
+    helm.sh/chart: cert-manager-v1.19.4
 spec:
   group: cert-manager.io
   names:
@@ -4716,9 +4716,9 @@ metadata:
     app.kubernetes.io/name: "cert-manager"
     app.kubernetes.io/instance: "cert-manager"
     app.kubernetes.io/component: "crds"
-    app.kubernetes.io/version: "v1.19.3"
+    app.kubernetes.io/version: "v1.19.4"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: cert-manager-v1.19.3
+    helm.sh/chart: cert-manager-v1.19.4
 spec:
   group: cert-manager.io
   names:
@@ -8535,9 +8535,9 @@ metadata:
     app.kubernetes.io/name: "cert-manager"
     app.kubernetes.io/instance: "cert-manager"
     app.kubernetes.io/component: "crds"
-    app.kubernetes.io/version: "v1.19.3"
+    app.kubernetes.io/version: "v1.19.4"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: cert-manager-v1.19.3
+    helm.sh/chart: cert-manager-v1.19.4
 spec:
   group: cert-manager.io
   names:
