@@ -1,0 +1,19 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: quay-cert
+  namespace: quay
+spec:
+  isCA: true
+  subject:
+    organizations:
+      - konflux
+  dnsNames:
+    - localhost
+    - quay-service.quay
+    - quay-service.quay.svc.cluster.local
+  issuerRef:
+    kind: ClusterIssuer
+    name: ca-issuer
+  secretName: quay-tls
