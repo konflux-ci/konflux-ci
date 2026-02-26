@@ -2,12 +2,14 @@
 
 <!-- toc -->
 
-- [Automated Release Flow](#automated-release-flow)
+- [Periodic Releases](#periodic-releases)
   * [Step 1: Auto-Tag Creation](#step-1-auto-tag-creation)
   * [Step 2: Konflux Build and Release](#step-2-konflux-build-and-release)
   * [Step 3: GitHub Release Creation](#step-3-github-release-creation)
   * [Step 4: Community Operator Publication](#step-4-community-operator-publication)
-- [Manual Releases](#manual-releases)
+- [Manual Steps](#manual-steps)
+  * [Cut a New Release Stream](#cut-a-new-release-stream)
+  * [Promote Release Candidate](#promote-release-candidate)
   * [On-Demand Release (Create New Tag)](#on-demand-release-create-new-tag)
   * [Manual Release (Existing Tag and Image)](#manual-release-existing-tag-and-image)
   * [Manual Community Operator PR](#manual-community-operator-pr)
@@ -17,49 +19,52 @@
 
 <!-- tocstop -->
 
-This repository uses an automated release process that creates weekly releases
-when tags are pushed to the repository. The process involves four main steps:
+This repository uses an automated release process that creates weekly release
+candidates across all active release branches. The process involves four main
+steps:
 
-1. **Auto-tagging**: A GitHub Actions workflow automatically creates a new tag
-   on the main branch
-2. **Build and Release**: Konflux builds the operator image and releases it to
-   Quay, then sends an event back to GitHub
-3. **GitHub Release Creation**: A GitHub Actions workflow creates the GitHub
-   release with artifacts
+1. **Auto-tagging**: A GitHub Actions workflow automatically creates a new RC
+   tag on every active release branch (`main` and `release-x.y` branches).
+   Branches can be excluded from tagging and release verification via an
+   [exclusion list](.github/excluded-release-branches.yaml).
+2. **Build and Release**: Konflux builds the operator image via the `on-tag`
+   pipeline and triggers the `release` and `finalPipeline` stages
+3. **GitHub Release Creation**: A GitHub Actions workflow creates either a
+   pre-release or a full release depending on the tag format
 4. **Community Operator Publication**: A GitHub Actions workflow creates a PR to
    the Red Hat Community Operators repository to publish the operator in the
    OpenShift catalog
 
-# Automated Release Flow
+# Periodic Releases
 
 ## Step 1: Auto-Tag Creation
 
 The [Auto Tag Weekly workflow](.github/workflows/auto-tag-weekly.yaml) runs
 automatically every week (or can be triggered manually via `workflow_dispatch`).
-This workflow:
+This workflow runs against every active release branch (`main` and all
+`release-x.y` branches) and for each branch:
 
-- Checks if HEAD is already tagged (skips if already tagged)
-- Finds the latest semantic version tag (format: `vX.Y.Z`)
-- Increments the patch version (Z number)
-- Creates and pushes the new tag to the repository
+- Increments the RC tag if the latest tag on that branch is already an RC tag
+- Creates a new `rc.0` tag if the latest tag on the branch is a proper release
 
-**Example**: If the latest tag is `v0.1.5`, the workflow will create `v0.1.6`.
+**Examples**:
+- Latest tag `v0.1.5-rc.2` → creates `v0.1.5-rc.3`
+- Latest tag `v0.1.5` → creates `v0.1.6-rc.0`
 
 ## Step 2: Konflux Build and Release
 
 When a new tag is pushed, the
-[konflux-operator-tag PipelineRun](.tekton/konflux-operator-tag.yaml) is
-automatically triggered in Konflux. This PipelineRun:
+[konflux-operator-tag PipelineRun](.tekton/konflux-operator-tag.yaml) (`on-tag`
+pipeline) is automatically triggered in Konflux. The pipeline chain is:
 
-- Builds the operator image for multiple platforms (linux/x86_64, linux/arm64)
-- Triggers a release of the image to Quay.io
-- Triggers the final pipeline which includes the
-  [notify-and-trigger-github-release pipeline](pipelines/notify-and-trigger-github-release/notify-and-trigger-github-release.yaml)
-
-The final pipeline uses the
-[send-github-release-event task](tasks/send-github-release-event/send-github-release-event.yaml)
-to send a `repository_dispatch` event back to GitHub with the release
-information (version, image tag, and git ref).
+1. **`on-tag` pipeline** — builds the operator image for multiple platforms
+   (linux/x86_64, linux/arm64) and triggers the `release` pipeline
+2. **`release` pipeline** — releases the image to Quay.io and triggers the
+   `finalPipeline`
+3. **`finalPipeline`** — uses the
+   [send-github-release-event task](tasks/send-github-release-event/send-github-release-event.yaml)
+   to send a `repository_dispatch` event back to GitHub with the release
+   information (version, image tag, and git ref)
 
 ## Step 3: GitHub Release Creation
 
@@ -70,7 +75,9 @@ The `repository_dispatch` event triggers the
 - Checks out the target commit (git ref)
 - Generates release artifacts (install.yaml, samples.tar.gz, bundle.tar.gz)
 - Prepares release notes
-- Creates the GitHub release with all artifacts
+- Creates the GitHub release — as a **pre-release** if the tag is an RC tag
+  (e.g., `vX.Y.Z-rc.W`), or as a **full release** if the tag is a proper
+  release (e.g., `vX.Y.Z`)
 
 ## Step 4: Community Operator Publication
 
@@ -125,16 +132,76 @@ For more information about the community catalog automation and FBC (File-Based
 Catalog) workflow, see the
 [Operator Pipelines documentation](https://redhat-openshift-ecosystem.github.io/operator-pipelines/).
 
-# Manual Releases
+# Manual Steps
 
-The release process can be triggered on demand in two ways:
+## Cut a New Release Stream
+
+Use this procedure when starting development in a new y-stream (e.g.,
+moving from `v0.1.x` to `v0.2.x`, or from `v1.y.x` to `v2.0.x`).
+
+1. Create a development stream and RPA in the `releng` repository:
+ * [development stream](https://gitlab.cee.redhat.com/releng/konflux-release-data/-/tree/main/tenants-config/cluster/stone-prd-rh01/tenants/konflux-vanguard-tenant/konflux-operator/_base/projectl.konflux.dev)
+ * [release plan admission](https://gitlab.cee.redhat.com/releng/konflux-release-data/-/tree/main/config/stone-prd-rh01.pg1f.p1/service/ReleasePlanAdmission/konflux-vanguard)
+
+
+2. Manually trigger the
+   [Create Release Branch workflow](.github/workflows/create-release-branch.yaml)
+   via `workflow_dispatch`, providing:
+   - **dev version** (`x.y`): the version to be used going forward on `main`
+   - **release version** (`x'.y'`): the version to be used on the new
+     `release-x'-y'` branch
+
+   The workflow will create the `release-x'-y'` branch and automatically open a
+   PR on `main` that updates the `on-tag` CEL expression to target the new
+   development version.
+
+   **Example**:
+   Suppose `main` was used for developing `v4.5.x` and you want to
+   start working on the `4.6` y-stream while preparing to release `v4.5.0`.
+   Set **dev version** to `4.6` (used on `main` going forward) and **release
+   version** to `4.5` (used on the new `release-4-5` branch).
+
+   After triggering, verify that the new component in Konflux is functional. If
+   the component shows the following status:
+
+   ```
+   build.appstudio.openshift.io/status: >-
+     {"message":"waiting for spec.containerImage to be set by ImageRepository
+     with annotation image-controller.appstudio.redhat.com/update-component-image"}
+   ```
+
+   Patch the `imagerepository` resource to unblock it (replace `X` and `Y` with
+   the release version numbers):
+
+   ```bash
+   REPO=konflux-operator-X-Y
+   kubectl patch imagerepository $REPO -n konflux-vanguard-tenant --type=merge \
+     -p '{"metadata":{"annotations":{"image-controller.appstudio.redhat.com/update-component-image":"true"}}}'
+   ```
+
+3. Merge the PR automatically created by the workflow in step 2 (via
+   [create-release-branch-and-pr.sh](.github/scripts/create-release-branch-and-pr.sh)).
+
+4. Configure branch protection rules for the new `release-x'-y'` branch as
+   needed.
+
+## Promote Release Candidate
+
+Use this procedure to promote an existing RC tag to a proper release.
+
+1. Manually trigger the [Promote Release workflow](https://github.com/konflux-ci/konflux-ci/actions/workflows/promote-release.yaml) via `workflow_dispatch`, providing:
+   - **release_candidate_tag**: The release candidate tag to promote (e.g., `vX.Y.Z-rc.W`)
+
+   The workflow will tag the same commit with the corresponding proper release
+   tag (`vX.Y.Z`), which triggers the full automated release flow (build,
+   release to Quay, create GitHub release, and community operator PR).
 
 ## On-Demand Release (Create New Tag)
 
 You can trigger the release process on demand by manually running the
 [Auto Tag Weekly workflow](.github/workflows/auto-tag-weekly.yaml) via
-`workflow_dispatch`. This will create a new tag and trigger the full automated
-release flow (build, release to Quay, and create GitHub release).
+`workflow_dispatch`. This will create a new RC tag on all active release
+branches and trigger the full automated release flow.
 
 ## Manual Release (Existing Tag and Image)
 
@@ -143,7 +210,7 @@ you can create a GitHub release directly using the
 [Create Release workflow](.github/workflows/create-release.yaml) via
 `workflow_dispatch`. When triggered manually, you must provide:
 
-- **version**: Release version (e.g., `v0.0.1`)
+- **version**: Release version (e.g., `v0.0.1` or `v0.0.1-rc.0`)
 - **git_ref**: Git ref to release (commit SHA, branch, or tag)
 - **image_tag**: Image tag (e.g., `release-sha-abc1234`)
 
@@ -180,6 +247,7 @@ for more information.
 # Related Documentation
 
 - [Auto Tag Weekly Workflow](.github/workflows/auto-tag-weekly.yaml)
+- [Create Release Branch Workflow](.github/workflows/create-release-branch.yaml)
 - [Konflux Operator Tag PipelineRun](.tekton/konflux-operator-tag.yaml)
 - [Create Release Workflow](.github/workflows/create-release.yaml)
 - [Notify and Trigger GitHub Release Pipeline](pipelines/notify-and-trigger-github-release/notify-and-trigger-github-release.yaml)
