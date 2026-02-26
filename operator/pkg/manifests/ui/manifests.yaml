@@ -520,7 +520,7 @@ spec:
         - -R
         - /opt/app-root/src/.
         - /mnt/static-content/
-        image: quay.io/konflux-ci/konflux-ui@sha256:7044a2f0139d2925c7e32ba4728640d43c46811eae7beb52e1b82449ec5cd65b
+        image: quay.io/konflux-ci/konflux-ui@sha256:2ea35df54805ef94fdaed7e1c795ceac8fe9746898eaef6ce38c8b25621cd08a
         name: copy-static-content
         resources:
           limits:
@@ -559,7 +559,7 @@ spec:
           fi
           sed "s/__TEKTON_RESULTS_HOSTNAME__/$results_hostname/" /mnt/nginx-templates/tekton-results.conf > /mnt/nginx-generated-location-config/tekton-results.conf
           chmod 640 /mnt/nginx-generated-location-config/tekton-results.conf
-        image: quay.io/konflux-ci/konflux-ui@sha256:7044a2f0139d2925c7e32ba4728640d43c46811eae7beb52e1b82449ec5cd65b
+        image: quay.io/konflux-ci/konflux-ui@sha256:2ea35df54805ef94fdaed7e1c795ceac8fe9746898eaef6ce38c8b25621cd08a
         name: generate-nginx-configs
         resources:
           limits:
