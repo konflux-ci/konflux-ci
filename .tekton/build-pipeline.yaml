@@ -547,7 +547,7 @@ spec:
           - name: name
             value: push-dockerfile-oci-ta
           - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-push-dockerfile-oci-ta:0.1@sha256:24bc731e6cd6bda93c965769062868b10082c6d2e5d3207b74056741e873ba82
+            value: quay.io/konflux-ci/tekton-catalog/task-push-dockerfile-oci-ta:0.2@sha256:efda2b60a3e6f1e1f64150963f4133f2f6353f8fcf9db86768466bf3f2753277
           - name: kind
             value: task
         resolver: bundles
