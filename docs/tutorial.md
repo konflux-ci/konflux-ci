@@ -73,7 +73,7 @@ To enable Quay.io repository provisioning, follow the step below:
 
 :gear: Create an organization and an application in Quay.io that will allow Konflux to
 create repositories for your applications. To do that,
-[Follow the procedure](./registry-configuration.md#automatic-repository-provisioning-quayio)
+[Follow the procedure](./registry-configuration.md#automatically-provision-quay-repositories-for-container-images)
 to configure a Quay.io application and deploy `image-controller`.
 
 #### Create Application and Component via the Konflux UI
@@ -518,7 +518,7 @@ deploying it.
 ```
 
    For more details, see
-   [Trusted Artifacts (ociStorage)](./registry-configuration.md#configuring-a-push-secret-for-the-release-pipeline).
+   [Trusted Artifacts (ociStorage)](./registry-configuration.md#trusted-artifacts-ocistorage).
 
 Deploy the managed environment team's namespace:
 
