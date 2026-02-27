@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	securityv1 "github.com/openshift/api/security/v1"
+	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -172,6 +173,15 @@ func (r *KonfluxBuildServiceReconciler) applyManifests(ctx context.Context, tc *
 			}
 		}
 
+		// Apply pipeline config merge logic to the build-pipeline-config ConfigMap
+		if configMap, ok := obj.(*corev1.ConfigMap); ok {
+			if configMap.Name == "build-pipeline-config" {
+				if err := applyPipelineConfigMerge(configMap, owner.Spec.PipelineConfig); err != nil {
+					return fmt.Errorf("failed to merge pipeline config: %w", err)
+				}
+			}
+		}
+
 		// Skip OpenShift SecurityContextConstraints when not running on OpenShift
 		if _, isSCC := obj.(*securityv1.SecurityContextConstraints); isSCC {
 			if r.ClusterInfo == nil || !r.ClusterInfo.IsOpenShift() {
@@ -220,6 +230,126 @@ func buildBuildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerD
 			customization.WithLeaderElection(),
 		),
 	)
+}
+
+// pipelineConfigYAML represents the structure of the config.yaml data in the build-pipeline-config ConfigMap.
+type pipelineConfigYAML struct {
+	DefaultPipelineName string              `yaml:"default-pipeline-name,omitempty"`
+	Pipelines           []pipelineEntryYAML `yaml:"pipelines"`
+}
+
+// pipelineEntryYAML represents a single pipeline entry in the config.yaml.
+type pipelineEntryYAML struct {
+	Name   string `yaml:"name"`
+	Bundle string `yaml:"bundle"`
+}
+
+// applyPipelineConfigMerge merges user-specified pipeline configuration into the
+// build-pipeline-config ConfigMap. When pipelineConfig is nil, the defaults are
+// used unchanged.
+func applyPipelineConfigMerge(configMap *corev1.ConfigMap, pipelineConfig *konfluxv1alpha1.PipelineConfigSpec) error {
+	if pipelineConfig == nil {
+		return nil
+	}
+
+	configData, ok := configMap.Data["config.yaml"]
+	if !ok {
+		return fmt.Errorf("build-pipeline-config ConfigMap missing config.yaml key")
+	}
+
+	var cfg pipelineConfigYAML
+	if err := yaml.Unmarshal([]byte(configData), &cfg); err != nil {
+		return fmt.Errorf("failed to parse config.yaml: %w", err)
+	}
+
+	cfg.Pipelines = mergePipelines(cfg.Pipelines, pipelineConfig)
+
+	// Apply defaultPipelineName override if specified
+	if pipelineConfig.DefaultPipelineName != "" {
+		cfg.DefaultPipelineName = pipelineConfig.DefaultPipelineName
+		// Validate that the default pipeline exists when explicitly overridden
+		if err := validateDefaultPipeline(&cfg); err != nil {
+			return err
+		}
+	}
+
+	out, err := yaml.Marshal(&cfg)
+	if err != nil {
+		return fmt.Errorf("failed to serialize merged config.yaml: %w", err)
+	}
+
+	configMap.Data["config.yaml"] = string(out)
+	return nil
+}
+
+// mergePipelines applies the merge logic:
+//  1. If removeDefaults is true, start with an empty list
+//  2. Otherwise start with the defaults
+//  3. For each user pipeline: if removed, delete from list; otherwise upsert
+func mergePipelines(defaults []pipelineEntryYAML, spec *konfluxv1alpha1.PipelineConfigSpec) []pipelineEntryYAML {
+	var result []pipelineEntryYAML
+	if !spec.RemoveDefaults {
+		result = make([]pipelineEntryYAML, len(defaults))
+		copy(result, defaults)
+	} else {
+		result = []pipelineEntryYAML{}
+	}
+
+	for _, p := range spec.Pipelines {
+		if p.Removed {
+			// Remove by name if present
+			filtered := make([]pipelineEntryYAML, 0, len(result))
+			for _, r := range result {
+				if r.Name != p.Name {
+					filtered = append(filtered, r)
+				}
+			}
+			result = filtered
+			continue
+		}
+
+		// Upsert: replace existing or append
+		found := false
+		for i, r := range result {
+			if r.Name == p.Name {
+				result[i] = pipelineEntryYAML{Name: p.Name, Bundle: p.Bundle}
+				found = true
+				break
+			}
+		}
+		if !found {
+			result = append(result, pipelineEntryYAML{Name: p.Name, Bundle: p.Bundle})
+		}
+	}
+
+	return result
+}
+
+// validateDefaultPipeline ensures the default pipeline name exists in the pipelines list.
+func validateDefaultPipeline(cfg *pipelineConfigYAML) error {
+	if cfg.DefaultPipelineName == "" {
+		return nil
+	}
+
+	for _, p := range cfg.Pipelines {
+		if p.Name == cfg.DefaultPipelineName {
+			return nil
+		}
+	}
+
+	// Provide helpful error with available pipeline names
+	availableNames := make([]string, len(cfg.Pipelines))
+	for i, p := range cfg.Pipelines {
+		availableNames[i] = p.Name
+	}
+
+	if len(availableNames) == 0 {
+		return fmt.Errorf("default pipeline '%s' not found: no pipelines available (hint: check removeDefaults and pipelines configuration)",
+			cfg.DefaultPipelineName)
+	}
+
+	return fmt.Errorf("default pipeline '%s' not found in merged pipeline list (available: %v)",
+		cfg.DefaultPipelineName, availableNames)
 }
 
 // SetupWithManager sets up the controller with the Manager.
