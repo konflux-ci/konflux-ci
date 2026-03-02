@@ -80,7 +80,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          .github/scripts/auto-tag-branch.sh
+          .github/scripts/auto-tag-branch.sh "${{ matrix.branch }}"
 
       - name: Notify on failure
         if: failure()

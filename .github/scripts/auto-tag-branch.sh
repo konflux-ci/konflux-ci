@@ -2,16 +2,29 @@
 set -euo pipefail
 
 # Auto Tag Branch Script
-# Creates RC tags only. Run on release-x.y branches.
-#   - If latest tag reachable from HEAD is vX.Y.Z (no -rc): create vX.Y.(Z+1)-rc.0
+# Creates RC tags only. Run on main or release-x.y branches.
+#   - Determines the stream (X.Y) from branch name (release-x.y) or latest tag (main).
+#   - Finds the latest tag for that stream reachable from HEAD.
+#   - If latest tag is vX.Y.Z (stable): create vX.Y.(Z+1)-rc.0
 #   - If latest tag is vX.Y.Z-rc.W: create vX.Y.Z-rc.(W+1)
 # Skips if the computed next tag already exists.
 #
 # Usage:
-#   .github/scripts/auto-tag-branch.sh
+#   .github/scripts/auto-tag-branch.sh <branch>
+#
+# Arguments:
+#   branch - Branch name, e.g. main or release-1.2 (required)
 #
 # This script should be run from the repository root directory
 # with the target branch already checked out.
+
+if [ $# -lt 1 ]; then
+  echo "Error: Missing branch argument"
+  echo "Usage: $0 <branch>"
+  exit 1
+fi
+
+BRANCH="$1"
 
 # Configure git to use token for authentication (if GH_TOKEN is set)
 if [ -n "${GH_TOKEN:-}" ]; then
@@ -23,14 +36,38 @@ fi
 STABLE_PATTERN='^v[0-9]+\.[0-9]+\.[0-9]+$'
 VERSION_PATTERN='^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$'
 
-# Latest tag reachable from HEAD (any version tag, sort -V)
-LATEST=$(git tag --merged=HEAD 2>/dev/null | grep -E "$VERSION_PATTERN" | sort -V | tail -1 || true)
-
-if [ -z "$LATEST" ]; then
-  echo "Error: No version tags (vX.Y.Z or vX.Y.Z-rc.W) reachable from HEAD."
-  echo "Create an initial tag manually (e.g., v0.0.0 or v1.0.0-rc.0)."
+# Determine stream from branch name (release-x.y) or latest tag (main)
+if [[ "$BRANCH" =~ ^release-([0-9]+\.[0-9]+)$ ]]; then
+  STREAM="${BASH_REMATCH[1]}"
+  echo "Stream from branch name: $STREAM"
+elif [ "$BRANCH" = "main" ]; then
+  HIGHEST=$(git tag --merged=HEAD 2>/dev/null \
+    | grep -E "$VERSION_PATTERN" | sort -V | tail -1 || true)
+  if [ -z "$HIGHEST" ]; then
+    echo "Error: No version tags reachable from HEAD on main."
+    exit 1
+  fi
+  [[ "$HIGHEST" =~ ^v([0-9]+\.[0-9]+)\. ]]
+  STREAM="${BASH_REMATCH[1]}"
+  echo "Stream from latest tag ($HIGHEST): $STREAM"
+else
+  echo "Error: Unexpected branch format: $BRANCH (expected main or release-x.y)"
   exit 1
 fi
+
+TAG_PREFIX="v${STREAM}."
+
+# Latest tag for this stream reachable from HEAD
+LATEST=$(git tag --merged=HEAD 2>/dev/null \
+  | grep -E "$VERSION_PATTERN" | grep -F "${TAG_PREFIX}" | sort -V | tail -1 || true)
+
+if [ -z "$LATEST" ]; then
+  echo "Error: No version tags for stream ${STREAM} reachable from HEAD."
+  echo "Create an initial tag manually (e.g., v${STREAM}.0 or v${STREAM}.0-rc.0)."
+  exit 1
+fi
+
+echo "Latest tag for stream ${STREAM}: $LATEST"
 
 if [[ "$LATEST" =~ $STABLE_PATTERN ]]; then
   # vX.Y.Z → vX.Y.(Z+1)-rc.0
