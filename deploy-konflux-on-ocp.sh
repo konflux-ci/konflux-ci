@@ -76,49 +76,38 @@ echo "Operator image is available!"
 
 # Step 1: Deploy dependencies
 # - USE_OPENSHIFT_PIPELINES: Use OCP's native Tekton instead of upstream
+# - USE_OPENSHIFT_CERTMANAGER: Use Red Hat cert-manager operator instead of upstream
 # - SKIP_INTERNAL_REGISTRY: OCP has its own registry
 # - SKIP_DEX: OCP has its own OAuth/authentication
 # - SKIP_SMEE: Webhook relay not needed for CI testing
 echo ""
-echo "=== Step 1/6: Deploying dependencies ==="
-USE_OPENSHIFT_PIPELINES=true SKIP_INTERNAL_REGISTRY=true SKIP_DEX=true SKIP_SMEE=true ./deploy-deps.sh
+echo "=== Step 1/5: Deploying dependencies ==="
+USE_OPENSHIFT_PIPELINES=true USE_OPENSHIFT_CERTMANAGER=true SKIP_INTERNAL_REGISTRY=true SKIP_DEX=true SKIP_SMEE=true ./deploy-deps.sh
 
 # Step 2: Install CRDs from the checked-out branch
 echo ""
-echo "=== Step 2/6: Installing Operator CRDs ==="
+echo "=== Step 2/5: Installing Operator CRDs ==="
 cd operator
 # Clear GOFLAGS to allow downloading tools (CI may have -mod=vendor set)
 GOFLAGS="" make install
 
 # Step 3: Deploy the operator using the Konflux-built image
 echo ""
-echo "=== Step 3/6: Deploying Operator ==="
+echo "=== Step 3/5: Deploying Operator ==="
 echo "Image: ${OPERATOR_IMAGE}"
 # GOFLAGS="" needed because CI sets -mod=vendor which blocks kustomize download
 GOFLAGS="" make deploy IMG="${OPERATOR_IMAGE}"
 
 # Step 4: Wait for the operator deployment to be available
 echo ""
-echo "=== Step 4/6: Waiting for Operator to be ready ==="
+echo "=== Step 4/5: Waiting for Operator to be ready ==="
 oc wait --for=condition=Available deployment/konflux-operator-controller-manager \
     -n konflux-operator --timeout=300s
 echo "Operator is ready!"
 
-# Step 5: Fix operator RBAC permissions for OCP
-# The operator needs 'delete' permission on RBAC resources to set ownerReferences
-# This is required for UI and info components to work correctly
+# Step 5: Create Konflux CR instance
 echo ""
-echo "=== Step 5/6: Patching operator RBAC for OCP compatibility ==="
-oc patch clusterrole konflux-operator-manager-role --type='json' -p='[
-  {"op": "add", "path": "/rules/-", "value": {"apiGroups": ["rbac.authorization.k8s.io"], "resources": ["clusterroles", "clusterrolebindings", "roles", "rolebindings"], "verbs": ["delete"]}}
-]'
-echo "RBAC patched. Restarting operator to pick up new permissions..."
-oc rollout restart deployment/konflux-operator-controller-manager -n konflux-operator
-oc rollout status deployment/konflux-operator-controller-manager -n konflux-operator --timeout=120s
-
-# Step 6: Create Konflux CR instance
-echo ""
-echo "=== Step 6/6: Creating Konflux CR ==="
+echo "=== Step 5/5: Creating Konflux CR ==="
 oc apply -f config/samples/konflux_v1alpha1_konflux.yaml
 
 # Wait for Konflux to be fully ready

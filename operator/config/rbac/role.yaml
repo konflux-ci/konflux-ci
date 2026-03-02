@@ -327,6 +327,7 @@ rules:
   verbs:
   - bind
   - create
+  - delete
   - get
   - list
   - patch
@@ -412,6 +413,7 @@ rules:
   - clusterroles
   verbs:
   - create
+  - delete
   - escalate
   - get
   - list
@@ -586,6 +588,7 @@ rules:
   - roles
   verbs:
   - create
+  - delete
   - get
   - list
   - patch
