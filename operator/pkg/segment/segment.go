@@ -14,15 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package version
+package segment
 
-import (
-	"testing"
-)
+// defaultWriteKey is the Segment write key baked into production builds.
+// Empty in development; set via -ldflags during container image builds.
+// Used as a fallback when the KonfluxSegmentBridge CR does not specify a key.
+var defaultWriteKey = ""
 
-func TestVersionVariables(t *testing.T) {
-	// Contract test: verify variables are accessible and can be overridden at build time via ldflags.
-	// We don't assert specific values for Version/GitCommit since they depend on build configuration.
-	_ = Version
-	_ = GitCommit
+// GetDefaultWriteKey returns the build-time Segment write key.
+func GetDefaultWriteKey() string {
+	return defaultWriteKey
 }
