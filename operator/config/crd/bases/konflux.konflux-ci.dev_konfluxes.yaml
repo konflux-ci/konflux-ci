@@ -420,6 +420,11 @@ spec:
                               WARNING: Changing field names or JSON tags is a BREAKING CHANGE that will affect
                               all PipelineRuns reading from the ConfigMap. Field names must remain stable.
                             properties:
+                              buildIdentityRegexp:
+                                description: |-
+                                  BuildIdentityRegexp is a regex pattern used for matching the identity
+                                  that signed artifacts as part of the build pipeline.
+                                type: string
                               defaultOIDCIssuer:
                                 description: DefaultOIDCIssuer is the default OIDC
                                   issuer URL.

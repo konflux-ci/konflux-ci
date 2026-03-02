@@ -39,11 +39,12 @@ func TestClusterConfigData_All(t *testing.T) {
 			TufExternalUrl:            "https://tuf-external.example.com",
 			TrustifyServerInternalUrl: "https://trustify-internal.example.com",
 			TrustifyServerExternalUrl: "https://trustify-external.example.com",
+			BuildIdentityRegexp:       "^https://konflux\\.dev/build/.*$",
 		}
 
 		collected := maps.Collect(data.All)
 
-		g.Expect(collected).To(gomega.HaveLen(10))
+		g.Expect(collected).To(gomega.HaveLen(11))
 		g.Expect(collected["defaultOIDCIssuer"]).To(gomega.Equal("https://oidc.example.com"))
 		g.Expect(collected["enableKeylessSigning"]).To(gomega.Equal("true"))
 		g.Expect(collected["fulcioInternalUrl"]).To(gomega.Equal("https://fulcio-internal.example.com"))
@@ -54,6 +55,7 @@ func TestClusterConfigData_All(t *testing.T) {
 		g.Expect(collected["tufExternalUrl"]).To(gomega.Equal("https://tuf-external.example.com"))
 		g.Expect(collected["trustifyServerInternalUrl"]).To(gomega.Equal("https://trustify-internal.example.com"))
 		g.Expect(collected["trustifyServerExternalUrl"]).To(gomega.Equal("https://trustify-external.example.com"))
+		g.Expect(collected["buildIdentityRegexp"]).To(gomega.Equal("^https://konflux\\.dev/build/.*$"))
 	})
 
 	t.Run("should not yield empty fields", func(t *testing.T) {
@@ -77,6 +79,7 @@ func TestClusterConfigData_All(t *testing.T) {
 		g.Expect(collected).NotTo(gomega.HaveKey("tufExternalUrl"))
 		g.Expect(collected).NotTo(gomega.HaveKey("trustifyServerInternalUrl"))
 		g.Expect(collected).NotTo(gomega.HaveKey("trustifyServerExternalUrl"))
+		g.Expect(collected).NotTo(gomega.HaveKey("buildIdentityRegexp"))
 	})
 
 	t.Run("should yield nothing for empty struct", func(t *testing.T) {
@@ -103,6 +106,7 @@ func TestClusterConfigData_All(t *testing.T) {
 			TufExternalUrl:            "https://tuf-external.example.com",
 			TrustifyServerInternalUrl: "https://trustify-internal.example.com",
 			TrustifyServerExternalUrl: "https://trustify-external.example.com",
+			BuildIdentityRegexp:       "^https://konflux\\.dev/build/.*$",
 		}
 
 		var yielded []string
@@ -130,6 +134,7 @@ func TestClusterConfigData_All(t *testing.T) {
 			TufExternalUrl:            "tuf-external",
 			TrustifyServerInternalUrl: "trustify-internal",
 			TrustifyServerExternalUrl: "trustify-external",
+			BuildIdentityRegexp:       "^https://konflux\\.dev/build/.*$",
 		}
 
 		var keys []string
@@ -149,6 +154,7 @@ func TestClusterConfigData_All(t *testing.T) {
 			"tufExternalUrl",
 			"trustifyServerInternalUrl",
 			"trustifyServerExternalUrl",
+			"buildIdentityRegexp",
 		}
 
 		g.Expect(keys).To(gomega.Equal(expectedOrder))
@@ -277,6 +283,7 @@ func TestClusterConfigData_MergeOver(t *testing.T) {
 			TufExternalUrl:            "base-tuf-external",
 			TrustifyServerInternalUrl: "base-trustify-internal",
 			TrustifyServerExternalUrl: "base-trustify-external",
+			BuildIdentityRegexp:       "base-build-identity",
 		}
 
 		override := ClusterConfigData{
@@ -290,11 +297,12 @@ func TestClusterConfigData_MergeOver(t *testing.T) {
 			TufExternalUrl:            "override-tuf-external",
 			TrustifyServerInternalUrl: "override-trustify-internal",
 			TrustifyServerExternalUrl: "override-trustify-external",
+			BuildIdentityRegexp:       "override-build-identity",
 		}
 
 		result := override.MergeOver(base)
 
-		g.Expect(result).To(gomega.HaveLen(10))
+		g.Expect(result).To(gomega.HaveLen(11))
 		g.Expect(result["defaultOIDCIssuer"]).To(gomega.Equal("override-oidc"))
 		g.Expect(result["enableKeylessSigning"]).To(gomega.Equal("true"))
 		g.Expect(result["fulcioInternalUrl"]).To(gomega.Equal("override-fulcio-internal"))
@@ -305,6 +313,7 @@ func TestClusterConfigData_MergeOver(t *testing.T) {
 		g.Expect(result["tufExternalUrl"]).To(gomega.Equal("override-tuf-external"))
 		g.Expect(result["trustifyServerInternalUrl"]).To(gomega.Equal("override-trustify-internal"))
 		g.Expect(result["trustifyServerExternalUrl"]).To(gomega.Equal("override-trustify-external"))
+		g.Expect(result["buildIdentityRegexp"]).To(gomega.Equal("override-build-identity"))
 	})
 
 	t.Run("should combine base and override when no conflicts", func(t *testing.T) {
