@@ -5,7 +5,7 @@ metadata:
   namespace: build-service
 data:
   config.yaml: |
-    default-pipeline-name: docker-build-oci-ta
+    default-pipeline-name: docker-build-oci-ta-min
     pipelines:
     - name: fbc-builder
       bundle: quay.io/konflux-ci/tekton-catalog/pipeline-fbc-builder@sha256:b2e9042bbaae277dd798dbd907aac1fcddd70017f0cbb16fa92b66a557a6922f
@@ -16,4 +16,7 @@ data:
     - name: tekton-bundle-builder
       bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder@sha256:fa6d63446addeb48687c470f5c303ad30c2bfb92712707bc55b7b3a17634398f
     - name: tekton-bundle-builder-oci-ta
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder-oci-ta@sha256:ef42677c32d3d1d32e065627f23dc7c5995e774a2e198f255a59969fb2133ec0
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder-oci-ta@sha256:386c79b657d6e90351e96d9e7338c83d9564149d47567ec90802621442e7ba17
+    - name: docker-build-oci-ta-min
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta-min@sha256:3b35c91fb1f69976586f01a859531c0e77651f678023f33a8ac27a6b256f08be
+      description: minimal version of the docker-build-oci-ta pipeline, which requires less compute resources. In addition, it doesn't contain tasks which require user provided secrets.
