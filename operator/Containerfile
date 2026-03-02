@@ -4,6 +4,7 @@ ARG TARGETOS
 ARG TARGETARCH
 ARG OPERATOR_VERSION
 ARG GIT_COMMIT
+ARG SEGMENT_WRITE_KEY
 
 ENV GOTOOLCHAIN=auto
 WORKDIR /workspace
@@ -23,7 +24,8 @@ COPY --chmod=755 pkg/ pkg/
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
     go build -a \
     -ldflags "-X github.com/konflux-ci/konflux-ci/operator/pkg/version.Version=${OPERATOR_VERSION:-unknown} \
-              -X github.com/konflux-ci/konflux-ci/operator/pkg/version.GitCommit=${GIT_COMMIT:-unknown}" \
+              -X github.com/konflux-ci/konflux-ci/operator/pkg/version.GitCommit=${GIT_COMMIT:-unknown} \
+              -X github.com/konflux-ci/konflux-ci/operator/pkg/segment.DefaultWriteKey=${SEGMENT_WRITE_KEY:-}" \
     -o /opt/app-root/manager ./cmd/main.go
 
 # Use UBI minimal as base image
