@@ -1,0 +1,41 @@
+name: Promote Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_candidate_tag:
+        description: 'Release candidate tag to promote (e.g. v1.2.3-rc.2)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+# Prevent concurrent promotions of the same RC tag to avoid race conditions.
+# If the same RC tag is triggered multiple times, subsequent runs will queue
+# and wait for the first to complete.
+concurrency:
+  group: promote-release-${{ github.event.inputs.release_candidate_tag }}
+  cancel-in-progress: false
+
+jobs:
+  promote-release:
+    name: Promote Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+      - name: Promote release candidate to release tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          .github/scripts/promote-release.sh "${{ inputs.release_candidate_tag }}"
