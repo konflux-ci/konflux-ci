@@ -2,119 +2,155 @@
 set -euo pipefail
 
 # Verify Releases Script
-# This script checks if a release was created in the past 7 days and if commits were made
+# For the current branch (already checked out by the workflow):
+#   1. Determine the stream (X.Y): from the branch name for release-x.y branches,
+#      or from the latest version tag for main.
+#   2. Find the latest tag for this stream (vX.Y.Z or vX.Y.Z-rc.W).
+#   3. Verify every stable tag (vX.Y.Z) for this stream created in the past 7 days
+#      has a corresponding GitHub release.
+#   4. If the latest tag is an RC, verify it also has a GitHub release.
 #
 # Usage:
-#   verify-releases.sh <repository>
+#   verify-releases.sh <repository> <branch>
 #
 # Arguments:
 #   repository - Repository in format owner/repo (required)
+#   branch     - Branch name, e.g. main or release-1.2 (required)
+#
+# Must be run from a repo checkout with the target branch checked out
+# (fetch-depth: 0, fetch-tags: true).
 #
 # Environment Variables:
 #   GH_TOKEN      - GitHub token for API access (required)
-#   GITHUB_ENV    - Path to GitHub Actions environment file (automatically set by GitHub Actions)
+#   GITHUB_OUTPUT - Path to GitHub Actions step output file (set automatically)
 #
-# The script sets the following environment variables (via GITHUB_ENV):
-#   COMMIT_COUNT         - Number of commits found in the past 7 days
-#   VERIFICATION_FAILED  - "true" if verification failed (no release but commits exist), "false" otherwise
+# The script sets:
+#   GITHUB_OUTPUT: verification_failed (true/false)
 #
 # Exit Codes:
-#   0 - Success (release exists OR no commits)
-#   1 - Unexpected failure: Script error (should create generic issue)
-#   2 - Expected failure: No release found but commits exist (should create verification issue)
+#   0 - All checks passed (or no tags to verify)
+#   1 - Unexpected failure (script error)
+#   2 - Verification failure (missing releases)
 #
 # Example:
 #   export GH_TOKEN="your_token"
-#   verify-releases.sh owner/repo
+#   verify-releases.sh owner/repo release-1.2
 
-if [ $# -lt 1 ]; then
+if [ $# -lt 2 ]; then
   echo "Error: Invalid number of arguments"
-  echo "Usage: $0 <repository>"
-  echo "  repository - Repository in format owner/repo"
+  echo "Usage: $0 <repository> <branch>"
   exit 1
 fi
 
 REPOSITORY="$1"
+BRANCH="$2"
 
-# Verify GH_TOKEN is set
 if [ -z "${GH_TOKEN:-}" ]; then
   echo "Error: GH_TOKEN environment variable is not set"
   exit 1
 fi
 
-# Set up GitHub CLI authentication
 export GH_TOKEN
 
-# Initialize VERIFICATION_FAILED to false (will be set to true if verification fails)
-echo "VERIFICATION_FAILED=false" >> "${GITHUB_ENV}"
+set_output() {
+  [ -n "${GITHUB_OUTPUT:-}" ] && echo "$1=$2" >> "${GITHUB_OUTPUT}"
+}
 
-echo "Checking for releases in the past 7 days..."
+set_output "verification_failed" "false"
 
-# Calculate the start time ONCE (7 days ago in seconds)
-# This freezes the window so both commands (to get releases and commits) use the exact same instant
+STABLE_PATTERN='^v[0-9]+\.[0-9]+\.[0-9]+$'
+VERSION_PATTERN='^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$'
+
+# Determine stream: from branch name for release-x.y, from latest tag for main
+if [[ "$BRANCH" =~ ^release-([0-9]+\.[0-9]+)$ ]]; then
+  STREAM="${BASH_REMATCH[1]}"
+  echo "Stream from branch name: $STREAM"
+elif [ "$BRANCH" = "main" ]; then
+  HIGHEST=$(git tag --merged=HEAD 2>/dev/null \
+    | grep -E "$VERSION_PATTERN" | sort -V | tail -1 || true)
+  if [ -z "$HIGHEST" ]; then
+    echo "Error: No version tags reachable from HEAD on main."
+    exit 1
+  fi
+  [[ "$HIGHEST" =~ ^v([0-9]+\.[0-9]+)\. ]]
+  STREAM="${BASH_REMATCH[1]}"
+  echo "Stream from latest tag ($HIGHEST): $STREAM"
+else
+  echo "Error: Unexpected branch format: $BRANCH (expected main or release-x.y)"
+  exit 1
+fi
+
+TAG_PREFIX="v${STREAM}."
+
+# Latest tag for this stream reachable from HEAD
+LATEST=$(git tag --merged=HEAD 2>/dev/null \
+  | grep -E "$VERSION_PATTERN" | grep "^${TAG_PREFIX}" | sort -V | tail -1 || true)
+
+if [ -z "$LATEST" ]; then
+  echo "Error: No version tags for stream ${STREAM} reachable from HEAD."
+  exit 1
+fi
+
+echo "Latest tag for stream ${STREAM}: $LATEST"
+
 START_TIMESTAMP=$(date -u --date='7 days ago' +%s)
+echo "Verification window: past 7 days (since $(date -u --date="@$START_TIMESTAMP" +%Y-%m-%dT%H:%M:%SZ))"
 
-# Check for releases in the past 7 days using gh release list
-# Get JSON output first, then pipe to jq with --arg to safely pass the timestamp
-# Wrap in error handling to catch unexpected failures
-RELEASES_JSON=$(gh release list --repo "$REPOSITORY" --limit 100 --json publishedAt 2>&1) || {
-  echo "Error: Failed to fetch releases - ${RELEASES_JSON}"
-  exit 1
-}
+FAILURE_REASONS=""
 
-RELEASE_COUNT=$(echo "$RELEASES_JSON" | jq --arg start "$START_TIMESTAMP" 'map(select((.publishedAt | fromdate) > ($start | tonumber))) | length') || {
-  echo "Error: Failed to process releases data"
-  exit 1
-}
+# Check 1: stable tags for this stream in the verification window must have a release
+echo ""
+echo "=== Checking stable tags for stream ${STREAM} in verification period ==="
+TAGS_WITHOUT_RELEASE=""
+STABLE_CHECKED=0
+while IFS= read -r line; do
+  [ -z "$line" ] && continue
+  tag="${line%% *}"
+  cdate="${line##* }"
+  [ "$cdate" -lt "$START_TIMESTAMP" ] 2>/dev/null && continue
+  [[ ! "$tag" =~ $STABLE_PATTERN ]] && continue
+  [[ "$tag" != "${TAG_PREFIX}"* ]] && continue
+  STABLE_CHECKED=$((STABLE_CHECKED + 1))
+  echo "  Checking stable tag: $tag"
+  if ! gh release view "$tag" --repo "$REPOSITORY" >/dev/null 2>&1; then
+    TAGS_WITHOUT_RELEASE="${TAGS_WITHOUT_RELEASE}${TAGS_WITHOUT_RELEASE:+$'\n'}  - $tag"
+    echo "    ❌ No GitHub release found"
+  else
+    echo "    ✅ GitHub release exists"
+  fi
+done < <(git for-each-ref --format='%(refname:short) %(creatordate:unix)' refs/tags 2>/dev/null || true)
 
-if [ "$RELEASE_COUNT" -gt 0 ]; then
-  echo "Found $RELEASE_COUNT release(s) in the past 7 days"
-  RELEASE_EXISTS="true"
-else
-  echo "No releases found in the past 7 days"
-  RELEASE_EXISTS="false"
+if [ "$STABLE_CHECKED" -eq 0 ]; then
+  echo "  No stable tags for stream ${STREAM} in the verification period."
 fi
 
-# Get commits in the past 7 days on main branch (excluding merge commits for cleaner output)
-# Git accepts the @timestamp syntax for absolute time
-COMMITS=$(git log --since="@$START_TIMESTAMP" \
-  --oneline --no-merges main 2>/dev/null || echo "")
-
-# Count commits
-COMMIT_COUNT=$(printf '%s' "$COMMITS" | wc -l | tr -d ' ')
-
-if [ "$COMMIT_COUNT" -gt 0 ]; then
-  echo ""
-  echo "Found $COMMIT_COUNT commit(s) in the past 7 days on main branch"
-  COMMITS_EXIST="true"
-
-  # Save commits to a file for the issue creation
-  echo "$COMMITS" > /tmp/recent-commits.txt
-
-  # Show all commits in workflow logs
-  echo ""
-  echo "Recent commits:"
-  echo "$COMMITS"
-else
-  echo ""
-  echo "No commits found in the past 7 days on main branch"
-  COMMITS_EXIST="false"
-  COMMIT_COUNT=0
+if [ -n "$TAGS_WITHOUT_RELEASE" ]; then
+  FAILURE_REASONS="Stable tag(s) for stream ${STREAM} in the past 7 days without a GitHub release:
+${TAGS_WITHOUT_RELEASE}"
 fi
 
-# Set environment variable for use in workflow (persist across steps)
-echo "COMMIT_COUNT=${COMMIT_COUNT}" >> "${GITHUB_ENV}"
+# Check 2: if latest tag is an RC, it must have a release
+if [[ ! "$LATEST" =~ $STABLE_PATTERN ]]; then
+  echo ""
+  echo "=== Latest tag is RC: checking for release ==="
+  echo "  Checking RC tag: $LATEST"
+  if ! gh release view "$LATEST" --repo "$REPOSITORY" >/dev/null 2>&1; then
+    [ -n "$FAILURE_REASONS" ] && FAILURE_REASONS="${FAILURE_REASONS}"$'\n\n'
+    FAILURE_REASONS="${FAILURE_REASONS}Latest RC tag ${LATEST} has no GitHub release."
+    echo "    ❌ No GitHub release found"
+  else
+    echo "    ✅ GitHub release exists"
+  fi
+fi
 
-# Fail if no release exists but commits were made (expected failure - exit code 2)
-if [ "$RELEASE_EXISTS" = "false" ] && [ "$COMMITS_EXIST" = "true" ]; then
+if [ -n "$FAILURE_REASONS" ]; then
   echo ""
-  echo "❌ No release found in the past 7 days, but commits exist"
-  echo "Commit count: ${COMMIT_COUNT}"
-  echo ""
-  echo "This workflow verifies that a release was created when commits are made to the main branch."
-  echo "Please create a release for the recent commits."
-  
-  # Set flag to indicate this is an expected verification failure (should create issue)
-  echo "VERIFICATION_FAILED=true" >> "${GITHUB_ENV}"
+  echo "❌ Verification failed:"
+  echo "$FAILURE_REASONS"
+  echo "$FAILURE_REASONS" > /tmp/verification-details.txt
+  set_output "verification_failed" "true"
   exit 2
 fi
+
+echo ""
+echo "✅ All verification checks passed for stream ${STREAM}"
