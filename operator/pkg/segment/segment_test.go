@@ -14,15 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package version
+package segment
 
 import (
 	"testing"
 )
 
-func TestVersionVariables(t *testing.T) {
-	// Contract test: verify variables are accessible and can be overridden at build time via ldflags.
-	// We don't assert specific values for Version/GitCommit since they depend on build configuration.
-	_ = Version
-	_ = GitCommit
+func TestGetDefaultWriteKey(t *testing.T) {
+	if got := GetDefaultWriteKey(); got != "" {
+		t.Errorf("GetDefaultWriteKey() should return empty in source, got %q", got)
+	}
 }
