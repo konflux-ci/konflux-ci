@@ -13,6 +13,14 @@ main() {
     local catalog_revision="${RELEASE_SERVICE_CATALOG_REVISION:?RELEASE_SERVICE_CATALOG_REVISION must be set in vars.sh or env}"
     local release_catalog_ta_quay_token="${RELEASE_CATALOG_TA_QUAY_TOKEN:-}"
 
+    # Use default-pipeline (docker-build-oci-ta-min) bundle from operator manifests so E2E tests run the same pipeline as new onboarded apps.
+    # Override by setting CUSTOM_DOCKER_BUILD_OCI_TA_PIPELINE_BUNDLE_ENV in the environment.
+    local repo_root="${script_path}/../.."
+    local manifests_yaml="${repo_root}/operator/pkg/manifests/build-service/manifests.yaml"
+    if [[ -z "${CUSTOM_DOCKER_BUILD_OCI_TA_PIPELINE_BUNDLE_ENV:-}" && -f "$manifests_yaml" ]]; then
+        CUSTOM_DOCKER_BUILD_OCI_TA_PIPELINE_BUNDLE_ENV=$(yq eval-all 'select(.metadata.name == "build-pipeline-config") | .data["config.yaml"] | from_yaml | .pipelines[] | select(.name == "docker-build-oci-ta-min") | .bundle' "$manifests_yaml")
+    fi
+
     docker run \
         --network=host \
         -v ~/.kube/config:/kube/config \
@@ -24,6 +32,7 @@ main() {
         -e TEST_ENVIRONMENT=upstream \
         -e RELEASE_SERVICE_CATALOG_REVISION="$catalog_revision" \
         -e RELEASE_CATALOG_TA_QUAY_TOKEN="$release_catalog_ta_quay_token" \
+        ${CUSTOM_DOCKER_BUILD_OCI_TA_PIPELINE_BUNDLE_ENV:+ -e CUSTOM_DOCKER_BUILD_OCI_TA_PIPELINE_BUNDLE_ENV="$CUSTOM_DOCKER_BUILD_OCI_TA_PIPELINE_BUNDLE_ENV"} \
         "$E2E_TEST_IMAGE" \
         /bin/bash -c "ginkgo -v --label-filter=upstream-konflux --focus=\"Test local\" /konflux-e2e/konflux-e2e.test"
 }
