@@ -96,6 +96,8 @@ const (
 	ClusterConfigKeyTrustifyServerInternalUrl = "trustifyServerInternalUrl"
 	// ClusterConfigKeyTrustifyServerExternalUrl is the ConfigMap key for external Trustify server URL.
 	ClusterConfigKeyTrustifyServerExternalUrl = "trustifyServerExternalUrl"
+	// ClusterConfigKeyBuildIdentityRegexp is the ConfigMap key for the regex pattern matching build pipeline signing identities.
+	ClusterConfigKeyBuildIdentityRegexp = "buildIdentityRegexp"
 )
 
 // ClusterConfigDiscoverer is an interface for discovering cluster configuration values.

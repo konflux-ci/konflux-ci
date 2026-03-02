@@ -259,6 +259,11 @@ type ClusterConfigData struct {
 	// TrustifyServerExternalUrl is the external URL for the Trustify server.
 	// +optional
 	TrustifyServerExternalUrl string `json:"trustifyServerExternalUrl,omitempty"`
+
+	// BuildIdentityRegexp is a regex pattern used for matching the identity
+	// that signed artifacts as part of the build pipeline.
+	// +optional
+	BuildIdentityRegexp string `json:"buildIdentityRegexp,omitempty"`
 }
 
 // All is an iterator that yields all non-empty key-value pairs from ClusterConfigData.
@@ -312,6 +317,11 @@ func (d ClusterConfigData) All(yield func(key, value string) bool) {
 	}
 	if d.TrustifyServerExternalUrl != "" {
 		if !yield("trustifyServerExternalUrl", d.TrustifyServerExternalUrl) {
+			return
+		}
+	}
+	if d.BuildIdentityRegexp != "" {
+		if !yield("buildIdentityRegexp", d.BuildIdentityRegexp) {
 			return
 		}
 	}
