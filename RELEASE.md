@@ -91,7 +91,8 @@ The workflow:
 
 - The `release-config.yaml` file (generated in
   [generate-release-artifacts.sh](.github/scripts/generate-release-artifacts.sh))
-  specifies the OLM channel (`Stable`) for the bundle
+  specifies the OLM channel for the bundle: `Stable` for stable releases,
+  `Candidate` for release-candidate (prerelease) versions (e.g. tags containing `rc`).
 - The [ci.yaml](https://github.com/redhat-openshift-ecosystem/community-operators-prod/blob/main/operators/konflux/ci.yaml)
   file in the upstream repository defines which OpenShift catalog versions the
   operator is published to (catalog versions correspond to OpenShift versions)
