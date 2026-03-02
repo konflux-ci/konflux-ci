@@ -84,7 +84,7 @@ TAG_PREFIX="v${STREAM}."
 
 # Latest tag for this stream reachable from HEAD
 LATEST=$(git tag --merged=HEAD 2>/dev/null \
-  | grep -E "$VERSION_PATTERN" | grep "^${TAG_PREFIX}" | sort -V | tail -1 || true)
+  | grep -E "$VERSION_PATTERN" | grep -F "${TAG_PREFIX}" | sort -V | tail -1 || true)
 
 if [ -z "$LATEST" ]; then
   echo "Error: No version tags for stream ${STREAM} reachable from HEAD."
