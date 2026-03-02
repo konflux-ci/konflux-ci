@@ -160,8 +160,9 @@ deploy_openshift_pipelines() {
     retry "kubectl wait --for=condition=Available deployment/tekton-operator-proxy-webhook -n openshift-pipelines --timeout=120s" \
           "Tekton webhook did not become available within the allocated time"
 
-    # Apply Tekton Chains RBAC (same as upstream Tekton)
-    kubectl apply -k "${script_path}/dependencies/tekton-chains-rbac"
+    # Apply Tekton Chains RBAC for OpenShift Pipelines (uses openshift-pipelines namespace)
+    echo "  🔐 Setting up Tekton Chains RBAC..." >&2
+    kubectl apply -k "${script_path}/dependencies/tekton-chains-rbac-ocp"
 
     echo "  ✅ OpenShift Pipelines is ready!" >&2
 }
@@ -189,6 +190,51 @@ deploy_upstream_tekton() {
 }
 
 deploy_cert_manager() {
+    : "${USE_OPENSHIFT_CERTMANAGER:=false}"
+    if [[ "${USE_OPENSHIFT_CERTMANAGER}" == "true" ]]; then
+        deploy_openshift_certmanager
+    else
+        deploy_upstream_certmanager
+    fi
+}
+
+deploy_openshift_certmanager() {
+    echo "  🔐 Installing cert-manager via Red Hat Operator..." >&2
+    # Install cert-manager Operator via OLM (requires Namespace + OperatorGroup + Subscription)
+    kubectl apply -k "${script_path}/dependencies/cert-manager-subscription"
+
+    # Wait for cert-manager CRDs to be available (timeout: 10 minutes)
+    echo "  ⏳ Waiting for cert-manager CRDs..." >&2
+    local crd_timeout=600
+    local crd_waited=0
+    until kubectl get crd certificates.cert-manager.io &>/dev/null; do
+        if [[ $crd_waited -ge $crd_timeout ]]; then
+            echo "ERROR: cert-manager CRDs not available after ${crd_timeout}s" >&2
+            exit 1
+        fi
+        sleep 10
+        crd_waited=$((crd_waited + 10))
+    done
+
+    # Wait for cert-manager deployments to be ready (timeout: 10 minutes)
+    echo "  ⏳ Waiting for cert-manager to be ready..." >&2
+    local deploy_timeout=600
+    local deploy_waited=0
+    until kubectl get deployment cert-manager -n cert-manager &>/dev/null; do
+        if [[ $deploy_waited -ge $deploy_timeout ]]; then
+            echo "ERROR: cert-manager deployment not created after ${deploy_timeout}s" >&2
+            exit 1
+        fi
+        sleep 10
+        deploy_waited=$((deploy_waited + 10))
+    done
+    retry "kubectl wait --for=condition=Available --timeout=300s deployment -l app.kubernetes.io/instance=cert-manager -n cert-manager" \
+          "cert-manager did not become available within the allocated time"
+
+    echo "  ✅ Red Hat cert-manager Operator is ready!" >&2
+}
+
+deploy_upstream_certmanager() {
     kubectl apply -k "${script_path}/dependencies/cert-manager"
     sleep 5
     retry "kubectl wait --for=condition=Available --timeout=120s deployment -l app.kubernetes.io/instance=cert-manager -n cert-manager" \
