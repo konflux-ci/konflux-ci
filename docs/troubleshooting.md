@@ -159,6 +159,56 @@ added there. Please refer to
 [this document](https://pipelinesascode.com/docs/install/github_apps/#manual-setup)
 on how to create webhook secret.
 
+# Webhook URL Configuration Issues
+
+If you encounter webhook-related errors when setting up GitHub webhooks, particularly timeouts 
+like "timed out waiting for the condition on pods/trust-manager" or "timed out waiting for 
+the condition on deployments/cert-manager", verify your GitHub App webhook URL configuration.
+
+## Common Webhook URL Mistakes
+
+**❌ INCORRECT:**
+- `https://XCD.ngrok-free.app` ← Missing path or using ngrok directly
+- `https://smee.io/XXXXXXXXXXXXXXXX/api/webhook` ← Adding path suffix 
+- `https://smee.io/XXXXXXXXXXXXXXXX/webhook` ← Adding path suffix
+- `https://localhost:9443` ← Using localhost (webhooks are external)
+
+**✅ CORRECT:**
+- `https://smee.io/XXXXXXXXXXXXXXXX` ← Full URL, no path suffix
+
+## Webhook URL Setup Guide
+
+For local development with Kind, you **must use Smee.io** for webhook forwarding since 
+GitHub cannot reach services inside your cluster:
+
+1. **Create a Smee Channel:**
+   Go to https://smee.io/ and create a new channel. You'll get a URL like:
+   ```
+   https://smee.io/abc123def456xyz789
+   ```
+
+2. **Configure GitHub App Webhook:**
+   In your GitHub App settings, under "Webhook", set:
+   - **Webhook URL:** `https://smee.io/abc123def456xyz789` (use the URL exactly as-is)
+   - **Do NOT** add any path suffix like `/webhook`, `/api/webhook`, `/hook`, etc.
+   - The pipelines-as-code controller handles all webhook processing internally on port 8180
+
+3. **Verify Smee Forwarding:**
+   The Smee client deployed in the cluster will forward webhooks to:
+   ```
+   http://pipelines-as-code-controller.pipelines-as-code.svc.cluster.local:8180
+   ```
+   No additional path configuration is needed.
+
+## Why Ngrok Alone Won't Work
+
+If you try to use ngrok directly without Smee:
+- You'd need to configure the exact endpoint path the pipelines-as-code controller expects
+- Without proper path configuration, webhooks won't be routed correctly
+- This can cause cluster instability as components try to reach non-existent endpoints
+
+Always use **Smee.io as the intermediary** for local Kind cluster webhook forwarding.
+
 # UI Not Accessible (Kind)
 
 If you cannot reach `https://localhost:9443` on a Kind cluster, verify that your Konflux

@@ -369,8 +369,13 @@ The script will not recreate the patch file if it already exists.
 
    For `Homepage URL` you can insert `https://localhost:9443/` (it doesn't matter).
 
-   For `Webhook URL` insert the smee client's webhook proxy URL from previous steps.
-
+   For `Webhook URL`, insert the **full smee.io URL** from the previous step (e.g., `https://smee.io/XXXXXXXXXXXXXXXX`).
+   
+   > **Important:** 
+   > - Use the **full smee.io URL as-is** - do **NOT** add any path suffix like `/api/webhook`, `/webhook`, etc.
+   > - The webhook URL should look like: `https://smee.io/XXXXXXXXXXXXXXXX` (without trailing paths)
+   > - This is different from using ngrok directly, which would require proper endpoint configuration
+   
    :gear: Per the instructions on the link, generate and download the private key and create a
    secret on the cluster providing the location of the private key, the App ID, and the
    openssl-generated secret created during the process.
