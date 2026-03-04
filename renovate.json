@@ -37,7 +37,13 @@
     }
   ],
   "tekton": {
-    "fileMatch": ["^\\.tekton/.*\\.ya?ml$"]
+    "fileMatch": [".*\\.ya?ml$"],
+    "includePaths": [
+      ".tekton/**",
+      "tasks/**",
+      "pipelines/**"
+    ],
+    "schedule": ["* * * * *"]
   },
   "customManagers": [
     {
