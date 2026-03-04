@@ -1,9 +1,72 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+
+# Inherit shared base resources from tekton-chains-rbac
 resources:
-  - tekton-chains.yaml
+  - ../tekton-chains-rbac/base
 
-images:
-  - name: quay.io/konflux-ci/appstudio-utils
-    digest: sha256:a8d6c26006f22e61f700b547dc589f2a0c6bccbcade7eddc34304d1d9d3f898b
+# Transform all namespaces to openshift-pipelines
+namespace: openshift-pipelines
 
+patches:
+  # Fix RoleBinding subjects to reference SA in openshift-pipelines (not tekton-pipelines)
+  - target:
+      kind: RoleBinding
+      name: chains-secret-admin
+    patch: |-
+      - op: replace
+        path: /subjects/0/namespace
+        value: openshift-pipelines
+
+  # Update job for OCP: namespace variable + stricter security context
+  - target:
+      kind: Job
+      name: tekton-chains-signing-secret
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/command/2
+        value: |
+          set -o errexit
+          set -o nounset
+          set -o pipefail
+
+          # For OpenShift Pipelines, use openshift-pipelines namespace
+          namespace="openshift-pipelines"
+          secret="signing-secrets"
+
+          cd /tmp
+
+          if [ "$(kubectl get secret "$secret" -n "$namespace" -o jsonpath='{.data}' --ignore-not-found --allow-missing-template-keys)" != "" ]; then
+            echo "Signing secret exists and is non-empty."
+          else
+            # Delete secret/signing-secrets if already exists since by default cosign creates immutable secrets
+            kubectl delete secrets "$secret" -n "$namespace" --ignore-not-found=true
+
+            # To make this run conveniently without user input let's create a random password
+            RANDOM_PASS=$( openssl rand -base64 30 )
+
+            # Generate the key pair secret directly in the cluster.
+            # The secret should be created as immutable.
+            echo "Generating k8s secret/$secret in $namespace with key-pair"
+            env COSIGN_PASSWORD=$RANDOM_PASS cosign generate-key-pair "k8s://$namespace/$secret"
+          fi
+
+          echo "Generating/updating the secret with the public key"
+          kubectl create secret generic public-key \
+            --namespace "$namespace" \
+            --from-literal=cosign.pub="$(
+              cosign public-key --key "k8s://$namespace/$secret"
+            )" \
+            --dry-run=client \
+            -o yaml | kubectl apply -f -
+      - op: replace
+        path: /spec/template/spec/containers/0/securityContext
+        value:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+              - ALL
+          seccompProfile:
+            type: RuntimeDefault
