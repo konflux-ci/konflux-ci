@@ -64,8 +64,9 @@ var SegmentBridgeClusterScopedAllowList tracking.ClusterScopedAllowList = nil
 // KonfluxSegmentBridgeReconciler reconciles a KonfluxSegmentBridge object
 type KonfluxSegmentBridgeReconciler struct {
 	client.Client
-	Scheme      *runtime.Scheme
-	ObjectStore *manifests.ObjectStore
+	Scheme               *runtime.Scheme
+	ObjectStore          *manifests.ObjectStore
+	GetDefaultSegmentKey func() string
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxsegmentbridges,verbs=get;list;watch;create;update;patch;delete
@@ -73,7 +74,8 @@ type KonfluxSegmentBridgeReconciler struct {
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxsegmentbridges/finalizers,verbs=update
 // +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;patch
-// +kubebuilder:rbac:groups=core,resources=secrets;serviceaccounts,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles;clusterrolebindings,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=segment-bridge,verbs=bind;escalate
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=segment-bridge,verbs=bind
@@ -104,7 +106,7 @@ func (r *KonfluxSegmentBridgeReconciler) Reconcile(ctx context.Context, req ctrl
 		return errHandler.HandleApplyError(ctx, err)
 	}
 
-	if err := reconcileSegmentBridgeSecret(ctx, tc, &segmentBridge.Spec); err != nil {
+	if err := r.reconcileSegmentBridgeSecret(ctx, tc, &segmentBridge.Spec); err != nil {
 		return errHandler.HandleWithReason(ctx, err, condition.ReasonSecretCreationFailed, "reconcile segment-bridge secret")
 	}
 
@@ -142,19 +144,36 @@ func (r *KonfluxSegmentBridgeReconciler) applyManifests(ctx context.Context, tc 
 	return nil
 }
 
-// reconcileSegmentBridgeSecret creates the Secret in the segment-bridge namespace
-// that the CronJob reads via envFrom. Contains both SEGMENT_WRITE_KEY and
+// reconcileSegmentBridgeSecret creates or deletes the Secret in the segment-bridge
+// namespace that the CronJob reads via envFrom. Contains both SEGMENT_WRITE_KEY and
 // SEGMENT_BATCH_API (host URL + "/batch").
 //
-// If no write key is available, Secret creation is skipped.
-func reconcileSegmentBridgeSecret(ctx context.Context, tc *tracking.Client, spec *konfluxv1alpha1.KonfluxSegmentBridgeSpec) error {
+// Key resolution precedence:
+//  1. CR inline spec.segmentKey (admin override)
+//  2. Build-time default from GetDefaultSegmentKey (baked into binary via ldflags)
+//  3. Empty -- existing Secret is deleted to disable telemetry
+func (r *KonfluxSegmentBridgeReconciler) reconcileSegmentBridgeSecret(ctx context.Context, tc *tracking.Client, spec *konfluxv1alpha1.KonfluxSegmentBridgeSpec) error {
 	log := logf.FromContext(ctx)
 
 	segmentKey := spec.GetSegmentKey()
+	keySource := "cr"
 	if segmentKey == "" {
-		log.Info("No Segment write key configured; skipping Secret creation")
+		segmentKey = r.GetDefaultSegmentKey()
+		keySource = "build-time-default"
+	}
+	if segmentKey == "" {
+		log.Info("No Segment write key configured (neither CR nor build-time default); removing Secret if it exists")
+		existing := &corev1.Secret{}
+		if err := tc.Get(ctx, client.ObjectKey{Name: segmentBridgeSecretName, Namespace: segmentBridgeNamespace}, existing); err != nil {
+			return client.IgnoreNotFound(err)
+		}
+		if err := tc.Delete(ctx, existing); err != nil {
+			return client.IgnoreNotFound(err)
+		}
 		return nil
 	}
+
+	log.Info("Resolved Segment write key", "source", keySource)
 
 	batchURL := spec.GetSegmentAPIURL() + "/batch"
 

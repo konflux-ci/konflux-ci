@@ -205,6 +205,7 @@ docker-build: ## Build docker image with the manager.
 		-t ${IMG} \
 		$(if $(VERSION),--build-arg OPERATOR_VERSION=$(VERSION)) \
 		$(if $(GIT_COMMIT),--build-arg GIT_COMMIT=$(GIT_COMMIT)) \
+		$(if $(SEGMENT_WRITE_KEY),--build-arg SEGMENT_WRITE_KEY=$(SEGMENT_WRITE_KEY)) \
 		.
 
 .PHONY: docker-push

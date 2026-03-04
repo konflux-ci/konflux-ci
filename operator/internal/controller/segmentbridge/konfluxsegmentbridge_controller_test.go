@@ -31,6 +31,9 @@ import (
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 )
 
+func noDefaultKey() string             { return "" }
+func staticKey(k string) func() string { return func() string { return k } }
+
 var _ = Describe("KonfluxSegmentBridge Controller", func() {
 	Context("When reconciling a resource", func() {
 
@@ -75,9 +78,10 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &KonfluxSegmentBridgeReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ObjectStore: objectStore,
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				ObjectStore:          objectStore,
+				GetDefaultSegmentKey: noDefaultKey,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -86,11 +90,12 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should skip Secret creation when no write key is configured", func() {
+		It("should skip Secret creation when no write key is configured (CR empty, no build-time default)", func() {
 			controllerReconciler := &KonfluxSegmentBridgeReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ObjectStore: objectStore,
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				ObjectStore:          objectStore,
+				GetDefaultSegmentKey: noDefaultKey,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -105,6 +110,46 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 			Expect(errors.IsNotFound(err)).To(BeTrue(), "Secret should not be created when no key is set")
 		})
 
+		It("should delete existing Secret when key becomes empty", func() {
+			By("First reconciling with a key to create the Secret")
+			resource := &konfluxv1alpha1.KonfluxSegmentBridge{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			resource.Spec.SegmentKey = "temporary-key"
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+
+			controllerReconciler := &KonfluxSegmentBridgeReconciler{
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				ObjectStore:          objectStore,
+				GetDefaultSegmentKey: noDefaultKey,
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			secret := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: segmentBridgeSecretName, Namespace: segmentBridgeNamespace,
+			}, secret)).To(Succeed(), "Secret should exist after reconciling with a key")
+
+			By("Removing the key and reconciling again")
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			resource.Spec.SegmentKey = ""
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Name: segmentBridgeSecretName, Namespace: segmentBridgeNamespace,
+			}, secret)
+			Expect(errors.IsNotFound(err)).To(BeTrue(), "Secret should be deleted when key becomes empty")
+		})
+
 		It("should create Secret with both SEGMENT_WRITE_KEY and SEGMENT_BATCH_API from inline CR fields", func() {
 			By("Updating the CR with inline segment config")
 			resource := &konfluxv1alpha1.KonfluxSegmentBridge{}
@@ -114,9 +159,10 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &KonfluxSegmentBridgeReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ObjectStore: objectStore,
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				ObjectStore:          objectStore,
+				GetDefaultSegmentKey: noDefaultKey,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -141,9 +187,10 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &KonfluxSegmentBridgeReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ObjectStore: objectStore,
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				ObjectStore:          objectStore,
+				GetDefaultSegmentKey: noDefaultKey,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -159,6 +206,56 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 			Expect(string(secret.Data["SEGMENT_WRITE_KEY"])).To(Equal("default-key"))
 			Expect(string(secret.Data["SEGMENT_BATCH_API"])).To(Equal(
 				konfluxv1alpha1.DefaultSegmentAPIURL + "/batch"))
+		})
+
+		It("should use build-time default key when CR key is empty", func() {
+			controllerReconciler := &KonfluxSegmentBridgeReconciler{
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				ObjectStore:          objectStore,
+				GetDefaultSegmentKey: staticKey("build-time-key"),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			secret := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: segmentBridgeSecretName, Namespace: segmentBridgeNamespace,
+			}, secret)).To(Succeed())
+
+			Expect(string(secret.Data["SEGMENT_WRITE_KEY"])).To(Equal("build-time-key"))
+			Expect(string(secret.Data["SEGMENT_BATCH_API"])).To(Equal(
+				konfluxv1alpha1.DefaultSegmentAPIURL + "/batch"))
+		})
+
+		It("should prefer CR inline key over build-time default", func() {
+			By("Updating the CR with an inline segment key")
+			resource := &konfluxv1alpha1.KonfluxSegmentBridge{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			resource.Spec.SegmentKey = "cr-override-key"
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+
+			controllerReconciler := &KonfluxSegmentBridgeReconciler{
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				ObjectStore:          objectStore,
+				GetDefaultSegmentKey: staticKey("build-time-key"),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			secret := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: segmentBridgeSecretName, Namespace: segmentBridgeNamespace,
+			}, secret)).To(Succeed())
+
+			Expect(string(secret.Data["SEGMENT_WRITE_KEY"])).To(Equal("cr-override-key"))
 		})
 
 	})
