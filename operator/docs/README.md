@@ -1,5 +1,7 @@
 # Konflux Operator Documentation
 
+> **⚠️ DEPRECATED:** This document is no longer maintained. Any updates should be made in the [content/docs](content/docs) directory.
+
 This directory contains the documentation for the Konflux Operator, configured for GitHub Pages using Hugo with the Docsy theme.
 
 ## Local Development

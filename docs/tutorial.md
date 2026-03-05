@@ -1,6 +1,8 @@
 Konflux Tutorial
 ===
 
+> **⚠️ DEPRECATED:** This document is no longer maintained. Any updates should be made in the [operator/docs/content/docs](../operator/docs/content/docs) directory.
+
 This tutorial covers common Konflux operations: onboarding repositories,
 building, testing, and releasing artifacts.
 

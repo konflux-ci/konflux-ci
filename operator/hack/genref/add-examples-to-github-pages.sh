@@ -20,7 +20,7 @@ if [ ! -f "$HOMEPAGE" ]; then
 ---
 title: "Examples"
 linkTitle: "Examples"
-weight: 1
+weight: 999
 description: "Example configurations for Konflux Operator Custom Resources"
 ---
 
