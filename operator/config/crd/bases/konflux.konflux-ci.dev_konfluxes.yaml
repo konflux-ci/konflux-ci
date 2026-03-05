@@ -1377,10 +1377,12 @@ spec:
                     properties:
                       segmentAPIURL:
                         description: |-
-                          SegmentAPIURL is the URL of the Segment API endpoint.
-                          When not specified, the default Segment API URL is used.
-                          Users may override this to route telemetry to their own Segment project
-                          or to another system that implements the Segment API.
+                          SegmentAPIURL is the base URL of the Segment API endpoint, without "/batch".
+                          The operator appends "/batch" to produce the SEGMENT_BATCH_API env var.
+                          Example: "https://console.redhat.com/connections/api/v1"
+                          When not specified, defaults to "https://api.segment.io/v1".
+                          Only plain HTTPS base URLs are supported (no query strings or fragments).
+                        pattern: ^https://[^?#]+$
                         type: string
                       segmentKey:
                         description: |-
