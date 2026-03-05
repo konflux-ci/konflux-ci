@@ -2,7 +2,5 @@
 title: "Documentation"
 linkTitle: "Documentation"
 weight: 1
-description: "Documentation for Konflux Operator Custom Resources"
+description: "Documentation for the Konflux Operator - installation, configuration, and API reference."
 ---
-
-Welcome to the Konflux Operator documentation. This section provides comprehensive documentation for Konflux Operator Custom Resources.

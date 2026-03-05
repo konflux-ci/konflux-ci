@@ -1,6 +1,8 @@
 Konflux-CI
 ===
 
+> **⚠️ DEPRECATED:** This document is no longer maintained. Any updates should be made in the [operator/docs/content/docs](operator/docs/content/docs) directory.
+
 <!-- toc -->
 
 - [Document Conventions](#document-conventions)

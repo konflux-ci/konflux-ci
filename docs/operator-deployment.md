@@ -1,5 +1,7 @@
 # Konflux Operator Deployment Guide
 
+> **⚠️ DEPRECATED:** This document is no longer maintained. Any updates should be made in the [operator/docs/content/docs](../operator/docs/content/docs) directory.
+
 This guide covers deploying Konflux using the operator-based approach on any Kubernetes cluster.
 
 ## Table of Contents

@@ -1,6 +1,8 @@
 Container Registry Configuration
 ===
 
+> **⚠️ DEPRECATED:** This document is no longer maintained. Any updates should be made in the [operator/docs/content/docs](../operator/docs/content/docs) directory.
+
 Konflux supports any OCI-compliant container registry for storing built images.
 
 For local development on Kind, the internal registry

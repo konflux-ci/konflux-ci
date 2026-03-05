@@ -1,6 +1,8 @@
 Troubleshooting Common Issues
 ===
 
+> **⚠️ DEPRECATED:** This document is no longer maintained. Any updates should be made in the [operator/docs/content/docs](../operator/docs/content/docs) directory.
+
 <!-- toc -->
 
 - [Using Podman with Kind while also having Docker Installed](#using-podman-with-kind-while-also-having-docker-installed)

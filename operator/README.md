@@ -1,6 +1,8 @@
 konflux-operator
 ===
 
+> **⚠️ DEPRECATED:** This document is no longer maintained. Any updates should be made in the [docs/content/docs](docs/content/docs) directory.
+
 <!-- toc -->
 
 - [Description](#description)
