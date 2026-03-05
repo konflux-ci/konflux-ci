@@ -109,7 +109,7 @@ kubectl apply -f https://github.com/konflux-ci/konflux-ci/releases/download/${VE
 ### Image
 - **Repository**: quay.io/konflux-ci/konflux-operator
 - **Tag**: ${IMAGE_TAG}
-- **Git Ref**: ${GIT_REF}
+- **Git Ref**: [${GIT_REF}](https://github.com/konflux-ci/konflux-ci/tree/${GIT_REF})
 - **Pull command**: \`podman pull quay.io/konflux-ci/konflux-operator:${IMAGE_TAG}\`
 
 ### Artifacts
@@ -117,7 +117,7 @@ kubectl apply -f https://github.com/konflux-ci/konflux-ci/releases/download/${VE
 - samples.tar.gz - Sample Custom Resources
 
 ### Documentation
-- [README.md](https://github.com/konflux-ci/konflux-ci/blob/main/README.md) - Installation and usage instructions
+- [Documentation](https://konflux-ci.dev/konflux-ci/) - Installation and usage instructions
 EOF
 
 # Append changelogs (failures here must never block the release)
