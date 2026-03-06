@@ -15,3 +15,6 @@ patchesJson6902:
       - op: replace
         path: /spec/template/spec/containers/0/env/1/value
         value: "openshift-pipelines"
+images:
+  - name: quay.io/konflux-ci/appstudio-utils
+    digest: sha256:366636b0a749700571c862529065b6820b486a770a3b17eaf543e11ac238e837
