@@ -359,6 +359,78 @@ deploy_quay() {
           "Quay Redis did not become available within the allocated time"
     retry "kubectl wait --for=condition=Ready --timeout=240s -n quay -l app=quay pod" \
           "Quay did not become available within the allocated time"
+
+    init_quay_admin
+}
+
+init_quay_admin() {
+    : "${SKIP_QUAY_ADMIN_INIT:=false}"
+    if [[ "${SKIP_QUAY_ADMIN_INIT}" == "true" ]]; then
+        echo "⏭️  Skipping Quay admin initialization" >&2
+        return 0
+    fi
+
+    for cmd in curl jq; do
+        if ! command -v "$cmd" &>/dev/null; then
+            echo "❌ '$cmd' is required for Quay admin initialization but not found" >&2
+            return 1
+        fi
+    done
+
+    if kubectl get secret quay-admin-token -n quay &>/dev/null; then
+        echo "✅ Quay admin already initialized (quay-admin-token secret exists)" >&2
+        return 0
+    fi
+
+    echo "👤 Initializing Quay admin user..." >&2
+
+    local ADMIN_USER="quayadmin"
+    local ADMIN_PASSWORD="password"  # gitleaks:allow -- throwaway ephemeral Kind cluster credential
+    local ADMIN_EMAIL="admin@local.dev"
+
+    local QUAY_URL="https://localhost:8443"
+
+    echo "⏳ Waiting for Quay API to be reachable from host..." >&2
+    local i
+    for i in $(seq 1 30); do
+        if curl -4 -sk --connect-timeout 2 "${QUAY_URL}/health/instance" 2>/dev/null \
+            | grep -q '"status_code":200'; then
+            echo "✅ Quay API is reachable" >&2
+            break
+        fi
+        if [[ "$i" -eq 30 ]]; then
+            echo "❌ Quay API not reachable from host within 60s" >&2
+            return 1
+        fi
+        sleep 2
+    done
+
+    echo "📡 Creating admin user '${ADMIN_USER}'..." >&2
+    local INIT_RESPONSE
+    INIT_RESPONSE=$(curl -4 -sk --connect-timeout 10 -X POST "${QUAY_URL}/api/v1/user/initialize" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"username\": \"${ADMIN_USER}\",
+            \"password\": \"${ADMIN_PASSWORD}\",
+            \"email\": \"${ADMIN_EMAIL}\",
+            \"access_token\": true
+        }")
+
+    local TOKEN
+    if echo "$INIT_RESPONSE" | jq -e '.access_token' &>/dev/null; then
+        TOKEN=$(echo "$INIT_RESPONSE" | jq -r '.access_token')
+        echo "✅ Admin user '${ADMIN_USER}' created" >&2
+    else
+        echo "❌ Failed to create admin: $(echo "$INIT_RESPONSE" | jq -r '.message // "unknown"')" >&2
+        echo "❌ Response: ${INIT_RESPONSE}" >&2
+        return 1
+    fi
+
+    kubectl create secret generic quay-admin-token --namespace=quay \
+        --from-literal=token="${TOKEN}" \
+        --from-literal=username="${ADMIN_USER}" \
+        --from-literal=password="${ADMIN_PASSWORD}"
+    echo "🔑 Admin token stored in secret 'quay-admin-token' in namespace 'quay'" >&2
 }
 
 retry() {
