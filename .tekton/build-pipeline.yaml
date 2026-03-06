@@ -502,7 +502,7 @@ spec:
           - name: name
             value: sast-unicode-check-oci-ta
           - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-sast-unicode-check-oci-ta:0.4@sha256:2bcccabd857914f66543d17a676f4d259daa67fe55c63a7d317000365c369792
+            value: quay.io/konflux-ci/tekton-catalog/task-sast-unicode-check-oci-ta:0.4@sha256:8f93c716782b68a71e314d3eb037edfc07255d1a4d531afcf612409ef62233c7
           - name: kind
             value: task
         resolver: bundles
