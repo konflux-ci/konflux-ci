@@ -7,6 +7,7 @@ on:
     types: [checks_requested]
   repository_dispatch:
     types: [e2e]
+  workflow_dispatch:
 
 jobs:
   # Gate: only same-repo PRs run heavy jobs on push. Fork PRs need /allow. Trusted contexts (dispatch, merge_group) always run.
@@ -41,6 +42,7 @@ jobs:
         id: set-ref
         run: |
           case "${{ github.event_name }}" in
+            workflow_dispatch)  ref="${{ github.sha }}" ;;
             repository_dispatch) ref=$(jq -r '.client_payload.head_sha' $GITHUB_EVENT_PATH) ;;
             merge_group)        ref=$(jq -r '.merge_group.head_sha' $GITHUB_EVENT_PATH) ;;
             *)                  ref=$(jq -r '.pull_request.head.sha' $GITHUB_EVENT_PATH) ;;
@@ -165,6 +167,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           case "${{ github.event_name }}" in
+            workflow_dispatch)  ref="${{ github.sha }}" ;;
             repository_dispatch) ref=$(jq -r '.client_payload.head_sha' $GITHUB_EVENT_PATH) ;;
             merge_group)        ref=$(jq -r '.merge_group.head_sha' $GITHUB_EVENT_PATH) ;;
             *)                  ref=$(jq -r '.pull_request.head.sha' $GITHUB_EVENT_PATH) ;;
@@ -219,9 +222,9 @@ jobs:
           KONFLUX_CR: ${{ matrix.konflux_cr }}
 
           # GitHub App secrets (standardized names)
-          GITHUB_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
-          GITHUB_APP_ID: ${{ secrets.APP_ID }}
-          WEBHOOK_SECRET: ${{ secrets.APP_WEBHOOK_SECRET }}
+          GITHUB_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY || 'dummy_key' }}
+          GITHUB_APP_ID: ${{ secrets.APP_ID || '123456' }}
+          WEBHOOK_SECRET: ${{ secrets.APP_WEBHOOK_SECRET || 'dummy_secret' }}
 
           # Quay secrets for image-controller (required by konflux-e2e.yaml CR)
           QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
