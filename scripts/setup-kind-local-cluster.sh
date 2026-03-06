@@ -20,6 +20,7 @@
 # - REGISTRY_HOST_PORT: Host port for registry (default: 5001)
 # - ENABLE_REGISTRY_PORT: Enable registry port binding (default: 1)
 # - INCREASE_PODMAN_PIDS_LIMIT: Increase PID limits (default: 1)
+# - ENABLE_IMAGE_CACHE: Persist containerd image cache across cluster recreations (default: 0)
 
 # Determine the absolute path of the repository root
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
@@ -31,6 +32,49 @@ PODMAN_MACHINE_NAME="${PODMAN_MACHINE_NAME:-}"
 INCREASE_PODMAN_PIDS_LIMIT="${INCREASE_PODMAN_PIDS_LIMIT:-1}"
 ENABLE_REGISTRY_PORT="${ENABLE_REGISTRY_PORT:-1}"
 REGISTRY_HOST_PORT="${REGISTRY_HOST_PORT:-5001}"
+ENABLE_IMAGE_CACHE="${ENABLE_IMAGE_CACHE:-0}"
+
+# ---------------------------------------------------------------------------
+# Image cache helpers
+# ---------------------------------------------------------------------------
+
+# Add extraMounts to the Kind config so that containerd's data directory is
+# persisted on the host. This means images pulled during the first cluster
+# creation survive cluster deletion and are instantly available ("already
+# present on machine") on subsequent creations.
+#
+# IMPORTANT: If you change the Kind node image (e.g. upgrade Kubernetes),
+# the cached containerd state may be incompatible. Delete the cache dir:
+#   rm -rf ~/.cache/konflux-ci/containerd-cache
+add_image_cache_to_kind_config() {
+    local config_file="$1"
+    local cache_dir="${HOME}/.cache/konflux-ci/containerd-cache"
+
+    echo "Enabling persistent containerd image cache..."
+    mkdir -p "${cache_dir}"
+
+    if grep -q 'extraMounts:' "${config_file}"; then
+        # extraMounts already exists – append our entry to the existing list
+        local entry
+        entry=$(mktemp)
+        cat > "${entry}" <<EOF
+  - hostPath: ${cache_dir}
+    containerPath: /var/lib/containerd
+EOF
+        sed -i "/extraMounts:/r ${entry}" "${config_file}"
+        rm -f "${entry}"
+    else
+        # No extraMounts yet – append the section to the node definition
+        cat >> "${config_file}" <<EOF
+  extraMounts:
+  - hostPath: ${cache_dir}
+    containerPath: /var/lib/containerd
+EOF
+    fi
+
+    echo "✓ Persistent containerd cache configured at ${cache_dir}"
+    echo "  To clear the cache: rm -rf ${cache_dir}"
+}
 
 # Increase inotify limits on Linux (only if current values are lower than required)
 if [[ "$(uname)" == "Linux" ]]; then
@@ -203,6 +247,11 @@ if [[ "${ENABLE_REGISTRY_PORT}" -eq 1 ]]; then
 else
     echo "Registry port binding is disabled. Removing registry port mapping..."
     sed -i.bak '/# Registry/,+3d' "${KIND_CONFIG}" && rm "${KIND_CONFIG}.bak"
+fi
+
+# Setup persistent containerd image cache if enabled
+if [[ "${ENABLE_IMAGE_CACHE}" -eq 1 ]]; then
+    add_image_cache_to_kind_config "${KIND_CONFIG}"
 fi
 
 # Create the Kind cluster

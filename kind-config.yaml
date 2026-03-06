@@ -10,6 +10,10 @@ nodes:
       kubeletExtraArgs:
         node-labels: "ingress-ready=true"
         system-reserved: memory=8Gi
+  - |
+    kind: KubeletConfiguration
+    serializeImagePulls: false
+    maxParallelImagePulls: 10
   extraPortMappings:
   - containerPort: 30010
     hostPort: 8888
