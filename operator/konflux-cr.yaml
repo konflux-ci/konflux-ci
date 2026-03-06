@@ -1,0 +1,22 @@
+---
+apiVersion: konflux.konflux-ci.dev/v1alpha1
+kind: Konflux
+metadata:
+  labels:
+    app.kubernetes.io/name: konflux-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: konflux
+spec:
+  imageController:
+    enabled: true
+  info:
+    spec:
+      clusterConfig:
+        data:
+          defaultOIDCIssuer: https://kubernetes.default.svc
+          fulcioInternalUrl: https://fulcio.gal.com
+          fulcioExternalUrl: https://fulcio.example.com
+          rekorInternalUrl: https://rekor.example.com
+          rekorExternalUrl: https://rekor.example.com
+          tufInternalUrl: https://tuf.example.com
+          tufExternalUrl: https://tuf.example.com

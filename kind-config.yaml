@@ -10,6 +10,11 @@ nodes:
       kubeletExtraArgs:
         node-labels: "ingress-ready=true"
         system-reserved: memory=8Gi
+  - |
+    kind: ClusterConfiguration
+    apiServer:
+      extraArgs:
+        service-account-issuer: https://kubernetes.default.svc
   extraPortMappings:
   - containerPort: 30010
     hostPort: 8888
