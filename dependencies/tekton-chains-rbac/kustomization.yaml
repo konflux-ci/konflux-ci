@@ -1,8 +1,17 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - tekton-chains.yaml
+  - base
+  - openshift-compat.yaml
 
-images:
-  - name: quay.io/konflux-ci/appstudio-utils
-    digest: sha256:131039dec81f231a6532b443f15d3d18f1c9e5959a9f01126c49a5e40d332255
+patchesJson6902:
+  # Set EXTRA_NAMESPACE to also create public-key secret in openshift-pipelines namespace
+  - target:
+      group: batch
+      version: v1
+      kind: Job
+      name: tekton-chains-signing-secret
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/env/1/value
+        value: "openshift-pipelines"

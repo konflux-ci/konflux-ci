@@ -1,9 +1,43 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+
+# Inherit shared base resources from tekton-chains-rbac
 resources:
-  - tekton-chains.yaml
+  - ../tekton-chains-rbac/base
 
-images:
-  - name: quay.io/konflux-ci/appstudio-utils
-    digest: sha256:131039dec81f231a6532b443f15d3d18f1c9e5959a9f01126c49a5e40d332255
+# Transform all namespaces to openshift-pipelines
+namespace: openshift-pipelines
 
+patchesJson6902:
+  # Fix RoleBinding subjects to reference SA in openshift-pipelines (not tekton-pipelines)
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: RoleBinding
+      name: chains-secret-admin
+    patch: |-
+      - op: replace
+        path: /subjects/0/namespace
+        value: openshift-pipelines
+
+  # Set TARGET_NAMESPACE for OCP and apply stricter security context
+  - target:
+      group: batch
+      version: v1
+      kind: Job
+      name: tekton-chains-signing-secret
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/env/0/value
+        value: "openshift-pipelines"
+      - op: replace
+        path: /spec/template/spec/containers/0/securityContext
+        value:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+              - ALL
+          seccompProfile:
+            type: RuntimeDefault
