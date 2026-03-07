@@ -4,8 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 )
@@ -141,5 +143,141 @@ func TestGetCRDNamesForComponent(t *testing.T) {
 				t.Errorf("GetCRDNamesForComponent(%s) expected non-empty names", tt.component)
 			}
 		})
+	}
+}
+
+// TestParseManifests directly tests the unexported parseManifests function.
+// The test file is in package manifests so parseManifests is directly callable.
+func TestParseManifests(t *testing.T) {
+	// Build a minimal scheme that knows about core Kubernetes types (e.g. Deployment).
+	// Unknown types (CRDs, Tekton resources) fall back to unstructured.Unstructured.
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	decoder := serializer.NewCodecFactory(scheme).UniversalDeserializer()
+
+	deploymentYAML := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-deployment
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test
+  template:
+    metadata:
+      labels:
+        app: test
+    spec:
+      containers:
+      - name: test
+        image: nginx:latest
+`
+
+	unknownYAML := `apiVersion: example.io/v1alpha1
+kind: MyCustomResource
+metadata:
+  name: my-resource
+  namespace: default
+`
+
+	tests := []struct {
+		name      string
+		input     []byte
+		wantCount int
+		wantErr   bool
+	}{
+		{
+			name:      "single typed object decoded as *appsv1.Deployment",
+			input:     []byte(deploymentYAML),
+			wantCount: 1,
+			wantErr:   false,
+		},
+		{
+			name: "multi-document YAML returns two objects in order",
+			input: []byte(deploymentYAML + "---\n" + deploymentYAML),
+			wantCount: 2,
+			wantErr:   false,
+		},
+		{
+			name: "empty documents between separators are skipped",
+			input: []byte("---\n" + deploymentYAML + "---\n\n---\n" + deploymentYAML),
+			wantCount: 2,
+			wantErr:   false,
+		},
+		{
+			name:      "unknown apiVersion falls back to unstructured.Unstructured",
+			input:     []byte(unknownYAML),
+			wantCount: 1,
+			wantErr:   false,
+		},
+		{
+			name:      "malformed YAML returns an error",
+			input:     []byte("this: is: not: valid: yaml: [{"),
+			wantCount: 0,
+			wantErr:   true,
+		},
+		{
+			name:      "empty input returns empty slice with no error",
+			input:     []byte{},
+			wantCount: 0,
+			wantErr:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objects, err := parseManifests(decoder, tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("parseManifests() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr {
+				return
+			}
+			if len(objects) != tt.wantCount {
+				t.Errorf("parseManifests() returned %d objects, want %d", len(objects), tt.wantCount)
+				return
+			}
+		})
+	}
+}
+
+// TestParseManifestsTypedDecoding verifies that a registered type is decoded
+// into its concrete Go type (not unstructured).
+func TestParseManifestsTypedDecoding(t *testing.T) {
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	decoder := serializer.NewCodecFactory(scheme).UniversalDeserializer()
+
+	yaml := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: typed-deployment
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: typed
+  template:
+    metadata:
+      labels:
+        app: typed
+    spec:
+      containers:
+      - name: app
+        image: nginx:latest
+`
+	objects, err := parseManifests(decoder, []byte(yaml))
+	if err != nil {
+		t.Fatalf("parseManifests() unexpected error: %v", err)
+	}
+	if len(objects) != 1 {
+		t.Fatalf("parseManifests() returned %d objects, want 1", len(objects))
+	}
+	if _, ok := objects[0].(*appsv1.Deployment); !ok {
+		t.Errorf("parseManifests() returned %T, want *appsv1.Deployment", objects[0])
 	}
 }
