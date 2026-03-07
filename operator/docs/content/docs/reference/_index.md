@@ -1,7 +1,7 @@
 ---
 title: "API Reference"
 linkTitle: "API Reference"
-weight: 2
+weight: 3
 description: "Complete API reference documentation for Konflux Operator Custom Resources."
 ---
 

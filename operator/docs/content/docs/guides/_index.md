@@ -1,7 +1,7 @@
 ---
 title: "Guides"
 linkTitle: "Guides"
-weight: 1
+weight: 2
 description: "How-to guides for configuring and deploying Konflux."
 ---
 
