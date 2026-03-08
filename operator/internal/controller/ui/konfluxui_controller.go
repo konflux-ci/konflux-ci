@@ -124,7 +124,7 @@ type KonfluxUIReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;create;update;list;watch;patch
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;patch
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=dex;konflux-proxy;konflux-proxy-namespace-lister,verbs=bind;escalate
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=dex;konflux-proxy;konflux-proxy-namespace-lister,verbs=bind
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;patch

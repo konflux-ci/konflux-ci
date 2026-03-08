@@ -138,8 +138,8 @@ type KonfluxInfoReconciler struct {
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=list
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;patch
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=get;list;watch;create;patch
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=config.openshift.io,resources=clusterversions,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to

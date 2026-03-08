@@ -87,6 +87,8 @@ deploy() {
     deploy_kyverno
     echo "📋 Deploying Konflux Info..." >&2
     deploy_konflux_info
+    echo "🐳 Deploying Quay..." >&2
+    deploy_quay
 }
 
 test_pvc_binding(){
@@ -101,7 +103,71 @@ test_pvc_binding(){
 }
 
 deploy_tekton() {
-    echo "  🐱 Installing Tekton Operator..." >&2
+    : "${USE_OPENSHIFT_PIPELINES:=false}"
+    if [[ "${USE_OPENSHIFT_PIPELINES}" == "true" ]]; then
+        echo "  🐱 Installing Tekton via OpenShift Pipelines Operator..." >&2
+        deploy_openshift_pipelines
+    else
+        echo "  🐱 Installing Tekton via upstream Operator..." >&2
+        deploy_upstream_tekton
+    fi
+}
+
+deploy_openshift_pipelines() {
+    # Install OpenShift Pipelines Operator via OLM
+    kubectl apply -k "${script_path}/dependencies/openshift-pipelines-subscription"
+
+    # Wait for TektonConfig CRD to be available (timeout: 10 minutes)
+    echo "  ⏳ Waiting for TektonConfig CRD..." >&2
+    local crd_timeout=600
+    local crd_waited=0
+    until kubectl get crd tektonconfigs.operator.tekton.dev &>/dev/null; do
+        if [[ $crd_waited -ge $crd_timeout ]]; then
+            echo "ERROR: TektonConfig CRD not available after ${crd_timeout}s" >&2
+            exit 1
+        fi
+        sleep 10
+        crd_waited=$((crd_waited + 10))
+    done
+
+    # Wait for TektonConfig resource to be created (timeout: 10 minutes)
+    echo "  ⏳ Waiting for TektonConfig to be ready..." >&2
+    local config_timeout=600
+    local config_waited=0
+    until kubectl get tektonconfig config &>/dev/null; do
+        if [[ $config_waited -ge $config_timeout ]]; then
+            echo "ERROR: TektonConfig resource not created after ${config_timeout}s" >&2
+            exit 1
+        fi
+        sleep 10
+        config_waited=$((config_waited + 10))
+    done
+    retry "kubectl wait --for=condition=Ready tektonconfig/config --timeout=600s" \
+          "TektonConfig did not become ready within the allocated time"
+
+    # Wait for Tekton webhook services (timeout: 5 minutes)
+    echo "  ⏳ Waiting for Tekton webhook services..." >&2
+    local webhook_timeout=300
+    local webhook_waited=0
+    until kubectl get service tekton-operator-proxy-webhook -n openshift-pipelines &>/dev/null; do
+        if [[ $webhook_waited -ge $webhook_timeout ]]; then
+            echo "ERROR: Tekton webhook service not available after ${webhook_timeout}s" >&2
+            exit 1
+        fi
+        sleep 10
+        webhook_waited=$((webhook_waited + 10))
+    done
+    retry "kubectl wait --for=condition=Available deployment/tekton-operator-proxy-webhook -n openshift-pipelines --timeout=120s" \
+          "Tekton webhook did not become available within the allocated time"
+
+    # Apply Tekton Chains RBAC for OpenShift Pipelines (uses openshift-pipelines namespace)
+    echo "  🔐 Setting up Tekton Chains RBAC..." >&2
+    kubectl apply -k "${script_path}/dependencies/tekton-chains-rbac-ocp"
+
+    echo "  ✅ OpenShift Pipelines is ready!" >&2
+}
+
+deploy_upstream_tekton() {
     # Operator
     kubectl apply -k "${script_path}/dependencies/tekton-operator"
     retry "kubectl wait --for=condition=Ready -l app=tekton-operator -n tekton-operator pod --timeout=240s" \
@@ -124,6 +190,51 @@ deploy_tekton() {
 }
 
 deploy_cert_manager() {
+    : "${USE_OPENSHIFT_CERTMANAGER:=false}"
+    if [[ "${USE_OPENSHIFT_CERTMANAGER}" == "true" ]]; then
+        deploy_openshift_certmanager
+    else
+        deploy_upstream_certmanager
+    fi
+}
+
+deploy_openshift_certmanager() {
+    echo "  🔐 Installing cert-manager via Red Hat Operator..." >&2
+    # Install cert-manager Operator via OLM (requires Namespace + OperatorGroup + Subscription)
+    kubectl apply -k "${script_path}/dependencies/cert-manager-subscription"
+
+    # Wait for cert-manager CRDs to be available (timeout: 10 minutes)
+    echo "  ⏳ Waiting for cert-manager CRDs..." >&2
+    local crd_timeout=600
+    local crd_waited=0
+    until kubectl get crd certificates.cert-manager.io &>/dev/null; do
+        if [[ $crd_waited -ge $crd_timeout ]]; then
+            echo "ERROR: cert-manager CRDs not available after ${crd_timeout}s" >&2
+            exit 1
+        fi
+        sleep 10
+        crd_waited=$((crd_waited + 10))
+    done
+
+    # Wait for cert-manager deployments to be ready (timeout: 10 minutes)
+    echo "  ⏳ Waiting for cert-manager to be ready..." >&2
+    local deploy_timeout=600
+    local deploy_waited=0
+    until kubectl get deployment cert-manager -n cert-manager &>/dev/null; do
+        if [[ $deploy_waited -ge $deploy_timeout ]]; then
+            echo "ERROR: cert-manager deployment not created after ${deploy_timeout}s" >&2
+            exit 1
+        fi
+        sleep 10
+        deploy_waited=$((deploy_waited + 10))
+    done
+    retry "kubectl wait --for=condition=Available --timeout=300s deployment -l app.kubernetes.io/instance=cert-manager -n cert-manager" \
+          "cert-manager did not become available within the allocated time"
+
+    echo "  ✅ Red Hat cert-manager Operator is ready!" >&2
+}
+
+deploy_upstream_certmanager() {
     kubectl apply -k "${script_path}/dependencies/cert-manager"
     sleep 5
     retry "kubectl wait --for=condition=Available --timeout=120s deployment -l app.kubernetes.io/instance=cert-manager -n cert-manager" \
@@ -175,6 +286,11 @@ deploy_registry() {
 }
 
 deploy_smee() {
+    : "${SKIP_SMEE:=false}"
+    if [[ "${SKIP_SMEE}" == "true" ]]; then
+        echo "⏭️  Skipping Smee deployment (not needed for OCP CI)" >&2
+        return 0
+    fi
     local patch="${script_path}/dependencies/smee/smee-channel-id.yaml"
     if [ ! -f "$patch" ]; then
         echo "Randomizing smee-channel ID"
@@ -201,6 +317,120 @@ deploy_konflux_info() {
         return 0
     fi
     kubectl apply -k "${script_path}/dependencies/konflux-info"
+}
+
+deploy_quay() {
+    : "${SKIP_QUAY:=true}"
+    if [[ "${SKIP_QUAY}" == "true" ]]; then
+        echo "⏭️  Skipping Quay deployment" >&2
+        return 0
+    fi
+    kubectl apply -k "${script_path}/dependencies/quay"
+
+    local POSTGRES_PASSWORD
+    if ! kubectl get secret quay-postgres-creds -n quay &>/dev/null; then
+        echo "🔑 Creating quay-postgres-creds secret" >&2
+        POSTGRES_PASSWORD="$(openssl rand -base64 20 | tr '+/' '-_' | tr -d '\n' | tr -d '=')"
+        kubectl create secret generic quay-postgres-creds \
+            --namespace=quay \
+            --from-literal=password="$POSTGRES_PASSWORD"
+    else
+        POSTGRES_PASSWORD="$(kubectl get secret quay-postgres-creds -n quay \
+            -o jsonpath='{.data.password}' | base64 -d)"
+    fi
+
+    if ! kubectl get secret quay-config -n quay &>/dev/null; then
+        echo "🔑 Creating quay-config secret" >&2
+        local DATABASE_SECRET_KEY SECRET_KEY config
+        DATABASE_SECRET_KEY="$(openssl rand -hex 16)"
+        SECRET_KEY="$(openssl rand -hex 16)"
+        config="$(sed -e "s|\${POSTGRES_PASSWORD}|${POSTGRES_PASSWORD}|g" \
+                      -e "s|\${DATABASE_SECRET_KEY}|${DATABASE_SECRET_KEY}|g" \
+                      -e "s|\${SECRET_KEY}|${SECRET_KEY}|g" \
+                      "${script_path}/dependencies/quay/quay-config.yaml.tpl")"
+        kubectl create secret generic quay-config \
+            --namespace=quay \
+            --from-literal=config.yaml="$config"
+    fi
+
+    retry "kubectl wait --for=condition=Ready --timeout=240s -n quay -l app=quay-postgres pod" \
+          "Quay Postgres did not become available within the allocated time"
+    retry "kubectl wait --for=condition=Ready --timeout=240s -n quay -l app=quay-redis pod" \
+          "Quay Redis did not become available within the allocated time"
+    retry "kubectl wait --for=condition=Ready --timeout=240s -n quay -l app=quay pod" \
+          "Quay did not become available within the allocated time"
+
+    init_quay_admin
+}
+
+init_quay_admin() {
+    : "${SKIP_QUAY_ADMIN_INIT:=false}"
+    if [[ "${SKIP_QUAY_ADMIN_INIT}" == "true" ]]; then
+        echo "⏭️  Skipping Quay admin initialization" >&2
+        return 0
+    fi
+
+    for cmd in curl jq; do
+        if ! command -v "$cmd" &>/dev/null; then
+            echo "❌ '$cmd' is required for Quay admin initialization but not found" >&2
+            return 1
+        fi
+    done
+
+    if kubectl get secret quay-admin-token -n quay &>/dev/null; then
+        echo "✅ Quay admin already initialized (quay-admin-token secret exists)" >&2
+        return 0
+    fi
+
+    echo "👤 Initializing Quay admin user..." >&2
+
+    local ADMIN_USER="quayadmin"
+    local ADMIN_PASSWORD="password"  # gitleaks:allow -- throwaway ephemeral Kind cluster credential
+    local ADMIN_EMAIL="admin@local.dev"
+
+    local QUAY_URL="https://localhost:8443"
+
+    echo "⏳ Waiting for Quay API to be reachable from host..." >&2
+    local i
+    for i in $(seq 1 30); do
+        if curl -4 -sk --connect-timeout 2 "${QUAY_URL}/health/instance" 2>/dev/null \
+            | grep -q '"status_code":200'; then
+            echo "✅ Quay API is reachable" >&2
+            break
+        fi
+        if [[ "$i" -eq 30 ]]; then
+            echo "❌ Quay API not reachable from host within 60s" >&2
+            return 1
+        fi
+        sleep 2
+    done
+
+    echo "📡 Creating admin user '${ADMIN_USER}'..." >&2
+    local INIT_RESPONSE
+    INIT_RESPONSE=$(curl -4 -sk --connect-timeout 10 -X POST "${QUAY_URL}/api/v1/user/initialize" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"username\": \"${ADMIN_USER}\",
+            \"password\": \"${ADMIN_PASSWORD}\",
+            \"email\": \"${ADMIN_EMAIL}\",
+            \"access_token\": true
+        }")
+
+    local TOKEN
+    if echo "$INIT_RESPONSE" | jq -e '.access_token' &>/dev/null; then
+        TOKEN=$(echo "$INIT_RESPONSE" | jq -r '.access_token')
+        echo "✅ Admin user '${ADMIN_USER}' created" >&2
+    else
+        echo "❌ Failed to create admin: $(echo "$INIT_RESPONSE" | jq -r '.message // "unknown"')" >&2
+        echo "❌ Response: ${INIT_RESPONSE}" >&2
+        return 1
+    fi
+
+    kubectl create secret generic quay-admin-token --namespace=quay \
+        --from-literal=token="${TOKEN}" \
+        --from-literal=username="${ADMIN_USER}" \
+        --from-literal=password="${ADMIN_PASSWORD}"
+    echo "🔑 Admin token stored in secret 'quay-admin-token' in namespace 'quay'" >&2
 }
 
 retry() {

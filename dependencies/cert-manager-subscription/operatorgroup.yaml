@@ -1,0 +1,9 @@
+# OperatorGroup for cert-manager Operator (AllNamespaces mode for v1.15.0+)
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: openshift-cert-manager-operator
+  namespace: cert-manager-operator
+spec:
+  targetNamespaces: []
+

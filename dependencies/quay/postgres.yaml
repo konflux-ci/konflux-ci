@@ -1,0 +1,79 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: quay-postgres-init
+  namespace: quay
+data:
+  setup-extensions.sh: |
+    #!/bin/bash
+    psql -d "${POSTGRESQL_DATABASE}" -U "${POSTGRESQL_USER}" -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quay-postgres
+  namespace: quay
+  labels:
+    app: quay-postgres
+  annotations:
+    ignore-check.kube-linter.io/no-read-only-root-fs: >-
+      PostgreSQL sclorg image writes to /var/lib/pgsql/passwd at startup
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quay-postgres
+  template:
+    metadata:
+      labels:
+        app: quay-postgres
+    spec:
+      containers:
+      - name: postgres
+        image: quay.io/sclorg/postgresql-15-c9s
+        securityContext:
+          runAsNonRoot: true
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        env:
+        - name: POSTGRESQL_USER
+          value: quay
+        - name: POSTGRESQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: quay-postgres-creds
+              key: password
+        - name: POSTGRESQL_DATABASE
+          value: quay
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: init-scripts
+          mountPath: /opt/app-root/src/postgresql-start
+          readOnly: true
+        - name: data
+          mountPath: /var/lib/pgsql/data
+      volumes:
+      - name: init-scripts
+        configMap:
+          name: quay-postgres-init
+      - name: data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quay-postgres
+  namespace: quay
+spec:
+  selector:
+    app: quay-postgres
+  ports:
+  - port: 5432
+    targetPort: 5432

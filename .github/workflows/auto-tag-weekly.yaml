@@ -4,8 +4,15 @@ on:
   # Run weekly on Monday at 2 AM UTC (not on weekends as EC might block releases)
   schedule:
     - cron: '0 2 * * 1'
-  # Allow manual triggering
+  # Allow manual triggering (optionally for a single branch)
   workflow_dispatch:
+    inputs:
+      branch:
+        description: >-
+          Single branch to tag (e.g. main or release-0.0).
+          Leave empty to tag all branches from list.
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -25,8 +32,28 @@ jobs:
 
       - name: List branches
         id: set
+        env:
+          BRANCH_INPUT: ${{ github.event.inputs.branch }}
         run: |
-          BRANCHES=$(.github/scripts/list-release-branches.sh)
+          if [ -n "${BRANCH_INPUT}" ]; then
+            if [[ ! "${BRANCH_INPUT}" =~ ^(main|release-[0-9]+\.[0-9]+)$ ]]; then
+              echo "Error: branch name must be 'main' or 'release-x.y' (e.g. release-0.0)" >&2
+              BRANCHES='[]'
+              echo "branches=$BRANCHES" >> "$GITHUB_OUTPUT"
+              echo "Branches to tag: $BRANCHES"
+              exit 1
+            fi
+            if ! git rev-parse "origin/${BRANCH_INPUT}" &>/dev/null; then
+              echo "Error: branch '${BRANCH_INPUT}' not found on remote" >&2
+              BRANCHES='[]'
+              echo "branches=$BRANCHES" >> "$GITHUB_OUTPUT"
+              echo "Branches to tag: $BRANCHES"
+              exit 1
+            fi
+            BRANCHES=$(echo "${BRANCH_INPUT}" | jq -R -c '[.]')
+          else
+            BRANCHES=$(.github/scripts/list-release-branches.sh)
+          fi
           echo "branches=$BRANCHES" >> "$GITHUB_OUTPUT"
           echo "Branches to tag: $BRANCHES"
 
