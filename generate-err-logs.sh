@@ -1,5 +1,6 @@
-#!/bin/bash -e
-
+#!/bin/bash
+# Best-effort log collection: do not exit on first failure so the workflow is not failed.
+set +e
 
 main() {
     echo "Generating error logs" >&2
@@ -220,4 +221,5 @@ kubectl get pods -n user-ns2 -o name \
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     main "$@"
+    exit 0
 fi

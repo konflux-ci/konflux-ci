@@ -87,17 +87,20 @@ Kind cluster, use `OPERATOR_INSTALL_METHOD=build` with `deploy-local.sh`.
 ## Automated E2E Tests
 
 The repository includes automated tests that run in GitHub Actions on both x86_64
-and ARM64 architectures:
+and ARM64 architectures. There are **two test suites** in `test/go-tests`:
 
-- **x86_64 E2E Tests**: Defined in `.github/workflows/operator-test-e2e.yaml`,
-  runs on `ubuntu-latest` and executes the full E2E test suite
-- **ARM64 Integration Tests**: Defined in
-  `.github/workflows/operator-integration-test-arm.yaml`, runs on
-  `ubuntu-24.04-arm` and executes integration tests
+- **Integration tests** (suite "GoTests"): Quick checks that do not require full E2E
+  secrets. Run with `cd test/go-tests && go test .`
+- **E2E tests** (suite "Konflux E2E"): Full end-to-end flow (application, component,
+  build, integration test, release). Requires cluster and E2E credentials. Copy
+  `test/e2e/e2e.env.template` to `test/e2e/e2e.env`, fill in the values, then
+  source it and run (from repo root; no cd, repeat as needed): `source test/e2e/e2e.env` then `go -C test/go-tests test ./tests/konflux-demo -v`
+  The E2E test code lives in `test/go-tests/tests/konflux-demo/` and is maintained in this repo.
+  The release-service-catalog revision is read from `test/e2e/release-service-catalog-revision` when not set in env (so your copy of `e2e.env` does not drift).
 
-Both workflows run in parallel when changes to the `operator/` directory are
-detected. The x86_64 workflow runs the full E2E test suite, while the ARM64
-workflow runs integration tests to validate ARM64 compatibility.
+Workflow `.github/workflows/operator-test-e2e.yaml` runs both suites when
+operator-related changes are detected: first integration (`go test .`), then E2E
+(env set from secrets, then the same `go test` command).
 
 ## ARM64 Testing
 
@@ -128,39 +131,34 @@ To validate changes more quickly, run the E2E test, which validates that:
 
 ## Setup
 
-Create the deploy-local.sh configuration:
+Create the deploy configuration (for deploying Konflux):
 ```bash
 cp scripts/deploy-local.env.template scripts/deploy-local.env
 # Edit scripts/deploy-local.env with your GitHub App credentials
 ```
 
-Or just export the E2E test environment variables:
+Create the E2E test configuration (only needed when running E2E tests):
 ```bash
-# quay.io org where the built and released image will be pushed to
-export QUAY_ORGANIZATION=""
-# quay.io org OAuth access token
-export QUAY_TOKEN=""
-# Content of quay.io credentials config for the robot account with access to $QUAY_ORGANIZATION/test-images
-export QUAY_DOCKERCONFIGJSON="$(< /path/to/docker/config.json)"
-# URL of the smee.io channel you created
-export SMEE_CHANNEL=""
-# Name of the GitHub org/username where https://github.com/konflux-ci/testrepo is forked
-export GH_ORG=""
-# GitHub token with permissions to merge PRs in your GH_ORG
-export GH_TOKEN=""
+cp test/e2e/e2e.env.template test/e2e/e2e.env
+# Edit test/e2e/e2e.env with GH_ORG, GH_TOKEN, QUAY_DOCKERCONFIGJSON, etc.
 ```
+
+See `test/e2e/e2e.env.template` for all E2E variables and descriptions. You do not need to set `RELEASE_SERVICE_CATALOG_REVISION` in `e2e.env`; it is read from `test/e2e/release-service-catalog-revision` when unset.
 
 ## Running the test
 
-Run (from the root of the repository directory):
+Deploy Konflux and test resources (in one terminal):
 ```bash
 ./scripts/deploy-local.sh
 ./deploy-test-resources.sh
-./test/e2e/run-e2e.sh
 ```
 
-Note: The `deploy-local.sh` script reads `SMEE_CHANNEL`, `QUAY_TOKEN`, and
-`QUAY_ORGANIZATION` from the environment or from `scripts/deploy-local.env` to
-configure E2E prerequisites (secrets, Smee, image-controller).
+Run the E2E tests (source E2E env in the same terminal where you run the test, or in a second terminal). From repo root:
+```bash
+source test/e2e/e2e.env
+go -C test/go-tests test ./tests/konflux-demo -v
+```
 
-The source code of the test is located [.](https://github.com/konflux-ci/e2e-tests/tree/main/tests/konflux-demo)
+Note: The deploy step uses `scripts/deploy-local.env` (GitHub App, Quay for image-controller, Smee). The E2E step uses `test/e2e/e2e.env` (GitHub/Quay for E2E flows only). They are separate so you never load deploy secrets into the shell where you only run tests.
+
+The source code of the E2E tests is in this repo under `test/go-tests/tests/konflux-demo/`.
