@@ -83,10 +83,16 @@ spec:
                 drop:
                 - ALL
               readOnlyRootFilesystem: true
+            volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           restartPolicy: OnFailure
           securityContext:
             runAsNonRoot: true
             seccompProfile:
               type: RuntimeDefault
           serviceAccountName: segment-bridge
+          volumes:
+          - name: tmp
+            emptyDir: {}
   schedule: 0 * * * *
