@@ -35,20 +35,24 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/segmentbridge"
 	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/consolelink"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/hashedconfigmap"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/hashedsecret"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/ingress"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/oauth2proxy"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/segment"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
 
@@ -79,6 +83,12 @@ const (
 	dexConfigKey           = "config.yaml"
 	dexConfigMapLabel      = "app.kubernetes.io/managed-by-konflux-ui-reconciler"
 	dexConfigMapVolumeName = "dex"
+
+	// Segment Secret constants
+	segmentSecretBaseName = "segment-bridge-config"
+	segmentSecretVolume   = "segment-bridge-config"
+	segmentKeyWriteKey    = "key"
+	segmentKeyAPIURL      = "url"
 )
 
 // UICleanupGVKs defines which resource types should be cleaned up when they are
@@ -110,14 +120,16 @@ var UIClusterScopedAllowList = tracking.ClusterScopedAllowList{
 // KonfluxUIReconciler reconciles a KonfluxUI object
 type KonfluxUIReconciler struct {
 	client.Client
-	Scheme      *runtime.Scheme
-	ObjectStore *manifests.ObjectStore
-	ClusterInfo *clusterinfo.Info
+	Scheme               *runtime.Scheme
+	ObjectStore          *manifests.ObjectStore
+	ClusterInfo          *clusterinfo.Info
+	GetDefaultSegmentKey func() string
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxuis,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxuis/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxuis/finalizers,verbs=update
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxsegmentbridges,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;patch;delete
@@ -186,8 +198,15 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return errHandler.HandleWithReason(ctx, err, condition.ReasonConfigMapFailed, "reconcile Dex ConfigMap")
 	}
 
+	// Reconcile the Segment config Secret for the UI frontend.
+	// Creates a content-hashed Secret so the proxy deployment rolls out on changes.
+	segmentSecretName, err := r.reconcileSegmentSecret(ctx, tc)
+	if err != nil {
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonSecretCreationFailed, "reconcile segment config secret")
+	}
+
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, tc, ui, dexConfigMapName, endpoint); err != nil {
+	if err := r.applyManifests(ctx, tc, ui, dexConfigMapName, segmentSecretName, endpoint); err != nil {
 		return errHandler.HandleApplyError(ctx, err)
 	}
 
@@ -267,8 +286,9 @@ func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, tc *tra
 // applyManifests loads and applies all embedded manifests to the cluster.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
 // dexConfigMapName is the name of the Dex ConfigMap to use (empty if not configured).
+// segmentSecretName is the name of the content-hashed Segment Secret (empty if not configured).
 // endpoint is the base URL used to configure oauth2-proxy.
-func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, dexConfigMapName string, endpoint *url.URL) error {
+func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, dexConfigMapName, segmentSecretName string, endpoint *url.URL) error {
 	objects, err := r.ObjectStore.GetForComponent(manifests.UI)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for UI: %w", err)
@@ -277,7 +297,7 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 	for _, obj := range objects {
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
-			if err := applyUIDeploymentCustomizations(deployment, ui, r.ClusterInfo, dexConfigMapName, endpoint); err != nil {
+			if err := applyUIDeploymentCustomizations(deployment, ui, r.ClusterInfo, dexConfigMapName, segmentSecretName, endpoint); err != nil {
 				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
 			}
 		}
@@ -296,7 +316,7 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 }
 
 // applyUIDeploymentCustomizations applies user-defined customizations to UI deployments.
-func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv1alpha1.KonfluxUI, clusterInfo *clusterinfo.Info, dexConfigMapName string, endpoint *url.URL) error {
+func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv1alpha1.KonfluxUI, clusterInfo *clusterinfo.Info, dexConfigMapName, segmentSecretName string, endpoint *url.URL) error {
 	openShiftLoginEnabled := isOpenShiftLoginEnabled(ui, clusterInfo)
 
 	switch deployment.Name {
@@ -305,7 +325,7 @@ func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv
 		deployment.Spec.Replicas = &proxySpec.Replicas
 		// Build oauth2-proxy options based on endpoint URL and OpenShift login state
 		oauth2ProxyOpts := buildOAuth2ProxyOptions(endpoint, openShiftLoginEnabled)
-		if err := buildProxyOverlay(ui.Spec.Proxy, oauth2ProxyOpts...).ApplyToDeployment(deployment); err != nil {
+		if err := buildProxyOverlay(ui.Spec.Proxy, segmentSecretName, oauth2ProxyOpts...).ApplyToDeployment(deployment); err != nil {
 			return err
 		}
 	case dexDeploymentName:
@@ -344,8 +364,9 @@ func applyUIServiceCustomizations(service *corev1.Service, ui *konfluxv1alpha1.K
 }
 
 // buildProxyOverlay builds the pod overlay for the proxy deployment.
+// segmentSecretName is the content-hashed Secret name (empty if segment is not configured).
 // oauth2ProxyOpts are applied to the oauth2-proxy container before user-provided overrides.
-func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, oauth2ProxyOpts ...customization.ContainerOption) *customization.PodOverlay {
+func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, segmentSecretName string, oauth2ProxyOpts ...customization.ContainerOption) *customization.PodOverlay {
 	// Create CA bundle volume that will be mounted in oauth2-proxy container.
 	// The Secret is created by cert-manager from the oauth2-proxy-cert Certificate resource
 	// (see operator/upstream-kustomizations/ui/dex/dex.yaml).
@@ -375,20 +396,30 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, oauth2ProxyOpt
 		},
 	}
 
+	// Build the list of pod-level options
+	podOpts := []customization.PodOverlayOption{
+		customization.WithVolumes(caVolume),
+	}
+
+	// Update the segment-bridge-config volume's Secret name when segment is configured.
+	// This triggers a deployment rollout because the volume reference changes.
+	if segmentSecretName != "" {
+		podOpts = append(podOpts, customization.WithSecretVolumeUpdate(segmentSecretVolume, segmentSecretName))
+	}
+
 	if spec == nil {
-		return customization.NewPodOverlay(
-			customization.WithVolumes(caVolume),
+		podOpts = append(podOpts,
 			customization.WithContainerBuilder(oauth2ProxyContainerName, oauth2ProxyOpts...)(
 				customization.DeploymentContext{},
 			),
 		)
+		return customization.NewPodOverlay(podOpts...)
 	}
 
 	// Append user overrides after oauth2proxy options
 	oauth2ProxyOpts = append(oauth2ProxyOpts, customization.FromContainerSpec(spec.OAuth2Proxy))
 
-	return customization.NewPodOverlay(
-		customization.WithVolumes(caVolume),
+	podOpts = append(podOpts,
 		customization.WithContainerBuilder(
 			nginxContainerName,
 			customization.FromContainerSpec(spec.Nginx),
@@ -398,6 +429,7 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, oauth2ProxyOpt
 			oauth2ProxyOpts...,
 		)(customization.DeploymentContext{Replicas: spec.Replicas}),
 	)
+	return customization.NewPodOverlay(podOpts...)
 }
 
 // buildOAuth2ProxyOptions builds the container options for oauth2-proxy configuration.
@@ -565,6 +597,60 @@ func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *kon
 	return result.ConfigMapName, nil
 }
 
+// reconcileSegmentSecret creates a content-hashed Secret in the konflux-ui namespace
+// containing the Segment write key and API URL. The Secret is mounted into the
+// nginx container.
+//
+// The Secret name includes a hash suffix derived from its content, so whenever the
+// Segment key or API URL changes the name changes, which updates the volume reference
+// in the proxy Deployment and triggers a rollout.
+//
+// Returns the full Secret name (base + hash) for the volume reference, or empty string
+// if no Segment key is configured (the tracking client will clean up any stale Secret).
+func (r *KonfluxUIReconciler) reconcileSegmentSecret(ctx context.Context, tc *tracking.Client) (string, error) {
+	log := logf.FromContext(ctx)
+
+	// Fetch the KonfluxSegmentBridge CR to read the segment configuration
+	segmentBridge := &konfluxv1alpha1.KonfluxSegmentBridge{}
+	if err := r.Get(ctx, client.ObjectKey{Name: segmentbridge.CRName}, segmentBridge); err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			return "", fmt.Errorf("failed to get KonfluxSegmentBridge CR: %w", err)
+		}
+		log.Info("KonfluxSegmentBridge CR not found, skipping segment config secret")
+		return "", nil
+	}
+
+	// Resolve the write key (CR spec → build-time default → empty)
+	segmentKey, source := segment.ResolveWriteKey(segmentBridge.Spec.GetSegmentKey(), r.GetDefaultSegmentKey())
+	if !segment.LogWriteKeyResolution(log, segmentKey, source) {
+		return "", nil
+	}
+
+	apiURL := segmentBridge.Spec.GetSegmentAPIURL()
+
+	// Create the content-hashed Secret and apply it via the tracking client
+	secret := hashedsecret.Build(
+		segmentSecretBaseName,
+		uiNamespace, map[string]string{
+			segmentKeyWriteKey: segmentKey,
+			segmentKeyAPIURL:   apiURL,
+		},
+	)
+
+	log.Info("Applying segment config secret", "name", secret.Name, "apiURL", apiURL)
+	if err := tc.ApplyOwned(ctx, secret); err != nil {
+		return "", fmt.Errorf("failed to apply segment config secret: %w", err)
+	}
+
+	return secret.Name, nil
+}
+
+// mapSegmentBridgeToUI maps KonfluxSegmentBridge events to KonfluxUI reconcile requests
+// so that changes to the Segment configuration trigger a UI reconcile.
+func (r *KonfluxUIReconciler) mapSegmentBridgeToUI(_ context.Context, _ client.Object) []ctrl.Request {
+	return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: CRName}}}
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
@@ -582,6 +668,10 @@ func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&rbacv1.ClusterRole{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Owns(&rbacv1.ClusterRoleBinding{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Owns(&networkingv1.Ingress{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
+		// Watch KonfluxSegmentBridge CR so Segment config changes trigger a UI reconcile
+		Watches(&konfluxv1alpha1.KonfluxSegmentBridge{},
+			handler.EnqueueRequestsFromMapFunc(r.mapSegmentBridgeToUI),
+			builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Complete(r)
 }
 

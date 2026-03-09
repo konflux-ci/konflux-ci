@@ -37,6 +37,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/segment"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
 
@@ -159,18 +160,10 @@ func (r *KonfluxSegmentBridgeReconciler) applyManifests(ctx context.Context, tc 
 func (r *KonfluxSegmentBridgeReconciler) reconcileSegmentBridgeSecret(ctx context.Context, tc *tracking.Client, spec *konfluxv1alpha1.KonfluxSegmentBridgeSpec) error {
 	log := logf.FromContext(ctx)
 
-	segmentKey := spec.GetSegmentKey()
-	keySource := "cr"
-	if segmentKey == "" {
-		segmentKey = r.GetDefaultSegmentKey()
-		keySource = "build-time-default"
-	}
-	if segmentKey == "" {
-		log.Info("No Segment write key configured (neither CR nor build-time default); skipping Secret creation")
+	segmentKey, source := segment.ResolveWriteKey(spec.GetSegmentKey(), r.GetDefaultSegmentKey())
+	if !segment.LogWriteKeyResolution(log, segmentKey, source) {
 		return nil
 	}
-
-	log.Info("Resolved Segment write key", "source", keySource)
 
 	batchURL, err := url.JoinPath(spec.GetSegmentAPIURL(), "batch")
 	if err != nil {

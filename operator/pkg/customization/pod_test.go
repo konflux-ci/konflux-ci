@@ -531,6 +531,239 @@ func TestComplexScenario(t *testing.T) {
 	})
 }
 
+func TestWithConfigMapVolumeUpdate(t *testing.T) {
+	t.Run("updates existing configmap volume reference", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		p := NewPodOverlay(
+			WithConfigMapVolumeUpdate("dex-config", "dex-config-abc1234567"),
+		)
+
+		template := &corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "app", Image: "app:v1"}},
+				Volumes: []corev1.Volume{
+					{
+						Name: "dex-config",
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "dex-config-old"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToPodTemplateSpec(template)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(template.Spec.Volumes[0].ConfigMap.Name).To(gomega.Equal("dex-config-abc1234567"))
+	})
+
+	t.Run("ignores volumes without configmap source", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		p := NewPodOverlay(
+			WithConfigMapVolumeUpdate("my-vol", "new-cm"),
+		)
+
+		template := &corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "app", Image: "app:v1"}},
+				Volumes: []corev1.Volume{
+					{
+						Name: "my-vol",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToPodTemplateSpec(template)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		// Volume source should remain unchanged
+		g.Expect(template.Spec.Volumes[0].EmptyDir).NotTo(gomega.BeNil())
+		g.Expect(template.Spec.Volumes[0].ConfigMap).To(gomega.BeNil())
+	})
+
+	t.Run("does not affect non-matching volumes", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		p := NewPodOverlay(
+			WithConfigMapVolumeUpdate("target-vol", "new-cm"),
+		)
+
+		template := &corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "app", Image: "app:v1"}},
+				Volumes: []corev1.Volume{
+					{
+						Name: "other-vol",
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "original-cm"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToPodTemplateSpec(template)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(template.Spec.Volumes[0].ConfigMap.Name).To(gomega.Equal("original-cm"))
+	})
+}
+
+func TestWithSecretVolumeUpdate(t *testing.T) {
+	t.Run("updates existing secret volume reference", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		p := NewPodOverlay(
+			WithSecretVolumeUpdate("segment-config", "segment-config-abc1234567"),
+		)
+
+		template := &corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "nginx", Image: "nginx:1.21"}},
+				Volumes: []corev1.Volume{
+					{
+						Name: "segment-config",
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: "segment-config-old",
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToPodTemplateSpec(template)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(template.Spec.Volumes[0].Secret.SecretName).To(gomega.Equal("segment-config-abc1234567"))
+	})
+
+	t.Run("preserves other secret volume fields", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		optional := true
+		p := NewPodOverlay(
+			WithSecretVolumeUpdate("my-secret", "my-secret-new"),
+		)
+
+		template := &corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "app", Image: "app:v1"}},
+				Volumes: []corev1.Volume{
+					{
+						Name: "my-secret",
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: "my-secret-old",
+								Optional:   &optional,
+								Items: []corev1.KeyToPath{
+									{Key: "key", Path: "key"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToPodTemplateSpec(template)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		vol := template.Spec.Volumes[0].Secret
+		g.Expect(vol.SecretName).To(gomega.Equal("my-secret-new"))
+		g.Expect(*vol.Optional).To(gomega.BeTrue(), "optional field should be preserved")
+		g.Expect(vol.Items).To(gomega.HaveLen(1), "items should be preserved")
+		g.Expect(vol.Items[0].Key).To(gomega.Equal("key"))
+	})
+
+	t.Run("ignores volumes without secret source", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		p := NewPodOverlay(
+			WithSecretVolumeUpdate("my-vol", "new-secret"),
+		)
+
+		template := &corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "app", Image: "app:v1"}},
+				Volumes: []corev1.Volume{
+					{
+						Name: "my-vol",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToPodTemplateSpec(template)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(template.Spec.Volumes[0].EmptyDir).NotTo(gomega.BeNil())
+		g.Expect(template.Spec.Volumes[0].Secret).To(gomega.BeNil())
+	})
+
+	t.Run("does not affect non-matching volumes", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		p := NewPodOverlay(
+			WithSecretVolumeUpdate("target-vol", "new-secret"),
+		)
+
+		template := &corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "app", Image: "app:v1"}},
+				Volumes: []corev1.Volume{
+					{
+						Name: "other-vol",
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{SecretName: "original-secret"},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToPodTemplateSpec(template)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(template.Spec.Volumes[0].Secret.SecretName).To(gomega.Equal("original-secret"))
+	})
+
+	t.Run("can update multiple secret volumes", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		p := NewPodOverlay(
+			WithSecretVolumeUpdate("secret-a", "secret-a-new"),
+			WithSecretVolumeUpdate("secret-b", "secret-b-new"),
+		)
+
+		template := &corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "app", Image: "app:v1"}},
+				Volumes: []corev1.Volume{
+					{
+						Name: "secret-a",
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{SecretName: "secret-a-old"},
+						},
+					},
+					{
+						Name: "secret-b",
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{SecretName: "secret-b-old"},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToPodTemplateSpec(template)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(template.Spec.Volumes[0].Secret.SecretName).To(gomega.Equal("secret-a-new"))
+		g.Expect(template.Spec.Volumes[1].Secret.SecretName).To(gomega.Equal("secret-b-new"))
+	})
+}
+
 // TestApplyToPodTemplateSpec_ContainerDeletionBug tests for a regression where
 // applying pod-level customizations (like ServiceAccountName) would accidentally
 // delete all containers from the deployment.

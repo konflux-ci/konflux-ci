@@ -18,10 +18,74 @@ package segment
 
 import (
 	"testing"
+
+	"github.com/go-logr/logr"
+	"github.com/onsi/gomega"
 )
 
 func TestGetDefaultWriteKey(t *testing.T) {
-	if got := GetDefaultWriteKey(); got != "" {
-		t.Errorf("GetDefaultWriteKey() should return empty in source, got %q", got)
+	g := gomega.NewWithT(t)
+	g.Expect(GetDefaultWriteKey()).To(gomega.BeEmpty(), "should return empty in source (no ldflags)")
+}
+
+func TestResolveWriteKey(t *testing.T) {
+	tests := []struct {
+		name       string
+		crKey      string
+		defaultKey string
+		wantKey    string
+		wantSource string
+	}{
+		{
+			name:       "CR key takes precedence",
+			crKey:      "cr-key",
+			wantKey:    "cr-key",
+			wantSource: "cr",
+		},
+		{
+			name:       "CR key takes precedence over default",
+			crKey:      "cr-key",
+			defaultKey: "build-key",
+			wantKey:    "cr-key",
+			wantSource: "cr",
+		},
+		{
+			name:       "falls back to default when CR key is empty",
+			crKey:      "",
+			defaultKey: "build-key",
+			wantKey:    "build-key",
+			wantSource: "build-time-default",
+		},
+		{
+			name:       "returns empty when neither is set",
+			crKey:      "",
+			defaultKey: "",
+			wantKey:    "",
+			wantSource: "",
+		},
 	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+
+			gotKey, gotSource := ResolveWriteKey(tt.crKey, tt.defaultKey)
+			g.Expect(gotKey).To(gomega.Equal(tt.wantKey))
+			g.Expect(gotSource).To(gomega.Equal(tt.wantSource))
+		})
+	}
+}
+
+func TestLogWriteKeyResolution(t *testing.T) {
+	log := logr.Discard()
+
+	t.Run("returns false when key is empty", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		g.Expect(LogWriteKeyResolution(log, "", "")).To(gomega.BeFalse())
+	})
+
+	t.Run("returns true when key is present", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		g.Expect(LogWriteKeyResolution(log, "some-key", "cr")).To(gomega.BeTrue())
+	})
 }
