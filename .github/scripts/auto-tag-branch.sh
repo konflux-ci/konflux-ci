@@ -67,6 +67,21 @@ if [ -z "$LATEST" ]; then
   exit 1
 fi
 
+# If LATEST is an RC, prefer the corresponding stable if it exists (sort -V orders stable before RC).
+# If the stable exists but is not reachable from HEAD, we cannot release this RC as final — error out.
+if [[ "$LATEST" =~ ^(v[0-9]+\.[0-9]+\.[0-9]+)-rc\.([0-9]+)$ ]]; then
+  BASE="${BASH_REMATCH[1]}"
+  if git rev-parse "$BASE" &>/dev/null; then
+    if git merge-base --is-ancestor "$BASE" HEAD 2>/dev/null; then
+      echo "Using stable tag ${BASE} (reachable) instead of RC ${LATEST}"
+      LATEST="$BASE"
+    else
+      echo "Error: Release candidate ${LATEST} has a final release ${BASE}, but ${BASE} is not reachable from this branch. Cannot auto-tag."
+      exit 1
+    fi
+  fi
+fi
+
 echo "Latest tag for stream ${STREAM}: $LATEST"
 
 if [[ "$LATEST" =~ $STABLE_PATTERN ]]; then
