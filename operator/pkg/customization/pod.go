@@ -31,6 +31,8 @@ type PodOverlay struct {
 	containerOverlays map[string]*corev1.Container
 	// configMapVolumeUpdates holds updates to existing ConfigMap volume references
 	configMapVolumeUpdates map[string]string
+	// secretVolumeUpdates holds updates to existing Secret volume references
+	secretVolumeUpdates map[string]string
 }
 
 // PodOverlayOption is a functional option for configuring a PodOverlay.
@@ -127,6 +129,18 @@ func WithConfigMapVolumeUpdate(volumeName, configMapName string) PodOverlayOptio
 	}
 }
 
+// WithSecretVolumeUpdate updates an existing Secret volume's Secret name.
+// This modifies the volume in-place during ApplyToPodTemplateSpec, preserving other fields
+// like items, defaultMode, and optional.
+func WithSecretVolumeUpdate(volumeName, secretName string) PodOverlayOption {
+	return func(p *PodOverlay) {
+		if p.secretVolumeUpdates == nil {
+			p.secretVolumeUpdates = make(map[string]string)
+		}
+		p.secretVolumeUpdates[volumeName] = secretName
+	}
+}
+
 // WithServiceAccountName sets the service account name for the pod.
 func WithServiceAccountName(name string) PodOverlayOption {
 	return func(p *PodOverlay) {
@@ -187,6 +201,9 @@ func (p *PodOverlay) ApplyToPodTemplateSpec(template *corev1.PodTemplateSpec) er
 	// Apply ConfigMap volume updates
 	applyConfigMapVolumeUpdates(template.Spec.Volumes, p.configMapVolumeUpdates)
 
+	// Apply Secret volume updates
+	applySecretVolumeUpdates(template.Spec.Volumes, p.secretVolumeUpdates)
+
 	return nil
 }
 
@@ -239,6 +256,19 @@ func applyConfigMapVolumeUpdates(volumes []corev1.Volume, updates map[string]str
 		vol := &volumes[i]
 		if configMapName, ok := updates[vol.Name]; ok && vol.ConfigMap != nil {
 			vol.ConfigMap.Name = configMapName
+		}
+	}
+}
+
+// applySecretVolumeUpdates updates Secret volume references in-place.
+func applySecretVolumeUpdates(volumes []corev1.Volume, updates map[string]string) {
+	if updates == nil {
+		return
+	}
+	for i := range volumes {
+		vol := &volumes[i]
+		if secretName, ok := updates[vol.Name]; ok && vol.Secret != nil {
+			vol.Secret.SecretName = secretName
 		}
 	}
 }

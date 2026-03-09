@@ -332,10 +332,11 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&ui.KonfluxUIReconciler{
-		Client:      mgr.GetClient(),
-		Scheme:      mgr.GetScheme(),
-		ObjectStore: objectStore,
-		ClusterInfo: clusterInfo,
+		Client:               mgr.GetClient(),
+		Scheme:               mgr.GetScheme(),
+		ObjectStore:          objectStore,
+		ClusterInfo:          clusterInfo,
+		GetDefaultSegmentKey: segment.GetDefaultWriteKey,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxUI")
 		os.Exit(1)
