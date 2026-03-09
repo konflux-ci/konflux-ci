@@ -14,8 +14,8 @@ jobs:
   create-pr:
     name: Create Community Operator PR
     runs-on: ubuntu-latest
-    # Skip pre-releases for automatic triggers
-    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
+    # Run for both stable and candidate (prerelease) releases; skip only for non-dispatch non-release events
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'release'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
