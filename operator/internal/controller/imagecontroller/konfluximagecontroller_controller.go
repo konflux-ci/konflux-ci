@@ -163,7 +163,7 @@ func (r *KonfluxImageControllerReconciler) SetupWithManager(mgr ctrl.Manager) er
 		return err
 	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&konfluxv1alpha1.KonfluxImageController{}).
+		For(&konfluxv1alpha1.KonfluxImageController{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Named("konfluximagecontroller").
 		// Use predicates to filter out unnecessary updates and prevent reconcile loops
 		// Deployments: watch spec changes AND readiness status changes

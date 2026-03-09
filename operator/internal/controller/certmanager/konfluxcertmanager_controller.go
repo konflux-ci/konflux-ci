@@ -163,7 +163,7 @@ func (r *KonfluxCertManagerReconciler) applyManifests(ctx context.Context, tc *t
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxCertManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&konfluxv1alpha1.KonfluxCertManager{}).
+		For(&konfluxv1alpha1.KonfluxCertManager{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Named("konfluxcertmanager").
 		// Watch for changes to cert-manager resources
 		Owns(&corev1.Secret{}, builder.WithPredicates(predicate.LabelsOrAnnotationsChangedPredicate)).

@@ -257,7 +257,7 @@ func (r *KonfluxIntegrationServiceReconciler) SetupWithManager(mgr ctrl.Manager)
 		return err
 	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&konfluxv1alpha1.KonfluxIntegrationService{}).
+		For(&konfluxv1alpha1.KonfluxIntegrationService{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Named("konfluxintegrationservice").
 		// Use predicates to filter out unnecessary updates and prevent reconcile loops
 		// Deployments: watch spec changes AND readiness status changes

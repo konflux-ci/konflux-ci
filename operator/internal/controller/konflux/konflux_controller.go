@@ -25,12 +25,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
+	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/applicationapi"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/buildservice"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/certmanager"
@@ -754,46 +756,25 @@ func (r *KonfluxReconciler) applyKonfluxSegmentBridge(ctx context.Context, tc *t
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&konfluxv1alpha1.Konflux{}).
+		For(&konfluxv1alpha1.Konflux{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Named("konflux").
-		// Watch sub-CRs for status changes to aggregate conditions on the parent Konflux CR
-		// All resource management (Deployments, Services, etc.) is handled by component-specific reconcilers
-		// Watch KonfluxBuildService for any changes to copy conditions to Konflux CR
-		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
-		Owns(&konfluxv1alpha1.KonfluxBuildService{}).
-		// Watch KonfluxIntegrationService for any changes to copy conditions to Konflux CR
-		Owns(&konfluxv1alpha1.KonfluxIntegrationService{}).
-		// Watch KonfluxReleaseService for any changes to copy conditions to Konflux CR
-		Owns(&konfluxv1alpha1.KonfluxReleaseService{}).
-		// Watch KonfluxUI for any changes to copy conditions to Konflux CR
-		Owns(&konfluxv1alpha1.KonfluxUI{}).
-		// Watch KonfluxRBAC for any changes to copy conditions to Konflux CR
-		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
-		Owns(&konfluxv1alpha1.KonfluxRBAC{}).
-		// Watch KonfluxInfo for any changes to copy conditions to Konflux CR
-		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
-		Owns(&konfluxv1alpha1.KonfluxInfo{}).
-		// Watch KonfluxNamespaceLister for any changes to copy conditions to Konflux CR
-		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
-		Owns(&konfluxv1alpha1.KonfluxNamespaceLister{}).
-		// Watch KonfluxEnterpriseContract for any changes to copy conditions to Konflux CR
-		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
-		Owns(&konfluxv1alpha1.KonfluxEnterpriseContract{}).
-		// Watch KonfluxApplicationAPI for any changes to copy conditions to Konflux CR
-		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
-		Owns(&konfluxv1alpha1.KonfluxApplicationAPI{}).
-		// Watch KonfluxImageController for any changes to copy conditions to Konflux CR
-		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
-		Owns(&konfluxv1alpha1.KonfluxImageController{}).
-		// Watch KonfluxCertManager for any changes to copy conditions to Konflux CR
-		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
-		Owns(&konfluxv1alpha1.KonfluxCertManager{}).
-		// Watch KonfluxInternalRegistry for any changes to copy conditions to Konflux CR
-		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
-		Owns(&konfluxv1alpha1.KonfluxInternalRegistry{}).
-		// Watch KonfluxDefaultTenant for any changes to copy conditions to Konflux CR
-		// No predicate needed - the For() GenerationChangedPredicate prevents self-triggering loops
-		Owns(&konfluxv1alpha1.KonfluxDefaultTenant{}).
-		Owns(&konfluxv1alpha1.KonfluxSegmentBridge{}).
+		// Watch sub-CRs to re-aggregate conditions on the parent Konflux CR when their spec changes.
+		// GenerationChangedPredicate filters out status-only updates to prevent reconcile loops:
+		// without it, every sub-CR Status().Update() would trigger a parent reconcile, which would
+		// call Status().Update() on Konflux, which would trigger another reconcile indefinitely.
+		Owns(&konfluxv1alpha1.KonfluxBuildService{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
+		Owns(&konfluxv1alpha1.KonfluxIntegrationService{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
+		Owns(&konfluxv1alpha1.KonfluxReleaseService{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
+		Owns(&konfluxv1alpha1.KonfluxUI{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
+		Owns(&konfluxv1alpha1.KonfluxRBAC{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
+		Owns(&konfluxv1alpha1.KonfluxInfo{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
+		Owns(&konfluxv1alpha1.KonfluxNamespaceLister{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
+		Owns(&konfluxv1alpha1.KonfluxEnterpriseContract{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
+		Owns(&konfluxv1alpha1.KonfluxApplicationAPI{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
+		Owns(&konfluxv1alpha1.KonfluxImageController{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
+		Owns(&konfluxv1alpha1.KonfluxCertManager{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
+		Owns(&konfluxv1alpha1.KonfluxInternalRegistry{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
+		Owns(&konfluxv1alpha1.KonfluxDefaultTenant{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
+		Owns(&konfluxv1alpha1.KonfluxSegmentBridge{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Complete(r)
 }

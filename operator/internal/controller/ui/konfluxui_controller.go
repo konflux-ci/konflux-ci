@@ -568,7 +568,7 @@ func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *kon
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&konfluxv1alpha1.KonfluxUI{}).
+		For(&konfluxv1alpha1.KonfluxUI{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Named("konfluxui").
 		// Use predicates to filter out unnecessary updates and prevent reconcile loops
 		// Deployments: watch spec changes AND readiness status changes

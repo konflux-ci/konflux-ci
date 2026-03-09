@@ -176,7 +176,7 @@ func reconcileSegmentBridgeSecret(ctx context.Context, tc *tracking.Client, segm
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxSegmentBridgeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&konfluxv1alpha1.KonfluxSegmentBridge{}).
+		For(&konfluxv1alpha1.KonfluxSegmentBridge{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Named("konfluxsegmentbridge").
 		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Owns(&corev1.ServiceAccount{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
