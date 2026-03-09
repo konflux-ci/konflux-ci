@@ -15,7 +15,7 @@ configMapGenerator:
     literals:
       - verify_ec_task_bundle=quay.io/enterprise-contract/ec-task-bundle@sha256:080172276d25afea2e90aaba8b24734b6243e8e3ff0ca8994c14cece263278e0
       - verify_ec_task_git_url=https://github.com/enterprise-contract/ec-cli.git
-      - verify_ec_task_git_revision=1d37a50fa72ee5af454ef64522a5f072ad6b05d6
+      - verify_ec_task_git_revision=36834a2c5036aeb4e6cdb9b7f40a6700b336c94f
       - verify_ec_task_git_pathInRepo=tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml
 
 patches:

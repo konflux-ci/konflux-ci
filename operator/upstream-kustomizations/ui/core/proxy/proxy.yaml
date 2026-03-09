@@ -159,6 +159,8 @@ spec:
             mountPath: /mnt/nginx-generated-location-config
           - name: static-content
             mountPath: /opt/app-root/src/static-content
+          - name: segment-bridge-config
+            mountPath: /opt/app-root/src/segment
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
@@ -221,6 +223,15 @@ spec:
             secretName: proxy
         - name: static-content
           emptyDir: {}
+        - name: segment-bridge-config
+          secret:
+            secretName: segment-bridge-config
+            optional: true
+            items:
+              - key: key
+                path: key
+              - key: url
+                path: url
 
 ---
 apiVersion: v1

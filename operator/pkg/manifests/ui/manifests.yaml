@@ -159,6 +159,10 @@ data:
             location = /404.html {
             }
 
+            location /segment {
+                default_type text/plain;
+            }
+
             location = /oauth2/auth {
                 internal;
                 proxy_pass       http://127.0.0.1:6000;
@@ -254,7 +258,7 @@ data:
     }
 kind: ConfigMap
 metadata:
-  name: proxy-mhd28tm54t
+  name: proxy-5f87fc6759
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -487,6 +491,8 @@ spec:
           name: nginx-generated-location-config
         - mountPath: /opt/app-root/src/static-content
           name: static-content
+        - mountPath: /opt/app-root/src/segment
+          name: segment-bridge-config
       - env:
         - name: OAUTH2_PROXY_CLIENT_SECRET
           valueFrom:
@@ -594,7 +600,7 @@ spec:
           items:
           - key: nginx.conf
             path: nginx.conf
-          name: proxy-mhd28tm54t
+          name: proxy-5f87fc6759
         name: proxy
       - configMap:
           defaultMode: 420
@@ -618,6 +624,15 @@ spec:
           secretName: proxy
       - emptyDir: {}
         name: static-content
+      - name: segment-bridge-config
+        secret:
+          items:
+          - key: key
+            path: key
+          - key: url
+            path: url
+          optional: true
+          secretName: segment-bridge-config
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate

@@ -133,6 +133,37 @@ spec:
       workspaces:
         - name: basic-auth
           workspace: git-auth
+    # The Segment write key is a client-side analytics token (similar to a
+    # Google Analytics tracking ID). It only permits writing telemetry events
+    # and is baked into the public binary via ldflags, so exposing it through
+    # a Tekton result is acceptable.
+    - name: read-segment-key
+      runAfter:
+        - init
+      taskSpec:
+        results:
+          - name: segment-write-key
+            description: Segment write key read from the default-segment-key secret
+        volumes:
+          - name: segment-key
+            secret:
+              secretName: default-segment-key
+              optional: true
+        steps:
+          - name: read-secret
+            image: registry.access.redhat.com/ubi10/ubi-minimal@sha256:a74a7a92d3069bfac09c6882087771fc7db59fa9d8e16f14f4e012fe7288554c
+            volumeMounts:
+              - name: segment-key
+                mountPath: /var/run/secrets/segment
+                readOnly: true
+            script: |
+              #!/usr/bin/env bash
+              KEY_FILE="/var/run/secrets/segment/SEGMENT_WRITE_KEY"
+              if [ -f "$KEY_FILE" ]; then
+                tr -d '\n' < "$KEY_FILE" > "$(results.segment-write-key.path)"
+              else
+                printf '' > "$(results.segment-write-key.path)"
+              fi
     - name: prefetch-dependencies
       params:
         - name: input
@@ -183,6 +214,7 @@ spec:
         - name: BUILD_ARGS
           value:
             - $(params.build-args[*])
+            - "SEGMENT_WRITE_KEY=$(tasks.read-segment-key.results.segment-write-key)"
         - name: BUILD_ARGS_FILE
           value: $(params.build-args-file)
         - name: PRIVILEGED_NESTED
@@ -205,6 +237,7 @@ spec:
           value: "true"
       runAfter:
         - prefetch-dependencies
+        - read-segment-key
       taskRef:
         params:
           - name: name
@@ -547,7 +580,7 @@ spec:
           - name: name
             value: push-dockerfile-oci-ta
           - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-push-dockerfile-oci-ta:0.3@sha256:322d515ca66d92188067344761733d1e5c64d4b7bb790d10f35540da5e6289f1
+            value: quay.io/konflux-ci/tekton-catalog/task-push-dockerfile-oci-ta:0.2@sha256:efda2b60a3e6f1e1f64150963f4133f2f6353f8fcf9db86768466bf3f2753277
           - name: kind
             value: task
         resolver: bundles

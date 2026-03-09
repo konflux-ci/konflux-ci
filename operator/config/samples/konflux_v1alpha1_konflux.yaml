@@ -127,12 +127,14 @@ spec:
   # Defaults to true if not specified.
   defaultTenant:
     enabled: true
-  # segmentBridge:
-  #   # Enabled controls whether segment-bridge telemetry resources are deployed
-  #   # Defaults to false if not specified
+  # telemetry:
+  #   # Enabled controls whether segment-bridge telemetry resources are deployed.
+  #   # Defaults to false if not specified.
   #   enabled: true
   #   spec:
-  #     # segmentKey is the Segment write key; omit to use the default dev key
-  #     segmentKey: ""
-  #     # segmentAPIURL is the Segment API endpoint; omit to use the default
-  #     segmentAPIURL: ""
+  #     # segmentKey is the Segment write key; omit to use the default build-time key
+  #     # segmentKey: "your-write-key"
+  #
+  #     # segmentAPIURL is the base URL without "/batch". The operator appends "/batch".
+  #     # Defaults to "https://api.segment.io/v1" if not specified.
+  #     # segmentAPIURL: "https://console.redhat.com/connections/api/v1"

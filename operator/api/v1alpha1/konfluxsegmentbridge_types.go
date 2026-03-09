@@ -17,12 +17,16 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"net/url"
+	"strings"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
-	// DefaultSegmentAPIURL is the default Segment HTTP API endpoint.
-	DefaultSegmentAPIURL = "https://api.segment.io"
+	// DefaultSegmentAPIURL is the default Segment HTTP API base URL (without /batch).
+	// The operator appends "/batch" to produce the full SEGMENT_BATCH_API value.
+	DefaultSegmentAPIURL = "https://api.segment.io/v1"
 )
 
 // KonfluxSegmentBridgeSpec defines the desired state of KonfluxSegmentBridge.
@@ -33,11 +37,13 @@ type KonfluxSegmentBridgeSpec struct {
 	// +optional
 	SegmentKey string `json:"segmentKey,omitempty"`
 
-	// SegmentAPIURL is the URL of the Segment API endpoint.
-	// When not specified, the default Segment API URL is used.
-	// Users may override this to route telemetry to their own Segment project
-	// or to another system that implements the Segment API.
+	// SegmentAPIURL is the base URL of the Segment API endpoint, without "/batch".
+	// The operator appends "/batch" to produce the SEGMENT_BATCH_API env var.
+	// Example: "https://console.redhat.com/connections/api/v1"
+	// When not specified, defaults to "https://api.segment.io/v1".
+	// Only plain HTTPS base URLs are supported (no query strings or fragments).
 	// +optional
+	// +kubebuilder:validation:Pattern=`^https://[^?#]+$`
 	SegmentAPIURL string `json:"segmentAPIURL,omitempty"`
 }
 
@@ -49,13 +55,30 @@ func (s *KonfluxSegmentBridgeSpec) GetSegmentKey() string {
 	return s.SegmentKey
 }
 
-// GetSegmentAPIURL returns the configured Segment API URL,
-// falling back to DefaultSegmentAPIURL when unset.
+// GetSegmentAPIURL returns the configured Segment API base URL (without "/batch"),
+// falling back to DefaultSegmentAPIURL when unset. Trailing slashes and an
+// accidental "/batch" suffix are stripped so callers can safely append "/batch".
 func (s *KonfluxSegmentBridgeSpec) GetSegmentAPIURL() string {
-	if s == nil || s.SegmentAPIURL == "" {
-		return DefaultSegmentAPIURL
+	baseURL := DefaultSegmentAPIURL
+	if s != nil && s.SegmentAPIURL != "" {
+		baseURL = s.SegmentAPIURL
 	}
-	return s.SegmentAPIURL
+	return sanitizeSegmentHost(baseURL)
+}
+
+// sanitizeSegmentHost parses the URL and strips trailing slashes and an
+// accidental "/batch" suffix from the path so that callers can safely join
+// "/batch" to the result. Parsing via net/url ensures only the path component
+// is modified, leaving scheme, host, and other parts intact.
+func sanitizeSegmentHost(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	u.Path = strings.TrimRight(u.Path, "/")
+	u.Path = strings.TrimSuffix(u.Path, "/batch")
+	u.Path = strings.TrimRight(u.Path, "/")
+	return u.String()
 }
 
 // KonfluxSegmentBridgeStatus defines the observed state of KonfluxSegmentBridge.

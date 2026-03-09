@@ -21,10 +21,8 @@ import (
 )
 
 func TestVersionVariables(t *testing.T) {
-	// Contract test: verify variables are accessible
-	// Values are initialized to "unknown" but can be overridden at build time via ldflags
-	// We don't assert specific values since they depend on build configuration
+	// Contract test: verify variables are accessible and can be overridden at build time via ldflags.
+	// We don't assert specific values for Version/GitCommit since they depend on build configuration.
 	_ = Version
 	_ = GitCommit
-	// If we get here without compilation errors, the variables exist and are accessible
 }
