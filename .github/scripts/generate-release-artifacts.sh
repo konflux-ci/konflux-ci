@@ -77,12 +77,20 @@ echo "✅ Generated OLM bundle at: $(pwd)/bundle"
 
 # Generate release-config.yaml (for OLM catalog configuration)
 # https://redhat-openshift-ecosystem.github.io/operator-pipelines/users/fbc_autorelease/
+# For SemVer: allowed channels are Fast, Stable, Candidate. Use Candidate for RC versions.
 echo "Generating release-config.yaml..."
-cat > release-config.yaml << 'EOF'
+if [[ "${VERSION_WITH_V}" == *"rc"* ]]; then
+  RELEASE_CHANNEL="Candidate"
+  echo "Version contains 'rc'; using catalog channel: ${RELEASE_CHANNEL}"
+else
+  RELEASE_CHANNEL="Stable"
+  echo "Using catalog channel: ${RELEASE_CHANNEL}"
+fi
+cat > release-config.yaml << EOF
 ---
 catalog_templates:
   - template_name: semver.yaml
-    channels: [Stable]
+    channels: [${RELEASE_CHANNEL}]
 EOF
 echo "✅ Generated release-config.yaml"
 cat release-config.yaml

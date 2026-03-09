@@ -1,5 +1,10 @@
 #!/bin/bash
+# shellcheck source-path=SCRIPTDIR
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091 source=changelog-lib.sh
+source "${SCRIPT_DIR}/changelog-lib.sh"
 
 # Generate Changelog Script
 # Generates a markdown changelog from upstream conventional commits between two operator tags.
@@ -74,9 +79,6 @@ declare -A COMPONENT_CONFIG=(
   ["release-service"]="operator/upstream-kustomizations/release/core/kustomization.yaml|konflux-ci/release-service|konflux-ci/release-service|Release Service|ref"
   ["ui"]="operator/upstream-kustomizations/ui/core/proxy/kustomization.yaml|quay.io/konflux-ci/konflux-ui|konflux-ci/konflux-ui|UI|digest"
 )
-
-# Bot authors to exclude from changelog
-BOT_AUTHORS='["dependabot[bot]", "renovate[bot]", "github-actions[bot]", "konflux-internal-p02[bot]", "red-hat-konflux[bot]"]'
 
 # Determine which components to process.
 # Sort keys for deterministic output order (bash associative arrays are unordered).
@@ -157,14 +159,6 @@ extract_sha_from_ref_url() {
     | head -n 1 || true
 }
 
-# strip_commit_prefix removes the conventional commit type prefix from a message,
-# returning just the description as a markdown list item.
-# "feat(scope): add X" -> "- add X"
-# "fix: broken Y"      -> "- broken Y"
-strip_commit_prefix() {
-  sed 's/^[a-z]*([^)]*):[[:space:]]*/- /; s/^[a-z]*:[[:space:]]*/- /'
-}
-
 # generate_component_changelog generates the changelog section for a single component.
 # Args: $1=component_name
 # Returns: 0 if changes were found, 1 otherwise
@@ -229,8 +223,12 @@ generate_component_changelog() {
   echo "  Comparing ${old_sha:0:12}..${new_sha:0:12}" >&2
 
   # Query GitHub API for commits between the two SHAs
+  local encoded_old encoded_new
+  encoded_old=$(printf '%s' "$old_sha" | jq -sRr @uri)
+  encoded_new=$(printf '%s' "$new_sha" | jq -sRr @uri)
+
   local api_response
-  api_response=$(gh api "repos/${github_repo}/compare/${old_sha}...${new_sha}" \
+  api_response=$(gh api "repos/${github_repo}/compare/${encoded_old}...${encoded_new}" \
     --header "Accept: application/vnd.github+json" 2>/dev/null) || {
     echo "  Warning: GitHub API call failed for ${github_repo}" >&2
     return 1
@@ -246,19 +244,13 @@ generate_component_changelog() {
 
   # Filter commits: keep feat/fix, exclude bots
   local filtered_commits
-  filtered_commits=$(echo "$api_response" | jq -r --argjson bots "$BOT_AUTHORS" '
-    .commits[]
-    | select(
-        ((.author.login // "") as $login |
-          ($bots | map(. == $login) | any | not))
-        and
-        (.commit.message | split("\n")[0] | test("^(feat|fix)(\\(.*\\))?:"))
-      )
-    | .commit.message | split("\n")[0]
-  ' 2>/dev/null) || {
+  filtered_commits=$(echo "$api_response" | changelog_filter_commits 2>/dev/null) || {
     echo "  Warning: Failed to filter commits for ${github_repo}" >&2
     return 1
   }
+
+  # Qualify PR references: (#NNN) → (owner/repo#NNN) for correct GitHub auto-linking
+  filtered_commits=$(echo "$filtered_commits" | changelog_qualify_refs "$github_repo")
 
   if [ -z "$filtered_commits" ]; then
     # Fallback: show commit count and compare URL for repos without conventional commits
@@ -274,22 +266,9 @@ generate_component_changelog() {
   fi
 
   # Split commits by type and output grouped markdown sections
-  local feat_commits fix_commits
-  feat_commits=$(echo "$filtered_commits" | grep -E '^feat(\(.*\))?:' || true)
-  fix_commits=$(echo "$filtered_commits" | grep -E '^fix(\(.*\))?:' || true)
-
   echo "### ${display_name}"
   echo ""
-  if [ -n "$feat_commits" ]; then
-    echo "#### Features"
-    echo "$feat_commits" | strip_commit_prefix
-    echo ""
-  fi
-  if [ -n "$fix_commits" ]; then
-    echo "#### Bug Fixes"
-    echo "$fix_commits" | strip_commit_prefix
-    echo ""
-  fi
+  echo "$filtered_commits" | changelog_format_grouped
 
   local count
   count=$(echo "$filtered_commits" | wc -l | tr -d ' ')

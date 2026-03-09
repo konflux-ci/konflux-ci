@@ -8,7 +8,7 @@ set -euo pipefail
 #   2. Find the latest tag for this stream (vX.Y.Z or vX.Y.Z-rc.W).
 #   3. Verify every stable tag (vX.Y.Z) for this stream created in the past 7 days
 #      has a corresponding GitHub release.
-#   4. If the latest tag is an RC, verify it also has a GitHub release.
+#   4. If the latest tag is an RC and its stable counterpart is not yet tagged, verify it has a GitHub release.
 #
 # Usage:
 #   verify-releases.sh <repository> <branch>
@@ -61,7 +61,9 @@ set_output "verification_failed" "false"
 STABLE_PATTERN='^v[0-9]+\.[0-9]+\.[0-9]+$'
 VERSION_PATTERN='^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$'
 
-# Determine stream: from branch name for release-x.y, from latest tag for main
+# Determine the version stream (X.Y) to scope all tag lookups.
+# For release-x.y branches the stream is encoded in the branch name.
+# For main we derive it from the highest version tag reachable from HEAD.
 if [[ "$BRANCH" =~ ^release-([0-9]+\.[0-9]+)$ ]]; then
   STREAM="${BASH_REMATCH[1]}"
   echo "Stream from branch name: $STREAM"
@@ -82,9 +84,17 @@ fi
 
 TAG_PREFIX="v${STREAM}."
 
-# Latest tag for this stream reachable from HEAD
-LATEST=$(git tag --merged=HEAD 2>/dev/null \
-  | grep -E "$VERSION_PATTERN" | grep -F "${TAG_PREFIX}" | sort -V | tail -1 || true)
+# All version tags for this stream reachable from HEAD.
+# Captured once and reused for both LATEST and the Check 2 stable-counterpart lookup,
+# so both checks share the same --merged=HEAD reachability scope.
+STREAM_TAGS=$(git tag --merged=HEAD 2>/dev/null \
+  | grep -E "$VERSION_PATTERN" | grep -F "${TAG_PREFIX}" || true)
+
+# Latest tag for this stream.
+# Note: sort -V ranks RC suffixes after the bare version (v0.0.12 < v0.0.12-rc.0).
+# When both an RC and its stable counterpart exist for the same version (e.g. v0.0.12
+# and v0.0.12-rc.0), LATEST will be the RC tag.
+LATEST=$(echo "$STREAM_TAGS" | sort -V | tail -1 || true)
 
 if [ -z "$LATEST" ]; then
   echo "Error: No version tags for stream ${STREAM} reachable from HEAD."
@@ -93,12 +103,15 @@ fi
 
 echo "Latest tag for stream ${STREAM}: $LATEST"
 
+# Limit Check 1 to tags created within the past 7 days to avoid re-checking
+# historical releases on every run.
 START_TIMESTAMP=$(date -u --date='7 days ago' +%s)
 echo "Verification window: past 7 days (since $(date -u --date="@$START_TIMESTAMP" +%Y-%m-%dT%H:%M:%SZ))"
 
 FAILURE_REASONS=""
 
-# Check 1: stable tags for this stream in the verification window must have a release
+# Check 1: every stable tag for this stream created in the verification window
+# must have a corresponding GitHub release.
 echo ""
 echo "=== Checking stable tags for stream ${STREAM} in verification period ==="
 TAGS_WITHOUT_RELEASE=""
@@ -107,8 +120,11 @@ while IFS= read -r line; do
   [ -z "$line" ] && continue
   tag="${line%% *}"
   cdate="${line##* }"
+  # Skip tags outside the 7-day window.
   [ "$cdate" -lt "$START_TIMESTAMP" ] 2>/dev/null && continue
+  # Skip RC tags — only stable releases are checked here.
   [[ ! "$tag" =~ $STABLE_PATTERN ]] && continue
+  # Skip tags that belong to a different stream.
   [[ "$tag" != "${TAG_PREFIX}"* ]] && continue
   STABLE_CHECKED=$((STABLE_CHECKED + 1))
   echo "  Checking stable tag: $tag"
@@ -129,17 +145,30 @@ if [ -n "$TAGS_WITHOUT_RELEASE" ]; then
 ${TAGS_WITHOUT_RELEASE}"
 fi
 
-# Check 2: if latest tag is an RC, it must have a release
+# Check 2: if the latest tag is an RC, verify its stable counterpart has been tagged.
+# - If the stable counterpart exists and is reachable from HEAD (e.g. v0.0.12 for
+#   v0.0.12-rc.0), the RC was promoted and Check 1 already covers the stable release — skip.
+# - If the stable counterpart is absent or not reachable from HEAD, the RC is still
+#   active and must have a GitHub prerelease.
 if [[ ! "$LATEST" =~ $STABLE_PATTERN ]]; then
-  echo ""
-  echo "=== Latest tag is RC: checking for release ==="
-  echo "  Checking RC tag: $LATEST"
-  if ! gh release view "$LATEST" --repo "$REPOSITORY" >/dev/null 2>&1; then
-    [ -n "$FAILURE_REASONS" ] && FAILURE_REASONS="${FAILURE_REASONS}"$'\n\n'
-    FAILURE_REASONS="${FAILURE_REASONS}Latest RC tag ${LATEST} has no GitHub release."
-    echo "    ❌ No GitHub release found"
+  # Strip the -rc.N suffix to get the stable version this RC targets.
+  STABLE_FOR_RC="${LATEST%-rc.*}"
+  # Use STREAM_TAGS (already scoped to --merged=HEAD) so we only treat the RC as
+  # promoted when the stable tag is reachable from the current branch HEAD.
+  if echo "$STREAM_TAGS" | grep -qxF "$STABLE_FOR_RC"; then
+    echo ""
+    echo "=== Latest RC ${LATEST} already promoted to stable (${STABLE_FOR_RC}) — skipping RC check ==="
   else
-    echo "    ✅ GitHub release exists"
+    echo ""
+    echo "=== Latest tag is RC: checking for prerelease ==="
+    echo "  Checking RC tag: $LATEST"
+    if ! gh release view "$LATEST" --repo "$REPOSITORY" >/dev/null 2>&1; then
+      [ -n "$FAILURE_REASONS" ] && FAILURE_REASONS="${FAILURE_REASONS}"$'\n\n'
+      FAILURE_REASONS="${FAILURE_REASONS}Latest RC tag ${LATEST} has no GitHub release."
+      echo "    ❌ No GitHub release found"
+    else
+      echo "    ✅ GitHub release exists"
+    fi
   fi
 fi
 
