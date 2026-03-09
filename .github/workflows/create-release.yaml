@@ -22,11 +22,6 @@ on:
         required: false
         type: boolean
         default: false
-      generate_notes:
-        description: 'Include auto-generated notes with commit history'
-        required: false
-        type: boolean
-        default: true
 
 jobs:
   create-release:
@@ -140,8 +135,7 @@ jobs:
             "${{ steps.payload.outputs.git_ref }}" \
             /tmp/release-notes.md \
             operator/dist \
-            "${{ inputs.draft || false }}" \
-            "${{ inputs.generate_notes || 'true' }}"
+            "${{ inputs.draft || false }}"
 
       - name: Create issue on release failure
         if: failure()
