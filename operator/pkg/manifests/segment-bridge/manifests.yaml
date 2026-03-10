@@ -67,7 +67,7 @@ spec:
             - secretRef:
                 name: segment-bridge-config
                 optional: true
-            image: quay.io/konflux-ci/segment-bridge:a49fb41767ac05d94357a9f67d7a23a2d539f2e0
+            image: quay.io/konflux-ci/segment-bridge:509967e8f570328be0f4b894ca9360ccaf0b82ce
             imagePullPolicy: IfNotPresent
             name: segment-bridge
             resources:
@@ -83,10 +83,16 @@ spec:
                 drop:
                 - ALL
               readOnlyRootFilesystem: true
+            volumeMounts:
+            - mountPath: /tmp
+              name: tmp
           restartPolicy: OnFailure
           securityContext:
             runAsNonRoot: true
             seccompProfile:
               type: RuntimeDefault
           serviceAccountName: segment-bridge
+          volumes:
+          - emptyDir: {}
+            name: tmp
   schedule: 0 * * * *
