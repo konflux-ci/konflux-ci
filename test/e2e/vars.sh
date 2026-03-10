@@ -5,4 +5,4 @@ E2E_TEST_IMAGE=quay.io/redhat-user-workloads/konflux-qe-team-tenant/konflux-e2e/
 
 export RELEASE_SERVICE_CATALOG_REVISION
 # renovate: datasource=git-refs depName=https://github.com/konflux-ci/release-service-catalog
-RELEASE_SERVICE_CATALOG_REVISION="3dfc216e78d176131fdbb05ea02b524eda903a76"
+RELEASE_SERVICE_CATALOG_REVISION="085dbcb90c5eef6641e89a27336d50133dc39605"
