@@ -231,14 +231,30 @@ deploy_openshift_certmanager() {
     retry "kubectl wait --for=condition=Available --timeout=300s deployment -l app.kubernetes.io/instance=cert-manager -n cert-manager" \
           "cert-manager did not become available within the allocated time"
 
-    # Wait for webhook to be fully functional (TLS certificate ready)
-    # This prevents both "no endpoints" and "certificate signed by unknown authority" errors
-    echo "  ⏳ Waiting for cert-manager webhook to be fully ready..." >&2
+    # Wait for CA bundle to be injected into webhook configuration
+    # The x509 errors occur when the API server doesn't have the CA bundle to verify the webhook's certificate.
+    # cert-manager's cainjector component populates this field once the webhook certificate is ready.
+    echo "  ⏳ Waiting for cert-manager webhook CA bundle..." >&2
     local webhook_timeout=120
     local webhook_waited=0
-    until kubectl get --raw /apis/cert-manager.io/v1 &>/dev/null; do
+    until kubectl get validatingwebhookconfiguration cert-manager-webhook \
+        -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null | grep -q .; do
         if [[ $webhook_waited -ge $webhook_timeout ]]; then
-            echo "ERROR: cert-manager webhook not responding after ${webhook_timeout}s" >&2
+            echo "ERROR: cert-manager webhook CA bundle not ready after ${webhook_timeout}s" >&2
+            exit 1
+        fi
+        sleep 5
+        webhook_waited=$((webhook_waited + 5))
+    done
+
+    # Wait for webhook service to have endpoints
+    # The "no endpoints available" error occurs when the webhook pods aren't registered yet.
+    echo "  ⏳ Waiting for cert-manager webhook endpoints..." >&2
+    webhook_waited=0
+    until kubectl get endpoints cert-manager-webhook -n cert-manager \
+        -o jsonpath='{.subsets[0].addresses}' 2>/dev/null | grep -q .; do
+        if [[ $webhook_waited -ge $webhook_timeout ]]; then
+            echo "ERROR: cert-manager webhook endpoints not ready after ${webhook_timeout}s" >&2
             exit 1
         fi
         sleep 5
