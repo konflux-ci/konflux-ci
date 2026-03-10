@@ -36,6 +36,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/segment"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
@@ -51,6 +52,13 @@ const (
 
 	segmentBridgeNamespace  = "segment-bridge"
 	segmentBridgeSecretName = "segment-bridge-config"
+
+	// tektonResultsAPIAddrK8s is the in-cluster gRPC address of the Tekton Results
+	// API on vanilla Kubernetes (targetNamespace=tekton-pipelines).
+	tektonResultsAPIAddrK8s = "tekton-results-api-service.tekton-pipelines.svc.cluster.local:8080"
+	// tektonResultsAPIAddrOpenShift is the in-cluster gRPC address of the Tekton
+	// Results API on OpenShift (targetNamespace=openshift-pipelines).
+	tektonResultsAPIAddrOpenShift = "tekton-results-api-service.openshift-pipelines.svc.cluster.local:8080"
 )
 
 // SegmentBridgeCleanupGVKs defines which resource types should be cleaned up when they are
@@ -71,6 +79,7 @@ type KonfluxSegmentBridgeReconciler struct {
 	client.Client
 	Scheme               *runtime.Scheme
 	ObjectStore          *manifests.ObjectStore
+	ClusterInfo          *clusterinfo.Info
 	GetDefaultSegmentKey func() string
 }
 
@@ -149,9 +158,19 @@ func (r *KonfluxSegmentBridgeReconciler) applyManifests(ctx context.Context, tc 
 	return nil
 }
 
+// tektonResultsAPIAddr returns the in-cluster gRPC address of the Tekton Results API.
+// On OpenShift the Tekton namespace is openshift-pipelines; everywhere else it is
+// tekton-pipelines. The same logic is used by the UI proxy (see proxy.yaml).
+func (r *KonfluxSegmentBridgeReconciler) tektonResultsAPIAddr() string {
+	if r.ClusterInfo != nil && r.ClusterInfo.IsOpenShift() {
+		return tektonResultsAPIAddrOpenShift
+	}
+	return tektonResultsAPIAddrK8s
+}
+
 // reconcileSegmentBridgeSecret creates the Secret in the segment-bridge namespace that the
-// CronJob reads via envFrom. Contains both SEGMENT_WRITE_KEY and SEGMENT_BATCH_API
-// (host URL + "/batch").
+// CronJob reads via envFrom. Contains SEGMENT_WRITE_KEY, SEGMENT_BATCH_API (host URL +
+// "/batch"), and TEKTON_RESULTS_API_ADDR (in-cluster gRPC endpoint).
 //
 // Key resolution precedence:
 //  1. CR inline spec.segmentKey (admin override)
@@ -180,8 +199,9 @@ func (r *KonfluxSegmentBridgeReconciler) reconcileSegmentBridgeSecret(ctx contex
 			Namespace: segmentBridgeNamespace,
 		},
 		StringData: map[string]string{
-			"SEGMENT_WRITE_KEY": segmentKey,
-			"SEGMENT_BATCH_API": batchURL,
+			"SEGMENT_WRITE_KEY":       segmentKey,
+			"SEGMENT_BATCH_API":       batchURL,
+			"TEKTON_RESULTS_API_ADDR": r.tektonResultsAPIAddr(),
 		},
 	}
 
