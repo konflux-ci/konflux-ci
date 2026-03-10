@@ -8,15 +8,15 @@ data:
     default-pipeline-name: docker-build-oci-ta-min
     pipelines:
     - name: fbc-builder
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-fbc-builder@sha256:40e9f0688c77b6ec78f7b3a9f2f98b93f4b20d6053a9aad2d98f744c12df5967
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-fbc-builder@sha256:4923ba8ba7a6a6d0e754b3d85a085322e49390f81d6804b817f4204e2f0ad380
     - name: docker-build
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build@sha256:fbcd7493a12f6b2a9e30b6bb8b6d2a8f8befe25d4c11e3cc3de1f0293a67b37e
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build@sha256:e354c7674582fc255d2500f489ddf32cb5b86badca5af3bf0e48f216c4443975
     - name: docker-build-oci-ta
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta@sha256:06aa01fd6e4c05cca0eb39587cf4880795e7ebb53e83dc9f39b957a4d325c1c1
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta@sha256:270b7ef94fa83509984e060755e1126c904d79c98f5aa06bd6e5c1eaa8111ff0
     - name: tekton-bundle-builder
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder@sha256:fa6d63446addeb48687c470f5c303ad30c2bfb92712707bc55b7b3a17634398f
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder@sha256:38f4617985b366fe317937ef1657e682ed0c281f1d489872b364912ae0c99ebc
     - name: tekton-bundle-builder-oci-ta
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder-oci-ta@sha256:ef42677c32d3d1d32e065627f23dc7c5995e774a2e198f255a59969fb2133ec0
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder-oci-ta@sha256:f8c058fff3f6407791a44f17283c89e9baa71105f92c59d9a7413b48175b0af7
     - name: docker-build-oci-ta-min
       bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta-min@sha256:b79c7178b8b6d6ee9f4e76fa3ff089b06b57514558bb090f576b43269a19c781
       description: minimal version of the docker-build-oci-ta pipeline, which requires less compute resources. In addition, it doesn't contain tasks which require user provided secrets.

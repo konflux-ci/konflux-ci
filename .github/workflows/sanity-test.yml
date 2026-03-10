@@ -155,7 +155,7 @@ jobs:
 
       - name: Archive logs
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: logs
           path: logs
