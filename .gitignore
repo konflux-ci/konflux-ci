@@ -1,4 +1,5 @@
-logs/
+# Top-level logs output only (e.g. generate-err-logs); do not ignore test/go-tests/pkg/logs (Go package)
+/logs/
 .vscode/
 __debug_bin*
 dependencies/smee/smee-channel-id.yaml
@@ -12,6 +13,8 @@ kubelinter.log
 # Secrets - never commit these
 scripts/*.env
 !scripts/*.env.template
+test/e2e/e2e.env
+!test/e2e/e2e.env.template
 *.pem
 *.private-key.pem
 

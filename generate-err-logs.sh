@@ -1,5 +1,6 @@
-#!/bin/bash -e
-
+#!/bin/bash
+# Best-effort log collection: do not exit on first failure so the workflow is not failed.
+set +e
 
 main() {
     echo "Generating error logs" >&2
@@ -216,8 +217,47 @@ kubectl get pods -n user-ns2 -o name \
 
     kubectl get -A -o yaml pipelineruns | tee "$pipelinerun_res_file"
     kubectl get -A -o yaml taskruns | tee "$taskrun_res_file"
+
+    # Collect structured cluster artifacts (JSON) for programmatic analysis
+    local artifacts_dir="$logs_dir/artifacts"
+    mkdir -p "$artifacts_dir/pods"
+
+    echo "Gathering cluster artifacts..." >&2
+    kubectl get namespaces -o json > "$artifacts_dir/namespaces.json" || true
+    kubectl get nodes -o json > "$artifacts_dir/nodes.json" || true
+    kubectl get events --all-namespaces -o json > "$artifacts_dir/events.json" || true
+    kubectl get configmaps --all-namespaces -o json > "$artifacts_dir/configmaps.json" || true
+    kubectl get deployments --all-namespaces -o json > "$artifacts_dir/deployments.json" || true
+    kubectl get services --all-namespaces -o json > "$artifacts_dir/services.json" || true
+
+    # Konflux resources
+    kubectl get applications.appstudio.redhat.com --all-namespaces -o json > "$artifacts_dir/applications.json" || true
+    kubectl get components.appstudio.redhat.com --all-namespaces -o json > "$artifacts_dir/components.json" || true
+    kubectl get snapshots.appstudio.redhat.com --all-namespaces -o json > "$artifacts_dir/snapshots.json" || true
+    kubectl get integrationtestscenarios.appstudio.redhat.com --all-namespaces -o json > "$artifacts_dir/integrationtestscenarios.json" || true
+    kubectl get releaseplans.appstudio.redhat.com --all-namespaces -o json > "$artifacts_dir/releaseplans.json" || true
+    kubectl get releaseplanadmissions.appstudio.redhat.com --all-namespaces -o json > "$artifacts_dir/releaseplanadmissions.json" || true
+    kubectl get releases.appstudio.redhat.com --all-namespaces -o json > "$artifacts_dir/releases.json" || true
+    kubectl get enterprisecontractpolicies --all-namespaces -o json > "$artifacts_dir/enterprisecontractpolicies.json" || true
+
+    # Tekton resources
+    kubectl get pipelineruns.tekton.dev --all-namespaces -o json > "$artifacts_dir/pipelineruns.json" || true
+    kubectl get taskruns.tekton.dev --all-namespaces -o json > "$artifacts_dir/taskruns.json" || true
+    kubectl get pipelines.tekton.dev --all-namespaces -o json > "$artifacts_dir/pipelines.json" || true
+    kubectl get repositories.pipelinesascode.tekton.dev --all-namespaces -o json > "$artifacts_dir/repositories.json" || true
+
+    # Pod logs from key namespaces
+    for ns in build-service integration-service release-service application-service; do
+        for pod in $(kubectl get pods -n "$ns" -o name 2>/dev/null); do
+            podname="${pod//pod\//}"
+            kubectl logs -n "$ns" "$pod" --all-containers --ignore-errors > "$artifacts_dir/pods/${ns}_${podname}.log" 2>&1 || true
+        done
+    done
+
+    echo "Artifact collection complete: $(find "$artifacts_dir" -type f | wc -l) files" >&2
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     main "$@"
+    exit 0
 fi

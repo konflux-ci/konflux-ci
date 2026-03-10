@@ -126,7 +126,7 @@ jobs:
       - name: Run Go Tests
         run: |
           cd test/go-tests
-          go test ./...
+          go test . ./pkg/...
 
       - name: Prepare resources for E2E tests
         env:
@@ -139,19 +139,42 @@ jobs:
         run: |
           ./test/e2e/prepare-e2e.sh
 
+      - name: Set release catalog revision
+        run: grep 'RELEASE_SERVICE_CATALOG_REVISION=' test/e2e/release-service-catalog-revision | sed 's/^export //' >> $GITHUB_ENV
+
+      - name: Set build pipeline bundle (min)
+        run: |
+          BUNDLE=$(yq eval-all 'select(.kind == "ConfigMap" and .metadata.name == "build-pipeline-config") | .data["config.yaml"]' operator/pkg/manifests/build-service/manifests.yaml | yq eval '.pipelines[] | select(.name == "docker-build-oci-ta-min") | .bundle' -)
+          echo "CUSTOM_DOCKER_BUILD_OCI_TA_MIN_PIPELINE_BUNDLE=$BUNDLE" >> $GITHUB_ENV
+
       - name: Run E2E tests
         env:
           GH_ORG: ${{ secrets.GH_ORG }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          MY_GITHUB_ORG: ${{ secrets.GH_ORG }}
           QUAY_DOCKERCONFIGJSON: ${{ secrets.QUAY_DOCKERCONFIGJSON }}
           RELEASE_CATALOG_TA_QUAY_TOKEN: ${{ secrets.RELEASE_CATALOG_TA_QUAY_TOKEN }}
+          E2E_APPLICATIONS_NAMESPACE: user-ns2
         run: |
-          ./test/e2e/run-e2e.sh
+          cd test/go-tests
+          go test ./tests/conformance -v -timeout 30m \
+            -ginkgo.vv \
+            -ginkgo.github-output \
+            -ginkgo.junit-report=${{ github.workspace }}/junit-conformance.xml
 
       - name: Generate error logs
         if: ${{ !cancelled() }}
         run: |
+          echo "Konflux CR:"
+          kubectl get konflux konflux -o yaml || :
           ./generate-err-logs.sh
+
+      - name: Collect JUnit report
+        if: ${{ !cancelled() }}
+        run: |
+          mkdir -p logs/junit
+          cp junit-conformance.xml logs/junit/ 2>/dev/null || true
 
       - name: Archive logs
         if: ${{ !cancelled() }}

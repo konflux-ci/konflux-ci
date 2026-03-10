@@ -121,16 +121,6 @@
     },
     {
       "customType": "regex",
-      "fileMatch": ["test/e2e/vars.sh"],
-      "matchStrings": [
-        "E2E_TEST_IMAGE=(?<depName>quay\\.io/redhat-user-workloads/konflux-qe-team-tenant/konflux-e2e/konflux-e2e-tests)@(?<currentDigest>sha256:[a-f0-9]{64})"
-      ],
-      "autoReplaceStringTemplate": "E2E_TEST_IMAGE={{depName}}@{{newDigest}}",
-      "datasourceTemplate": "docker",
-      "currentValueTemplate": "latest"
-    },
-    {
-      "customType": "regex",
       "matchStringsStrategy": "combination",
       "fileMatch": ["(^|\/)kustomization\\.(yaml|yml)$"],
       "matchStrings": [
@@ -226,18 +216,18 @@
       "extractVersionTemplate": "^v?(?<version>.*)$"
     },
     {
-      "description": "Track release-service-catalog development branch SHA in test/e2e/vars.sh",
+      "description": "Track release-service-catalog development branch SHA (single source of truth for E2E and workflows)",
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["test/e2e/vars.sh"],
+      "fileMatch": ["test/e2e/release-service-catalog-revision"],
       "matchStrings": [
         "# renovate: datasource=git-refs depName=https://github.com/konflux-ci/release-service-catalog",
-        "RELEASE_SERVICE_CATALOG_REVISION=\"(?<currentDigest>[a-f0-9]{40})\""
+        "RELEASE_SERVICE_CATALOG_REVISION=(?<currentDigest>[a-f0-9]{40})"
       ],
       "datasourceTemplate": "git-refs",
       "depNameTemplate": "https://github.com/konflux-ci/release-service-catalog",
       "currentValueTemplate": "development",
-      "autoReplaceStringTemplate": "RELEASE_SERVICE_CATALOG_REVISION=\"{{newDigest}}\""
+      "autoReplaceStringTemplate": "RELEASE_SERVICE_CATALOG_REVISION={{newDigest}}"
     },
     {
       "description": "Track cert-manager Helm chart in Update Third-Party Manifests workflow",
