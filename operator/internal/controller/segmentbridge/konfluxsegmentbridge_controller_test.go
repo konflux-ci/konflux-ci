@@ -23,16 +23,36 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 )
 
 func noDefaultKey() string             { return "" }
 func staticKey(k string) func() string { return func() string { return k } }
+
+type mockDiscoveryClient struct {
+	resources     map[string]*metav1.APIResourceList
+	serverVersion *version.Info
+}
+
+func (m *mockDiscoveryClient) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
+	if rl, ok := m.resources[groupVersion]; ok {
+		return rl, nil
+	}
+	return nil, errors.NewNotFound(schema.GroupResource{Group: groupVersion}, "")
+}
+
+func (m *mockDiscoveryClient) ServerVersion() (*version.Info, error) {
+	return m.serverVersion, nil
+}
+
+var _ clusterinfo.DiscoveryClient = (*mockDiscoveryClient)(nil)
 
 var _ = Describe("KonfluxSegmentBridge Controller", func() {
 	Context("When reconciling a resource", func() {
@@ -177,6 +197,7 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 
 			Expect(string(secret.Data["SEGMENT_WRITE_KEY"])).To(Equal("test-write-key"))
 			Expect(string(secret.Data["SEGMENT_BATCH_API"])).To(Equal("https://console.redhat.com/connections/api/v1/batch"))
+			Expect(string(secret.Data["TEKTON_RESULTS_API_ADDR"])).To(Equal(tektonResultsAPIAddrK8s))
 		})
 
 		It("should use default URL when only segmentKey is set", func() {
@@ -206,6 +227,7 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 			Expect(string(secret.Data["SEGMENT_WRITE_KEY"])).To(Equal("default-key"))
 			Expect(string(secret.Data["SEGMENT_BATCH_API"])).To(Equal(
 				konfluxv1alpha1.DefaultSegmentAPIURL + "/batch"))
+			Expect(string(secret.Data["TEKTON_RESULTS_API_ADDR"])).To(Equal(tektonResultsAPIAddrK8s))
 		})
 
 		It("should use build-time default key when CR key is empty", func() {
@@ -229,6 +251,7 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 			Expect(string(secret.Data["SEGMENT_WRITE_KEY"])).To(Equal("build-time-key"))
 			Expect(string(secret.Data["SEGMENT_BATCH_API"])).To(Equal(
 				konfluxv1alpha1.DefaultSegmentAPIURL + "/batch"))
+			Expect(string(secret.Data["TEKTON_RESULTS_API_ADDR"])).To(Equal(tektonResultsAPIAddrK8s))
 		})
 
 		It("should prefer CR inline key over build-time default", func() {
@@ -256,6 +279,47 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 			}, secret)).To(Succeed())
 
 			Expect(string(secret.Data["SEGMENT_WRITE_KEY"])).To(Equal("cr-override-key"))
+			Expect(string(secret.Data["TEKTON_RESULTS_API_ADDR"])).To(Equal(tektonResultsAPIAddrK8s))
+		})
+
+		It("should use OpenShift Tekton Results API address when running on OpenShift", func() {
+			By("Updating the CR with a segment key")
+			resource := &konfluxv1alpha1.KonfluxSegmentBridge{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			resource.Spec.SegmentKey = "openshift-key"
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+
+			openShiftClusterInfo, err := clusterinfo.DetectWithClient(&mockDiscoveryClient{
+				resources: map[string]*metav1.APIResourceList{
+					"config.openshift.io/v1": {
+						APIResources: []metav1.APIResource{
+							{Kind: "ClusterVersion"},
+						},
+					},
+				},
+				serverVersion: &version.Info{GitVersion: "v1.29.0"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			controllerReconciler := &KonfluxSegmentBridgeReconciler{
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				ObjectStore:          objectStore,
+				ClusterInfo:          openShiftClusterInfo,
+				GetDefaultSegmentKey: noDefaultKey,
+			}
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			secret := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: segmentBridgeSecretName, Namespace: segmentBridgeNamespace,
+			}, secret)).To(Succeed())
+
+			Expect(string(secret.Data["TEKTON_RESULTS_API_ADDR"])).To(Equal(tektonResultsAPIAddrOpenShift))
 		})
 
 	})
