@@ -325,7 +325,8 @@ deploy_kyverno() {
     echo "  ⏳ Waiting for Kyverno admission controller..." >&2
     retry "kubectl wait --for=condition=Available deployment/kyverno-admission-controller -n kyverno --timeout=30s" \
           "Kyverno admission controller did not become available within the allocated time"
-    kubectl apply -k "${script_path}/dependencies/kyverno/policy"
+    retry "kubectl apply -k ${script_path}/dependencies/kyverno/policy" \
+          "Failed to apply Kyverno policies (webhook may not be ready yet)"
 }
 
 deploy_konflux_info() {
