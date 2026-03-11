@@ -319,8 +319,12 @@ deploy_smee() {
 
 deploy_kyverno() {
     kubectl apply -k "${script_path}/dependencies/kyverno" --server-side
-    # Wait for policy CRD to be installed. Don't need to wait for everything to be up
-    sleep 5
+    # Policies are validated/mutated by the Kyverno admission webhook. The webhook is served
+    # by kyverno-admission-controller; if we apply policies before that deployment is ready,
+    # the API server gets "connection refused" from the webhook. Wait for it to be Available.
+    echo "  ⏳ Waiting for Kyverno admission controller..." >&2
+    retry "kubectl wait --for=condition=Available deployment/kyverno-admission-controller -n kyverno --timeout=30s" \
+          "Kyverno admission controller did not become available within the allocated time"
     kubectl apply -k "${script_path}/dependencies/kyverno/policy"
 }
 
