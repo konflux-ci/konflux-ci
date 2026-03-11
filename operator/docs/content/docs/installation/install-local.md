@@ -9,57 +9,54 @@ This guide walks you through deploying Konflux locally on macOS or Linux using
 [Kind](https://kind.sigs.k8s.io/). The automated `deploy-local.sh` script handles
 cluster creation, operator deployment, and GitHub integration in a single step.
 
+It relies on sourcing `deploy-local.env` file which provides it with environment
+variables. The following steps guide you through setting up the env file and running
+the script.
+
 ## Prerequisites
 
-Verify that the following tools are installed:
+- Verify that the following tools are installed:
 
-| Tool | Minimum version |
-|------|----------------|
-| [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) | v0.26.0 |
-| [podman](https://podman.io/docs/installation) or [docker](https://docs.docker.com/engine/install/) | podman v5.3.1 / docker v27.0.1 |
-| [kubectl](https://kubernetes.io/docs/tasks/tools/) | v1.31.4 |
-| [git](https://git-scm.com/) | v2.46 |
-| [openssl](https://www.openssl.org/) | v3.0.13 |
+  | Tool | Minimum version |
+  |------|----------------|
+  | [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) | v0.26.0 |
+  | [podman](https://podman.io/docs/installation) or [docker](https://docs.docker.com/engine/install/) | podman v5.3.1 / docker v27.0.1 |
+  | [kubectl](https://kubernetes.io/docs/tasks/tools/) | v1.31.4 |
+  | [git](https://git-scm.com/) | v2.46 |
+  | [openssl](https://www.openssl.org/) | v3.0.13 |
 
+- Verify **Minimum host free resources:**
+  - CPU: 4 cores
+  - RAM: 8 GB
 
-- A **GitHub Application** with a private key - Konflux uses it to receive webhook events
-  from GitHub, trigger build pipelines on pull requests, and write pipeline status back
-  to the PR. For local Kind clusters not reachable from the internet, a smee proxy is
-  used to relay webhook events into the cluster. See
-  [GitHub Application Secrets]({{< relref "github-secrets" >}}) for instructions on
-  creating one.
+- Clone the repository and create a copy of the env file:
+  ```bash
+  git clone https://github.com/konflux-ci/konflux-ci.git
+  cd konflux-ci
+  cp scripts/deploy-local.env.template scripts/deploy-local.env
+  ```
 
-**Minimum host resources (free):**
-- CPU: 4 cores
-- RAM: 8 GB
-
-{{< alert color="info" >}}
-If you have both Docker and Podman installed and prefer to use Podman, set the provider
-explicitly before running the script:
-<pre><code>export KIND_EXPERIMENTAL_PROVIDER=podman</code></pre>
-{{< /alert >}}
+- A **GitHub Application**: Konflux uses it to receive webhook events from GitHub,
+  trigger build pipelines on pull requests, and write pipeline status back to the PR.
+  Create the App by following [GitHub Application Secrets]({{< relref "github-secrets" >}}).
 
 ## Setup
 
-1. Clone the repository:
-
-```bash
-git clone https://github.com/konflux-ci/konflux-ci.git
-cd konflux-ci
-```
-
-2. Create the local configuration file from the template and fill in your GitHub App
-   credentials:
-
-```bash
-cp scripts/deploy-local.env.template scripts/deploy-local.env
-# Edit scripts/deploy-local.env with your values
-```
-
-See [Configuration options](#configuration-options) for a full reference of all available variables.
+Once you cloned the repo, created your copy of the env file, created the GitHub app
+and populated its secrets in the env file, refer to
+[Configuration options](#configuration-options) for a full reference of all available variables.
 macOS-specific configuration is handled automatically by the script.
 
-3. Deploy Konflux:
+Once the env file is set, deploy Konflux:
+
+{{% alert color="info" %}}
+If you have both Docker and Podman installed and prefer to use Podman, set the provider
+explicitly before running the script:
+```
+export KIND_EXPERIMENTAL_PROVIDER=podman
+```
+{{% /alert %}}
+
 
 ```bash
 ./scripts/deploy-local.sh
@@ -145,14 +142,14 @@ OPERATOR_INSTALL_METHOD=build ./scripts/deploy-local.sh
 
 | Value | Description | When to use |
 |-------|-------------|-------------|
-| `release` *(default)* | Installs from the latest GitHub release (`install.yaml`) | Normal local development |
+| `release` | Installs from the latest GitHub release (`install.yaml`) | Normal local development |
 | `local` | Deploys from your current checkout using kustomize, with the latest released image | Testing manifest changes against a specific release image |
 | `build` | Builds the operator image locally before deploying | Operator development - testing code changes |
 | `none` | Sets up Kind + dependencies + secrets, then exits without installing the operator | Running the operator manually - see [Building and Installing from Source]({{< relref "install-from-source" >}}) |
 
 {{< alert color="info" >}}
 When using <code>local</code>, the manifests from your checkout are applied with the latest
-released image. To avoid version mismatches, check out the matching release tag first:
+released image. To avoid version mismatches, checkout the matching release tag first:
 <pre><code>git checkout v1.0.0
 OPERATOR_INSTALL_METHOD=local ./scripts/deploy-local.sh</code></pre>
 {{< /alert >}}
@@ -176,6 +173,7 @@ automatically selects `konflux-e2e.yaml`.
 | `ENABLE_REGISTRY_PORT` | `1` | Expose the registry on the host (`0` to restrict to in-cluster access only) |
 | `INCREASE_PODMAN_PIDS_LIMIT` | `1` | Increase Podman PID limits for Tekton pipeline performance (`0` to disable) |
 | `PODMAN_MACHINE_NAME` | *(default machine)* | macOS only - name of the Podman machine to use when multiple machines exist |
+| `ENABLE_IMAGE_CACHE` | `0` | Persist containerd image cache across cluster recreations (`1` to enable) |
 
 ### Secrets
 
@@ -184,15 +182,17 @@ automatically selects `konflux-e2e.yaml`.
 | `GITHUB_APP_ID` | Yes | Numeric ID of your GitHub App (found in the App settings page) |
 | `GITHUB_PRIVATE_KEY` | Yes¹ | Literal PEM private key content (multi-line, quoted) |
 | `GITHUB_PRIVATE_KEY_PATH` | Yes¹ | Path to `.pem` file - takes precedence over `GITHUB_PRIVATE_KEY` |
-| `WEBHOOK_SECRET` | Yes | Webhook secret for GitHub webhooks. Generate with: `openssl rand -hex 20` |
+| `WEBHOOK_SECRET` | Yes | Webhook secret for GitHub webhooks. Must match the secret configured in the GitHub App |
 | `QUAY_TOKEN` | No² | Quay OAuth token for image-controller auto-provisioning. Generate at: Quay.io → Account Settings → Applications → Generate Token |
 | `QUAY_ORGANIZATION` | No² | Quay organization where component images will be stored |
-| `SMEE_CHANNEL` | No | Full Smee channel URL (e.g. `https://smee.io/XXXXXXXXXXXXXXXX`). Auto-generated if not set |
+| `SMEE_CHANNEL` | No³ | Full Smee channel URL (`https://smee.io/<channel-id>`). Required only when using smee for webhook relay (cluster not reachable); must match the GitHub App webhook URL. Generate the channel ID with `head -c 30 /dev/random | base64 | tr -dc 'a-zA-Z0-9'` and use it as the URL path, or create a channel at [smee.io](https://smee.io/). |
 
 ¹ Provide either `GITHUB_PRIVATE_KEY` or `GITHUB_PRIVATE_KEY_PATH`.
 
 ² `QUAY_TOKEN` and `QUAY_ORGANIZATION` have no effect unless you also set `KONFLUX_CR` to
 a sample that enables image-controller (e.g. `operator/config/samples/konflux-e2e.yaml`).
+
+³ Required when the cluster is not reachable and you use smee as the webhook proxy. Set `SMEE_CHANNEL` to the same URL you use as the GitHub App webhook URL (e.g. generate a channel ID with `head -c 30 /dev/random | base64 | tr -dc 'a-zA-Z0-9'` and use `https://smee.io/<that-id>`). If unset, the script generates a random channel ID at deploy time, but you would then need to set this variable and update the GitHub App webhook URL to match. Omit when your cluster has a publicly reachable webhook URL.
 
 The GitHub App must have the following permissions: `checks:write`, `contents:write`,
 `issues:write`, `pull_requests:write`.
@@ -200,7 +200,7 @@ The GitHub App must have the following permissions: `checks:write`, `contents:wr
 ## What's next
 
 - [Onboard a new Application]({{< relref "onboard" >}}) - onboard an application, run builds, tests, and releases
-- [GitHub Application Secrets]({{< relref "github-secrets" >}}) - complete your GitHub App configuration
+- [GitHub Application Secrets]({{< relref "github-secrets" >}}) - full GitHub App and webhook proxy reference
 - [Registry Configuration]({{< relref "registry-configuration" >}}) - configure an external container registry for build and release pipelines
 - [API Reference]({{< relref "../reference/konflux.v1alpha1" >}}) - full CR field reference
 - [Troubleshooting]({{< relref "troubleshooting" >}}) - solutions to common installation issues
