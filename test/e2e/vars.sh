@@ -1,7 +1,7 @@
 #!/bin/bash -e
 export E2E_TEST_IMAGE
 # https://github.com/konflux-ci/e2e-tests/commit/<COMMIT>
-E2E_TEST_IMAGE=quay.io/redhat-user-workloads/konflux-qe-team-tenant/konflux-e2e/konflux-e2e-tests@sha256:4e4ec184b3937725c22e90ca348336628b16ea84593b9eccc3e8f22f11066bcf
+E2E_TEST_IMAGE=quay.io/redhat-user-workloads/konflux-qe-team-tenant/konflux-e2e/konflux-e2e-tests@sha256:ef413d080f28bf8cc7b009b1fb998743904d3189a2371a51b274a57840c5c82c
 
 export RELEASE_SERVICE_CATALOG_REVISION
 # renovate: datasource=git-refs depName=https://github.com/konflux-ci/release-service-catalog
