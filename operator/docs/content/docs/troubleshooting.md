@@ -224,7 +224,7 @@ via the Konflux UI, the image-controller was most likely not installed or the Qu
 secret is missing.
 
 Enable image-controller in your Konflux CR and create the `quaytoken` secret as
-described in the [Installing on Kubernetes]({{< relref "install-kubernetes" >}}#quayio-auto-provisioning-optional)
+described in the [Registry Configuration]({{< relref "registry-configuration#quayio-auto-provisioning-image-controller" >}})
 guide, then try again.
 
 ### Release fails
