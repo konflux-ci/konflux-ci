@@ -21,8 +21,13 @@ Verify that the following tools are installed:
 | [git](https://git-scm.com/) | v2.46 |
 | [openssl](https://www.openssl.org/) | v3.0.13 |
 
-You also need a **GitHub App** with a private key. See
-[GitHub Application Secrets]({{< relref "github-secrets" >}}) for instructions on creating one.
+
+- A **GitHub Application** with a private key - Konflux uses it to receive webhook events
+  from GitHub, trigger build pipelines on pull requests, and write pipeline status back
+  to the PR. For local Kind clusters not reachable from the internet, a smee proxy is
+  used to relay webhook events into the cluster. See
+  [GitHub Application Secrets]({{< relref "github-secrets" >}}) for instructions on
+  creating one.
 
 **Minimum host resources (free):**
 - CPU: 4 cores
@@ -68,7 +73,6 @@ The script performs all of the following automatically:
 - Applies the Konflux CR configuration
 - Sets up GitHub App integration and smee webhook proxy
 - Provides a local OCI registry at `localhost:5001`
-- Creates demo users for local authentication
 
 ## Verify the installation
 
@@ -77,6 +81,12 @@ with the demo credentials:
 
 - **Username:** `user1@konflux.dev`
 - **Password:** `password`
+
+{{< alert color="info" >}}
+<strong>Remote machine?</strong> If Kind is running on a remote host, open an SSH tunnel
+to access the UI from your local browser:
+<pre><code>ssh -L 9443:localhost:9443 $USER@$VM_IP</code></pre>
+{{< /alert >}}
 
 {{< alert color="warning" >}}
 The demo users use static passwords and are intended for <strong>local development only</strong>.
@@ -108,15 +118,8 @@ is not `none`.
 | Konflux Operator | Deploys and manages all Konflux components lifecycles |
 
 
-The demo users (`user1@konflux.dev`, `user2@konflux.dev`) can authenticate via Dex once the
-operator is running. To create their tenant namespaces, RBAC, and sample components, run:
-
-```bash
-./deploy-test-resources.sh
-```
-
 When using `none`, the script stops after setting up the base infrastructure and secrets.
-You then install and run the operator manually — see the `none` method workflow under
+You then install and run the operator manually - see the `none` method workflow under
 [Install method values](#install-method-values) below, and
 [Building and Installing from Source]({{< relref "install-from-source" >}}).
 
@@ -144,8 +147,8 @@ OPERATOR_INSTALL_METHOD=build ./scripts/deploy-local.sh
 |-------|-------------|-------------|
 | `release` *(default)* | Installs from the latest GitHub release (`install.yaml`) | Normal local development |
 | `local` | Deploys from your current checkout using kustomize, with the latest released image | Testing manifest changes against a specific release image |
-| `build` | Builds the operator image locally before deploying | Operator development — testing code changes |
-| `none` | Sets up Kind + dependencies + secrets, then exits without installing the operator | Running the operator manually — see [Building and Installing from Source]({{< relref "install-from-source" >}}) |
+| `build` | Builds the operator image locally before deploying | Operator development - testing code changes |
+| `none` | Sets up Kind + dependencies + secrets, then exits without installing the operator | Running the operator manually - see [Building and Installing from Source]({{< relref "install-from-source" >}}) |
 
 {{< alert color="info" >}}
 When using <code>local</code>, the manifests from your checkout are applied with the latest
@@ -172,23 +175,23 @@ automatically selects `konflux-e2e.yaml`.
 | `REGISTRY_HOST_PORT` | `5001` | Host port for the internal OCI registry. Port 5000 is often taken by macOS AirPlay Receiver |
 | `ENABLE_REGISTRY_PORT` | `1` | Expose the registry on the host (`0` to restrict to in-cluster access only) |
 | `INCREASE_PODMAN_PIDS_LIMIT` | `1` | Increase Podman PID limits for Tekton pipeline performance (`0` to disable) |
-| `PODMAN_MACHINE_NAME` | *(default machine)* | macOS only — name of the Podman machine to use when multiple machines exist |
+| `PODMAN_MACHINE_NAME` | *(default machine)* | macOS only - name of the Podman machine to use when multiple machines exist |
 
 ### Secrets
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `GITHUB_APP_ID` | Yes | Numeric ID of your GitHub App (found in the App settings page) |
-| `GITHUB_PRIVATE_KEY` | Yes* | Literal PEM private key content (multi-line, quoted) |
-| `GITHUB_PRIVATE_KEY_PATH` | Yes* | Path to `.pem` file — takes precedence over `GITHUB_PRIVATE_KEY` |
+| `GITHUB_PRIVATE_KEY` | Yes¹ | Literal PEM private key content (multi-line, quoted) |
+| `GITHUB_PRIVATE_KEY_PATH` | Yes¹ | Path to `.pem` file - takes precedence over `GITHUB_PRIVATE_KEY` |
 | `WEBHOOK_SECRET` | Yes | Webhook secret for GitHub webhooks. Generate with: `openssl rand -hex 20` |
-| `QUAY_TOKEN` | No† | Quay OAuth token for image-controller auto-provisioning. Generate at: Quay.io → Account Settings → Applications → Generate Token |
-| `QUAY_ORGANIZATION` | No† | Quay organization where component images will be stored |
+| `QUAY_TOKEN` | No² | Quay OAuth token for image-controller auto-provisioning. Generate at: Quay.io → Account Settings → Applications → Generate Token |
+| `QUAY_ORGANIZATION` | No² | Quay organization where component images will be stored |
 | `SMEE_CHANNEL` | No | Full Smee channel URL (e.g. `https://smee.io/XXXXXXXXXXXXXXXX`). Auto-generated if not set |
 
-\* Provide either `GITHUB_PRIVATE_KEY` or `GITHUB_PRIVATE_KEY_PATH`.
+¹ Provide either `GITHUB_PRIVATE_KEY` or `GITHUB_PRIVATE_KEY_PATH`.
 
-† `QUAY_TOKEN` and `QUAY_ORGANIZATION` have no effect unless you also set `KONFLUX_CR` to
+² `QUAY_TOKEN` and `QUAY_ORGANIZATION` have no effect unless you also set `KONFLUX_CR` to
 a sample that enables image-controller (e.g. `operator/config/samples/konflux-e2e.yaml`).
 
 The GitHub App must have the following permissions: `checks:write`, `contents:write`,
@@ -196,7 +199,9 @@ The GitHub App must have the following permissions: `checks:write`, `contents:wr
 
 ## What's next
 
-- [Troubleshooting]({{< relref "troubleshooting" >}}) — solutions to common installation issues
-- [GitHub Application Secrets]({{< relref "github-secrets" >}}) — connect Tekton to your GitHub repositories
-- [Namespace and user management](https://github.com/konflux-ci/konflux-ci/blob/main/README.md#namespace-and-user-management) — create tenant namespaces and grant user access
-- [Konflux Tutorial](https://github.com/konflux-ci/konflux-ci/blob/main/docs/tutorial.md) — onboard an application, run builds and tests
+- [Onboard a new Application]({{< relref "onboard" >}}) - onboard an application, run builds, tests, and releases
+- [GitHub Application Secrets]({{< relref "github-secrets" >}}) - complete your GitHub App configuration
+- [Registry Configuration]({{< relref "registry-configuration" >}}) - configure an external container registry for build and release pipelines
+- [API Reference]({{< relref "../reference/konflux.v1alpha1" >}}) - full CR field reference
+- [Troubleshooting]({{< relref "troubleshooting" >}}) - solutions to common installation issues
+- [Examples]({{< relref "../examples" >}}) - sample Konflux CR configurations

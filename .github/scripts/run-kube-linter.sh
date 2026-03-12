@@ -6,7 +6,7 @@ set -euo pipefail
 # The kube-linter version is tracked by Renovate for automatic updates
 
 # renovate: datasource=github-releases depName=stackrox/kube-linter
-KUBE_LINTER_VERSION="0.8.1"
+KUBE_LINTER_VERSION="0.8.3"
 
 # Cleanup function for temporary files
 cleanup() {

@@ -3,6 +3,7 @@
   "ignorePaths": [
     "operator/pkg/manifests/**"
   ],
+  "rebaseWhen": "conflicted",
   "packageRules": [
     {
       "matchPackageNames": [

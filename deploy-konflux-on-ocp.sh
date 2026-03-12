@@ -12,8 +12,12 @@
 #   - OpenShift cluster with OperatorHub access
 #
 # Environment variables (optional):
-#   OPERATOR_IMAGE            - Full operator image to use (skips SHA-based construction)
+#   OPERATOR_IMAGE        - Full operator image to use (skips SHA-based construction)
 #   KONFLUX_OPERATOR_REPO - Operator image repository (default: quay.io/redhat-user-workloads/konflux-vanguard-tenant/konflux-operator)
+#
+# Environment variables (set by OpenShift CI/Prow):
+#   REPO_NAME      - Name of the repository being tested (e.g., "konflux-ci", "release")
+#   PULL_PULL_SHA  - Git SHA of the PR head commit being tested
 #
 
 set -o nounset
@@ -44,17 +48,16 @@ KONFLUX_OPERATOR_REPO="${KONFLUX_OPERATOR_REPO:-quay.io/redhat-user-workloads/ko
 if [[ -n "${OPERATOR_IMAGE:-}" ]]; then
     echo "Using provided OPERATOR_IMAGE: ${OPERATOR_IMAGE}"
 else
-    # Construct image tag from commit SHA
-    # In CI (Prow), use PULL_PULL_SHA (PR head) instead of HEAD (merge commit)
-    if [[ -n "${PULL_PULL_SHA:-}" ]]; then
+    # Only use PULL_PULL_SHA if this is actually a PR to konflux-ci (not rehearsal jobs)
+    if [[ "${REPO_NAME:-}" == "konflux-ci" && -n "${PULL_PULL_SHA:-}" ]]; then
         COMMIT_SHA="${PULL_PULL_SHA}"
-        echo "Using PR head SHA (PULL_PULL_SHA): ${COMMIT_SHA}"
+        OPERATOR_IMAGE="${KONFLUX_OPERATOR_REPO}:on-pr-${COMMIT_SHA}"
+        echo "Using PR image: ${OPERATOR_IMAGE}"
     else
-        COMMIT_SHA=$(git rev-parse HEAD)
-        echo "Using git HEAD SHA: ${COMMIT_SHA}"
+        # Rehearsal, periodic, or local testing - use latest tag
+        OPERATOR_IMAGE="quay.io/konflux-ci/konflux-operator:latest"
+        echo "Using fallback image: ${OPERATOR_IMAGE}"
     fi
-    OPERATOR_IMAGE="${KONFLUX_OPERATOR_REPO}:on-pr-${COMMIT_SHA}"
-    echo "Operator image: ${OPERATOR_IMAGE}"
 fi
 
 # Wait for operator image to be available (Konflux CI may still be building it)
