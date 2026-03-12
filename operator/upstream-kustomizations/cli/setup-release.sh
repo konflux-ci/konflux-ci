@@ -82,7 +82,8 @@ APPLICATION="sample-component"
 PRODUCT_VERSION="0.1"
 CONFORMA_POLICY="default"
 RELEASE_NAME="local-release"
-CATALOG_REVISION="production"
+# renovate: datasource=git-refs depName=https://github.com/konflux-ci/release-service-catalog currentValue=development
+CATALOG_REVISION="2c240d6a1b551a1e152e299567175872bb10fb16"
 IMAGE_NAME_PREFIX=""
 COMPONENTS=()
 
@@ -152,7 +153,6 @@ IS_OPENSHIFT=false
 if kubectl api-resources --api-group=config.openshift.io &>/dev/null; then
     IS_OPENSHIFT=true
 fi
-
 # Auto-detect components if none specified
 if [[ ${#COMPONENTS[@]} -eq 0 ]]; then
     echo "🔍 No components specified, auto-detecting from application '${APPLICATION}' in namespace '${TENANT_NS}'..."
