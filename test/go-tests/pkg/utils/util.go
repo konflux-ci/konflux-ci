@@ -88,30 +88,6 @@ func GetEnvOrFunc(key string, defaultFunc func() (string, error)) (string, error
 	return defaultFunc()
 }
 
-// GetReleaseServiceCatalogRevision returns RELEASE_SERVICE_CATALOG_REVISION from env, or from
-// test/e2e/release-service-catalog-revision (env-var file with one variable), or "development".
-func GetReleaseServiceCatalogRevision() string {
-	if v := os.Getenv("RELEASE_SERVICE_CATALOG_REVISION"); v != "" {
-		return v
-	}
-	for _, path := range []string{"../e2e/release-service-catalog-revision", "test/e2e/release-service-catalog-revision"} {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		for _, line := range strings.Split(string(data), "\n") {
-			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "RELEASE_SERVICE_CATALOG_REVISION=") {
-				v := strings.TrimPrefix(line, "RELEASE_SERVICE_CATALOG_REVISION=")
-				v = strings.Trim(v, "\"'")
-				if v != "" {
-					return v
-				}
-			}
-		}
-	}
-	return "development"
-}
 
 func GetQuayIOOrganization() string {
 	return GetEnv(constants.QUAY_E2E_ORGANIZATION_ENV, "redhat-appstudio-qe")

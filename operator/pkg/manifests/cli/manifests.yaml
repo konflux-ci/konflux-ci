@@ -121,7 +121,9 @@ data:
     get imagerepository \"${name}\" -n \"${MANAGED_NS}\" -o jsonpath='{.status.state}'
     2>/dev/null || echo 'unknown')\"\n    echo \"  Message: $(kubectl get imagerepository
     \"${name}\" -n \"${MANAGED_NS}\" -o jsonpath='{.status.message}' 2>/dev/null ||
-    echo 'none')\"\n    return 1\n}\n\n# Parse arguments\nTENANT_NS=\"default-tenant\"\nMANAGED_NS=\"default-managed-tenant\"\nAPPLICATION=\"sample-component\"\nPRODUCT_VERSION=\"0.1\"\nCONFORMA_POLICY=\"default\"\nRELEASE_NAME=\"local-release\"\nCATALOG_REVISION=\"production\"\nIMAGE_NAME_PREFIX=\"\"\nCOMPONENTS=()\n\nwhile
+    echo 'none')\"\n    return 1\n}\n\n# Parse arguments\nTENANT_NS=\"default-tenant\"\nMANAGED_NS=\"default-managed-tenant\"\nAPPLICATION=\"sample-component\"\nPRODUCT_VERSION=\"0.1\"\nCONFORMA_POLICY=\"default\"\nRELEASE_NAME=\"local-release\"\n#
+    renovate: datasource=git-refs depName=https://github.com/konflux-ci/release-service-catalog
+    currentValue=development\nCATALOG_REVISION=\"2c240d6a1b551a1e152e299567175872bb10fb16\"\nIMAGE_NAME_PREFIX=\"\"\nCOMPONENTS=()\n\nwhile
     [[ $# -gt 0 ]]; do\n    case $1 in\n        -t|--tenant-namespace)\n            TENANT_NS=\"$2\"\n
     \           shift 2\n            ;;\n        -m|--managed-namespace)\n            MANAGED_NS=\"$2\"\n
     \           shift 2\n            ;;\n        -a|--application)\n            APPLICATION=\"$2\"\n
@@ -139,7 +141,7 @@ data:
     a unique image name prefix to avoid credential collisions between\n# concurrent
     CI runs that share the same Quay organization.\nif [[ -z \"${IMAGE_NAME_PREFIX}\"
     ]]; then\n    RANDOM_SUFFIX=$(od -An -tx1 -N3 /dev/urandom | tr -d ' ')\n    IMAGE_NAME_PREFIX=\"${MANAGED_NS}-${RANDOM_SUFFIX}\"\nfi\n\nIS_OPENSHIFT=false\nif
-    kubectl api-resources --api-group=config.openshift.io &>/dev/null; then\n    IS_OPENSHIFT=true\nfi\n\n#
+    kubectl api-resources --api-group=config.openshift.io &>/dev/null; then\n    IS_OPENSHIFT=true\nfi\n#
     Auto-detect components if none specified\nif [[ ${#COMPONENTS[@]} -eq 0 ]]; then\n
     \   echo \"\U0001F50D No components specified, auto-detecting from application
     '${APPLICATION}' in namespace '${TENANT_NS}'...\"\n    mapfile -t COMPONENTS <
