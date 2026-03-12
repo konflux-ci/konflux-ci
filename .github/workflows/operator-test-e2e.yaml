@@ -205,6 +205,12 @@ jobs:
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${{ matrix.kubectl_arch }}/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/kubectl
+          echo Expected kubectl version: $KUBECTL_VERSION
+          echo Actual kubectl version:
+          echo $(kubectl version)
+          echo Expected kubectl path: /usr/local/bin/kubectl
+          echo Actual kubectl path:
+          echo $(which kubectl)
 
       - name: Verify kind installation
         run: kind version
