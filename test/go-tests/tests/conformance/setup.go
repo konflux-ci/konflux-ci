@@ -2,185 +2,151 @@ package conformance
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"time"
 
 	ecp "github.com/conforma/crds/api/v1alpha1"
 	buildcontrollers "github.com/konflux-ci/build-service/controllers"
-	tektonutils "github.com/konflux-ci/release-service/tekton/utils"
 
-	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/clients/kube"
-	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/constants"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/framework"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/utils"
 	ginkgo "github.com/onsi/ginkgo/v2"
 	gomega "github.com/onsi/gomega"
-	corev1 "k8s.io/api/core/v1"
-	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
 )
 
-const (
-	releaseCatalogTAQuaySecret = "release-catalog-trusted-artifacts-quay-secret"
-)
-
-var (
-	relSvcCatalogURL      = utils.GetEnv("RELEASE_SERVICE_CATALOG_URL", "https://github.com/konflux-ci/release-service-catalog")
-	relSvcCatalogRevision = utils.GetReleaseServiceCatalogRevision()
-)
-
-func createReleaseConfig(hub *framework.ControllerHub, managedNamespace, userNamespace, componentName, appName string, secretData []byte, ociStorage string) {
-	if ociStorage == "" {
-		ociStorage = os.Getenv("RELEASE_TA_OCI_STORAGE")
+// runSetupRelease invokes operator/hack/setup-release.sh to create the managed
+// namespace, ImageRepositories, EnterpriseContractPolicy, ReleasePlanAdmission,
+// and ReleasePlan needed by the release flow.
+func runSetupRelease(appName, componentName, tenantNS, managedNS string) error {
+	scriptPath := findScriptPath("operator/hack/setup-release.sh")
+	args := []string{
+		"-t", tenantNS,
+		"-m", managedNS,
+		"-a", appName,
+		"-c", componentName,
 	}
-	if ociStorage != "" {
-		ginkgo.GinkgoWriter.Printf("RELEASE_TA_OCI_STORAGE=%q\n", ociStorage)
+	if rev := utils.GetReleaseServiceCatalogRevision(); rev != "" {
+		args = append(args, "-R", rev)
 	}
-
-	klog.Info("conformance: creating release config", "managedNamespace", managedNamespace)
-
-	_, err := hub.CommonController.CreateTestNamespace(managedNamespace)
-	gomega.Expect(err).ShouldNot(gomega.HaveOccurred(), "failed to create managed namespace %s", managedNamespace)
-
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "release-pull-secret", Namespace: managedNamespace},
-		Data:       map[string][]byte{".dockerconfigjson": secretData},
-		Type:       corev1.SecretTypeDockerConfigJson,
-	}
-	_, err = hub.CommonController.CreateSecret(managedNamespace, secret)
-	gomega.Expect(err).ShouldNot(gomega.HaveOccurred(), "failed to create release-pull-secret")
-
-	managedServiceAccount, err := hub.CommonController.CreateServiceAccount("release-service-account", managedNamespace, []corev1.ObjectReference{{Name: secret.Name}}, nil)
-	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "failed to create release-service-account")
-
-	_, err = hub.ReleaseController.CreateReleasePipelineRoleBindingForServiceAccount(userNamespace, managedServiceAccount)
-	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "failed to create role binding in %s", userNamespace)
-
-	_, err = hub.ReleaseController.CreateReleasePipelineRoleBindingForServiceAccount(managedNamespace, managedServiceAccount)
-	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "failed to create role binding in %s", managedNamespace)
-
-	publicKey, err := hub.TektonController.GetTektonChainsPublicKey()
-	gomega.Expect(err).ToNot(gomega.HaveOccurred(), "failed to get Tekton Chains public key")
-
-	err = hub.TektonController.CreateOrUpdateSigningSecret(publicKey, "cosign-public-key", managedNamespace)
-	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "failed to create cosign-public-key secret")
-
-	_, err = hub.ReleaseController.CreateReleasePlan("source-releaseplan", userNamespace, appName, managedNamespace, "", nil, nil, nil)
-	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "failed to create ReleasePlan")
-
-	defaultEcPolicy, err := hub.TektonController.GetEnterpriseContractPolicy("default", "enterprise-contract-service")
-	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "failed to get default EC policy")
-
-	ecPolicyName := componentName + "-policy"
-	sources := make([]ecp.Source, len(defaultEcPolicy.Spec.Sources))
-	for i := range defaultEcPolicy.Spec.Sources {
-		defaultEcPolicy.Spec.Sources[i].DeepCopyInto(&sources[i])
-		if sources[i].Config == nil {
-			sources[i].Config = &ecp.SourceConfig{}
-		}
-		// By default, `skip-checks` is set to true in the build pipeline which disables all the
-		// tests/scans.
-		sources[i].Config.Exclude = append(
-			sources[i].Config.Exclude,
-			"cve",
-			"tasks.required_tasks_found:clair-scan",
-			"tasks.required_tasks_found:roxctl-scan",
-			"tasks.required_tasks_found:clamav-scan",
-			"tasks.required_tasks_found:tpa-scan",
-			"tasks.required_tasks_found:deprecated-image-check",
-			"tasks.required_tasks_found:rpms-signature-scan",
-			"tasks.required_tasks_found:sast-shell-check",
-			"tasks.required_tasks_found:sast-shell-check-oci-ta",
-			"tasks.required_tasks_found:sast-unicode-check",
-			"tasks.required_tasks_found:sast-unicode-check-oci-ta",
-			"test.test_data_found",
-		)
-	}
-	_, err = hub.TektonController.CreateEnterpriseContractPolicy(ecPolicyName, managedNamespace, ecp.EnterpriseContractPolicySpec{
-		Description: "Red Hat's enterprise requirements",
-		PublicKey:   string(publicKey),
-		Sources:     sources,
-	})
-	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "failed to create EC policy %s", ecPolicyName)
-
-	_, err = hub.ReleaseController.CreateReleasePlanAdmission("demo", managedNamespace, "", userNamespace, ecPolicyName, "release-service-account", []string{appName}, false, &tektonutils.PipelineRef{
-		Resolver: "git",
-		Params: []tektonutils.Param{
-			{Name: "url", Value: relSvcCatalogURL},
-			{Name: "revision", Value: relSvcCatalogRevision},
-			{Name: "pathInRepo", Value: "pipelines/managed/e2e/e2e.yaml"},
-		},
-		OciStorage: ociStorage,
-	}, nil)
-	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "failed to create ReleasePlanAdmission")
-
-	_, err = hub.TektonController.CreatePVCInAccessMode("release-pvc", managedNamespace, corev1.ReadWriteOnce)
-	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "failed to create release-pvc")
-
-	_, err = hub.CommonController.CreateRole("role-release-service-account", managedNamespace, map[string][]string{
-		"apiGroupsList": {""},
-		"roleResources": {"secrets"},
-		"roleVerbs":     {"get", "list", "watch"},
-	})
-	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "failed to create Role")
-
-	_, err = hub.CommonController.CreateRoleBinding("role-release-service-account-binding", managedNamespace, "ServiceAccount", "release-service-account", managedNamespace, "Role", "role-release-service-account", "rbac.authorization.k8s.io")
-	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "failed to create RoleBinding")
-
-	klog.Info("conformance: release config created", "managedNamespace", managedNamespace)
+	klog.Infof("conformance: running setup-release.sh %v", args)
+	cmd := exec.Command(scriptPath, args...)
+	cmd.Stdout = ginkgo.GinkgoWriter
+	cmd.Stderr = ginkgo.GinkgoWriter
+	return cmd.Run()
 }
 
-func createE2EQuaySecret(k *kube.CustomClient) (*corev1.Secret, error) {
-	quayToken := os.Getenv("QUAY_TOKEN")
-	if quayToken == "" {
-		return nil, fmt.Errorf("QUAY_TOKEN env is not set")
+// e2eECPExclusions lists policy rules to exclude during E2E tests. The default
+// build pipeline sets skip-checks=true which disables security scans/tests, so
+// the corresponding required_tasks_found rules must be excluded to avoid EC
+// failures during the release.
+var e2eECPExclusions = []string{
+	"cve",
+	"tasks.required_tasks_found:clair-scan",
+	"tasks.required_tasks_found:roxctl-scan",
+	"tasks.required_tasks_found:clamav-scan",
+	"tasks.required_tasks_found:tpa-scan",
+	"tasks.required_tasks_found:deprecated-image-check",
+	"tasks.required_tasks_found:rpms-signature-scan",
+	"tasks.required_tasks_found:sast-shell-check",
+	"tasks.required_tasks_found:sast-shell-check-oci-ta",
+	"tasks.required_tasks_found:sast-unicode-check",
+	"tasks.required_tasks_found:sast-unicode-check-oci-ta",
+	"test.test_data_found",
+}
+
+// patchECPForE2E appends E2E-specific exclusions to the EnterpriseContractPolicy
+// in the managed namespace.
+func patchECPForE2E(hub *framework.ControllerHub, policyName, managedNS string) error {
+	klog.Infof("conformance: patching ECP %s/%s with E2E exclusions", managedNS, policyName)
+
+	policy, err := hub.TektonController.GetEnterpriseContractPolicy(policyName, managedNS)
+	if err != nil {
+		return fmt.Errorf("get ECP %s/%s: %w", managedNS, policyName, err)
 	}
 
-	decodedToken, err := base64.StdEncoding.DecodeString(quayToken)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode QUAY_TOKEN (must be base64): %v", err)
-	}
-
-	namespace := constants.QuayRepositorySecretNamespace
-	_, err = k.KubeInterface().CoreV1().Namespaces().Get(context.Background(), namespace, metav1.GetOptions{})
-	if err != nil {
-		if k8sErrors.IsNotFound(err) {
-			_, err = k.KubeInterface().CoreV1().Namespaces().Create(context.Background(), &corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{Name: namespace},
-			}, metav1.CreateOptions{})
-			if err != nil {
-				return nil, fmt.Errorf("error creating namespace %s: %v", namespace, err)
+	for i := range policy.Spec.Sources {
+		if policy.Spec.Sources[i].Config == nil {
+			policy.Spec.Sources[i].Config = &ecp.SourceConfig{}
+		}
+		seen := make(map[string]bool, len(policy.Spec.Sources[i].Config.Exclude))
+		for _, e := range policy.Spec.Sources[i].Config.Exclude {
+			seen[e] = true
+		}
+		for _, e := range e2eECPExclusions {
+			if !seen[e] {
+				policy.Spec.Sources[i].Config.Exclude = append(policy.Spec.Sources[i].Config.Exclude, e)
 			}
-		} else {
-			return nil, fmt.Errorf("error getting namespace %s: %v", namespace, err)
 		}
 	}
 
-	secretName := constants.QuayRepositorySecretName
-	secret, err := k.KubeInterface().CoreV1().Secrets(namespace).Get(context.Background(), secretName, metav1.GetOptions{})
-	if err != nil {
-		if k8sErrors.IsNotFound(err) {
-			secret, err = k.KubeInterface().CoreV1().Secrets(namespace).Create(context.Background(), &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: namespace},
-				Type:       corev1.SecretTypeDockerConfigJson,
-				Data:       map[string][]byte{corev1.DockerConfigJsonKey: decodedToken},
-			}, metav1.CreateOptions{})
-			if err != nil {
-				return nil, fmt.Errorf("error creating secret %s: %v", secretName, err)
-			}
-		} else {
-			secret.Data = map[string][]byte{corev1.DockerConfigJsonKey: decodedToken}
-			secret, err = k.KubeInterface().CoreV1().Secrets(namespace).Update(context.Background(), secret, metav1.UpdateOptions{})
-			if err != nil {
-				return nil, fmt.Errorf("error updating secret %s: %v", secretName, err)
-			}
-		}
-	}
+	return hub.TektonController.KubeRest().Update(context.Background(), policy)
+}
 
-	return secret, nil
+// findScriptPath resolves a repo-relative path by walking up from the working
+// directory until the path is found (or we run out of parents).
+func findScriptPath(relPath string) string {
+	dir, _ := os.Getwd()
+	for range 10 {
+		candidate := filepath.Join(dir, relPath)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return relPath
+}
+
+// grantIntegrationRunnerJobRBAC creates a Role + RoleBinding so that the
+// konflux-integration-runner SA can manage Jobs and Pods in the tenant namespace.
+// TODO: remove once the integration test pipeline no longer creates/deletes Jobs
+// directly and instead runs the image via a Tekton task.
+func grantIntegrationRunnerJobRBAC(namespace string) error {
+	manifest := fmt.Sprintf(`
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: integration-runner-jobs
+  namespace: %[1]s
+rules:
+- apiGroups: [""]
+  resources: [pods]
+  verbs: [get, list, watch, delete]
+- apiGroups: [""]
+  resources: [pods/log]
+  verbs: [get, list]
+- apiGroups: [batch]
+  resources: [jobs]
+  verbs: [create, delete, get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: integration-runner-jobs
+  namespace: %[1]s
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: integration-runner-jobs
+subjects:
+- kind: ServiceAccount
+  name: konflux-integration-runner
+  namespace: %[1]s
+`, namespace)
+
+	cmd := exec.Command("kubectl", "apply", "-f", "-")
+	cmd.Stdin = strings.NewReader(manifest)
+	cmd.Stdout = ginkgo.GinkgoWriter
+	cmd.Stderr = ginkgo.GinkgoWriter
+	return cmd.Run()
 }
 
 // dumpDiagnostics logs component build status, application status, PaC repository state,
