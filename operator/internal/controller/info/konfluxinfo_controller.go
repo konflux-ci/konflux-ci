@@ -100,6 +100,8 @@ const (
 	ClusterConfigKeyBuildIdentityRegexp = "buildIdentityRegexp"
 	// ClusterConfigKeyTrustifyOIDCIssuerUrl is the ConfigMap key for URL of the OIDC issuer used by Trustification clients.
 	ClusterConfigKeyTrustifyOIDCIssuerUrl = "trustifyOIDCIssuerUrl"
+	// ClusterConfigKeyTektonChainsIdentity is the ConfigMap key for the Tekton Chains identity used when verifying attestation signatures.
+	ClusterConfigKeyTektonChainsIdentity = "tektonChainsIdentity"
 )
 
 // ClusterConfigDiscoverer is an interface for discovering cluster configuration values.
