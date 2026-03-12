@@ -269,6 +269,11 @@ type ClusterConfigData struct {
 	// used by Trustification clients.
 	// +optional
 	TrustifyOIDCIssuerUrl string `json:"trustifyOIDCIssuerUrl,omitempty"`
+
+	// TektonChainsIdentity is the identity of Tekton Chains used when verifying
+	// the signature of attestations produced by Tekton Chains.
+	// +optional
+	TektonChainsIdentity string `json:"tektonChainsIdentity,omitempty"`
 }
 
 // All is an iterator that yields all non-empty key-value pairs from ClusterConfigData.
@@ -332,6 +337,11 @@ func (d ClusterConfigData) All(yield func(key, value string) bool) {
 	}
 	if d.TrustifyOIDCIssuerUrl != "" {
 		if !yield("trustifyOIDCIssuerUrl", d.TrustifyOIDCIssuerUrl) {
+			return
+		}
+	}
+	if d.TektonChainsIdentity != "" {
+		if !yield("tektonChainsIdentity", d.TektonChainsIdentity) {
 			return
 		}
 	}

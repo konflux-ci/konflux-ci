@@ -41,11 +41,12 @@ func TestClusterConfigData_All(t *testing.T) {
 			TrustifyServerExternalUrl: "https://trustify-external.example.com",
 			BuildIdentityRegexp:       "^https://konflux\\.dev/build/.*$",
 			TrustifyOIDCIssuerUrl:     "https://keycloak-external/realm/foobar",
+			TektonChainsIdentity:      "https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/tekton-chains-controller",
 		}
 
 		collected := maps.Collect(data.All)
 
-		g.Expect(collected).To(gomega.HaveLen(12))
+		g.Expect(collected).To(gomega.HaveLen(13))
 		g.Expect(collected["defaultOIDCIssuer"]).To(gomega.Equal("https://oidc.example.com"))
 		g.Expect(collected["enableKeylessSigning"]).To(gomega.Equal("true"))
 		g.Expect(collected["fulcioInternalUrl"]).To(gomega.Equal("https://fulcio-internal.example.com"))
@@ -58,6 +59,7 @@ func TestClusterConfigData_All(t *testing.T) {
 		g.Expect(collected["trustifyServerExternalUrl"]).To(gomega.Equal("https://trustify-external.example.com"))
 		g.Expect(collected["buildIdentityRegexp"]).To(gomega.Equal("^https://konflux\\.dev/build/.*$"))
 		g.Expect(collected["trustifyOIDCIssuerUrl"]).To(gomega.Equal("https://keycloak-external/realm/foobar"))
+		g.Expect(collected["tektonChainsIdentity"]).To(gomega.Equal("https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/tekton-chains-controller"))
 	})
 
 	t.Run("should not yield empty fields", func(t *testing.T) {
@@ -83,6 +85,7 @@ func TestClusterConfigData_All(t *testing.T) {
 		g.Expect(collected).NotTo(gomega.HaveKey("trustifyServerExternalUrl"))
 		g.Expect(collected).NotTo(gomega.HaveKey("buildIdentityRegexp"))
 		g.Expect(collected).NotTo(gomega.HaveKey("trustifyOIDCIssuerUrl"))
+		g.Expect(collected).NotTo(gomega.HaveKey("tektonChainsIdentity"))
 	})
 
 	t.Run("should yield nothing for empty struct", func(t *testing.T) {
@@ -111,6 +114,7 @@ func TestClusterConfigData_All(t *testing.T) {
 			TrustifyServerExternalUrl: "https://trustify-external.example.com",
 			BuildIdentityRegexp:       "^https://konflux\\.dev/build/.*$",
 			TrustifyOIDCIssuerUrl:     "https://keycloak-external/realm/foobar",
+			TektonChainsIdentity:      "https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/tekton-chains-controller",
 		}
 
 		var yielded []string
@@ -140,6 +144,7 @@ func TestClusterConfigData_All(t *testing.T) {
 			TrustifyServerExternalUrl: "trustify-external",
 			BuildIdentityRegexp:       "^https://konflux\\.dev/build/.*$",
 			TrustifyOIDCIssuerUrl:     "https://keycloak-external/realm/foobar",
+			TektonChainsIdentity:      "https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/tekton-chains-controller",
 		}
 
 		var keys []string
@@ -161,6 +166,7 @@ func TestClusterConfigData_All(t *testing.T) {
 			"trustifyServerExternalUrl",
 			"buildIdentityRegexp",
 			"trustifyOIDCIssuerUrl",
+			"tektonChainsIdentity",
 		}
 
 		g.Expect(keys).To(gomega.Equal(expectedOrder))
@@ -291,6 +297,7 @@ func TestClusterConfigData_MergeOver(t *testing.T) {
 			TrustifyServerExternalUrl: "base-trustify-external",
 			BuildIdentityRegexp:       "base-build-identity",
 			TrustifyOIDCIssuerUrl:     "base-trustify-issuer",
+			TektonChainsIdentity:      "https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/base-tekton-chains-controller",
 		}
 
 		override := ClusterConfigData{
@@ -306,11 +313,12 @@ func TestClusterConfigData_MergeOver(t *testing.T) {
 			TrustifyServerExternalUrl: "override-trustify-external",
 			BuildIdentityRegexp:       "override-build-identity",
 			TrustifyOIDCIssuerUrl:     "override-trustify-issuer",
+			TektonChainsIdentity:      "https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/override-tekton-chains-controller",
 		}
 
 		result := override.MergeOver(base)
 
-		g.Expect(result).To(gomega.HaveLen(12))
+		g.Expect(result).To(gomega.HaveLen(13))
 		g.Expect(result["defaultOIDCIssuer"]).To(gomega.Equal("override-oidc"))
 		g.Expect(result["enableKeylessSigning"]).To(gomega.Equal("true"))
 		g.Expect(result["fulcioInternalUrl"]).To(gomega.Equal("override-fulcio-internal"))
@@ -323,6 +331,7 @@ func TestClusterConfigData_MergeOver(t *testing.T) {
 		g.Expect(result["trustifyServerExternalUrl"]).To(gomega.Equal("override-trustify-external"))
 		g.Expect(result["buildIdentityRegexp"]).To(gomega.Equal("override-build-identity"))
 		g.Expect(result["trustifyOIDCIssuerUrl"]).To(gomega.Equal("override-trustify-issuer"))
+		g.Expect(result["tektonChainsIdentity"]).To(gomega.Equal("https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/override-tekton-chains-controller"))
 	})
 
 	t.Run("should combine base and override when no conflicts", func(t *testing.T) {
