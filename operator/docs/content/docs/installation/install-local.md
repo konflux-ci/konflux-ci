@@ -183,8 +183,8 @@ automatically selects `konflux-e2e.yaml`.
 | `GITHUB_PRIVATE_KEY` | Yes¹ | Literal PEM private key content (multi-line, quoted) |
 | `GITHUB_PRIVATE_KEY_PATH` | Yes¹ | Path to `.pem` file - takes precedence over `GITHUB_PRIVATE_KEY` |
 | `WEBHOOK_SECRET` | Yes | Webhook secret for GitHub webhooks. Must match the secret configured in the GitHub App |
-| `QUAY_TOKEN` | No² | Quay OAuth token for image-controller auto-provisioning. Generate at: Quay.io → Account Settings → Applications → Generate Token |
-| `QUAY_ORGANIZATION` | No² | Quay organization where component images will be stored |
+| `QUAY_TOKEN` | No² | Quay OAuth token for image-controller auto-provisioning. See [Registry Configuration]({{< relref "registry-configuration#step-1-create-a-quay-organization-and-oauth-token" >}}) for instructions. |
+| `QUAY_ORGANIZATION` | No² | Quay organization where component images will be stored. See [Registry Configuration]({{< relref "registry-configuration#step-1-create-a-quay-organization-and-oauth-token" >}}) for instructions. |
 | `SMEE_CHANNEL` | No³ | Full Smee channel URL (`https://smee.io/<channel-id>`). Required only when using smee for webhook relay (cluster not reachable); must match the GitHub App webhook URL. Generate the channel ID with `head -c 30 /dev/random | base64 | tr -dc 'a-zA-Z0-9'` and use it as the URL path, or create a channel at [smee.io](https://smee.io/). |
 
 ¹ Provide either `GITHUB_PRIVATE_KEY` or `GITHUB_PRIVATE_KEY_PATH`.

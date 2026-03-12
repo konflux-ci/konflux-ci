@@ -1,13 +1,13 @@
 ---
-title: "Installing via OLM"
-linkTitle: "Installing via OLM"
-weight: 4
+title: "Installing from OLM"
+linkTitle: "Installing from OLM"
+weight: 5
 description: "Installing the Konflux Operator through the Operator Lifecycle Manager (OLM)."
 ---
 
 The Konflux Operator is published to the
-[OpenShift community operators catalog](https://github.com/redhat-openshift-ecosystem/community-operators-prod/tree/main/operators/konflux)
-and can be installed through OLM on OpenShift clusters.
+[community operators catalog](https://github.com/redhat-openshift-ecosystem/community-operators-prod/tree/main/operators/konflux)
+and can be installed through OLM on any cluster that has OLM installed.
 
 ## Channels
 
@@ -23,21 +23,49 @@ Substitute the appropriate stream (e.g. `v0.2`) when a newer stream is available
 
 ## Prerequisites
 
-- OpenShift v4.20 or newer
+| Tool | Minimum version |
+|------|----------------|
+| [git](https://git-scm.com/) | v2.46 |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | v1.31.4 |
+| [openssl](https://www.openssl.org/) | v3.0.13 |
+
 - `cluster-admin` permissions
-- [cert-manager Operator](https://docs.openshift.com/container-platform/latest/security/cert_manager_operator/cert-manager-operator-install.html) installed
-- [OpenShift Pipelines Operator](https://docs.redhat.com/en/documentation/red_hat_openshift_pipelines/latest/html/installing_and_configuring/installing-pipelines) installed
+- A Kubernetes cluster with [OLM](https://olm.operatorframework.io/) installed and the
+  following dependencies (see [Setup](#setup)):
+  - Tekton (or OpenShift Pipelines when using OpenShift)
+  - cert-manager
+  - trust-manager
+  - Kyverno
+  - Pipelines-as-Code
 
-OLM is included by default on OpenShift. The operator is published to the OpenShift
-community operators catalog and currently targets OpenShift **v4.20 and v4.21**.
+{{< alert color="info" >}}
+OLM is included by default on OpenShift. For vanilla Kubernetes, follow the
+<a href="https://olm.operatorframework.io/docs/getting-started/">OLM getting started guide</a>
+to install it first.
+{{< /alert >}}
 
-## Install via the OpenShift Web Console
+## Setup
 
-1. Open the OpenShift Web Console and navigate to **Operators → OperatorHub**.
-2. Search for **Konflux**.
-3. Select the **Konflux Operator** and click **Install**.
-4. Choose the desired channel (e.g. **`stable-v0.1`**) and set the installation namespace to `konflux-operator`.
-5. Click **Install** and wait for the operator to become ready.
+1. Clone the repository:
+
+```bash
+git clone https://github.com/konflux-ci/konflux-ci.git
+cd konflux-ci
+```
+
+2. Deploy the cluster dependencies:
+
+```bash
+# Generic Kubernetes
+SKIP_DEX=true SKIP_INTERNAL_REGISTRY=true SKIP_SMEE=true ./deploy-deps.sh
+
+# OpenShift - use native operators instead of upstream ones
+USE_OPENSHIFT_PIPELINES=true USE_OPENSHIFT_CERTMANAGER=true \
+SKIP_DEX=true SKIP_INTERNAL_REGISTRY=true SKIP_SMEE=true \
+./deploy-deps.sh
+```
+
+Alternatively, apply the individual kustomizations under `dependencies/` manually.
 
 ## Install via kubectl
 
@@ -79,7 +107,7 @@ spec:
   # channel: stable-v0.1  # omit to use the default channel
   installPlanApproval: Automatic
   source: community-operators
-  sourceNamespace: openshift-marketplace
+  sourceNamespace: <catalog-namespace>  # openshift-marketplace on OpenShift, olm on vanilla Kubernetes
 ```
 
 ```bash
@@ -102,14 +130,25 @@ kubectl get subscription konflux-operator -n konflux-operator
 kubectl get installplan -n konflux-operator
 ```
 
+## Install via the OpenShift Web Console
+
+On OpenShift, you can also install through the OperatorHub UI:
+
+1. Navigate to **Operators → OperatorHub**.
+2. Search for **Konflux**.
+3. Select the **Konflux Operator** and click **Install**.
+4. Choose the desired channel (e.g. **`stable-v0.1`**) and set the installation namespace to `konflux-operator`.
+5. Click **Install** and wait for the operator to become ready.
+
+
+## Create and verify the Konflux Custom Resource
+
+See [Applying the Konflux Custom Resource]({{< relref "apply-konflux-cr" >}}) for instructions
+on creating a Konflux CR and verifying that all components are ready.
 ## What's next
 
-Once the Operator is running, create a `Konflux` Custom Resource to deploy all Konflux
-components. Continue with [Create a Konflux CR]({{< relref "install-kubernetes#step-2-create-a-konflux-cr" >}})
-to configure secrets and verify the installation.
 
-- [Installing on Kubernetes]({{< relref "install-kubernetes" >}}) - apply a Konflux CR and configure secrets
-- [Onboard a new Application]({{< relref "onboard" >}}) - onboard an application, run builds, tests, and releases
-- [API Reference]({{< relref "../reference/konflux.v1alpha1" >}}) - full CR field reference
-- [Troubleshooting]({{< relref "../troubleshooting" >}}) - solutions to common issues
-- [Examples]({{< relref "../examples" >}}) - sample Konflux CR configurations
+- [Onboard a new Application]({{< relref "onboard" >}}) — onboard an application, run builds, tests, and releases
+- [API Reference]({{< relref "../reference/konflux.v1alpha1" >}}) — full CR field reference
+- [Troubleshooting]({{< relref "../troubleshooting" >}}) — solutions to common issues
+- [Examples]({{< relref "../examples" >}}) — sample Konflux CR configurations
