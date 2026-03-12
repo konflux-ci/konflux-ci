@@ -264,6 +264,11 @@ type ClusterConfigData struct {
 	// that signed artifacts as part of the build pipeline.
 	// +optional
 	BuildIdentityRegexp string `json:"buildIdentityRegexp,omitempty"`
+
+	// TektonChainsIdentity is the identity of Tekton Chains used when verifying
+	// the signature of attestations produced by Tekton Chains.
+	// +optional
+	TektonChainsIdentity string `json:"tektonChainsIdentity,omitempty"`
 }
 
 // All is an iterator that yields all non-empty key-value pairs from ClusterConfigData.
@@ -322,6 +327,11 @@ func (d ClusterConfigData) All(yield func(key, value string) bool) {
 	}
 	if d.BuildIdentityRegexp != "" {
 		if !yield("buildIdentityRegexp", d.BuildIdentityRegexp) {
+			return
+		}
+	}
+	if d.TektonChainsIdentity != "" {
+		if !yield("tektonChainsIdentity", d.TektonChainsIdentity) {
 			return
 		}
 	}
