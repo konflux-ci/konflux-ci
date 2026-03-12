@@ -450,6 +450,11 @@ spec:
                                 description: RekorInternalUrl is the internal Rekor
                                   URL.
                                 type: string
+                              trustifyOIDCIssuerURL:
+                                description: |-
+                                  trustifyOIDCIssuerURL is the URL of the OIDC issuer
+                                  used by Trustification clients.
+                                type: string
                               trustifyServerExternalUrl:
                                 description: TrustifyServerExternalUrl is the external
                                   URL for the Trustify server.
