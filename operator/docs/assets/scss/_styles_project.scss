@@ -20,45 +20,100 @@
   }
 }
 
-// Dark mode: Make all YAML values appear as #0a3069
+// Dark mode: fix code block readability.
+//
+// Hugo's Chroma highlighter bakes a light background (background-color:#f7f7f7)
+// as an inline style on every <pre> tag. In dark mode the page background turns
+// dark but the code block stays light, so plain text nodes (no explicit color
+// span) inherit the dark-mode body color (near-white) and become invisible on
+// the light code-block background. The fix below sets a visible dark base color
+// on the <code> element for each language; spans that already carry explicit
+// inline color attributes are left untouched (their inline styles win the
+// cascade naturally, but we re-assert them with !important as a safety net).
 [data-bs-theme="dark"] {
   .td-content {
-    // Target all YAML code blocks (standalone and in containers)
+
+    // ── YAML blocks ────────────────────────────────────────────────────────
     code.language-yaml,
     code[data-lang="yaml"],
     .highlight code.language-yaml,
     .highlight code[data-lang="yaml"],
     pre code.language-yaml,
     pre code[data-lang="yaml"] {
-      // Set default color for all text (including plain text nodes) to #0a3069
-      // This makes unquoted values inherit the correct color
-      color: #0a3069 !important;
+      color: #0a3069 !important; // base color for unclassified value text
 
-      // Override for keys, comments, syntax, and spacing to keep their original colors
-      // Keys (like apiVersion, kind, metadata, etc.)
       span[style*="color:#0550ae"],
       span[style*="color: #0550ae"] {
-        color: #0550ae !important;
+        color: #0550ae !important; // keys
       }
 
-      // Colons and syntax
       span[style*="color:#1f2328"],
       span[style*="color: #1f2328"] {
-        color: #1f2328 !important;
+        color: #1f2328 !important; // colons / syntax
       }
 
-      // Comments
       span[style*="color:#57606a"],
       span[style*="color: #57606a"] {
-        color: #57606a !important;
+        color: #57606a !important; // comments
       }
 
-      // White color spans (spacing/newlines)
       span[style*="color:#fff"],
       span[style*="color: #fff"],
       span[style*="color:#ffffff"],
       span[style*="color: #ffffff"] {
-        color: #fff !important;
+        color: #fff !important; // whitespace spans
+      }
+    }
+
+    // ── Bash blocks ─────────────────────────────────────────────────────────
+    code.language-bash,
+    code[data-lang="bash"],
+    .highlight code.language-bash,
+    .highlight code[data-lang="bash"],
+    pre code.language-bash,
+    pre code[data-lang="bash"] {
+      color: #1f2328 !important; // base color for unclassified command/argument text
+
+      span[style*="color:#0550ae"],
+      span[style*="color: #0550ae"] {
+        color: #0550ae !important; // operators / equals signs
+      }
+
+      span[style*="color:#0a3069"],
+      span[style*="color: #0a3069"] {
+        color: #0a3069 !important; // strings / line continuations
+      }
+
+      span[style*="color:#6639ba"],
+      span[style*="color: #6639ba"] {
+        color: #6639ba !important; // builtins (e.g. wait)
+      }
+
+      span[style*="color:#953800"],
+      span[style*="color: #953800"] {
+        color: #953800 !important; // variables (e.g. $NS, $condition)
+      }
+
+      span[style*="color:#cf222e"],
+      span[style*="color: #cf222e"] {
+        color: #cf222e !important; // keywords (for, do, done, if)
+      }
+
+      span[style*="color:#1f2328"],
+      span[style*="color: #1f2328"] {
+        color: #1f2328 !important; // punctuation / semicolons
+      }
+
+      span[style*="color:#57606a"],
+      span[style*="color: #57606a"] {
+        color: #57606a !important; // comments
+      }
+
+      span[style*="color:#fff"],
+      span[style*="color: #fff"],
+      span[style*="color:#ffffff"],
+      span[style*="color: #ffffff"] {
+        color: #fff !important; // whitespace spans
       }
     }
   }
