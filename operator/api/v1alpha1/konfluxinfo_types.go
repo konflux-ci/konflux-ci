@@ -265,10 +265,10 @@ type ClusterConfigData struct {
 	// +optional
 	BuildIdentityRegexp string `json:"buildIdentityRegexp,omitempty"`
 
-	// trustifyOIDCIssuerURL is the URL of the OIDC issuer
+	// trustifyOIDCIssuerUrl is the URL of the OIDC issuer
 	// used by Trustification clients.
 	// +optional
-	TrustifyOIDCIssuerURL string `json:"trustifyOIDCIssuerURL,omitempty"`
+	TrustifyOIDCIssuerUrl string `json:"trustifyOIDCIssuerUrl,omitempty"`
 }
 
 // All is an iterator that yields all non-empty key-value pairs from ClusterConfigData.
@@ -330,8 +330,8 @@ func (d ClusterConfigData) All(yield func(key, value string) bool) {
 			return
 		}
 	}
-	if d.TrustifyOIDCIssuerURL != "" {
-		if !yield("trustifyOIDCIssuerURL", d.TrustifyOIDCIssuerURL) {
+	if d.TrustifyOIDCIssuerUrl != "" {
+		if !yield("trustifyOIDCIssuerUrl", d.TrustifyOIDCIssuerUrl) {
 			return
 		}
 	}
