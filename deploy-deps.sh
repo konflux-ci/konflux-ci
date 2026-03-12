@@ -2,6 +2,29 @@
 
 script_path="$(dirname -- "${BASH_SOURCE[0]}")"
 
+# Track deployment progress for failure reporting
+COMPLETED_STEPS=()
+CURRENT_STEP=""
+
+# Print deployment status on failure
+print_failure_status() {
+    local exit_code=$?
+    if [[ $exit_code -ne 0 && -n "$CURRENT_STEP" ]]; then
+        echo "" >&2
+        echo "❌ Deployment failed during: $CURRENT_STEP" >&2
+        if [[ ${#COMPLETED_STEPS[@]} -gt 0 ]]; then
+            echo "✅ Completed steps:" >&2
+            for step in "${COMPLETED_STEPS[@]}"; do
+                echo "   - $step" >&2
+            done
+        fi
+        echo "" >&2
+        echo "💡 The script is idempotent - you can re-run it after fixing the issue." >&2
+    fi
+}
+
+trap print_failure_status EXIT
+
 main() {
     echo "🔍 Checking requirements" >&2
     check_req
@@ -69,26 +92,58 @@ check_req(){
 }
 
 deploy() {
+    CURRENT_STEP="Cert Manager"
     echo "🔐 Deploying Cert Manager..." >&2
     deploy_cert_manager
+    COMPLETED_STEPS+=("$CURRENT_STEP")
+
+    CURRENT_STEP="Trust Manager"
     echo "🤝 Deploying Trust Manager..." >&2
     deploy_trust_manager
+    COMPLETED_STEPS+=("$CURRENT_STEP")
+
+    CURRENT_STEP="Cluster Issuer"
     echo "📜 Setting up Cluster Issuer..." >&2
     deploy_cluster_issuer
+    COMPLETED_STEPS+=("$CURRENT_STEP")
+
+    CURRENT_STEP="Tekton"
     echo "🐱 Deploying Tekton..." >&2
     deploy_tekton
+    COMPLETED_STEPS+=("$CURRENT_STEP")
+
+    CURRENT_STEP="Dex"
     echo "🔑 Deploying Dex..." >&2
     deploy_dex
+    COMPLETED_STEPS+=("$CURRENT_STEP")
+
+    CURRENT_STEP="Registry"
     echo "📦 Deploying Registry..." >&2
     deploy_registry
+    COMPLETED_STEPS+=("$CURRENT_STEP")
+
+    CURRENT_STEP="Smee"
     echo "🔄 Deploying Smee..." >&2
     deploy_smee
+    COMPLETED_STEPS+=("$CURRENT_STEP")
+
+    CURRENT_STEP="Kyverno"
     echo "🛡️  Deploying Kyverno..." >&2
     deploy_kyverno
+    COMPLETED_STEPS+=("$CURRENT_STEP")
+
+    CURRENT_STEP="Konflux Info"
     echo "📋 Deploying Konflux Info..." >&2
     deploy_konflux_info
+    COMPLETED_STEPS+=("$CURRENT_STEP")
+
+    CURRENT_STEP="Quay"
     echo "🐳 Deploying Quay..." >&2
     deploy_quay
+    COMPLETED_STEPS+=("$CURRENT_STEP")
+
+    # Clear current step on success
+    CURRENT_STEP=""
 }
 
 test_pvc_binding(){
