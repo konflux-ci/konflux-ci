@@ -2,7 +2,6 @@ package conformance
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -22,7 +21,6 @@ import (
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/utils/tekton"
 	ginkgo "github.com/onsi/ginkgo/v2"
 	gomega "github.com/onsi/gomega"
-	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 
 	integrationv1beta2 "github.com/konflux-ci/integration-service/api/v1beta2"
 	releaseApi "github.com/konflux-ci/release-service/api/v1alpha1"
@@ -32,14 +30,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
 )
-
-var _ = ginkgo.BeforeSuite(func() {
-	if os.Getenv("QUAY_TOKEN") == "" {
-		if qdc := os.Getenv("QUAY_DOCKERCONFIGJSON"); qdc != "" {
-			os.Setenv("QUAY_TOKEN", base64.StdEncoding.EncodeToString([]byte(qdc)))
-		}
-	}
-})
 
 var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamKonfluxTestLabel), func() {
 	defer ginkgo.GinkgoRecover()
@@ -78,28 +68,15 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 				userNamespace = fw.UserNamespace
-				managedNamespace = userNamespace + "-managed"
+				managedNamespace = "default-managed-tenant"
 				klog.Info("conformance: namespaces ready", "user", userNamespace, "managed", managedNamespace)
 
 				componentName = fmt.Sprintf("%s-%s", appSpec.ComponentSpec.Name, util.GenerateRandomString(4))
 				pacBranchName = constants.PaCPullRequestBranchPrefix + componentName
 				componentRepositoryName = utils.ExtractGitRepositoryNameFromURL(appSpec.ComponentSpec.GitSourceUrl)
 
-				sharedSecret, secretErr := fw.AsKubeAdmin.CommonController.GetSecret(constants.QuayRepositorySecretNamespace, constants.QuayRepositorySecretName)
-				if secretErr != nil && k8sErrors.IsNotFound(secretErr) {
-					sharedSecret, secretErr = createE2EQuaySecret(fw.AsKubeAdmin.CommonController.CustomClient)
-				}
-				gomega.Expect(secretErr).ShouldNot(gomega.HaveOccurred(), "failed to get/create quay secret %s/%s", constants.QuayRepositorySecretNamespace, constants.QuayRepositorySecretName)
-
-				createReleaseConfig(fw.AsKubeAdmin, managedNamespace, userNamespace, appSpec.ComponentSpec.Name, appSpec.ApplicationName, sharedSecret.Data[".dockerconfigjson"], utils.GetEnv("RELEASE_TA_OCI_STORAGE", ""))
-
-				taToken := utils.GetEnv("RELEASE_CATALOG_TA_QUAY_TOKEN", "")
-				if taToken != "" {
-					_, err = fw.AsKubeAdmin.CommonController.CreateRegistryAuthSecret(releaseCatalogTAQuaySecret, managedNamespace, taToken)
-					gomega.Expect(err).NotTo(gomega.HaveOccurred())
-					err = fw.AsKubeAdmin.CommonController.LinkSecretToServiceAccount(managedNamespace, releaseCatalogTAQuaySecret, "release-service-account", true)
-					gomega.Expect(err).NotTo(gomega.HaveOccurred())
-				}
+				gomega.Expect(runSetupRelease(appSpec.ApplicationName, componentName, userNamespace, managedNamespace)).To(gomega.Succeed())
+				gomega.Expect(grantIntegrationRunnerJobRBAC(userNamespace)).To(gomega.Succeed())
 
 				buildPipelineAnnotation = build.GetBuildPipelineBundleAnnotation(appSpec.ComponentSpec.BuildPipelineType)
 			})
@@ -109,9 +86,6 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 					return
 				}
 				klog.Info("conformance: cleaning up")
-				// Fire-and-forget namespace deletion (don't wait for termination -- it can take minutes
-				// and the 30m test timeout includes cleanup time)
-				_ = fw.AsKubeAdmin.CommonController.KubeInterface().CoreV1().Namespaces().Delete(context.Background(), userNamespace, metav1.DeleteOptions{})
 				_ = fw.AsKubeAdmin.CommonController.KubeInterface().CoreV1().Namespaces().Delete(context.Background(), managedNamespace, metav1.DeleteOptions{})
 				cleanupWithRetry("delete PaC branch", func() error {
 					return fw.AsKubeAdmin.CommonController.GitHub.DeleteRef(componentRepositoryName, pacBranchName)
