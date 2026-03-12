@@ -14,16 +14,31 @@ and deploy its credentials as secrets in the cluster.
 Create a GitHub App following the
 [Pipelines-as-Code documentation](https://pipelinesascode.com/docs/install/github_apps/#manual-setup).
 
+{{% alert color="info" %}}
+That tutorial asks you to generate and set a **Webhook secret** when creating the App.
+The same value should be used in the App and for `WEBHOOK_SECRET` in `deploy-local.env`.
+
+Generate a random secret running: `head -c 30 /dev/random | base64`.
+{{% /alert %}}
+
 For `Homepage URL` you can use `https://localhost:9443/` (it doesn't matter).
 
 For `Webhook URL`, use either:
 - Your cluster's publicly reachable ingress URL, if available
 - A [smee](https://smee.io/) webhook proxy URL, if the cluster is not reachable from
-  the internet (see [Webhook Proxy for Non-Exposed Clusters](#webhook-proxy-for-non-exposed-clusters) below)
+  the internet (see
+  [Webhook Proxy for Non-Exposed Clusters](#webhook-proxy-for-non-exposed-clusters) below)
 
 Per the instructions on the link, generate and download the private key. Take note of
-the App ID and the webhook secret you configure during the process. You will need these
-values to create the cluster secrets.
+the location of the private Key, the App ID and the webhook secret you set in the App
+(random value generated above).
+
+If using a local cluster, set these values in `deploy-local.env`:
+- **GITHUB_PRIVATE_KEY_PATH**: path to private key downloaded earlier
+- **WEBHOOK_SECRET**: secret generated earlier
+- **GITHUB_APP_ID**: GitHub APP ID
+
+If deploying to a remote cluster, refer to the [section below](#creating-the-secrets).
 
 Install the GitHub App on the repositories you want to use with Konflux.
 
@@ -33,13 +48,13 @@ When deployed in a local environment like Kind, or behind a firewall, GitHub can
 reach the cluster's webhook endpoint directly. Use [smee](https://smee.io/) as a
 proxy to relay webhook events into the cluster.
 
-The `deploy-local.sh` script handles smee configuration automatically. Set the
-`SMEE_CHANNEL` variable in `scripts/deploy-local.env` to use a specific channel, or
-leave it empty to have one generated automatically. Use the smee channel URL as the
-`Webhook URL` when creating or configuring your GitHub App.
-
-For manual deployments, see the [smee client documentation](https://github.com/probot/smee-client)
-for deploying a client to your cluster.
+Generate a smee channel ID with
+`head -c 30 /dev/random | base64 | tr -dc 'a-zA-Z0-9'`, then use
+`https://smee.io/<channel-id>` (with that output as `<channel-id>`) as the
+**Webhook URL** when creating or configuring your GitHub App, and set the same URL
+as `SMEE_CHANNEL` in `scripts/deploy-local.env`. The `deploy-local.sh` script
+configures the smee client to listen on that channel. Alternatively, create a
+channel at [smee.io](https://smee.io/) and use the URL it gives you.
 
 ## Creating the Secrets
 
