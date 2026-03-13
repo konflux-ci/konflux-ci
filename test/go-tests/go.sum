@@ -371,8 +371,8 @@ github.com/konflux-ci/application-api v0.0.0-20251210122215-555a927cf6d9 h1:b4tC
 github.com/konflux-ci/application-api v0.0.0-20251210122215-555a927cf6d9/go.mod h1:948Z+a1IbfRT0RtoHzWWSN9YEucSbMJTHaMhz7dVICc=
 github.com/konflux-ci/build-service v0.0.0-20240611083846-2dee6cfe6fe4 h1:oZpPHgpAUI9OyvirRJ+0r0QFuiP8Par/CFZIwlr/6Ps=
 github.com/konflux-ci/build-service v0.0.0-20240611083846-2dee6cfe6fe4/go.mod h1:KgSj+voT2lpIu54zzUkHEXCMdnMGmf+Z9cQh+wTQ6ns=
-github.com/konflux-ci/image-controller v0.0.0-20240530145826-3296e4996f6f h1:IKlHR2SjBGx/qVgCpu7+/u5b0vHcRuvq+PiqG774Coo=
-github.com/konflux-ci/image-controller v0.0.0-20240530145826-3296e4996f6f/go.mod h1:sktzzIA3GZy9RUjPZFeDyM0G3OFGZJH8U8Np0NCJNUA=
+github.com/konflux-ci/image-controller v0.0.0-20241128141349-9986c9955e05 h1:5Xawkybl99uEiXhkdkxWtHDWitgnf+kAjpNVTanVGRE=
+github.com/konflux-ci/image-controller v0.0.0-20241128141349-9986c9955e05/go.mod h1:a/94a7ohVwjq6/MayAi15Ylcahl+zzkAzVeVFak/PUQ=
 github.com/konflux-ci/integration-service v0.0.0-20260108133201-e2f5559a9544 h1:xJKx9GnGmG/LRFx9BmoA5sON9W3mVPK+c9FOJE0sM4Y=
 github.com/konflux-ci/integration-service v0.0.0-20260108133201-e2f5559a9544/go.mod h1:LgoY/4g4Fh8zvp21qP+u4RRWTprDCXdXg+NIKqMzU3k=
 github.com/konflux-ci/operator-toolkit v0.0.0-20251118152634-b4f41f073069 h1:nT8V7Bva2LclJhWahIQYSNiYRHcmB22H6v4DD/FD7QU=
@@ -487,8 +487,8 @@ github.com/prometheus/procfs v0.19.2/go.mod h1:M0aotyiemPhBCM0z5w87kL22CxfcH05Zp
 github.com/prometheus/statsd_exporter v0.22.7/go.mod h1:N/TevpjkIh9ccs6nuzY3jQn9dFqnUakOjnEuMPJJJnI=
 github.com/prometheus/statsd_exporter v0.28.0 h1:S3ZLyLm/hOKHYZFOF0h4zYmd0EeKyPF9R1pFBYXUgYY=
 github.com/prometheus/statsd_exporter v0.28.0/go.mod h1:Lq41vNkMLfiPANmI+uHb5/rpFFUTxPXiiNpmsAYLvDI=
-github.com/redhat-appstudio/jvm-build-service v0.0.0-20240126122210-0e2ee7e2e5b0 h1:wqP4/99Lg68zRpzt9zSc5OGf3zigaBlvflDuDLmDLdM=
-github.com/redhat-appstudio/jvm-build-service v0.0.0-20240126122210-0e2ee7e2e5b0/go.mod h1:awZP3qi/GpBhQ50N3rRjFPsGbFperwWYSTN+OVG1Gb8=
+github.com/redhat-appstudio/jvm-build-service v0.0.0-20250301023318-b47170d413c5 h1:VcuZ+FHZ42EdUvn3NLqIHP8FkjzKhdV1Z+ckeWIP0u8=
+github.com/redhat-appstudio/jvm-build-service v0.0.0-20250301023318-b47170d413c5/go.mod h1:H6/3l7fjcXWNUkqsGggcCpkj6Yip5Q1XKySjuV374Ic=
 github.com/rogpeppe/fastuuid v1.2.0/go.mod h1:jVj6XXZzXRy/MSR5jhDC/2q6DgLz+nrA6LYCDYWNEvQ=
 github.com/rogpeppe/go-internal v1.3.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=
 github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=
