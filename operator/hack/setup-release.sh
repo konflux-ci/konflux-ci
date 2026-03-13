@@ -291,7 +291,7 @@ metadata:
   namespace: ${MANAGED_NS}
 type: Opaque
 stringData:
-  sso_account: $(echo -n "$SSO_ACCOUNT")
+  sso_account: ${SSO_ACCOUNT}
 data:
   sso_token: ${SSO_TOKEN}
 EOF
