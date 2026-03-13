@@ -23,17 +23,17 @@ require (
 	github.com/onsi/gomega v1.39.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/openshift-pipelines/pipelines-as-code v0.27.2
-	github.com/openshift/api v0.0.0-20260112161841-5b45879294d5
-	github.com/openshift/client-go v0.0.0-20260108185524-48f4ccfc4e13
-	github.com/openshift/library-go v0.0.0-20220525173854-9b950a41acdc
+	github.com/openshift/api v0.0.0-20260302174620-dcac36b908db
+	github.com/openshift/client-go v0.0.0-20260302182750-20813ce71ca6
+	github.com/openshift/library-go v0.0.0-20260311094140-ac826d10cb40
 	github.com/redhat-appstudio/jvm-build-service v0.0.0-20240126122210-0e2ee7e2e5b0
 	github.com/stretchr/testify v1.11.1
 	github.com/tektoncd/cli v0.43.0
 	github.com/tektoncd/pipeline v1.7.0
 	github.com/xanzy/go-gitlab v0.114.0
 	golang.org/x/oauth2 v0.34.0
-	k8s.io/api v0.34.3
-	k8s.io/apimachinery v0.34.3
+	k8s.io/api v0.35.1
+	k8s.io/apimachinery v0.35.1
 	k8s.io/client-go v11.0.0+incompatible
 	k8s.io/klog v1.0.0
 	k8s.io/klog/v2 v2.130.1
@@ -205,7 +205,7 @@ require (
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/apiextensions-apiserver v0.34.3 // indirect
+	k8s.io/apiextensions-apiserver v0.35.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20260304202019-5b3e3fdb0acf // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
