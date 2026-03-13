@@ -14,7 +14,7 @@ require (
 	github.com/h2non/gock v1.2.0
 	github.com/konflux-ci/application-api v0.0.0-20251210122215-555a927cf6d9
 	github.com/konflux-ci/build-service v0.0.0-20240611083846-2dee6cfe6fe4
-	github.com/konflux-ci/image-controller v0.0.0-20240530145826-3296e4996f6f
+	github.com/konflux-ci/image-controller v0.0.0-20260213161326-0489fa4f7ffb
 	github.com/konflux-ci/integration-service v0.0.0-20260108133201-e2f5559a9544
 	github.com/konflux-ci/operator-toolkit v0.0.0-20251118152634-b4f41f073069
 	github.com/konflux-ci/release-service v0.0.0-20260113075649-fff62d349fa9
