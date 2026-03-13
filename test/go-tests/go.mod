@@ -22,7 +22,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.27.4
 	github.com/onsi/gomega v1.39.0
 	github.com/opencontainers/image-spec v1.1.1
-	github.com/openshift-pipelines/pipelines-as-code v0.27.2
+	github.com/openshift-pipelines/pipelines-as-code v0.43.0
 	github.com/openshift/api v0.0.0-20260112161841-5b45879294d5
 	github.com/openshift/client-go v0.0.0-20260108185524-48f4ccfc4e13
 	github.com/openshift/library-go v0.0.0-20220525173854-9b950a41acdc
