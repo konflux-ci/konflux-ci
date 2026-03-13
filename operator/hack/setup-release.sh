@@ -290,8 +290,9 @@ metadata:
   name: release-sso-secret
   namespace: ${MANAGED_NS}
 type: Opaque
+stringData:
+  sso_account: $(echo -n "$SSO_ACCOUNT")
 data:
-  sso_account: $(echo -n "$SSO_ACCOUNT" | base64)
   sso_token: ${SSO_TOKEN}
 EOF
     SSO_SECRET_CREATED=true
