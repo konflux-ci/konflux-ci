@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/gofri/go-github-ratelimit/github_ratelimit"
-	"github.com/google/go-github/v44/github"
+	"github.com/google/go-github/v84/github"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/utils"
 	"golang.org/x/oauth2"
 )

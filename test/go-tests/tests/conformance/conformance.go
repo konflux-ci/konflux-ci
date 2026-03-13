@@ -12,7 +12,7 @@ import (
 	buildcontrollers "github.com/konflux-ci/build-service/controllers"
 
 	"github.com/devfile/library/v2/pkg/util"
-	"github.com/google/go-github/v44/github"
+	"github.com/google/go-github/v84/github"
 	appservice "github.com/konflux-ci/application-api/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/clients/has"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/constants"

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-github/v44/github"
+	"github.com/google/go-github/v84/github"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/constants"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/utils"
 	ginkgo "github.com/onsi/ginkgo/v2"
