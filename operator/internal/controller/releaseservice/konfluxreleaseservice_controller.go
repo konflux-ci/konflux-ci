@@ -209,7 +209,7 @@ func (r *KonfluxReleaseServiceReconciler) SetupWithManager(mgr ctrl.Manager) err
 		return err
 	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&konfluxv1alpha1.KonfluxReleaseService{}).
+		For(&konfluxv1alpha1.KonfluxReleaseService{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Named("konfluxreleaseservice").
 		// Use predicates to filter out unnecessary updates and prevent reconcile loops
 		// Deployments: watch spec changes AND readiness status changes

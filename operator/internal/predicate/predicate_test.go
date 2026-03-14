@@ -21,10 +21,89 @@ import (
 
 	"github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 )
+
+func TestGenerationChangedPredicate_UpdateFunc(t *testing.T) {
+	t.Run("nil objects should trigger reconciliation", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		e := event.UpdateEvent{}
+		result := GenerationChangedPredicate.UpdateFunc(e)
+		g.Expect(result).To(gomega.BeTrue())
+	})
+
+	tests := []struct {
+		name        string
+		oldGen      int64
+		newGen      int64
+		description string
+		expected    bool
+	}{
+		{
+			name:        "status-only update (same generation) should NOT trigger reconciliation",
+			oldGen:      3,
+			newGen:      3,
+			description: "This is the infinite loop scenario: Status().Update() bumps ResourceVersion but not Generation",
+			expected:    false,
+		},
+		{
+			name:        "spec change (generation bumped) should trigger reconciliation",
+			oldGen:      3,
+			newGen:      4,
+			description: "A real spec change from a user or controller bumps Generation",
+			expected:    true,
+		},
+		{
+			name:        "generation 0 to 0 (status-only on resources without generation) should NOT trigger",
+			oldGen:      0,
+			newGen:      0,
+			expected:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+
+			// Use a ConfigMap to represent any object that receives a status-only update.
+			// When a controller calls Status().Update(), the API server increments ResourceVersion
+			// but does NOT increment Generation (generation only changes on spec modifications).
+			// Without GenerationChangedPredicate on For(), every Status().Update() would fire a
+			// watch event that passes all predicates, enqueuing another reconcile and causing
+			// an infinite loop.
+			e := event.UpdateEvent{
+				ObjectOld: &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       "test-object",
+						Generation: tt.oldGen,
+					},
+				},
+				ObjectNew: &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       "test-object",
+						Generation: tt.newGen,
+					},
+				},
+			}
+
+			result := GenerationChangedPredicate.UpdateFunc(e)
+			g.Expect(result).To(gomega.Equal(tt.expected))
+		})
+	}
+}
+
+func TestGenerationChangedPredicate_CreateDeleteGenericFunc(t *testing.T) {
+	g := gomega.NewWithT(t)
+
+	obj := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "test"}}
+
+	g.Expect(GenerationChangedPredicate.CreateFunc(event.CreateEvent{Object: obj})).To(gomega.BeTrue())
+	g.Expect(GenerationChangedPredicate.DeleteFunc(event.DeleteEvent{Object: obj})).To(gomega.BeTrue())
+	g.Expect(GenerationChangedPredicate.GenericFunc(event.GenericEvent{Object: obj})).To(gomega.BeTrue())
+}
 
 func TestKonfluxUIIngressStatusChangedPredicate_UpdateFunc(t *testing.T) {
 	t.Run("nil objects should trigger reconciliation", func(t *testing.T) {

@@ -153,7 +153,7 @@ func (r *KonfluxDefaultTenantReconciler) applyManifests(ctx context.Context, tc 
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxDefaultTenantReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&konfluxv1alpha1.KonfluxDefaultTenant{}).
+		For(&konfluxv1alpha1.KonfluxDefaultTenant{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Named("konfluxdefaulttenant").
 		// Watch Namespace, ConfigMap, ServiceAccount, and RoleBindings
 		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
