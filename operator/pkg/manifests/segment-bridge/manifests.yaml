@@ -33,6 +33,13 @@ rules:
   verbs:
   - get
   - list
+- apiGroups:
+  - konflux.konflux-ci.dev
+  resources:
+  - konfluxes
+  verbs:
+  - get
+  - list
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -67,7 +74,7 @@ spec:
             - secretRef:
                 name: segment-bridge-config
                 optional: true
-            image: quay.io/konflux-ci/segment-bridge:9a71cedbbdce3bf00dda019ea7252e894f755f2a
+            image: quay.io/konflux-ci/segment-bridge:1f866ab3758b05bce37a8e156ca6a81cb64ffa90
             imagePullPolicy: IfNotPresent
             name: segment-bridge
             resources:
