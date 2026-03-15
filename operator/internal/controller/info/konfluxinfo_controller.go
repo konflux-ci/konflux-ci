@@ -98,6 +98,8 @@ const (
 	ClusterConfigKeyTrustifyServerExternalUrl = "trustifyServerExternalUrl"
 	// ClusterConfigKeyBuildIdentityRegexp is the ConfigMap key for the regex pattern matching build pipeline signing identities.
 	ClusterConfigKeyBuildIdentityRegexp = "buildIdentityRegexp"
+	// ClusterConfigKeyTrustifyOIDCIssuerUrl is the ConfigMap key for URL of the OIDC issuer used by Trustification clients.
+	ClusterConfigKeyTrustifyOIDCIssuerUrl = "trustifyOIDCIssuerUrl"
 )
 
 // ClusterConfigDiscoverer is an interface for discovering cluster configuration values.
