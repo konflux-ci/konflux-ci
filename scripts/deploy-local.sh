@@ -55,12 +55,19 @@ set -euo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 REPO_ROOT=$(dirname "$SCRIPT_DIR")
 
-# Optional: Load environment configuration from file if it exists
+# Optional: Load environment configuration from file if it exists.
+# Precedence (high to low): injected env vars > env file > script defaults.
+# Snapshot the caller's environment first so that any vars passed on the
+# command line (e.g. OPERATOR_INSTALL_METHOD=none ./scripts/deploy-local.sh)
+# are restored after sourcing and therefore take priority over the env file.
 ENV_FILE="${SCRIPT_DIR}/deploy-local.env"
 if [ -f "${ENV_FILE}" ]; then
     echo "Loading configuration from ${ENV_FILE}"
+    _pre_env=$(export -p)
     # shellcheck disable=SC1090
     source "${ENV_FILE}"
+    eval "$_pre_env"
+    unset _pre_env
 fi
 
 # Validate REQUIRED variables
