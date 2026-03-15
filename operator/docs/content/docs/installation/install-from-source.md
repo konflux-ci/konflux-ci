@@ -1,7 +1,7 @@
 ---
 title: "Building and Installing from Source"
 linkTitle: "Building and Installing from Source"
-weight: 2
+weight: 3
 description: "Building and running the Konflux Operator from source for development or custom deployments."
 ---
 
@@ -15,18 +15,24 @@ to run a custom build. There are two modes:
 
 ## Prerequisites
 
-- [Go](https://go.dev/) v1.25.0 or newer
-- [Docker](https://www.docker.com/) 17.03+ or [Podman](https://podman.io/) equivalent
-- `kubectl` v1.11.3 or newer, configured against a running cluster
-- `make`
+| Tool | Minimum version |
+|------|----------------|
+| [Go](https://go.dev/) | v1.25.0 |
+| [podman](https://podman.io/docs/installation) or [docker](https://docs.docker.com/engine/install/) | podman v5.3.1 / docker v27.0.1 *(required only when building an Operator image)* |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | v1.31.4 |
+| [make](https://www.gnu.org/software/make/) | — |
+| [openssl](https://www.openssl.org/) | v3.0.13 |
+
 - `cluster-admin` permissions
+- A Kubernetes cluster with the following dependencies installed
+  (see [Setup](#setup)):
+  - Tekton (or OpenShift Pipelines when using OpenShift)
+  - cert-manager
+  - trust-manager
+  - Kyverno
+  - Pipelines-as-Code
 
-Clone the repository:
-
-```bash
-git clone https://github.com/konflux-ci/konflux-ci.git
-cd konflux-ci
-```
+## Setup
 
 {{< alert color="info" >}}
 All <code>./scripts/</code> commands run from the <strong>repository root</strong>
@@ -34,23 +40,38 @@ All <code>./scripts/</code> commands run from the <strong>repository root</stron
 <strong><code>operator/</code> subdirectory</strong>.
 {{< /alert >}}
 
+1. Clone the repository:
+
+```bash
+git clone https://github.com/konflux-ci/konflux-ci.git
+cd konflux-ci
+```
+
+2. Deploy the cluster dependencies:
+
+{{< alert color="info" >}}
+If you are working with a local Kind cluster, <a href="{{< relref "install-local#setup" >}}">Local Deployment (Kind)</a>
+provides a fully automated setup that handles cluster creation and dependency deployment
+in a single step.
+{{< /alert >}}
+
+```bash
+# Generic Kubernetes
+SKIP_DEX=true SKIP_INTERNAL_REGISTRY=true SKIP_SMEE=true ./deploy-deps.sh
+
+# OpenShift - use native operators instead of upstream ones
+USE_OPENSHIFT_PIPELINES=true USE_OPENSHIFT_CERTMANAGER=true \
+SKIP_DEX=true SKIP_INTERNAL_REGISTRY=true SKIP_SMEE=true \
+./deploy-deps.sh
+```
+
+Alternatively, apply the individual kustomizations under `dependencies/` manually.
+
 ## Run Operator locally
 
 Running the Operator locally is the recommended workflow for most development scenarios.
 The Operator process runs on your machine and uses your `kubectl` context to connect to
 the cluster - no image build required.
-
-Before running the Operator, you need a Kubernetes cluster with Konflux's dependencies
-deployed (Tekton, cert-manager, secrets, etc.). The easiest way is to use
-`deploy-local.sh` with the `none` install method, which sets up Kind and all
-dependencies without installing the Operator, leaving that to you:
-
-```bash
-OPERATOR_INSTALL_METHOD=none ./scripts/deploy-local.sh
-```
-
-See [Local Deployment (Kind)]({{< relref "install-local" >}}) for setup instructions
-and all configuration options.
 
 ### Step 1: Install the CRDs
 
@@ -68,7 +89,7 @@ make run
 The Operator connects to your cluster, watches for `Konflux` Custom Resources, and
 reconciles them. Keep this terminal open while you work.
 
-### Step 3: Create instances
+### Step 3: Create The Konflux Custom Resource
 
 In a **separate terminal**, create a Konflux instance by applying one of the samples from
 `config/samples/` and wait for Konflux to be ready:
@@ -107,8 +128,8 @@ and all configuration options.
 ### Path 2: Manual deployment on an existing cluster
 
 Use this path when you have an existing cluster that already has Konflux's dependencies
-deployed (e.g. set up with `OPERATOR_INSTALL_METHOD=none`) and you want to deploy only
-the Operator image.
+deployed — either manually or using the built-in scripts described in [Setup](#setup) —
+and you want to deploy only the Operator image.
 
 #### Step 1: Build and push the image
 
@@ -135,7 +156,7 @@ make deploy IMG=<your-registry>/konflux-operator:<tag>
 If you encounter RBAC errors, ensure your user has cluster-admin privileges.
 {{< /alert >}}
 
-#### Step 4: Create instances
+#### Step 4: Create The Konflux Custom Resource
 
 Apply one of the samples from `config/samples/` and wait for Konflux to be ready:
 
@@ -146,7 +167,7 @@ kubectl wait --for=condition=Ready=True konflux konflux --timeout=10m
 
 ## Uninstall
 
-Remove Konflux CR instances:
+Remove the Konflux CR:
 
 ```bash
 kubectl delete -f config/samples/<the sample file you applied>
