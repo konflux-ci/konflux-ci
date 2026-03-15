@@ -98,6 +98,8 @@ const (
 	ClusterConfigKeyTrustifyServerExternalUrl = "trustifyServerExternalUrl"
 	// ClusterConfigKeyBuildIdentityRegexp is the ConfigMap key for the regex pattern matching build pipeline signing identities.
 	ClusterConfigKeyBuildIdentityRegexp = "buildIdentityRegexp"
+	// ClusterConfigKeyTektonChainsIdentity is the ConfigMap key for the Tekton Chains identity used when verifying attestation signatures.
+	ClusterConfigKeyTektonChainsIdentity = "tektonChainsIdentity"
 )
 
 // ClusterConfigDiscoverer is an interface for discovering cluster configuration values.

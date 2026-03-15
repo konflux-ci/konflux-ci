@@ -450,6 +450,11 @@ spec:
                                 description: RekorInternalUrl is the internal Rekor
                                   URL.
                                 type: string
+                              tektonChainsIdentity:
+                                description: |-
+                                  TektonChainsIdentity is the identity of Tekton Chains used when verifying
+                                  the signature of attestations produced by Tekton Chains.
+                                type: string
                               trustifyServerExternalUrl:
                                 description: TrustifyServerExternalUrl is the external
                                   URL for the Trustify server.
