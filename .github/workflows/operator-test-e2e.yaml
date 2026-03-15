@@ -108,6 +108,10 @@ jobs:
             test_scope: "integration+e2e"
             konflux_cr: "operator/config/samples/konflux-e2e.yaml"
             job_name: "Run Operator E2E Tests (AMD64)"
+            github_app_id: APP_ID_AMD64
+            github_private_key: APP_PRIVATE_KEY_AMD64
+            webhook_secret: APP_WEBHOOK_SECRET_AMD64
+            smee_channel: SMEE_CHANNEL_AMD64
           - arch: arm64
             runner: ubuntu-24.04-arm
             kind_binary: kind-linux-arm64
@@ -117,6 +121,10 @@ jobs:
             test_scope: "integration+e2e"
             konflux_cr: "operator/config/samples/konflux-e2e.yaml"
             job_name: "Run Operator E2E Tests (ARM64)"
+            github_app_id: APP_ID_ARM64
+            github_private_key: APP_PRIVATE_KEY_ARM64
+            webhook_secret: APP_WEBHOOK_SECRET_ARM64
+            smee_channel: SMEE_CHANNEL_ARM64
     steps:
       - name: Skip test - no operator changes
         run: |
@@ -141,6 +149,10 @@ jobs:
             test_scope: "integration+e2e"
             konflux_cr: "operator/config/samples/konflux-e2e.yaml"
             job_name: "Run Operator E2E Tests (AMD64)"
+            github_app_id: APP_ID_AMD64
+            github_private_key: APP_PRIVATE_KEY_AMD64
+            webhook_secret: APP_WEBHOOK_SECRET_AMD64
+            smee_channel: SMEE_CHANNEL_AMD64
           - arch: arm64
             runner: ubuntu-24.04-arm
             kind_binary: kind-linux-arm64
@@ -150,6 +162,10 @@ jobs:
             test_scope: "integration+e2e"
             konflux_cr: "operator/config/samples/konflux-e2e.yaml"
             job_name: "Run Operator E2E Tests (ARM64)"
+            github_app_id: APP_ID_ARM64
+            github_private_key: APP_PRIVATE_KEY_ARM64
+            webhook_secret: APP_WEBHOOK_SECRET_ARM64
+            smee_channel: SMEE_CHANNEL_ARM64
     env:
       # renovate: datasource=github-releases depName=kubernetes-sigs/kind
       KIND_VERSION: "0.31.0"
@@ -219,17 +235,17 @@ jobs:
 
           KONFLUX_CR: ${{ matrix.konflux_cr }}
 
-          # GitHub App secrets (standardized names)
-          GITHUB_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
-          GITHUB_APP_ID: ${{ secrets.APP_ID }}
-          WEBHOOK_SECRET: ${{ secrets.APP_WEBHOOK_SECRET }}
+          # GitHub App secrets (secret names in matrix; one set per row to avoid shared rate limits)
+          GITHUB_PRIVATE_KEY: ${{ secrets[matrix.github_private_key] }}
+          GITHUB_APP_ID: ${{ secrets[matrix.github_app_id] }}
+          WEBHOOK_SECRET: ${{ secrets[matrix.webhook_secret] }}
 
           # Quay secrets for image-controller (required by konflux-e2e.yaml CR)
           QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
           QUAY_ORGANIZATION: ${{ secrets.QUAY_ORG }}
 
-          # Smee webhook forwarding for E2E tests only
-          SMEE_CHANNEL: ${{ matrix.test_scope == 'integration+e2e' && secrets.SMEE_CHANNEL || '' }}
+          # Smee webhook forwarding for E2E tests only (one channel per matrix row)
+          SMEE_CHANNEL: ${{ matrix.test_scope == 'integration+e2e' && secrets[matrix.smee_channel] || '' }}
         run: ./scripts/deploy-local.sh
 
       - name: Show version information
