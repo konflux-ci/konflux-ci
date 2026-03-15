@@ -153,9 +153,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           MY_GITHUB_ORG: ${{ secrets.GH_ORG }}
-          QUAY_DOCKERCONFIGJSON: ${{ secrets.QUAY_DOCKERCONFIGJSON }}
-          RELEASE_CATALOG_TA_QUAY_TOKEN: ${{ secrets.RELEASE_CATALOG_TA_QUAY_TOKEN }}
-          E2E_APPLICATIONS_NAMESPACE: user-ns2
+          E2E_APPLICATIONS_NAMESPACE: default-tenant
         run: |
           cd test/go-tests
           go test ./tests/conformance -v -timeout 30m \

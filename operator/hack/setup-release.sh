@@ -28,6 +28,7 @@ Options:
                             enterprise-contract-service namespace (default: default)
   -r, --release-name        Name for the ReleasePlan and ReleasePlanAdmission
                             resources (default: local-release)
+  -R, --catalog-revision    Release service catalog git revision (default: production)
   -h, --help                Show this help message
 
 Examples:
@@ -75,6 +76,7 @@ MANAGED_NS="default-managed-tenant"
 APPLICATION="sample-component"
 CONFORMA_POLICY="default"
 RELEASE_NAME="local-release"
+CATALOG_REVISION="production"
 COMPONENTS=()
 
 while [[ $# -gt 0 ]]; do
@@ -101,6 +103,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -r|--release-name)
             RELEASE_NAME="$2"
+            shift 2
+            ;;
+        -R|--catalog-revision)
+            CATALOG_REVISION="$2"
             shift 2
             ;;
         -h|--help)
@@ -135,6 +141,7 @@ echo "   Managed namespace: ${MANAGED_NS}"
 echo "   Application:       ${APPLICATION}"
 echo "   EC policy:         ${CONFORMA_POLICY}"
 echo "   Release name:      ${RELEASE_NAME}"
+echo "   Catalog revision:  ${CATALOG_REVISION}"
 echo "   Components:        ${COMPONENTS[*]}"
 echo ""
 
@@ -318,10 +325,20 @@ spec:
         - name: url
           value: "https://github.com/konflux-ci/release-service-catalog.git"
         - name: revision
-          value: production
+          value: ${CATALOG_REVISION}
         - name: pathInRepo
           value: "pipelines/managed/push-to-external-registry/push-to-external-registry.yaml"
     serviceAccountName: release-pipeline
+    taskRunSpecs:
+      - pipelineTaskName: push-snapshot
+        stepSpecs:
+          - name: push-snapshot
+            computeResources:
+              requests:
+                cpu: 10m
+                memory: 256Mi
+              limits:
+                memory: 1Gi
 EOF
 
 # Step 11: Create ReleasePlan in tenant namespace
@@ -332,7 +349,7 @@ kind: ReleasePlan
 metadata:
   labels:
     release.appstudio.openshift.io/auto-release: "true"
-    release.appstudio.openshift.io/standing-attribution: "false"
+    release.appstudio.openshift.io/standing-attribution: "true"
   name: ${RELEASE_NAME}
   namespace: ${TENANT_NS}
 spec:
