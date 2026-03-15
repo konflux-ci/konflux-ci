@@ -15,6 +15,7 @@ generate_logs() {
     local event_messages_file="$logs_dir/failed-deployment-event-log.log"
     local pipelinerun_res_file="$logs_dir/pipelinerun-res.log"
     local taskrun_res_file="$logs_dir/taskrun-res.log"
+    local target_ns="${TARGET_NS:-user-ns2}"
 
     rm -rf "$logs_dir"
     mkdir -p "$logs_dir"
@@ -129,9 +130,9 @@ generate_logs() {
         docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}" 2>&1 || echo "Failed to list containers"
     } > "$logs_dir/container-resources.log"
 
-echo "logs from all pods from user-ns2 namespace"
-kubectl get pods -n user-ns2 -o name \
-  | xargs -I {} kubectl logs -n user-ns2 --all-containers {}
+    echo "logs from all pods from ${target_ns} namespace"
+    kubectl get pods -n "${target_ns}" -o name \
+      | xargs -I {} kubectl logs -n "${target_ns}" --all-containers {}
 
     # Collect Konflux Operator logs unconditionally (critical for debugging)
     {
