@@ -1,6 +1,8 @@
 name: Operator Tests
 
 on:
+  push:
+    branches: [main]
   pull_request:
   merge_group:
     types: [checks_requested]
@@ -29,6 +31,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: check-changes
     if: needs.check-changes.outputs.operator == 'true'
+    permissions:
+      id-token: write
     defaults:
       run:
         working-directory: operator
@@ -47,4 +51,12 @@ jobs:
       - name: Running Tests
         run: |
           make test
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          use_oidc: true
+          flags: unit-tests
+          files: operator/cover.out
+          fail_ci_if_error: false
 
