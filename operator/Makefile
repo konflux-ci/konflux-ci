@@ -134,9 +134,14 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
+# Packages excluded from unit-test coverage (entrypoint, test helpers, generated code lives in other pkgs)
+TEST_EXCLUDE_PKGS := /e2e|/cmd$$|/test/utils$$|/testutil$$
+# Strip generated code from cover profile so local and Codecov totals match (generated code is not unit-tested).
+COVER_EXCLUDE_FILES := zz_generated
 .PHONY: test
 test: manifests generate fmt vet setup-envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -vE '$(TEST_EXCLUDE_PKGS)') -coverprofile cover.out
+	@(head -1 cover.out; tail -n +2 cover.out | grep -v '$(COVER_EXCLUDE_FILES)') > cover.out.tmp && mv cover.out.tmp cover.out
 
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
