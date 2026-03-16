@@ -452,7 +452,7 @@ spec:
                                 type: string
                               trustifyOIDCIssuerUrl:
                                 description: |-
-                                  trustifyOIDCIssuerUrl is the URL of the OIDC issuer
+                                  TrustifyOIDCIssuerUrl is the URL of the OIDC issuer
                                   used by Trustification clients.
                                 type: string
                               trustifyServerExternalUrl:
