@@ -12,6 +12,7 @@
         "https://github.com/conforma/*",
         "https://github.com/konflux-ci/*",
         "https://github.com/redhat-appstudio/*",
+        "https://github.com/release-engineering/*",
         "quay.io/conforma/*",
         "quay.io/enterprise-contract/*",
         "quay.io/konflux-ci/*",
@@ -152,6 +153,33 @@
       ],
       "datasourceTemplate": "docker",
       "currentValueTemplate": "konflux"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": [
+        "konflux-ci/enterprise-contract/policies/.*\\.yaml$",
+        "operator/upstream-kustomizations/enterprise-contract/policies/.*\\.yaml$"
+      ],
+      "matchStrings": [
+        "- oci::(?<depName>quay\\.io/konflux-ci/tekton-catalog/data-acceptable-bundles):latest@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "autoReplaceStringTemplate": "- oci::{{depName}}:latest@{{newDigest}}",
+      "datasourceTemplate": "docker",
+      "currentValueTemplate": "latest"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": [
+        "konflux-ci/enterprise-contract/policies/.*\\.yaml$",
+        "operator/upstream-kustomizations/enterprise-contract/policies/.*\\.yaml$"
+      ],
+      "matchStrings": [
+        "- github\\.com/(?<depName>release-engineering/rhtap-ec-policy)\\.git//data\\?ref=(?<currentDigest>[a-f0-9]{40})"
+      ],
+      "packageNameTemplate": "https://github.com/{{depName}}",
+      "autoReplaceStringTemplate": "- github.com/{{depName}}.git//data?ref={{newDigest}}",
+      "datasourceTemplate": "git-refs",
+      "currentValueTemplate": "main"
     },
     {
       "description": "Track kind version in GitHub Actions workflows",
