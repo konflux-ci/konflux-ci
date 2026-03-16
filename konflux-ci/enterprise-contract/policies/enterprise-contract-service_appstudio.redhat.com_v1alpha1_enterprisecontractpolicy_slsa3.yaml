@@ -18,8 +18,8 @@ spec:
       - '@minimal'
       - '@slsa3'
     data:
-    - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest
-    - github.com/release-engineering/rhtap-ec-policy//data
+    - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest@sha256:cc03b2c00a336b9b264fbb5a077150a0a27549be75fa3ba4fb5c1aa1e826bc3c
+    - github.com/release-engineering/rhtap-ec-policy.git//data?ref=dd1a3dd1bf2299e1da9936b89e7279b6ab443bec
     name: Default
     policy:
     - oci::quay.io/conforma/release-policy:konflux@sha256:be53571e210f76978fb3d89233aa9740cde4e3c66707db029728a81479ad3f73
