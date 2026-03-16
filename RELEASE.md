@@ -83,9 +83,14 @@ The `repository_dispatch` event triggers the
 
 When a GitHub release is published, the
 [Community Operator PR workflow](.github/workflows/community-operator-pr.yaml)
-automatically creates a pull request to the
-[Red Hat Community Operators repository](https://github.com/redhat-openshift-ecosystem/community-operators-prod)
-to publish the Konflux operator in the OpenShift catalog.
+creates a **draft** pull request to the
+[Red Hat Community Operators repository](https://github.com/redhat-openshift-ecosystem/community-operators-prod).
+Draft PRs are used so that only one catalog PR is mergeable at a time (when multiple
+releases from different branches create PRs in parallel, marking them all ready would
+cause conflicts in the downstream catalog-update PRs).
+
+For the operator to be published to the OpenShift catalog, a draft PR must be marked
+**Ready for review**.
 
 The workflow:
 

@@ -161,8 +161,10 @@ git push --force origin "${BRANCH_NAME}"
 echo ""
 echo "=== Creating Pull Request ==="
 
-# Create PR to upstream repository
+# Create PR to upstream repository (as draft so we can later mark one ready at a time
+# and avoid catalog-update PR conflicts)
 PR_URL=$(GH_TOKEN="${GITHUB_TOKEN}" gh pr create \
+  --draft \
   --repo "${UPSTREAM_REPO}" \
   --head "${FORK_REPO%%/*}:${BRANCH_NAME}" \
   --base main \
