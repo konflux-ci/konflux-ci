@@ -279,10 +279,11 @@ EOF
 
 # Step 10: Copy SSO credentials from tpa-realm-clients secret in tsf namespace
 SSO_SECRET_CREATED=false
-if kubectl get namespace tsf &>/dev/null; then
+SSO_ACCOUNT=release
+SSO_TOKEN=$(kubectl get secret tpa-realm-clients -n tsf \
+  --ignore-not-found -o jsonpath="{.data.$SSO_ACCOUNT}")
+if [ -n "$SSO_TOKEN" ]; then
     echo "🔑 Creating SSO credentials secret from tpa-realm-clients..."
-    SSO_ACCOUNT=release
-    SSO_TOKEN=$(kubectl get secret tpa-realm-clients -n tsf -o jsonpath="{.data.$SSO_ACCOUNT}")
     kubectl apply -f - <<EOF
 apiVersion: v1
 kind: Secret
@@ -296,8 +297,9 @@ data:
   sso_token: ${SSO_TOKEN}
 EOF
     SSO_SECRET_CREATED=true
-else
-    echo "⚠️  Namespace 'tsf' not found, skipping SSO credentials secret creation"
+fi
+if [ "$SSO_SECRET_CREATED" == false ]; then
+    echo "⚠️ Secret 'tpa-realm-client' in namespace 'tsf' not found, skipping SSO credentials creation"
 fi
 
 # Step 11: Create ReleasePlanAdmission
@@ -377,9 +379,9 @@ done
 echo "  - ServiceAccount: release-pipeline (with push secrets)"
 echo "  - RoleBinding: release-pipeline-resource-role-binding -> ClusterRole/release-pipeline-resource-role"
 if [[ "${SSO_SECRET_CREATED}" == "true" ]]; then
-    echo "  - Secret: release-sso-secret (SSO credentials from tpa-realm-clients)"
+    echo "  - Secret: release-sso-secret (SSO credentials from 'tpa-realm-clients')"
 else
-    echo "  - Secret: release-sso-secret (SKIPPED - namespace 'tsf' not found)"
+    echo "  - Secret: release-sso-secret (SKIPPED - Secret 'tpa-realm-client' in 'tsf' not found)"
 fi
 echo "  - ReleasePlanAdmission: ${RELEASE_NAME}"
 echo ""
