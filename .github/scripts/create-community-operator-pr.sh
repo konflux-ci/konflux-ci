@@ -1,21 +1,29 @@
 #!/bin/bash
 set -euo pipefail
 
-# Create Community Operator PR Script
-# This script creates a PR to the community-operators-prod repository
-# with a new bundle version for the Konflux operator.
+# Create or update Community Operator PR Script
+# Creates a PR to the community-operators-prod repository with a new bundle
+# version for the Konflux operator, or updates an existing PR branch (rebase
+# on current main) and marks it ready for review.
 #
 # Usage:
-#   create-community-operator-pr.sh <release_tag>
+#   create-community-operator-pr.sh <release_tag> [--draft|--no-draft]
+#   create-community-operator-pr.sh <release_tag> --update
 #
 # Arguments:
 #   release_tag - GitHub release tag (e.g., v0.0.4)
+#   --draft     - Create PR as draft (default when creating)
+#   --no-draft  - Create PR ready for review
+#   --update    - Update mode: re-run same steps (clone main, apply bundle, force-push),
+#                 then find the PR by head branch and mark it ready.
+#   --dry-run   - Validate args and print branch name; no gh/git operations. No token needed.
 #
-# Environment Variables (required):
-#   GITHUB_TOKEN - PAT with public_repo scope for all operations
+# Environment Variables (required unless --dry-run):
+#   GITHUB_TOKEN - PAT with public_repo scope (same identity as PR author for --update)
 #
-# Example:
-#   GITHUB_TOKEN=ghp_xxx create-community-operator-pr.sh v0.0.4
+# Examples:
+#   GITHUB_TOKEN=ghp_xxx create-community-operator-pr.sh v0.0.4 --draft
+#   GITHUB_TOKEN=ghp_xxx create-community-operator-pr.sh v0.0.4 --update
 
 # Configuration
 UPSTREAM_REPO="redhat-openshift-ecosystem/community-operators-prod"
@@ -23,17 +31,68 @@ FORK_REPO="konflux-ci/community-operators-prod"
 SOURCE_REPO="konflux-ci/konflux-ci"
 OPERATOR_NAME="konflux"
 
-if [ $# -ne 1 ]; then
-  echo "Error: Invalid number of arguments"
-  echo "Usage: $0 <release_tag>"
+RELEASE_TAG=""
+CREATE_DRAFT="true"
+UPDATE_MODE="false"
+DRY_RUN="false"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --draft)
+      CREATE_DRAFT="true"
+      shift
+      ;;
+    --no-draft)
+      CREATE_DRAFT="false"
+      shift
+      ;;
+    --update)
+      UPDATE_MODE="true"
+      CREATE_DRAFT="false"
+      shift
+      ;;
+    --dry-run)
+      DRY_RUN="true"
+      shift
+      ;;
+    -*)
+      echo "Error: Unknown option $1"
+      exit 1
+      ;;
+    *)
+      if [ -z "${RELEASE_TAG}" ]; then
+        RELEASE_TAG="$1"
+      else
+        echo "Error: Unexpected argument $1"
+        exit 1
+      fi
+      shift
+      ;;
+  esac
+done
+
+if [ -z "${RELEASE_TAG}" ]; then
+  echo "Error: release_tag is required"
+  echo "Usage: $0 <release_tag> [--draft|--no-draft] [--update] [--dry-run]"
   exit 1
 fi
 
-RELEASE_TAG="$1"
-
-if [ -z "${GITHUB_TOKEN:-}" ]; then
+if [ "${DRY_RUN}" != "true" ] && [ -z "${GITHUB_TOKEN:-}" ]; then
   echo "Error: GITHUB_TOKEN environment variable is required"
   exit 1
+fi
+
+# Dry-run: validate and print what would be done; no network or git operations
+if [ "${DRY_RUN}" = "true" ]; then
+  VERSION="${RELEASE_TAG#v}"
+  BRANCH_NAME="${OPERATOR_NAME}-${VERSION}"
+  echo "=== Dry run ==="
+  echo "Release tag: ${RELEASE_TAG}"
+  echo "Version: ${VERSION}"
+  echo "Branch name: ${BRANCH_NAME}"
+  echo "Mode: $([ "${UPDATE_MODE}" = "true" ] && echo "update (refresh branch, mark PR ready)" || echo "create (draft=${CREATE_DRAFT})")"
+  echo "Would use: SOURCE_REPO=${SOURCE_REPO} FORK_REPO=${FORK_REPO} UPSTREAM_REPO=${UPSTREAM_REPO}"
+  exit 0
 fi
 
 echo "=== Creating Community Operator PR ==="
@@ -157,22 +216,37 @@ echo ""
 echo "=== Pushing to fork ==="
 git push --force origin "${BRANCH_NAME}"
 
-# Create PR to upstream
+# Create PR or mark existing PR ready
 echo ""
-echo "=== Creating Pull Request ==="
-
-# Create PR to upstream repository (as draft so we can later mark one ready at a time
-# and avoid catalog-update PR conflicts)
-PR_URL=$(GH_TOKEN="${GITHUB_TOKEN}" gh pr create \
-  --draft \
-  --repo "${UPSTREAM_REPO}" \
-  --head "${FORK_REPO%%/*}:${BRANCH_NAME}" \
-  --base main \
-  --title "${COMMIT_TITLE}" \
-  --body "${COMMIT_BODY}")
-
-echo ""
-echo "=== PR Created Successfully ==="
-echo "PR URL: ${PR_URL}"
+if [ "${UPDATE_MODE}" = "true" ]; then
+  PR_NUM=$(GH_TOKEN="${GITHUB_TOKEN}" gh pr list --repo "${UPSTREAM_REPO}" \
+    --head "${FORK_REPO%%/*}:${BRANCH_NAME}" --state open --json number -q '.[0].number')
+  if [ -z "${PR_NUM}" ] || [ "${PR_NUM}" = "null" ]; then
+    echo "Error: No open PR found for head ${FORK_REPO%%/*}:${BRANCH_NAME}"
+    exit 1
+  fi
+  echo "=== Marking PR #${PR_NUM} ready for review ==="
+  GH_TOKEN="${GITHUB_TOKEN}" gh pr ready "${PR_NUM}" --repo "${UPSTREAM_REPO}"
+  PR_URL="https://github.com/${UPSTREAM_REPO}/pull/${PR_NUM}"
+  echo ""
+  echo "=== PR updated and marked ready ==="
+  echo "PR URL: ${PR_URL}"
+else
+  echo "=== Creating Pull Request ==="
+  DRAFT_ARGS=""
+  if [ "${CREATE_DRAFT}" = "true" ]; then
+    DRAFT_ARGS="--draft"
+  fi
+  PR_URL=$(GH_TOKEN="${GITHUB_TOKEN}" gh pr create \
+    ${DRAFT_ARGS} \
+    --repo "${UPSTREAM_REPO}" \
+    --head "${FORK_REPO%%/*}:${BRANCH_NAME}" \
+    --base main \
+    --title "${COMMIT_TITLE}" \
+    --body "${COMMIT_BODY}")
+  echo ""
+  echo "=== PR Created Successfully ==="
+  echo "PR URL: ${PR_URL}"
+fi
 echo ""
 echo "Done!"

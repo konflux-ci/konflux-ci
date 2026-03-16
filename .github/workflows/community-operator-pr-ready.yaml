@@ -1,0 +1,48 @@
+# Mark one draft Community Operator PR ready for review (daily).
+# Uses the same script as PR creation to refresh the PR branch from current main
+# and the same bundle, then marks the PR ready. This avoids catalog-update PR
+# conflicts by having only one konflux bundle PR ready at a time.
+name: Community Operator PR — mark one ready
+
+on:
+  schedule:
+    # Run daily at 06:00 UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  mark-one-ready:
+    name: Mark one draft PR ready
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: List draft PRs by bot
+        id: list
+        env:
+          GH_TOKEN: ${{ secrets.KONFLUX_CI_BOT_PAT }}
+        run: .github/scripts/list-draft-community-operator-pr.sh
+
+      - name: Update PR branch and mark ready
+        if: steps.list.outputs.count == '1'
+        env:
+          GITHUB_TOKEN: ${{ secrets.KONFLUX_CI_BOT_PAT }}
+        run: |
+          .github/scripts/create-community-operator-pr.sh "${{ steps.list.outputs.tag }}" --update
+
+      - name: Create issue on failure
+        if: failure()
+        working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_NAME: Community Operator PR — mark one ready
+          RELEASE_VERSION: ${{ steps.list.outputs.tag }}
+        run: |
+          .github/scripts/create-or-update-issue.sh \
+            "Community Operator PR (mark one ready) Failure" \
+            "Updating the draft Community Operator PR and marking it ready failed."

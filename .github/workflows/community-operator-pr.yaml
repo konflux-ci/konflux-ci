@@ -35,7 +35,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.KONFLUX_CI_BOT_PAT }}
         run: |
-          .github/scripts/create-community-operator-pr.sh "${{ steps.release.outputs.tag }}"
+          .github/scripts/create-community-operator-pr.sh "${{ steps.release.outputs.tag }}" --draft
 
       - name: Create issue on failure
         if: failure()
