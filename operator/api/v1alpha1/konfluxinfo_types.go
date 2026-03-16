@@ -265,7 +265,7 @@ type ClusterConfigData struct {
 	// +optional
 	BuildIdentityRegexp string `json:"buildIdentityRegexp,omitempty"`
 
-	// trustifyOIDCIssuerUrl is the URL of the OIDC issuer
+	// TrustifyOIDCIssuerUrl is the URL of the OIDC issuer
 	// used by Trustification clients.
 	// +optional
 	TrustifyOIDCIssuerUrl string `json:"trustifyOIDCIssuerUrl,omitempty"`
