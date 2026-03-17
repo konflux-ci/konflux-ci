@@ -2,8 +2,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  # renovate: datasource=git-refs depName=https://github.com/openshift-pipelines/pipelines-as-code versioning=semver
-  - https://github.com/openshift-pipelines/pipelines-as-code/releases/download/v0.42.0/release.k8s.yaml
+  # renovate: datasource=git-refs depName=https://github.com/tektoncd/pipelines-as-code versioning=semver
+  - https://github.com/tektoncd/pipelines-as-code/releases/download/v0.42.0/release.k8s.yaml
 patches:
   - path: custom-console-patch.yaml
     target:
