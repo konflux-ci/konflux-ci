@@ -24,6 +24,9 @@ set -o nounset
 set -o errexit
 set -o pipefail
 
+# Determine the absolute path of the repository root
+REPO_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
+
 # On OCP, use 'oc' as kubectl if kubectl is not available
 # oc is a superset of kubectl and works for all kubectl commands
 if ! command -v kubectl &>/dev/null && command -v oc &>/dev/null; then
@@ -82,36 +85,61 @@ echo "Operator image is available!"
 # - USE_OPENSHIFT_CERTMANAGER: Use Red Hat cert-manager operator instead of upstream
 # - SKIP_INTERNAL_REGISTRY: OCP has its own registry
 # - SKIP_DEX: OCP has its own OAuth/authentication
-# - SKIP_SMEE: Webhook relay not needed for CI testing
+# - SKIP_SMEE: Skip Smee when no channel is configured
 echo ""
-echo "=== Step 1/5: Deploying dependencies ==="
-USE_OPENSHIFT_PIPELINES=true USE_OPENSHIFT_CERTMANAGER=true SKIP_INTERNAL_REGISTRY=true SKIP_DEX=true SKIP_SMEE=true ./deploy-deps.sh
+echo "=== Step 1/6: Deploying dependencies ==="
+
+# Pre-configure Smee channel if specified
+if [ -n "${SMEE_CHANNEL:-}" ]; then
+    echo "Configuring Smee channel: ${SMEE_CHANNEL}"
+    SMEE_DIR="${REPO_ROOT}/dependencies/smee"
+    sed "s|https://smee.io/CHANNELID|${SMEE_CHANNEL}|g" \
+        "${SMEE_DIR}/smee-channel-id.tpl" \
+        > "${SMEE_DIR}/smee-channel-id.yaml"
+    SKIP_SMEE=false
+else
+    SKIP_SMEE=true
+fi
+
+USE_OPENSHIFT_PIPELINES=true \
+USE_OPENSHIFT_CERTMANAGER=true \
+SKIP_INTERNAL_REGISTRY=true \
+SKIP_DEX=true \
+SKIP_SMEE="${SKIP_SMEE}" \
+"${REPO_ROOT}/deploy-deps.sh"
 
 # Step 2: Install CRDs from the checked-out branch
 echo ""
-echo "=== Step 2/5: Installing Operator CRDs ==="
+echo "=== Step 2/6: Installing Operator CRDs ==="
 cd operator
 # Clear GOFLAGS to allow downloading tools (CI may have -mod=vendor set)
 GOFLAGS="" make install
 
 # Step 3: Deploy the operator using the Konflux-built image
 echo ""
-echo "=== Step 3/5: Deploying Operator ==="
+echo "=== Step 3/6: Deploying Operator ==="
 echo "Image: ${OPERATOR_IMAGE}"
 # GOFLAGS="" needed because CI sets -mod=vendor which blocks kustomize download
 GOFLAGS="" make deploy IMG="${OPERATOR_IMAGE}"
 
 # Step 4: Wait for the operator deployment to be available
 echo ""
-echo "=== Step 4/5: Waiting for Operator to be ready ==="
+echo "=== Step 4/6: Waiting for Operator to be ready ==="
 oc wait --for=condition=Available deployment/konflux-operator-controller-manager \
     -n konflux-operator --timeout=300s
 echo "Operator is ready!"
 
 # Step 5: Create Konflux CR instance
 echo ""
-echo "=== Step 5/5: Creating Konflux CR ==="
-oc apply -f config/samples/konflux_v1alpha1_konflux.yaml
+echo "=== Step 5/6: Creating Konflux CR ==="
+KONFLUX_CR=$("${REPO_ROOT}/scripts/resolve-konflux-cr.sh")
+echo "Applying: ${KONFLUX_CR}"
+oc apply -f "${KONFLUX_CR}"
+
+# Step 6: Deploy secrets
+echo ""
+echo "=== Step 6/6: Deploying secrets ==="
+USE_OPENSHIFT_PIPELINES=true "${REPO_ROOT}/scripts/deploy-secrets.sh"
 
 # Wait for Konflux to be fully ready
 echo ""

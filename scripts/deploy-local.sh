@@ -63,25 +63,8 @@ if [ -f "${ENV_FILE}" ]; then
     source "${ENV_FILE}"
 fi
 
-# Validate REQUIRED variables
-GITHUB_APP_ID="${GITHUB_APP_ID:?GitHub App ID is required. Set GITHUB_APP_ID}"
-WEBHOOK_SECRET="${WEBHOOK_SECRET:?Webhook secret is required. Set WEBHOOK_SECRET}"
-
-# Validate that at least one private key option is provided
-if [ -z "${GITHUB_PRIVATE_KEY:-}" ] && [ -z "${GITHUB_PRIVATE_KEY_PATH:-}" ]; then
-    echo "ERROR: GitHub private key is required" >&2
-    echo "" >&2
-    echo "Set one of:" >&2
-    echo "  - GITHUB_PRIVATE_KEY (literal key content)" >&2
-    echo "  - GITHUB_PRIVATE_KEY_PATH (path to .pem file)" >&2
-    exit 1
-fi
-
-# Validate private key file exists if path is provided
-if [ -n "${GITHUB_PRIVATE_KEY_PATH:-}" ] && [ ! -f "${GITHUB_PRIVATE_KEY_PATH}" ]; then
-    echo "ERROR: GitHub private key file not found: ${GITHUB_PRIVATE_KEY_PATH}" >&2
-    exit 1
-fi
+# Validate secret-related variables early (before creating the cluster)
+VALIDATE_ONLY=true "${SCRIPT_DIR}/deploy-secrets.sh"
 
 # Optional variables with defaults (using :- pattern)
 KIND_CLUSTER="${KIND_CLUSTER:-konflux}"
@@ -99,32 +82,11 @@ export INCREASE_PODMAN_PIDS_LIMIT ENABLE_IMAGE_CACHE
 export GITHUB_PRIVATE_KEY GITHUB_APP_ID WEBHOOK_SECRET QUAY_TOKEN QUAY_ORGANIZATION
 export SEGMENT_WRITE_KEY
 
-# Get Konflux CR file path (precedence, high->low: command-line arg, env var, default)
+# Get Konflux CR file path (command-line arg takes highest precedence)
 KONFLUX_CR="${1:-${KONFLUX_CR:-}}"
 
-# Auto-select e2e CR when Quay credentials are configured but no explicit CR specified
-if [ -n "${QUAY_TOKEN:-}" ] && [ -n "${QUAY_ORGANIZATION:-}" ] && [ -z "${KONFLUX_CR}" ]; then
-    KONFLUX_CR="${REPO_ROOT}/operator/config/samples/konflux-e2e.yaml"
-    echo ""
-    echo "INFO: Auto-selecting konflux-e2e.yaml because QUAY_TOKEN/QUAY_ORGANIZATION are set"
-    echo "      This CR enables image-controller required for Quay integration"
-    echo "      To use a different CR, set KONFLUX_CR environment variable or pass as argument"
-    echo ""
-else
-    KONFLUX_CR="${KONFLUX_CR:-${REPO_ROOT}/operator/config/samples/konflux_v1alpha1_konflux.yaml}"
-fi
-
-# Convert relative path to absolute (if not already absolute)
-if [[ "${KONFLUX_CR}" != /* ]]; then
-    KONFLUX_CR="${REPO_ROOT}/${KONFLUX_CR}"
-fi
-
-if [ ! -f "${KONFLUX_CR}" ]; then
-    echo "ERROR: Konflux CR file not found: ${KONFLUX_CR}"
-    echo ""
-    echo "Usage: $0 [konflux-cr-file]"
-    exit 1
-fi
+# Resolve CR using shared logic (auto-selects e2e CR when Quay credentials are set)
+KONFLUX_CR=$("${SCRIPT_DIR}/resolve-konflux-cr.sh")
 
 echo "========================================="
 echo "Konflux Local Development Deployment"
@@ -136,30 +98,6 @@ echo "  Konflux CR:  ${KONFLUX_CR}"
 echo ""
 
 INSTALL_METHOD="${OPERATOR_INSTALL_METHOD:-local}"
-
-# Ensure a namespace exists: in 'none' mode, pre-create it immediately;
-# otherwise wait up to 60 s for the operator to create it.
-# Usage: wait_or_create_namespace <namespace> <install_method>
-# Returns 0 on success, 1 if the namespace was not found in time.
-wait_or_create_namespace() {
-    local ns="$1"
-    local method="$2"
-    if [ "${method}" = "none" ]; then
-        echo "Pre-creating namespace: ${ns}"
-        kubectl create namespace "${ns}" --dry-run=client -o yaml | kubectl apply -f -
-    else
-        echo "Waiting for namespace: ${ns}"
-        local timeout=60
-        while ! kubectl get namespace "${ns}" &> /dev/null && [ $timeout -gt 0 ]; do
-            sleep 2
-            timeout=$((timeout - 2))
-        done
-        if [ $timeout -le 0 ]; then
-            echo "WARNING: Namespace ${ns} not created after 60 seconds"
-            return 1
-        fi
-    fi
-}
 
 # For 'build' method, build the operator image before creating the cluster to reduce peak memory (no Kind container during go build)
 if [ "${INSTALL_METHOD}" = "build" ]; then
@@ -283,72 +221,22 @@ else
     echo "========================================="
 fi
 
-# Step 6: Create secrets for GitHub integration
+# Step 6: Create secrets for GitHub integration and optional image-controller
 echo ""
 echo "========================================="
-echo "Step 6: Creating GitHub integration secrets"
+echo "Step 6: Setting up secrets"
 echo "========================================="
-echo "Creating Pipelines-as-Code secrets..."
 
-for ns in pipelines-as-code build-service integration-service; do
-    if ! wait_or_create_namespace "${ns}" "${INSTALL_METHOD}"; then
-        echo "         Secrets will need to be created manually"
-        continue
-    fi
+# In 'none' mode, namespaces don't exist yet (operator isn't running),
+# so create them directly and skip waiting for pods that don't exist yet.
+DEPLOY_SECRETS_ENV=()
+if [ "${INSTALL_METHOD}" = "none" ]; then
+    DEPLOY_SECRETS_ENV+=(CREATE_NAMESPACES=true WAIT_FOR_PODS=false)
+fi
 
-    echo "Creating secret in ${ns}..."
-    # Use different kubectl syntax based on how private key is provided:
-    # - File path: use --from-file (local dev with .pem file)
-    # - Literal value: use --from-literal (CI with env var, matches prepare-e2e.sh)
-    if [ -n "${GITHUB_PRIVATE_KEY_PATH:-}" ] && [ -f "${GITHUB_PRIVATE_KEY_PATH}" ]; then
-        kubectl -n "$ns" create secret generic pipelines-as-code-secret \
-            --from-file=github-private-key="${GITHUB_PRIVATE_KEY_PATH}" \
-            --from-literal github-application-id="$GITHUB_APP_ID" \
-            --from-literal webhook.secret="$WEBHOOK_SECRET" \
-            --dry-run=client -o yaml | kubectl apply -f -
-    else
-        kubectl -n "$ns" create secret generic pipelines-as-code-secret \
-            --from-literal github-private-key="$GITHUB_PRIVATE_KEY" \
-            --from-literal github-application-id="$GITHUB_APP_ID" \
-            --from-literal webhook.secret="$WEBHOOK_SECRET" \
-            --dry-run=client -o yaml | kubectl apply -f -
-    fi
-done
+env "${DEPLOY_SECRETS_ENV[@]}" "${SCRIPT_DIR}/deploy-secrets.sh"
 
 echo "✓ Secrets created"
-
-# Step 6b: Create image-controller secret (optional)
-if [ -n "${QUAY_TOKEN}" ] && [ -n "${QUAY_ORGANIZATION}" ]; then
-    echo ""
-    echo "Creating image-controller Quay secret..."
-
-    if ! wait_or_create_namespace "image-controller" "${INSTALL_METHOD}"; then
-        echo "         Secret will need to be created manually"
-    else
-        echo "Creating secret in image-controller..."
-        kubectl -n image-controller create secret generic quaytoken \
-            --from-literal=quaytoken="${QUAY_TOKEN}" \
-            --from-literal=organization="${QUAY_ORGANIZATION}" \
-            --dry-run=client -o yaml | kubectl apply -f -
-        echo "✓ Image-controller secret created"
-
-        # Wait for image-controller pods to be ready (skip in 'none' mode - no pods yet)
-        if [ "${INSTALL_METHOD}" != "none" ]; then
-            echo "Waiting for image-controller pods to be ready..."
-            if kubectl wait --for=condition=Ready --timeout=240s \
-                -l control-plane=controller-manager -n image-controller pod 2>/dev/null; then
-                echo "✓ Image-controller is ready"
-            else
-                echo "WARNING: Image-controller pods did not become ready within 4 minutes"
-                echo "         This may cause E2E test failures"
-            fi
-        fi
-    fi
-elif [ -n "${QUAY_TOKEN}" ] || [ -n "${QUAY_ORGANIZATION}" ]; then
-    echo ""
-    echo "WARNING: Both QUAY_TOKEN and QUAY_ORGANIZATION must be set to create image-controller secret"
-    echo "         Image-controller secret not created"
-fi
 
 if [ "${INSTALL_METHOD}" != "none" ]; then
     # Step 7: Wait for Konflux to be ready

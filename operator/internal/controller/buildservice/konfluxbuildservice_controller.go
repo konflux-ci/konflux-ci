@@ -54,6 +54,12 @@ const (
 
 	// Container names
 	buildManagerContainerName = "manager"
+
+	// PaC webhook URL env var name and platform-specific defaults.
+	// On upstream/Kind, PaC is deployed in the "pipelines-as-code" namespace on port 8180.
+	// On OpenShift, PaC is deployed by the OpenShift Pipelines operator in "openshift-pipelines" on port 8080.
+	pacWebhookURLEnvName   = "PAC_WEBHOOK_URL"
+	pacWebhookURLOpenShift = "http://pipelines-as-code-controller.openshift-pipelines.svc.cluster.local:8080"
 )
 
 // BuildServiceCleanupGVKs defines which resource types should be cleaned up when they are
@@ -167,7 +173,7 @@ func (r *KonfluxBuildServiceReconciler) applyManifests(ctx context.Context, tc *
 	for _, obj := range objects {
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
-			if err := applyBuildServiceDeploymentCustomizations(deployment, owner.Spec); err != nil {
+			if err := applyBuildServiceDeploymentCustomizations(deployment, owner.Spec, r.ClusterInfo); err != nil {
 				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
 			}
 		}
@@ -192,14 +198,15 @@ func (r *KonfluxBuildServiceReconciler) applyManifests(ctx context.Context, tc *
 	return nil
 }
 
-// applyBuildServiceDeploymentCustomizations applies user-defined customizations to BuildService deployments.
-func applyBuildServiceDeploymentCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxBuildServiceSpec) error {
+// applyBuildServiceDeploymentCustomizations applies user-defined and platform-specific
+// customizations to BuildService deployments.
+func applyBuildServiceDeploymentCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxBuildServiceSpec, clusterInfo *clusterinfo.Info) error {
 	switch deployment.Name {
 	case buildControllerManagerDeploymentName:
 		if spec.BuildControllerManager != nil {
 			deployment.Spec.Replicas = &spec.BuildControllerManager.Replicas
 		}
-		if err := buildBuildControllerManagerOverlay(spec.BuildControllerManager).ApplyToDeployment(deployment); err != nil {
+		if err := buildBuildControllerManagerOverlay(spec.BuildControllerManager, clusterInfo).ApplyToDeployment(deployment); err != nil {
 			return err
 		}
 	}
@@ -207,17 +214,35 @@ func applyBuildServiceDeploymentCustomizations(deployment *appsv1.Deployment, sp
 }
 
 // buildBuildControllerManagerOverlay builds the pod overlay for the controller-manager deployment.
-func buildBuildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploymentSpec) *customization.PodOverlay {
-	if spec == nil {
-		return customization.NewPodOverlay()
+// On OpenShift, the PaC webhook URL is automatically set to the OpenShift Pipelines service
+// endpoint. User-provided env vars from the CR spec take precedence via strategic merge.
+func buildBuildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploymentSpec, clusterInfo *clusterinfo.Info) *customization.PodOverlay {
+	var containerOpts []customization.ContainerOption
+
+	// Set platform-specific PaC webhook URL before user overrides so CR values take precedence.
+	if clusterInfo != nil && clusterInfo.IsOpenShift() {
+		containerOpts = append(containerOpts, customization.WithEnv(corev1.EnvVar{
+			Name:  pacWebhookURLEnvName,
+			Value: pacWebhookURLOpenShift,
+		}))
 	}
+
+	if spec == nil {
+		return customization.NewPodOverlay(
+			customization.WithContainerOpts(buildManagerContainerName, customization.DeploymentContext{}, containerOpts...),
+		)
+	}
+
+	containerOpts = append(containerOpts,
+		customization.FromContainerSpec(spec.Manager),
+		customization.WithLeaderElection(),
+	)
 
 	return customization.BuildPodOverlay(
 		customization.DeploymentContext{Replicas: spec.Replicas},
 		customization.WithContainerBuilder(
 			buildManagerContainerName,
-			customization.FromContainerSpec(spec.Manager),
-			customization.WithLeaderElection(),
+			containerOpts...,
 		),
 	)
 }

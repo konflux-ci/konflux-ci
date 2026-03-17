@@ -22,11 +22,15 @@ import (
 	"github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/version"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
@@ -53,14 +57,14 @@ func getBuildServiceDeployment(t *testing.T) *appsv1.Deployment {
 func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 	t.Run("nil spec returns empty overlay", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		overlay := buildBuildControllerManagerOverlay(nil)
+		overlay := buildBuildControllerManagerOverlay(nil, nil)
 		g.Expect(overlay).NotTo(gomega.BeNil())
 	})
 
 	t.Run("empty spec returns overlay without customizations", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{}
-		overlay := buildBuildControllerManagerOverlay(spec)
+		overlay := buildBuildControllerManagerOverlay(spec, nil)
 		g.Expect(overlay).NotTo(gomega.BeNil())
 	})
 
@@ -82,7 +86,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		}
 
 		deployment := getBuildServiceDeployment(t)
-		overlay := buildBuildControllerManagerOverlay(spec)
+		overlay := buildBuildControllerManagerOverlay(spec, nil)
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -111,7 +115,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		g.Expect(managerContainer).NotTo(gomega.BeNil(), "manager container must exist in controller-manager deployment")
 		originalImage := managerContainer.Image
 
-		overlay := buildBuildControllerManagerOverlay(spec)
+		overlay := buildBuildControllerManagerOverlay(spec, nil)
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -137,7 +141,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getBuildServiceDeployment(t)
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
@@ -172,7 +176,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 			},
 		}
 
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic and container should be unchanged
@@ -186,7 +190,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getBuildServiceDeployment(t)
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
@@ -199,7 +203,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
 
 		deployment := getBuildServiceDeployment(t)
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
@@ -215,7 +219,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getBuildServiceDeployment(t)
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).NotTo(gomega.BeNil())
@@ -231,7 +235,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getBuildServiceDeployment(t)
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).NotTo(gomega.BeNil())
@@ -246,7 +250,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 
 		deployment := getBuildServiceDeployment(t)
 		originalReplicas := deployment.Spec.Replicas
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).To(gomega.Equal(originalReplicas))
@@ -268,7 +272,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getBuildServiceDeployment(t)
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Check replicas
@@ -279,6 +283,174 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("2"))
+	})
+}
+
+func newOpenShiftClusterInfo(t *testing.T) *clusterinfo.Info {
+	t.Helper()
+	info, err := clusterinfo.DetectWithClient(&mockDiscoveryClient{
+		resources: map[string]*metav1.APIResourceList{
+			"config.openshift.io/v1": {APIResources: []metav1.APIResource{{Kind: "ClusterVersion"}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to create OpenShift cluster info: %v", err)
+	}
+	return info
+}
+
+func newDefaultClusterInfo(t *testing.T) *clusterinfo.Info {
+	t.Helper()
+	info, err := clusterinfo.DetectWithClient(&mockDiscoveryClient{
+		resources: map[string]*metav1.APIResourceList{},
+	})
+	if err != nil {
+		t.Fatalf("failed to create default cluster info: %v", err)
+	}
+	return info
+}
+
+type mockDiscoveryClient struct {
+	resources map[string]*metav1.APIResourceList
+}
+
+func (m *mockDiscoveryClient) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
+	if rl, ok := m.resources[groupVersion]; ok {
+		return rl, nil
+	}
+	return nil, errors.NewNotFound(schema.GroupResource{Group: groupVersion}, "")
+}
+
+func (m *mockDiscoveryClient) ServerVersion() (*version.Info, error) {
+	return &version.Info{}, nil
+}
+
+func TestApplyBuildServiceDeploymentCustomizations_PaCWebhookURL(t *testing.T) {
+	t.Run("sets OpenShift PAC_WEBHOOK_URL on OpenShift", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+
+		deployment := getBuildServiceDeployment(t)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newOpenShiftClusterInfo(t))
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		var pacURL string
+		for _, env := range managerContainer.Env {
+			if env.Name == pacWebhookURLEnvName {
+				pacURL = env.Value
+			}
+		}
+		g.Expect(pacURL).To(gomega.Equal(pacWebhookURLOpenShift))
+	})
+
+	t.Run("preserves manifest default PAC_WEBHOOK_URL on non-OpenShift", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+
+		deployment := getBuildServiceDeployment(t)
+
+		// Capture the original value from the manifest
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		var originalURL string
+		for _, env := range managerContainer.Env {
+			if env.Name == pacWebhookURLEnvName {
+				originalURL = env.Value
+			}
+		}
+		g.Expect(originalURL).NotTo(gomega.BeEmpty(), "manifest should have a default PAC_WEBHOOK_URL")
+
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newDefaultClusterInfo(t))
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		var pacURL string
+		for _, env := range managerContainer.Env {
+			if env.Name == pacWebhookURLEnvName {
+				pacURL = env.Value
+			}
+		}
+		g.Expect(pacURL).To(gomega.Equal(originalURL))
+	})
+
+	t.Run("CR env override takes precedence over OpenShift default", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		customURL := "http://custom-pac.example.com:9999"
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+				Manager: &konfluxv1alpha1.ContainerSpec{
+					Env: []corev1.EnvVar{
+						{Name: pacWebhookURLEnvName, Value: customURL},
+					},
+				},
+			},
+		}
+
+		deployment := getBuildServiceDeployment(t)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newOpenShiftClusterInfo(t))
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		// Strategic merge uses env name as merge key, so the last value wins.
+		// The CR value should take precedence.
+		var pacURL string
+		for _, env := range managerContainer.Env {
+			if env.Name == pacWebhookURLEnvName {
+				pacURL = env.Value
+			}
+		}
+		g.Expect(pacURL).To(gomega.Equal(customURL))
+	})
+
+	t.Run("nil ClusterInfo preserves manifest default", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+
+		deployment := getBuildServiceDeployment(t)
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		var originalURL string
+		for _, env := range managerContainer.Env {
+			if env.Name == pacWebhookURLEnvName {
+				originalURL = env.Value
+			}
+		}
+
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		var pacURL string
+		for _, env := range managerContainer.Env {
+			if env.Name == pacWebhookURLEnvName {
+				pacURL = env.Value
+			}
+		}
+		g.Expect(pacURL).To(gomega.Equal(originalURL))
+	})
+
+	t.Run("sets OpenShift PAC_WEBHOOK_URL even with nil spec", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+
+		deployment := getBuildServiceDeployment(t)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newOpenShiftClusterInfo(t))
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		var pacURL string
+		for _, env := range managerContainer.Env {
+			if env.Name == pacWebhookURLEnvName {
+				pacURL = env.Value
+			}
+		}
+		g.Expect(pacURL).To(gomega.Equal(pacWebhookURLOpenShift))
 	})
 }
 
@@ -307,7 +479,7 @@ func TestApplyBuildServiceDeploymentCustomizations_ResourceMerging(t *testing.T)
 			},
 		}
 
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
@@ -341,7 +513,7 @@ func TestApplyBuildServiceDeploymentCustomizations_ResourceMerging(t *testing.T)
 			},
 		}
 
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
