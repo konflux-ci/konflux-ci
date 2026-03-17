@@ -23,7 +23,7 @@ spec:
         - name: shared-health
           emptyDir: {}
       securityContext:
-        fsGroup: 65532
+        fsGroup: null
       containers:
         - image: ghcr.io/chmouel/gosmee:latest
           imagePullPolicy: Always
@@ -38,7 +38,7 @@ spec:
           securityContext:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
-            runAsUser: 65532
+            runAsUser: null
           resources:
             limits:
               cpu: 100m
@@ -85,7 +85,7 @@ spec:
           securityContext:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
-            runAsUser: 65532
+            runAsUser: null
           resources:
             limits:
               cpu: 100m

@@ -331,6 +331,12 @@ deploy_smee() {
         sed "s/$placeholder/$channel_id/g" "$template" > "$patch"
     fi
     kubectl apply -k "${script_path}/dependencies/smee"
+
+    if [[ "${USE_OPENSHIFT_PIPELINES:-false}" == "true" ]]; then
+        echo "  🔧 Patching smee-client for OpenShift Pipelines namespace..." >&2
+        kubectl set env deployment/gosmee-client -n smee-client -c health-check-sidecar \
+            DOWNSTREAM_SERVICE_URL="http://pipelines-as-code-controller.openshift-pipelines.svc.cluster.local:8080"
+    fi
 }
 
 deploy_kyverno() {
