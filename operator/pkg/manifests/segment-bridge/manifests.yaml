@@ -34,6 +34,14 @@ rules:
   - get
   - list
 - apiGroups:
+  - results.tekton.dev
+  resources:
+  - results
+  - records
+  verbs:
+  - get
+  - list
+- apiGroups:
   - konflux.konflux-ci.dev
   resources:
   - konfluxes
@@ -74,7 +82,7 @@ spec:
             - secretRef:
                 name: segment-bridge-config
                 optional: true
-            image: quay.io/konflux-ci/segment-bridge:6cf6f19d52dade233e037ee3c4abbc6f22496b53
+            image: quay.io/konflux-ci/segment-bridge:1be10d5827416d034becc02c02673af937af3770
             imagePullPolicy: IfNotPresent
             name: segment-bridge
             resources:
