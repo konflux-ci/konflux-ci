@@ -255,6 +255,11 @@ spec:
                     name:
                       description: Name of the Component
                       type: string
+                    url:
+                      description: |-
+                        Git URL for the component. Needed by Release service. Can be used along
+                        with LastPromotedCommit to access the code that has been promoted
+                      type: string
                     version:
                       description: |-
                         Version of the Component. Only required if multiple version of the same
@@ -264,8 +269,6 @@ spec:
                   - name
                   type: object
                 type: array
-            required:
-            - conditions
             type: object
         type: object
     served: true
@@ -1559,7 +1562,7 @@ spec:
         - --leader-elector-retry-period=5s
         command:
         - /manager
-        image: quay.io/konflux-ci/integration-service:b066b4051d1010fa09894f6ccc741bf839151baa
+        image: quay.io/konflux-ci/integration-service:9fff25af8cf6f5e349364d81d43e281c79ac39fd
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1620,7 +1623,7 @@ spec:
             - --zap-log-level=debug
             - --pr-snapshots-to-keep=70
             - --non-pr-snapshots-to-keep=640
-            image: quay.io/konflux-ci/integration-service:b066b4051d1010fa09894f6ccc741bf839151baa
+            image: quay.io/konflux-ci/integration-service:9fff25af8cf6f5e349364d81d43e281c79ac39fd
             imagePullPolicy: Always
             name: test-gc
             resources:
