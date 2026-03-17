@@ -92,11 +92,6 @@ echo "Running kube-linter scan..."
 echo "Config file: ./.github/.kube-linter-config.yaml"
 echo "Scan directory: ./.kube-linter/"
 
-# Show some debug info
-echo "Files to be scanned:"
-find ./.kube-linter -name "*.yaml" -o -name "*.yml" | head -5
-echo ""
-
 # Run the scan with verbose output
 kube-linter lint ./.kube-linter/ --config ./.github/.kube-linter-config.yaml --verbose
 
