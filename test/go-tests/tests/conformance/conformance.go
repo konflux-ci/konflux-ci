@@ -284,9 +284,19 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				})
 
 				ginkgo.It("should validate that the build pipelineRun is annotated with the name of the Snapshot", ginkgo.Label(upstreamKonfluxTestLabel), func() {
-					pipelineRun, err = fw.AsKubeAdmin.HasController.GetComponentPipelineRun(component.GetName(), appSpec.ApplicationName, userNamespace, headSHA)
-					gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-					gomega.Expect(pipelineRun.Annotations["appstudio.openshift.io/snapshot"]).To(gomega.Equal(snapshot.GetName()))
+					gomega.Eventually(func() error {
+						var getErr error
+						pipelineRun, getErr = fw.AsKubeAdmin.HasController.GetComponentPipelineRun(component.GetName(), appSpec.ApplicationName, userNamespace, headSHA)
+						if getErr != nil {
+							return getErr
+						}
+						if pipelineRun.Annotations["appstudio.openshift.io/snapshot"] != snapshot.GetName() {
+							return fmt.Errorf("pipelineRun %s/%s annotation appstudio.openshift.io/snapshot is %q, want %q",
+								pipelineRun.GetNamespace(), pipelineRun.GetName(),
+								pipelineRun.Annotations["appstudio.openshift.io/snapshot"], snapshot.GetName())
+						}
+						return nil
+					}, snapshotTimeout, snapshotPollingInterval).Should(gomega.Succeed(), "timed out waiting for build pipelineRun to be annotated with snapshot name")
 				})
 
 				ginkgo.It("should find the related Integration Test PipelineRun", ginkgo.Label(upstreamKonfluxTestLabel), func() {
@@ -381,6 +391,18 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 							return getErr
 						}
 						if tekton.HasPipelineRunFailed(pr) {
+							for _, c := range pr.Status.Conditions {
+								klog.Errorf("release PipelineRun %s/%s condition: type=%s reason=%s message=%s",
+									pr.GetNamespace(), pr.GetName(), c.Type, c.Reason, c.Message)
+							}
+							if failedLogs, logErr := tekton.GetFailedPipelineRunLogs(
+								fw.AsKubeAdmin.ReleaseController.KubeRest(),
+								fw.AsKubeAdmin.ReleaseController.KubeInterface(),
+								pr); logErr == nil {
+								klog.Errorf("release PipelineRun %s/%s failed task logs:\n%s", pr.GetNamespace(), pr.GetName(), failedLogs)
+							} else {
+								klog.Errorf("release PipelineRun %s/%s could not get failed logs: %v", pr.GetNamespace(), pr.GetName(), logErr)
+							}
 							gomega.Expect(tekton.HasPipelineRunFailed(pr)).NotTo(gomega.BeTrue(), "PipelineRun %s/%s failed", pr.GetNamespace(), pr.GetName())
 						}
 						if !pr.IsDone() {
