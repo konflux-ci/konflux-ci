@@ -226,14 +226,3 @@ you can waive the failing check by customizing the policy. The recommended workf
 
 See [Customizing Policy](https://konflux-ci.dev/docs/compliance/customizing-policy/)
 in the Konflux documentation for more details.
-
-## Further reading
-
-- [Conforma User Guide](https://conforma.dev/docs/user-guide/index.html)
-- [Conforma configuration reference](https://conforma.dev/docs/cli/configuration.html)
-- [Predefined policy configurations](https://github.com/conforma/config)
-- [Konflux: Policy Evaluations](https://konflux-ci.dev/docs/compliance/policy-evaluations/)
-- [Konflux: Customizing Policy](https://konflux-ci.dev/docs/compliance/customizing-policy/)
-- [Konflux: Adding an integration test](https://konflux-ci.dev/docs/testing/integration/adding/)
-- [Konflux: Editing integration tests](https://konflux-ci.dev/docs/testing/integration/editing/)
-- [Konflux: Creating a release plan admission](https://konflux-ci.dev/docs/releasing/create-release-plan-admission/)

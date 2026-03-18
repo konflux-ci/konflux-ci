@@ -40,12 +40,3 @@ NAME      READY   UI-URL                                                    AGE
 konflux   True    https://konflux-ui-konflux-ui.apps.<cluster-domain>       10m
 
 ````
-
-## What's next
-
-- [Onboard a new Application]({{< relref "onboard" >}}) — onboard an application, run builds, tests, and releases
-- [GitHub Application Secrets]({{< relref "github-secrets" >}}) — create a GitHub App and configure webhook delivery
-- [Registry Configuration]({{< relref "registry-configuration" >}}) — configure an external container registry for build and release pipelines
-- [API Reference]({{< relref "../reference/konflux.v1alpha1" >}}) — full CR field reference
-- [Troubleshooting]({{< relref "../troubleshooting" >}}) — solutions to common installation and runtime issues
-- [Examples]({{< relref "../examples" >}}) — sample Konflux CR configurations
