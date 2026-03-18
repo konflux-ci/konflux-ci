@@ -21,18 +21,13 @@ in the Konflux documentation.
 
 ## Pre-deployed policies
 
-The operator deploys six `EnterpriseContractPolicy` CRs into the
-`enterprise-contract-service` namespace. These are publicly readable by any
+The operator deploys an `EnterpriseContractPolicy` CR into the
+`enterprise-contract-service` namespace. This is publicly readable by any
 authenticated cluster user and can be referenced directly without creating your own.
 
 | CR name | Display name | Rule collection(s) | Description |
 |---------|-------------|--------------------|-------------|
-| `default` | Default | `@slsa3` | Used for new Konflux applications. Covers SLSA levels 1–3. |
-| `slsa3` | SLSA3 | `@minimal` + `@slsa3` | SLSA levels 1–3 plus basic Konflux checks. |
-| `redhat` | Red Hat | `@redhat` | Full set of rules required internally by Red Hat when building Red Hat products. |
-| `redhat-no-hermetic` | Red Hat (non hermetic) | `@redhat` (excludes `hermetic_build_task` and `prefetch-dependencies`) | Red Hat rules for builds that do not use hermetic mode. |
-| `redhat-trusted-tasks` | Red Hat Trusted Tasks | `kind` | Validates **Tekton Task definitions** against Red Hat standards. Uses the `task-policy` bundle. |
-| `all` | Everything (experimental) | `*` | Every available rule. **Not expected to pass** without exclusions - for exploration only. |
+| `default` | Default | `@redhat` | Used for new Konflux applications. Includes most Red Hat rules, excluding hermetic builds. |
 
 List the policies on a running cluster:
 
@@ -75,7 +70,7 @@ To switch to a different policy, set the `POLICY_CONFIGURATION` parameter on the
 3. Click **Add parameter**.
 4. Set **Name** to `POLICY_CONFIGURATION`.
 5. Set **Value** to the policy reference, for example
-   `enterprise-contract-service/redhat-no-hermetic`.
+   `enterprise-contract-service/default`.
 6. Click **Save changes**.
 
 For the full procedure, see
@@ -97,7 +92,7 @@ spec:
   application: my-application
   params:
     - name: POLICY_CONFIGURATION
-      value: enterprise-contract-service/redhat-no-hermetic
+      value: enterprise-contract-service/default
 ```
 
 To trigger a new integration test run after saving, open a pull request or comment
@@ -127,7 +122,7 @@ spec:
 
 **(1)** The `policy` field is **required** and accepts a bare policy name — the name
 of an `EnterpriseContractPolicy` CR in the `enterprise-contract-service` namespace
-(e.g. `default`, `redhat-no-hermetic`). It must match the pattern
+(e.g. `default`). It must match the pattern
 `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 
 For complete details on creating and configuring a `ReleasePlanAdmission`, see
