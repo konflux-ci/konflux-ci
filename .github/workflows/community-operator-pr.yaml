@@ -10,6 +10,10 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   create-pr:
     name: Create Community Operator PR
