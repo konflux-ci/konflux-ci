@@ -4,21 +4,37 @@ metadata:
   name: default
   namespace: enterprise-contract-service
 spec:
-  description: Includes rules for levels 1, 2 & 3 of SLSA v0.1. This is the default
-    config used for new Konflux applications. Available collections are defined in
-    https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/release_policy.html#_available_rule_collections.
+  description: Includes most of the rules and policies required internally by Red
+    Hat when building Red Hat products. It excludes the requirement of hermetic builds.
+    Available collections are defined in https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/release_policy.html#_available_rule_collections.
     If a different policy configuration is desired, this resource can serve as a starting
     point. See the docs on how to include and exclude rules https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/policy_configuration.html#_including_and_excluding_rules.
   name: Default
   publicKey: k8s://openshift-pipelines/public-key
   sources:
   - config:
-      exclude: []
+      exclude:
+        # Hermetic builds are great, but there is usually a significant amount of work to make
+        # them work which can be intimidating during the onboarding process.
+        - hermetic_task
+        # Konflux supports packaging the source code used for building an image to be packaged
+        # as an OCI artifact attached to the image. Although this is great for open source, it
+        # can catch users by surprise and potentially leak code that is not meant to be open.
+        - source_image
+        # Konflux, via Hermeto, has support for the experimental RPM lockfiles. When that is used
+        # this policy package ensures that the RPMs listed in the SBOM declare which YUM/DNF repo
+        # they came from. This is important for mapping CVEs to RPMs during content analysis
+        # performed by clair.
+        # NOTE: To enable this policy package, the full list of RPM repositories has to be provided
+        # as rule data. Red Hat provides this list here:
+        # https://github.com/release-engineering/rhtap-ec-policy/blob/main/data/known_rpm_repositories.yml
+        # However, it is not possible to include just that file in the rule data.
+        - rpm_repos
       include:
-      - '@slsa3'
+      - '@redhat'
     data:
     - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest@sha256:7612aa06e24e5d8d304e97fd2bde931a6f052f0c1761b766cbcdb20f076c0502
-    - github.com/release-engineering/rhtap-ec-policy.git//data?ref=acaef210b5ddca7a87854b5141556c30efdc2afc
+    - github.com/redhat-appstudio/tsf-conforma-data//data?ref=bf0175a13f0672ec93f1507ce6f676f26aea5de8
     name: Default
     policy:
     - oci::quay.io/conforma/release-policy:konflux@sha256:6eb386faaf76de0d7dbc9f9e770a7f5639ebcee88e4ed4f004f8053189b21eae
