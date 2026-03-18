@@ -68,10 +68,10 @@ spec:
           resources:
             requests:
               cpu: 30m
-              memory: 128Mi
+              memory: 256Mi
             limits:
               cpu: 30m
-              memory: 128Mi
+              memory: 256Mi
   buildService:
     spec:
       buildControllerManager:
