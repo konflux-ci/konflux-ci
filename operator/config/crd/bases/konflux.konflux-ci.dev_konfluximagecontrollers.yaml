@@ -40,6 +40,30 @@ spec:
           spec:
             default: {}
             description: KonfluxImageControllerSpec defines the desired state of KonfluxImageController.
+            properties:
+              quayCABundle:
+                description: |-
+                  QuayCABundle configures a custom CA bundle for Quay registry communication.
+                  When set, the CA certificate from the referenced ConfigMap is mounted into the
+                  image-controller pod and used for TLS verification when connecting to Quay.
+                  This is required when using a self-hosted Quay registry with a custom CA.
+                properties:
+                  configMapName:
+                    description: ConfigMapName is the name of the ConfigMap containing
+                      the CA certificate.
+                    minLength: 1
+                    type: string
+                  key:
+                    description: |-
+                      Key is the key within the ConfigMap that contains the CA certificate in PEM format.
+                      Must be a plain filename without path separators or directory traversal sequences.
+                    minLength: 1
+                    pattern: ^[a-zA-Z0-9][a-zA-Z0-9._-]*$
+                    type: string
+                required:
+                - configMapName
+                - key
+                type: object
             type: object
           status:
             description: KonfluxImageControllerStatus defines the observed state of

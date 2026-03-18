@@ -217,7 +217,7 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// Apply the KonfluxImageController CR (only if enabled)
 	if konflux.Spec.IsImageControllerEnabled() {
-		if err := r.applyKonfluxImageController(ctx, tc); err != nil {
+		if err := r.applyKonfluxImageController(ctx, tc, konflux); err != nil {
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxImageController")
 		}
 	}
@@ -647,8 +647,13 @@ func (r *KonfluxReconciler) applyKonfluxApplicationAPI(ctx context.Context, tc *
 
 // applyKonfluxImageController creates or updates the KonfluxImageController CR.
 // The caller is responsible for checking if image-controller is enabled.
-func (r *KonfluxReconciler) applyKonfluxImageController(ctx context.Context, tc *tracking.Client) error {
+func (r *KonfluxReconciler) applyKonfluxImageController(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.Konflux) error {
 	log := logf.FromContext(ctx)
+
+	var spec konfluxv1alpha1.KonfluxImageControllerSpec
+	if owner.Spec.ImageController != nil && owner.Spec.ImageController.Spec != nil {
+		spec = *owner.Spec.ImageController.Spec
+	}
 
 	imageController := &konfluxv1alpha1.KonfluxImageController{
 		TypeMeta: metav1.TypeMeta{
@@ -658,6 +663,7 @@ func (r *KonfluxReconciler) applyKonfluxImageController(ctx context.Context, tc 
 		ObjectMeta: metav1.ObjectMeta{
 			Name: imagecontroller.CRName,
 		},
+		Spec: spec,
 	}
 
 	log.Info("Applying KonfluxImageController CR", "name", imageController.Name)

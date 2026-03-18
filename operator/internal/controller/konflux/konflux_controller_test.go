@@ -32,6 +32,7 @@ import (
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/defaulttenant"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/imagecontroller"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/internalregistry"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/segmentbridge"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
@@ -684,6 +685,158 @@ var _ = Describe("Konflux Controller", func() {
 			By("verifying SegmentBridge CR was deleted")
 			err = k8sClient.Get(ctx, segmentBridgeTypeNamespacedName, sb)
 			Expect(errors.IsNotFound(err)).To(BeTrue(), "SegmentBridge CR should be deleted when enabled changes to false")
+		})
+	})
+
+	Context("ImageController spec propagation", func() {
+		const resourceName = "konflux"
+		ctx := context.Background()
+
+		typeNamespacedName := types.NamespacedName{
+			Name: resourceName,
+		}
+		imageControllerNamespacedName := types.NamespacedName{
+			Name: imagecontroller.CRName,
+		}
+
+		AfterEach(func() {
+			resource := &konfluxv1alpha1.Konflux{}
+			if err := k8sClient.Get(ctx, typeNamespacedName, resource); err == nil {
+				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			}
+
+			ic := &konfluxv1alpha1.KonfluxImageController{}
+			if err := k8sClient.Get(ctx, imageControllerNamespacedName, ic); err == nil {
+				Expect(k8sClient.Delete(ctx, ic)).To(Succeed())
+			}
+		})
+
+		It("should create ImageController CR with empty spec when no spec is provided", func() {
+			By("creating Konflux CR with imageController.enabled=true but no spec")
+			enabled := true
+			konflux := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: resourceName,
+				},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					ImageController: &konfluxv1alpha1.ImageControllerConfig{
+						Enabled: &enabled,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+
+			By("reconciling the Konflux CR")
+			clusterInfo := createTestClusterInfo()
+			reconciler := &KonfluxReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ClusterInfo: clusterInfo,
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying ImageController CR was created with empty spec")
+			ic := &konfluxv1alpha1.KonfluxImageController{}
+			err = k8sClient.Get(ctx, imageControllerNamespacedName, ic)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ic.Spec.QuayCABundle).To(BeNil())
+		})
+
+		It("should propagate quayCABundle spec to ImageController CR", func() {
+			By("creating Konflux CR with imageController.spec.quayCABundle")
+			enabled := true
+			konflux := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: resourceName,
+				},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					ImageController: &konfluxv1alpha1.ImageControllerConfig{
+						Enabled: &enabled,
+						Spec: &konfluxv1alpha1.KonfluxImageControllerSpec{
+							QuayCABundle: &konfluxv1alpha1.QuayCABundleSpec{
+								ConfigMapName: "my-ca-bundle",
+								Key:           "ca.crt",
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+
+			By("reconciling the Konflux CR")
+			clusterInfo := createTestClusterInfo()
+			reconciler := &KonfluxReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ClusterInfo: clusterInfo,
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying ImageController CR has the quayCABundle spec")
+			ic := &konfluxv1alpha1.KonfluxImageController{}
+			err = k8sClient.Get(ctx, imageControllerNamespacedName, ic)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ic.Spec.QuayCABundle).NotTo(BeNil())
+			Expect(ic.Spec.QuayCABundle.ConfigMapName).To(Equal("my-ca-bundle"))
+			Expect(ic.Spec.QuayCABundle.Key).To(Equal("ca.crt"))
+		})
+
+		It("should update ImageController CR spec when Konflux CR spec changes", func() {
+			By("creating Konflux CR with imageController.spec.quayCABundle")
+			enabled := true
+			konflux := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: resourceName,
+				},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					ImageController: &konfluxv1alpha1.ImageControllerConfig{
+						Enabled: &enabled,
+						Spec: &konfluxv1alpha1.KonfluxImageControllerSpec{
+							QuayCABundle: &konfluxv1alpha1.QuayCABundleSpec{
+								ConfigMapName: "my-ca-bundle",
+								Key:           "ca.crt",
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+
+			By("reconciling to create the ImageController CR")
+			clusterInfo := createTestClusterInfo()
+			reconciler := &KonfluxReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				ClusterInfo: clusterInfo,
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("updating the Konflux CR to remove quayCABundle")
+			updatedKonflux := &konfluxv1alpha1.Konflux{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, updatedKonflux)).To(Succeed())
+			updatedKonflux.Spec.ImageController.Spec = nil
+			Expect(k8sClient.Update(ctx, updatedKonflux)).To(Succeed())
+
+			By("reconciling again after update")
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying ImageController CR no longer has quayCABundle")
+			ic := &konfluxv1alpha1.KonfluxImageController{}
+			err = k8sClient.Get(ctx, imageControllerNamespacedName, ic)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ic.Spec.QuayCABundle).To(BeNil())
 		})
 	})
 })

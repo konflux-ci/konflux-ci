@@ -180,3 +180,86 @@ kubectl -n image-controller create secret generic quaytoken \
   --from-literal=quaytoken="<token from step 3>" \
   --from-literal=organization="<organization from step 2>"
 ```
+
+## Self-hosted Quay registry
+
+The image-controller can be configured to work with a self-hosted Quay instance
+instead of the public quay.io. This requires two things: pointing image-controller
+to the self-hosted Quay API and, if the instance uses a custom CA certificate,
+providing that certificate.
+
+### Step 1: Configure the Quay API URL
+
+To point image-controller at a self-hosted Quay instance, add the `quayapiurl`
+key to the `quaytoken` secret in the `image-controller` namespace. The value
+should be the full API URL including the `/api/v1` suffix.
+
+If you are creating the secret for the first time:
+
+```bash
+kubectl -n image-controller create secret generic quaytoken \
+  --from-literal=quaytoken="<OAuth token>" \
+  --from-literal=organization="<organization>" \
+  --from-literal=quayapiurl="https://quay.example.com/api/v1"
+```
+
+If the secret already exists, patch it:
+
+```bash
+kubectl -n image-controller patch secret quaytoken \
+  -p '{"stringData":{"quayapiurl":"https://quay.example.com/api/v1"}}'
+```
+
+When `quayapiurl` is not set, image-controller defaults to the public Quay API
+(`https://quay.io/api/v1`).
+
+### Step 2: Provide a custom CA certificate (optional)
+
+If the self-hosted Quay instance uses a TLS certificate signed by a custom CA
+(i.e. not trusted by the system CA bundle), you must provide the CA certificate
+so that image-controller can verify the connection.
+
+1. Create a ConfigMap in the `image-controller` namespace with the CA certificate:
+
+```bash
+kubectl -n image-controller create configmap quay-ca-bundle \
+  --from-file=ca-bundle.crt=/path/to/your/ca-certificate.crt
+```
+
+2. Configure the CA bundle in your Konflux CR:
+
+```yaml
+apiVersion: konflux.konflux-ci.dev/v1alpha1
+kind: Konflux
+metadata:
+  name: konflux
+spec:
+  imageController:
+    enabled: true
+    spec:
+      quayCABundle:
+        configMapName: quay-ca-bundle
+        key: ca-bundle.crt
+```
+
+The operator will mount the CA certificate into the image-controller pod and set
+the `QUAY_ADDITIONAL_CA` environment variable pointing to it. The certificate is
+appended to the system CA pool, so connections to other registries are not affected.
+
+The `configMapName` and `key` fields allow you to use any ConfigMap name and key.
+For example, if your ConfigMap has the certificate under a different key:
+
+```bash
+kubectl -n image-controller create configmap my-ca \
+  --from-file=quay-ca.crt=/path/to/ca.crt
+```
+
+```yaml
+spec:
+  imageController:
+    enabled: true
+    spec:
+      quayCABundle:
+        configMapName: my-ca
+        key: quay-ca.crt
+```

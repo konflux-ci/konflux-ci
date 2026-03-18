@@ -19,6 +19,7 @@ package imagecontroller
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -37,6 +38,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	crdhandler "github.com/konflux-ci/konflux-ci/operator/internal/controller/handler"
 	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
@@ -48,6 +50,14 @@ const (
 	FieldManager = "konflux-imagecontroller-controller"
 	// crKind is used in error messages to identify this CR type.
 	crKind = "KonfluxImageController"
+
+	controllerManagerDeploymentName = "image-controller-controller-manager"
+	managerContainerName            = "manager"
+
+	quayCABundleVolumeName     = "quay-ca-bundle"
+	quayCABundleMountPath      = "/etc/ssl/certs/quay-ca"
+	quayAdditionalCAEnvVar     = "QUAY_ADDITIONAL_CA"
+	defaultQuayCAConfigMapName = "quay-ca-bundle"
 )
 
 // ImageControllerCleanupGVKs defines which resource types should be cleaned up when they are
@@ -113,7 +123,7 @@ func (r *KonfluxImageControllerReconciler) Reconcile(ctx context.Context, req ct
 	})
 
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, tc); err != nil {
+	if err := r.applyManifests(ctx, tc, imageController); err != nil {
 		return errHandler.HandleApplyError(ctx, err)
 	}
 
@@ -140,13 +150,19 @@ func (r *KonfluxImageControllerReconciler) Reconcile(ctx context.Context, req ct
 
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
-func (r *KonfluxImageControllerReconciler) applyManifests(ctx context.Context, tc *tracking.Client) error {
+func (r *KonfluxImageControllerReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxImageController) error {
 	objects, err := r.ObjectStore.GetForComponent(manifests.ImageController)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for ImageController: %w", err)
 	}
 
 	for _, obj := range objects {
+		if deployment, ok := obj.(*appsv1.Deployment); ok {
+			if err := applyImageControllerDeploymentCustomizations(deployment, owner.Spec); err != nil {
+				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
+			}
+		}
+
 		// Apply with ownership using the tracking client
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
@@ -154,6 +170,53 @@ func (r *KonfluxImageControllerReconciler) applyManifests(ctx context.Context, t
 		}
 	}
 	return nil
+}
+
+// applyImageControllerDeploymentCustomizations applies user-defined customizations to ImageController deployments.
+func applyImageControllerDeploymentCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxImageControllerSpec) error {
+	switch deployment.Name {
+	case controllerManagerDeploymentName:
+		overlay, err := buildImageControllerManagerOverlay(spec)
+		if err != nil {
+			return err
+		}
+		if err := overlay.ApplyToDeployment(deployment); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// buildImageControllerManagerOverlay builds the pod overlay for the controller-manager deployment.
+// When QuayCABundle is configured, it updates the ConfigMap volume name and sets the
+// QUAY_ADDITIONAL_CA environment variable pointing to the mounted CA certificate file.
+func buildImageControllerManagerOverlay(spec konfluxv1alpha1.KonfluxImageControllerSpec) (*customization.PodOverlay, error) {
+	if spec.QuayCABundle == nil {
+		return customization.NewPodOverlay(), nil
+	}
+
+	key := spec.QuayCABundle.Key
+	if filepath.Base(key) != key || key == "." || key == ".." {
+		return nil, fmt.Errorf("invalid CA bundle key %q: must be a plain filename without path separators or traversal sequences", key)
+	}
+
+	certPath := filepath.Join(quayCABundleMountPath, key)
+
+	var podOpts []customization.PodOverlayOption
+	if spec.QuayCABundle.ConfigMapName != defaultQuayCAConfigMapName {
+		podOpts = append(podOpts, customization.WithConfigMapVolumeUpdate(quayCABundleVolumeName, spec.QuayCABundle.ConfigMapName))
+	}
+
+	podOpts = append(podOpts, customization.WithContainerOpts(
+		managerContainerName,
+		customization.DeploymentContext{},
+		customization.WithEnv(corev1.EnvVar{
+			Name:  quayAdditionalCAEnvVar,
+			Value: certPath,
+		}),
+	))
+
+	return customization.NewPodOverlay(podOpts...), nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

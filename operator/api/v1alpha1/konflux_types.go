@@ -85,12 +85,16 @@ type KonfluxSpec struct {
 
 // ImageControllerConfig defines the configuration for the image-controller component.
 // The Enabled field controls whether the component is deployed (top-level concern).
-// Other fields are runtime configuration passed to the component.
+// The Spec field is the runtime configuration passed to the KonfluxImageController CR.
 type ImageControllerConfig struct {
 	// Enabled indicates whether image-controller should be deployed.
 	// If false or unset, the component CR will not be created.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
+
+	// Spec configures the image-controller component.
+	// +optional
+	Spec *KonfluxImageControllerSpec `json:"spec,omitempty"`
 }
 
 // KonfluxUIConfig defines the configuration for the UI component.
