@@ -110,7 +110,7 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should skip Secret creation when no write key is configured (CR empty, no build-time default)", func() {
+		It("should create Secret with empty segment fields when no write key is configured", func() {
 			controllerReconciler := &KonfluxSegmentBridgeReconciler{
 				Client:               k8sClient,
 				Scheme:               k8sClient.Scheme(),
@@ -124,13 +124,17 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			secret := &corev1.Secret{}
-			err = k8sClient.Get(ctx, types.NamespacedName{
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: segmentBridgeSecretName, Namespace: segmentBridgeNamespace,
-			}, secret)
-			Expect(errors.IsNotFound(err)).To(BeTrue(), "Secret should not be created when no key is set")
+			}, secret)).To(Succeed(), "Secret should always be created")
+
+			Expect(string(secret.Data["TEKTON_RESULTS_API_ADDR"])).To(Equal(tektonResultsAPIAddrK8s))
+			Expect(string(secret.Data["SEGMENT_WRITE_KEY"])).To(BeEmpty(), "write key should be empty")
+			Expect(string(secret.Data["SEGMENT_BATCH_API"])).To(Equal(
+				konfluxv1alpha1.DefaultSegmentAPIURL + "/batch"))
 		})
 
-		It("should delete existing Secret when key becomes empty", func() {
+		It("should retain Secret with only TEKTON_RESULTS_API_ADDR when key becomes empty", func() {
 			By("First reconciling with a key to create the Secret")
 			resource := &konfluxv1alpha1.KonfluxSegmentBridge{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
@@ -153,6 +157,7 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: segmentBridgeSecretName, Namespace: segmentBridgeNamespace,
 			}, secret)).To(Succeed(), "Secret should exist after reconciling with a key")
+			Expect(secret.Data).To(HaveKey("SEGMENT_WRITE_KEY"))
 
 			By("Removing the key and reconciling again")
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
@@ -164,10 +169,14 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = k8sClient.Get(ctx, types.NamespacedName{
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: segmentBridgeSecretName, Namespace: segmentBridgeNamespace,
-			}, secret)
-			Expect(errors.IsNotFound(err)).To(BeTrue(), "Secret should be deleted when key becomes empty")
+			}, secret)).To(Succeed(), "Secret should still exist after key removal")
+
+			Expect(string(secret.Data["TEKTON_RESULTS_API_ADDR"])).To(Equal(tektonResultsAPIAddrK8s))
+			Expect(string(secret.Data["SEGMENT_WRITE_KEY"])).To(BeEmpty(), "write key should be empty")
+			Expect(string(secret.Data["SEGMENT_BATCH_API"])).To(Equal(
+				konfluxv1alpha1.DefaultSegmentAPIURL + "/batch"))
 		})
 
 		It("should create Secret with both SEGMENT_WRITE_KEY and SEGMENT_BATCH_API from inline CR fields", func() {
