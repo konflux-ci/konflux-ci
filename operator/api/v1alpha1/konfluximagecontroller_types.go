@@ -23,10 +23,27 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// QuayCABundleSpec configures a custom CA bundle for Quay registry communication.
+// The referenced ConfigMap must exist in the image-controller namespace.
+type QuayCABundleSpec struct {
+	// ConfigMapName is the name of the ConfigMap containing the CA certificate.
+	// +kubebuilder:validation:MinLength=1
+	ConfigMapName string `json:"configMapName"`
+	// Key is the key within the ConfigMap that contains the CA certificate in PEM format.
+	// Must be a plain filename without path separators or directory traversal sequences.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`
+	Key string `json:"key"`
+}
+
 // KonfluxImageControllerSpec defines the desired state of KonfluxImageController.
 type KonfluxImageControllerSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// QuayCABundle configures a custom CA bundle for Quay registry communication.
+	// When set, the CA certificate from the referenced ConfigMap is mounted into the
+	// image-controller pod and used for TLS verification when connecting to Quay.
+	// This is required when using a self-hosted Quay registry with a custom CA.
+	// +optional
+	QuayCABundle *QuayCABundleSpec `json:"quayCABundle,omitempty"`
 }
 
 // KonfluxImageControllerStatus defines the observed state of KonfluxImageController.

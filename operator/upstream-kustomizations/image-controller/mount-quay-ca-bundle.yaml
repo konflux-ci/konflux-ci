@@ -1,0 +1,19 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: image-controller-controller-manager
+spec:
+  template:
+    spec:
+      containers:
+      - name: manager
+        volumeMounts:
+          - name: quay-ca-bundle
+            mountPath: /etc/ssl/certs/quay-ca
+            readOnly: true
+      volumes:
+      - name: quay-ca-bundle
+        configMap:
+          name: quay-ca-bundle
+          optional: true

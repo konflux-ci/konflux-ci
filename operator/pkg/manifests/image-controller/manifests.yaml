@@ -972,7 +972,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/konflux-ci/image-controller:6e77d754a97567b71fd53cc6dc02f98e305bd2e0
+        image: quay.io/konflux-ci/image-controller:13e073c337902510319cf5ef239bc12098ce8d68
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1004,6 +1004,9 @@ spec:
             - ALL
           readOnlyRootFilesystem: true
         volumeMounts:
+        - mountPath: /etc/ssl/certs/quay-ca
+          name: quay-ca-bundle
+          readOnly: true
         - mountPath: /workspace
           name: quaytoken
           readOnly: true
@@ -1014,6 +1017,10 @@ spec:
       serviceAccountName: image-controller-controller-manager
       terminationGracePeriodSeconds: 10
       volumes:
+      - configMap:
+          name: quay-ca-bundle
+          optional: true
+        name: quay-ca-bundle
       - name: quaytoken
         secret:
           secretName: quaytoken

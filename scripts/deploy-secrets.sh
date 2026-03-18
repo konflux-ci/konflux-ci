@@ -118,9 +118,16 @@ create_image_controller_secret() {
             return
         fi
 
+        local quay_secret_args=(
+            --from-literal=quaytoken="${QUAY_TOKEN}"
+            --from-literal=organization="${QUAY_ORGANIZATION}"
+        )
+        if [ -n "${QUAY_API_URL:-}" ]; then
+            quay_secret_args+=(--from-literal=quayapiurl="${QUAY_API_URL}")
+            echo "Using custom Quay API URL: ${QUAY_API_URL}"
+        fi
         kubectl -n image-controller create secret generic quaytoken \
-            --from-literal=quaytoken="${QUAY_TOKEN}" \
-            --from-literal=organization="${QUAY_ORGANIZATION}" \
+            "${quay_secret_args[@]}" \
             --dry-run=client -o yaml | kubectl apply -f -
         echo "Image-controller secret created."
 
