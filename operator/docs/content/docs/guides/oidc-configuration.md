@@ -336,7 +336,3 @@ Dex supports many more upstream providers including Bitbucket Cloud, GitLab, SAM
 LinkedIn, Microsoft, and more. For the full list of available connectors and their
 configuration options, refer to the
 [Dex connectors documentation](https://dexidp.io/docs/connectors/).
-
-## What's Next
-
-- [Troubleshooting]({{< relref "../troubleshooting" >}}) - solutions to common issues encountered when running Konflux.
