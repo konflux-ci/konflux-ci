@@ -382,81 +382,7 @@ metadata:
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: EnterpriseContractPolicy
 metadata:
-  name: all
-  namespace: enterprise-contract-service
-spec:
-  description: Include every rule in the default policy source. For experiments only.
-    This is not expected to pass for Konflux builds without excluding some rules.
-    Available collections are defined in https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/release_policy.html#_available_rule_collections.
-    If a different policy configuration is desired, this resource can serve as a starting
-    point. See the docs on how to include and exclude rules https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/policy_configuration.html#_including_and_excluding_rules.
-  name: Everything (experimental)
-  publicKey: k8s://openshift-pipelines/public-key
-  sources:
-  - config:
-      exclude: []
-      include:
-      - '*'
-    data:
-    - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest@sha256:cc03b2c00a336b9b264fbb5a077150a0a27549be75fa3ba4fb5c1aa1e826bc3c
-    - github.com/release-engineering/rhtap-ec-policy.git//data?ref=671e5c26f93de6a0931f49e2e2d7f0eb4d5df6c8
-    name: Default
-    policy:
-    - oci::quay.io/conforma/release-policy:konflux@sha256:be53571e210f76978fb3d89233aa9740cde4e3c66707db029728a81479ad3f73
----
-apiVersion: appstudio.redhat.com/v1alpha1
-kind: EnterpriseContractPolicy
-metadata:
   name: default
-  namespace: enterprise-contract-service
-spec:
-  description: Includes rules for levels 1, 2 & 3 of SLSA v0.1. This is the default
-    config used for new Konflux applications. Available collections are defined in
-    https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/release_policy.html#_available_rule_collections.
-    If a different policy configuration is desired, this resource can serve as a starting
-    point. See the docs on how to include and exclude rules https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/policy_configuration.html#_including_and_excluding_rules.
-  name: Default
-  publicKey: k8s://openshift-pipelines/public-key
-  sources:
-  - config:
-      exclude: []
-      include:
-      - '@slsa3'
-    data:
-    - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest@sha256:cc03b2c00a336b9b264fbb5a077150a0a27549be75fa3ba4fb5c1aa1e826bc3c
-    - github.com/release-engineering/rhtap-ec-policy.git//data?ref=dd1a3dd1bf2299e1da9936b89e7279b6ab443bec
-    name: Default
-    policy:
-    - oci::quay.io/conforma/release-policy:konflux@sha256:be53571e210f76978fb3d89233aa9740cde4e3c66707db029728a81479ad3f73
----
-apiVersion: appstudio.redhat.com/v1alpha1
-kind: EnterpriseContractPolicy
-metadata:
-  name: redhat
-  namespace: enterprise-contract-service
-spec:
-  description: Includes the full set of rules and policies required internally by
-    Red Hat when building Red Hat products. Available collections are defined in https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/release_policy.html#_available_rule_collections.
-    If a different policy configuration is desired, this resource can serve as a starting
-    point. See the docs on how to include and exclude rules https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/policy_configuration.html#_including_and_excluding_rules.
-  name: Red Hat
-  publicKey: k8s://openshift-pipelines/public-key
-  sources:
-  - config:
-      exclude: []
-      include:
-      - '@redhat'
-    data:
-    - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest@sha256:d0e34b6ed08e9e6922134693f7ca8130e04849b82318150c4b4b2f721b8a4bfb
-    - github.com/release-engineering/rhtap-ec-policy.git//data?ref=dd1a3dd1bf2299e1da9936b89e7279b6ab443bec
-    name: Default
-    policy:
-    - oci::quay.io/conforma/release-policy:konflux@sha256:be53571e210f76978fb3d89233aa9740cde4e3c66707db029728a81479ad3f73
----
-apiVersion: appstudio.redhat.com/v1alpha1
-kind: EnterpriseContractPolicy
-metadata:
-  name: redhat-no-hermetic
   namespace: enterprise-contract-service
 spec:
   description: Includes most of the rules and policies required internally by Red
@@ -464,63 +390,19 @@ spec:
     Available collections are defined in https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/release_policy.html#_available_rule_collections.
     If a different policy configuration is desired, this resource can serve as a starting
     point. See the docs on how to include and exclude rules https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/policy_configuration.html#_including_and_excluding_rules.
-  name: Red Hat (non hermetic)
+  name: Default
   publicKey: k8s://openshift-pipelines/public-key
   sources:
   - config:
       exclude:
-      - hermetic_build_task
-      - tasks.required_tasks_found:prefetch-dependencies
+      - hermetic_task
+      - source_image
+      - rpm_repos
       include:
       - '@redhat'
     data:
     - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest@sha256:cc03b2c00a336b9b264fbb5a077150a0a27549be75fa3ba4fb5c1aa1e826bc3c
-    - github.com/release-engineering/rhtap-ec-policy.git//data?ref=671e5c26f93de6a0931f49e2e2d7f0eb4d5df6c8
-    name: Default
-    policy:
-    - oci::quay.io/conforma/release-policy:konflux@sha256:be53571e210f76978fb3d89233aa9740cde4e3c66707db029728a81479ad3f73
----
-apiVersion: appstudio.redhat.com/v1alpha1
-kind: EnterpriseContractPolicy
-metadata:
-  name: redhat-trusted-tasks
-  namespace: enterprise-contract-service
-spec:
-  description: Rules used to verify Tekton Task definitions comply to Red Hat's standards.
-  name: Red Hat Trusted Tasks
-  sources:
-  - config:
-      exclude: []
-      include:
-      - kind
-    data:
-    - github.com/release-engineering/rhtap-ec-policy.git//data?ref=dd1a3dd1bf2299e1da9936b89e7279b6ab443bec
-    name: Default
-    policy:
-    - oci::quay.io/conforma/task-policy:konflux@sha256:fb2c1cfc0b68f6aca13eb9c63ae90bbabbc5384818484d8358f66cd9b53d82c9
----
-apiVersion: appstudio.redhat.com/v1alpha1
-kind: EnterpriseContractPolicy
-metadata:
-  name: slsa3
-  namespace: enterprise-contract-service
-spec:
-  description: Rules specifically related to levels 1, 2 & 3 of SLSA v0.1, plus a
-    set of basic checks that are expected to pass for all Konflux builds. Available
-    collections are defined in https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/release_policy.html#_available_rule_collections.
-    If a different policy configuration is desired, this resource can serve as a starting
-    point. See the docs on how to include and exclude rules https://redhat-appstudio.github.io/docs.stonesoup.io/ec-policies/policy_configuration.html#_including_and_excluding_rules.
-  name: SLSA3
-  publicKey: k8s://openshift-pipelines/public-key
-  sources:
-  - config:
-      exclude: []
-      include:
-      - '@minimal'
-      - '@slsa3'
-    data:
-    - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest@sha256:cc03b2c00a336b9b264fbb5a077150a0a27549be75fa3ba4fb5c1aa1e826bc3c
-    - github.com/release-engineering/rhtap-ec-policy.git//data?ref=dd1a3dd1bf2299e1da9936b89e7279b6ab443bec
+    - github.com/redhat-appstudio/tsf-conforma-data//data?ref=bf0175a13f0672ec93f1507ce6f676f26aea5de8
     name: Default
     policy:
     - oci::quay.io/conforma/release-policy:konflux@sha256:be53571e210f76978fb3d89233aa9740cde4e3c66707db029728a81479ad3f73
