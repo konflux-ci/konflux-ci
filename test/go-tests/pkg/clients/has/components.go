@@ -249,6 +249,14 @@ func (h *Controller) WaitForComponentPipelineToBeFinished(component *appservice.
 			if prLogs, err = t.GetPipelineRunLogs(component.GetName(), pr.Name, pr.Namespace); err != nil {
 				ginkgo.GinkgoWriter.Printf("failed to get logs for PipelineRun %s:%s: %s\n", pr.GetNamespace(), pr.GetName(), err.Error())
 			}
+			// Use condition reason and message when logs are empty (e.g. CouldntGetTask leaves no TaskRuns)
+			if strings.TrimSpace(prLogs) == "" {
+				cond := pr.GetStatusCondition().GetCondition(apis.ConditionSucceeded)
+				prLogs = cond.GetReason()
+				if msg := cond.GetMessage(); msg != "" {
+					prLogs = prLogs + ": " + msg
+				}
+			}
 			return false, fmt.Errorf("%s", prLogs)
 		})
 
