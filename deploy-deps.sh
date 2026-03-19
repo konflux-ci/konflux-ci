@@ -366,7 +366,23 @@ deploy_quay() {
         echo "⏭️  Skipping Quay deployment" >&2
         return 0
     fi
+
+    : "${QUAY_HOSTNAME:=localhost:8443}"
+    QUAY_HOSTNAME="${QUAY_HOSTNAME#https://}"
+    QUAY_HOSTNAME="${QUAY_HOSTNAME#http://}"
+    local quay_host="${QUAY_HOSTNAME%%:*}"
+
     kubectl apply -k "${script_path}/dependencies/quay"
+
+    # Add custom hostname to certificate SANs if not already covered
+    case "${quay_host}" in
+        localhost|quay-service.quay|quay-service.quay.svc.cluster.local) ;;
+        *)
+            echo "📜 Adding '${quay_host}' to quay-cert SANs" >&2
+            kubectl patch certificate quay-cert -n quay --type=json \
+                -p "[{\"op\": \"add\", \"path\": \"/spec/dnsNames/-\", \"value\": \"${quay_host}\"}]"
+            ;;
+    esac
 
     local POSTGRES_PASSWORD
     if ! kubectl get secret quay-postgres-creds -n quay &>/dev/null; then
@@ -388,6 +404,7 @@ deploy_quay() {
         config="$(sed -e "s|\${POSTGRES_PASSWORD}|${POSTGRES_PASSWORD}|g" \
                       -e "s|\${DATABASE_SECRET_KEY}|${DATABASE_SECRET_KEY}|g" \
                       -e "s|\${SECRET_KEY}|${SECRET_KEY}|g" \
+                      -e "s|\${QUAY_HOSTNAME}|${QUAY_HOSTNAME}|g" \
                       "${script_path}/dependencies/quay/quay-config.yaml.tpl")"
         kubectl create secret generic quay-config \
             --namespace=quay \
@@ -401,10 +418,14 @@ deploy_quay() {
     retry "kubectl wait --for=condition=Ready --timeout=240s -n quay -l app=quay pod" \
           "Quay did not become available within the allocated time"
 
-    init_quay_admin
+    init_quay_admin "${QUAY_HOSTNAME}"
 }
 
+# init_quay_admin creates the initial admin user via the Quay API.
+# Args: $1 = quay_hostname (e.g. "localhost:8443")
 init_quay_admin() {
+    local quay_hostname="${1:-localhost:8443}"
+
     : "${SKIP_QUAY_ADMIN_INIT:=false}"
     if [[ "${SKIP_QUAY_ADMIN_INIT}" == "true" ]]; then
         echo "⏭️  Skipping Quay admin initialization" >&2
@@ -429,7 +450,7 @@ init_quay_admin() {
     local ADMIN_PASSWORD="password"  # gitleaks:allow -- throwaway ephemeral Kind cluster credential
     local ADMIN_EMAIL="admin@local.dev"
 
-    local QUAY_URL="https://localhost:8443"
+    local QUAY_URL="https://${quay_hostname}"
 
     echo "⏳ Waiting for Quay API to be reachable from host..." >&2
     local i

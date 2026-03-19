@@ -19,6 +19,39 @@ spec:
       labels:
         app: quay
     spec:
+      initContainers:
+      - name: patch-nginx-conf
+        image: quay.io/projectquay/quay
+        command:
+          - /bin/sh
+          - -ec
+          - |
+            src=/quay-registry/conf/nginx/server-base.conf.jnj
+            dst=/nginx-patch/server-base.conf.jnj
+            pattern='proxy_set_header Host $host;'
+            replacement='proxy_set_header Host $http_host;'
+
+            if ! grep -q "$pattern" "$src"; then
+              echo "ERROR: expected pattern not found in $src — upstream template may have changed" >&2
+              exit 1
+            fi
+            sed "s/$pattern/$replacement/g" "$src" > "$dst"
+            if ! grep -q "$replacement" "$dst"; then
+              echo "ERROR: patched file $dst does not contain expected line" >&2
+              exit 1
+            fi
+        securityContext:
+          runAsNonRoot: true
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+        volumeMounts:
+        - name: nginx-patch
+          mountPath: /nginx-patch
       containers:
       - name: quay
         image: quay.io/projectquay/quay
@@ -56,6 +89,10 @@ spec:
           readOnly: true
         - name: storage
           mountPath: /datastorage
+        - name: nginx-patch
+          mountPath: /quay-registry/conf/nginx/server-base.conf.jnj
+          subPath: server-base.conf.jnj
+          readOnly: true
       volumes:
       - name: config-stack
         projected:
@@ -73,6 +110,8 @@ spec:
               - key: tls.key
                 path: ssl.key
       - name: storage
+        emptyDir: {}
+      - name: nginx-patch
         emptyDir: {}
 ---
 apiVersion: v1
