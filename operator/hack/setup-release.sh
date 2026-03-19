@@ -22,6 +22,8 @@ Options:
   -t, --tenant-namespace    Source tenant namespace (default: default-tenant)
   -m, --managed-namespace   Managed namespace for releases (default: default-managed-tenant)
   -a, --application         Application name (default: sample-component)
+  -p, --product-name        Product name to add to the ReleaseNotes (default: --application)
+  -v, --product-version     Product version to add to the ReleaseNotes (default: 0.1)
   -c, --component           Component name (repeatable for multiple components;
                             if omitted, auto-detects all components from the application)
   -e, --conforma-policy     EnterpriseContractPolicy name to copy from
@@ -73,6 +75,7 @@ wait_for_imagerepository() {
 TENANT_NS="default-tenant"
 MANAGED_NS="default-managed-tenant"
 APPLICATION="sample-component"
+PRODUCT_VERSION="0.1"
 CONFORMA_POLICY="default"
 RELEASE_NAME="local-release"
 COMPONENTS=()
@@ -89,6 +92,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         -a|--application)
             APPLICATION="$2"
+            shift 2
+            ;;
+        -p|--product-name)
+            PRODUCT_NAME="$2"
+            shift 2
+            ;;
+        -v|--product-version)
+            PRODUCT_VERSION="$2"
             shift 2
             ;;
         -c|--component)
@@ -113,6 +124,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Parse PRODUCT_NAME default value based on APPLICATION value (after args parsing)
+PRODUCT_NAME=${PRODUCT_NAME:-$APPLICATION}
+
 # Auto-detect components if none specified
 if [[ ${#COMPONENTS[@]} -eq 0 ]]; then
     echo "🔍 No components specified, auto-detecting from application '${APPLICATION}' in namespace '${TENANT_NS}'..."
@@ -133,6 +147,8 @@ echo "🏗️  Setting up release resources"
 echo "   Tenant namespace:  ${TENANT_NS}"
 echo "   Managed namespace: ${MANAGED_NS}"
 echo "   Application:       ${APPLICATION}"
+echo "   Product Name:      ${PRODUCT_NAME}"
+echo "   Product Version:   ${PRODUCT_VERSION}"
 echo "   EC policy:         ${CONFORMA_POLICY}"
 echo "   Release name:      ${RELEASE_NAME}"
 echo "   Components:        ${COMPONENTS[*]}"
@@ -334,6 +350,9 @@ spec:
           - latest
           - '{{ git_sha }}'
       components:${COMPONENTS_YAML}
+    releaseNotes:
+      product_name: '${PRODUCT_NAME}'
+      product_version: '${PRODUCT_VERSION}'
   pipeline:
     pipelineRef:
       resolver: git
