@@ -188,7 +188,7 @@ echo "✅ Copied all bundle contents"
 
 echo ""
 echo "Operator directory contents:"
-find "${OPERATOR_DIR}" -type f | head -20
+find "${OPERATOR_DIR}" -type f | head -20 || true
 
 # Prepare commit/PR message
 COMMIT_TITLE="operator ${OPERATOR_NAME} (${VERSION})"
