@@ -220,9 +220,9 @@ git push --force origin "${BRANCH_NAME}"
 echo ""
 if [ "${UPDATE_MODE}" = "true" ]; then
   PR_NUM=$(GH_TOKEN="${GITHUB_TOKEN}" gh pr list --repo "${UPSTREAM_REPO}" \
-    --head "${FORK_REPO%%/*}:${BRANCH_NAME}" --state open --json number -q '.[0].number')
+    --author "@me" --head "${BRANCH_NAME}" --state open --json number -q '.[0].number')
   if [ -z "${PR_NUM}" ] || [ "${PR_NUM}" = "null" ]; then
-    echo "Error: No open PR found for head ${FORK_REPO%%/*}:${BRANCH_NAME}"
+    echo "Error: No open PR found for branch ${BRANCH_NAME}"
     exit 1
   fi
   echo "=== Marking PR #${PR_NUM} ready for review ==="
