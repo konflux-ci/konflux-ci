@@ -15,4 +15,4 @@ spec:
     - github.com/release-engineering/rhtap-ec-policy.git//data?ref=dd1a3dd1bf2299e1da9936b89e7279b6ab443bec
     name: Default
     policy:
-    - oci::quay.io/conforma/task-policy:konflux@sha256:fb2c1cfc0b68f6aca13eb9c63ae90bbabbc5384818484d8358f66cd9b53d82c9
+    - oci::quay.io/conforma/task-policy:konflux@sha256:d653a9e8c2280556561dfea239190f56e6d4b34a0a2ae7fda58fd2221abaeb77
