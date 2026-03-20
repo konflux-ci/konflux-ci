@@ -357,7 +357,7 @@ kind: ReleasePlan
 metadata:
   labels:
     release.appstudio.openshift.io/auto-release: "true"
-    release.appstudio.openshift.io/standing-attribution: "false"
+    release.appstudio.openshift.io/standing-attribution: "true"
   name: ${RELEASE_NAME}
   namespace: ${TENANT_NS}
 spec:
