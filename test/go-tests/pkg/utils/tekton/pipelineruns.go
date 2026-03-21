@@ -47,6 +47,8 @@ type FailedPipelineRunDetails struct {
 	FailedTaskRunName   string
 	PodName             string
 	FailedContainerName string
+	// TaskRunConditionsText is built while walking child TaskRuns; used when FailedContainerName is empty.
+	TaskRunConditionsText string
 }
 
 // This is a demo pipeline to create test image and task signing
@@ -248,6 +250,8 @@ func GetFailedPipelineRunLogs(c crclient.Client, ki kubernetes.Interface, pipeli
 			failMessage += fmt.Sprintf("Failed container '%s/%s' (no logs available)",
 				d.FailedTaskRunName, d.FailedContainerName)
 		}
+	} else if d != nil && d.FailedContainerName == "" && d.TaskRunConditionsText != "" {
+		failMessage += "TaskRun status.conditions (no failed container logs available):\n" + d.TaskRunConditionsText
 	}
 	return failMessage, nil
 }
@@ -262,14 +266,16 @@ func HasPipelineRunFailed(pr *pipeline.PipelineRun) bool {
 
 func GetFailedPipelineRunDetails(c crclient.Client, pipelineRun *pipeline.PipelineRun) (*FailedPipelineRunDetails, error) {
 	d := &FailedPipelineRunDetails{}
+	var condText string
 	for _, chr := range pipelineRun.Status.ChildReferences {
 		taskRun := &pipeline.TaskRun{}
 		taskRunKey := types.NamespacedName{Namespace: pipelineRun.Namespace, Name: chr.Name}
 		if err := c.Get(context.Background(), taskRunKey, taskRun); err != nil {
 			return nil, fmt.Errorf("failed to get details for PR %s: %+v", pipelineRun.GetName(), err)
 		}
-		for _, c := range taskRun.Status.Conditions {
-			if c.Reason == "Failed" {
+		condText += fmt.Sprintf("- TaskRun %s (pipeline task %q):\n", taskRun.Name, chr.PipelineTaskName)
+		for _, tc := range taskRun.Status.Conditions {
+			if tc.Reason == "Failed" {
 				d.FailedTaskRunName = taskRun.Name
 				d.PodName = taskRun.Status.PodName
 				for _, s := range taskRun.Status.Steps {
@@ -279,7 +285,10 @@ func GetFailedPipelineRunDetails(c crclient.Client, pipelineRun *pipeline.Pipeli
 					}
 				}
 			}
+			condText += fmt.Sprintf("  type=%s status=%s reason=%s message=%s\n",
+				tc.Type, tc.Status, tc.Reason, tc.Message)
 		}
 	}
+	d.TaskRunConditionsText = condText
 	return d, nil
 }
