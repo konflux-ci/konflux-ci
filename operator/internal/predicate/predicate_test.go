@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
@@ -239,4 +240,147 @@ func TestKonfluxUIIngressStatusChangedPredicate_GenericFunc(t *testing.T) {
 
 	result := KonfluxUIIngressStatusChangedPredicate.GenericFunc(e)
 	g.Expect(result).To(gomega.BeTrue())
+}
+
+func TestGenerationChangedPredicate(t *testing.T) {
+	g := gomega.NewWithT(t)
+
+	t.Run("should return true when generation changes", func(t *testing.T) {
+		e := event.UpdateEvent{
+			ObjectOld: &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Generation: 1}},
+			ObjectNew: &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Generation: 2}},
+		}
+		g.Expect(GenerationChangedPredicate.UpdateFunc(e)).To(gomega.BeTrue())
+	})
+
+	t.Run("should return false when generation is same", func(t *testing.T) {
+		e := event.UpdateEvent{
+			ObjectOld: &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Generation: 1}},
+			ObjectNew: &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Generation: 1}},
+		}
+		g.Expect(GenerationChangedPredicate.UpdateFunc(e)).To(gomega.BeFalse())
+	})
+
+	t.Run("should return true when objects are nil", func(t *testing.T) {
+		g.Expect(GenerationChangedPredicate.UpdateFunc(event.UpdateEvent{})).To(gomega.BeTrue())
+	})
+
+	// Basic event types always return true
+	g.Expect(GenerationChangedPredicate.CreateFunc(event.CreateEvent{})).To(gomega.BeTrue())
+	g.Expect(GenerationChangedPredicate.DeleteFunc(event.DeleteEvent{})).To(gomega.BeTrue())
+	g.Expect(GenerationChangedPredicate.GenericFunc(event.GenericEvent{})).To(gomega.BeTrue())
+}
+
+func TestLabelsOrAnnotationsChangedPredicate(t *testing.T) {
+	g := gomega.NewWithT(t)
+
+	t.Run("should return true when generation changes", func(t *testing.T) {
+		e := event.UpdateEvent{
+			ObjectOld: &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Generation: 1}},
+			ObjectNew: &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Generation: 2}},
+		}
+		g.Expect(LabelsOrAnnotationsChangedPredicate.UpdateFunc(e)).To(gomega.BeTrue())
+	})
+
+	t.Run("should return true when labels change", func(t *testing.T) {
+		e := event.UpdateEvent{
+			ObjectOld: &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1, Labels: map[string]string{"foo": "bar"}},
+			},
+			ObjectNew: &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1, Labels: map[string]string{"foo": "baz"}},
+			},
+		}
+		g.Expect(LabelsOrAnnotationsChangedPredicate.UpdateFunc(e)).To(gomega.BeTrue())
+	})
+
+	t.Run("should return true when annotations change", func(t *testing.T) {
+		e := event.UpdateEvent{
+			ObjectOld: &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1, Annotations: map[string]string{"foo": "bar"}},
+			},
+			ObjectNew: &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1, Annotations: map[string]string{"foo": "baz"}},
+			},
+		}
+		g.Expect(LabelsOrAnnotationsChangedPredicate.UpdateFunc(e)).To(gomega.BeTrue())
+	})
+
+	t.Run("should return false when nothing changes", func(t *testing.T) {
+		e := event.UpdateEvent{
+			ObjectOld: &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1, Labels: map[string]string{"foo": "bar"}},
+			},
+			ObjectNew: &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1, Labels: map[string]string{"foo": "bar"}},
+			},
+		}
+		g.Expect(LabelsOrAnnotationsChangedPredicate.UpdateFunc(e)).To(gomega.BeFalse())
+	})
+
+	t.Run("should return true when objects are nil", func(t *testing.T) {
+		g.Expect(LabelsOrAnnotationsChangedPredicate.UpdateFunc(event.UpdateEvent{})).To(gomega.BeTrue())
+	})
+
+	// Basic event types always return true
+	g.Expect(LabelsOrAnnotationsChangedPredicate.CreateFunc(event.CreateEvent{})).To(gomega.BeTrue())
+	g.Expect(LabelsOrAnnotationsChangedPredicate.DeleteFunc(event.DeleteEvent{})).To(gomega.BeTrue())
+	g.Expect(LabelsOrAnnotationsChangedPredicate.GenericFunc(event.GenericEvent{})).To(gomega.BeTrue())
+}
+
+func TestDeploymentReadinessPredicate(t *testing.T) {
+	g := gomega.NewWithT(t)
+
+	t.Run("should return true when generation changes", func(t *testing.T) {
+		e := event.UpdateEvent{
+			ObjectOld: &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Generation: 1}},
+			ObjectNew: &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Generation: 2}},
+		}
+		g.Expect(DeploymentReadinessPredicate.UpdateFunc(e)).To(gomega.BeTrue())
+	})
+
+	t.Run("should return true when ready replicas change", func(t *testing.T) {
+		e := event.UpdateEvent{
+			ObjectOld: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+				Status:     appsv1.DeploymentStatus{ReadyReplicas: 1},
+			},
+			ObjectNew: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+				Status:     appsv1.DeploymentStatus{ReadyReplicas: 2},
+			},
+		}
+		g.Expect(DeploymentReadinessPredicate.UpdateFunc(e)).To(gomega.BeTrue())
+	})
+
+	t.Run("should return false when nothing changes", func(t *testing.T) {
+		e := event.UpdateEvent{
+			ObjectOld: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+				Status:     appsv1.DeploymentStatus{ReadyReplicas: 1},
+			},
+			ObjectNew: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+				Status:     appsv1.DeploymentStatus{ReadyReplicas: 1},
+			},
+		}
+		g.Expect(DeploymentReadinessPredicate.UpdateFunc(e)).To(gomega.BeFalse())
+	})
+
+	t.Run("should return true for wrong object types (fail safe)", func(t *testing.T) {
+		e := event.UpdateEvent{
+			ObjectOld: &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Generation: 1}},
+			ObjectNew: &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Generation: 1}},
+		}
+		g.Expect(DeploymentReadinessPredicate.UpdateFunc(e)).To(gomega.BeTrue())
+	})
+
+	t.Run("should return true when objects are nil", func(t *testing.T) {
+		g.Expect(DeploymentReadinessPredicate.UpdateFunc(event.UpdateEvent{})).To(gomega.BeTrue())
+	})
+
+	// Basic event types always return true
+	g.Expect(DeploymentReadinessPredicate.CreateFunc(event.CreateEvent{})).To(gomega.BeTrue())
+	g.Expect(DeploymentReadinessPredicate.DeleteFunc(event.DeleteEvent{})).To(gomega.BeTrue())
+	g.Expect(DeploymentReadinessPredicate.GenericFunc(event.GenericEvent{})).To(gomega.BeTrue())
 }
