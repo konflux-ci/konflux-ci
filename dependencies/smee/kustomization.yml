@@ -8,7 +8,7 @@ resources:
 images:
   - name: ghcr.io/chmouel/gosmee
     newName: ghcr.io/chmouel/gosmee
-    newTag: v0.29.0
+    newTag: v0.30.0
   - name: quay.io/konflux-ci/smee-sidecar
     newName: quay.io/konflux-ci/smee-sidecar
     newTag: latest@sha256:08868e03bfe64428090035642d01cc062771925a5e2ed30827a5e2a712308f35
