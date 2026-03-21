@@ -212,7 +212,7 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.1 // indirect
 )
 
-replace github.com/cyphar/filepath-securejoin => github.com/cyphar/filepath-securejoin v0.3.6
+replace github.com/cyphar/filepath-securejoin => github.com/cyphar/filepath-securejoin v0.6.1
 
 replace github.com/expr-lang/expr => github.com/expr-lang/expr v1.17.7
 
