@@ -275,7 +275,7 @@ func (r *KonfluxInfoReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	)
 
 	controllerBuilder := ctrl.NewControllerManagedBy(mgr).
-		For(&konfluxv1alpha1.KonfluxInfo{}).
+		For(&konfluxv1alpha1.KonfluxInfo{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Named("konfluxinfo").
 		// Use predicates to filter out unnecessary updates and prevent reconcile loops
 		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).

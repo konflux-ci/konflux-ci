@@ -170,7 +170,7 @@ func (r *KonfluxInternalRegistryReconciler) applyManifests(ctx context.Context, 
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxInternalRegistryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&konfluxv1alpha1.KonfluxInternalRegistry{}).
+		For(&konfluxv1alpha1.KonfluxInternalRegistry{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Named("konfluxinternalregistry").
 		// Watch for changes to registry resources
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(predicate.DeploymentReadinessPredicate)).
