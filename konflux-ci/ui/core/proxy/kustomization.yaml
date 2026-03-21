@@ -10,7 +10,7 @@ images:
   newTag: 76c3a63732a385eb5a717c96ba6a623472edc9ef
 - name: quay.io/oauth2-proxy/oauth2-proxy
   newName: quay.io/oauth2-proxy/oauth2-proxy
-  newTag: latest@sha256:68336da945bdaff799262c8d14fb1d1aa9354df5e02b87e0955addc040344618
+  newTag: latest@sha256:d963570b1f7e399bc42caace45433aab09e7ae76de5610fde97ba32029b6150a
 
 configMapGenerator:
   - name: proxy
