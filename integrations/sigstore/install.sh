@@ -13,7 +13,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # renovate: datasource=helm registryUrl=https://sigstore.github.io/helm-charts depName=scaffold
-SCAFFOLD_VERSION="0.6.105"
+SCAFFOLD_VERSION="0.6.106"
 
 HELM_REPO_NAME="sigstore"
 HELM_REPO_URL="https://sigstore.github.io/helm-charts"
