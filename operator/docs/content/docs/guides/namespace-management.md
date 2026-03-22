@@ -1,7 +1,7 @@
 ---
 title: "Tenant and Managed Namespace Management"
 linkTitle: "Namespace Management"
-weight: 6
+weight: 5
 description: "How to create and configure tenant namespaces and managed namespaces in Konflux."
 ---
 

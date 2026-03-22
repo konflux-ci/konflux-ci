@@ -1,7 +1,7 @@
 ---
 title: "Authentication and OIDC Configuration"
 linkTitle: "Authentication and OIDC Configuration"
-weight: 5
+weight: 4
 description: "Configuring login providers for Konflux using Dex connectors - GitHub, OpenShift, OIDC, LDAP, and static passwords."
 ---
 
