@@ -238,12 +238,11 @@ echo "========================================="
 
 # In 'none' mode, namespaces don't exist yet (operator isn't running),
 # so create them directly and skip waiting for pods that don't exist yet.
-DEPLOY_SECRETS_ENV=()
 if [ "${INSTALL_METHOD}" = "none" ]; then
-    DEPLOY_SECRETS_ENV+=(CREATE_NAMESPACES=true WAIT_FOR_PODS=false)
+    env CREATE_NAMESPACES=true WAIT_FOR_PODS=false "${SCRIPT_DIR}/deploy-secrets.sh"
+else
+    "${SCRIPT_DIR}/deploy-secrets.sh"
 fi
-
-env "${DEPLOY_SECRETS_ENV[@]}" "${SCRIPT_DIR}/deploy-secrets.sh"
 
 echo "✓ Secrets created"
 
