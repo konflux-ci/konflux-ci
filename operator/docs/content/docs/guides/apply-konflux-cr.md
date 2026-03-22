@@ -1,7 +1,7 @@
 ---
 title: "Applying the Konflux Custom Resource"
 linkTitle: "Applying the Konflux Custom Resource"
-weight: 6
+weight: 1
 description: "How to create a Konflux Custom Resource and verify the installation is ready."
 ---
 

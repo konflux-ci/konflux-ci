@@ -19,45 +19,7 @@ Port 5000 is used by macOS AirPlay Receiver.
 REGISTRY_HOST_PORT=5001
 ```
 
-### Insufficient memory — Podman on macOS
 
-On macOS, Podman runs in a virtual machine. Check the VM memory:
-
-```bash
-podman machine inspect | grep Memory
-```
-
-If insufficient, create a new machine with more resources:
-
-```bash
-podman machine stop
-podman machine init --memory 20480 --cpus 8 --rootful konflux-large
-podman machine start konflux-large
-```
-
-Then configure the deployment script to use it (in `scripts/deploy-local.env`):
-
-```bash
-PODMAN_MACHINE_NAME="konflux-large"
-```
-
-### PID limit issues — Podman on Linux
-
-If Tekton pipelines fail with "cannot fork" errors, increase the PID limit:
-
-```bash
-podman update --pids-limit 8192 konflux-control-plane
-```
-
-### Too many open files
-
-Increase `inotify` limits temporarily (the `deploy-local.sh` script does this automatically,
-but if you hit the issue on a restarted host):
-
-```bash
-sudo sysctl fs.inotify.max_user_watches=524288
-sudo sysctl fs.inotify.max_user_instances=512
-```
 
 ### Docker Hub rate limits
 
@@ -179,28 +141,63 @@ It may take a few minutes for the UI to become available again.
 
 ### Pipelines not triggering on PRs
 
-1. Check that events are being logged to your smee channel.
-2. Check the smee client pod logs:
+1. Confirm that events were logged to your smee channel. If not, verify your steps
+   for setting up the GitHub App and installing it on your fork repository.
 
-```bash
-kubectl get pods -n smee-client
-kubectl logs -n smee-client gosmee-client-<pod-id>
-```
+2. Check the smee client pod logs and confirm they show channel events being forwarded
+   to pipelines-as-code:
 
-3. If the smee client pod is missing or not forwarding, check the channel URL in the
-   smee client manifest and redeploy it.
-4. Check pipelines-as-code controller logs:
+   ```bash
+   kubectl get pods -n smee-client
+   kubectl logs -n smee-client gosmee-client-<pod-id>
+   ```
 
-```bash
-kubectl get pods -n pipelines-as-code
-kubectl logs -n pipelines-as-code pipelines-as-code-controller-<pod-id>
-```
+3. If the smee client pod is missing or the logs do not include forwarding entries,
+   verify the smee channel URL in the smee-client manifest, then redeploy it:
 
-5. Verify the `pipelines-as-code-secret` exists and has the correct fields:
+   ```bash
+   kubectl delete -f ./smee/smee-client.yaml
+   # fix the channel URL in the manifest
+   kubectl create -f ./smee/smee-client.yaml
+   ```
 
-```bash
-kubectl get secret pipelines-as-code-secret -n pipelines-as-code
-```
+   {{< alert color="info" >}}
+   If the host machine goes to sleep, the smee client may stop responding to events.
+   Delete the pod and wait for it to be recreated:
+   <code>kubectl delete pods -n smee-client gosmee-client-&lt;pod-id&gt;</code>
+   {{< /alert >}}
+
+4. Check the pipelines-as-code controller logs for errors linking events to a
+   `Repository` resource:
+
+   ```bash
+   kubectl get pods -n pipelines-as-code
+   kubectl logs -n pipelines-as-code pipelines-as-code-controller-<pod-id>
+   ```
+
+   If the logs mention a `Repository` resource cannot be found, compare the URL in the
+   log to the one in your deployed `application-and-component.yaml`. Fix the manifest
+   and redeploy it:
+
+   ```bash
+   kubectl apply -f ./test/resources/demo-users/user/sample-components/ns2/application-and-component.yaml
+   ```
+
+   {{< alert color="info" >}}
+   This is only relevant if the application was onboarded manually (not via the Konflux UI).
+   {{< /alert >}}
+
+5. If the logs mention `pipelines-as-code-secret` is missing or malformed, verify it
+   has the correct fields (`github-private-key`, `github-application-id`, `webhook.secret`).
+   If it needs to be recreated, delete it and re-apply it following the
+   [GitHub secrets setup]({{< relref "guides/github-secrets" >}}):
+
+   ```bash
+   kubectl delete secret pipelines-as-code-secret -n pipelines-as-code
+   ```
+
+6. Once the above checks pass, post `/retest` as a comment on your PR and observe
+   the behavior again.
 
 ### PR fails when webhook secret was not added
 
@@ -266,5 +263,60 @@ Error: PUT https://quay.io/...: unexpected status code 400 Bad Request
 ```
 
 Verify that you created a registry push secret for the managed namespace (`managed-ns2`).
-See [Registry Configuration](https://github.com/konflux-ci/konflux-ci/blob/main/docs/registry-configuration.md#configuring-a-push-secret-for-the-release-pipeline)
+See [Release pipeline push secret]({{< relref "registry-configuration#release-pipeline-push-secret" >}})
 for instructions.
+
+## Running out of resources
+
+### Insufficient memory — Podman on macOS
+
+On macOS, Podman runs in a virtual machine. Check the VM memory:
+
+```bash
+podman machine inspect | grep Memory
+```
+
+If insufficient, create a new machine with more resources:
+
+```bash
+podman machine stop
+podman machine init --memory 20480 --cpus 8 --rootful konflux-large
+podman machine start konflux-large
+```
+
+Then configure the deployment script to use it (in `scripts/deploy-local.env`):
+
+```bash
+PODMAN_MACHINE_NAME="konflux-large"
+```
+
+### PID limit issues — Podman on Linux
+
+If Tekton pipelines fail with "cannot fork" errors, increase the PID limit:
+
+```bash
+podman update --pids-limit 8192 konflux-control-plane
+```
+
+### Too many open files
+
+Increase `inotify` limits temporarily (the `deploy-local.sh` script does this automatically,
+but if you hit the issue on a restarted host):
+
+```bash
+sudo sysctl fs.inotify.max_user_watches=524288
+sudo sysctl fs.inotify.max_user_instances=512
+```
+
+### Performance tuning — reduce UI replica count
+
+If builds are slow or the UI is sluggish, you can reduce resource requirements by
+lowering the replica count in your Konflux CR:
+
+```yaml
+spec:
+  ui:
+    spec:
+      proxy:
+        replicas: 1  # default is 2-3
+```

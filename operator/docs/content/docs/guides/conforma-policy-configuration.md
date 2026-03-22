@@ -1,7 +1,7 @@
 ---
 title: "Conforma Policy Configuration"
 linkTitle: "Conforma Policy Configuration"
-weight: 4
+weight: 7
 description: "How to use and customize Conforma policies for integration tests and release."
 ---
 

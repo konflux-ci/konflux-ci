@@ -1,7 +1,7 @@
 ---
 title: "Custom URL without Operator-Managed Ingress"
 linkTitle: "Custom URL"
-weight: 1
+weight: 8
 description: "How to configure a custom URL for Konflux UI when managing your own ingress or external routing."
 ---
 
