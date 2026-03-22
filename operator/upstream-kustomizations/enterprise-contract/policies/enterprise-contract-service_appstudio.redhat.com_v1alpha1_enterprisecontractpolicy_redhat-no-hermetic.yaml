@@ -20,7 +20,7 @@ spec:
       - '@redhat'
     data:
     - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest@sha256:8b265f492939b1174a48b3499a50a691021e7e20e6063444fb369aeed66ce7b9
-    - github.com/release-engineering/rhtap-ec-policy.git//data?ref=671e5c26f93de6a0931f49e2e2d7f0eb4d5df6c8
+    - github.com/release-engineering/rhtap-ec-policy.git//data?ref=dd1a3dd1bf2299e1da9936b89e7279b6ab443bec
     name: Default
     policy:
     - oci::quay.io/conforma/release-policy:konflux@sha256:6eb386faaf76de0d7dbc9f9e770a7f5639ebcee88e4ed4f004f8053189b21eae
