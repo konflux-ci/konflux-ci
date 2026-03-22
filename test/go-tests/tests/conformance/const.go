@@ -13,7 +13,7 @@ const (
 	releaseTimeout              = time.Minute * 4
 
 	// Intervals
-	defaultPollingInterval = time.Second * 2
+	defaultPollingInterval  = time.Second * 2
 	snapshotPollingInterval = time.Second * 1
 	releasePollingInterval  = time.Second * 1
 
