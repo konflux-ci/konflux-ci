@@ -175,12 +175,13 @@
         "operator/upstream-kustomizations/enterprise-contract/policies/.*\\.yaml$"
       ],
       "matchStrings": [
-        "- github\\.com/(?<depName>release-engineering/rhtap-ec-policy)\\.git//data\\?ref=(?<currentDigest>[a-f0-9]{40})"
+        "- github\\.com/release-engineering/rhtap-ec-policy\\.git//data\\?ref=(?<currentDigest>[a-f0-9]{40})"
       ],
-      "packageNameTemplate": "https://github.com/{{depName}}",
-      "autoReplaceStringTemplate": "- github.com/{{depName}}.git//data?ref={{newDigest}}",
+      "depNameTemplate": "https://github.com/release-engineering/rhtap-ec-policy",
+      "autoReplaceStringTemplate": "- github.com/release-engineering/rhtap-ec-policy.git//data?ref={{newDigest}}",
       "datasourceTemplate": "git-refs",
-      "currentValueTemplate": "main"
+      "currentValueTemplate": "main",
+      "versioningTemplate": "git"
     },
     {
       "description": "Track kind version in GitHub Actions workflows",
