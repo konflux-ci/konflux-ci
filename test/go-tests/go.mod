@@ -16,7 +16,7 @@ require (
 	github.com/konflux-ci/build-service v0.0.0-20240611083846-2dee6cfe6fe4
 	github.com/konflux-ci/image-controller v0.0.0-20240530145826-3296e4996f6f
 	github.com/konflux-ci/integration-service v0.0.0-20260317112247-9b742d08c335
-	github.com/konflux-ci/operator-toolkit v0.0.0-20251118152634-b4f41f073069
+	github.com/konflux-ci/operator-toolkit v0.0.0-20260312101100-d4e398191a68
 	github.com/konflux-ci/release-service v0.0.0-20260127184035-c36c56a3c440
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/onsi/ginkgo/v2 v2.28.0
