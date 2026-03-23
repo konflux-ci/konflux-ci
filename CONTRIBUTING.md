@@ -94,7 +94,7 @@ and ARM64 architectures. There are **two test suites** in `test/go-tests`:
 - **E2E tests** (suite "Konflux E2E"): Full end-to-end flow (application, component,
   build, integration test, release). Requires cluster and E2E credentials. Copy
   `test/e2e/e2e.env.template` to `test/e2e/e2e.env`, fill in the values, then
-  source it and run (from repo root; no cd, repeat as needed): `source test/e2e/e2e.env` then `go -C test/go-tests test ./tests/conformance -v`
+  source it and run (from repo root): `source test/e2e/e2e.env` then `./test/e2e/run-e2e.sh`
   The E2E test code lives in `test/go-tests/tests/conformance/` and is maintained in this repo.
   The release-service-catalog revision is read from `test/e2e/release-service-catalog-revision` when not set in env (so your copy of `e2e.env` does not drift).
 
@@ -147,17 +147,18 @@ See `test/e2e/e2e.env.template` for all E2E variables and descriptions. You do n
 
 ## Running the test
 
-Deploy Konflux and test resources (in one terminal):
+Deploy Konflux (in one terminal):
 ```bash
 ./scripts/deploy-local.sh
-./deploy-test-resources.sh
 ```
 
 Run the E2E tests (source E2E env in the same terminal where you run the test, or in a second terminal). From repo root:
 ```bash
 source test/e2e/e2e.env
-go -C test/go-tests test ./tests/conformance -v
+./test/e2e/run-e2e.sh
 ```
+
+The script deploys test resources and runs the conformance suite.
 
 Note: The deploy step uses `scripts/deploy-local.env` (GitHub App, Quay for image-controller, Smee). The E2E step uses `test/e2e/e2e.env` (GitHub/Quay for E2E flows only). They are separate so you never load deploy secrets into the shell where you only run tests.
 

@@ -70,9 +70,6 @@ if [ -f "${ENV_FILE}" ]; then
     unset _pre_env
 fi
 
-# Validate secret-related variables early (before creating the cluster)
-VALIDATE_ONLY=true "${SCRIPT_DIR}/deploy-secrets.sh"
-
 # Optional variables with defaults (using :- pattern)
 KIND_CLUSTER="${KIND_CLUSTER:-konflux}"
 KIND_MEMORY_GB="${KIND_MEMORY_GB:-8}"
@@ -86,11 +83,16 @@ OPERATOR_IMAGE="${OPERATOR_IMAGE:-quay.io/konflux-ci/konflux-operator:latest}"
 # Export variables for child scripts
 export KIND_CLUSTER KIND_MEMORY_GB PODMAN_MACHINE_NAME REGISTRY_HOST_PORT ENABLE_REGISTRY_PORT
 export INCREASE_PODMAN_PIDS_LIMIT ENABLE_IMAGE_CACHE
-export GITHUB_PRIVATE_KEY GITHUB_APP_ID WEBHOOK_SECRET QUAY_TOKEN QUAY_ORGANIZATION QUAY_API_URL
+export GITHUB_PRIVATE_KEY GITHUB_PRIVATE_KEY_PATH GITHUB_APP_ID WEBHOOK_SECRET QUAY_TOKEN QUAY_ORGANIZATION QUAY_API_URL
 export SEGMENT_WRITE_KEY
+
+# Child scripts only see exported variables (values from deploy-local.env are not
+# exported by sourcing); validate secrets after exports so checks see the same env.
+VALIDATE_ONLY=true "${SCRIPT_DIR}/deploy-secrets.sh"
 
 # Get Konflux CR file path (command-line arg takes highest precedence)
 KONFLUX_CR="${1:-${KONFLUX_CR:-}}"
+export KONFLUX_CR
 
 # Resolve CR using shared logic (auto-selects e2e CR when Quay credentials are set)
 KONFLUX_CR=$("${SCRIPT_DIR}/resolve-konflux-cr.sh")

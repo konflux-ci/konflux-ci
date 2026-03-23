@@ -157,9 +157,7 @@ jobs:
           RELEASE_CATALOG_TA_QUAY_TOKEN: ${{ secrets.RELEASE_CATALOG_TA_QUAY_TOKEN }}
           E2E_APPLICATIONS_NAMESPACE: user-ns2
         run: |
-          cd test/go-tests
-          go test ./tests/conformance -v -timeout 30m \
-            -ginkgo.vv \
+          ./test/e2e/run-e2e.sh \
             -ginkgo.github-output \
             -ginkgo.junit-report=${{ github.workspace }}/junit-conformance.xml
 

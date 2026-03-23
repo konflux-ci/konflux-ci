@@ -63,11 +63,9 @@ const (
 
 // SegmentBridgeCleanupGVKs defines which resource types should be cleaned up when they are
 // no longer part of the desired state. Only optional/conditional resources are listed here.
-// Always-applied resources don't need cleanup (they're always tracked and never become orphans).
-var SegmentBridgeCleanupGVKs = []schema.GroupVersionKind{
-	// Secret is conditional - only created when a Segment write key is configured
-	{Group: "", Version: "v1", Kind: "Secret"},
-}
+// All segment-bridge resources (including the Secret) are always applied, so no cleanup
+// candidates exist.
+var SegmentBridgeCleanupGVKs []schema.GroupVersionKind
 
 // SegmentBridgeClusterScopedAllowList restricts which cluster-scoped resources can be deleted
 // during orphan cleanup. All cluster-scoped resources managed by this controller are always
@@ -169,24 +167,30 @@ func (r *KonfluxSegmentBridgeReconciler) tektonResultsAPIAddr() string {
 }
 
 // reconcileSegmentBridgeSecret creates the Secret in the segment-bridge namespace that the
-// CronJob reads via envFrom. Contains SEGMENT_WRITE_KEY, SEGMENT_BATCH_API (host URL +
-// "/batch"), and TEKTON_RESULTS_API_ADDR (in-cluster gRPC endpoint).
+// CronJob reads via envFrom. Always contains TEKTON_RESULTS_API_ADDR (in-cluster gRPC
+// endpoint), SEGMENT_WRITE_KEY, and SEGMENT_BATCH_API.
 //
 // Key resolution precedence:
 //  1. CR inline spec.segmentKey (admin override)
 //  2. Build-time default from GetDefaultSegmentKey (baked into binary via ldflags)
-//  3. Empty -- Secret is not applied, so CleanupOrphans will remove it if it exists
+//  3. Empty -- Secret is still created so the CronJob can reach the Results API;
+//     the segment-bridge scripts handle the missing key gracefully by skipping the
+//     upload step.
 func (r *KonfluxSegmentBridgeReconciler) reconcileSegmentBridgeSecret(ctx context.Context, tc *tracking.Client, spec *konfluxv1alpha1.KonfluxSegmentBridgeSpec) error {
 	log := logf.FromContext(ctx)
 
 	segmentKey, source := segment.ResolveWriteKey(spec.GetSegmentKey(), r.GetDefaultSegmentKey())
-	if !segment.LogWriteKeyResolution(log, segmentKey, source) {
-		return nil
-	}
+	segment.LogWriteKeyResolution(log, segmentKey, source)
 
 	batchURL, err := url.JoinPath(spec.GetSegmentAPIURL(), "batch")
 	if err != nil {
 		return fmt.Errorf("invalid segment API URL: %w", err)
+	}
+
+	data := map[string]string{
+		"TEKTON_RESULTS_API_ADDR": r.tektonResultsAPIAddr(),
+		"SEGMENT_WRITE_KEY":       segmentKey,
+		"SEGMENT_BATCH_API":       batchURL,
 	}
 
 	secret := &corev1.Secret{
@@ -198,14 +202,10 @@ func (r *KonfluxSegmentBridgeReconciler) reconcileSegmentBridgeSecret(ctx contex
 			Name:      segmentBridgeSecretName,
 			Namespace: segmentBridgeNamespace,
 		},
-		StringData: map[string]string{
-			"SEGMENT_WRITE_KEY":       segmentKey,
-			"SEGMENT_BATCH_API":       batchURL,
-			"TEKTON_RESULTS_API_ADDR": r.tektonResultsAPIAddr(),
-		},
+		StringData: data,
 	}
 
-	log.V(1).Info("Applying segment-bridge Secret", "name", secret.Name, "namespace", secret.Namespace, "batchURL", batchURL)
+	log.V(1).Info("Applying segment-bridge Secret", "name", secret.Name, "namespace", secret.Namespace, "hasWriteKey", segmentKey != "")
 	if err := tc.ApplyOwned(ctx, secret); err != nil {
 		return fmt.Errorf("failed to apply Secret: %w", err)
 	}

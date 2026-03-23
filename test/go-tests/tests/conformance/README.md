@@ -34,7 +34,15 @@ They run against an upstream Konflux instance deployed via scripts in the [konfl
 ### How to run
 
 1) Follow the instructions in the [konflux-ci repository](https://github.com/konflux-ci/konflux-ci/blob/main/CONTRIBUTING.md#running-e2e-test) to install Konflux
-2) Run: `ginkgo -v` (or `go test . -v` from this directory)
+2) From the repo root, run:
+   ```bash
+   ./test/e2e/run-e2e.sh
+   ```
+   This deploys test resources and runs the conformance suite.
+
+   You can also run `go test . -v` directly from this directory, but that
+   skips test resource deployment — you must ensure resources are already
+   deployed (e.g. via `deploy-test-resources.sh`).
 
 ### Configuration
 
