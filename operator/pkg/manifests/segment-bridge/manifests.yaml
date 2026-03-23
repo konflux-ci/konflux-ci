@@ -27,6 +27,12 @@ rules:
   verbs:
   - get
 - apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - list
+- apiGroups:
   - config.openshift.io
   resources:
   - clusterversions
@@ -82,7 +88,7 @@ spec:
             - secretRef:
                 name: segment-bridge-config
                 optional: true
-            image: quay.io/konflux-ci/segment-bridge:4f8631b0a8433891eb9e264acfaa36f11632ce07
+            image: quay.io/konflux-ci/segment-bridge:e49f2379e5a4949e8ca3c667a2f66018b287ca0b
             imagePullPolicy: IfNotPresent
             name: segment-bridge
             resources:
