@@ -73,8 +73,28 @@ spec:
           tufExternalUrl: ${TUF_URL}
           defaultOIDCIssuer: ${OIDC_ISSUER}
           buildIdentityRegexp: "^build-pipeline-[a-z0-9-]+$"
+          tektonChainsIdentity: https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/tekton-chains-controller
+          enableKeylessSigning: true
 "
     echo "✅ Konflux CR patched with Sigstore URLs" >&2
 else
     echo "ℹ️  Konflux CR not found, skipping CR patch" >&2
+fi
+
+# Configure Tekton Chains for keyless signing via TektonConfig (best-effort)
+if kubectl get tektonconfig config &>/dev/null; then
+    echo "🔑 Configuring Tekton Chains for keyless signing..." >&2
+
+    kubectl patch tektonconfig config --type=merge -p "
+spec:
+  chain:
+    signers.x509.fulcio.enabled: true
+    signers.x509.fulcio.address: \"${FULCIO_URL}\"
+    transparency.enabled: \"true\"
+    transparency.url: \"${REKOR_URL}\"
+"
+
+    echo "✅ Tekton Chains configured for keyless signing" >&2
+else
+    echo "ℹ️  TektonConfig not found, skipping Chains configuration" >&2
 fi
