@@ -7,9 +7,15 @@ on:
         description: 'Release candidate tag to promote (e.g. v1.2.3-rc.2)'
         required: true
         type: string
+      dry_run:
+        description: 'Run e2e tests but skip actual promotion (for testing)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
+  issues: write
 
 # Prevent concurrent promotions of the same RC tag to avoid race conditions.
 # If the same RC tag is triggered multiple times, subsequent runs will queue
@@ -34,8 +40,31 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
+      - name: Run OpenShift CI e2e tests
+        env:
+          OPENSHIFT_CI_TOKEN: ${{ secrets.OPENSHIFT_CI_TOKEN }}
+          RC_TAG: ${{ inputs.release_candidate_tag }}
+        run: |
+          .github/scripts/trigger-openshift-ci-tests.sh "$RC_TAG"
+
       - name: Promote release candidate to release tag
+        if: ${{ !inputs.dry_run }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RC_TAG: ${{ inputs.release_candidate_tag }}
         run: |
-          .github/scripts/promote-release.sh "${{ inputs.release_candidate_tag }}"
+          .github/scripts/promote-release.sh "$RC_TAG"
+
+      - name: Create issue on failure
+        if: ${{ failure() && !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_NAME: Promote Release
+          RC_TAG: ${{ inputs.release_candidate_tag }}
+        run: |
+          .github/scripts/create-or-update-issue.sh \
+            "Release Promotion Failure" \
+            "E2E tests or promotion failed for $RC_TAG. See workflow run for details."
