@@ -385,32 +385,53 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 
 			ginkgo.When("Release PipelineRun is triggered", ginkgo.Label(upstreamKonfluxTestLabel), func() {
 				ginkgo.It("should eventually succeed", func() {
-					gomega.Eventually(func() error {
-						pr, getErr := fw.AsKubeAdmin.ReleaseController.GetPipelineRunInNamespace(managedNamespace, release.Name, release.Namespace)
-						if getErr != nil {
-							return getErr
+					waitForReleasePipelineToSucceed := func(rel *releaseApi.Release) error {
+						pr, waitStartErr := fw.AsKubeAdmin.ReleaseController.WaitForReleasePipelineToGetStarted(rel, managedNamespace)
+						if waitStartErr != nil {
+							return waitStartErr
 						}
-						if tekton.HasPipelineRunFailed(pr) {
-							for _, c := range pr.Status.Conditions {
-								klog.Errorf("release PipelineRun %s/%s condition: type=%s reason=%s message=%s",
-									pr.GetNamespace(), pr.GetName(), c.Type, c.Reason, c.Message)
-							}
-							if failedLogs, logErr := tekton.GetFailedPipelineRunLogs(
-								fw.AsKubeAdmin.ReleaseController.KubeRest(),
-								fw.AsKubeAdmin.ReleaseController.KubeInterface(),
-								pr); logErr == nil {
-								klog.Errorf("release PipelineRun %s/%s failed task logs:\n%s", pr.GetNamespace(), pr.GetName(), failedLogs)
-							} else {
-								klog.Errorf("release PipelineRun %s/%s could not get failed logs: %v", pr.GetNamespace(), pr.GetName(), logErr)
-							}
-							gomega.Expect(tekton.HasPipelineRunFailed(pr)).NotTo(gomega.BeTrue(), "PipelineRun %s/%s failed", pr.GetNamespace(), pr.GetName())
+						waitFinishErr := fw.AsKubeAdmin.ReleaseController.WaitForReleasePipelineToBeFinished(rel, managedNamespace)
+						if waitFinishErr == nil {
+							return nil
 						}
-						if !pr.IsDone() {
-							return fmt.Errorf("release pipelinerun %s/%s has not finished yet", pr.GetNamespace(), pr.GetName())
+
+						for _, c := range pr.Status.Conditions {
+							klog.Errorf("release PipelineRun %s/%s condition: type=%s reason=%s message=%s",
+								pr.GetNamespace(), pr.GetName(), c.Type, c.Reason, c.Message)
 						}
-						gomega.Expect(tekton.HasPipelineRunSucceeded(pr)).To(gomega.BeTrue(), "PipelineRun %s/%s did not succeed", pr.GetNamespace(), pr.GetName())
-						return nil
-					}, releasePipelineTimeout, constants.PipelineRunPollingInterval).Should(gomega.Succeed(), "release PipelineRun did not complete successfully")
+						if failedLogs, logErr := tekton.GetFailedPipelineRunLogs(
+							fw.AsKubeAdmin.ReleaseController.KubeRest(),
+							fw.AsKubeAdmin.ReleaseController.KubeInterface(),
+							pr); logErr == nil {
+							klog.Errorf("release PipelineRun %s/%s failed task logs:\n%s", pr.GetNamespace(), pr.GetName(), failedLogs)
+						} else {
+							klog.Errorf("release PipelineRun %s/%s could not get failed logs: %v", pr.GetNamespace(), pr.GetName(), logErr)
+						}
+
+						return waitFinishErr
+					}
+
+					err := waitForReleasePipelineToSucceed(release)
+					if err == nil {
+						return
+					}
+
+					klog.Warningf("release pipeline for %s/%s failed on first attempt, retrying once with a new Release: %v",
+						release.GetNamespace(), release.GetName(), err)
+
+					// Keep retry release names short to satisfy webhook/DNS-1123 limits while still being explicit.
+					retryReleaseName := fmt.Sprintf("retry-release-%s", util.GenerateRandomString(6))
+					retriedRelease, createErr := fw.AsKubeAdmin.ReleaseController.CreateRelease(
+						retryReleaseName,
+						release.GetNamespace(),
+						release.Spec.Snapshot,
+						release.Spec.ReleasePlan,
+					)
+					gomega.Expect(createErr).NotTo(gomega.HaveOccurred(), "failed to create retry Release")
+
+					err = waitForReleasePipelineToSucceed(retriedRelease)
+					gomega.Expect(err).NotTo(gomega.HaveOccurred(), "release PipelineRun did not complete successfully after retry")
+					release = retriedRelease
 				})
 			})
 
