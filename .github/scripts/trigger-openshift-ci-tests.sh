@@ -5,14 +5,14 @@ set -euo pipefail
 # Triggers multiple Prow jobs via the Gangway REST API, polls for completion,
 # and returns success only if all jobs pass. Used to gate release promotions.
 #
-# The script derives the operator image tag from the git SHA of the RC tag.
-# Images are tagged with release-sha-<short-sha> by Konflux builds.
+# The script derives the operator image tag from the git SHA of the provided ref.
+# Images are tagged with their full commit SHA by Konflux builds.
 #
 # Usage:
-#   trigger-openshift-ci-tests.sh <rc_tag>
+#   trigger-openshift-ci-tests.sh <git_ref>
 #
 # Arguments:
-#   rc_tag - Release candidate tag (e.g., v0.1.5-rc.2)
+#   git_ref - Any git reference (tag, branch, SHA) e.g., v0.1.5-rc.2
 #
 # Environment:
 #   OPENSHIFT_CI_TOKEN - Gangway API token (required)
@@ -62,32 +62,33 @@ trap cleanup SIGINT SIGTERM SIGHUP
 
 # Validate arguments
 if [ $# -ne 1 ]; then
-  echo "Error: RC tag argument required"
-  echo "Usage: $0 <rc_tag>"
+  echo "Error: git ref argument required"
+  echo "Usage: $0 <git_ref>"
   echo "Example: $0 v0.1.5-rc.2"
   exit 1
 fi
 
-RC_TAG="$1"
+GIT_REF="$1"
 
-# Verify required environment variables
+# Verify required environment variables (disable tracing to avoid leaking token)
+{ set +x; } 2>/dev/null
 if [ -z "${OPENSHIFT_CI_TOKEN:-}" ]; then
   echo "Error: OPENSHIFT_CI_TOKEN environment variable is not set"
   exit 1
 fi
 
-# Derive operator image tag from the git SHA of the RC tag
-echo "Resolving git SHA for ${RC_TAG}..."
-COMMIT_SHA=$(git rev-parse "${RC_TAG}^{commit}" 2>/dev/null) || {
-  echo "Error: Failed to resolve git SHA for tag ${RC_TAG}"
-  echo "Ensure the tag exists and the repository has been fetched with tags"
+# Derive operator image tag from the git SHA of the provided ref
+echo "Resolving git SHA for ${GIT_REF}..."
+COMMIT_SHA=$(git rev-parse "${GIT_REF}^{commit}" 2>/dev/null) || {
+  echo "Error: Failed to resolve git SHA for ref ${GIT_REF}"
+  echo "Ensure the ref exists and the repository has been fetched"
   exit 1
 }
 
-SHORT_SHA="${COMMIT_SHA:0:7}"
-OPERATOR_IMAGE="${OPERATOR_REPO}:release-sha-${SHORT_SHA}"
+OPERATOR_IMAGE="${OPERATOR_REPO}:${COMMIT_SHA}"
 echo "Commit SHA: ${COMMIT_SHA}"
 echo "Operator image: ${OPERATOR_IMAGE}"
+echo "(KONFLUX_REF will be derived from image tag by step scripts)"
 echo ""
 
 # Trigger all jobs
@@ -105,7 +106,7 @@ for job_name in "${JOBS[@]}"; do
       job_execution_type: "1",
       pod_spec_options: {
         envs: {
-          OPERATOR_IMAGE: $operator_image
+          MULTISTAGE_PARAM_OVERRIDE_OPERATOR_IMAGE: $operator_image
         }
       }
     }')
@@ -114,17 +115,32 @@ for job_name in "${JOBS[@]}"; do
   JOB_ID=""
   
   while [ -z "$JOB_ID" ] && [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    RESPONSE=$(curl -s -X POST \
+    HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
       -H "Authorization: Bearer ${OPENSHIFT_CI_TOKEN}" \
       -H "Content-Type: application/json" \
       -d "$REQUEST_PAYLOAD" \
       "${GANGWAY_URL}")
 
-    JOB_ID=$(echo "$RESPONSE" | jq -r '.id // empty')
+    HTTP_CODE=$(echo "$HTTP_RESPONSE" | tail -n1)
+    RESPONSE=$(echo "$HTTP_RESPONSE" | sed '$d')
+
+    if [[ ! "$HTTP_CODE" =~ ^2[0-9][0-9]$ ]]; then
+      RETRY_COUNT=$((RETRY_COUNT + 1))
+      echo "  HTTP ${HTTP_CODE} error (attempt ${RETRY_COUNT}/${MAX_RETRIES}). Response: ${RESPONSE}"
+      [ $RETRY_COUNT -lt $MAX_RETRIES ] && sleep 10
+      continue
+    fi
+
+    JOB_ID=$(echo "$RESPONSE" | jq -r '.id // empty' 2>/dev/null) || {
+      RETRY_COUNT=$((RETRY_COUNT + 1))
+      echo "  JSON parse error (attempt ${RETRY_COUNT}/${MAX_RETRIES}). Response: ${RESPONSE}"
+      [ $RETRY_COUNT -lt $MAX_RETRIES ] && sleep 10
+      continue
+    }
 
     if [ -z "$JOB_ID" ]; then
       RETRY_COUNT=$((RETRY_COUNT + 1))
-      echo "  Failed to trigger (attempt ${RETRY_COUNT}/${MAX_RETRIES}). Response: ${RESPONSE}"
+      echo "  Missing job ID (attempt ${RETRY_COUNT}/${MAX_RETRIES}). Response: ${RESPONSE}"
       [ $RETRY_COUNT -lt $MAX_RETRIES ] && sleep 10
     fi
   done
@@ -174,8 +190,16 @@ while [ $COMPLETED -lt ${#JOBS[@]} ]; do
       continue
     fi
 
-    RESPONSE=$(curl -s -H "Authorization: Bearer ${OPENSHIFT_CI_TOKEN}" \
+    HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer ${OPENSHIFT_CI_TOKEN}" \
       "${GANGWAY_URL}/${JOB_IDS[$job_name]}")
+    HTTP_CODE=$(echo "$HTTP_RESPONSE" | tail -n1)
+    RESPONSE=$(echo "$HTTP_RESPONSE" | sed '$d')
+
+    if [[ ! "$HTTP_CODE" =~ ^2[0-9][0-9]$ ]]; then
+      echo "[$(date '+%H:%M:%S')] ${job_name}: HTTP ${HTTP_CODE} error polling status"
+      continue
+    fi
+
     NEW_STATUS=$(echo "$RESPONSE" | jq -r '.job_status // empty' 2>/dev/null || echo "")
 
     if [ -n "$NEW_STATUS" ] && [ "$NEW_STATUS" != "$current_status" ]; then
@@ -196,7 +220,7 @@ echo ""
 echo "========================================"
 echo "RESULTS"
 echo "========================================"
-echo "RC Tag: ${RC_TAG}"
+echo "Git Ref: ${GIT_REF}"
 echo "Operator Image: ${OPERATOR_IMAGE}"
 echo "Duration: ${ELAPSED}s"
 echo ""
