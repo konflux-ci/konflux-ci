@@ -361,7 +361,7 @@ spec:
             secretKeyRef:
               key: client-secret
               name: oauth2-proxy-client-secret
-        image: quay.io/konflux-ci/dex@sha256:a81c2616e7268cbcea6ee1314939e7f56717907c9e192cbf363ad21b05220d2c
+        image: quay.io/konflux-ci/dex@sha256:a1e9a10809c0f1601064096607a5a8ffc8c60c38678ae88e512888ef41a9db4c
         name: dex
         ports:
         - containerPort: 9443
