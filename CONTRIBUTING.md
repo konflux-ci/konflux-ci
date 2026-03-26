@@ -97,7 +97,7 @@ and ARM64 architectures. There are **two test suites** in `test/go-tests`:
   `test/e2e/e2e.env.template` to `test/e2e/e2e.env`, fill in the values, then
   source it and run (from repo root): `source test/e2e/e2e.env` then `./test/e2e/run-e2e.sh`
   The E2E test code lives in `test/go-tests/tests/conformance/` and is maintained in this repo.
-  The release-service-catalog revision is read from `test/e2e/release-service-catalog-revision` when not set in env (so your copy of `e2e.env` does not drift).
+  The default release catalog revision is `CATALOG_REVISION` in `operator/upstream-kustomizations/cli/setup-release.sh` (Renovate-tracked). Conformance tests that need a pinned build pipeline bundle read `CUSTOM_DOCKER_BUILD_OCI_TA_MIN_PIPELINE_BUNDLE` from the same `build-service` manifests as CI; the Tekton flow sets that via `scripts/operator-e2e/prepare-conformance-env.sh`.
 
 Workflow `.github/workflows/operator-test-e2e.yaml` runs both suites when
 operator-related changes are detected: first integration (`go test .`), then E2E
@@ -153,7 +153,7 @@ cp test/e2e/e2e.env.template test/e2e/e2e.env
 # Edit test/e2e/e2e.env with GH_ORG, GH_TOKEN, etc.
 ```
 
-See `test/e2e/e2e.env.template` for all E2E variables and descriptions. Release infrastructure (managed namespace, ImageRepositories, ReleasePlan, etc.) is set up automatically by `operator/hack/setup-release.sh`, which the test calls during `BeforeAll`. The release-service-catalog revision is embedded in the script as its default and tracked by Renovate.
+See `test/e2e/e2e.env.template` for all E2E variables and descriptions. Release infrastructure (managed namespace, ImageRepositories, ReleasePlan, etc.) is set up automatically by `operator/upstream-kustomizations/cli/setup-release.sh`, which the test calls during `BeforeAll`. The release-service-catalog revision is embedded in the script as its default and tracked by Renovate.
 
 ## Running the test
 
