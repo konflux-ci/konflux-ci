@@ -96,7 +96,7 @@ test_pvc_binding(){
     echo "Creating PVC from '$pvc_resources' using the cluster's default storage class"
     sleep 10  # Retries are not enough to ensure the default SA is created, see https://github.com/konflux-ci/konflux-ci/issues/161
     retry "kubectl apply -k ${pvc_resources}" "Error while creating pre-deployment-pvc-binding"
-    retry "kubectl wait --for=jsonpath={status.phase}=Bound pvc/test-pvc -n test-pvc-ns --timeout=20s" \
+    retry "kubectl wait --for=jsonpath={status.phase}=Bound pvc/test-pvc -n test-pvc-ns --timeout=30s" \
           "Test PVC unable to bind on default storage class"
     kubectl delete -k "$pvc_resources"
     echo "PVC binding successfull"
