@@ -27,7 +27,8 @@ params:
 
   # GitHub information
   github_repo: "https://github.com/konflux-ci/konflux-ci"
-  github_subdir: "operator"
+  github_subdir: "operator/docs"
+  github_branch: "main"
 
   # Search
   offlineSearch: true
