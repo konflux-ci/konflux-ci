@@ -1,0 +1,93 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  annotations:
+    build.appstudio.openshift.io/repo: https://github.com/konflux-ci/konflux-ci?rev={{revision}}
+    build.appstudio.redhat.com/commit_sha: '{{revision}}'
+    build.appstudio.redhat.com/pull_request_number: '{{pull_request_number}}'
+    build.appstudio.redhat.com/target_branch: '{{target_branch}}'
+    pipelinesascode.tekton.dev/cancel-in-progress: "true"
+    pipelinesascode.tekton.dev/max-keep-runs: "2"
+    pipelinesascode.tekton.dev/on-cel-expression: |
+      event == "pull_request" && target_branch == "main" ||
+      event == "push" && target_branch.startsWith("gh-readonly-queue/main/")
+  creationTimestamp: null
+  labels:
+    appstudio.openshift.io/application: konflux-operator
+    appstudio.openshift.io/component: konflux-operator
+    pipelines.appstudio.openshift.io/type: test
+  name: konflux-operator-e2e-on-pull-request
+  namespace: konflux-vanguard-tenant
+spec:
+  params:
+    - name: git-url
+      value: '{{source_url}}'
+    - name: revision
+      value: '{{revision}}'
+    - name: overrides-yaml
+      # Example inline value (uncomment and replace as needed):
+      # value: |
+      #   - name: segment-bridge
+      #     git:
+      #       - sourceRepo: konflux-ci/segment-bridge
+      #         remote:
+      #           repo: https://github.com/konflux-ci/segment-bridge
+      #           ref: {{revision}}
+      #     images:
+      #       - orig: quay.io/konflux-ci/segment-bridge
+      #         replacement: quay.io/redhat-user-workloads/konflux-vanguard-tenant/segment-bridge/segment-bridge:on-pr-{{revision}}
+      # TEMP: remove after verifying overrides (pinned segment-bridge ref, PR images for segment-bridge + UI).
+      value: |
+        - name: segment-bridge
+          git:
+            - sourceRepo: konflux-ci/segment-bridge
+              remote:
+                repo: https://github.com/konflux-ci/segment-bridge
+                ref: f9b0012a9b90842c502dc88419000a6eabb9b276
+          images:
+            - orig: quay.io/konflux-ci/segment-bridge
+              replacement: quay.io/redhat-user-workloads/konflux-vanguard-tenant/segment-bridge/segment-bridge:on-pr-f9b0012a9b90842c502dc88419000a6eabb9b276
+        - name: ui
+          images:
+            - orig: quay.io/konflux-ci/konflux-ui
+              replacement: quay.io/redhat-user-workloads/konflux-ui-tenant/konflux-ui/konflux-ui:on-pr-e8b4f4148e19ba5a456bc8786d9b7d81a48fd1cc
+    - name: konflux-ready-timeout
+      value: 15m
+    # OCI artifact prefix for kind-aws provision/deprovision (tag = PipelineRun name). Credentials secret must allow push/pull to this repo.
+    - name: oci-container-repo
+      value: quay.io/konflux-vanguard/konflux-operator-e2e-artifacts
+    # Secret in this namespace: registry creds for oci-container-repo above (not a pipeline default).
+    - name: oci-container-repo-credentials-secret
+      value: konflux-test-infra
+    - name: aws-credentials-secret
+      value: konflux-mapt-us-east-1
+    - name: deprovision-aws-credentials-secret
+      value: konflux-mapt-us-east-1
+    - name: release-ta-oci-storage
+      value: ""
+  pipelineRef:
+    resolver: git
+    params:
+      - name: url
+        value: '{{source_url}}'
+      - name: revision
+        value: '{{revision}}'
+      - name: pathInRepo
+        value: .tekton/pipelines/operator-e2e/pipeline.yaml
+  taskRunTemplate:
+    # kind-aws provision creates/patches Secret kfg-<PipelineRun name>; konflux-integration-runner has secrets create/patch (build-pipeline-* SAs do not).
+    serviceAccountName: konflux-integration-runner
+  workspaces:
+    - name: git-auth
+      secret:
+        secretName: '{{ git_auth_secret }}'
+    - name: source
+      # Shared across clone-repository, deploy-konflux, and konflux-e2e-tests TaskRuns; emptyDir is pod-scoped and loses cloned repo between tasks.
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 10Gi
+status: {}

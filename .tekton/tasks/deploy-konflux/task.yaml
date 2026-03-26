@@ -1,0 +1,197 @@
+# Deploy Konflux on a cluster whose kubeconfig is stored in a Secret
+# (e.g. created by tekton-integration-catalog kind-aws-provision), with optional
+# manifest overrides, through Konflux Ready.
+#
+# Requires a ServiceAccount that can read the cluster-access Secret in this namespace.
+#
+# Uses quay.io/konflux-ci/task-runner for kubeconfig/shared tools and
+# registry.access.redhat.com/ubi10/go-toolset for override logic and go/make; shared CLIs are copied
+# to /mnt/e2e-shared/bin (no network downloads). After prep, optional oras push of
+# operator/pkg/manifests uses the same task-runner image as fetch-kubeconfig (oras + jq).
+#
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: deploy-konflux
+spec:
+  description: >-
+    Apply OVERRIDES_YAML (optional), run deploy-local.sh with DEPLOY_LOCAL_SKIP_KIND=1
+    (go-toolset), optionally push operator/pkg/manifests to OCI (${repo}:${run}.pkg-manifests),
+    then make install/build and bin/manager on go-toolset, apply Konflux CR, and wait Ready.
+  volumes:
+    - name: e2e-shared
+      emptyDir: {}
+    - name: oci-registry-creds
+      secret:
+        secretName: $(params.oci-container-repo-credentials-secret)
+  workspaces:
+    - name: source
+      description: konflux-ci repository (git clone)
+  params:
+    - name: cluster-access-secret
+      description: Secret name containing kubeconfig (e.g. kfg-<pipelinerun name>)
+      type: string
+    - name: kubeconfig-secret-key
+      description: Key inside the Secret holding kubeconfig bytes
+      type: string
+      default: kubeconfig
+    - name: overrides-yaml
+      description: >-
+        Optional apply-overrides-from-yaml body (empty to skip). Do not pass credentials or
+        other secrets; param values are stored on TaskRuns and may appear in UIs and debug output.
+      type: string
+      default: ""
+    - name: konflux-ready-timeout
+      type: string
+      default: "30m"
+    - name: konflux-cr-relative-path
+      type: string
+      default: operator/config/samples/konflux-e2e.yaml
+    - name: kind-cluster-name
+      description: Logical Kind cluster name for deploy-local.sh
+      type: string
+      default: konflux-operator-e2e
+    - name: oci-container-repo
+      description: >-
+        Registry/repo prefix (no tag), same as kind-aws provision oci-ref prefix. Used to push
+        operator/pkg/manifests after prep as ${repo}:${pipelineRun}.pkg-manifests. Empty skips push.
+      type: string
+      default: ""
+    - name: oci-container-repo-credentials-secret
+      description: >-
+        Secret with data key oci-storage-dockerconfigjson (same shape as kind-aws oci-credentials).
+      type: string
+      default: konflux-test-infra
+    - name: pipeline-run-name
+      description: PipelineRun name (for OCI tag suffix .pkg-manifests).
+      type: string
+      default: ""
+  stepTemplate:
+    volumeMounts:
+      - name: e2e-shared
+        mountPath: /mnt/e2e-shared
+  steps:
+    - name: fetch-kubeconfig
+      image: quay.io/konflux-ci/task-runner:0.2.0@sha256:ba65585f5c8b0a74dc51590e95961765322427d1d62ccd4eb742ff0442291985
+      workingDir: $(workspaces.source.path)
+      env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        cd "$(workspaces.source.path)"
+        exec bash scripts/operator-e2e/tekton-fetch-kubeconfig.sh "$(params.cluster-access-secret)" "$(params.kubeconfig-secret-key)"
+    - name: copy-shared-tools
+      image: quay.io/konflux-ci/task-runner:0.2.0@sha256:ba65585f5c8b0a74dc51590e95961765322427d1d62ccd4eb742ff0442291985
+      workingDir: $(workspaces.source.path)
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        exec bash scripts/operator-e2e/tekton-copy-shared-tools.sh
+    - name: deploy-prep
+      image: registry.access.redhat.com/ubi10/go-toolset@sha256:b7f71131f21be923baaaf952309b7940ae7c6a55ca44a7a91460adc6c8afd4de
+      workingDir: $(workspaces.source.path)
+      env:
+        - name: GITHUB_APP_ID
+          valueFrom:
+            secretKeyRef:
+              name: konflux-operator-e2e-credentials
+              key: GITHUB_APP_ID
+        - name: GITHUB_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: konflux-operator-e2e-credentials
+              key: GITHUB_PRIVATE_KEY
+        - name: WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: konflux-operator-e2e-credentials
+              key: WEBHOOK_SECRET
+        - name: QUAY_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: konflux-operator-e2e-credentials
+              key: QUAY_TOKEN
+        - name: QUAY_ORGANIZATION
+          valueFrom:
+            secretKeyRef:
+              name: konflux-operator-e2e-credentials
+              key: QUAY_ORGANIZATION
+        - name: SMEE_CHANNEL
+          valueFrom:
+            secretKeyRef:
+              name: konflux-operator-e2e-credentials
+              key: SMEE_CHANNEL
+        - name: GH_ORG
+          valueFrom:
+            secretKeyRef:
+              name: konflux-operator-e2e-credentials
+              key: GH_ORG
+        - name: GH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: konflux-operator-e2e-credentials
+              key: GH_TOKEN
+        - name: QUAY_DOCKERCONFIGJSON
+          valueFrom:
+            secretKeyRef:
+              name: konflux-operator-e2e-credentials
+              key: QUAY_DOCKERCONFIGJSON
+        - name: RELEASE_CATALOG_TA_QUAY_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: konflux-operator-e2e-credentials
+              key: RELEASE_CATALOG_TA_QUAY_TOKEN
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        cd "$(workspaces.source.path)"
+        exec env \
+          E2E_OVERRIDES_YAML="$(params.overrides-yaml)" \
+          E2E_KONFLUX_CR="$(params.konflux-cr-relative-path)" \
+          E2E_KIND_CLUSTER="$(params.kind-cluster-name)" \
+          E2E_KONFLUX_READY_TIMEOUT="$(params.konflux-ready-timeout)" \
+          bash scripts/operator-e2e/tekton-deploy-prep.sh "$(workspaces.source.path)"
+    - name: push-operator-pkg-manifests-oci
+      image: quay.io/konflux-ci/task-runner:0.2.0@sha256:ba65585f5c8b0a74dc51590e95961765322427d1d62ccd4eb742ff0442291985
+      workingDir: $(workspaces.source.path)
+      volumeMounts:
+        - name: e2e-shared
+          mountPath: /mnt/e2e-shared
+        - name: oci-registry-creds
+          mountPath: /mnt/oci-registry/.docker/config.json
+          subPath: oci-storage-dockerconfigjson
+          readOnly: true
+      env:
+        - name: DOCKER_CONFIG
+          value: /mnt/oci-registry/.docker
+        - name: E2E_OCI_CONTAINER_REPO
+          value: $(params.oci-container-repo)
+        - name: E2E_PIPELINE_RUN_NAME
+          value: $(params.pipeline-run-name)
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        cd "$(workspaces.source.path)"
+        exec bash scripts/operator-e2e/tekton-push-operator-pkg-manifests-oci.sh "$(workspaces.source.path)"
+    - name: deploy-operator-and-wait
+      computeResources:
+        requests:
+          cpu: "500m"
+          memory: "2Gi"
+        limits:
+          cpu: "2"
+          memory: "8Gi"
+      workingDir: $(workspaces.source.path)
+      image: registry.access.redhat.com/ubi10/go-toolset@sha256:b7f71131f21be923baaaf952309b7940ae7c6a55ca44a7a91460adc6c8afd4de
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        cd "$(workspaces.source.path)"
+        exec env \
+          E2E_KONFLUX_CR="$(params.konflux-cr-relative-path)" \
+          E2E_KONFLUX_READY_TIMEOUT="$(params.konflux-ready-timeout)" \
+          bash scripts/operator-e2e/tekton-deploy-operator-and-wait.sh "$(workspaces.source.path)"
