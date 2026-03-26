@@ -30,7 +30,9 @@ params:
   github_subdir: "operator"
 
   # Search
-  search: true
+  offlineSearch: true
+  offlineSearchSummaryLength: 150
+
 
   # UI
   ui:
@@ -50,6 +52,7 @@ outputs:
   home:
     - HTML
     - RSS
+    - JSON
 
 # Exclude files from processing
 ignoreFiles:

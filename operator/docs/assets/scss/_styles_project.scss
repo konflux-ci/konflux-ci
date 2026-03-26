@@ -1,5 +1,26 @@
 // Custom styles for Konflux Operator documentation
 
+// Hide search bar from the top navbar; search is available in the sidebar only
+.td-navbar .td-search {
+  display: none;
+}
+
+// Search result snippet – highlight matched terms
+.td-offline-search-results {
+  mark {
+    background-color: #fff176;
+    color: inherit;
+    padding: 0 2px;
+    border-radius: 2px;
+  }
+
+  [data-bs-theme="dark"] & mark,
+  .td-body[data-bs-theme="dark"] & mark {
+    background-color: #5a4a00;
+    color: #fff176;
+  }
+}
+
 // Logo styling - override fixed SVG dimensions for responsive display
 .td-navbar {
   .navbar-brand {
