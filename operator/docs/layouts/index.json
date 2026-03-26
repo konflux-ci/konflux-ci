@@ -1,0 +1,13 @@
+{{- $.Scratch.Add "index" slice -}}
+{{- range .Site.RegularPages -}}
+{{- $.Scratch.Add "index" (dict
+    "ref"         .RelPermalink
+    "title"       .Title
+    "categories"  (.Params.categories | default "")
+    "tags"        (.Params.tags | default "")
+    "description" (.Description | default "")
+    "body"        (.Plain | htmlUnescape)
+    "excerpt"     ((.Description | default .Plain) | truncate (.Site.Params.offlineSearchSummaryLength | default 70) | htmlUnescape)
+) -}}
+{{- end -}}
+{{- $.Scratch.Get "index" | jsonify -}}
