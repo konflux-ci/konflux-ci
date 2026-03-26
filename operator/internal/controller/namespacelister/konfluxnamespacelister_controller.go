@@ -23,6 +23,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -164,7 +165,7 @@ func (r *KonfluxNamespaceListerReconciler) applyManifests(ctx context.Context, t
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			gvk := obj.GetObjectKind().GroupVersionKind()
 			// TODO: Remove this once we decide if we want to have a dependency on Kyverno
-			if gvk.Group == constant.KyvernoGroup {
+			if meta.IsNoMatchError(err) && gvk.Group == constant.KyvernoGroup {
 				log.Info("Skipping resource: CRD not installed",
 					"kind", gvk.Kind,
 					"apiVersion", gvk.GroupVersion().String(),
