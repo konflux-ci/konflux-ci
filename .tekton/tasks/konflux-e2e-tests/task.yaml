@@ -1,0 +1,141 @@
+# Run Konflux E2E tests against a pre-deployed cluster.
+# Clones konflux-ci into a Task emptyDir (no Pipeline workspace).
+#
+# Requires a ServiceAccount that can read the cluster-access Secret in this namespace.
+#
+# task-runner: clone + kubeconfig fetch + copy kubectl/yq/jq to /mnt/e2e-shared/bin (+ jq .so to /mnt/e2e-shared/lib).
+# go-toolset: port-forward, go test (integration + conformance).
+#
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: konflux-e2e-tests
+spec:
+  description: >-
+    Clone konflux-ci (git-url/revision), fetch kubeconfig, copy shared CLIs, wait for Konflux CR Ready,
+    then run deploy-test-resources, integration tests, and conformance tests.
+  volumes:
+    - name: repo
+      emptyDir: {}
+    - name: e2e-shared
+      emptyDir: {}
+  params:
+    - name: git-url
+      description: HTTPS git URL for konflux-ci (clone source)
+      type: string
+      default: https://github.com/konflux-ci/konflux-ci.git
+    - name: revision
+      description: Git branch, tag, or commit to checkout after clone
+      type: string
+      default: main
+    - name: clone-depth
+      description: >-
+        Shallow clone depth (same default as Tekton task git-clone 0.1 param depth).
+      type: string
+      default: "1"
+    - name: cluster-access-secret
+      description: Secret name containing kubeconfig (e.g. kfg-<pipelinerun name>)
+      type: string
+    - name: kubeconfig-secret-key
+      description: Key inside the Secret holding kubeconfig bytes
+      type: string
+      default: kubeconfig
+    - name: konflux-ready-timeout
+      type: string
+      default: "30m"
+    - name: release-ta-oci-storage
+      description: Optional; passed through to conformance trusted-artifacts flow
+      type: string
+      default: ""
+    - name: integration-go-test-extra-args
+      description: >-
+        Optional extra arguments appended to "go test . ./pkg/..." (integration suite). Space-separated;
+        same quoting rules as shell (e.g. -run=TestFoo -count=1). Empty uses default invocation only.
+      type: string
+      default: ""
+    - name: conformance-go-test-extra-args
+      description: >-
+        Optional extra arguments appended to conformance "go test ./tests/conformance ..." after fixed flags
+        (e.g. -ginkgo.focus=Subsuite -ginkgo.skip=Flaky). Empty uses default flags only.
+      type: string
+      default: ""
+  stepTemplate:
+    volumeMounts:
+      - name: repo
+        mountPath: /mnt/konflux-ci/repo
+      - name: e2e-shared
+        mountPath: /mnt/e2e-shared
+  steps:
+    - name: clone-repository
+      image: quay.io/konflux-ci/task-runner:0.2.0@sha256:ba65585f5c8b0a74dc51590e95961765322427d1d62ccd4eb742ff0442291985
+      env:
+        - name: GIT_URL
+          value: $(params.git-url)
+        - name: GIT_REVISION
+          value: $(params.revision)
+        - name: GIT_DEPTH
+          value: $(params.clone-depth)
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        REPO_ROOT=/mnt/konflux-ci/repo
+        mkdir -p "${REPO_ROOT}"
+        # emptyDir mount: clear contents only (cannot rm the mount point).
+        find "${REPO_ROOT}" -mindepth 1 -delete
+        git init "${REPO_ROOT}"
+        git -C "${REPO_ROOT}" remote add origin "${GIT_URL}"
+        git -C "${REPO_ROOT}" fetch --depth "${GIT_DEPTH}" origin "${GIT_REVISION}"
+        git -C "${REPO_ROOT}" checkout -q FETCH_HEAD
+    - name: fetch-kubeconfig
+      image: quay.io/konflux-ci/task-runner:0.2.0@sha256:ba65585f5c8b0a74dc51590e95961765322427d1d62ccd4eb742ff0442291985
+      workingDir: /mnt/konflux-ci/repo
+      env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        cd /mnt/konflux-ci/repo
+        exec bash scripts/operator-e2e/tekton-fetch-kubeconfig.sh "$(params.cluster-access-secret)" "$(params.kubeconfig-secret-key)"
+    - name: copy-shared-tools
+      image: quay.io/konflux-ci/task-runner:0.2.0@sha256:ba65585f5c8b0a74dc51590e95961765322427d1d62ccd4eb742ff0442291985
+      workingDir: /mnt/konflux-ci/repo
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        exec bash scripts/operator-e2e/tekton-copy-shared-tools.sh
+    - name: run-tests
+      computeResources:
+        requests:
+          cpu: "500m"
+          memory: "2Gi"
+        limits:
+          cpu: "2"
+          memory: "8Gi"
+      workingDir: /mnt/konflux-ci/repo
+      image: registry.access.redhat.com/ubi10/go-toolset@sha256:b7f71131f21be923baaaf952309b7940ae7c6a55ca44a7a91460adc6c8afd4de
+      env:
+        - name: GH_ORG
+          valueFrom:
+            secretKeyRef:
+              name: konflux-operator-e2e-credentials
+              key: GH_ORG
+        - name: GH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: konflux-operator-e2e-credentials
+              key: GH_TOKEN
+        - name: E2E_INTEGRATION_GO_TEST_EXTRA_ARGS
+          value: $(params.integration-go-test-extra-args)
+        - name: E2E_CONFORMANCE_GO_TEST_EXTRA_ARGS
+          value: $(params.conformance-go-test-extra-args)
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        cd /mnt/konflux-ci/repo
+        exec env \
+          E2E_KONFLUX_READY_TIMEOUT="$(params.konflux-ready-timeout)" \
+          E2E_RELEASE_TA_OCI_STORAGE="$(params.release-ta-oci-storage)" \
+          bash scripts/operator-e2e/tekton-run-e2e-tests.sh /mnt/konflux-ci/repo
