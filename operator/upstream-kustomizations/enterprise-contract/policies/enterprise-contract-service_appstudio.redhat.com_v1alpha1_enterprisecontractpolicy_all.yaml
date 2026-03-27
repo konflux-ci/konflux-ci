@@ -17,7 +17,7 @@ spec:
       include:
       - '*'
     data:
-    - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest@sha256:63c08a0d6c5646f5b4654fba89b9f73248f5033712e718c90a3e803b67d0a293
+    - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest@sha256:7612aa06e24e5d8d304e97fd2bde931a6f052f0c1761b766cbcdb20f076c0502
     - github.com/release-engineering/rhtap-ec-policy.git//data?ref=dd1a3dd1bf2299e1da9936b89e7279b6ab443bec
     name: Default
     policy:
