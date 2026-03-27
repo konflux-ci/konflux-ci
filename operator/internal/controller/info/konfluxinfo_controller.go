@@ -322,16 +322,18 @@ func (r *KonfluxInfoReconciler) ensureNamespaceExists(ctx context.Context, tc *t
 
 // generateInfoJSON generates info.json content from PublicInfo.
 // Provides defaults if fields are missing. k8sVersion is the current cluster Kubernetes version (non-cached).
-func (r *KonfluxInfoReconciler) generateInfoJSON(config *konfluxv1alpha1.PublicInfo, k8sVersion, openShiftVersion string) ([]byte, error) {
-	info := r.applyInfoDefaults(config, k8sVersion, openShiftVersion)
+// clusterId is the stable cluster identifier (OpenShift ClusterVersion UID or kube-system namespace UID).
+func (r *KonfluxInfoReconciler) generateInfoJSON(config *konfluxv1alpha1.PublicInfo, k8sVersion, openShiftVersion, clusterId string) ([]byte, error) {
+	info := r.applyInfoDefaults(config, k8sVersion, openShiftVersion, clusterId)
 	return json.MarshalIndent(info, "", "    ")
 }
 
 // applyInfoDefaults applies default values to PublicInfo if not specified.
-func (r *KonfluxInfoReconciler) applyInfoDefaults(config *konfluxv1alpha1.PublicInfo, k8sVersion, openShiftVersion string) *infoJSON {
+func (r *KonfluxInfoReconciler) applyInfoDefaults(config *konfluxv1alpha1.PublicInfo, k8sVersion, openShiftVersion, clusterId string) *infoJSON {
 	info := &infoJSON{
 		Environment:       "development",
 		Visibility:        "public",
+		ClusterId:         clusterId,
 		KonfluxVersion:    version.Version,
 		KubernetesVersion: k8sVersion,
 		OpenShiftVersion:  openShiftVersion,
@@ -381,6 +383,7 @@ func (r *KonfluxInfoReconciler) reconcileInfoConfigMap(ctx context.Context, tc *
 
 	k8sVersion := ""
 	openShiftVersion := ""
+	clusterId := ""
 	if r.ClusterInfo != nil {
 		if v, err := r.ClusterInfo.K8sVersion(); err == nil && v != nil {
 			k8sVersion = v.GitVersion
@@ -391,19 +394,28 @@ func (r *KonfluxInfoReconciler) reconcileInfoConfigMap(ctx context.Context, tc *
 			if err != nil {
 				return fmt.Errorf("failed to get OpenShift version: %w", err)
 			}
+			clusterId, err = clusterinfo.GetOpenShiftClusterID(ctx, r.Client)
+			if err != nil {
+				return fmt.Errorf("failed to get OpenShift cluster ID: %w", err)
+			}
+		} else {
+			var err error
+			clusterId, err = clusterinfo.GetKubeSystemUID(ctx, r.Client)
+			if err != nil {
+				return fmt.Errorf("failed to get kube-system UID for cluster ID: %w", err)
+			}
 		}
 	}
 
 	var infoJSON []byte
 	var err error
 	if info.Spec.PublicInfo != nil {
-		infoJSON, err = r.generateInfoJSON(info.Spec.PublicInfo, k8sVersion, openShiftVersion)
+		infoJSON, err = r.generateInfoJSON(info.Spec.PublicInfo, k8sVersion, openShiftVersion, clusterId)
 		if err != nil {
 			return fmt.Errorf("failed to generate info.json: %w", err)
 		}
 	} else {
-		// Use default development config
-		infoJSON, err = r.generateInfoJSON(nil, k8sVersion, openShiftVersion)
+		infoJSON, err = r.generateInfoJSON(nil, k8sVersion, openShiftVersion, clusterId)
 		if err != nil {
 			return fmt.Errorf("failed to generate default info.json: %w", err)
 		}
@@ -499,6 +511,7 @@ func (r *KonfluxInfoReconciler) reconcileClusterConfigConfigMap(ctx context.Cont
 type infoJSON struct {
 	Environment       string                              `json:"environment"`
 	Visibility        string                              `json:"visibility"`
+	ClusterId         string                              `json:"clusterId,omitempty"`
 	KonfluxVersion    string                              `json:"konfluxVersion,omitempty"`
 	KubernetesVersion string                              `json:"kubernetesVersion,omitempty"`
 	OpenShiftVersion  string                              `json:"openshiftVersion,omitempty"`

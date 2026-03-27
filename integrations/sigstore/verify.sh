@@ -4,6 +4,10 @@ set -euo pipefail
 # Verifies an OCI image built by Konflux:
 #   1. Image signature  (cosign verify)
 #   2. SBOM attestation (cosign verify-attestation --type spdxjson)
+#   3. SLSA provenance  (cosign verify-attestation --type slsaprovenance)
+#
+# Steps 1-2 use the build pipeline identity; step 3 uses the Tekton Chains
+# controller identity since Chains signs the provenance attestation itself.
 #
 # Because the Sigstore services are not exposed via ingress, this script
 # sets up kubectl port-forwards to Rekor and TUF before running cosign.
@@ -20,6 +24,7 @@ set -euo pipefail
 # Environment variables (optional):
 #   CERTIFICATE_IDENTITY_REGEXP  - signing identity regexp (default: .*)
 #   CERTIFICATE_OIDC_ISSUER      - OIDC issuer (default: auto-detected)
+#   CHAINS_IDENTITY - Tekton Chains SA identity for provenance verification
 #   REKOR_PORT  - local port for Rekor  (default: 30800)
 #   TUF_PORT    - local port for TUF    (default: 30801)
 #   INSECURE_REGISTRY - "true" for insecure registries (default: false)
@@ -54,6 +59,7 @@ if [ -z "${CERTIFICATE_OIDC_ISSUER:-}" ]; then
     echo "Auto-detected OIDC issuer: ${CERTIFICATE_OIDC_ISSUER}" >&2
 fi
 CERTIFICATE_IDENTITY_REGEXP="${CERTIFICATE_IDENTITY_REGEXP:-.*}"
+CHAINS_IDENTITY="${CHAINS_IDENTITY:-https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/tekton-chains-controller}"
 
 # ---------- port-forwards ----------
 
@@ -110,7 +116,7 @@ fi
 # ---------- 1. verify image signature ----------
 
 echo "" >&2
-echo "🔍 [1/2] Verifying image signature: ${IMAGE_REF}" >&2
+echo "🔍 [1/3] Verifying image signature: ${IMAGE_REF}" >&2
 if cosign verify "${COMMON_ARGS[@]}" "${IMAGE_REF}" > /dev/null; then
     echo "✅ Image signature OK" >&2
 else
@@ -121,11 +127,31 @@ fi
 # ---------- 2. verify SBOM attestation ----------
 
 echo "" >&2
-echo "🔍 [2/2] Verifying SBOM attestation: ${IMAGE_REF}" >&2
+echo "🔍 [2/3] Verifying SBOM attestation: ${IMAGE_REF}" >&2
 if cosign verify-attestation --type=spdxjson "${COMMON_ARGS[@]}" "${IMAGE_REF}" > /dev/null; then
     echo "✅ SBOM attestation OK" >&2
 else
     echo "❌ SBOM attestation verification FAILED" >&2
+    exit 1
+fi
+
+# ---------- 3. verify SLSA provenance attestation (Tekton Chains) ----------
+
+CHAINS_ARGS=(
+    --rekor-url="${REKOR_LOCAL_URL}"
+    --certificate-identity="${CHAINS_IDENTITY}"
+    --certificate-oidc-issuer="${CERTIFICATE_OIDC_ISSUER}"
+)
+if [ "${INSECURE_REGISTRY}" = "true" ]; then
+    CHAINS_ARGS+=(--allow-insecure-registry)
+fi
+
+echo "" >&2
+echo "🔍 [3/3] Verifying SLSA provenance attestation: ${IMAGE_REF}" >&2
+if cosign verify-attestation --type=slsaprovenance "${CHAINS_ARGS[@]}" "${IMAGE_REF}" > /dev/null; then
+    echo "✅ SLSA provenance attestation OK" >&2
+else
+    echo "❌ SLSA provenance attestation verification FAILED" >&2
     exit 1
 fi
 

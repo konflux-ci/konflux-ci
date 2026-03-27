@@ -92,6 +92,10 @@ cause conflicts in the downstream catalog-update PRs).
 For the operator to be published to the OpenShift catalog, a draft PR must be marked
 **Ready for review**.
 
+An automated workflow is periodically checking the status of existing PRs and rebasing
+them one at a time and then marking them as ready. With no manual intervention, one PR
+will be marked as ready per day.
+
 The workflow:
 
 - Downloads the OLM bundle files (`bundle.tar.gz`) from the release artifacts

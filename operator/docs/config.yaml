@@ -27,10 +27,13 @@ params:
 
   # GitHub information
   github_repo: "https://github.com/konflux-ci/konflux-ci"
-  github_subdir: "operator"
+  github_subdir: "operator/docs"
+  github_branch: "main"
 
   # Search
-  search: true
+  offlineSearch: true
+  offlineSearchSummaryLength: 150
+
 
   # UI
   ui:
@@ -50,6 +53,7 @@ outputs:
   home:
     - HTML
     - RSS
+    - JSON
 
 # Exclude files from processing
 ignoreFiles:
