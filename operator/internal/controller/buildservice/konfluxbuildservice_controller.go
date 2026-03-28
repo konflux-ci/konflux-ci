@@ -250,7 +250,7 @@ func buildBuildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerD
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxBuildServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&konfluxv1alpha1.KonfluxBuildService{}).
+		For(&konfluxv1alpha1.KonfluxBuildService{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Named("konfluxbuildservice").
 		// Use predicates to filter out unnecessary updates and prevent reconcile loops
 		// Deployments: watch spec changes AND readiness status changes

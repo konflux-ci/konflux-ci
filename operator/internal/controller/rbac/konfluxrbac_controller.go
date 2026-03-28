@@ -152,7 +152,7 @@ func (r *KonfluxRBACReconciler) applyManifests(ctx context.Context, tc *tracking
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxRBACReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&konfluxv1alpha1.KonfluxRBAC{}).
+		For(&konfluxv1alpha1.KonfluxRBAC{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Named("konfluxrbac").
 		// Use predicates to filter out unnecessary updates and prevent reconcile loops
 		// Deployments: watch spec changes AND readiness status changes

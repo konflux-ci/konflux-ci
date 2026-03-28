@@ -207,7 +207,7 @@ func applyNamespaceListerCustomizations(deployment *appsv1.Deployment, spec konf
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxNamespaceListerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&konfluxv1alpha1.KonfluxNamespaceLister{}).
+		For(&konfluxv1alpha1.KonfluxNamespaceLister{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Named("konfluxnamespacelister").
 		// Use predicates to filter out unnecessary updates and prevent reconcile loops
 		// Deployments: watch spec changes AND readiness status changes

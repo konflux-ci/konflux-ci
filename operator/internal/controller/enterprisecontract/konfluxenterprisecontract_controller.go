@@ -166,7 +166,7 @@ func (r *KonfluxEnterpriseContractReconciler) SetupWithManager(mgr ctrl.Manager)
 		return err
 	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&konfluxv1alpha1.KonfluxEnterpriseContract{}).
+		For(&konfluxv1alpha1.KonfluxEnterpriseContract{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
 		Named("konfluxenterprisecontract").
 		// Use predicates to filter out unnecessary updates and prevent reconcile loops
 		// Deployments: watch spec changes AND readiness status changes
