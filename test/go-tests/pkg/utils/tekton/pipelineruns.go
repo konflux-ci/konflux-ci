@@ -22,6 +22,8 @@ import (
 
 const sslCertDir = "/var/run/secrets/kubernetes.io/serviceaccount"
 
+const verifyConformaTaskName = "verify-conforma"
+
 type PipelineRunGenerator interface {
 	Generate() (*pipeline.PipelineRun, error)
 }
@@ -254,6 +256,40 @@ func GetFailedPipelineRunLogs(c crclient.Client, ki kubernetes.Interface, pipeli
 		failMessage += "TaskRun status.conditions (no failed container logs available):\n" + d.TaskRunConditionsText
 	}
 	return failMessage, nil
+}
+
+// GetVerifyConformaLogs fetches logs from all step containers of the
+// verify-conforma task in a failed PipelineRun, using the steps reported in
+// the TaskRun status. Returns an empty string if the task is not found
+// (e.g. the pipeline failed before reaching it).
+func GetVerifyConformaLogs(c crclient.Client, ki kubernetes.Interface, pr *pipeline.PipelineRun) (string, error) {
+	for _, chr := range pr.Status.ChildReferences {
+		if chr.PipelineTaskName != verifyConformaTaskName {
+			continue
+		}
+		taskRun := &pipeline.TaskRun{}
+		if err := c.Get(context.Background(), types.NamespacedName{
+			Namespace: pr.Namespace, Name: chr.Name,
+		}, taskRun); err != nil {
+			return "", fmt.Errorf("failed to get %s TaskRun %s: %w", verifyConformaTaskName, chr.Name, err)
+		}
+		if taskRun.Status.PodName == "" {
+			return "", fmt.Errorf("%s TaskRun %s has no pod (task may not have started)", verifyConformaTaskName, chr.Name)
+		}
+		var out strings.Builder
+		for _, step := range taskRun.Status.Steps {
+			logs, err := utils.GetContainerLogs(ki, taskRun.Status.PodName, step.Container, pr.Namespace)
+			if err != nil {
+				out.WriteString(fmt.Sprintf("--- %s: (unavailable: %v)\n", step.Name, err))
+				continue
+			}
+			if logs != "" {
+				out.WriteString(fmt.Sprintf("--- %s:\n%s\n", step.Name, logs))
+			}
+		}
+		return out.String(), nil
+	}
+	return "", nil
 }
 
 func HasPipelineRunSucceeded(pr *pipeline.PipelineRun) bool {

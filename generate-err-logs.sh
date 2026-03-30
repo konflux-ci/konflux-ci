@@ -129,10 +129,6 @@ generate_logs() {
         docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}" 2>&1 || echo "Failed to list containers"
     } > "$logs_dir/container-resources.log"
 
-echo "logs from all pods from user-ns2 namespace"
-kubectl get pods -n user-ns2 -o name \
-  | xargs -I {} kubectl logs -n user-ns2 --all-containers {}
-
     # Collect Konflux Operator logs unconditionally (critical for debugging)
     {
         echo "=== KONFLUX OPERATOR LOGS ==="
@@ -246,8 +242,8 @@ kubectl get pods -n user-ns2 -o name \
     kubectl get pipelines.tekton.dev --all-namespaces -o json > "$artifacts_dir/pipelines.json" || true
     kubectl get repositories.pipelinesascode.tekton.dev --all-namespaces -o json > "$artifacts_dir/repositories.json" || true
 
-    # Pod logs from key namespaces
-    for ns in build-service integration-service release-service application-service pipelines-as-code openshift-pipelines; do
+    # Pod logs from key namespaces (system services + test namespaces)
+    for ns in build-service integration-service release-service application-service pipelines-as-code openshift-pipelines user-ns2 user-ns2-managed; do
         for pod in $(kubectl get pods -n "$ns" -o name 2>/dev/null); do
             podname="${pod//pod\//}"
             kubectl logs -n "$ns" "$pod" --all-containers --ignore-errors > "$artifacts_dir/pods/${ns}_${podname}.log" 2>&1 || true

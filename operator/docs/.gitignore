@@ -1,0 +1,6 @@
+# Hugo module vendor directory (created by `hugo mod vendor`, not for version control)
+_vendor/
+
+# Hugo build output
+public/
+resources/

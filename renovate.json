@@ -1,7 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "ignorePaths": [
-    "operator/pkg/manifests/**"
+    "operator/pkg/manifests/**",
+    "konflux-ci/**"
   ],
   "rebaseWhen": "conflicted",
   "packageRules": [
@@ -84,7 +85,6 @@
     {
       "customType": "regex",
       "fileMatch": [
-        "konflux-ci/enterprise-contract/core/kustomization.yaml",
         "operator/upstream-kustomizations/enterprise-contract/core/kustomization.yaml"
       ],
       "matchStrings": [
@@ -98,7 +98,6 @@
       "customType": "regex",
       "matchStringsStrategy": "combination",
       "fileMatch": [
-        "konflux-ci/enterprise-contract/core/kustomization.yaml",
         "operator/upstream-kustomizations/enterprise-contract/core/kustomization.yaml"
       ],
       "matchStrings": [
@@ -111,7 +110,6 @@
     {
       "customType": "regex",
       "fileMatch": [
-        "konflux-ci/build-service/core/build-pipeline-config.yaml",
         "operator/upstream-kustomizations/build-service/core/build-pipeline-config.yaml"
       ],
       "matchStrings": [
@@ -146,7 +144,6 @@
     {
       "customType": "regex",
       "fileMatch": [
-        "konflux-ci/enterprise-contract/policies/.*\\.yaml$",
         "operator/upstream-kustomizations/enterprise-contract/policies/.*\\.yaml$"
       ],
       "matchStrings": [
@@ -158,7 +155,6 @@
     {
       "customType": "regex",
       "fileMatch": [
-        "konflux-ci/enterprise-contract/policies/.*\\.yaml$",
         "operator/upstream-kustomizations/enterprise-contract/policies/.*\\.yaml$"
       ],
       "matchStrings": [
@@ -171,7 +167,6 @@
     {
       "customType": "regex",
       "fileMatch": [
-        "konflux-ci/enterprise-contract/policies/.*\\.yaml$",
         "operator/upstream-kustomizations/enterprise-contract/policies/.*\\.yaml$"
       ],
       "matchStrings": [

@@ -23,10 +23,12 @@ import (
 
 	"github.com/onsi/gomega"
 	configv1 "github.com/openshift/api/config/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -681,24 +683,8 @@ func TestGetOpenShiftVersion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := gomega.NewWithT(t)
+			fakeClient := newClusterVersionFakeClient(tt.clusterVersion)
 
-			// Create scheme and fake client
-			scheme := runtime.NewScheme()
-			_ = configv1.Install(scheme)
-
-			var fakeClient client.Client
-			if tt.clusterVersion != nil {
-				fakeClient = fake.NewClientBuilder().
-					WithScheme(scheme).
-					WithObjects(tt.clusterVersion).
-					Build()
-			} else {
-				fakeClient = fake.NewClientBuilder().
-					WithScheme(scheme).
-					Build()
-			}
-
-			// Call the standalone function directly
 			version, err := GetOpenShiftVersion(context.Background(), fakeClient)
 
 			if tt.expectError {
@@ -710,6 +696,131 @@ func TestGetOpenShiftVersion(t *testing.T) {
 				g.Expect(err).NotTo(gomega.HaveOccurred())
 			}
 			g.Expect(version).To(gomega.Equal(tt.expectedVersion))
+		})
+	}
+}
+
+func newClusterVersionFakeClient(cv *configv1.ClusterVersion) client.Client {
+	scheme := runtime.NewScheme()
+	_ = configv1.Install(scheme)
+	builder := fake.NewClientBuilder().WithScheme(scheme)
+	if cv != nil {
+		builder = builder.WithObjects(cv)
+	}
+	return builder.Build()
+}
+
+func TestGetOpenShiftClusterID(t *testing.T) {
+	tests := []struct {
+		name           string
+		clusterVersion *configv1.ClusterVersion
+		expectedID     string
+		expectError    bool
+		errorContains  string
+	}{
+		{
+			name: "Valid cluster ID",
+			clusterVersion: &configv1.ClusterVersion{
+				ObjectMeta: metav1.ObjectMeta{Name: "version"},
+				Spec: configv1.ClusterVersionSpec{
+					ClusterID: "d3a1f2b4-5678-90ab-cdef-1234567890ab",
+				},
+			},
+			expectedID:  "d3a1f2b4-5678-90ab-cdef-1234567890ab",
+			expectError: false,
+		},
+		{
+			name:           "ClusterVersion resource not found",
+			clusterVersion: nil,
+			expectedID:     "",
+			expectError:    true,
+			errorContains:  "not found",
+		},
+		{
+			name: "Empty clusterID in spec",
+			clusterVersion: &configv1.ClusterVersion{
+				ObjectMeta: metav1.ObjectMeta{Name: "version"},
+				Spec:       configv1.ClusterVersionSpec{},
+			},
+			expectedID:    "",
+			expectError:   true,
+			errorContains: "empty",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+			fakeClient := newClusterVersionFakeClient(tt.clusterVersion)
+
+			id, err := GetOpenShiftClusterID(context.Background(), fakeClient)
+
+			if tt.expectError {
+				g.Expect(err).To(gomega.HaveOccurred())
+				if tt.errorContains != "" {
+					g.Expect(err.Error()).To(gomega.ContainSubstring(tt.errorContains))
+				}
+			} else {
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			}
+			g.Expect(id).To(gomega.Equal(tt.expectedID))
+		})
+	}
+}
+
+func TestGetKubeSystemUID(t *testing.T) {
+	tests := []struct {
+		name        string
+		namespace   *corev1.Namespace
+		expectedUID string
+		expectError bool
+	}{
+		{
+			name: "kube-system exists with UID",
+			namespace: &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "kube-system",
+					UID:  k8stypes.UID("abc-123-def-456"),
+				},
+			},
+			expectedUID: "abc-123-def-456",
+			expectError: false,
+		},
+		{
+			name:        "kube-system namespace not found",
+			namespace:   nil,
+			expectedUID: "",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+
+			scheme := runtime.NewScheme()
+			_ = corev1.AddToScheme(scheme)
+
+			var fakeClient client.Client
+			if tt.namespace != nil {
+				fakeClient = fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(tt.namespace).
+					Build()
+			} else {
+				fakeClient = fake.NewClientBuilder().
+					WithScheme(scheme).
+					Build()
+			}
+
+			uid, err := GetKubeSystemUID(context.Background(), fakeClient)
+
+			if tt.expectError {
+				g.Expect(err).To(gomega.HaveOccurred())
+			} else {
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			}
+			g.Expect(uid).To(gomega.Equal(tt.expectedUID))
 		})
 	}
 }

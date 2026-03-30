@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	configv1 "github.com/openshift/api/config/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -142,6 +143,34 @@ func GetOpenShiftVersion(ctx context.Context, c client.Client) (string, error) {
 
 	// No completed version found
 	return UnknownVersion, ErrNoCompletedVersion
+}
+
+// GetOpenShiftClusterID retrieves the cluster ID from the ClusterVersion resource's spec.clusterID field.
+// This should only be called when running on OpenShift (check with Info.IsOpenShift() first).
+func GetOpenShiftClusterID(ctx context.Context, c client.Client) (string, error) {
+	clusterVersion := &configv1.ClusterVersion{}
+	if err := c.Get(ctx, types.NamespacedName{Name: "version"}, clusterVersion); err != nil {
+		return "", err
+	}
+	id := string(clusterVersion.Spec.ClusterID)
+	if id == "" {
+		return "", fmt.Errorf("ClusterVersion spec.clusterID is empty")
+	}
+	return id, nil
+}
+
+// GetKubeSystemUID retrieves the UID of the kube-system namespace as a stable cluster identifier.
+// Used as a fallback when OpenShift ClusterVersion is not available.
+func GetKubeSystemUID(ctx context.Context, c client.Client) (string, error) {
+	ns := &corev1.Namespace{}
+	if err := c.Get(ctx, types.NamespacedName{Name: "kube-system"}, ns); err != nil {
+		return "", err
+	}
+	uid := string(ns.UID)
+	if uid == "" {
+		return "", fmt.Errorf("kube-system namespace has empty UID")
+	}
+	return uid, nil
 }
 
 // HasResource checks if a specific resource kind exists in the given API group version.

@@ -403,6 +403,17 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 							} else {
 								klog.Errorf("release PipelineRun %s/%s could not get failed logs: %v", pr.GetNamespace(), pr.GetName(), logErr)
 							}
+						// Fetch verify-conforma logs separately: they contain EC policy
+						// violation details that are not captured by the generic failed-task
+						// logs above, and are useful even when another task caused the failure.
+						if ecLogs, ecErr := tekton.GetVerifyConformaLogs(
+							fw.AsKubeAdmin.ReleaseController.KubeRest(),
+							fw.AsKubeAdmin.ReleaseController.KubeInterface(),
+							pr); ecErr == nil && ecLogs != "" {
+								klog.Errorf("release PipelineRun %s/%s verify-conforma EC policy details:\n%s", pr.GetNamespace(), pr.GetName(), ecLogs)
+							} else if ecErr != nil {
+								klog.Errorf("release PipelineRun %s/%s could not get verify-conforma logs: %v", pr.GetNamespace(), pr.GetName(), ecErr)
+							}
 							gomega.Expect(tekton.HasPipelineRunFailed(pr)).NotTo(gomega.BeTrue(), "PipelineRun %s/%s failed", pr.GetNamespace(), pr.GetName())
 						}
 						if !pr.IsDone() {

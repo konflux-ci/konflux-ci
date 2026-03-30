@@ -31,6 +31,7 @@ import (
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/version"
 )
 
@@ -641,6 +642,98 @@ func TestKonfluxInfoBannerCustomization(t *testing.T) {
 		bannerContent := bannerConfigMap.Data["banner-content.yaml"]
 		// No banner specified should produce an empty array in YAML
 		g.Expect(bannerContent).To(gomega.ContainSubstring("[]"))
+	})
+}
+
+func TestApplyInfoDefaultsClusterId(t *testing.T) {
+	r := &KonfluxInfoReconciler{}
+
+	t.Run("should include clusterId when provided", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		info := r.applyInfoDefaults(nil, "v1.29.0", "", "test-cluster-id-123")
+		g.Expect(info.ClusterId).To(gomega.Equal("test-cluster-id-123"))
+	})
+
+	t.Run("should omit clusterId when empty", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		info := r.applyInfoDefaults(nil, "v1.29.0", "", "")
+		g.Expect(info.ClusterId).To(gomega.BeEmpty())
+
+		jsonBytes, err := json.Marshal(info)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(string(jsonBytes)).NotTo(gomega.ContainSubstring("clusterId"))
+	})
+
+	t.Run("should serialize clusterId in JSON output", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		jsonBytes, err := r.generateInfoJSON(nil, "v1.29.0", "", "my-cluster-uid")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		var data map[string]interface{}
+		err = json.Unmarshal(jsonBytes, &data)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(data["clusterId"]).To(gomega.Equal("my-cluster-uid"))
+	})
+}
+
+func TestKonfluxInfoClusterIdIntegration(t *testing.T) {
+	if k8sClient == nil || objectStore == nil {
+		t.Skip("Skipping test: k8sClient or objectStore not initialized. Run tests via Ginkgo suite.")
+	}
+
+	ctx := context.Background()
+	typeNamespacedName := types.NamespacedName{
+		Name: CRName,
+	}
+
+	t.Run("should include clusterId from kube-system UID in info.json", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		mockDiscovery := &MockDiscoveryClient{}
+		mockDiscovery.SetVersion("v1.29.0")
+		ci, err := clusterinfo.DetectWithClient(mockDiscovery)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		resource := &konfluxv1alpha1.KonfluxInfo{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+			},
+			Spec: konfluxv1alpha1.KonfluxInfoSpec{},
+		}
+		err = k8sClient.Create(ctx, resource)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		defer func() {
+			_ = k8sClient.Delete(ctx, resource)
+		}()
+
+		controllerReconciler := &KonfluxInfoReconciler{
+			Client:      k8sClient,
+			Scheme:      k8sClient.Scheme(),
+			ObjectStore: objectStore,
+			ClusterInfo: ci,
+		}
+		_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: typeNamespacedName,
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		infoConfigMap := &corev1.ConfigMap{}
+		err = k8sClient.Get(ctx, types.NamespacedName{
+			Name:      infoConfigMapName,
+			Namespace: infoNamespace,
+		}, infoConfigMap)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		var infoData map[string]interface{}
+		err = json.Unmarshal([]byte(infoConfigMap.Data["info.json"]), &infoData)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(infoData).To(gomega.HaveKey("clusterId"))
+		g.Expect(infoData["clusterId"]).NotTo(gomega.BeEmpty())
+
+		kubeSystemNs := &corev1.Namespace{}
+		err = k8sClient.Get(ctx, types.NamespacedName{Name: "kube-system"}, kubeSystemNs)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(infoData["clusterId"]).To(gomega.Equal(string(kubeSystemNs.UID)))
 	})
 }
 

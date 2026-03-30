@@ -14,16 +14,16 @@ require (
 	github.com/h2non/gock v1.2.0
 	github.com/konflux-ci/application-api v0.0.0-20260312190025-5154ad273e17
 	github.com/konflux-ci/build-service v0.0.0-20240611083846-2dee6cfe6fe4
-	github.com/konflux-ci/image-controller v0.0.0-20240530145826-3296e4996f6f
-	github.com/konflux-ci/integration-service v0.0.0-20260317112247-9b742d08c335
-	github.com/konflux-ci/operator-toolkit v0.0.0-20251118152634-b4f41f073069
+	github.com/konflux-ci/image-controller v0.0.0-20260327175801-5e469d127233
+	github.com/konflux-ci/integration-service v0.0.0-20260330012634-6190adb9bbce
+	github.com/konflux-ci/operator-toolkit v0.0.0-20260312101100-d4e398191a68
 	github.com/konflux-ci/release-service v0.0.0-20260127184035-c36c56a3c440
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/onsi/ginkgo/v2 v2.28.0
 	github.com/onsi/gomega v1.39.1
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/openshift-pipelines/pipelines-as-code v0.34.0
-	github.com/openshift/api v0.0.0-20260112161841-5b45879294d5
+	github.com/openshift/api v0.0.0-20260320151444-324a1bcb9f55
 	github.com/openshift/client-go v0.0.0-20260108185524-48f4ccfc4e13
 	github.com/openshift/library-go v0.0.0-20220525173854-9b950a41acdc
 	github.com/redhat-appstudio/jvm-build-service v0.0.0-20240126122210-0e2ee7e2e5b0

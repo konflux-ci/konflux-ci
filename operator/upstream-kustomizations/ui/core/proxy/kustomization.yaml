@@ -7,12 +7,12 @@ resources:
 images:
 - name: quay.io/konflux-ci/konflux-ui
   newName: quay.io/konflux-ci/konflux-ui
-  digest: sha256:503831414ca09befa276fdffd836708f04d2d430b1fd428cb3b0e3cd5bd74eb3
+  digest: sha256:6bd0603054128f1b0d056dd4d5ddc14e74285c1e98ff8527f3a09f799dc635f8
 - name: quay.io/konflux-ci/oauth2-proxy
   newName: quay.io/konflux-ci/oauth2-proxy
   digest: sha256:1f4a37529de4f750099af18e113556bd995fe6922030c614b7d6d23eaa0bd318
 - name: registry.access.redhat.com/ubi9/nginx-124
-  digest: sha256:04156cd38c436fb6692930d18af59619b0669b2d80cd3590d0973c0e038c5d6d
+  digest: sha256:5f74c8297926209136221c135b27d756867aa0d478e256a53fd4e0dc0acc148c
 
 configMapGenerator:
   - name: proxy

@@ -3787,9 +3787,76 @@ spec:
                     format: date-time
                     type: string
                 type: object
+              managedPipelineAttempts:
+                description: ManagedPipelineAttempts contains information about each
+                  attempt of the release managed pipeline processing
+                items:
+                  description: ManagedPipelineAttempt defines the observed state of
+                    a managed pipeline processing attempt
+                  properties:
+                    completionTime:
+                      description: CompletionTime is the time when the managed pipeline
+                        attempt completed
+                      format: date-time
+                      type: string
+                    failureReason:
+                      description: FailureReason is the failure type when the PipelineRun
+                        fails
+                      type: string
+                    lastStep:
+                      description: LastStep is the name of the last step that executed
+                        or failed within the last task
+                      type: string
+                    lastTask:
+                      description: LastTask is the name of the last task that executed
+                        or failed
+                      type: string
+                    pipelineRun:
+                      description: PipelineRun contains the namespaced name of the
+                        managed Release PipelineRun executed as part of this attempt
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?\/[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    roleBindings:
+                      description: RoleBindings defines the roleBindings for accessing
+                        resources during the managed pipeline attempt
+                      properties:
+                        managedRoleBinding:
+                          description: ManagedRoleBinding contains the namespaced
+                            name of the roleBinding created for accessing resources
+                            within the managed namespace.
+                          pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?\/[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                          type: string
+                        secretRoleBinding:
+                          description: SecretRoleBinding contains the namespaced name
+                            of the roleBinding created for accessing secrets within
+                            the namespace.
+                          pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?\/[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                          type: string
+                        tenantRoleBinding:
+                          description: TenantRoleBinding contains the namespaced name
+                            of the roleBinding created for accessing resources within
+                            the tenant namespace.
+                          pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?\/[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                          type: string
+                      type: object
+                    startTime:
+                      description: StartTime is the time when the managed pipeline
+                        attempt started
+                      format: date-time
+                      type: string
+                    status:
+                      description: Status is the outcome of the managed pipeline attempt
+                      type: string
+                    successfulTasks:
+                      description: SuccessfulTasks is the number of tasks that completed
+                        successfully
+                      type: integer
+                  type: object
+                type: array
               managedProcessing:
-                description: ManagedProcessing contains information about the release
-                  managed processing
+                description: |-
+                  ManagedProcessing contains information about the release managed processing
+                  Deprecated: kept for backward compatibility, use ManagedPipelineAttempts instead
                 properties:
                   completionTime:
                     description: CompletionTime is the time when the Release processing
@@ -4971,7 +5038,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: quay.io/konflux-ci/release-service:5cb6469fa3fdd1246906170fab4ee7b28ee5d990
+        image: quay.io/konflux-ci/release-service:dfc0cd33e84468968581775d8d733bb8d1613721
         livenessProbe:
           httpGet:
             path: /healthz
