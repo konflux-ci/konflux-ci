@@ -20,11 +20,153 @@ import (
 	"testing"
 
 	"github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 )
+
+var testOwnerRef = metav1.OwnerReference{
+	APIVersion: "konflux.konflux-ci.dev/v1alpha1",
+	Kind:       "KonfluxEnterpriseContract",
+	Name:       "test-owner",
+	UID:        "test-uid",
+}
+
+func TestIgnoreStatusUpdatesPredicate_UpdateFunc(t *testing.T) {
+	t.Run("nil objects should trigger reconciliation", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		e := event.UpdateEvent{}
+		g.Expect(IgnoreStatusUpdatesPredicate.UpdateFunc(e)).To(gomega.BeTrue())
+	})
+
+	tests := []struct {
+		name     string
+		old      *corev1.ConfigMap
+		new      *corev1.ConfigMap
+		expected bool
+	}{
+		{
+			name: "generation change triggers reconciliation",
+			old: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+			},
+			new: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Generation: 2},
+			},
+			expected: true,
+		},
+		{
+			name: "status-only update does not trigger",
+			old: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Generation:      1,
+					OwnerReferences: []metav1.OwnerReference{testOwnerRef},
+					Labels:          map[string]string{"app": "test"},
+					Annotations:     map[string]string{"note": "ok"},
+				},
+			},
+			new: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Generation:      1,
+					OwnerReferences: []metav1.OwnerReference{testOwnerRef},
+					Labels:          map[string]string{"app": "test"},
+					Annotations:     map[string]string{"note": "ok"},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "ownerReference removed triggers reconciliation",
+			old: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1, OwnerReferences: []metav1.OwnerReference{testOwnerRef}},
+			},
+			new: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1, OwnerReferences: []metav1.OwnerReference{}},
+			},
+			expected: true,
+		},
+		{
+			name: "ownerReference added triggers reconciliation",
+			old: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+			},
+			new: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1, OwnerReferences: []metav1.OwnerReference{testOwnerRef}},
+			},
+			expected: true,
+		},
+		{
+			name: "ownerReference modified triggers reconciliation",
+			old: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1, OwnerReferences: []metav1.OwnerReference{testOwnerRef}},
+			},
+			new: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1, OwnerReferences: []metav1.OwnerReference{
+					{APIVersion: "v1", Kind: "Other", Name: "other", UID: "other-uid"},
+				}},
+			},
+			expected: true,
+		},
+		{
+			name: "label change triggers reconciliation",
+			old: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1, Labels: map[string]string{"app": "old"}},
+			},
+			new: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1, Labels: map[string]string{"app": "new"}},
+			},
+			expected: true,
+		},
+		{
+			name: "annotation change triggers reconciliation",
+			old: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1, Annotations: map[string]string{"note": "old"}},
+			},
+			new: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1, Annotations: map[string]string{"note": "new"}},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+			e := event.UpdateEvent{ObjectOld: tt.old, ObjectNew: tt.new}
+			g.Expect(IgnoreStatusUpdatesPredicate.UpdateFunc(e)).To(gomega.Equal(tt.expected))
+		})
+	}
+}
+
+func TestDeploymentReadinessPredicate_MetadataChange(t *testing.T) {
+	t.Run("ownerReference removed triggers reconciliation", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		e := event.UpdateEvent{
+			ObjectOld: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1, OwnerReferences: []metav1.OwnerReference{testOwnerRef}},
+			},
+			ObjectNew: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+			},
+		}
+		g.Expect(DeploymentReadinessPredicate.UpdateFunc(e)).To(gomega.BeTrue())
+	})
+	t.Run("label change triggers reconciliation", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		e := event.UpdateEvent{
+			ObjectOld: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1, Labels: map[string]string{"app": "old"}},
+			},
+			ObjectNew: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1, Labels: map[string]string{"app": "new"}},
+			},
+		}
+		g.Expect(DeploymentReadinessPredicate.UpdateFunc(e)).To(gomega.BeTrue())
+	})
+}
 
 func TestKonfluxUIIngressStatusChangedPredicate_UpdateFunc(t *testing.T) {
 	t.Run("nil objects should trigger reconciliation", func(t *testing.T) {
@@ -184,6 +326,30 @@ func TestKonfluxUIIngressStatusChangedPredicate_UpdateFunc(t *testing.T) {
 				},
 			},
 			expected: false,
+		},
+		{
+			name: "ownerReference removed should trigger reconciliation",
+			oldUI: &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1, OwnerReferences: []metav1.OwnerReference{testOwnerRef}},
+				Status: konfluxv1alpha1.KonfluxUIStatus{
+					Ingress: &konfluxv1alpha1.IngressStatus{
+						Enabled:  true,
+						Hostname: "konflux.example.com",
+						URL:      "https://konflux.example.com",
+					},
+				},
+			},
+			newUI: &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+				Status: konfluxv1alpha1.KonfluxUIStatus{
+					Ingress: &konfluxv1alpha1.IngressStatus{
+						Enabled:  true,
+						Hostname: "konflux.example.com",
+						URL:      "https://konflux.example.com",
+					},
+				},
+			},
+			expected: true,
 		},
 	}
 

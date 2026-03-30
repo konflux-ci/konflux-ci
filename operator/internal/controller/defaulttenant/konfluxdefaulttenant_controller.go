@@ -156,9 +156,9 @@ func (r *KonfluxDefaultTenantReconciler) SetupWithManager(mgr ctrl.Manager) erro
 		For(&konfluxv1alpha1.KonfluxDefaultTenant{}).
 		Named("konfluxdefaulttenant").
 		// Watch Namespace, ConfigMap, ServiceAccount, and RoleBindings
-		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
-		Owns(&corev1.ConfigMap{}, builder.WithPredicates(predicate.LabelsOrAnnotationsChangedPredicate)).
-		Owns(&corev1.ServiceAccount{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
-		Owns(&rbacv1.RoleBinding{}, builder.WithPredicates(predicate.GenerationChangedPredicate)).
+		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
+		Owns(&corev1.ConfigMap{}).
+		Owns(&corev1.ServiceAccount{}).
+		Owns(&rbacv1.RoleBinding{}).
 		Complete(r)
 }
