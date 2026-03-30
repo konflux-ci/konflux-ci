@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	buildcontrollers "github.com/konflux-ci/build-service/controllers"
 	ecp "github.com/conforma/crds/api/v1alpha1"
+	buildcontrollers "github.com/konflux-ci/build-service/controllers"
 	tektonutils "github.com/konflux-ci/release-service/tekton/utils"
 
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/clients/kube"
@@ -75,14 +75,34 @@ func createReleaseConfig(hub *framework.ControllerHub, managedNamespace, userNam
 	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "failed to get default EC policy")
 
 	ecPolicyName := componentName + "-policy"
+	sources := make([]ecp.Source, len(defaultEcPolicy.Spec.Sources))
+	for i := range defaultEcPolicy.Spec.Sources {
+		defaultEcPolicy.Spec.Sources[i].DeepCopyInto(&sources[i])
+		if sources[i].Config == nil {
+			sources[i].Config = &ecp.SourceConfig{}
+		}
+		// By default, `skip-checks` is set to true in the build pipeline which disables all the
+		// tests/scans.
+		sources[i].Config.Exclude = append(
+			sources[i].Config.Exclude,
+			"cve",
+			"tasks.required_tasks_found:clair-scan",
+			"tasks.required_tasks_found:roxctl-scan",
+			"tasks.required_tasks_found:clamav-scan",
+			"tasks.required_tasks_found:tpa-scan",
+			"tasks.required_tasks_found:deprecated-image-check",
+			"tasks.required_tasks_found:rpms-signature-scan",
+			"tasks.required_tasks_found:sast-shell-check",
+			"tasks.required_tasks_found:sast-shell-check-oci-ta",
+			"tasks.required_tasks_found:sast-unicode-check",
+			"tasks.required_tasks_found:sast-unicode-check-oci-ta",
+			"test.test_data_found",
+		)
+	}
 	_, err = hub.TektonController.CreateEnterpriseContractPolicy(ecPolicyName, managedNamespace, ecp.EnterpriseContractPolicySpec{
 		Description: "Red Hat's enterprise requirements",
 		PublicKey:   string(publicKey),
-		Sources:     defaultEcPolicy.Spec.Sources,
-		Configuration: &ecp.EnterpriseContractPolicyConfiguration{
-			Collections: []string{"minimal"},
-			Exclude:     []string{"cve"},
-		},
+		Sources:     sources,
 	})
 	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "failed to create EC policy %s", ecPolicyName)
 
