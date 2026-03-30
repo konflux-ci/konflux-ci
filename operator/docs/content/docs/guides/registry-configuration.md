@@ -124,6 +124,50 @@ spec:
       ociStorage: registry-service.kind-registry/test-component-release-ta
 ```
 
+### In-cluster registries with self-signed certificates
+
+The `push-to-external-registry` pipeline uses [oras](https://oras.land/) internally to
+push and pull Trusted Artifacts. When the OCI-TA repository lives in an in-cluster
+registry that uses a self-signed certificate, oras will fail TLS verification.
+
+**Important limitation:** The `pipelineRef.params` field in a `ReleasePlanAdmission`
+contains resolver parameters (passed to the git resolver to locate the pipeline), not
+pipeline parameters. There is currently no way to pass pipeline-level parameters such
+as `orasOptions` to a managed pipeline through the RPA. The only pipeline parameter
+the release service injects from the RPA is `ociStorage` (via its dedicated field).
+
+This means TLS verification for Trusted Artifact operations **cannot be disabled via
+the RPA**. To use an in-cluster registry with a self-signed certificate as the OCI-TA
+store, the registry's CA certificate must be trusted at the cluster level so that oras
+can verify TLS normally:
+
+- **OpenShift:** inject the CA via the
+  [cluster proxy / additional trust bundle](https://docs.openshift.com/container-platform/latest/networking/configuring-a-custom-pki.html)
+  configuration.
+- **Vanilla Kubernetes:** add the CA to the node's system trust store, or use a
+  `MutatingAdmissionWebhook` to mount the certificate into every pod in the managed
+  namespace.
+
+Once the certificate is trusted at the system level, set `ociStorage` to the
+in-cluster registry path and no further RPA changes are needed:
+
+```yaml
+spec:
+  pipeline:
+    pipelineRef:
+      ociStorage: registry-service.kind-registry/my-ns/release-ta
+```
+
+For **external registries with a publicly trusted CA** (e.g. Quay.io), no TLS
+configuration is needed — set `ociStorage` and the pipeline works out of the box:
+
+```yaml
+spec:
+  pipeline:
+    pipelineRef:
+      ociStorage: quay.io/my-org/my-component-release-ta
+```
+
 ## Quay.io auto-provisioning (image-controller)
 
 The [image-controller](https://github.com/konflux-ci/image-controller) automatically

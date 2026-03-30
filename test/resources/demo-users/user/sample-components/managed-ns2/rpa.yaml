@@ -19,6 +19,12 @@ spec:
   pipeline:
     pipelineRef:
       resolver: git
+      # ociStorage: the OCI repository used to store Trusted Artifacts between tasks.
+      # Note: the in-cluster registry uses a self-signed certificate. TLS verification
+      # for Trusted Artifact operations cannot be configured via the RPA — pipelineRef.params
+      # are resolver params only and do not reach the pipeline. To use the in-cluster
+      # registry for TA storage, the registry's CA must be trusted at the cluster level.
+      # See docs/guides/registry-configuration.md for details.
       ociStorage: registry-service.kind-registry/test-component-release-ta
       params:
         - name: url
