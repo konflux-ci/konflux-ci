@@ -255,6 +255,20 @@
       "autoReplaceStringTemplate": "RELEASE_SERVICE_CATALOG_REVISION={{newDigest}}"
     },
     {
+      "description": "Track tekton-integration-catalog main HEAD in operator-e2e pipeline param default",
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["^\\.tekton/pipelines/operator-e2e/pipeline\\.yaml$"],
+      "matchStrings": [
+        "# renovate: datasource=git-refs depName=https://github.com/konflux-ci/tekton-integration-catalog",
+        "default:\\s+(?<currentDigest>[a-f0-9]{40})"
+      ],
+      "datasourceTemplate": "git-refs",
+      "depNameTemplate": "https://github.com/konflux-ci/tekton-integration-catalog",
+      "currentValueTemplate": "main",
+      "autoReplaceStringTemplate": "default: {{newDigest}}"
+    },
+    {
       "description": "Track cert-manager Helm chart in Update Third-Party Manifests workflow",
       "customType": "regex",
       "fileMatch": [".github/workflows/update-third-party-manifests.yaml"],
