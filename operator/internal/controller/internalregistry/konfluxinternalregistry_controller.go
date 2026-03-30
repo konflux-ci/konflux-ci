@@ -174,7 +174,7 @@ func (r *KonfluxInternalRegistryReconciler) SetupWithManager(mgr ctrl.Manager) e
 		Named("konfluxinternalregistry").
 		// Watch for changes to registry resources
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(predicate.DeploymentReadinessPredicate)).
-		Owns(&corev1.Service{}, builder.WithPredicates(predicate.LabelsOrAnnotationsChangedPredicate)).
-		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.LabelsOrAnnotationsChangedPredicate)).
+		Owns(&corev1.Service{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
+		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Complete(r)
 }

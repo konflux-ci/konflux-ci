@@ -17,25 +17,43 @@ limitations under the License.
 package predicate
 
 import (
-	"reflect"
+	"maps"
 
 	appsv1 "k8s.io/api/apps/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 )
 
-// GenerationChangedPredicate filters out events where the generation hasn't changed
-// (i.e., status-only updates that shouldn't trigger reconciliation)
-var GenerationChangedPredicate = predicate.Funcs{
+// generationOrMetadataChanged returns true if the update is NOT a status-only change.
+// It detects spec changes (generation bump), ownerReference changes, and
+// label/annotation changes -- none of which are reflected in the generation
+// field alone.
+func generationOrMetadataChanged(oldObj, newObj client.Object) bool {
+	if oldObj.GetGeneration() != newObj.GetGeneration() {
+		return true
+	}
+	if !apiequality.Semantic.DeepEqual(oldObj.GetOwnerReferences(), newObj.GetOwnerReferences()) {
+		return true
+	}
+	if !maps.Equal(oldObj.GetLabels(), newObj.GetLabels()) {
+		return true
+	}
+	return !maps.Equal(oldObj.GetAnnotations(), newObj.GetAnnotations())
+}
+
+// IgnoreStatusUpdatesPredicate filters out status-only updates.
+// Reconciliation triggers on spec changes (generation bump), ownerReference
+// changes, and label/annotation changes.
+var IgnoreStatusUpdatesPredicate = predicate.Funcs{
 	UpdateFunc: func(e event.UpdateEvent) bool {
 		if e.ObjectOld == nil || e.ObjectNew == nil {
 			return true
 		}
-		// Only reconcile if the generation changed (spec was modified)
-		// This filters out status-only updates
-		return e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
+		return generationOrMetadataChanged(e.ObjectOld, e.ObjectNew)
 	},
 	CreateFunc: func(e event.CreateEvent) bool {
 		return true
@@ -48,17 +66,15 @@ var GenerationChangedPredicate = predicate.Funcs{
 	},
 }
 
-// DeploymentReadinessPredicate triggers reconciliation when:
-// - Spec changes (generation changed)
-// - Readiness status changes (ReadyReplicas, AvailableReplicas, UnavailableReplicas)
-// This allows us to react to deployment health changes without polling
+// DeploymentReadinessPredicate extends IgnoreStatusUpdatesPredicate by also
+// triggering on deployment readiness status changes (ReadyReplicas,
+// AvailableReplicas, etc.) so we can react to health changes without polling.
 var DeploymentReadinessPredicate = predicate.Funcs{
 	UpdateFunc: func(e event.UpdateEvent) bool {
 		if e.ObjectOld == nil || e.ObjectNew == nil {
 			return true
 		}
-		// Always reconcile on spec changes
-		if e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration() {
+		if generationOrMetadataChanged(e.ObjectOld, e.ObjectNew) {
 			return true
 		}
 		// Check for meaningful status changes
@@ -85,41 +101,14 @@ var DeploymentReadinessPredicate = predicate.Funcs{
 	},
 }
 
-// LabelsOrAnnotationsChangedPredicate triggers reconciliation when labels or annotations change
-// Used for resources like ConfigMaps that don't have a generation field that changes on data updates
-var LabelsOrAnnotationsChangedPredicate = predicate.Funcs{
-	UpdateFunc: func(e event.UpdateEvent) bool {
-		if e.ObjectOld == nil || e.ObjectNew == nil {
-			return true
-		}
-		// Check if generation changed
-		if e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration() {
-			return true
-		}
-		// Also check labels and annotations for resources without generation updates
-		return !reflect.DeepEqual(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels()) ||
-			!reflect.DeepEqual(e.ObjectOld.GetAnnotations(), e.ObjectNew.GetAnnotations())
-	},
-	CreateFunc: func(e event.CreateEvent) bool {
-		return true
-	},
-	DeleteFunc: func(e event.DeleteEvent) bool {
-		return true
-	},
-	GenericFunc: func(e event.GenericEvent) bool {
-		return true
-	},
-}
-
-// KonfluxUIIngressStatusChangedPredicate triggers reconciliation only when the Status.Ingress field changes in KonfluxUI CR.
-// This predicate filters out status updates that don't affect the ingress configuration.
+// KonfluxUIIngressStatusChangedPredicate extends IgnoreStatusUpdatesPredicate
+// by also triggering when the Status.Ingress field changes in KonfluxUI CR.
 var KonfluxUIIngressStatusChangedPredicate = predicate.Funcs{
 	UpdateFunc: func(e event.UpdateEvent) bool {
 		if e.ObjectOld == nil || e.ObjectNew == nil {
 			return true
 		}
-		// Always reconcile on spec changes
-		if e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration() {
+		if generationOrMetadataChanged(e.ObjectOld, e.ObjectNew) {
 			return true
 		}
 		// Check for ingress status changes
