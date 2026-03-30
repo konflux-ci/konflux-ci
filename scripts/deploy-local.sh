@@ -256,16 +256,14 @@ if [ "${INSTALL_METHOD}" != "none" ]; then
 
     if ! kubectl wait --for=condition=Ready=True konflux konflux --timeout=15m 2>/dev/null; then
         echo ""
-        echo "WARNING: Konflux CR did not become Ready within 15 minutes"
-        echo "         This may be normal if deploying all components"
-        echo "         Check status with: kubectl get konflux konflux -o yaml"
+        echo "ERROR: Konflux CR did not become Ready within 15 minutes"
         echo ""
-        echo "To monitor progress:"
-        echo "  kubectl get pods -A"
+        echo "Debug with:"
+        echo "  kubectl get konflux konflux -o yaml"
         echo "  kubectl get konflux konflux -o jsonpath='{.status.conditions}'"
-    else
-        echo "✓ Konflux is ready"
+        exit 1
     fi
+    echo "✓ Konflux is ready"
 else
     echo ""
     echo "========================================="
