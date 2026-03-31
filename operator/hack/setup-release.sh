@@ -28,6 +28,12 @@ Options:
                             enterprise-contract-service namespace (default: default)
   -r, --release-name        Name for the ReleasePlan and ReleasePlanAdmission
                             resources (default: local-release)
+      --ta-repository       Custom OCI repository for Trusted Artifacts storage.
+                            Overrides the ImageRepository-provisioned URL.
+                            Use for in-cluster registries, e.g.:
+                              registry-service.kind-registry/my-ns/release-ta
+                            If omitted, the URL from the 'trusted-artifacts'
+                            ImageRepository status is used.
   -h, --help                Show this help message
 
 Examples:
@@ -42,6 +48,9 @@ Examples:
 
   # Explicitly specify components
   $(basename "$0") -c component-a -c component-b
+
+  # Use a custom in-cluster OCI-TA repository
+  $(basename "$0") --ta-repository registry-service.kind-registry/my-ns/release-ta
 
   # Full customization
   $(basename "$0") -t my-tenant -m my-managed -a my-app -c comp1 -c comp2
@@ -76,6 +85,7 @@ APPLICATION="sample-component"
 CONFORMA_POLICY="default"
 RELEASE_NAME="local-release"
 COMPONENTS=()
+TA_REPOSITORY=""       # custom OCI-TA repo; empty = use ImageRepository status URL
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -101,6 +111,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -r|--release-name)
             RELEASE_NAME="$2"
+            shift 2
+            ;;
+        --ta-repository)
+            TA_REPOSITORY="$2"
             shift 2
             ;;
         -h|--help)
@@ -136,6 +150,9 @@ echo "   Application:       ${APPLICATION}"
 echo "   EC policy:         ${CONFORMA_POLICY}"
 echo "   Release name:      ${RELEASE_NAME}"
 echo "   Components:        ${COMPONENTS[*]}"
+if [[ -n "${TA_REPOSITORY}" ]]; then
+    echo "   OCI-TA repository: ${TA_REPOSITORY} (custom)"
+fi
 echo ""
 
 # Step 1: Create managed namespace
@@ -174,8 +191,12 @@ subjects:
 EOF
 
 # Step 4: Create ImageRepository for trusted-artifacts
-echo "🖼️  Creating ImageRepository for trusted-artifacts..."
-kubectl apply -f - <<EOF
+# Skip when --ta-repository is provided: the user is supplying their own OCI-TA
+# repo (e.g. an in-cluster registry) so there is no need to provision one via
+# image-controller, and the controller may not even be available.
+if [[ -z "${TA_REPOSITORY}" ]]; then
+    echo "🖼️  Creating ImageRepository for trusted-artifacts..."
+    kubectl apply -f - <<EOF
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
@@ -186,6 +207,9 @@ spec:
     name: ${MANAGED_NS}/trusted-artifacts
     visibility: public
 EOF
+else
+    echo "⏭️  Skipping ImageRepository for trusted-artifacts (--ta-repository provided)"
+fi
 
 # Step 5: Create ImageRepository for each component
 for COMPONENT in "${COMPONENTS[@]}"; do
@@ -207,7 +231,12 @@ done
 echo ""
 echo "⏳ Waiting for ImageRepositories to become ready (timeout: ${WAIT_TIMEOUT}s)..."
 
-ALL_REPOS=("trusted-artifacts" "${COMPONENTS[@]}")
+# Only wait for the trusted-artifacts ImageRepository when we provisioned it.
+if [[ -z "${TA_REPOSITORY}" ]]; then
+    ALL_REPOS=("trusted-artifacts" "${COMPONENTS[@]}")
+else
+    ALL_REPOS=("${COMPONENTS[@]}")
+fi
 
 for repo in "${ALL_REPOS[@]}"; do
     echo "   Waiting for '${repo}'..."
@@ -219,12 +248,20 @@ done
 echo ""
 echo "📡 Fetching image URLs and push secrets from ImageRepository status..."
 
-TA_PUSH_SECRET=$(kubectl get imagerepository trusted-artifacts -n "${MANAGED_NS}" \
-    -o jsonpath='{.status.credentials.push-secret}')
-TA_IMAGE_URL=$(kubectl get imagerepository trusted-artifacts -n "${MANAGED_NS}" \
-    -o jsonpath='{.status.image.url}')
-echo "   trusted-artifacts:"
-echo "     Image URL:   ${TA_IMAGE_URL}"
+# When --ta-repository is provided we skip the trusted-artifacts ImageRepository
+# entirely, so there is no push secret to fetch for it.
+TA_PUSH_SECRET=""
+if [[ -z "${TA_REPOSITORY}" ]]; then
+    TA_PUSH_SECRET=$(kubectl get imagerepository trusted-artifacts -n "${MANAGED_NS}" \
+        -o jsonpath='{.status.credentials.push-secret}')
+    TA_IMAGE_URL=$(kubectl get imagerepository trusted-artifacts -n "${MANAGED_NS}" \
+        -o jsonpath='{.status.image.url}')
+    echo "   trusted-artifacts:"
+    echo "     Image URL:   ${TA_IMAGE_URL}"
+else
+    TA_IMAGE_URL="${TA_REPOSITORY}"
+    echo "   OCI-TA repository: ${TA_IMAGE_URL} (custom, ImageRepository not provisioned)"
+fi
 
 declare -A COMP_PUSH_SECRETS
 declare -A COMP_IMAGE_URLS
@@ -242,11 +279,20 @@ done
 echo ""
 echo "👤 Creating release-pipeline ServiceAccount..."
 
-# Build the secrets list YAML
-SECRETS_YAML="  - name: ${TA_PUSH_SECRET}"
+# Build the secrets list YAML.
+# Only include the trusted-artifacts push secret when we provisioned the
+# ImageRepository (i.e. --ta-repository was NOT provided).
+SECRETS_YAML=""
+if [[ -n "${TA_PUSH_SECRET}" ]]; then
+    SECRETS_YAML="  - name: ${TA_PUSH_SECRET}"
+fi
 for COMPONENT in "${COMPONENTS[@]}"; do
-    SECRETS_YAML="${SECRETS_YAML}
+    if [[ -n "${SECRETS_YAML}" ]]; then
+        SECRETS_YAML="${SECRETS_YAML}
   - name: ${COMP_PUSH_SECRETS["${COMPONENT}"]}"
+    else
+        SECRETS_YAML="  - name: ${COMP_PUSH_SECRETS["${COMPONENT}"]}"
+    fi
 done
 
 kubectl apply -f - <<EOF
@@ -255,8 +301,7 @@ kind: ServiceAccount
 metadata:
   name: release-pipeline
   namespace: ${MANAGED_NS}
-secrets:
-${SECRETS_YAML}
+$(if [[ -n "${SECRETS_YAML}" ]]; then printf 'secrets:\n%s\n' "${SECRETS_YAML}"; fi)
 EOF
 
 # Step 9: Create RoleBinding for release-pipeline ServiceAccount
@@ -338,7 +383,6 @@ spec:
     pipelineRef:
       resolver: git
       ociStorage: ${TA_IMAGE_URL}
-      useEmptyDir: true
       params:
         - name: url
           value: "https://github.com/konflux-ci/release-service-catalog.git"
@@ -372,7 +416,9 @@ echo "Resources created in managed namespace '${MANAGED_NS}':"
 echo "  - Namespace: ${MANAGED_NS} (with label konflux-ci.dev/type: tenant)"
 echo "  - EnterpriseContractPolicy: ${CONFORMA_POLICY}"
 echo "  - RoleBinding: authenticated-konflux-viewer -> ClusterRole/konflux-viewer-user-actions"
-echo "  - ImageRepository: trusted-artifacts"
+if [[ -z "${TA_REPOSITORY}" ]]; then
+    echo "  - ImageRepository: trusted-artifacts"
+fi
 for COMPONENT in "${COMPONENTS[@]}"; do
     echo "  - ImageRepository: ${COMPONENT}"
 done
@@ -384,6 +430,7 @@ else
     echo "  - Secret: release-sso-secret (SKIPPED - Secret 'tpa-realm-client' in 'tsf' not found)"
 fi
 echo "  - ReleasePlanAdmission: ${RELEASE_NAME}"
+echo "      ociStorage:   ${TA_IMAGE_URL}"
 echo ""
 echo "Resources created in tenant namespace '${TENANT_NS}':"
 echo "  - ReleasePlan: ${RELEASE_NAME} -> ${MANAGED_NS}"

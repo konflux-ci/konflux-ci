@@ -21,6 +21,13 @@ spec:
   pipeline:
     pipelineRef:
       resolver: git
+      # Set ociStorage to your own OCI repository for Trusted Artifacts storage.
+      # Examples:
+      #   Quay:       ociStorage: quay.io/my-org/sample-component-release-ta
+      #   In-cluster: ociStorage: registry-service.kind-registry/sample-component-release-ta
+      # If omitted, the pipeline default (quay.io/konflux-ci/release-service-trusted-artifacts)
+      # is used, which requires push access and is not suitable for production.
+      # ociStorage: quay.io/my-org/sample-component-release-ta
       params:
         - name: url
           value: "https://github.com/konflux-ci/release-service-catalog.git"
