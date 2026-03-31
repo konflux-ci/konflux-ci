@@ -2,17 +2,18 @@
 set -euo pipefail
 
 # Trigger OpenShift CI Tests Script
-# Triggers multiple Prow jobs via the Gangway REST API, polls for completion,
+# Triggers Prow jobs via the Gangway REST API, polls for completion,
 # and returns success only if all jobs pass. Used to gate release promotions.
 #
 # The script derives the operator image tag from the git SHA of the provided ref.
 # Images are tagged with their full commit SHA by Konflux builds.
 #
 # Usage:
-#   trigger-openshift-ci-tests.sh <git_ref>
+#   trigger-openshift-ci-tests.sh <git_ref> [job_name]
 #
 # Arguments:
-#   git_ref - Any git reference (tag, branch, SHA) e.g., v0.1.5-rc.2
+#   git_ref  - Any git reference (tag, branch, SHA) e.g., v0.1.5-rc.2
+#   job_name - (Optional) Specific job to trigger. If omitted, triggers all default jobs.
 #
 # Environment:
 #   OPENSHIFT_CI_TOKEN - Gangway API token (required)
@@ -21,9 +22,12 @@ set -euo pipefail
 #   0 - All jobs completed successfully
 #   1 - One or more jobs failed, were aborted, or encountered an error
 #
-# Example:
-#   export OPENSHIFT_CI_TOKEN="your_gangway_token"
+# Examples:
+#   # Trigger all default jobs
 #   trigger-openshift-ci-tests.sh v0.1.5-rc.2
+#
+#   # Trigger a specific job (for individual retry)
+#   trigger-openshift-ci-tests.sh v0.1.5-rc.2 "periodic-ci-konflux-ci-konflux-ci-main-ocp420-konflux-e2e-v420"
 
 GANGWAY_URL="https://gangway-ci.apps.ci.l2s4.p1.openshiftapps.com/v1/executions"
 OPERATOR_REPO="quay.io/konflux-ci/konflux-operator"
@@ -31,11 +35,14 @@ POLL_INTERVAL=60
 TIMEOUT_SECONDS=10800  # 3 hours
 MAX_RETRIES=5
 
-# List of jobs to trigger - add/remove jobs here
-JOBS=(
+# Default list of jobs to trigger when no specific job is provided
+DEFAULT_JOBS=(
   "periodic-ci-konflux-ci-konflux-ci-main-ocp420-konflux-e2e-v420"
   "periodic-ci-konflux-ci-konflux-ci-main-ocp420-arm64-konflux-e2e-v420-arm64"
 )
+
+# JOBS array will be set based on arguments
+declare -a JOBS
 
 # Associative arrays to track job state
 declare -A JOB_IDS
@@ -61,14 +68,25 @@ cleanup() {
 trap cleanup SIGINT SIGTERM SIGHUP
 
 # Validate arguments
-if [ $# -ne 1 ]; then
-  echo "Error: git ref argument required"
-  echo "Usage: $0 <git_ref>"
-  echo "Example: $0 v0.1.5-rc.2"
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+  echo "Error: invalid arguments"
+  echo "Usage: $0 <git_ref> [job_name]"
+  echo "Examples:"
+  echo "  $0 v0.1.5-rc.2                    # Trigger all default jobs"
+  echo "  $0 v0.1.5-rc.2 \"periodic-ci-...\"  # Trigger specific job"
   exit 1
 fi
 
 GIT_REF="$1"
+
+# Set JOBS array based on arguments
+if [ $# -eq 2 ]; then
+  JOBS=("$2")
+  echo "Single job mode: ${JOBS[0]}"
+else
+  JOBS=("${DEFAULT_JOBS[@]}")
+  echo "All jobs mode: ${#JOBS[@]} job(s)"
+fi
 
 # Verify required environment variables (disable tracing to avoid leaking token)
 { set +x; } 2>/dev/null

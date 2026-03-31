@@ -25,9 +25,46 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # E2E test jobs run in parallel. Each can be retried independently if it fails.
+  e2e-ocp420-x86:
+    name: E2E Tests (OCP 4.20 x86)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Run OpenShift CI e2e test
+        env:
+          OPENSHIFT_CI_TOKEN: ${{ secrets.OPENSHIFT_CI_TOKEN }}
+          RC_TAG: ${{ inputs.release_candidate_tag }}
+        run: |
+          .github/scripts/trigger-openshift-ci-tests.sh "$RC_TAG" "periodic-ci-konflux-ci-konflux-ci-main-ocp420-konflux-e2e-v420"
+
+  e2e-ocp420-arm64:
+    name: E2E Tests (OCP 4.20 ARM64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Run OpenShift CI e2e test
+        env:
+          OPENSHIFT_CI_TOKEN: ${{ secrets.OPENSHIFT_CI_TOKEN }}
+          RC_TAG: ${{ inputs.release_candidate_tag }}
+        run: |
+          .github/scripts/trigger-openshift-ci-tests.sh "$RC_TAG" "periodic-ci-konflux-ci-konflux-ci-main-ocp420-arm64-konflux-e2e-v420-arm64"
+
+  # Promotion only runs after ALL e2e tests pass
   promote-release:
     name: Promote Release
     runs-on: ubuntu-latest
+    needs: [e2e-ocp420-x86, e2e-ocp420-arm64]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -40,13 +77,6 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
-      - name: Run OpenShift CI e2e tests
-        env:
-          OPENSHIFT_CI_TOKEN: ${{ secrets.OPENSHIFT_CI_TOKEN }}
-          RC_TAG: ${{ inputs.release_candidate_tag }}
-        run: |
-          .github/scripts/trigger-openshift-ci-tests.sh "$RC_TAG"
-
       - name: Promote release candidate to release tag
         if: ${{ !inputs.dry_run }}
         env:
@@ -55,8 +85,17 @@ jobs:
         run: |
           .github/scripts/promote-release.sh "$RC_TAG"
 
-      - name: Create issue on failure
-        if: ${{ failure() && !inputs.dry_run }}
+  # Issue creation runs if any job fails
+  create-issue-on-failure:
+    name: Create Issue on Failure
+    runs-on: ubuntu-latest
+    needs: [e2e-ocp420-x86, e2e-ocp420-arm64, promote-release]
+    if: ${{ failure() && !inputs.dry_run }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Create or update failure issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
