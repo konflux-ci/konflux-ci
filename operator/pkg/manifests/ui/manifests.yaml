@@ -361,7 +361,7 @@ spec:
             secretKeyRef:
               key: client-secret
               name: oauth2-proxy-client-secret
-        image: quay.io/konflux-ci/dex@sha256:d44ed2e9590a09e3e65b8195d4632393905f02e14b6b4d6080de1dcec99eaeb6
+        image: quay.io/konflux-ci/dex@sha256:26002acd53db6523c8378c5045857e17a2a3d692f6b6e2dc23b71ce3a4fe2e8e
         name: dex
         ports:
         - containerPort: 9443
@@ -433,7 +433,7 @@ spec:
         - daemon off;
         - -c
         - /etc/nginx/nginx.conf
-        image: registry.access.redhat.com/ubi9/nginx-124@sha256:04156cd38c436fb6692930d18af59619b0669b2d80cd3590d0973c0e038c5d6d
+        image: registry.access.redhat.com/ubi9/nginx-124@sha256:5f74c8297926209136221c135b27d756867aa0d478e256a53fd4e0dc0acc148c
         livenessProbe:
           failureThreshold: 3
           httpGet:
