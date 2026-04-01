@@ -30,6 +30,10 @@ Options:
                             enterprise-contract-service namespace (default: default)
   -r, --release-name        Name for the ReleasePlan and ReleasePlanAdmission
                             resources (default: local-release)
+  -R, --catalog-revision    Release service catalog git revision (default: production)
+  -I, --image-name-prefix   Prefix for Quay image repository names. Must be unique
+                            across concurrent CI runs to avoid credential collisions.
+                            (default: auto-generated from managed namespace + random suffix)
   -h, --help                Show this help message
 
 Examples:
@@ -78,6 +82,8 @@ APPLICATION="sample-component"
 PRODUCT_VERSION="0.1"
 CONFORMA_POLICY="default"
 RELEASE_NAME="local-release"
+CATALOG_REVISION="production"
+IMAGE_NAME_PREFIX=""
 COMPONENTS=()
 
 while [[ $# -gt 0 ]]; do
@@ -114,6 +120,14 @@ while [[ $# -gt 0 ]]; do
             RELEASE_NAME="$2"
             shift 2
             ;;
+        -R|--catalog-revision)
+            CATALOG_REVISION="$2"
+            shift 2
+            ;;
+        -I|--image-name-prefix)
+            IMAGE_NAME_PREFIX="$2"
+            shift 2
+            ;;
         -h|--help)
             usage
             ;;
@@ -126,6 +140,13 @@ done
 
 # Parse PRODUCT_NAME default value based on APPLICATION value (after args parsing)
 PRODUCT_NAME=${PRODUCT_NAME:-$APPLICATION}
+
+# Generate a unique image name prefix to avoid credential collisions between
+# concurrent CI runs that share the same Quay organization.
+if [[ -z "${IMAGE_NAME_PREFIX}" ]]; then
+    RANDOM_SUFFIX=$(od -An -tx1 -N3 /dev/urandom | tr -d ' ')
+    IMAGE_NAME_PREFIX="${MANAGED_NS}-${RANDOM_SUFFIX}"
+fi
 
 # Auto-detect components if none specified
 if [[ ${#COMPONENTS[@]} -eq 0 ]]; then
@@ -151,6 +172,8 @@ echo "   Product Name:      ${PRODUCT_NAME}"
 echo "   Product Version:   ${PRODUCT_VERSION}"
 echo "   EC policy:         ${CONFORMA_POLICY}"
 echo "   Release name:      ${RELEASE_NAME}"
+echo "   Catalog revision:  ${CATALOG_REVISION}"
+echo "   Image name prefix: ${IMAGE_NAME_PREFIX}"
 echo "   Components:        ${COMPONENTS[*]}"
 echo ""
 
@@ -199,7 +222,7 @@ metadata:
   namespace: ${MANAGED_NS}
 spec:
   image:
-    name: ${MANAGED_NS}/trusted-artifacts
+    name: ${IMAGE_NAME_PREFIX}/trusted-artifacts
     visibility: public
 EOF
 
@@ -214,7 +237,7 @@ metadata:
   namespace: ${MANAGED_NS}
 spec:
   image:
-    name: ${MANAGED_NS}/${COMPONENT}
+    name: ${IMAGE_NAME_PREFIX}/${COMPONENT}
     visibility: public
 EOF
 done
@@ -362,10 +385,20 @@ spec:
         - name: url
           value: "https://github.com/konflux-ci/release-service-catalog.git"
         - name: revision
-          value: production
+          value: ${CATALOG_REVISION}
         - name: pathInRepo
           value: "pipelines/managed/push-to-external-registry/push-to-external-registry.yaml"
     serviceAccountName: release-pipeline
+    taskRunSpecs:
+      - pipelineTaskName: push-snapshot
+        stepSpecs:
+          - name: push-snapshot
+            computeResources:
+              requests:
+                cpu: 10m
+                memory: 256Mi
+              limits:
+                memory: 1Gi
 EOF
 
 # Step 12: Create ReleasePlan in tenant namespace
