@@ -8,7 +8,7 @@ require (
 	github.com/conforma/crds/api v0.1.7
 	github.com/devfile/library/v2 v2.2.1-0.20230418160146-e75481b7eebd
 	github.com/docker/cli v29.0.3+incompatible
-	github.com/gofri/go-github-ratelimit v1.0.3-0.20230428184158-a500e14de53f
+	github.com/gofri/go-github-ratelimit/v2 v2.0.2
 	github.com/google/go-containerregistry v0.20.7
 	github.com/google/go-github/v44 v44.1.0
 	github.com/h2non/gock v1.2.0
