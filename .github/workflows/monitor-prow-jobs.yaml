@@ -1,0 +1,28 @@
+name: Monitor Periodic Prow Jobs
+
+on:
+  schedule:
+    # Run daily at 6 AM UTC (after the 3 AM and 4 AM scheduled jobs complete)
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  check-prow-jobs:
+    name: Check Periodic E2E Job Status
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Check Prow job status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_NAME: Monitor Periodic Prow Jobs
+        run: .github/scripts/check-prow-job-status.sh
