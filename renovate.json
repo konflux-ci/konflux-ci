@@ -170,10 +170,10 @@
         "operator/upstream-kustomizations/enterprise-contract/policies/.*\\.yaml$"
       ],
       "matchStrings": [
-        "- github\\.com/release-engineering/rhtap-ec-policy\\.git//data\\?ref=(?<currentDigest>[a-f0-9]{40})"
+        "- github\\.com/redhat-appstudio/tsf-conforma-data\\.git//data\\?ref=(?<currentDigest>[a-f0-9]{40})"
       ],
-      "depNameTemplate": "https://github.com/release-engineering/rhtap-ec-policy",
-      "autoReplaceStringTemplate": "- github.com/release-engineering/rhtap-ec-policy.git//data?ref={{newDigest}}",
+      "depNameTemplate": "https://github.com/redhat-appstudio/tsf-conforma-data",
+      "autoReplaceStringTemplate": "- github.com/redhat-appstudio/tsf-conforma-data.git//data?ref={{newDigest}}",
       "datasourceTemplate": "git-refs",
       "currentValueTemplate": "main",
       "versioningTemplate": "git"
