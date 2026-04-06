@@ -9,6 +9,7 @@ Contributing Guidelines
 - [Operator Development](#operator-development)
 - [CI/CD and Testing](#cicd-and-testing)
   * [Automated E2E Tests](#automated-e2e-tests)
+  * [OpenShift CI Periodic Tests](#openshift-ci-periodic-tests)
   * [ARM64 Testing](#arm64-testing)
 - [Running E2E test](#running-e2e-test)
   * [Prerequisites](#prerequisites)
@@ -101,6 +102,15 @@ and ARM64 architectures. There are **two test suites** in `test/go-tests`:
 Workflow `.github/workflows/operator-test-e2e.yaml` runs both suites when
 operator-related changes are detected: first integration (`go test .`), then E2E
 (env set from secrets, then the same `go test` command).
+
+## OpenShift CI Periodic Tests
+
+In addition to GitHub Actions, the repository has periodic E2E tests running on
+OpenShift CI (Prow) infrastructure. These tests run daily and validate Konflux
+deployment on OCP 4.20 clusters:
+
+- [x86_64 E2E Tests](https://prow.ci.openshift.org/?job=periodic-ci-konflux-ci-konflux-ci-main-ocp420-konflux-e2e-v420)
+- [ARM64 E2E Tests](https://prow.ci.openshift.org/?job=periodic-ci-konflux-ci-konflux-ci-main-ocp420-arm64-konflux-e2e-v420-arm64)
 
 ## ARM64 Testing
 

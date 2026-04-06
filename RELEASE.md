@@ -263,5 +263,7 @@ for more information.
 - [Send GitHub Release Event Task](tasks/send-github-release-event/send-github-release-event.yaml)
 - [Community Operator PR Workflow](.github/workflows/community-operator-pr.yaml)
 - [Create Community Operator PR Script](.github/scripts/create-community-operator-pr.sh)
+- [Periodic E2E Tests - x86_64](https://prow.ci.openshift.org/?job=periodic-ci-konflux-ci-konflux-ci-main-ocp420-konflux-e2e-v420) (external)
+- [Periodic E2E Tests - ARM64](https://prow.ci.openshift.org/?job=periodic-ci-konflux-ci-konflux-ci-main-ocp420-arm64-konflux-e2e-v420-arm64) (external)
 - [Operator Pipelines Documentation](https://redhat-openshift-ecosystem.github.io/operator-pipelines/) (external)
 - [Konflux Operator in Community Catalog](https://github.com/redhat-openshift-ecosystem/community-operators-prod/tree/main/operators/konflux) (external)
