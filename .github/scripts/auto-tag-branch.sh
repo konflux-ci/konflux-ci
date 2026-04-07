@@ -84,6 +84,16 @@ fi
 
 echo "Latest tag for stream ${STREAM}: $LATEST"
 
+# Check if HEAD already has a version tag for this stream - skip if no new commits
+HEAD_TAGS=$(git tag --points-at HEAD 2>/dev/null \
+  | grep -E "$VERSION_PATTERN" | grep -F "${TAG_PREFIX}" || true)
+
+if [ -n "$HEAD_TAGS" ]; then
+  echo "HEAD already has version tag(s) for stream ${STREAM}: $HEAD_TAGS"
+  echo "No new commits since last tag. Skipping."
+  exit 0
+fi
+
 if [[ "$LATEST" =~ $STABLE_PATTERN ]]; then
   # vX.Y.Z → vX.Y.(Z+1)-rc.0
   VERSION="${LATEST#v}"
