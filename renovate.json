@@ -170,10 +170,10 @@
         "operator/upstream-kustomizations/enterprise-contract/policies/.*\\.yaml$"
       ],
       "matchStrings": [
-        "- github\\.com/redhat-appstudio/tsf-conforma-data\\.git//data\\?ref=(?<currentDigest>[a-f0-9]{40})"
+        "- github\\.com/redhat-appstudio/tsf-conforma-data//data\\?ref=(?<currentDigest>[a-f0-9]{40})"
       ],
       "depNameTemplate": "https://github.com/redhat-appstudio/tsf-conforma-data",
-      "autoReplaceStringTemplate": "- github.com/redhat-appstudio/tsf-conforma-data.git//data?ref={{newDigest}}",
+      "autoReplaceStringTemplate": "- github.com/redhat-appstudio/tsf-conforma-data//data?ref={{newDigest}}",
       "datasourceTemplate": "git-refs",
       "currentValueTemplate": "main",
       "versioningTemplate": "git"
