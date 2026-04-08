@@ -9,7 +9,7 @@ resources:
   - quay.yaml
 images:
   - name: quay.io/projectquay/quay
-    newTag: "3.16.2"
+    newTag: "3.17.1"
   - name: quay.io/sclorg/postgresql-15-c9s
     newTag: "20260302"
   - name: quay.io/sclorg/redis-7-c9s
