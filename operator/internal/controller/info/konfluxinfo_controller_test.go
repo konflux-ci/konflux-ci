@@ -18,61 +18,36 @@ package info
 
 import (
 	"context"
-
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 )
 
 var _ = Describe("KonfluxInfo Controller", func() {
 	Context("When reconciling a resource", func() {
-		ctx := context.Background()
-
-		typeNamespacedName := types.NamespacedName{
-			Name: CRName,
-		}
-		konfluxinfo := &konfluxv1alpha1.KonfluxInfo{}
-
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind KonfluxInfo")
-			err := k8sClient.Get(ctx, typeNamespacedName, konfluxinfo)
-			if err != nil && apierrors.IsNotFound(err) {
-				resource := &konfluxv1alpha1.KonfluxInfo{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: CRName,
-					},
-					Spec: konfluxv1alpha1.KonfluxInfoSpec{},
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
-		})
-
-		AfterEach(func() {
-			resource := &konfluxv1alpha1.KonfluxInfo{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			if err == nil {
-				By("Cleanup the specific resource instance KonfluxInfo")
-				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-			}
-		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
-			controllerReconciler := &KonfluxInfoReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ObjectStore: objectStore,
-			}
-
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
+		It("should successfully reconcile the resource", func(ctx context.Context) {
+			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxInfo{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			})).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxInfo{ObjectMeta: metav1.ObjectMeta{Name: CRName}})
 			})
-			Expect(err).NotTo(HaveOccurred())
+
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.KonfluxInfo{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
+				readyCond := meta.FindStatusCondition(updated.Status.Conditions, condition.TypeReady)
+				g.Expect(readyCond).NotTo(BeNil())
+				g.Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 	})
 })

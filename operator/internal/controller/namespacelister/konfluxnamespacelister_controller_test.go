@@ -18,67 +18,42 @@ package namespacelister
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 )
+
+const namespaceListerNamespace = "namespace-lister"
 
 var _ = Describe("KonfluxNamespaceLister Controller", func() {
 	Context("When reconciling a resource", func() {
-
-		ctx := context.Background()
-
-		typeNamespacedName := types.NamespacedName{
-			Name:      CRName,
-			Namespace: "default",
-		}
-		konfluxnamespacelister := &konfluxv1alpha1.KonfluxNamespaceLister{}
-
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind KonfluxNamespaceLister")
-			err := k8sClient.Get(ctx, typeNamespacedName, konfluxnamespacelister)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &konfluxv1alpha1.KonfluxNamespaceLister{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      CRName,
-						Namespace: "default",
-					},
-					// TODO(user): Specify other spec details if needed.
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
-		})
-
-		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &konfluxv1alpha1.KonfluxNamespaceLister{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the specific resource instance KonfluxNamespaceLister")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
-			controllerReconciler := &KonfluxNamespaceListerReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ObjectStore: objectStore,
-			}
-
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
+		It("should successfully reconcile the resource", func(ctx context.Context) {
+			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxNamespaceLister{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			})).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxNamespaceLister{ObjectMeta: metav1.ObjectMeta{Name: CRName}})
 			})
-			Expect(err).NotTo(HaveOccurred())
+
+			// Wait for the Deployment rather than Ready=True: UpdateComponentStatuses
+			// gates Ready=True on ReadyReplicas == Replicas, which never happens in
+			// envtest (no kubelet → pods never start).
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      namespaceListerNamespace,
+					Namespace: namespaceListerNamespace,
+				}, dep)).To(Succeed())
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 	})
 })
@@ -95,7 +70,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{
-								Name: "namespace-lister",
+								Name: namespaceListerNamespace,
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceCPU:    resource.MustParse("50m"),

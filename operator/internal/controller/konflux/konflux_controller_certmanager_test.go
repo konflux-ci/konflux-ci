@@ -19,293 +19,197 @@ package konflux
 import (
 	"context"
 	"errors"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/version"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 )
 
 var _ = Describe("Konflux Controller - Cert-Manager Dependency", func() {
+	// startManager creates a per-test manager with the given ClusterInfo
+	// and registers a DeferCleanup to cancel it after the test.
+	startManager := func(clusterInfo *clusterinfo.Info) {
+		mgr := testutil.NewTestManager(testEnv)
+		Expect((&KonfluxReconciler{
+			Client:      mgr.GetClient(),
+			Scheme:      mgr.GetScheme(),
+			ClusterInfo: clusterInfo,
+		}).SetupWithManager(mgr)).To(Succeed())
+		mgrCtx, cancel := context.WithCancel(testEnv.Ctx)
+		DeferCleanup(cancel)
+		testutil.StartManagerWithContext(mgrCtx, mgr)
+	}
+
 	Context("When cert-manager CRDs are not installed", func() {
-		var (
-			ctx                context.Context
-			reconciler         *KonfluxReconciler
-			fakeClient         client.Client
-			konflux            *konfluxv1alpha1.Konflux
-			typeNamespacedName types.NamespacedName
-		)
+		var clusterInfo *clusterinfo.Info
 
 		BeforeEach(func() {
-			ctx = context.Background()
-			scheme := runtime.NewScheme()
-			_ = konfluxv1alpha1.AddToScheme(scheme)
-
-			// Create a fake client WITHOUT cert-manager resources
-			fakeClient = fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithStatusSubresource(&konfluxv1alpha1.Konflux{}).
-				Build()
-
-			// Create clusterInfo without cert-manager resources
-			mockDiscoveryClient := &certManagerMockDiscoveryClient{
+			var err error
+			clusterInfo, err = clusterinfo.DetectWithClient(&certManagerMockDiscoveryClient{
 				hasCertManager: false,
-			}
-			clusterInfo, _ := clusterinfo.DetectWithClient(mockDiscoveryClient)
-
-			reconciler = &KonfluxReconciler{
-				Client:      fakeClient,
-				Scheme:      scheme,
-				ClusterInfo: clusterInfo,
-			}
-
-			konflux = &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: CRName,
-				},
-			}
-
-			typeNamespacedName = types.NamespacedName{
-				Name: CRName,
-			}
-
-			// Create the Konflux CR
-			Expect(fakeClient.Create(ctx, konflux)).To(Succeed())
-		})
-
-		AfterEach(func() {
-			// Cleanup
-			_ = fakeClient.Delete(ctx, konflux)
-		})
-
-		It("should set CertManagerAvailable and Ready conditions to False when cert-manager is missing", func() {
-			By("Reconciling the Konflux CR")
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Fetching the updated Konflux CR")
-			updatedKonflux := &konfluxv1alpha1.Konflux{}
-			Expect(fakeClient.Get(ctx, typeNamespacedName, updatedKonflux)).To(Succeed())
+			By("pre-cleaning any existing Konflux CR")
+			_ = k8sClient.Delete(ctx, &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			})
+		})
 
-			By("Verifying CertManagerAvailable condition is False")
-			cond := apimeta.FindStatusCondition(updatedKonflux.GetConditions(), constant.ConditionTypeCertManagerAvailable)
-			Expect(cond).NotTo(BeNil())
-			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
-			Expect(cond.Reason).To(Equal(condition.ReasonCertManagerNotInstalled))
-			Expect(cond.Message).To(ContainSubstring("cert-manager CRDs are not installed"))
+		It("should set CertManagerAvailable and Ready conditions to False when cert-manager is missing", func(ctx context.Context) {
+			startManager(clusterInfo)
 
-			By("Verifying Ready condition is False")
-			readyCond := apimeta.FindStatusCondition(updatedKonflux.GetConditions(), constant.ConditionTypeReady)
-			Expect(readyCond).NotTo(BeNil())
-			Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
-			Expect(readyCond.Reason).To(Equal(condition.ReasonCertManagerNotInstalled))
-			Expect(readyCond.Message).To(ContainSubstring("cert-manager CRDs are not installed"))
+			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
+
+				cond := apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeCertManagerAvailable)
+				g.Expect(cond).NotTo(BeNil())
+				g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+				g.Expect(cond.Reason).To(Equal(condition.ReasonCertManagerNotInstalled))
+				g.Expect(cond.Message).To(ContainSubstring("cert-manager CRDs are not installed"))
+
+				readyCond := apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)
+				g.Expect(readyCond).NotTo(BeNil())
+				g.Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+				g.Expect(readyCond.Reason).To(Equal(condition.ReasonCertManagerNotInstalled))
+				g.Expect(readyCond.Message).To(ContainSubstring("cert-manager CRDs are not installed"))
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 	})
 
 	Context("When cert-manager CRDs are installed", func() {
-		var (
-			ctx                context.Context
-			reconciler         *KonfluxReconciler
-			fakeClient         client.Client
-			konflux            *konfluxv1alpha1.Konflux
-			typeNamespacedName types.NamespacedName
-		)
+		var clusterInfo *clusterinfo.Info
 
 		BeforeEach(func() {
-			ctx = context.Background()
-			scheme := runtime.NewScheme()
-			_ = konfluxv1alpha1.AddToScheme(scheme)
-
-			// Create a fake client WITH cert-manager resources
-			fakeClient = fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithStatusSubresource(&konfluxv1alpha1.Konflux{}).
-				Build()
-
-			// Create clusterInfo with cert-manager resources
-			mockDiscoveryClient := &certManagerMockDiscoveryClient{
+			var err error
+			clusterInfo, err = clusterinfo.DetectWithClient(&certManagerMockDiscoveryClient{
 				hasCertManager: true,
-			}
-			clusterInfo, _ := clusterinfo.DetectWithClient(mockDiscoveryClient)
-
-			reconciler = &KonfluxReconciler{
-				Client:      fakeClient,
-				Scheme:      scheme,
-				ClusterInfo: clusterInfo,
-			}
-
-			konflux = &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: CRName,
-				},
-			}
-
-			typeNamespacedName = types.NamespacedName{
-				Name: CRName,
-			}
-
-			// Create the Konflux CR
-			Expect(fakeClient.Create(ctx, konflux)).To(Succeed())
-		})
-
-		AfterEach(func() {
-			// Cleanup
-			_ = fakeClient.Delete(ctx, konflux)
-		})
-
-		It("should set CertManagerAvailable condition to True", func() {
-			By("Reconciling the Konflux CR")
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Fetching the updated Konflux CR")
-			updatedKonflux := &konfluxv1alpha1.Konflux{}
-			Expect(fakeClient.Get(ctx, typeNamespacedName, updatedKonflux)).To(Succeed())
-
-			By("Verifying CertManagerAvailable condition is True")
-			cond := apimeta.FindStatusCondition(updatedKonflux.GetConditions(), constant.ConditionTypeCertManagerAvailable)
-			Expect(cond).NotTo(BeNil())
-			Expect(cond.Status).To(Equal(metav1.ConditionTrue))
-			Expect(cond.Reason).To(Equal("CertManagerInstalled"))
-			Expect(cond.Message).To(ContainSubstring("cert-manager CRDs are installed"))
+			By("pre-cleaning any existing Konflux CR")
+			_ = k8sClient.Delete(ctx, &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			})
 		})
 
-		It("should not override Ready condition when cert-manager is available", func() {
-			By("Reconciling the Konflux CR")
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+		It("should set CertManagerAvailable condition to True", func(ctx context.Context) {
+			startManager(clusterInfo)
 
-			By("Fetching the updated Konflux CR")
-			updatedKonflux := &konfluxv1alpha1.Konflux{}
-			Expect(fakeClient.Get(ctx, typeNamespacedName, updatedKonflux)).To(Succeed())
+			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
 
-			By("Verifying Ready condition is not overridden by cert-manager check")
-			readyCond := apimeta.FindStatusCondition(updatedKonflux.GetConditions(), constant.ConditionTypeReady)
-			// Ready condition should be set based on sub-CR statuses, not cert-manager
-			// If cert-manager is available, it shouldn't force Ready to False
-			if readyCond != nil {
-				Expect(readyCond.Reason).NotTo(Equal(condition.ReasonCertManagerNotInstalled))
-			}
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
+
+				cond := apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeCertManagerAvailable)
+				g.Expect(cond).NotTo(BeNil())
+				g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+				g.Expect(cond.Reason).To(Equal("CertManagerInstalled"))
+				g.Expect(cond.Message).To(ContainSubstring("cert-manager CRDs are installed"))
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
+		})
+
+		It("should not override Ready condition when cert-manager is available", func(ctx context.Context) {
+			startManager(clusterInfo)
+
+			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+
+			// Wait for CertManagerAvailable=True to confirm reconcile ran.
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
+
+				cond := apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeCertManagerAvailable)
+				g.Expect(cond).NotTo(BeNil())
+				g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+
+				readyCond := apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)
+				if readyCond != nil {
+					g.Expect(readyCond.Reason).NotTo(Equal(condition.ReasonCertManagerNotInstalled))
+				}
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 	})
 
 	Context("When cert-manager check fails with an error", func() {
-		var (
-			ctx                context.Context
-			reconciler         *KonfluxReconciler
-			fakeClient         client.Client
-			konflux            *konfluxv1alpha1.Konflux
-			typeNamespacedName types.NamespacedName
-		)
+		var clusterInfo *clusterinfo.Info
 
 		BeforeEach(func() {
-			ctx = context.Background()
-			scheme := runtime.NewScheme()
-			_ = konfluxv1alpha1.AddToScheme(scheme)
-
-			// Create a fake client
-			fakeClient = fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithStatusSubresource(&konfluxv1alpha1.Konflux{}).
-				Build()
-
-			// Create clusterInfo that returns an error when checking cert-manager
-			// This simulates RBAC issues or network problems
-			mockDiscoveryClient := &certManagerMockDiscoveryClient{
+			var err error
+			clusterInfo, err = clusterinfo.DetectWithClient(&certManagerMockDiscoveryClient{
 				hasCertManager: false,
 				returnError:    true,
-			}
-			clusterInfo, _ := clusterinfo.DetectWithClient(mockDiscoveryClient)
-
-			reconciler = &KonfluxReconciler{
-				Client:      fakeClient,
-				Scheme:      scheme,
-				ClusterInfo: clusterInfo,
-			}
-
-			konflux = &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: CRName,
-				},
-			}
-
-			typeNamespacedName = types.NamespacedName{
-				Name: CRName,
-			}
-
-			// Create the Konflux CR
-			Expect(fakeClient.Create(ctx, konflux)).To(Succeed())
-		})
-
-		AfterEach(func() {
-			// Cleanup
-			_ = fakeClient.Delete(ctx, konflux)
-		})
-
-		It("should continue reconciliation and set CertManagerAvailable to Unknown", func() {
-			By("Reconciling the Konflux CR")
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			// Reconciliation should continue even if cert-manager check fails
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Fetching the updated Konflux CR")
-			updatedKonflux := &konfluxv1alpha1.Konflux{}
-			Expect(fakeClient.Get(ctx, typeNamespacedName, updatedKonflux)).To(Succeed())
-
-			By("Verifying that CertManagerAvailable condition is set to Unknown")
-			cond := apimeta.FindStatusCondition(updatedKonflux.GetConditions(), constant.ConditionTypeCertManagerAvailable)
-			Expect(cond).NotTo(BeNil())
-			Expect(cond.Status).To(Equal(metav1.ConditionUnknown))
-			Expect(cond.Reason).To(Equal(condition.ReasonCertManagerInstallationCheckFailed))
-			Expect(cond.Message).To(ContainSubstring("simulated RBAC or network error"))
-		})
-
-		It("should allow Ready to be True when CertManagerAvailable is Unknown", func() {
-			By("Reconciling the Konflux CR")
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Fetching the updated Konflux CR")
-			updatedKonflux := &konfluxv1alpha1.Konflux{}
-			Expect(fakeClient.Get(ctx, typeNamespacedName, updatedKonflux)).To(Succeed())
+			By("pre-cleaning any existing Konflux CR")
+			_ = k8sClient.Delete(ctx, &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			})
+		})
 
-			By("Verifying CertManagerAvailable is Unknown")
-			certManagerCond := apimeta.FindStatusCondition(updatedKonflux.GetConditions(), constant.ConditionTypeCertManagerAvailable)
-			Expect(certManagerCond).NotTo(BeNil())
-			Expect(certManagerCond.Status).To(Equal(metav1.ConditionUnknown))
+		It("should continue reconciliation and set CertManagerAvailable to Unknown", func(ctx context.Context) {
+			startManager(clusterInfo)
 
-			By("Verifying Ready condition is not overridden by Unknown CertManagerAvailable")
-			// Ready should be based on sub-CR statuses, not blocked by Unknown cert-manager status
-			readyCond := apimeta.FindStatusCondition(updatedKonflux.GetConditions(), constant.ConditionTypeReady)
-			// Ready condition should exist (set by SetAggregatedReadyCondition)
-			// It should NOT be False with CertManagerNotInstalled reason since cert-manager is Unknown, not False
-			if readyCond != nil {
-				Expect(readyCond.Reason).NotTo(Equal(condition.ReasonCertManagerNotInstalled))
-			}
+			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
+
+				cond := apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeCertManagerAvailable)
+				g.Expect(cond).NotTo(BeNil())
+				g.Expect(cond.Status).To(Equal(metav1.ConditionUnknown))
+				g.Expect(cond.Reason).To(Equal(condition.ReasonCertManagerInstallationCheckFailed))
+				g.Expect(cond.Message).To(ContainSubstring("simulated RBAC or network error"))
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
+		})
+
+		It("should allow Ready to be True when CertManagerAvailable is Unknown", func(ctx context.Context) {
+			startManager(clusterInfo)
+
+			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+
+			// Wait for CertManagerAvailable=Unknown to confirm reconcile ran.
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
+
+				certManagerCond := apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeCertManagerAvailable)
+				g.Expect(certManagerCond).NotTo(BeNil())
+				g.Expect(certManagerCond.Status).To(Equal(metav1.ConditionUnknown))
+
+				readyCond := apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)
+				if readyCond != nil {
+					g.Expect(readyCond.Reason).NotTo(Equal(condition.ReasonCertManagerNotInstalled))
+				}
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 	})
 })
