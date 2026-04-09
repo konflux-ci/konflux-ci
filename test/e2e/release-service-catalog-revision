@@ -1,2 +1,2 @@
 # renovate: datasource=git-refs depName=https://github.com/konflux-ci/release-service-catalog
-export RELEASE_SERVICE_CATALOG_REVISION=a0c94037809017a83331ea205a8a6647b6f775d2
+export RELEASE_SERVICE_CATALOG_REVISION=67ad19106974bdbe7bba87a9d0b83bd3123929da
