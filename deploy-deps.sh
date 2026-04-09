@@ -146,13 +146,57 @@ deploy() {
     CURRENT_STEP=""
 }
 
+collect_storage_diagnostics() {
+    local context="${1:-}"
+    local verbose="${2:-false}"
+    echo "" >&2
+    echo "=== Storage Diagnostics ${context} ===" >&2
+
+    echo "--- Storage Classes ---" >&2
+    kubectl get storageclass -o wide 2>&1 || true
+
+    # OpenShift-specific diagnostics (skip on non-OpenShift platforms)
+    if kubectl get namespace openshift-cluster-csi-drivers &>/dev/null; then
+        echo "" >&2
+        echo "--- CSI Driver Pods (openshift-cluster-csi-drivers) ---" >&2
+        kubectl get pods -n openshift-cluster-csi-drivers 2>&1 || true
+
+        if [[ "$verbose" == "true" ]]; then
+            echo "" >&2
+            echo "--- AWS EBS CSI Driver Controller Logs (last 100 lines) ---" >&2
+            kubectl logs -n openshift-cluster-csi-drivers -l app=aws-ebs-csi-driver-controller --tail=100 2>&1 || true
+        fi
+    fi
+
+    if kubectl get pvc/test-pvc -n test-pvc-ns &>/dev/null; then
+        echo "" >&2
+        echo "--- Test PVC Description (includes events) ---" >&2
+        kubectl describe pvc/test-pvc -n test-pvc-ns 2>&1 || true
+    fi
+
+    echo "=== End Storage Diagnostics ===" >&2
+    echo "" >&2
+}
+
 test_pvc_binding(){
     local pvc_resources="${script_path}/dependencies/pre-deployment-pvc-binding"
     echo "Creating PVC from '$pvc_resources' using the cluster's default storage class"
+
+    # Capture initial storage state before test (brief)
+    collect_storage_diagnostics "(Initial State)" "false"
+
     sleep 10  # Retries are not enough to ensure the default SA is created, see https://github.com/konflux-ci/konflux-ci/issues/161
     retry "kubectl apply -k ${pvc_resources}" "Error while creating pre-deployment-pvc-binding"
-    retry "kubectl wait --for=jsonpath={status.phase}=Bound pvc/test-pvc -n test-pvc-ns --timeout=20s" \
-          "Test PVC unable to bind on default storage class"
+
+    # Try to wait for PVC binding, capture full diagnostics on failure
+    if ! retry "kubectl wait --for=jsonpath={status.phase}=Bound pvc/test-pvc -n test-pvc-ns --timeout=20s" \
+          "Test PVC unable to bind on default storage class"; then
+        collect_storage_diagnostics "(Failure State)" "true"
+        # Clean up before exiting
+        kubectl delete -k "$pvc_resources" 2>/dev/null || true
+        return 1
+    fi
+
     kubectl delete -k "$pvc_resources"
     echo "PVC binding successfull"
 }
