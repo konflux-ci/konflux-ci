@@ -544,15 +544,21 @@ data:
             "Authorization": f"Bearer {quay_token}",
         })
         resp: HTTPResponse
-        try:
-            with urlopen(request) as resp:
-                if resp.status != 200 and resp.status != 204:
-                    raise RuntimeError(resp.reason)
+        while True:
+            try:
+                with urlopen(request) as resp:
+                    if resp.status != 200 and resp.status != 204:
+                        raise RuntimeError(resp.reason)
+            except HTTPError as ex:
+                if ex.status == 502 or ex.status == 504:
+                    LOGGER.info("Gateway error, will retry")
+                    time.sleep(1)
+                    continue
 
-        except HTTPError as ex:
-            # ignore if not found
-            if ex.status != 404:
-                raise(ex)
+                # ignore if not found
+                if ex.status != 404:
+                    raise(ex)
+            break
 
 
     def manifest_exists(quay_token: str, namespace: str, name: str, manifest: str) -> bool:
@@ -562,17 +568,22 @@ data:
         })
         resp: HTTPResponse
         manifest_exists = True
-        try:
-            with urlopen(request) as resp:
-                if resp.status != 200 and resp.status != 204:
-                    raise RuntimeError(resp.reason)
+        while True:
+            try:
+                with urlopen(request) as resp:
+                    if resp.status != 200 and resp.status != 204:
+                        raise RuntimeError(resp.reason)
+            except HTTPError as ex:
+                if ex.status == 502 or ex.status == 504:
+                    LOGGER.info("Gateway error, will retry")
+                    time.sleep(1)
+                    continue
 
-        except HTTPError as ex:
-            if ex.status != 404:
-                raise(ex)
-            else:
-                manifest_exists = False
-
+                if ex.status != 404:
+                    raise(ex)
+                else:
+                    manifest_exists = False
+            break
         return manifest_exists
 
 
@@ -689,7 +700,7 @@ data:
         main()
 kind: ConfigMap
 metadata:
-  name: image-controller-image-pruner-configmap-mmk4bf6tc8
+  name: image-controller-image-pruner-configmap-9c277hthc8
   namespace: image-controller
 ---
 apiVersion: v1
@@ -977,7 +988,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/konflux-ci/image-controller:5f7f59e096643853387badee651dd770ad0df656
+        image: quay.io/konflux-ci/image-controller:ae94b530b287a9a648226d3e5583506822158e53
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1077,7 +1088,7 @@ spec:
             runAsNonRoot: true
           volumes:
           - configMap:
-              name: image-controller-image-pruner-configmap-mmk4bf6tc8
+              name: image-controller-image-pruner-configmap-9c277hthc8
             name: image-pruner-volume
           - name: quaytoken
             secret:
