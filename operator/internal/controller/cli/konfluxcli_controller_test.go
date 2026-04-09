@@ -18,12 +18,10 @@ package cli
 
 import (
 	"context"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -32,102 +30,39 @@ import (
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 )
 
 var _ = Describe("KonfluxCLI Controller", func() {
 	Context("When reconciling a resource", func() {
-		ctx := context.Background()
-
-		typeNamespacedName := types.NamespacedName{
-			Name: CRName,
-		}
-
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind KonfluxCLI")
-			resource := &konfluxv1alpha1.KonfluxCLI{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			if err != nil && errors.IsNotFound(err) {
-				resource = &konfluxv1alpha1.KonfluxCLI{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: CRName,
-					},
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
-		})
-
-		AfterEach(func() {
-			resource := &konfluxv1alpha1.KonfluxCLI{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			if err == nil {
-				By("Cleanup the specific resource instance KonfluxCLI")
-				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-
-				Eventually(func() bool {
-					err := k8sClient.Get(ctx, typeNamespacedName, &konfluxv1alpha1.KonfluxCLI{})
-					return errors.IsNotFound(err)
-				}, 10*time.Second, 250*time.Millisecond).Should(BeTrue(), "Resource should be deleted")
-			}
-		})
-
-		It("should successfully reconcile the resource", func() {
-			reconciler := &KonfluxCLIReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ObjectStore: objectStore,
-			}
-
-			By("Reconciling the created resource")
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
+		It("should successfully reconcile the resource", func(ctx context.Context) {
+			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxCLI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			})).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxCLI{ObjectMeta: metav1.ObjectMeta{Name: CRName}})
 			})
-			Expect(err).NotTo(HaveOccurred())
-		})
 
-		It("should set Ready=True status after reconciliation", func() {
-			reconciler := &KonfluxCLIReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ObjectStore: objectStore,
-			}
+			// The CLI manifests contain no Deployments — only a Namespace, ConfigMaps, and
+			// RBAC resources — so Ready=True is a reliable sentinel that the full
+			// reconcile codepath ran successfully.
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.KonfluxCLI{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
+				readyCond := meta.FindStatusCondition(updated.Status.Conditions, condition.TypeReady)
+				g.Expect(readyCond).NotTo(BeNil())
+				g.Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
+				g.Expect(readyCond.Message).To(ContainSubstring("Component ready"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
-			By("Reconciling the created resource")
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Verifying the status is ready")
-			updated := &konfluxv1alpha1.KonfluxCLI{}
-			Expect(k8sClient.Get(ctx, typeNamespacedName, updated)).To(Succeed())
-
-			readyCond := meta.FindStatusCondition(updated.Status.Conditions, condition.TypeReady)
-			Expect(readyCond).NotTo(BeNil(), "Ready condition should be present")
-			Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
-			Expect(readyCond.Message).To(ContainSubstring("Component ready"))
-		})
-
-		It("should create the CLI namespace and ConfigMaps", func() {
-			reconciler := &KonfluxCLIReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ObjectStore: objectStore,
-			}
-
-			By("Reconciling the created resource")
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Verifying the konflux-cli namespace was created")
+			By("verifying the konflux-cli namespace was created")
 			ns := &corev1.Namespace{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "konflux-cli"}, ns)).To(Succeed())
 
-			By("Verifying the owner label is set on the namespace")
+			By("verifying the owner label is set on the namespace")
 			Expect(ns.Labels).To(HaveKeyWithValue(constant.KonfluxOwnerLabel, CRName))
 
-			By("Verifying the create-tenant ConfigMap was created")
+			By("verifying the create-tenant ConfigMap was created")
 			createTenantCM := &corev1.ConfigMap{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name:      "create-tenant",
@@ -135,7 +70,7 @@ var _ = Describe("KonfluxCLI Controller", func() {
 			}, createTenantCM)).To(Succeed())
 			Expect(createTenantCM.Data).To(HaveKey("create-tenant.sh"))
 
-			By("Verifying the setup-release ConfigMap was created")
+			By("verifying the setup-release ConfigMap was created")
 			setupReleaseCM := &corev1.ConfigMap{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name:      "setup-release",
@@ -143,15 +78,17 @@ var _ = Describe("KonfluxCLI Controller", func() {
 			}, setupReleaseCM)).To(Succeed())
 			Expect(setupReleaseCM.Data).To(HaveKey("setup-release.sh"))
 		})
-
-		It("should return no error when the CR does not exist", func() {
+		It("should return no error when the CR does not exist", func(ctx context.Context) {
+			// This is a unit-level guard: the controller must silently ignore
+			// reconcile requests for resources that no longer exist (e.g. deleted
+			// between the watch event and the actual reconcile). The manager flow
+			// cannot exercise this path directly, so we call Reconcile once with a
+			// name that was never created.
 			reconciler := &KonfluxCLIReconciler{
 				Client:      k8sClient,
 				Scheme:      k8sClient.Scheme(),
 				ObjectStore: objectStore,
 			}
-
-			By("Reconciling a non-existent resource")
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: "nonexistent"},
 			})

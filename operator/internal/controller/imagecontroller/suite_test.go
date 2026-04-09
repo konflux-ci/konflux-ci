@@ -45,6 +45,14 @@ var _ = BeforeSuite(func() {
 	ctx = testEnv.Ctx
 	k8sClient = testEnv.K8sClient
 	objectStore = testEnv.ObjectStore
+
+	mgr := testutil.NewTestManager(testEnv)
+	Expect((&KonfluxImageControllerReconciler{
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		ObjectStore: objectStore,
+	}).SetupWithManager(mgr)).To(Succeed())
+	testutil.StartManager(testEnv, mgr)
 })
 
 var _ = AfterSuite(func() {
