@@ -8,15 +8,15 @@ data:
     default-pipeline-name: docker-build-oci-ta-min
     pipelines:
     - name: fbc-builder
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-fbc-builder@sha256:66137efdd8c7829ad8fb49d47e035eb9ce0ca06ab250bc1803d28376099629d3
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-fbc-builder@sha256:37014977ce2679fd1e8324bc61da94ac0d6091a8e75cf3b3bfa3a08964677de6
     - name: docker-build
       bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build@sha256:d9a2dd069a7da757b842e4eba277bbac1c0c81b66d0a917c40d73c6756d5c34b
     - name: docker-build-oci-ta
       bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta@sha256:a92e1795bb7fefe71560db310160720edb8f1b2263566f3b40ddc35742f09388
     - name: tekton-bundle-builder
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder@sha256:bbc91049194b602a2401898446b485afe0540089051db8e7e46e8daefd96c5da
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder@sha256:73663fc3071f3ba9352f51af5a2efa5820e11c536801514beeb88ce7eba648f3
     - name: tekton-bundle-builder-oci-ta
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder-oci-ta@sha256:f26d5fea5a12de33b9ca5454992afb4707120a5cf9ed076a6477c2cee55f141d
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder-oci-ta@sha256:7af3d7513aa3f65d22c0578e10fbf0d289225b6744dcb2c3fe56fa8852d60e7c
     - name: docker-build-oci-ta-min
       bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta-min@sha256:1f9d86b8429e6ed287f35ae7cd10927d53295fd5cd7ee446fd42317fa74b9aad
       description: minimal version of the docker-build-oci-ta pipeline, which requires less compute resources. In addition, it doesn't contain tasks which require user provided secrets.
