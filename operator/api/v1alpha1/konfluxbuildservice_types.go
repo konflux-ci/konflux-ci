@@ -28,6 +28,20 @@ type KonfluxBuildServiceSpec struct {
 	// BuildControllerManager defines customizations for the controller-manager deployment.
 	// +optional
 	BuildControllerManager *ControllerManagerDeploymentSpec `json:"buildControllerManager,omitempty"`
+
+	// WebhookURLs maps repository URL prefixes to externally-reachable webhook URLs.
+	// When configured, the build-service uses these URLs instead of the default PaC webhook
+	// URL when setting up webhooks for git repositories.
+	//
+	// Keys are matched against the full repository URL using longest-prefix matching.
+	// An empty string key ("") serves as a catch-all default for any unmatched repository.
+	//
+	// Example:
+	//   webhookURLs:
+	//     "https://github.com": "https://smee.example.com/github-hook"
+	//     "https://gitlab.com": "https://smee.example.com/gitlab-hook"
+	// +optional
+	WebhookURLs map[string]string `json:"webhookURLs,omitempty"`
 }
 
 // KonfluxBuildServiceStatus defines the observed state of KonfluxBuildService

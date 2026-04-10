@@ -409,11 +409,9 @@ spec:
         - --metrics-bind-address=:8443
         - --leader-elect=false
         - --health-probe-bind-address=:8081
+        - -webhook-config-path=/mnt/webhook-config.json
         command:
         - /manager
-        env:
-        - name: PAC_WEBHOOK_URL
-          value: http://pipelines-as-code-controller.pipelines-as-code.svc.cluster.local:8180
         image: quay.io/konflux-ci/build-service:ca44d2b8386e0af3ce29d2dc2d639a4e8fae3199
         livenessProbe:
           httpGet:
@@ -447,6 +445,9 @@ spec:
           name: trusted-ca
           readOnly: true
           subPath: ca-bundle.crt
+        - mountPath: /mnt
+          name: webhook-config
+          readOnly: true
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -461,6 +462,13 @@ spec:
           name: trusted-ca
           optional: true
         name: trusted-ca
+      - configMap:
+          items:
+          - key: webhook-config.json
+            path: webhook-config.json
+          name: webhook-config
+          optional: true
+        name: webhook-config
 ---
 allowHostDirVolumePlugin: false
 allowHostIPC: false
