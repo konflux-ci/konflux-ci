@@ -31,7 +31,13 @@ import (
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/hashedconfigmap"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
+)
+
+const (
+	testWebhookConfigMapName = "webhook-config-abc1234567"
+	testCustomPaCURL         = "http://custom-pac.example.com:9999"
 )
 
 // getBuildServiceDeployment returns a deep copy of the BuildService controller-manager deployment from the manifests.
@@ -54,39 +60,49 @@ func getBuildServiceDeployment(t *testing.T) *appsv1.Deployment {
 	return nil
 }
 
-func TestBuildBuildControllerManagerOverlay(t *testing.T) {
-	t.Run("nil spec returns empty overlay", func(t *testing.T) {
-		g := gomega.NewWithT(t)
-		overlay := buildBuildControllerManagerOverlay(nil, nil)
-		g.Expect(overlay).NotTo(gomega.BeNil())
-	})
+// findPaCWebhookURLEnvValue returns the last PAC_WEBHOOK_URL env var value.
+// Returns the value and whether the env var was found. Checks the last match
+// to match Kubernetes behavior where later env entries override earlier ones.
+func findPaCWebhookURLEnvValue(envs []corev1.EnvVar) (string, bool) {
+	var value string
+	var found bool
+	for _, env := range envs {
+		if env.Name == pacWebhookURLEnvName {
+			value = env.Value
+			found = true
+		}
+	}
+	return value, found
+}
 
-	t.Run("empty spec returns overlay without customizations", func(t *testing.T) {
+func TestBuildBuildControllerManagerOverlay(t *testing.T) {
+	t.Run("empty spec returns overlay", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{}
-		overlay := buildBuildControllerManagerOverlay(spec, nil)
+		overlay := buildBuildControllerManagerOverlay(konfluxv1alpha1.KonfluxBuildServiceSpec{}, nil, "")
 		g.Expect(overlay).NotTo(gomega.BeNil())
 	})
 
 	t.Run("manager resources are applied", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{
-			Manager: &konfluxv1alpha1.ContainerSpec{
-				Resources: &corev1.ResourceRequirements{
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("500m"),
-						corev1.ResourceMemory: resource.MustParse("256Mi"),
-					},
-					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("100m"),
-						corev1.ResourceMemory: resource.MustParse("128Mi"),
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+				Manager: &konfluxv1alpha1.ContainerSpec{
+					Resources: &corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("500m"),
+							corev1.ResourceMemory: resource.MustParse("256Mi"),
+						},
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("100m"),
+							corev1.ResourceMemory: resource.MustParse("128Mi"),
+						},
 					},
 				},
 			},
 		}
 
 		deployment := getBuildServiceDeployment(t)
-		overlay := buildBuildControllerManagerOverlay(spec, nil)
+		overlay := buildBuildControllerManagerOverlay(spec, nil, "")
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -100,11 +116,13 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 
 	t.Run("preserves existing container fields", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{
-			Manager: &konfluxv1alpha1.ContainerSpec{
-				Resources: &corev1.ResourceRequirements{
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU: resource.MustParse("500m"),
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+				Manager: &konfluxv1alpha1.ContainerSpec{
+					Resources: &corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU: resource.MustParse("500m"),
+						},
 					},
 				},
 			},
@@ -115,7 +133,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		g.Expect(managerContainer).NotTo(gomega.BeNil(), "manager container must exist in controller-manager deployment")
 		originalImage := managerContainer.Image
 
-		overlay := buildBuildControllerManagerOverlay(spec, nil)
+		overlay := buildBuildControllerManagerOverlay(spec, nil, "")
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -141,7 +159,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getBuildServiceDeployment(t)
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
@@ -176,7 +194,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 			},
 		}
 
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic and container should be unchanged
@@ -190,7 +208,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getBuildServiceDeployment(t)
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
@@ -203,7 +221,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
 
 		deployment := getBuildServiceDeployment(t)
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
@@ -219,7 +237,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getBuildServiceDeployment(t)
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).NotTo(gomega.BeNil())
@@ -235,7 +253,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getBuildServiceDeployment(t)
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).NotTo(gomega.BeNil())
@@ -250,7 +268,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 
 		deployment := getBuildServiceDeployment(t)
 		originalReplicas := deployment.Spec.Replicas
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).To(gomega.Equal(originalReplicas))
@@ -272,7 +290,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getBuildServiceDeployment(t)
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Check replicas
@@ -326,59 +344,40 @@ func (m *mockDiscoveryClient) ServerVersion() (*version.Info, error) {
 }
 
 func TestApplyBuildServiceDeploymentCustomizations_PaCWebhookURL(t *testing.T) {
-	t.Run("sets OpenShift PAC_WEBHOOK_URL on OpenShift", func(t *testing.T) {
+	t.Run("sets PAC_WEBHOOK_URL on non-OpenShift", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
 
 		deployment := getBuildServiceDeployment(t)
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newOpenShiftClusterInfo(t))
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newDefaultClusterInfo(t), "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
-		var pacURL string
-		for _, env := range managerContainer.Env {
-			if env.Name == pacWebhookURLEnvName {
-				pacURL = env.Value
-			}
-		}
-		g.Expect(pacURL).To(gomega.Equal(pacWebhookURLOpenShift))
+		pacURL, found := findPaCWebhookURLEnvValue(managerContainer.Env)
+		g.Expect(found).To(gomega.BeTrue(), "PAC_WEBHOOK_URL should be set on non-OpenShift")
+		g.Expect(pacURL).To(gomega.Equal(pacWebhookURLNonOpenShift))
 	})
 
-	t.Run("preserves manifest default PAC_WEBHOOK_URL on non-OpenShift", func(t *testing.T) {
+	t.Run("does not set PAC_WEBHOOK_URL on OpenShift", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
 
 		deployment := getBuildServiceDeployment(t)
-
-		// Capture the original value from the manifest
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
-		g.Expect(managerContainer).NotTo(gomega.BeNil())
-		var originalURL string
-		for _, env := range managerContainer.Env {
-			if env.Name == pacWebhookURLEnvName {
-				originalURL = env.Value
-			}
-		}
-		g.Expect(originalURL).NotTo(gomega.BeEmpty(), "manifest should have a default PAC_WEBHOOK_URL")
-
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newDefaultClusterInfo(t))
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newOpenShiftClusterInfo(t), "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
-		var pacURL string
-		for _, env := range managerContainer.Env {
-			if env.Name == pacWebhookURLEnvName {
-				pacURL = env.Value
-			}
-		}
-		g.Expect(pacURL).To(gomega.Equal(originalURL))
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		_, found := findPaCWebhookURLEnvValue(managerContainer.Env)
+		g.Expect(found).To(gomega.BeFalse(), "PAC_WEBHOOK_URL should NOT be set on OpenShift (auto-discover Route)")
 	})
 
-	t.Run("CR env override takes precedence over OpenShift default", func(t *testing.T) {
+	t.Run("CR env override takes precedence on non-OpenShift", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		customURL := "http://custom-pac.example.com:9999"
+		customURL := testCustomPaCURL
 		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
 			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
@@ -390,67 +389,249 @@ func TestApplyBuildServiceDeploymentCustomizations_PaCWebhookURL(t *testing.T) {
 		}
 
 		deployment := getBuildServiceDeployment(t)
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newOpenShiftClusterInfo(t))
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newDefaultClusterInfo(t), "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
-		// Strategic merge uses env name as merge key, so the last value wins.
-		// The CR value should take precedence.
-		var pacURL string
-		for _, env := range managerContainer.Env {
-			if env.Name == pacWebhookURLEnvName {
-				pacURL = env.Value
-			}
-		}
+		pacURL, found := findPaCWebhookURLEnvValue(managerContainer.Env)
+		g.Expect(found).To(gomega.BeTrue())
 		g.Expect(pacURL).To(gomega.Equal(customURL))
 	})
 
-	t.Run("nil ClusterInfo preserves manifest default", func(t *testing.T) {
+	t.Run("CR env override works on OpenShift", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
-
-		deployment := getBuildServiceDeployment(t)
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
-		var originalURL string
-		for _, env := range managerContainer.Env {
-			if env.Name == pacWebhookURLEnvName {
-				originalURL = env.Value
-			}
+		customURL := testCustomPaCURL
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+				Manager: &konfluxv1alpha1.ContainerSpec{
+					Env: []corev1.EnvVar{
+						{Name: pacWebhookURLEnvName, Value: customURL},
+					},
+				},
+			},
 		}
 
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
-
-		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
-		var pacURL string
-		for _, env := range managerContainer.Env {
-			if env.Name == pacWebhookURLEnvName {
-				pacURL = env.Value
-			}
-		}
-		g.Expect(pacURL).To(gomega.Equal(originalURL))
-	})
-
-	t.Run("sets OpenShift PAC_WEBHOOK_URL even with nil spec", func(t *testing.T) {
-		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
-
 		deployment := getBuildServiceDeployment(t)
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newOpenShiftClusterInfo(t))
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newOpenShiftClusterInfo(t), "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
-		var pacURL string
-		for _, env := range managerContainer.Env {
-			if env.Name == pacWebhookURLEnvName {
-				pacURL = env.Value
+		pacURL, found := findPaCWebhookURLEnvValue(managerContainer.Env)
+		g.Expect(found).To(gomega.BeTrue())
+		g.Expect(pacURL).To(gomega.Equal(customURL))
+	})
+
+	t.Run("nil ClusterInfo sets non-OpenShift default", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+
+		deployment := getBuildServiceDeployment(t)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		pacURL, found := findPaCWebhookURLEnvValue(managerContainer.Env)
+		g.Expect(found).To(gomega.BeTrue(), "nil ClusterInfo should be treated as non-OpenShift")
+		g.Expect(pacURL).To(gomega.Equal(pacWebhookURLNonOpenShift))
+	})
+}
+
+func TestApplyBuildServiceDeploymentCustomizations_WebhookConfig(t *testing.T) {
+	t.Run("updates volume reference to hashed ConfigMap", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+		configMapName := testWebhookConfigMapName
+
+		deployment := getBuildServiceDeployment(t)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, configMapName)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		var volFound bool
+		for _, vol := range deployment.Spec.Template.Spec.Volumes {
+			if vol.Name == webhookConfigVolName && vol.ConfigMap != nil && vol.ConfigMap.Name == configMapName {
+				volFound = true
+				break
 			}
 		}
-		g.Expect(pacURL).To(gomega.Equal(pacWebhookURLOpenShift))
+		g.Expect(volFound).To(gomega.BeTrue(), "webhook-config volume should reference the hashed ConfigMap")
+	})
+
+	t.Run("keeps placeholder name when webhook config is empty", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+
+		deployment := getBuildServiceDeployment(t)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// Volume should exist from the manifest with the placeholder name
+		var volFound bool
+		for _, vol := range deployment.Spec.Template.Spec.Volumes {
+			if vol.Name == webhookConfigVolName && vol.ConfigMap != nil {
+				g.Expect(vol.ConfigMap.Name).To(gomega.Equal(webhookConfigBaseName),
+					"volume should keep the placeholder ConfigMap name")
+				g.Expect(*vol.ConfigMap.Optional).To(gomega.BeTrue(),
+					"volume should be optional so the pod starts without a ConfigMap")
+				volFound = true
+				break
+			}
+		}
+		g.Expect(volFound).To(gomega.BeTrue(), "webhook-config volume should be present from manifest")
+	})
+
+	t.Run("different hashed names produce different volume references", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+
+		content1 := `{"https://github.com":"https://smee.example.com/hook1"}`
+		content2 := `{"https://github.com":"https://smee.example.com/hook2"}`
+
+		name1 := hashedconfigmap.BuildConfigMapName(webhookConfigBaseName, content1)
+		name2 := hashedconfigmap.BuildConfigMapName(webhookConfigBaseName, content2)
+		g.Expect(name1).NotTo(gomega.Equal(name2))
+
+		deployment1 := getBuildServiceDeployment(t)
+		err := applyBuildServiceDeploymentCustomizations(deployment1, spec, nil, name1)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		deployment2 := getBuildServiceDeployment(t)
+		err = applyBuildServiceDeploymentCustomizations(deployment2, spec, nil, name2)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		var vol1Name, vol2Name string
+		for _, vol := range deployment1.Spec.Template.Spec.Volumes {
+			if vol.Name == webhookConfigVolName {
+				vol1Name = vol.ConfigMap.Name
+			}
+		}
+		for _, vol := range deployment2.Spec.Template.Spec.Volumes {
+			if vol.Name == webhookConfigVolName {
+				vol2Name = vol.ConfigMap.Name
+			}
+		}
+		g.Expect(vol1Name).To(gomega.Equal(name1))
+		g.Expect(vol2Name).To(gomega.Equal(name2))
+	})
+
+	t.Run("re-applying with new hashed name does not duplicate volumes", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+
+		content1 := `{"https://github.com":"https://smee.example.com/hook1"}`
+		content2 := `{"https://github.com":"https://smee.example.com/hook2"}`
+
+		name1 := hashedconfigmap.BuildConfigMapName(webhookConfigBaseName, content1)
+		name2 := hashedconfigmap.BuildConfigMapName(webhookConfigBaseName, content2)
+		g.Expect(name1).NotTo(gomega.Equal(name2))
+
+		deployment := getBuildServiceDeployment(t)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, name1)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		err = applyBuildServiceDeploymentCustomizations(deployment, spec, nil, name2)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		var webhookVolCount int
+		var webhookVolCMName string
+		for _, vol := range deployment.Spec.Template.Spec.Volumes {
+			if vol.Name == webhookConfigVolName {
+				webhookVolCount++
+				g.Expect(vol.ConfigMap).NotTo(gomega.BeNil())
+				webhookVolCMName = vol.ConfigMap.Name
+			}
+		}
+		g.Expect(webhookVolCount).To(gomega.Equal(1), "should not create duplicate webhook-config volumes")
+		g.Expect(webhookVolCMName).To(gomega.Equal(name2), "should reference the latest hashed ConfigMap name")
+	})
+
+	t.Run("webhook config works with nil spec on OpenShift", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+		configMapName := testWebhookConfigMapName
+
+		deployment := getBuildServiceDeployment(t)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newOpenShiftClusterInfo(t), configMapName)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// Volume should reference the hashed ConfigMap
+		var volFound bool
+		for _, vol := range deployment.Spec.Template.Spec.Volumes {
+			if vol.Name == webhookConfigVolName && vol.ConfigMap != nil && vol.ConfigMap.Name == configMapName {
+				volFound = true
+				break
+			}
+		}
+		g.Expect(volFound).To(gomega.BeTrue(), "webhook-config volume should reference the hashed ConfigMap")
+
+		// PAC_WEBHOOK_URL should NOT be set on OpenShift
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		_, found := findPaCWebhookURLEnvValue(managerContainer.Env)
+		g.Expect(found).To(gomega.BeFalse())
+	})
+
+	t.Run("does not set PAC_WEBHOOK_URL when webhookURLs configured on non-OpenShift", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			WebhookURLs: map[string]string{
+				"https://gitlab.com": "https://smee.example.com/hook",
+			},
+		}
+		configMapName := testWebhookConfigMapName
+
+		deployment := getBuildServiceDeployment(t)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newDefaultClusterInfo(t), configMapName)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		_, found := findPaCWebhookURLEnvValue(managerContainer.Env)
+		g.Expect(found).To(gomega.BeFalse(), "PAC_WEBHOOK_URL should NOT be set when webhookURLs are configured")
+	})
+
+	t.Run("user PAC_WEBHOOK_URL override with webhookURLs on non-OpenShift", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		customURL := testCustomPaCURL
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+				Manager: &konfluxv1alpha1.ContainerSpec{
+					Env: []corev1.EnvVar{
+						{Name: pacWebhookURLEnvName, Value: customURL},
+					},
+				},
+			},
+			WebhookURLs: map[string]string{
+				"https://gitlab.com": "https://smee.example.com/hook",
+			},
+		}
+		configMapName := testWebhookConfigMapName
+
+		deployment := getBuildServiceDeployment(t)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newDefaultClusterInfo(t), configMapName)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		// User-specified PAC_WEBHOOK_URL is set even when webhookURLs are configured
+		pacURL, found := findPaCWebhookURLEnvValue(managerContainer.Env)
+		g.Expect(found).To(gomega.BeTrue())
+		g.Expect(pacURL).To(gomega.Equal(customURL))
+
+		// Webhook config volume should reference the hashed ConfigMap
+		var volFound bool
+		for _, vol := range deployment.Spec.Template.Spec.Volumes {
+			if vol.Name == webhookConfigVolName && vol.ConfigMap != nil && vol.ConfigMap.Name == configMapName {
+				volFound = true
+				break
+			}
+		}
+		g.Expect(volFound).To(gomega.BeTrue())
 	})
 }
 
@@ -479,7 +660,7 @@ func TestApplyBuildServiceDeploymentCustomizations_ResourceMerging(t *testing.T)
 			},
 		}
 
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
@@ -513,7 +694,7 @@ func TestApplyBuildServiceDeploymentCustomizations_ResourceMerging(t *testing.T)
 			},
 		}
 
-		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
