@@ -77,6 +77,11 @@ spec:
       buildControllerManager:
         replicas: 1
         manager:
+          # Skip TLS verification for PaC webhook URLs — the OpenShift e2e
+          # environment exposes Pipelines-as-Code via a route with a self-signed certificate.
+          env:
+            - name: PAC_WEBHOOK_INSECURE_SSL
+              value: "1"
           resources:
             requests:
               cpu: 30m
