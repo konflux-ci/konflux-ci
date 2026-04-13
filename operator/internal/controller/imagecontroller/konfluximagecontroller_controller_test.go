@@ -17,251 +17,268 @@ limitations under the License.
 package imagecontroller
 
 import (
-	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 )
 
+const imageControllerNamespace = "image-controller"
+
 var _ = Describe("KonfluxImageController Controller", func() {
-	Context("When reconciling a resource", func() {
+	Context("When reconciling a resource", Ordered, func() {
+		BeforeAll(func() {
+			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxImageController{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			})).To(Succeed())
 
-		ctx := context.Background()
+			// Wait for the Deployment rather than Ready=True: UpdateComponentStatuses
+			// gates Ready=True on ReadyReplicas == Replicas, which never happens in
+			// envtest (no kubelet → pods never start). Deployment existence is
+			// sufficient proof that the full manifest-apply codepath completed.
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      controllerManagerDeploymentName,
+					Namespace: imageControllerNamespace,
+				}, dep)).To(Succeed())
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
+		})
 
-		typeNamespacedName := types.NamespacedName{
-			Name: CRName,
-		}
-		konfluximagecontroller := &konfluxv1alpha1.KonfluxImageController{}
+		AfterAll(func() {
+			testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxImageController{ObjectMeta: metav1.ObjectMeta{Name: CRName}})
+		})
 
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind KonfluxImageController")
-			err := k8sClient.Get(ctx, typeNamespacedName, konfluximagecontroller)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &konfluxv1alpha1.KonfluxImageController{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: CRName,
-					},
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+		It("should create the image-controller namespace", func() {
+			ns := &corev1.Namespace{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: imageControllerNamespace}, ns)).To(Succeed())
+		})
+
+		It("should create the imagerepositories CRD", func() {
+			crd := &apiextensionsv1.CustomResourceDefinition{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "imagerepositories.appstudio.redhat.com"}, crd)).To(Succeed())
+		})
+
+		It("should create the leader-election Role", func() {
+			role := &rbacv1.Role{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      "image-controller-leader-election-role",
+				Namespace: imageControllerNamespace,
+			}, role)).To(Succeed())
+		})
+
+		It("should create the ClusterRoles", func() {
+			for _, name := range []string{
+				"image-controller-imagerepository-editor-role",
+				"image-controller-imagerepository-viewer-role",
+				"image-controller-manager-role",
+				"image-controller-metrics-auth-role",
+			} {
+				cr := &rbacv1.ClusterRole{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name}, cr)).To(Succeed())
 			}
 		})
 
-		AfterEach(func() {
-			resource := &konfluxv1alpha1.KonfluxImageController{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the specific resource instance KonfluxImageController")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+		It("should create the leader-election RoleBinding", func() {
+			rb := &rbacv1.RoleBinding{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      "image-controller-leader-election-rolebinding",
+				Namespace: imageControllerNamespace,
+			}, rb)).To(Succeed())
 		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
-			controllerReconciler := &KonfluxImageControllerReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ObjectStore: objectStore,
+
+		It("should create the ClusterRoleBindings", func() {
+			for _, name := range []string{
+				"image-controller-manager-rolebinding",
+				"image-controller-metrics-auth-rolebinding",
+			} {
+				crb := &rbacv1.ClusterRoleBinding{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name}, crb)).To(Succeed())
 			}
-
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
 		})
+
+		It("should create the ConfigMaps", func() {
+			// ConfigMap names include a kustomize-generated hash suffix that can change
+			// when manifest content changes. Match by prefix to stay resilient to that.
+			cmList := &corev1.ConfigMapList{}
+			Expect(k8sClient.List(ctx, cmList, runtimeclient.InNamespace(imageControllerNamespace))).To(Succeed())
+			Expect(cmList.Items).To(ContainElement(HaveField("Name", HavePrefix("image-controller-image-pruner-configmap-"))))
+			Expect(cmList.Items).To(ContainElement(HaveField("Name", HavePrefix("image-controller-notification-resetter-configmap-"))))
+		})
+
+		It("should create the metrics Service", func() {
+			svc := &corev1.Service{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      "image-controller-controller-manager-metrics-service",
+				Namespace: imageControllerNamespace,
+			}, svc)).To(Succeed())
+		})
+
+		It("should create the controller manager Deployment", func() {
+			dep := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      controllerManagerDeploymentName,
+				Namespace: imageControllerNamespace,
+			}, dep)).To(Succeed())
+		})
+
 	})
 
 	Context("Quay CA Bundle", func() {
-		var (
-			ctx                context.Context
-			imageController    *konfluxv1alpha1.KonfluxImageController
-			reconciler         *KonfluxImageControllerReconciler
-			typeNamespacedName types.NamespacedName
-		)
+		var imageController *konfluxv1alpha1.KonfluxImageController
 
-		reconcileImageController := func(ctx context.Context) {
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			ExpectWithOffset(1, err).NotTo(HaveOccurred())
-		}
-
-		getManagerDeployment := func(ctx context.Context) *appsv1.Deployment {
-			deployment := &appsv1.Deployment{}
-			err := k8sClient.Get(ctx, types.NamespacedName{
+		// waitForDeployment polls until the Deployment exists and returns it.
+		getDeployment := func(g Gomega) *appsv1.Deployment {
+			dep := &appsv1.Deployment{}
+			g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name:      controllerManagerDeploymentName,
-				Namespace: "image-controller",
-			}, deployment)
-			ExpectWithOffset(1, err).NotTo(HaveOccurred())
-			return deployment
+				Namespace: imageControllerNamespace,
+			}, dep)).To(Succeed())
+			return dep
 		}
 
 		BeforeEach(func() {
-			ctx = context.Background()
-			typeNamespacedName = types.NamespacedName{
-				Name: CRName,
-			}
-
-			reconciler = &KonfluxImageControllerReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ObjectStore: objectStore,
-			}
-
 			imageController = &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: CRName,
-				},
-				Spec: konfluxv1alpha1.KonfluxImageControllerSpec{},
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
+			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
 
-			err := k8sClient.Get(ctx, typeNamespacedName, &konfluxv1alpha1.KonfluxImageController{})
-			if errors.IsNotFound(err) {
-				Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
-			}
+			// Same reasoning as BeforeAll above: wait for Deployment existence, not Ready=True.
+			Eventually(getDeployment).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Not(BeNil()))
 		})
 
 		AfterEach(func() {
-			_ = k8sClient.Delete(ctx, imageController)
+			testutil.DeleteAndWait(ctx, k8sClient, imageController)
 		})
 
 		It("should NOT set QUAY_ADDITIONAL_CA when QuayCABundle is not configured", func() {
-			By("reconciling without QuayCABundle")
-			reconcileImageController(ctx)
+			Eventually(func(g Gomega) {
+				dep := getDeployment(g)
+				managerContainer := testutil.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
+				g.Expect(managerContainer).NotTo(BeNil())
 
-			By("verifying deployment has no QUAY_ADDITIONAL_CA env var")
-			deployment := getManagerDeployment(ctx)
-			managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
-			Expect(managerContainer).NotTo(BeNil())
-
-			var envVar *string
-			for _, e := range managerContainer.Env {
-				if e.Name == quayAdditionalCAEnvVar {
-					envVar = &e.Value
-					break
+				for _, e := range managerContainer.Env {
+					g.Expect(e.Name).NotTo(Equal(quayAdditionalCAEnvVar), "QUAY_ADDITIONAL_CA should not be set")
 				}
-			}
-			Expect(envVar).To(BeNil(), "QUAY_ADDITIONAL_CA should not be set when QuayCABundle is not configured")
 
-			By("verifying quay-ca-bundle volume still exists from base manifests")
-			var caVolume bool
-			for _, v := range deployment.Spec.Template.Spec.Volumes {
-				if v.Name == quayCABundleVolumeName {
-					caVolume = true
-					Expect(v.ConfigMap).NotTo(BeNil())
-					Expect(v.ConfigMap.Name).To(Equal(defaultQuayCAConfigMapName))
-					break
+				var caVolume *corev1.Volume
+				for i := range dep.Spec.Template.Spec.Volumes {
+					if dep.Spec.Template.Spec.Volumes[i].Name == quayCABundleVolumeName {
+						caVolume = &dep.Spec.Template.Spec.Volumes[i]
+						break
+					}
 				}
-			}
-			Expect(caVolume).To(BeTrue(), "quay-ca-bundle volume should exist from base manifests")
+				g.Expect(caVolume).NotTo(BeNil(), "quay-ca-bundle volume should exist from base manifests")
+				g.Expect(caVolume.ConfigMap).NotTo(BeNil())
+				g.Expect(caVolume.ConfigMap.Name).To(Equal(defaultQuayCAConfigMapName))
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 
 		It("should set QUAY_ADDITIONAL_CA when QuayCABundle is configured", func() {
-			By("updating the CR with QuayCABundle spec")
-			err := k8sClient.Get(ctx, typeNamespacedName, imageController)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, imageController)).To(Succeed())
 			imageController.Spec.QuayCABundle = &konfluxv1alpha1.QuayCABundleSpec{
 				ConfigMapName: "quay-ca-bundle",
 				Key:           "quay-ca.crt",
 			}
 			Expect(k8sClient.Update(ctx, imageController)).To(Succeed())
 
-			By("reconciling the resource")
-			reconcileImageController(ctx)
-
-			By("verifying QUAY_ADDITIONAL_CA is set on the manager container")
-			deployment := getManagerDeployment(ctx)
-			managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
-			Expect(managerContainer).NotTo(BeNil())
-
-			var foundEnv bool
-			for _, e := range managerContainer.Env {
-				if e.Name == quayAdditionalCAEnvVar {
-					foundEnv = true
-					Expect(e.Value).To(Equal("/etc/ssl/certs/quay-ca/quay-ca.crt"))
-					break
+			Eventually(func(g Gomega) {
+				dep := getDeployment(g)
+				managerContainer := testutil.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
+				g.Expect(managerContainer).NotTo(BeNil())
+				var found bool
+				for _, e := range managerContainer.Env {
+					if e.Name == quayAdditionalCAEnvVar {
+						found = true
+						g.Expect(e.Value).To(Equal("/etc/ssl/certs/quay-ca/quay-ca.crt"))
+						break
+					}
 				}
-			}
-			Expect(foundEnv).To(BeTrue(), "QUAY_ADDITIONAL_CA should be set")
+				g.Expect(found).To(BeTrue(), "QUAY_ADDITIONAL_CA should be set")
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 
 		It("should update ConfigMap volume name when custom ConfigMap is specified", func() {
-			By("creating CR with custom ConfigMap name")
-			err := k8sClient.Get(ctx, typeNamespacedName, imageController)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, imageController)).To(Succeed())
 			imageController.Spec.QuayCABundle = &konfluxv1alpha1.QuayCABundleSpec{
 				ConfigMapName: "my-custom-ca-bundle",
 				Key:           "ca.crt",
 			}
 			Expect(k8sClient.Update(ctx, imageController)).To(Succeed())
 
-			By("reconciling the resource")
-			reconcileImageController(ctx)
+			Eventually(func(g Gomega) {
+				dep := getDeployment(g)
 
-			By("verifying the ConfigMap volume name is updated")
-			deployment := getManagerDeployment(ctx)
-			var found bool
-			for _, v := range deployment.Spec.Template.Spec.Volumes {
-				if v.Name == quayCABundleVolumeName {
-					found = true
-					Expect(v.ConfigMap).NotTo(BeNil())
-					Expect(v.ConfigMap.Name).To(Equal("my-custom-ca-bundle"))
-					break
+				var caVolume *corev1.Volume
+				for i := range dep.Spec.Template.Spec.Volumes {
+					if dep.Spec.Template.Spec.Volumes[i].Name == quayCABundleVolumeName {
+						caVolume = &dep.Spec.Template.Spec.Volumes[i]
+						break
+					}
 				}
-			}
-			Expect(found).To(BeTrue(), "quay-ca-bundle volume should exist")
+				g.Expect(caVolume).NotTo(BeNil(), "quay-ca-bundle volume should exist")
+				g.Expect(caVolume.ConfigMap).NotTo(BeNil())
+				g.Expect(caVolume.ConfigMap.Name).To(Equal("my-custom-ca-bundle"))
 
-			By("verifying QUAY_ADDITIONAL_CA uses the correct key")
-			managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
-			Expect(managerContainer).NotTo(BeNil())
-			var foundEnv bool
-			for _, e := range managerContainer.Env {
-				if e.Name == quayAdditionalCAEnvVar {
-					foundEnv = true
-					Expect(e.Value).To(Equal("/etc/ssl/certs/quay-ca/ca.crt"))
-					break
+				managerContainer := testutil.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
+				g.Expect(managerContainer).NotTo(BeNil())
+				var found bool
+				for _, e := range managerContainer.Env {
+					if e.Name == quayAdditionalCAEnvVar {
+						found = true
+						g.Expect(e.Value).To(Equal("/etc/ssl/certs/quay-ca/ca.crt"))
+						break
+					}
 				}
-			}
-			Expect(foundEnv).To(BeTrue(), "QUAY_ADDITIONAL_CA should be set")
+				g.Expect(found).To(BeTrue(), "QUAY_ADDITIONAL_CA should be set with custom key")
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 
 		It("should remove QUAY_ADDITIONAL_CA when QuayCABundle is removed", func() {
-			By("creating CR with QuayCABundle")
-			err := k8sClient.Get(ctx, typeNamespacedName, imageController)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, imageController)).To(Succeed())
 			imageController.Spec.QuayCABundle = &konfluxv1alpha1.QuayCABundleSpec{
 				ConfigMapName: "quay-ca-bundle",
 				Key:           "quay-ca.crt",
 			}
 			Expect(k8sClient.Update(ctx, imageController)).To(Succeed())
 
-			By("reconciling with QuayCABundle")
-			reconcileImageController(ctx)
+			// Wait for QUAY_ADDITIONAL_CA to appear first.
+			Eventually(func(g Gomega) {
+				dep := getDeployment(g)
+				managerContainer := testutil.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
+				g.Expect(managerContainer).NotTo(BeNil())
+				var found bool
+				for _, e := range managerContainer.Env {
+					if e.Name == quayAdditionalCAEnvVar {
+						found = true
+						break
+					}
+				}
+				g.Expect(found).To(BeTrue(), "QUAY_ADDITIONAL_CA should be set before removal")
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 
-			By("removing QuayCABundle from the CR")
-			err = k8sClient.Get(ctx, typeNamespacedName, imageController)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, imageController)).To(Succeed())
 			imageController.Spec.QuayCABundle = nil
 			Expect(k8sClient.Update(ctx, imageController)).To(Succeed())
 
-			By("reconciling without QuayCABundle")
-			reconcileImageController(ctx)
-
-			By("verifying QUAY_ADDITIONAL_CA is no longer set")
-			deployment := getManagerDeployment(ctx)
-			managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
-			Expect(managerContainer).NotTo(BeNil())
-
-			for _, e := range managerContainer.Env {
-				Expect(e.Name).NotTo(Equal(quayAdditionalCAEnvVar),
-					"QUAY_ADDITIONAL_CA should not be present after removing QuayCABundle")
-			}
+			Eventually(func(g Gomega) {
+				dep := getDeployment(g)
+				managerContainer := testutil.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
+				g.Expect(managerContainer).NotTo(BeNil())
+				for _, e := range managerContainer.Env {
+					g.Expect(e.Name).NotTo(Equal(quayAdditionalCAEnvVar), "QUAY_ADDITIONAL_CA should not be present after removal")
+				}
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 	})
 })

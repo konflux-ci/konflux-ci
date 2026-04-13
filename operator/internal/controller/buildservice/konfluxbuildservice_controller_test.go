@@ -18,198 +18,138 @@ package buildservice
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	securityv1 "github.com/openshift/api/security/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/version"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 )
 
+const buildServiceNamespace = "build-service"
+
 var _ = Describe("KonfluxBuildService Controller", func() {
 	Context("When reconciling a resource", func() {
-
-		ctx := context.Background()
-
-		typeNamespacedName := types.NamespacedName{
-			Name:      CRName,
-			Namespace: "default", // TODO(user):Modify as needed
-		}
-		konfluxbuildservice := &konfluxv1alpha1.KonfluxBuildService{}
-
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind KonfluxBuildService")
-			err := k8sClient.Get(ctx, typeNamespacedName, konfluxbuildservice)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &konfluxv1alpha1.KonfluxBuildService{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      CRName,
-						Namespace: "default",
-					},
-					Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{},
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
-		})
-
-		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &konfluxv1alpha1.KonfluxBuildService{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the specific resource instance KonfluxBuildService")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
-			controllerReconciler := &KonfluxBuildServiceReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ObjectStore: objectStore,
-			}
-
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
+		It("should successfully reconcile the resource", func(ctx context.Context) {
+			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			})).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxBuildService{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				})
 			})
-			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+
+			// Wait for the Deployment rather than Ready=True: UpdateComponentStatuses
+			// gates Ready=True on ReadyReplicas == Replicas, which never happens in
+			// envtest (no kubelet → pods never start). Deployment existence is
+			// sufficient proof that the full manifest-apply codepath completed.
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      buildControllerManagerDeploymentName,
+					Namespace: buildServiceNamespace,
+				}, &appsv1.Deployment{})).To(Succeed())
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 	})
 
 	Context("OpenShift SecurityContextConstraints", func() {
 		const sccName = "appstudio-pipelines-scc"
 
-		var (
-			ctx                  context.Context
-			buildService         *konfluxv1alpha1.KonfluxBuildService
-			reconciler           *KonfluxBuildServiceReconciler
-			openShiftClusterInfo *clusterinfo.Info
-			defaultClusterInfo   *clusterinfo.Info
-			typeNamespacedName   types.NamespacedName
-		)
+		var buildService *konfluxv1alpha1.KonfluxBuildService
 
-		sccExists := func(ctx context.Context) bool {
+		sccExists := func() bool {
 			scc := &securityv1.SecurityContextConstraints{}
-			err := k8sClient.Get(ctx, types.NamespacedName{Name: sccName}, scc)
-			return err == nil
+			return k8sClient.Get(ctx, types.NamespacedName{Name: sccName}, scc) == nil
 		}
 
-		reconcileBuildService := func(ctx context.Context) {
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+		// startManagerWithClusterInfo starts a per-test manager with the given ClusterInfo
+		// and registers a DeferCleanup to stop it when the It block finishes.
+		startManagerWithClusterInfo := func(clusterInfo *clusterinfo.Info) {
+			mgrCtx, mgrCancel := context.WithCancel(testEnv.Ctx)
+			DeferCleanup(mgrCancel)
+			mgr := testutil.NewTestManager(testEnv)
+			Expect((&KonfluxBuildServiceReconciler{
+				Client:      mgr.GetClient(),
+				Scheme:      mgr.GetScheme(),
+				ObjectStore: objectStore,
+				ClusterInfo: clusterInfo,
+			}).SetupWithManager(mgr)).To(Succeed())
+			testutil.StartManagerWithContext(mgrCtx, mgr)
 		}
 
 		BeforeEach(func() {
-			ctx = context.Background()
-			typeNamespacedName = types.NamespacedName{
-				Name:      CRName,
-				Namespace: "default",
+			buildService = &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+		})
 
-			By("cleaning up any existing SCC from previous tests")
-			existingSCC := &securityv1.SecurityContextConstraints{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: sccName,
-				},
-			}
-			_ = k8sClient.Delete(ctx, existingSCC)
+		AfterEach(func() {
+			testutil.DeleteAndWait(ctx, k8sClient, buildService)
+			testutil.DeleteAndWait(ctx, k8sClient, &securityv1.SecurityContextConstraints{
+				ObjectMeta: metav1.ObjectMeta{Name: sccName},
+			})
+		})
 
-			By("creating mock cluster info for OpenShift and non-OpenShift platforms")
-			var err error
-			openShiftClusterInfo, err = clusterinfo.DetectWithClient(&buildServiceMockDiscoveryClient{
+		It("Should create SCC when running on OpenShift", func() {
+			openShiftClusterInfo, err := clusterinfo.DetectWithClient(&buildServiceMockDiscoveryClient{
 				resources: map[string]*metav1.APIResourceList{
 					"config.openshift.io/v1": {
-						APIResources: []metav1.APIResource{
-							{Kind: "ClusterVersion"},
-						},
+						APIResources: []metav1.APIResource{{Kind: "ClusterVersion"}},
 					},
 				},
 				serverVersion: &version.Info{GitVersion: "v1.29.0"},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			defaultClusterInfo, err = clusterinfo.DetectWithClient(&buildServiceMockDiscoveryClient{
+			startManagerWithClusterInfo(openShiftClusterInfo)
+
+			By("verifying the SCC was created")
+			Eventually(sccExists).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(BeTrue())
+		})
+
+		It("Should NOT create SCC when NOT running on OpenShift", func() {
+			defaultClusterInfo, err := clusterinfo.DetectWithClient(&buildServiceMockDiscoveryClient{
 				resources:     map[string]*metav1.APIResourceList{},
 				serverVersion: &version.Info{GitVersion: "v1.29.0"},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("creating the KonfluxBuildService resource")
-			buildService = &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      CRName,
-					Namespace: "default",
-				},
-				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{},
-			}
-			err = k8sClient.Get(ctx, typeNamespacedName, &konfluxv1alpha1.KonfluxBuildService{})
-			if errors.IsNotFound(err) {
-				Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
-			}
+			startManagerWithClusterInfo(defaultClusterInfo)
 
-			reconciler = &KonfluxBuildServiceReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ObjectStore: objectStore,
-				ClusterInfo: nil, // Will be set in individual tests
-			}
-		})
-
-		AfterEach(func() {
-			By("cleaning up the SCC")
-			existingSCC := &securityv1.SecurityContextConstraints{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: sccName,
-				},
-			}
-			_ = k8sClient.Delete(ctx, existingSCC)
-
-			By("cleaning up KonfluxBuildService resource")
-			_ = k8sClient.Delete(ctx, buildService)
-		})
-
-		It("Should create SCC when running on OpenShift", func() {
-			By("setting ClusterInfo to OpenShift")
-			reconciler.ClusterInfo = openShiftClusterInfo
-
-			By("reconciling the resource")
-			reconcileBuildService(ctx)
-
-			By("verifying the SCC was created")
-			Expect(sccExists(ctx)).To(BeTrue())
-		})
-
-		It("Should NOT create SCC when NOT running on OpenShift", func() {
-			By("setting ClusterInfo to non-OpenShift")
-			reconciler.ClusterInfo = defaultClusterInfo
-
-			By("reconciling the resource")
-			reconcileBuildService(ctx)
-
-			By("verifying the SCC was NOT created")
-			Expect(sccExists(ctx)).To(BeFalse())
+			By("waiting for the controller to apply manifests and create the build-service Deployment, then verifying no SCC was created")
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      buildControllerManagerDeploymentName,
+					Namespace: buildServiceNamespace,
+				}, dep)).To(Succeed())
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
+			Expect(sccExists()).To(BeFalse())
 		})
 
 		It("Should NOT create SCC when ClusterInfo is nil", func() {
-			By("keeping ClusterInfo as nil")
-			reconciler.ClusterInfo = nil
+			startManagerWithClusterInfo(nil)
 
-			By("reconciling the resource")
-			reconcileBuildService(ctx)
-
-			By("verifying the SCC was NOT created")
-			Expect(sccExists(ctx)).To(BeFalse())
+			By("waiting for the controller to apply manifests and create the build-service Deployment, then verifying no SCC was created")
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      buildControllerManagerDeploymentName,
+					Namespace: buildServiceNamespace,
+				}, dep)).To(Succeed())
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
+			Expect(sccExists()).To(BeFalse())
 		})
 	})
 })

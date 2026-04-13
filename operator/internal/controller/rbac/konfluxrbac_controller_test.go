@@ -17,67 +17,56 @@ limitations under the License.
 package rbac
 
 import (
-	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 )
 
 var _ = Describe("KonfluxRBAC Controller", func() {
-	Context("When reconciling a resource", func() {
+	Context("When reconciling a resource", Ordered, func() {
+		BeforeAll(func() {
+			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxRBAC{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			})).To(Succeed())
 
-		ctx := context.Background()
+			// The rbac manifests contain only ClusterRoles — no Deployments — so
+			// Ready=True is a reliable barrier: it fires as soon as all owned objects
+			// are applied without waiting for pod readiness.
+			cr := &konfluxv1alpha1.KonfluxRBAC{}
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, cr)).To(Succeed())
+				g.Expect(condition.IsConditionTrue(cr, condition.TypeReady)).To(BeTrue())
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
+		})
 
-		typeNamespacedName := types.NamespacedName{
-			Name:      CRName,
-			Namespace: "default",
+		AfterAll(func() {
+			testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxRBAC{ObjectMeta: metav1.ObjectMeta{Name: CRName}})
+		})
+
+		clusterRole := func(name string) func() {
+			return func() {
+				cr := &rbacv1.ClusterRole{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name}, cr)).To(Succeed())
+			}
 		}
-		konfluxrbac := &konfluxv1alpha1.KonfluxRBAC{}
 
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind KonfluxRBAC")
-			err := k8sClient.Get(ctx, typeNamespacedName, konfluxrbac)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &konfluxv1alpha1.KonfluxRBAC{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      CRName,
-						Namespace: "default",
-					},
-					// TODO(user): Specify other spec details if needed.
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
-		})
-
-		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &konfluxv1alpha1.KonfluxRBAC{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the specific resource instance KonfluxRBAC")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
-			controllerReconciler := &KonfluxRBACReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ObjectStore: objectStore,
-			}
-
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
-		})
+		It("should create the konflux-admin-user-actions-batch ClusterRole", clusterRole("konflux-admin-user-actions-batch"))
+		It("should create the konflux-admin-user-actions-core ClusterRole", clusterRole("konflux-admin-user-actions-core"))
+		It("should create the konflux-admin-user-actions-extra ClusterRole", clusterRole("konflux-admin-user-actions-extra"))
+		It("should create the konflux-contributor-user-actions-core ClusterRole", clusterRole("konflux-contributor-user-actions-core"))
+		It("should create the konflux-contributor-user-actions-extra ClusterRole", clusterRole("konflux-contributor-user-actions-extra"))
+		It("should create the konflux-maintainer-user-actions-core ClusterRole", clusterRole("konflux-maintainer-user-actions-core"))
+		It("should create the konflux-maintainer-user-actions-extra ClusterRole", clusterRole("konflux-maintainer-user-actions-extra"))
+		It("should create the konflux-self-access-reviewer ClusterRole", clusterRole("konflux-self-access-reviewer"))
+		It("should create the konflux-viewer-user-actions-core ClusterRole", clusterRole("konflux-viewer-user-actions-core"))
+		It("should create the konflux-viewer-user-actions-extra ClusterRole", clusterRole("konflux-viewer-user-actions-extra"))
 	})
 })
