@@ -150,10 +150,10 @@ cp scripts/deploy-local.env.template scripts/deploy-local.env
 Create the E2E test configuration (only needed when running E2E tests):
 ```bash
 cp test/e2e/e2e.env.template test/e2e/e2e.env
-# Edit test/e2e/e2e.env with GH_ORG, GH_TOKEN, QUAY_DOCKERCONFIGJSON, etc.
+# Edit test/e2e/e2e.env with GH_ORG, GH_TOKEN, etc.
 ```
 
-See `test/e2e/e2e.env.template` for all E2E variables and descriptions. You do not need to set `RELEASE_SERVICE_CATALOG_REVISION` in `e2e.env`; it is read from `test/e2e/release-service-catalog-revision` when unset.
+See `test/e2e/e2e.env.template` for all E2E variables and descriptions. Release infrastructure (managed namespace, ImageRepositories, ReleasePlan, etc.) is set up automatically by `operator/hack/setup-release.sh`, which the test calls during `BeforeAll`. You do not need to set `RELEASE_SERVICE_CATALOG_REVISION` in `e2e.env`; it is read from `test/e2e/release-service-catalog-revision` when unset.
 
 ## Running the test
 
@@ -170,6 +170,6 @@ source test/e2e/e2e.env
 
 The script deploys test resources and runs the conformance suite.
 
-Note: The deploy step uses `scripts/deploy-local.env` (GitHub App, Quay for image-controller, Smee). The E2E step uses `test/e2e/e2e.env` (GitHub/Quay for E2E flows only). They are separate so you never load deploy secrets into the shell where you only run tests.
+Note: The deploy step uses `scripts/deploy-local.env` (GitHub App, Quay for image-controller, Smee). The E2E step uses `test/e2e/e2e.env` (GitHub token for PaC flows). They are separate so you never load deploy secrets into the shell where you only run tests.
 
 The source code of the E2E tests is in this repo under `test/go-tests/tests/conformance/`.
