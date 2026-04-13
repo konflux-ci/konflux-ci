@@ -271,11 +271,6 @@ jobs:
           cd test/go-tests
           go test . ./pkg/...
 
-      - name: Set release catalog revision
-        if: matrix.test_scope == 'integration+e2e'
-        working-directory: ${{ github.workspace }}
-        run: grep 'RELEASE_SERVICE_CATALOG_REVISION=' test/e2e/release-service-catalog-revision | sed 's/^export //' >> $GITHUB_ENV
-
       - name: Set build pipeline bundle (min)
         if: matrix.test_scope == 'integration+e2e'
         working-directory: ${{ github.workspace }}
@@ -292,9 +287,7 @@ jobs:
           # Test framework reads GITHUB_TOKEN and MY_GITHUB_ORG (see pkg/clients/common/controller.go, e2e.env.template)
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           MY_GITHUB_ORG: ${{ secrets.GH_ORG }}
-          QUAY_DOCKERCONFIGJSON: ${{ secrets.QUAY_DOCKERCONFIGJSON }}
-          RELEASE_CATALOG_TA_QUAY_TOKEN: ${{ secrets.RELEASE_CATALOG_TA_QUAY_TOKEN }}
-          E2E_APPLICATIONS_NAMESPACE: user-ns2
+          E2E_APPLICATIONS_NAMESPACE: default-tenant
         run: |
           ./test/e2e/run-e2e.sh \
             -ginkgo.github-output \

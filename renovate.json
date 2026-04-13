@@ -241,18 +241,18 @@
       "extractVersionTemplate": "^v?(?<version>.*)$"
     },
     {
-      "description": "Track release-service-catalog development branch SHA (single source of truth for E2E and workflows)",
+      "description": "Track release-service-catalog development branch SHA in setup-release.sh",
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["test/e2e/release-service-catalog-revision"],
+      "fileMatch": ["operator/hack/setup-release\\.sh$"],
       "matchStrings": [
-        "# renovate: datasource=git-refs depName=https://github.com/konflux-ci/release-service-catalog",
-        "RELEASE_SERVICE_CATALOG_REVISION=(?<currentDigest>[a-f0-9]{40})"
+        "# renovate: datasource=git-refs depName=https://github.com/konflux-ci/release-service-catalog currentValue=development",
+        "CATALOG_REVISION=\"(?<currentDigest>[a-f0-9]{40})\""
       ],
       "datasourceTemplate": "git-refs",
       "depNameTemplate": "https://github.com/konflux-ci/release-service-catalog",
       "currentValueTemplate": "development",
-      "autoReplaceStringTemplate": "RELEASE_SERVICE_CATALOG_REVISION={{newDigest}}"
+      "autoReplaceStringTemplate": "CATALOG_REVISION=\"{{newDigest}}\""
     },
     {
       "description": "Track cert-manager Helm chart in Update Third-Party Manifests workflow",
