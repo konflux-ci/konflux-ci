@@ -120,11 +120,17 @@ if [ "${INSTALL_METHOD}" = "build" ]; then
     echo ""
 fi
 
-# Step 1: Setup Kind cluster
-echo "========================================="
-echo "Step 1: Creating Kind cluster"
-echo "========================================="
-"${SCRIPT_DIR}/setup-kind-local-cluster.sh"
+# Step 1: Setup Kind cluster (skip when using an existing kubeconfig, e.g. Tekton kind-aws-provision)
+if [ "${DEPLOY_LOCAL_SKIP_KIND:-0}" = "1" ]; then
+    echo "========================================="
+    echo "Step 1: Skipped (DEPLOY_LOCAL_SKIP_KIND=1 — using current KUBECONFIG)"
+    echo "========================================="
+else
+    echo "========================================="
+    echo "Step 1: Creating Kind cluster"
+    echo "========================================="
+    "${SCRIPT_DIR}/setup-kind-local-cluster.sh"
+fi
 
 # Step 2: Deploy dependencies
 echo ""

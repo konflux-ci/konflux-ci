@@ -1,0 +1,101 @@
+# Prototype Task: run Konflux E2E tests against a pre-deployed cluster.
+# This Task assumes Konflux has already been deployed (e.g. by deploy-konflux).
+#
+# Requires a ServiceAccount that can read the cluster-access Secret in this namespace.
+#
+# task-runner: kubeconfig fetch + copy kubectl/yq/jq to /mnt/e2e-shared/bin.
+# go-toolset: port-forward, go test (integration + conformance).
+#
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: konflux-e2e-tests
+spec:
+  description: >-
+    Fetch kubeconfig from Secret, copy shared CLIs, wait for Konflux CR Ready,
+    then run deploy-test-resources, integration tests, and conformance tests.
+  volumes:
+    - name: e2e-shared
+      emptyDir: {}
+  workspaces:
+    - name: source
+      description: konflux-ci repository (git clone)
+  params:
+    - name: cluster-access-secret
+      description: Secret name containing kubeconfig (e.g. kfg-<pipelinerun name>)
+      type: string
+    - name: kubeconfig-secret-key
+      description: Key inside the Secret holding kubeconfig bytes
+      type: string
+      default: kubeconfig
+    - name: konflux-ready-timeout
+      type: string
+      default: "30m"
+    - name: release-ta-oci-storage
+      description: Optional; passed through to conformance trusted-artifacts flow
+      type: string
+      default: ""
+  stepTemplate:
+    volumeMounts:
+      - name: e2e-shared
+        mountPath: /mnt/e2e-shared
+  steps:
+    - name: fetch-kubeconfig
+      image: quay.io/konflux-ci/task-runner:0.2.0@sha256:ba65585f5c8b0a74dc51590e95961765322427d1d62ccd4eb742ff0442291985
+      workingDir: $(workspaces.source.path)
+      env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        cd "$(workspaces.source.path)"
+        exec bash scripts/operator-e2e/tekton-fetch-kubeconfig.sh "$(params.cluster-access-secret)" "$(params.kubeconfig-secret-key)"
+    - name: copy-shared-tools
+      image: quay.io/konflux-ci/task-runner:0.2.0@sha256:ba65585f5c8b0a74dc51590e95961765322427d1d62ccd4eb742ff0442291985
+      workingDir: $(workspaces.source.path)
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        exec bash scripts/operator-e2e/tekton-copy-shared-tools.sh
+    - name: run-tests
+      computeResources:
+        requests:
+          cpu: "500m"
+          memory: "2Gi"
+        limits:
+          cpu: "2"
+          memory: "8Gi"
+      workingDir: $(workspaces.source.path)
+      image: registry.access.redhat.com/ubi10/go-toolset@sha256:b7f71131f21be923baaaf952309b7940ae7c6a55ca44a7a91460adc6c8afd4de
+      env:
+        - name: GH_ORG
+          valueFrom:
+            secretKeyRef:
+              name: konflux-operator-e2e-credentials
+              key: GH_ORG
+        - name: GH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: konflux-operator-e2e-credentials
+              key: GH_TOKEN
+        - name: QUAY_DOCKERCONFIGJSON
+          valueFrom:
+            secretKeyRef:
+              name: konflux-operator-e2e-credentials
+              key: QUAY_DOCKERCONFIGJSON
+        - name: RELEASE_CATALOG_TA_QUAY_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: konflux-operator-e2e-credentials
+              key: RELEASE_CATALOG_TA_QUAY_TOKEN
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        cd "$(workspaces.source.path)"
+        exec env \
+          E2E_KONFLUX_READY_TIMEOUT="$(params.konflux-ready-timeout)" \
+          E2E_RELEASE_TA_OCI_STORAGE="$(params.release-ta-oci-storage)" \
+          bash scripts/operator-e2e/tekton-run-e2e-tests.sh "$(workspaces.source.path)"

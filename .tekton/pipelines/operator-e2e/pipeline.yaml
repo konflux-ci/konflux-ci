@@ -1,0 +1,204 @@
+# Kind on AWS (tekton-integration-catalog) -> clone konflux-ci -> operator E2E
+# (overrides optional) -> deprovision.
+#
+# The deploy Task builds and runs bin/manager in-process
+# (no operator image). This pipeline intentionally does not support local image-based
+# operator install to keep the first upstream iteration minimal.
+#
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: operator-e2e-pipeline
+spec:
+  description: >-
+    Provision Kind (AWS), clone konflux-ci, deploy Konflux to Ready (skip in-cluster Kind),
+    run e2e integration + conformance in a separate Task, then deprovision.
+  params:
+    - name: git-url
+      type: string
+      description: konflux-ci git URL
+      default: https://github.com/konflux-ci/konflux-ci.git
+    - name: revision
+      type: string
+      description: Git commit SHA, branch, or tag to test
+    - name: overrides-yaml
+      type: string
+      description: >-
+        Optional YAML consumed by operator/cmd/overrides (empty string to skip). Do not embed
+        secrets; pipeline params are persisted on PipelineRuns/TaskRuns and are not treated as confidential.
+      default: ""
+    - name: konflux-ready-timeout
+      type: string
+      default: "30m"
+    - name: oci-container-repo
+      type: string
+      description: >-
+        OCI registry/repo prefix for kind-aws provision/deprovision artifacts (logs/state); no tag
+        suffix (PipelineRun name is appended). Must be set by the PipelineRun.
+    - name: oci-container-repo-credentials-secret
+      type: string
+      description: >-
+        Name of a Secret in the PipelineRun namespace with registry credentials for the
+        oci-container-repo prefix (kind-aws oci-credentials for artifact push/pull). Must be set by the PipelineRun.
+    - name: aws-credentials-secret
+      type: string
+      description: AWS credentials secret name for kind-aws-provision
+      default: konflux-mapt-us-east-1
+    - name: deprovision-aws-credentials-secret
+      type: string
+      description: AWS secret for kind-aws-deprovision (often same as provision; override if your catalog differs)
+      default: konflux-mapt-us-east-1
+    - name: release-ta-oci-storage
+      type: string
+      description: Optional OCI ref for conformance trusted-artifacts
+      default: ""
+    - name: catalog-url
+      type: string
+      default: https://github.com/konflux-ci/tekton-integration-catalog.git
+    - name: catalog-revision
+      type: string
+      description: >-
+        Pinned commit of tekton-integration-catalog for kind-aws and other catalog tasks (bump when upgrading tasks).
+      # renovate: datasource=git-refs depName=https://github.com/konflux-ci/tekton-integration-catalog
+      default: 489cd0a413f52fd3fac90f38694f8fe51871be4a
+  workspaces:
+    - name: source
+    - name: git-auth
+  tasks:
+    - name: provision-kind-cluster
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: $(params.catalog-url)
+          - name: revision
+            value: $(params.catalog-revision)
+          - name: pathInRepo
+            value: tasks/mapt-oci/kind-aws-spot/provision/0.2/kind-aws-provision.yaml
+      params:
+        - name: secret-aws-credentials
+          value: $(params.aws-credentials-secret)
+        - name: cluster-access-secret-name
+          value: kfg-$(context.pipelineRun.name)
+        - name: id
+          value: $(context.pipelineRun.name)
+        - name: tags
+          value: owner=konflux-ci,project=konflux-ci,created-by=operator-e2e-pipeline
+        - name: debug
+          value: "false"
+        - name: ownerKind
+          value: PipelineRun
+        - name: ownerName
+          value: $(context.pipelineRun.name)
+        - name: ownerUid
+          value: $(context.pipelineRun.uid)
+        - name: oci-ref
+          value: $(params.oci-container-repo):$(context.pipelineRun.name)
+        - name: oci-credentials
+          value: $(params.oci-container-repo-credentials-secret)
+        - name: extra-port-mappings
+          value: >-
+            '[{\"containerPort\":30012,\"hostPort\":8180,\"protocol\":\"TCP\"}]'
+        - name: cpus
+          value: "16"
+        - name: memory
+          value: "32"
+        - name: spot
+          value: "false"
+        - name: harden-control-plane
+          value: "true"
+    - name: clone-repository
+      params:
+        - name: url
+          value: $(params.git-url)
+        - name: revision
+          value: $(params.revision)
+        - name: subdirectory
+          value: ""
+      taskRef:
+        params:
+          - name: name
+            value: git-clone
+          - name: bundle
+            value: quay.io/konflux-ci/tekton-catalog/task-git-clone:0.1@sha256:3ced9a6b9d8520773d3ffbf062190515a362ecda11e72f56e38e4dd980294b57
+          - name: kind
+            value: task
+        resolver: bundles
+      workspaces:
+        - name: output
+          workspace: source
+        - name: basic-auth
+          workspace: git-auth
+    - name: deploy-konflux
+      runAfter:
+        - provision-kind-cluster
+        - clone-repository
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: $(params.git-url)
+          - name: revision
+            value: $(params.revision)
+          - name: pathInRepo
+            value: .tekton/tasks/deploy-konflux/task.yaml
+      workspaces:
+        - name: source
+          workspace: source
+      params:
+        - name: cluster-access-secret
+          value: kfg-$(context.pipelineRun.name)
+        - name: overrides-yaml
+          value: $(params.overrides-yaml)
+        - name: konflux-ready-timeout
+          value: $(params.konflux-ready-timeout)
+        - name: oci-container-repo
+          value: $(params.oci-container-repo)
+        - name: oci-container-repo-credentials-secret
+          value: $(params.oci-container-repo-credentials-secret)
+        - name: pipeline-run-name
+          value: $(context.pipelineRun.name)
+    - name: konflux-e2e-tests
+      runAfter:
+        - deploy-konflux
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: $(params.git-url)
+          - name: revision
+            value: $(params.revision)
+          - name: pathInRepo
+            value: .tekton/tasks/konflux-e2e-tests/task.yaml
+      workspaces:
+        - name: source
+          workspace: source
+      params:
+        - name: cluster-access-secret
+          value: kfg-$(context.pipelineRun.name)
+        - name: konflux-ready-timeout
+          value: $(params.konflux-ready-timeout)
+        - name: release-ta-oci-storage
+          value: $(params.release-ta-oci-storage)
+  finally:
+    - name: deprovision-kind-cluster
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: $(params.catalog-url)
+          - name: revision
+            value: $(params.catalog-revision)
+          - name: pathInRepo
+            value: tasks/mapt-oci/kind-aws-spot/deprovision/0.1/kind-aws-deprovision.yaml
+      params:
+        - name: secret-aws-credentials
+          value: $(params.deprovision-aws-credentials-secret)
+        - name: id
+          value: $(context.pipelineRun.name)
+        - name: cluster-access-secret
+          value: kfg-$(context.pipelineRun.name)
+        - name: oci-container
+          value: $(params.oci-container-repo):$(context.pipelineRun.name)
+        - name: oci-credentials
+          value: $(params.oci-container-repo-credentials-secret)
