@@ -206,6 +206,7 @@ rules:
   - konfluxapplicationapis
   - konfluxbuildservices
   - konfluxcertmanagers
+  - konfluxclis
   - konfluxdefaulttenants
   - konfluxenterprisecontracts
   - konfluxes
@@ -232,6 +233,7 @@ rules:
   - konfluxapplicationapis/finalizers
   - konfluxbuildservices/finalizers
   - konfluxcertmanagers/finalizers
+  - konfluxclis/finalizers
   - konfluxdefaulttenants/finalizers
   - konfluxenterprisecontracts/finalizers
   - konfluxes/finalizers
@@ -252,6 +254,7 @@ rules:
   - konfluxapplicationapis/status
   - konfluxbuildservices/status
   - konfluxcertmanagers/status
+  - konfluxclis/status
   - konfluxdefaulttenants/status
   - konfluxenterprisecontracts/status
   - konfluxes/status
@@ -556,6 +559,14 @@ rules:
 - apiGroups:
   - rbac.authorization.k8s.io
   resourceNames:
+  - konflux-cli-configmaps-read-binding
+  resources:
+  - rolebindings
+  verbs:
+  - bind
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
   - public-ec-cm
   - public-ecp
   resources:
@@ -605,6 +616,15 @@ rules:
   - rbac.authorization.k8s.io
   resourceNames:
   - integration-service-leader-election-role
+  resources:
+  - roles
+  verbs:
+  - bind
+  - escalate
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - konflux-cli-configmaps-read
   resources:
   - roles
   verbs:

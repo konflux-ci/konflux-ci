@@ -34,6 +34,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/applicationapi"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/buildservice"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/certmanager"
+	clictrl "github.com/konflux-ci/konflux-ci/operator/internal/controller/cli"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/defaulttenant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/enterprisecontract"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/imagecontroller"
@@ -139,6 +140,9 @@ type KonfluxReconciler struct {
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxsegmentbridges,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxsegmentbridges/status,verbs=get;patch;update
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxsegmentbridges/finalizers,verbs=update
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxclis,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxclis/status,verbs=get;patch;update
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxclis/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -248,6 +252,11 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
+	// Apply the KonfluxCLI CR
+	if err := r.applyKonfluxCLI(ctx, tc); err != nil {
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxCLI")
+	}
+
 	// Cleanup orphaned sub-CRs - delete any sub-CRs with our owner label
 	// that weren't applied during this reconcile (e.g., disabled optional components)
 	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, konflux.Name, konfluxCleanupGVKs,
@@ -327,6 +336,13 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxApplicationAPI status")
 	}
 	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, applicationAPI, "application-api"))
+
+	// Get and copy status from the KonfluxCLI CR
+	cliCR := &konfluxv1alpha1.KonfluxCLI{}
+	if err := r.Get(ctx, client.ObjectKey{Name: clictrl.CRName}, cliCR); err != nil {
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxCLI status")
+	}
+	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, cliCR, "cli"))
 
 	// Get and copy status from the KonfluxImageController CR (if enabled)
 	if konflux.Spec.IsImageControllerEnabled() {
@@ -757,6 +773,24 @@ func (r *KonfluxReconciler) applyKonfluxSegmentBridge(ctx context.Context, tc *t
 	return tc.ApplyOwned(ctx, segmentBridgeCR)
 }
 
+// applyKonfluxCLI creates or updates the KonfluxCLI CR.
+func (r *KonfluxReconciler) applyKonfluxCLI(ctx context.Context, tc *tracking.Client) error {
+	log := logf.FromContext(ctx)
+
+	cliCR := &konfluxv1alpha1.KonfluxCLI{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: konfluxv1alpha1.GroupVersion.String(),
+			Kind:       "KonfluxCLI",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: clictrl.CRName,
+		},
+	}
+
+	log.Info("Applying KonfluxCLI CR", "name", cliCR.Name)
+	return tc.ApplyOwned(ctx, cliCR)
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
@@ -791,5 +825,6 @@ func (r *KonfluxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// Watch KonfluxDefaultTenant for any changes to copy conditions to Konflux CR
 		Owns(&konfluxv1alpha1.KonfluxDefaultTenant{}).
 		Owns(&konfluxv1alpha1.KonfluxSegmentBridge{}).
+		Owns(&konfluxv1alpha1.KonfluxCLI{}).
 		Complete(r)
 }
