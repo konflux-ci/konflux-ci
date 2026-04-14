@@ -433,7 +433,7 @@ spec:
         - daemon off;
         - -c
         - /etc/nginx/nginx.conf
-        image: registry.access.redhat.com/ubi9/nginx-124@sha256:5f74c8297926209136221c135b27d756867aa0d478e256a53fd4e0dc0acc148c
+        image: registry.access.redhat.com/ubi9/nginx-124@sha256:a58ed1b3229e6fb750a8459b2c1bdd7a278aa4c65e96ae40957fc7fba37ca89f
         livenessProbe:
           failureThreshold: 3
           httpGet:
