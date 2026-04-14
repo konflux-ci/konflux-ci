@@ -17,6 +17,7 @@ resources:
 - bases/konflux.konflux-ci.dev_konfluxinternalregistries.yaml
 - bases/konflux.konflux-ci.dev_konfluxdefaulttenants.yaml
 - bases/konflux.konflux-ci.dev_konfluxsegmentbridges.yaml
+- bases/konflux.konflux-ci.dev_konfluxclis.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

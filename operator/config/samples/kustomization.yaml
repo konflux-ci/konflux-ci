@@ -15,4 +15,5 @@ resources:
 - konflux_v1alpha1_konfluxcertmanager.yaml
 - konflux_v1alpha1_konfluxinternalregistry.yaml
 - konflux_v1alpha1_konfluxdefaulttenant.yaml
+- konflux_v1alpha1_konfluxcli.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

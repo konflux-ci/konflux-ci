@@ -1,0 +1,266 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: konflux-cli
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: konflux-cli-configmaps-read
+  namespace: konflux-cli
+rules:
+- apiGroups:
+  - ""
+  resourceNames:
+  - create-tenant
+  - setup-release
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: konflux-cli-configmaps-read-binding
+  namespace: konflux-cli
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: konflux-cli-configmaps-read
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: system:authenticated
+---
+apiVersion: v1
+data:
+  create-tenant.sh: "#!/bin/bash -e\n\n# Script to create a new Konflux tenant namespace
+    with all required resources\n\nusage() {\n    cat <<EOF\nUsage: $(basename \"$0\")
+    -n <namespace> -u <admin-user>\n\nCreate a new Konflux tenant namespace with all
+    required resources.\n\nRequired arguments:\n  -n, --namespace    Name of the tenant
+    namespace to create\n  -u, --admin-user   Name of the admin user (e.g., user1@konflux.dev)\n\nExample:\n
+    \ $(basename \"$0\") -n my-tenant -u user1@konflux.dev\nEOF\n    exit 1\n}\n\n#
+    Parse arguments\nwhile [[ $# -gt 0 ]]; do\n    case $1 in\n        -n|--namespace)\n
+    \           NAMESPACE=\"$2\"\n            shift 2\n            ;;\n        -u|--admin-user)\n
+    \           ADMIN_USER=\"$2\"\n            shift 2\n            ;;\n        -h|--help)\n
+    \           usage\n            ;;\n        *)\n            echo \"Unknown option:
+    $1\"\n            usage\n            ;;\n    esac\ndone\n\n# Validate required
+    arguments\nif [[ -z \"${NAMESPACE}\" ]]; then\n    echo \"Error: Namespace is
+    required\"\n    usage\nfi\n\nif [[ -z \"${ADMIN_USER}\" ]]; then\n    echo \"Error:
+    Admin user is required\"\n    usage\nfi\n\necho \"\U0001F3D7️  Creating Konflux
+    tenant namespace: ${NAMESPACE}\"\n\n# Create the namespace with tenant label\necho
+    \"\U0001F4E6 Creating namespace...\"\nkubectl apply -f - <<EOF\napiVersion: v1\nkind:
+    Namespace\nmetadata:\n  name: ${NAMESPACE}\n  labels:\n    konflux-ci.dev/type:
+    tenant\nEOF\n\n# Create the konflux-integration-runner ServiceAccount\necho \"\U0001F464
+    Creating konflux-integration-runner ServiceAccount...\"\nkubectl apply -f - <<EOF\napiVersion:
+    v1\nkind: ServiceAccount\nmetadata:\n  name: konflux-integration-runner\n  namespace:
+    ${NAMESPACE}\nEOF\n\n# Create RoleBinding for konflux-integration-runner ServiceAccount\necho
+    \"\U0001F517 Creating RoleBinding for konflux-integration-runner...\"\nkubectl
+    apply -f - <<EOF\napiVersion: rbac.authorization.k8s.io/v1\nkind: RoleBinding\nmetadata:\n
+    \ name: konflux-integration-runner\n  namespace: ${NAMESPACE}\nroleRef:\n  apiGroup:
+    rbac.authorization.k8s.io\n  kind: ClusterRole\n  name: konflux-integration-runner\nsubjects:\n-
+    kind: ServiceAccount\n  name: konflux-integration-runner\n  namespace: ${NAMESPACE}\nEOF\n\n#
+    Create RoleBinding for admin user\necho \"\U0001F451 Creating RoleBinding for
+    admin user: ${ADMIN_USER}...\"\nkubectl apply -f - <<EOF\napiVersion: rbac.authorization.k8s.io/v1\nkind:
+    RoleBinding\nmetadata:\n  name: ${ADMIN_USER%%@*}-konflux-admin\n  namespace:
+    ${NAMESPACE}\nroleRef:\n  apiGroup: rbac.authorization.k8s.io\n  kind: ClusterRole\n
+    \ name: konflux-admin-user-actions\nsubjects:\n- kind: User\n  name: ${ADMIN_USER}\n
+    \ apiGroup: rbac.authorization.k8s.io\nEOF\n\necho \"✅ Tenant namespace '${NAMESPACE}'
+    created successfully!\"\necho \"\"\necho \"Resources created:\"\necho \"  - Namespace:
+    ${NAMESPACE} (with label konflux-ci.dev/type: tenant)\"\necho \"  - ServiceAccount:
+    konflux-integration-runner\"\necho \"  - RoleBinding: konflux-integration-runner
+    -> ClusterRole/konflux-integration-runner\"\necho \"  - RoleBinding: ${ADMIN_USER%%@*}-konflux-admin
+    -> ClusterRole/konflux-admin-user-actions\"\n"
+kind: ConfigMap
+metadata:
+  name: create-tenant
+  namespace: konflux-cli
+---
+apiVersion: v1
+data:
+  setup-release.sh: "#!/bin/bash -e\n\n# Script to set up release resources for a
+    Konflux application.\n# Creates a managed namespace with all required resources
+    (EnterpriseContractPolicy,\n# ImageRepositories, ReleasePlanAdmission) and a ReleasePlan
+    in the tenant namespace.\n\nset -o pipefail\nset -eu\n\nWAIT_TIMEOUT=120  # seconds
+    to wait for ImageRepositories to become ready\nPOLL_INTERVAL=5   # seconds between
+    polls\n\nusage() {\n    cat <<EOF\nUsage: $(basename \"$0\") [OPTIONS]\n\nSet
+    up release resources for a Konflux application. Creates a managed namespace\nwith
+    ImageRepositories, EnterpriseContractPolicy, and ReleasePlanAdmission,\nand a
+    ReleasePlan in the tenant namespace.\n\nOptions:\n  -t, --tenant-namespace    Source
+    tenant namespace (default: default-tenant)\n  -m, --managed-namespace   Managed
+    namespace for releases (default: default-managed-tenant)\n  -a, --application
+    \        Application name (default: sample-component)\n  -p, --product-name        Product
+    name to add to the ReleaseNotes (default: --application)\n  -v, --product-version
+    \    Product version to add to the ReleaseNotes (default: 0.1)\n  -c, --component
+    \          Component name (repeatable for multiple components;\n                            if
+    omitted, auto-detects all components from the application)\n  -e, --conforma-policy
+    \    EnterpriseContractPolicy name to copy from\n                            enterprise-contract-service
+    namespace (default: default)\n  -r, --release-name        Name for the ReleasePlan
+    and ReleasePlanAdmission\n                            resources (default: local-release)\n
+    \ -R, --catalog-revision    Release service catalog git revision (default: production)\n
+    \ -I, --image-name-prefix   Prefix for Quay image repository names. Must be unique\n
+    \                           across concurrent CI runs to avoid credential collisions.\n
+    \                           (default: auto-generated from managed namespace +
+    random suffix)\n  -h, --help                Show this help message\n\nExamples:\n
+    \ # Use all defaults with auto-detected components\n  $(basename \"$0\")\n\n  #
+    Set up release for a specific application (auto-detects its components)\n  $(basename
+    \"$0\") -a my-app\n\n  # Specify a custom managed namespace\n  $(basename \"$0\")
+    -m my-managed-ns\n\n  # Explicitly specify components\n  $(basename \"$0\") -c
+    component-a -c component-b\n\n  # Full customization\n  $(basename \"$0\") -t
+    my-tenant -m my-managed -a my-app -c comp1 -c comp2\nEOF\n    exit 1\n}\n\n# Wait
+    for an ImageRepository to reach \"ready\" state\nwait_for_imagerepository() {\n
+    \   local name=\"$1\"\n    local elapsed=0\n    while [[ $elapsed -lt $WAIT_TIMEOUT
+    ]]; do\n        local state\n        state=$(kubectl get imagerepository \"${name}\"
+    -n \"${MANAGED_NS}\" \\\n            -o jsonpath='{.status.state}' 2>/dev/null
+    || true)\n        if [[ \"${state}\" == \"ready\" ]]; then\n            return
+    0\n        fi\n        sleep \"${POLL_INTERVAL}\"\n        elapsed=$((elapsed
+    + POLL_INTERVAL))\n    done\n    echo \"Error: ImageRepository '${name}' did not
+    become ready within ${WAIT_TIMEOUT}s\"\n    echo \"  Current state: $(kubectl
+    get imagerepository \"${name}\" -n \"${MANAGED_NS}\" -o jsonpath='{.status.state}'
+    2>/dev/null || echo 'unknown')\"\n    echo \"  Message: $(kubectl get imagerepository
+    \"${name}\" -n \"${MANAGED_NS}\" -o jsonpath='{.status.message}' 2>/dev/null ||
+    echo 'none')\"\n    return 1\n}\n\n# Parse arguments\nTENANT_NS=\"default-tenant\"\nMANAGED_NS=\"default-managed-tenant\"\nAPPLICATION=\"sample-component\"\nPRODUCT_VERSION=\"0.1\"\nCONFORMA_POLICY=\"default\"\nRELEASE_NAME=\"local-release\"\nCATALOG_REVISION=\"production\"\nIMAGE_NAME_PREFIX=\"\"\nCOMPONENTS=()\n\nwhile
+    [[ $# -gt 0 ]]; do\n    case $1 in\n        -t|--tenant-namespace)\n            TENANT_NS=\"$2\"\n
+    \           shift 2\n            ;;\n        -m|--managed-namespace)\n            MANAGED_NS=\"$2\"\n
+    \           shift 2\n            ;;\n        -a|--application)\n            APPLICATION=\"$2\"\n
+    \           shift 2\n            ;;\n        -p|--product-name)\n            PRODUCT_NAME=\"$2\"\n
+    \           shift 2\n            ;;\n        -v|--product-version)\n            PRODUCT_VERSION=\"$2\"\n
+    \           shift 2\n            ;;\n        -c|--component)\n            COMPONENTS+=(\"$2\")\n
+    \           shift 2\n            ;;\n        -e|--conforma-policy)\n            CONFORMA_POLICY=\"$2\"\n
+    \           shift 2\n            ;;\n        -r|--release-name)\n            RELEASE_NAME=\"$2\"\n
+    \           shift 2\n            ;;\n        -R|--catalog-revision)\n            CATALOG_REVISION=\"$2\"\n
+    \           shift 2\n            ;;\n        -I|--image-name-prefix)\n            IMAGE_NAME_PREFIX=\"$2\"\n
+    \           shift 2\n            ;;\n        -h|--help)\n            usage\n            ;;\n
+    \       *)\n            echo \"Unknown option: $1\"\n            usage\n            ;;\n
+    \   esac\ndone\n\n# Parse PRODUCT_NAME default value based on APPLICATION value
+    (after args parsing)\nPRODUCT_NAME=${PRODUCT_NAME:-$APPLICATION}\n\n# Generate
+    a unique image name prefix to avoid credential collisions between\n# concurrent
+    CI runs that share the same Quay organization.\nif [[ -z \"${IMAGE_NAME_PREFIX}\"
+    ]]; then\n    RANDOM_SUFFIX=$(od -An -tx1 -N3 /dev/urandom | tr -d ' ')\n    IMAGE_NAME_PREFIX=\"${MANAGED_NS}-${RANDOM_SUFFIX}\"\nfi\n\nIS_OPENSHIFT=false\nif
+    kubectl api-resources --api-group=config.openshift.io &>/dev/null; then\n    IS_OPENSHIFT=true\nfi\n\n#
+    Auto-detect components if none specified\nif [[ ${#COMPONENTS[@]} -eq 0 ]]; then\n
+    \   echo \"\U0001F50D No components specified, auto-detecting from application
+    '${APPLICATION}' in namespace '${TENANT_NS}'...\"\n    mapfile -t COMPONENTS <
+    <(kubectl get components -n \"${TENANT_NS}\" \\\n        -o jsonpath=\"{range
+    .items[?(@.spec.application==\\\"${APPLICATION}\\\")]}{.metadata.name}{\\\"\\n\\\"}{end}\"
+    \\\n        2>/dev/null | grep -v '^$')\n\n    if [[ ${#COMPONENTS[@]} -eq 0 ]];
+    then\n        echo \"Error: No components found for application '${APPLICATION}'
+    in namespace '${TENANT_NS}'.\"\n        echo \"Make sure the application and its
+    components exist, or specify components explicitly with -c.\"\n        exit 1\n
+    \   fi\n    echo \"   Found ${#COMPONENTS[@]} component(s): ${COMPONENTS[*]}\"\nfi\n\necho
+    \"\"\necho \"\U0001F3D7️  Setting up release resources\"\necho \"   Tenant namespace:
+    \ ${TENANT_NS}\"\necho \"   Managed namespace: ${MANAGED_NS}\"\necho \"   Application:
+    \      ${APPLICATION}\"\necho \"   Product Name:      ${PRODUCT_NAME}\"\necho
+    \"   Product Version:   ${PRODUCT_VERSION}\"\necho \"   EC policy:         ${CONFORMA_POLICY}\"\necho
+    \"   Release name:      ${RELEASE_NAME}\"\necho \"   Catalog revision:  ${CATALOG_REVISION}\"\necho
+    \"   Image name prefix: ${IMAGE_NAME_PREFIX}\"\necho \"   Components:        ${COMPONENTS[*]}\"\necho
+    \"\"\n\n# Step 1: Create managed namespace\necho \"\U0001F4E6 Creating managed
+    namespace '${MANAGED_NS}'...\"\nkubectl apply -f - <<EOF\napiVersion: v1\nkind:
+    Namespace\nmetadata:\n  name: ${MANAGED_NS}\n  labels:\n    konflux-ci.dev/type:
+    tenant\nEOF\n\n# Step 2: On OpenShift, create a ConfigMap to inject the cluster-wide
+    trusted CA bundle\nif [[ \"${IS_OPENSHIFT}\" == \"true\" ]]; then\n    echo \"\U0001F512
+    OpenShift detected — creating trusted-ca ConfigMap in '${MANAGED_NS}'...\"\n    kubectl
+    apply -f - <<EOF\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: trusted-ca\n
+    \ namespace: ${MANAGED_NS}\n  labels:\n    config.openshift.io/inject-trusted-cabundle:
+    \"true\"\ndata: {}\nEOF\nfi\n\n# Step 3: Copy EnterpriseContractPolicy from enterprise-contract-service
+    namespace\necho \"\U0001F4DC Copying EnterpriseContractPolicy '${CONFORMA_POLICY}'
+    from enterprise-contract-service namespace...\"\nkubectl get enterprisecontractpolicy
+    \"${CONFORMA_POLICY}\" -n enterprise-contract-service -o json \\\n    | jq 'del(.metadata.resourceVersion,
+    .metadata.uid, .metadata.creationTimestamp, .metadata.generation, .metadata.managedFields,
+    .metadata.ownerReferences, .status) | .metadata.namespace = \"'\"${MANAGED_NS}\"'\"'
+    \\\n    | kubectl apply -f -\n\n# Step 4: Create RoleBinding for authenticated
+    users\necho \"\U0001F517 Creating RoleBinding for authenticated users...\"\nkubectl
+    apply -f - <<EOF\napiVersion: rbac.authorization.k8s.io/v1\nkind: RoleBinding\nmetadata:\n
+    \ name: authenticated-konflux-viewer\n  namespace: ${MANAGED_NS}\nroleRef:\n  apiGroup:
+    rbac.authorization.k8s.io\n  kind: ClusterRole\n  name: konflux-viewer-user-actions\nsubjects:\n
+    \ - kind: Group\n    name: system:authenticated\n    apiGroup: rbac.authorization.k8s.io\nEOF\n\n#
+    Step 5: Create ImageRepository for trusted-artifacts\necho \"\U0001F5BC️  Creating
+    ImageRepository for trusted-artifacts...\"\nkubectl apply -f - <<EOF\napiVersion:
+    appstudio.redhat.com/v1alpha1\nkind: ImageRepository\nmetadata:\n  name: trusted-artifacts\n
+    \ namespace: ${MANAGED_NS}\nspec:\n  image:\n    name: ${IMAGE_NAME_PREFIX}/trusted-artifacts\n
+    \   visibility: public\nEOF\n\n# Step 6: Create ImageRepository for each component\nfor
+    COMPONENT in \"${COMPONENTS[@]}\"; do\n    echo \"\U0001F5BC️  Creating ImageRepository
+    for component '${COMPONENT}'...\"\n    kubectl apply -f - <<EOF\napiVersion: appstudio.redhat.com/v1alpha1\nkind:
+    ImageRepository\nmetadata:\n  name: ${COMPONENT}\n  namespace: ${MANAGED_NS}\nspec:\n
+    \ image:\n    name: ${IMAGE_NAME_PREFIX}/${COMPONENT}\n    visibility: public\nEOF\ndone\n\n#
+    Step 7: Wait for all ImageRepositories to become ready\necho \"\"\necho \"⏳ Waiting
+    for ImageRepositories to become ready (timeout: ${WAIT_TIMEOUT}s)...\"\n\nALL_REPOS=(\"trusted-artifacts\"
+    \"${COMPONENTS[@]}\")\n\nfor repo in \"${ALL_REPOS[@]}\"; do\n    echo \"   Waiting
+    for '${repo}'...\"\n    wait_for_imagerepository \"${repo}\"\n    echo \"   ✅
+    '${repo}' is ready\"\ndone\n\n# Step 8: Fetch dynamic values from ImageRepository
+    status\necho \"\"\necho \"\U0001F4E1 Fetching image URLs and push secrets from
+    ImageRepository status...\"\n\nTA_PUSH_SECRET=$(kubectl get imagerepository trusted-artifacts
+    -n \"${MANAGED_NS}\" \\\n    -o jsonpath='{.status.credentials.push-secret}')\nTA_IMAGE_URL=$(kubectl
+    get imagerepository trusted-artifacts -n \"${MANAGED_NS}\" \\\n    -o jsonpath='{.status.image.url}')\necho
+    \"   trusted-artifacts:\"\necho \"     Image URL:   ${TA_IMAGE_URL}\"\n\ndeclare
+    -A COMP_PUSH_SECRETS\ndeclare -A COMP_IMAGE_URLS\n\nfor COMPONENT in \"${COMPONENTS[@]}\";
+    do\n    COMP_PUSH_SECRETS[\"${COMPONENT}\"]=$(kubectl get imagerepository \"${COMPONENT}\"
+    -n \"${MANAGED_NS}\" \\\n        -o jsonpath='{.status.credentials.push-secret}')\n
+    \   COMP_IMAGE_URLS[\"${COMPONENT}\"]=$(kubectl get imagerepository \"${COMPONENT}\"
+    -n \"${MANAGED_NS}\" \\\n        -o jsonpath='{.status.image.url}')\n    echo
+    \"   ${COMPONENT}:\"\n    echo \"     Image URL:   ${COMP_IMAGE_URLS[\"${COMPONENT}\"]}\"\ndone\n\n#
+    Step 9: Create release-pipeline ServiceAccount with push secrets\necho \"\"\necho
+    \"\U0001F464 Creating release-pipeline ServiceAccount...\"\n\n# Build the secrets
+    list YAML\nSECRETS_YAML=\"  - name: ${TA_PUSH_SECRET}\"\nfor COMPONENT in \"${COMPONENTS[@]}\";
+    do\n    SECRETS_YAML=\"${SECRETS_YAML}\n  - name: ${COMP_PUSH_SECRETS[\"${COMPONENT}\"]}\"\ndone\n\nkubectl
+    apply -f - <<EOF\napiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: release-pipeline\n
+    \ namespace: ${MANAGED_NS}\nsecrets:\n${SECRETS_YAML}\nEOF\n\n# Step 10: Create
+    RoleBinding for release-pipeline ServiceAccount\necho \"\U0001F517 Creating RoleBinding
+    for release-pipeline ServiceAccount...\"\nkubectl apply -f - <<EOF\napiVersion:
+    rbac.authorization.k8s.io/v1\nkind: RoleBinding\nmetadata:\n  name: release-pipeline-resource-role-binding\n
+    \ namespace: ${MANAGED_NS}\nroleRef:\n  apiGroup: rbac.authorization.k8s.io\n
+    \ kind: ClusterRole\n  name: release-pipeline-resource-role\nsubjects:\n  - kind:
+    ServiceAccount\n    name: release-pipeline\n    namespace: ${MANAGED_NS}\nEOF\n\n#
+    Step 11: Copy SSO credentials from tpa-realm-clients secret in tsf namespace\nSSO_SECRET_CREATED=false\nSSO_ACCOUNT=release\nSSO_TOKEN=$(kubectl
+    get secret tpa-realm-clients -n tsf \\\n  --ignore-not-found -o jsonpath=\"{.data.$SSO_ACCOUNT}\")\nif
+    [ -n \"$SSO_TOKEN\" ]; then\n    echo \"\U0001F511 Creating SSO credentials secret
+    from tpa-realm-clients...\"\n    kubectl apply -f - <<EOF\napiVersion: v1\nkind:
+    Secret\nmetadata:\n  name: release-sso-secret\n  namespace: ${MANAGED_NS}\ntype:
+    Opaque\nstringData:\n  sso_account: ${SSO_ACCOUNT}\ndata:\n  sso_token: ${SSO_TOKEN}\nEOF\n
+    \   SSO_SECRET_CREATED=true\nfi\nif [ \"$SSO_SECRET_CREATED\" == false ]; then\n
+    \   echo \"⚠️ Secret 'tpa-realm-client' in namespace 'tsf' not found, skipping
+    SSO credentials creation\"\nfi\n\n# Step 12: Create ReleasePlanAdmission\necho
+    \"\U0001F4CB Creating ReleasePlanAdmission...\"\n\n# Build the components mapping
+    YAML\nCOMPONENTS_YAML=\"\"\nfor COMPONENT in \"${COMPONENTS[@]}\"; do\n    COMPONENTS_YAML=\"${COMPONENTS_YAML}\n
+    \       - name: ${COMPONENT}\n          repository: ${COMP_IMAGE_URLS[\"${COMPONENT}\"]}\"\ndone\n\nkubectl
+    apply -f - <<EOF\napiVersion: appstudio.redhat.com/v1alpha1\nkind: ReleasePlanAdmission\nmetadata:\n
+    \ name: ${RELEASE_NAME}\n  namespace: ${MANAGED_NS}\n  labels:\n    release.appstudio.openshift.io/auto-release:
+    'true'\nspec:\n  applications:\n    - ${APPLICATION}\n  origin: ${TENANT_NS}\n
+    \ policy: ${CONFORMA_POLICY}\n  data:\n    mapping:\n      defaults:\n        pushSourceContainer:
+    false\n        tags:\n          - latest\n          - '{{ git_sha }}'\n      components:${COMPONENTS_YAML}\n
+    \   releaseNotes:\n      product_name: '${PRODUCT_NAME}'\n      product_version:
+    '${PRODUCT_VERSION}'\n  pipeline:\n    pipelineRef:\n      resolver: git\n      ociStorage:
+    ${TA_IMAGE_URL}\n      useEmptyDir: true\n      params:\n        - name: url\n
+    \         value: \"https://github.com/konflux-ci/release-service-catalog.git\"\n
+    \       - name: revision\n          value: ${CATALOG_REVISION}\n        - name:
+    pathInRepo\n          value: \"pipelines/managed/push-to-external-registry/push-to-external-registry.yaml\"\n
+    \   serviceAccountName: release-pipeline\n    taskRunSpecs:\n      - pipelineTaskName:
+    push-snapshot\n        stepSpecs:\n          - name: push-snapshot\n            computeResources:\n
+    \             requests:\n                cpu: 10m\n                memory: 256Mi\n
+    \             limits:\n                memory: 1Gi\nEOF\n\n# Step 13: Create ReleasePlan
+    in tenant namespace\necho \"\U0001F4CB Creating ReleasePlan in tenant namespace
+    '${TENANT_NS}'...\"\nkubectl apply -f - <<EOF\napiVersion: appstudio.redhat.com/v1alpha1\nkind:
+    ReleasePlan\nmetadata:\n  labels:\n    release.appstudio.openshift.io/auto-release:
+    \"true\"\n    release.appstudio.openshift.io/standing-attribution: \"true\"\n
+    \ name: ${RELEASE_NAME}\n  namespace: ${TENANT_NS}\nspec:\n  application: ${APPLICATION}\n
+    \ target: ${MANAGED_NS}\nEOF\n\necho \"\"\necho \"✅ Release setup completed successfully!\"\necho
+    \"\"\necho \"Resources created in managed namespace '${MANAGED_NS}':\"\necho \"
+    \ - Namespace: ${MANAGED_NS} (with label konflux-ci.dev/type: tenant)\"\nif [[
+    \"${IS_OPENSHIFT}\" == \"true\" ]]; then\n    echo \"  - ConfigMap: trusted-ca
+    (OpenShift trusted CA bundle injection)\"\nfi\necho \"  - EnterpriseContractPolicy:
+    ${CONFORMA_POLICY}\"\necho \"  - RoleBinding: authenticated-konflux-viewer ->
+    ClusterRole/konflux-viewer-user-actions\"\necho \"  - ImageRepository: trusted-artifacts\"\nfor
+    COMPONENT in \"${COMPONENTS[@]}\"; do\n    echo \"  - ImageRepository: ${COMPONENT}\"\ndone\necho
+    \"  - ServiceAccount: release-pipeline (with push secrets)\"\necho \"  - RoleBinding:
+    release-pipeline-resource-role-binding -> ClusterRole/release-pipeline-resource-role\"\nif
+    [[ \"${SSO_SECRET_CREATED}\" == \"true\" ]]; then\n    echo \"  - Secret: release-sso-secret
+    (SSO credentials from 'tpa-realm-clients')\"\nelse\n    echo \"  - Secret: release-sso-secret
+    (SKIPPED - Secret 'tpa-realm-client' in 'tsf' not found)\"\nfi\necho \"  - ReleasePlanAdmission:
+    ${RELEASE_NAME}\"\necho \"\"\necho \"Resources created in tenant namespace '${TENANT_NS}':\"\necho
+    \"  - ReleasePlan: ${RELEASE_NAME} -> ${MANAGED_NS}\"\n"
+kind: ConfigMap
+metadata:
+  name: setup-release
+  namespace: konflux-cli

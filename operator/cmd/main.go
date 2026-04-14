@@ -49,6 +49,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/applicationapi"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/buildservice"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/certmanager"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/cli"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/defaulttenant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/enterprisecontract"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/imagecontroller"
@@ -422,6 +423,14 @@ func main() {
 		GetDefaultSegmentKey: segment.GetDefaultWriteKey,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxSegmentBridge")
+		os.Exit(1)
+	}
+	if err = (&cli.KonfluxCLIReconciler{
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		ObjectStore: objectStore,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "KonfluxCLI")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

@@ -19,7 +19,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 )
 
-//go:embed all:application-api all:build-service all:enterprise-contract all:image-controller all:integration all:namespace-lister all:rbac all:release all:ui all:info all:cert-manager all:registry all:default-tenant all:segment-bridge
+//go:embed all:application-api all:build-service all:cli all:enterprise-contract all:image-controller all:integration all:namespace-lister all:rbac all:release all:ui all:info all:cert-manager all:registry all:default-tenant all:segment-bridge
 var embeddedFS embed.FS
 
 // Component represents a known upstream component.
@@ -29,6 +29,7 @@ const (
 	ApplicationAPI     Component = "application-api"
 	BuildService       Component = "build-service"
 	CertManager        Component = "cert-manager"
+	CLI                Component = "cli"
 	DefaultTenant      Component = "default-tenant"
 	EnterpriseContract Component = "enterprise-contract"
 	ImageController    Component = "image-controller"
@@ -48,6 +49,7 @@ func AllComponents() []Component {
 		ApplicationAPI,
 		RBAC,
 		CertManager,
+		CLI,
 		DefaultTenant,
 		EnterpriseContract,
 		Release,

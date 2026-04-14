@@ -1,0 +1,30 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: konflux-cli-configmaps-read
+  namespace: konflux-cli
+rules:
+- apiGroups:
+  - ""
+  resourceNames:
+  - create-tenant
+  - setup-release
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: konflux-cli-configmaps-read-binding
+  namespace: konflux-cli
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: konflux-cli-configmaps-read
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: system:authenticated
