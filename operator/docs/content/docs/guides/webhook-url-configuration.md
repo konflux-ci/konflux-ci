@@ -133,3 +133,26 @@ spec:
 
 Note that setting `PAC_WEBHOOK_URL` will override the webhook config JSON for
 any repositories not matched by a specific prefix in `webhookURLs`.
+
+## Disabling TLS verification for webhooks
+
+The webhook endpoint may use a self-signed certificate, which is common in test
+or development environments. When the build-service configures webhooks on the
+git provider, TLS verification will fail against such certificates.
+
+To skip TLS verification, set the `PAC_WEBHOOK_INSECURE_SSL` environment
+variable:
+
+```yaml
+spec:
+  buildService:
+    spec:
+      buildControllerManager:
+        manager:
+          env:
+            - name: PAC_WEBHOOK_INSECURE_SSL
+              value: "1"
+```
+
+> **Warning:** Only use this in test or development environments. Production
+> deployments should use properly signed certificates.
