@@ -1,5 +1,0 @@
-- op: add
-  path: /spec/template/spec/containers/0/env/-
-  value:
-    name: AUTH_USERNAME_HEADER
-    value: Impersonate-User
