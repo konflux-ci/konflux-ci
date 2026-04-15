@@ -115,6 +115,8 @@ generate-apiref: genref ## Generate API reference documentation in markdown form
 generate-docs: generate-apiref ## Generate all documentation (includes API reference).
 	@echo "Adding examples to homepage..."
 	@bash hack/genref/add-examples-to-github-pages.sh config/samples docs/content/docs/examples.md
+	@echo "Generating llms.txt..."
+	@bash hack/generate-llms-txt.sh docs/content/docs docs/static/llms.txt
 	@echo "Documentation generation complete"
 
 .PHONY: docs-serve

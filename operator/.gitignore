@@ -39,6 +39,7 @@ docs/.hugo_build.lock
 docs/content/docs/reference/*.md
 !docs/content/docs/reference/_index.md
 docs/content/docs/examples.md
+docs/static/llms.txt
 
 # Temporary assets (if any)
 docs/assets/icons/*
