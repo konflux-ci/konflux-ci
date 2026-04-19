@@ -58,8 +58,6 @@ func runSetupRelease(appName, componentName, tenantNS, managedNS string) error {
 // failures during the release.
 var e2eECPExclusions = []string{
 	"cve",
-	"tasks.required_tasks_found:clair-scan",
-	"tasks.required_tasks_found:roxctl-scan",
 	"tasks.required_tasks_found:clamav-scan",
 	"tasks.required_tasks_found:tpa-scan",
 	"tasks.required_tasks_found:deprecated-image-check",
