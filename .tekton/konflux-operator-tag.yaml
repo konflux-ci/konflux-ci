@@ -11,10 +11,10 @@ metadata:
       event == "push" && target_branch.matches("refs/tags/v0[.]1[.].*")
   creationTimestamp: null
   labels:
-    appstudio.openshift.io/application: konflux-operator
-    appstudio.openshift.io/component: konflux-operator
+    appstudio.openshift.io/application: konflux-operator-0-1
+    appstudio.openshift.io/component: konflux-operator-0-1
     pipelines.appstudio.openshift.io/type: build
-  name: konflux-operator-on-tag
+  name: konflux-operator-0-1-on-tag
   namespace: konflux-vanguard-tenant
 spec:
   params:
@@ -23,7 +23,7 @@ spec:
     - name: revision
       value: '{{revision}}'
     - name: output-image
-      value: quay.io/redhat-user-workloads/konflux-vanguard-tenant/konflux-operator:{{revision}}-{{git_tag}}
+      value: quay.io/redhat-user-workloads/konflux-vanguard-tenant/konflux-operator-0-1:{{revision}}-{{git_tag}}
     - name: dockerfile
       value: Containerfile
     - name: path-context
@@ -41,7 +41,7 @@ spec:
   pipelineRef:
     name: build-pipeline
   taskRunTemplate:
-    serviceAccountName: build-pipeline-konflux-operator
+    serviceAccountName: build-pipeline-konflux-operator-0-1
   workspaces:
     - name: git-auth
       secret:
