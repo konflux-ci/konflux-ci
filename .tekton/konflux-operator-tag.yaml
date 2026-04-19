@@ -8,7 +8,7 @@ metadata:
     pipelinesascode.tekton.dev/cancel-in-progress: "false"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-cel-expression: |-
-      event == "push" && target_branch.matches("refs/tags/v0[.]1[.].*")
+      event == "push" && target_branch.matches("refs/tags/v0[.]2[.].*")
   creationTimestamp: null
   labels:
     appstudio.openshift.io/application: konflux-operator
