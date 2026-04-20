@@ -211,7 +211,7 @@ allowing webhooks that has no secret"
 ```
 
 Go to your GitHub App settings and verify a webhook secret is configured. See
-[Pipelines as Code documentation](https://pipelinesascode.com/docs/install/github_apps/#manual-setup)
+[Pipelines-as-Code documentation](https://pipelinesascode.com/docs/providers/github-app/#manual-setup)
 for instructions.
 
 ### Unable to create Application with Component using the Konflux UI

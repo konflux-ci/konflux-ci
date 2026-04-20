@@ -12,7 +12,7 @@ and deploy its credentials as secrets in the cluster.
 ## Creating a GitHub App
 
 Create a GitHub App following the
-[Pipelines-as-Code documentation](https://pipelinesascode.com/docs/install/github_apps/#manual-setup).
+[Pipelines-as-Code documentation](https://pipelinesascode.com/docs/providers/github-app/#manual-setup).
 
 {{% alert color="info" %}}
 That tutorial asks you to generate and set a **Webhook secret** when creating the App.
