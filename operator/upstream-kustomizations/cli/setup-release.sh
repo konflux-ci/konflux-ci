@@ -3,6 +3,7 @@
 # Script to set up release resources for a Konflux application.
 # Creates a managed namespace with all required resources (EnterpriseContractPolicy,
 # ImageRepositories, ReleasePlanAdmission) and a ReleasePlan in the tenant namespace.
+# Note: this script needs to be compatible with Bash 3.x to support both macOS and Linux.
 
 set -o pipefail
 set -eu
@@ -156,7 +157,9 @@ fi
 # Auto-detect components if none specified
 if [[ ${#COMPONENTS[@]} -eq 0 ]]; then
     echo "🔍 No components specified, auto-detecting from application '${APPLICATION}' in namespace '${TENANT_NS}'..."
-    mapfile -t COMPONENTS < <(kubectl get components -n "${TENANT_NS}" \
+    while IFS= read -r line; do
+        COMPONENTS+=("$line")
+    done < <(kubectl get components -n "${TENANT_NS}" \
         -o jsonpath="{range .items[?(@.spec.application==\"${APPLICATION}\")]}{.metadata.name}{\"\n\"}{end}" \
         2>/dev/null | grep -v '^$')
 
@@ -285,16 +288,17 @@ TA_IMAGE_URL=$(kubectl get imagerepository trusted-artifacts -n "${MANAGED_NS}" 
 echo "   trusted-artifacts:"
 echo "     Image URL:   ${TA_IMAGE_URL}"
 
-declare -A COMP_PUSH_SECRETS
-declare -A COMP_IMAGE_URLS
-
-for COMPONENT in "${COMPONENTS[@]}"; do
-    COMP_PUSH_SECRETS["${COMPONENT}"]=$(kubectl get imagerepository "${COMPONENT}" -n "${MANAGED_NS}" \
+# Per-component ImageRepository push secret and image URL; index i matches COMPONENTS[i].
+REPO_PUSH_SECRETS=()
+REPO_IMAGE_URLS=()
+for ((i = 0; i < ${#COMPONENTS[@]}; i++)); do
+    COMPONENT="${COMPONENTS[i]}"
+    REPO_PUSH_SECRETS[i]=$(kubectl get imagerepository "${COMPONENT}" -n "${MANAGED_NS}" \
         -o jsonpath='{.status.credentials.push-secret}')
-    COMP_IMAGE_URLS["${COMPONENT}"]=$(kubectl get imagerepository "${COMPONENT}" -n "${MANAGED_NS}" \
+    REPO_IMAGE_URLS[i]=$(kubectl get imagerepository "${COMPONENT}" -n "${MANAGED_NS}" \
         -o jsonpath='{.status.image.url}')
     echo "   ${COMPONENT}:"
-    echo "     Image URL:   ${COMP_IMAGE_URLS["${COMPONENT}"]}"
+    echo "     Image URL:   ${REPO_IMAGE_URLS[i]}"
 done
 
 # Step 9: Create release-pipeline ServiceAccount with push secrets
@@ -303,9 +307,9 @@ echo "👤 Creating release-pipeline ServiceAccount..."
 
 # Build the secrets list YAML
 SECRETS_YAML="  - name: ${TA_PUSH_SECRET}"
-for COMPONENT in "${COMPONENTS[@]}"; do
+for ((i = 0; i < ${#COMPONENTS[@]}; i++)); do
     SECRETS_YAML="${SECRETS_YAML}
-  - name: ${COMP_PUSH_SECRETS["${COMPONENT}"]}"
+  - name: ${REPO_PUSH_SECRETS[i]}"
 done
 
 kubectl apply -f - <<EOF
@@ -366,10 +370,11 @@ echo "📋 Creating ReleasePlanAdmission..."
 
 # Build the components mapping YAML
 COMPONENTS_YAML=""
-for COMPONENT in "${COMPONENTS[@]}"; do
+for ((i = 0; i < ${#COMPONENTS[@]}; i++)); do
+    COMPONENT="${COMPONENTS[i]}"
     COMPONENTS_YAML="${COMPONENTS_YAML}
         - name: ${COMPONENT}
-          repository: ${COMP_IMAGE_URLS["${COMPONENT}"]}"
+          repository: ${REPO_IMAGE_URLS[i]}"
 done
 
 kubectl apply -f - <<EOF

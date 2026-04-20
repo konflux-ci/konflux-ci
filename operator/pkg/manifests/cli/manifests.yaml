@@ -144,9 +144,9 @@ data:
     kubectl api-resources --api-group=config.openshift.io &>/dev/null; then\n    IS_OPENSHIFT=true\nfi\n#
     Auto-detect components if none specified\nif [[ ${#COMPONENTS[@]} -eq 0 ]]; then\n
     \   echo \"\U0001F50D No components specified, auto-detecting from application
-    '${APPLICATION}' in namespace '${TENANT_NS}'...\"\n    mapfile -t COMPONENTS <
-    <(kubectl get components -n \"${TENANT_NS}\" \\\n        -o jsonpath=\"{range
-    .items[?(@.spec.application==\\\"${APPLICATION}\\\")]}{.metadata.name}{\\\"\\n\\\"}{end}\"
+    '${APPLICATION}' in namespace '${TENANT_NS}'...\"\n    while IFS= read -r line;
+    do\n        COMPONENTS+=(\"$line\")\n    done < <(kubectl get components -n \"${TENANT_NS}\"
+    \\\n        -o jsonpath=\"{range .items[?(@.spec.application==\\\"${APPLICATION}\\\")]}{.metadata.name}{\\\"\\n\\\"}{end}\"
     \\\n        2>/dev/null | grep -v '^$')\n\n    if [[ ${#COMPONENTS[@]} -eq 0 ]];
     then\n        echo \"Error: No components found for application '${APPLICATION}'
     in namespace '${TENANT_NS}'.\"\n        echo \"Make sure the application and its
@@ -196,17 +196,17 @@ data:
     ImageRepository status...\"\n\nTA_PUSH_SECRET=$(kubectl get imagerepository trusted-artifacts
     -n \"${MANAGED_NS}\" \\\n    -o jsonpath='{.status.credentials.push-secret}')\nTA_IMAGE_URL=$(kubectl
     get imagerepository trusted-artifacts -n \"${MANAGED_NS}\" \\\n    -o jsonpath='{.status.image.url}')\necho
-    \"   trusted-artifacts:\"\necho \"     Image URL:   ${TA_IMAGE_URL}\"\n\ndeclare
-    -A COMP_PUSH_SECRETS\ndeclare -A COMP_IMAGE_URLS\n\nfor COMPONENT in \"${COMPONENTS[@]}\";
-    do\n    COMP_PUSH_SECRETS[\"${COMPONENT}\"]=$(kubectl get imagerepository \"${COMPONENT}\"
-    -n \"${MANAGED_NS}\" \\\n        -o jsonpath='{.status.credentials.push-secret}')\n
-    \   COMP_IMAGE_URLS[\"${COMPONENT}\"]=$(kubectl get imagerepository \"${COMPONENT}\"
-    -n \"${MANAGED_NS}\" \\\n        -o jsonpath='{.status.image.url}')\n    echo
-    \"   ${COMPONENT}:\"\n    echo \"     Image URL:   ${COMP_IMAGE_URLS[\"${COMPONENT}\"]}\"\ndone\n\n#
+    \"   trusted-artifacts:\"\necho \"     Image URL:   ${TA_IMAGE_URL}\"\n\n# Per-component
+    ImageRepository push secret and image URL; index i matches COMPONENTS[i].\nREPO_PUSH_SECRETS=()\nREPO_IMAGE_URLS=()\nfor
+    ((i = 0; i < ${#COMPONENTS[@]}; i++)); do\n    COMPONENT=\"${COMPONENTS[i]}\"\n
+    \   REPO_PUSH_SECRETS[i]=$(kubectl get imagerepository \"${COMPONENT}\" -n \"${MANAGED_NS}\"
+    \\\n        -o jsonpath='{.status.credentials.push-secret}')\n    REPO_IMAGE_URLS[i]=$(kubectl
+    get imagerepository \"${COMPONENT}\" -n \"${MANAGED_NS}\" \\\n        -o jsonpath='{.status.image.url}')\n
+    \   echo \"   ${COMPONENT}:\"\n    echo \"     Image URL:   ${REPO_IMAGE_URLS[i]}\"\ndone\n\n#
     Step 9: Create release-pipeline ServiceAccount with push secrets\necho \"\"\necho
     \"\U0001F464 Creating release-pipeline ServiceAccount...\"\n\n# Build the secrets
-    list YAML\nSECRETS_YAML=\"  - name: ${TA_PUSH_SECRET}\"\nfor COMPONENT in \"${COMPONENTS[@]}\";
-    do\n    SECRETS_YAML=\"${SECRETS_YAML}\n  - name: ${COMP_PUSH_SECRETS[\"${COMPONENT}\"]}\"\ndone\n\nkubectl
+    list YAML\nSECRETS_YAML=\"  - name: ${TA_PUSH_SECRET}\"\nfor ((i = 0; i < ${#COMPONENTS[@]};
+    i++)); do\n    SECRETS_YAML=\"${SECRETS_YAML}\n  - name: ${REPO_PUSH_SECRETS[i]}\"\ndone\n\nkubectl
     apply -f - <<EOF\napiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: release-pipeline\n
     \ namespace: ${MANAGED_NS}\nsecrets:\n${SECRETS_YAML}\nEOF\n\n# Step 10: Create
     RoleBinding for release-pipeline ServiceAccount\necho \"\U0001F517 Creating RoleBinding
@@ -225,13 +225,14 @@ data:
     \   echo \"⚠️ Secret 'tpa-realm-client' in namespace 'tsf' not found, skipping
     SSO credentials creation\"\nfi\n\n# Step 12: Create ReleasePlanAdmission\necho
     \"\U0001F4CB Creating ReleasePlanAdmission...\"\n\n# Build the components mapping
-    YAML\nCOMPONENTS_YAML=\"\"\nfor COMPONENT in \"${COMPONENTS[@]}\"; do\n    COMPONENTS_YAML=\"${COMPONENTS_YAML}\n
-    \       - name: ${COMPONENT}\n          repository: ${COMP_IMAGE_URLS[\"${COMPONENT}\"]}\"\ndone\n\nkubectl
-    apply -f - <<EOF\napiVersion: appstudio.redhat.com/v1alpha1\nkind: ReleasePlanAdmission\nmetadata:\n
-    \ name: ${RELEASE_NAME}\n  namespace: ${MANAGED_NS}\n  labels:\n    release.appstudio.openshift.io/auto-release:
-    'true'\nspec:\n  applications:\n    - ${APPLICATION}\n  origin: ${TENANT_NS}\n
-    \ policy: ${CONFORMA_POLICY}\n  data:\n    mapping:\n      defaults:\n        pushSourceContainer:
-    false\n        tags:\n          - latest\n          - '{{ git_sha }}'\n      components:${COMPONENTS_YAML}\n
+    YAML\nCOMPONENTS_YAML=\"\"\nfor ((i = 0; i < ${#COMPONENTS[@]}; i++)); do\n    COMPONENT=\"${COMPONENTS[i]}\"\n
+    \   COMPONENTS_YAML=\"${COMPONENTS_YAML}\n        - name: ${COMPONENT}\n          repository:
+    ${REPO_IMAGE_URLS[i]}\"\ndone\n\nkubectl apply -f - <<EOF\napiVersion: appstudio.redhat.com/v1alpha1\nkind:
+    ReleasePlanAdmission\nmetadata:\n  name: ${RELEASE_NAME}\n  namespace: ${MANAGED_NS}\n
+    \ labels:\n    release.appstudio.openshift.io/auto-release: 'true'\nspec:\n  applications:\n
+    \   - ${APPLICATION}\n  origin: ${TENANT_NS}\n  policy: ${CONFORMA_POLICY}\n  data:\n
+    \   mapping:\n      defaults:\n        pushSourceContainer: false\n        tags:\n
+    \         - latest\n          - '{{ git_sha }}'\n      components:${COMPONENTS_YAML}\n
     \   releaseNotes:\n      product_name: '${PRODUCT_NAME}'\n      product_version:
     '${PRODUCT_VERSION}'\n  pipeline:\n    pipelineRef:\n      resolver: git\n      ociStorage:
     ${TA_IMAGE_URL}\n      useEmptyDir: true\n      params:\n        - name: url\n
