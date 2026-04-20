@@ -2,5 +2,5 @@
 # Only release-x.y branches are considered; list here the ones to skip.
 # Example: add "release-0.0" to stop auto-tagging and verification for that branch.
 excluded:
-  - release-999.999
+  - release-0.0
   - release-888.888
