@@ -22,67 +22,123 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 )
 
+const (
+	ecPolicyNamespace = "enterprise-contract-service"
+	ecPolicyName      = "default"
+)
+
+// ecPolicyGVK is defined in the controller file.
+
+func newECPolicyObject() *unstructured.Unstructured {
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(ecPolicyGVK)
+	obj.SetName(ecPolicyName)
+	obj.SetNamespace(ecPolicyNamespace)
+	return obj
+}
+
+func newECPolicyList() *unstructured.UnstructuredList {
+	list := &unstructured.UnstructuredList{}
+	list.SetGroupVersionKind(ecPolicyGVK)
+	return list
+}
+
+func reconcileEC(ctx context.Context) {
+	reconciler := &KonfluxEnterpriseContractReconciler{
+		Client:      k8sClient,
+		Scheme:      k8sClient.Scheme(),
+		ObjectStore: objectStore,
+	}
+	Eventually(func() error {
+		_, err := reconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: types.NamespacedName{Name: CRName},
+		})
+		return err
+	}).WithTimeout(15 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
+}
+
 var _ = Describe("KonfluxEnterpriseContract Controller", func() {
 	Context("When reconciling a resource", func() {
-
-		ctx := context.Background()
-
-		typeNamespacedName := types.NamespacedName{
-			Name:      CRName,
-			Namespace: "default",
-		}
-		konfluxenterprisecontract := &konfluxv1alpha1.KonfluxEnterpriseContract{}
+		var cr *konfluxv1alpha1.KonfluxEnterpriseContract
 
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind KonfluxEnterpriseContract")
-			err := k8sClient.Get(ctx, typeNamespacedName, konfluxenterprisecontract)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &konfluxv1alpha1.KonfluxEnterpriseContract{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      CRName,
-						Namespace: "default",
-					},
-					// TODO(user): Specify other spec details if needed.
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			By("creating the KonfluxEnterpriseContract CR")
+			cr = &konfluxv1alpha1.KonfluxEnterpriseContract{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: CRName,
+				},
 			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+
+			By("running initial reconciliation")
+			reconcileEC(ctx)
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &konfluxv1alpha1.KonfluxEnterpriseContract{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the specific resource instance KonfluxEnterpriseContract")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			By("cleaning up the KonfluxEnterpriseContract CR")
+			Expect(k8sClient.Delete(ctx, cr)).To(Succeed())
 		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
-			controllerReconciler := &KonfluxEnterpriseContractReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ObjectStore: objectStore,
-			}
 
-			By("Waiting for reconciliation to succeed (CRD may need to establish first)")
-			Eventually(func() error {
-				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				return err
-			}).WithTimeout(15 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+		It("should create EnterpriseContractPolicy resources", func() {
+			policyList := newECPolicyList()
+			Expect(k8sClient.List(ctx, policyList, client.InNamespace(ecPolicyNamespace))).To(Succeed())
+			Expect(policyList.Items).NotTo(BeEmpty())
+		})
+
+		It("should restore an EnterpriseContractPolicy after it is modified", func() {
+			By("fetching the existing EnterpriseContractPolicy")
+			policy := newECPolicyObject()
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      ecPolicyName,
+				Namespace: ecPolicyNamespace,
+			}, policy)).To(Succeed())
+
+			spec, _, _ := unstructured.NestedMap(policy.Object, "spec")
+			originalDescription, _, _ := unstructured.NestedString(spec, "description")
+
+			By("modifying the EnterpriseContractPolicy spec")
+			Expect(unstructured.SetNestedField(policy.Object, "modified-by-test", "spec", "description")).To(Succeed())
+			Expect(k8sClient.Update(ctx, policy)).To(Succeed())
+
+			By("reconciling and verifying the controller restores the original spec")
+			reconcileEC(ctx)
+
+			updated := newECPolicyObject()
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      ecPolicyName,
+				Namespace: ecPolicyNamespace,
+			}, updated)).To(Succeed())
+			desc, _, _ := unstructured.NestedString(updated.Object, "spec", "description")
+			Expect(desc).To(Equal(originalDescription))
+		})
+
+		It("should re-create an EnterpriseContractPolicy after it is deleted", func() {
+			By("deleting the EnterpriseContractPolicy")
+			policy := newECPolicyObject()
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      ecPolicyName,
+				Namespace: ecPolicyNamespace,
+			}, policy)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, policy)).To(Succeed())
+
+			By("reconciling and verifying the controller re-creates it")
+			reconcileEC(ctx)
+
+			recreated := newECPolicyObject()
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      ecPolicyName,
+				Namespace: ecPolicyNamespace,
+			}, recreated)).To(Succeed())
 		})
 	})
 })
