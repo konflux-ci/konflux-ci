@@ -18,122 +18,115 @@ package konflux
 
 import (
 	"context"
-	"fmt"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/version"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/applicationapi"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/buildservice"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/certmanager"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/defaulttenant"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/enterprisecontract"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/imagecontroller"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/info"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/integrationservice"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/internalregistry"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/namespacelister"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/rbac"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/releaseservice"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/segmentbridge"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	uictrl "github.com/konflux-ci/konflux-ci/operator/internal/controller/ui"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 )
 
 var _ = Describe("Konflux Controller", func() {
+	// startManager creates a per-test manager with the given ClusterInfo
+	// and registers a DeferCleanup to cancel it after the test.
+	startManager := func(clusterInfo *clusterinfo.Info) {
+		mgr := testutil.NewTestManager(testEnv)
+		Expect((&KonfluxReconciler{
+			Client:      mgr.GetClient(),
+			Scheme:      mgr.GetScheme(),
+			ClusterInfo: clusterInfo,
+		}).SetupWithManager(mgr)).To(Succeed())
+		mgrCtx, cancel := context.WithCancel(testEnv.Ctx)
+		DeferCleanup(cancel)
+		testutil.StartManagerWithContext(mgrCtx, mgr)
+	}
+
 	Context("When reconciling a resource", func() {
-		const resourceName = "konflux"
+		It("should successfully reconcile the resource", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
 
-		ctx := context.Background()
+			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
 
-		typeNamespacedName := types.NamespacedName{
-			Name: resourceName,
-		}
-		konflux := &konfluxv1alpha1.Konflux{}
+			// The Ready condition is written only after the reconciler completes all apply/get/status steps
+			// without an early error return. Its presence (regardless of True/False) is therefore a reliable
+			// sentinel that the entire reconcile loop ran to completion. Ready=True is not expected here
+			// because the sub-controllers are not running in this test, so sub-CRs have no conditions yet.
+			//
+			// We also assert that every always-on sub-CR was created. This catches the case where both
+			// an applyKonflux* call and its corresponding Get are removed together — the Ready condition
+			// would still be set, but the sub-CR existence check would fail.
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
+				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)).NotTo(BeNil())
 
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind Konflux")
-			err := k8sClient.Get(ctx, typeNamespacedName, konflux)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &konfluxv1alpha1.Konflux{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: resourceName,
-					},
-					// TODO(user): Specify other spec details if needed.
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
-		})
+				// Verify all always-on sub-CRs were created.
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: applicationapi.CRName}, &konfluxv1alpha1.KonfluxApplicationAPI{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: buildservice.CRName}, &konfluxv1alpha1.KonfluxBuildService{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: integrationservice.CRName}, &konfluxv1alpha1.KonfluxIntegrationService{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: releaseservice.CRName}, &konfluxv1alpha1.KonfluxReleaseService{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: uictrl.CRName}, &konfluxv1alpha1.KonfluxUI{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: rbac.CRName}, &konfluxv1alpha1.KonfluxRBAC{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: info.CRName}, &konfluxv1alpha1.KonfluxInfo{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: namespacelister.CRName}, &konfluxv1alpha1.KonfluxNamespaceLister{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: enterprisecontract.CRName}, &konfluxv1alpha1.KonfluxEnterpriseContract{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: certmanager.CRName}, &konfluxv1alpha1.KonfluxCertManager{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: defaulttenant.CRName}, &konfluxv1alpha1.KonfluxDefaultTenant{})).To(Succeed())
 
-		AfterEach(func() {
-			resource := &konfluxv1alpha1.Konflux{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			if err == nil {
-				By("Cleanup the specific resource instance Konflux")
-				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-			}
-		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
-			clusterInfo := createTestClusterInfo()
-			controllerReconciler := &KonfluxReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ClusterInfo: clusterInfo,
-			}
-
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+				// Verify optional sub-CRs are NOT created (disabled by default in empty spec).
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: imagecontroller.CRName}, &konfluxv1alpha1.KonfluxImageController{})).To(MatchError(ContainSubstring("not found")))
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: internalregistry.CRName}, &konfluxv1alpha1.KonfluxInternalRegistry{})).To(MatchError(ContainSubstring("not found")))
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: segmentbridge.CRName}, &konfluxv1alpha1.KonfluxSegmentBridge{})).To(MatchError(ContainSubstring("not found")))
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 	})
 
 	Context("Konflux Name Validation (CEL)", func() {
 		const requiredKonfluxName = "konflux"
 
-		AfterEach(func(ctx context.Context) {
-			// Clean up any Konflux instances created during tests
-			konfluxList := &konfluxv1alpha1.KonfluxList{}
-			if err := k8sClient.List(ctx, konfluxList); err == nil {
-				for _, item := range konfluxList.Items {
-					if err := k8sClient.Delete(ctx, &item); err != nil && !errors.IsNotFound(err) {
-						_, _ = fmt.Fprintf(
-							GinkgoWriter,
-							"Failed to delete Konflux %q: %v\n",
-							item.GetName(),
-							err,
-						)
-					}
-				}
-			}
-		})
-
 		It("Should allow creation with the required name 'konflux'", func(ctx context.Context) {
 			By("creating a Konflux instance with the required name")
 			konflux := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: requiredKonfluxName,
-				},
-				Spec: konfluxv1alpha1.KonfluxSpec{},
+				ObjectMeta: metav1.ObjectMeta{Name: requiredKonfluxName},
 			}
-			err := k8sClient.Create(ctx, konflux)
-			Expect(err).NotTo(HaveOccurred(), "Creation with required name should be allowed")
+			Expect(k8sClient.Create(ctx, konflux)).To(Succeed(), "Creation with required name should be allowed")
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, konflux)
 
 			By("verifying the instance was created")
 			created := &konfluxv1alpha1.Konflux{}
-			err = k8sClient.Get(ctx, types.NamespacedName{Name: requiredKonfluxName}, created)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: requiredKonfluxName}, created)).To(Succeed())
 			Expect(created.GetName()).To(Equal(requiredKonfluxName))
 		})
 
 		It("Should deny creation with a different name", func(ctx context.Context) {
 			By("attempting to create a Konflux instance with a different name")
 			konflux := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "my-konflux",
-				},
-				Spec: konfluxv1alpha1.KonfluxSpec{},
+				ObjectMeta: metav1.ObjectMeta{Name: "my-konflux"},
 			}
 			err := k8sClient.Create(ctx, konflux)
 			Expect(err).To(HaveOccurred(), "Creation with different name should be rejected")
@@ -143,615 +136,385 @@ var _ = Describe("Konflux Controller", func() {
 		It("Should allow updates to the instance with the required name", func(ctx context.Context) {
 			By("creating a Konflux instance with the required name")
 			konflux := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: requiredKonfluxName,
-				},
-				Spec: konfluxv1alpha1.KonfluxSpec{},
+				ObjectMeta: metav1.ObjectMeta{Name: requiredKonfluxName},
 			}
-			err := k8sClient.Create(ctx, konflux)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create Konflux instance")
+			Expect(k8sClient.Create(ctx, konflux)).To(Succeed(), "Failed to create Konflux instance")
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, konflux)
 
 			By("updating the instance")
-			// Get the latest version
 			updated := &konfluxv1alpha1.Konflux{}
-			err = k8sClient.Get(ctx, types.NamespacedName{Name: requiredKonfluxName}, updated)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Add a label
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: requiredKonfluxName}, updated)).To(Succeed())
 			if updated.Labels == nil {
 				updated.Labels = make(map[string]string)
 			}
 			updated.Labels["test"] = "value"
-			err = k8sClient.Update(ctx, updated)
-			Expect(err).NotTo(HaveOccurred(), "Updates should be allowed")
+			Expect(k8sClient.Update(ctx, updated)).To(Succeed(), "Updates should be allowed")
 		})
 	})
 
 	Context("InternalRegistry conditional enablement", func() {
 		const resourceName = "konflux"
-		ctx := context.Background()
 
-		typeNamespacedName := types.NamespacedName{
-			Name: resourceName,
-		}
-		registryTypeNamespacedName := types.NamespacedName{
-			Name: internalregistry.CRName,
-		}
+		It("should not create InternalRegistry CR when internalRegistry is omitted", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
 
-		AfterEach(func() {
-			// Cleanup Konflux CR
-			resource := &konfluxv1alpha1.Konflux{}
-			if err := k8sClient.Get(ctx, typeNamespacedName, resource); err == nil {
-				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-			}
-
-			// Cleanup InternalRegistry CR if it exists
-			registry := &konfluxv1alpha1.KonfluxInternalRegistry{}
-			if err := k8sClient.Get(ctx, registryTypeNamespacedName, registry); err == nil {
-				Expect(k8sClient.Delete(ctx, registry)).To(Succeed())
-			}
-		})
-
-		It("should not create InternalRegistry CR when internalRegistry is omitted", func() {
 			By("creating Konflux CR without internalRegistry config")
-			konflux := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: resourceName,
-				},
-				Spec: konfluxv1alpha1.KonfluxSpec{
-					// internalRegistry is omitted (nil)
-				},
-			}
-			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: resourceName}}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
 
-			By("reconciling the Konflux CR")
-			clusterInfo := createTestClusterInfo()
-			reconciler := &KonfluxReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ClusterInfo: clusterInfo,
-			}
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			By("waiting for reconcile to complete")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)).NotTo(BeNil())
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 
 			By("verifying InternalRegistry CR was not created")
 			registry := &konfluxv1alpha1.KonfluxInternalRegistry{}
-			err = k8sClient.Get(ctx, registryTypeNamespacedName, registry)
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: internalregistry.CRName}, registry)
 			Expect(errors.IsNotFound(err)).To(BeTrue(), "InternalRegistry CR should not exist when omitted")
 		})
 
-		It("should not create InternalRegistry CR when enabled is false", func() {
+		It("should not create InternalRegistry CR when enabled is false", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
 			By("creating Konflux CR with internalRegistry.enabled=false")
 			disabled := false
-			konflux := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: resourceName,
-				},
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
-					InternalRegistry: &konfluxv1alpha1.InternalRegistryConfig{
-						Enabled: &disabled,
-					},
+					InternalRegistry: &konfluxv1alpha1.InternalRegistryConfig{Enabled: &disabled},
 				},
 			}
-			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
 
-			By("reconciling the Konflux CR")
-			clusterInfo := createTestClusterInfo()
-			reconciler := &KonfluxReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ClusterInfo: clusterInfo,
-			}
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			By("waiting for reconcile to complete")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)).NotTo(BeNil())
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 
 			By("verifying InternalRegistry CR was not created")
 			registry := &konfluxv1alpha1.KonfluxInternalRegistry{}
-			err = k8sClient.Get(ctx, registryTypeNamespacedName, registry)
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: internalregistry.CRName}, registry)
 			Expect(errors.IsNotFound(err)).To(BeTrue(), "InternalRegistry CR should not exist when enabled=false")
 		})
 
-		It("should create InternalRegistry CR when enabled is true", func() {
+		It("should create InternalRegistry CR when enabled is true", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
 			By("creating Konflux CR with internalRegistry.enabled=true")
 			enabled := true
-			konflux := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: resourceName,
-				},
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
-					InternalRegistry: &konfluxv1alpha1.InternalRegistryConfig{
-						Enabled: &enabled,
-					},
+					InternalRegistry: &konfluxv1alpha1.InternalRegistryConfig{Enabled: &enabled},
 				},
 			}
-			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
-
-			By("reconciling the Konflux CR")
-			clusterInfo := createTestClusterInfo()
-			reconciler := &KonfluxReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ClusterInfo: clusterInfo,
-			}
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			DeferCleanup(testutil.DeleteAndWait, k8sClient,
+				&konfluxv1alpha1.KonfluxInternalRegistry{ObjectMeta: metav1.ObjectMeta{Name: internalregistry.CRName}})
 
 			By("verifying InternalRegistry CR was created")
 			registry := &konfluxv1alpha1.KonfluxInternalRegistry{}
-			err = k8sClient.Get(ctx, registryTypeNamespacedName, registry)
-			Expect(err).NotTo(HaveOccurred(), "InternalRegistry CR should exist when enabled=true")
-			Expect(registry.Name).To(Equal(internalregistry.CRName))
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: internalregistry.CRName}, registry)).To(Succeed())
+				g.Expect(registry.Name).To(Equal(internalregistry.CRName))
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 
-		It("should delete InternalRegistry CR when enabled changes from true to false", func() {
+		It("should delete InternalRegistry CR when enabled changes from true to false", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
 			By("creating Konflux CR with internalRegistry.enabled=true")
 			enabled := true
-			konflux := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: resourceName,
-				},
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
-					InternalRegistry: &konfluxv1alpha1.InternalRegistryConfig{
-						Enabled: &enabled,
-					},
+					InternalRegistry: &konfluxv1alpha1.InternalRegistryConfig{Enabled: &enabled},
 				},
 			}
-			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
 
-			By("reconciling to create the InternalRegistry CR")
-			clusterInfo := createTestClusterInfo()
-			reconciler := &KonfluxReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ClusterInfo: clusterInfo,
-			}
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("verifying InternalRegistry CR was created")
-			registry := &konfluxv1alpha1.KonfluxInternalRegistry{}
-			err = k8sClient.Get(ctx, registryTypeNamespacedName, registry)
-			Expect(err).NotTo(HaveOccurred())
+			By("waiting for InternalRegistry CR to be created")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: internalregistry.CRName},
+					&konfluxv1alpha1.KonfluxInternalRegistry{})).To(Succeed())
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 
 			By("updating Konflux CR to set enabled=false")
 			updatedKonflux := &konfluxv1alpha1.Konflux{}
-			Expect(k8sClient.Get(ctx, typeNamespacedName, updatedKonflux)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updatedKonflux)).To(Succeed())
 			disabled := false
-			updatedKonflux.Spec.InternalRegistry = &konfluxv1alpha1.InternalRegistryConfig{
-				Enabled: &disabled,
-			}
+			updatedKonflux.Spec.InternalRegistry = &konfluxv1alpha1.InternalRegistryConfig{Enabled: &disabled}
 			Expect(k8sClient.Update(ctx, updatedKonflux)).To(Succeed())
 
-			By("reconciling again after disabling")
-			_, err = reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("verifying InternalRegistry CR was deleted")
-			err = k8sClient.Get(ctx, registryTypeNamespacedName, registry)
-			Expect(errors.IsNotFound(err)).To(BeTrue(), "InternalRegistry CR should be deleted when enabled changes to false")
+			By("waiting for InternalRegistry CR to be deleted")
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: internalregistry.CRName},
+					&konfluxv1alpha1.KonfluxInternalRegistry{})
+				g.Expect(errors.IsNotFound(err)).To(BeTrue(), "InternalRegistry CR should be deleted when enabled changes to false")
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 	})
 
 	Context("DefaultTenant conditional enablement", func() {
 		const resourceName = "konflux"
-		ctx := context.Background()
 
-		typeNamespacedName := types.NamespacedName{
-			Name: resourceName,
-		}
-		defaultTenantTypeNamespacedName := types.NamespacedName{
-			Name: defaulttenant.CRName,
-		}
+		It("should create DefaultTenant CR when defaultTenant is omitted (enabled by default)", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
 
-		AfterEach(func() {
-			// Cleanup Konflux CR
-			resource := &konfluxv1alpha1.Konflux{}
-			if err := k8sClient.Get(ctx, typeNamespacedName, resource); err == nil {
-				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-			}
-
-			// Cleanup DefaultTenant CR if it exists
-			tenant := &konfluxv1alpha1.KonfluxDefaultTenant{}
-			if err := k8sClient.Get(ctx, defaultTenantTypeNamespacedName, tenant); err == nil {
-				Expect(k8sClient.Delete(ctx, tenant)).To(Succeed())
-			}
-		})
-
-		It("should create DefaultTenant CR when defaultTenant is omitted (enabled by default)", func() {
 			By("creating Konflux CR without defaultTenant config")
-			konflux := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: resourceName,
-				},
-				Spec: konfluxv1alpha1.KonfluxSpec{
-					// defaultTenant is omitted (nil) - should default to enabled
-				},
-			}
-			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
-
-			By("reconciling the Konflux CR")
-			clusterInfo := createTestClusterInfo()
-			reconciler := &KonfluxReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ClusterInfo: clusterInfo,
-			}
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: resourceName}}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			DeferCleanup(testutil.DeleteAndWait, k8sClient,
+				&konfluxv1alpha1.KonfluxDefaultTenant{ObjectMeta: metav1.ObjectMeta{Name: defaulttenant.CRName}})
 
 			By("verifying DefaultTenant CR was created (enabled by default)")
 			tenant := &konfluxv1alpha1.KonfluxDefaultTenant{}
-			err = k8sClient.Get(ctx, defaultTenantTypeNamespacedName, tenant)
-			Expect(err).NotTo(HaveOccurred(), "DefaultTenant CR should exist when omitted (enabled by default)")
-			Expect(tenant.Name).To(Equal(defaulttenant.CRName))
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: defaulttenant.CRName}, tenant)).To(Succeed())
+				g.Expect(tenant.Name).To(Equal(defaulttenant.CRName))
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 
-		It("should create DefaultTenant CR when enabled is explicitly true", func() {
+		It("should create DefaultTenant CR when enabled is explicitly true", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
 			By("creating Konflux CR with defaultTenant.enabled=true")
 			enabled := true
-			konflux := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: resourceName,
-				},
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
-					DefaultTenant: &konfluxv1alpha1.DefaultTenantConfig{
-						Enabled: &enabled,
-					},
+					DefaultTenant: &konfluxv1alpha1.DefaultTenantConfig{Enabled: &enabled},
 				},
 			}
-			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
-
-			By("reconciling the Konflux CR")
-			clusterInfo := createTestClusterInfo()
-			reconciler := &KonfluxReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ClusterInfo: clusterInfo,
-			}
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			DeferCleanup(testutil.DeleteAndWait, k8sClient,
+				&konfluxv1alpha1.KonfluxDefaultTenant{ObjectMeta: metav1.ObjectMeta{Name: defaulttenant.CRName}})
 
 			By("verifying DefaultTenant CR was created")
-			tenant := &konfluxv1alpha1.KonfluxDefaultTenant{}
-			err = k8sClient.Get(ctx, defaultTenantTypeNamespacedName, tenant)
-			Expect(err).NotTo(HaveOccurred(), "DefaultTenant CR should exist when enabled=true")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: defaulttenant.CRName},
+					&konfluxv1alpha1.KonfluxDefaultTenant{})).To(Succeed())
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 
-		It("should not create DefaultTenant CR when enabled is false", func() {
+		It("should not create DefaultTenant CR when enabled is false", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
 			By("creating Konflux CR with defaultTenant.enabled=false")
 			disabled := false
-			konflux := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: resourceName,
-				},
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
-					DefaultTenant: &konfluxv1alpha1.DefaultTenantConfig{
-						Enabled: &disabled,
-					},
+					DefaultTenant: &konfluxv1alpha1.DefaultTenantConfig{Enabled: &disabled},
 				},
 			}
-			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
 
-			By("reconciling the Konflux CR")
-			clusterInfo := createTestClusterInfo()
-			reconciler := &KonfluxReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ClusterInfo: clusterInfo,
-			}
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			By("waiting for reconcile to complete")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)).NotTo(BeNil())
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 
 			By("verifying DefaultTenant CR was not created")
 			tenant := &konfluxv1alpha1.KonfluxDefaultTenant{}
-			err = k8sClient.Get(ctx, defaultTenantTypeNamespacedName, tenant)
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: defaulttenant.CRName}, tenant)
 			Expect(errors.IsNotFound(err)).To(BeTrue(), "DefaultTenant CR should not exist when enabled=false")
 		})
 
-		It("should delete DefaultTenant CR when enabled changes from true to false", func() {
+		It("should delete DefaultTenant CR when enabled changes from true to false", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
 			By("creating Konflux CR with defaultTenant.enabled=true")
 			enabled := true
-			konflux := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: resourceName,
-				},
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
-					DefaultTenant: &konfluxv1alpha1.DefaultTenantConfig{
-						Enabled: &enabled,
-					},
+					DefaultTenant: &konfluxv1alpha1.DefaultTenantConfig{Enabled: &enabled},
 				},
 			}
-			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
 
-			By("reconciling to create the DefaultTenant CR")
-			clusterInfo := createTestClusterInfo()
-			reconciler := &KonfluxReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ClusterInfo: clusterInfo,
-			}
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("verifying DefaultTenant CR was created")
-			tenant := &konfluxv1alpha1.KonfluxDefaultTenant{}
-			err = k8sClient.Get(ctx, defaultTenantTypeNamespacedName, tenant)
-			Expect(err).NotTo(HaveOccurred())
+			By("waiting for DefaultTenant CR to be created")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: defaulttenant.CRName},
+					&konfluxv1alpha1.KonfluxDefaultTenant{})).To(Succeed())
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 
 			By("updating Konflux CR to set enabled=false")
 			updatedKonflux := &konfluxv1alpha1.Konflux{}
-			Expect(k8sClient.Get(ctx, typeNamespacedName, updatedKonflux)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updatedKonflux)).To(Succeed())
 			disabled := false
-			updatedKonflux.Spec.DefaultTenant = &konfluxv1alpha1.DefaultTenantConfig{
-				Enabled: &disabled,
-			}
+			updatedKonflux.Spec.DefaultTenant = &konfluxv1alpha1.DefaultTenantConfig{Enabled: &disabled}
 			Expect(k8sClient.Update(ctx, updatedKonflux)).To(Succeed())
 
-			By("reconciling again after disabling")
-			_, err = reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("verifying DefaultTenant CR was deleted")
-			err = k8sClient.Get(ctx, defaultTenantTypeNamespacedName, tenant)
-			Expect(errors.IsNotFound(err)).To(BeTrue(), "DefaultTenant CR should be deleted when enabled changes to false")
+			By("waiting for DefaultTenant CR to be deleted")
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: defaulttenant.CRName},
+					&konfluxv1alpha1.KonfluxDefaultTenant{})
+				g.Expect(errors.IsNotFound(err)).To(BeTrue(), "DefaultTenant CR should be deleted when enabled changes to false")
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 	})
 
 	Context("SegmentBridge conditional enablement", func() {
 		const resourceName = "konflux"
-		ctx := context.Background()
 
-		typeNamespacedName := types.NamespacedName{
-			Name: resourceName,
-		}
-		segmentBridgeTypeNamespacedName := types.NamespacedName{
-			Name: segmentbridge.CRName,
-		}
+		It("should not create SegmentBridge CR when telemetry is omitted", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
 
-		AfterEach(func() {
-			resource := &konfluxv1alpha1.Konflux{}
-			if err := k8sClient.Get(ctx, typeNamespacedName, resource); err == nil {
-				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-			}
-
-			sb := &konfluxv1alpha1.KonfluxSegmentBridge{}
-			if err := k8sClient.Get(ctx, segmentBridgeTypeNamespacedName, sb); err == nil {
-				Expect(k8sClient.Delete(ctx, sb)).To(Succeed())
-			}
-		})
-
-		It("should not create SegmentBridge CR when telemetry is omitted", func() {
 			By("creating Konflux CR without telemetry config")
-			konflux := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: resourceName,
-				},
-				Spec: konfluxv1alpha1.KonfluxSpec{},
-			}
-			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: resourceName}}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
 
-			By("reconciling the Konflux CR")
-			clusterInfo := createTestClusterInfo()
-			reconciler := &KonfluxReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ClusterInfo: clusterInfo,
-			}
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			By("waiting for reconcile to complete")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)).NotTo(BeNil())
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 
 			By("verifying SegmentBridge CR was not created")
 			sb := &konfluxv1alpha1.KonfluxSegmentBridge{}
-			err = k8sClient.Get(ctx, segmentBridgeTypeNamespacedName, sb)
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: segmentbridge.CRName}, sb)
 			Expect(errors.IsNotFound(err)).To(BeTrue(), "SegmentBridge CR should not exist when telemetry is omitted")
 		})
 
-		It("should not create SegmentBridge CR when telemetry.enabled is false", func() {
+		It("should not create SegmentBridge CR when telemetry.enabled is false", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
 			By("creating Konflux CR with telemetry.enabled=false")
 			disabled := false
-			konflux := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: resourceName,
-				},
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
-					Telemetry: &konfluxv1alpha1.TelemetryConfig{
-						Enabled: &disabled,
-					},
+					Telemetry: &konfluxv1alpha1.TelemetryConfig{Enabled: &disabled},
 				},
 			}
-			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
 
-			By("reconciling the Konflux CR")
-			clusterInfo := createTestClusterInfo()
-			reconciler := &KonfluxReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ClusterInfo: clusterInfo,
-			}
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			By("waiting for reconcile to complete")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)).NotTo(BeNil())
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 
 			By("verifying SegmentBridge CR was not created")
 			sb := &konfluxv1alpha1.KonfluxSegmentBridge{}
-			err = k8sClient.Get(ctx, segmentBridgeTypeNamespacedName, sb)
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: segmentbridge.CRName}, sb)
 			Expect(errors.IsNotFound(err)).To(BeTrue(), "SegmentBridge CR should not exist when telemetry.enabled=false")
 		})
 
-		It("should create SegmentBridge CR when telemetry.enabled is true", func() {
+		It("should create SegmentBridge CR when telemetry.enabled is true", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
 			By("creating Konflux CR with telemetry.enabled=true")
 			enabled := true
-			konflux := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: resourceName,
-				},
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
-					Telemetry: &konfluxv1alpha1.TelemetryConfig{
-						Enabled: &enabled,
-					},
+					Telemetry: &konfluxv1alpha1.TelemetryConfig{Enabled: &enabled},
 				},
 			}
-			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
-
-			By("reconciling the Konflux CR")
-			clusterInfo := createTestClusterInfo()
-			reconciler := &KonfluxReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ClusterInfo: clusterInfo,
-			}
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			DeferCleanup(testutil.DeleteAndWait, k8sClient,
+				&konfluxv1alpha1.KonfluxSegmentBridge{ObjectMeta: metav1.ObjectMeta{Name: segmentbridge.CRName}})
 
 			By("verifying SegmentBridge CR was created")
 			sb := &konfluxv1alpha1.KonfluxSegmentBridge{}
-			err = k8sClient.Get(ctx, segmentBridgeTypeNamespacedName, sb)
-			Expect(err).NotTo(HaveOccurred(), "SegmentBridge CR should exist when telemetry.enabled=true")
-			Expect(sb.Name).To(Equal(segmentbridge.CRName))
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: segmentbridge.CRName}, sb)).To(Succeed())
+				g.Expect(sb.Name).To(Equal(segmentbridge.CRName))
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 
-		It("should delete SegmentBridge CR when enabled changes from true to false", func() {
+		It("should delete SegmentBridge CR when enabled changes from true to false", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
 			By("creating Konflux CR with telemetry.enabled=true")
 			enabled := true
-			konflux := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: resourceName,
-				},
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
-					Telemetry: &konfluxv1alpha1.TelemetryConfig{
-						Enabled: &enabled,
-					},
+					Telemetry: &konfluxv1alpha1.TelemetryConfig{Enabled: &enabled},
 				},
 			}
-			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
 
-			By("reconciling to create the SegmentBridge CR")
-			clusterInfo := createTestClusterInfo()
-			reconciler := &KonfluxReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ClusterInfo: clusterInfo,
-			}
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("verifying SegmentBridge CR was created")
-			sb := &konfluxv1alpha1.KonfluxSegmentBridge{}
-			err = k8sClient.Get(ctx, segmentBridgeTypeNamespacedName, sb)
-			Expect(err).NotTo(HaveOccurred())
+			By("waiting for SegmentBridge CR to be created")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: segmentbridge.CRName},
+					&konfluxv1alpha1.KonfluxSegmentBridge{})).To(Succeed())
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 
 			By("updating Konflux CR to set telemetry.enabled=false")
 			updatedKonflux := &konfluxv1alpha1.Konflux{}
-			Expect(k8sClient.Get(ctx, typeNamespacedName, updatedKonflux)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updatedKonflux)).To(Succeed())
 			disabled := false
-			updatedKonflux.Spec.Telemetry = &konfluxv1alpha1.TelemetryConfig{
-				Enabled: &disabled,
-			}
+			updatedKonflux.Spec.Telemetry = &konfluxv1alpha1.TelemetryConfig{Enabled: &disabled}
 			Expect(k8sClient.Update(ctx, updatedKonflux)).To(Succeed())
 
-			By("reconciling again after disabling")
-			_, err = reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("verifying SegmentBridge CR was deleted")
-			err = k8sClient.Get(ctx, segmentBridgeTypeNamespacedName, sb)
-			Expect(errors.IsNotFound(err)).To(BeTrue(), "SegmentBridge CR should be deleted when enabled changes to false")
+			By("waiting for SegmentBridge CR to be deleted")
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: segmentbridge.CRName},
+					&konfluxv1alpha1.KonfluxSegmentBridge{})
+				g.Expect(errors.IsNotFound(err)).To(BeTrue(), "SegmentBridge CR should be deleted when enabled changes to false")
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 	})
 
 	Context("ImageController spec propagation", func() {
 		const resourceName = "konflux"
-		ctx := context.Background()
 
-		typeNamespacedName := types.NamespacedName{
-			Name: resourceName,
-		}
-		imageControllerNamespacedName := types.NamespacedName{
-			Name: imagecontroller.CRName,
-		}
+		It("should create ImageController CR with empty spec when no spec is provided", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
 
-		AfterEach(func() {
-			resource := &konfluxv1alpha1.Konflux{}
-			if err := k8sClient.Get(ctx, typeNamespacedName, resource); err == nil {
-				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-			}
-
-			ic := &konfluxv1alpha1.KonfluxImageController{}
-			if err := k8sClient.Get(ctx, imageControllerNamespacedName, ic); err == nil {
-				Expect(k8sClient.Delete(ctx, ic)).To(Succeed())
-			}
-		})
-
-		It("should create ImageController CR with empty spec when no spec is provided", func() {
 			By("creating Konflux CR with imageController.enabled=true but no spec")
 			enabled := true
-			konflux := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: resourceName,
-				},
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
-					ImageController: &konfluxv1alpha1.ImageControllerConfig{
-						Enabled: &enabled,
-					},
+					ImageController: &konfluxv1alpha1.ImageControllerConfig{Enabled: &enabled},
 				},
 			}
-			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
-
-			By("reconciling the Konflux CR")
-			clusterInfo := createTestClusterInfo()
-			reconciler := &KonfluxReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ClusterInfo: clusterInfo,
-			}
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			DeferCleanup(testutil.DeleteAndWait, k8sClient,
+				&konfluxv1alpha1.KonfluxImageController{ObjectMeta: metav1.ObjectMeta{Name: imagecontroller.CRName}})
 
 			By("verifying ImageController CR was created with empty spec")
 			ic := &konfluxv1alpha1.KonfluxImageController{}
-			err = k8sClient.Get(ctx, imageControllerNamespacedName, ic)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(ic.Spec.QuayCABundle).To(BeNil())
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: imagecontroller.CRName}, ic)).To(Succeed())
+				g.Expect(ic.Spec.QuayCABundle).To(BeNil())
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 
-		It("should propagate quayCABundle spec to ImageController CR", func() {
+		It("should propagate quayCABundle spec to ImageController CR", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
 			By("creating Konflux CR with imageController.spec.quayCABundle")
 			enabled := true
-			konflux := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: resourceName,
-				},
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
 					ImageController: &konfluxv1alpha1.ImageControllerConfig{
 						Enabled: &enabled,
@@ -764,36 +527,28 @@ var _ = Describe("Konflux Controller", func() {
 					},
 				},
 			}
-			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
-
-			By("reconciling the Konflux CR")
-			clusterInfo := createTestClusterInfo()
-			reconciler := &KonfluxReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ClusterInfo: clusterInfo,
-			}
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			DeferCleanup(testutil.DeleteAndWait, k8sClient,
+				&konfluxv1alpha1.KonfluxImageController{ObjectMeta: metav1.ObjectMeta{Name: imagecontroller.CRName}})
 
 			By("verifying ImageController CR has the quayCABundle spec")
 			ic := &konfluxv1alpha1.KonfluxImageController{}
-			err = k8sClient.Get(ctx, imageControllerNamespacedName, ic)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(ic.Spec.QuayCABundle).NotTo(BeNil())
-			Expect(ic.Spec.QuayCABundle.ConfigMapName).To(Equal("my-ca-bundle"))
-			Expect(ic.Spec.QuayCABundle.Key).To(Equal("ca.crt"))
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: imagecontroller.CRName}, ic)).To(Succeed())
+				g.Expect(ic.Spec.QuayCABundle).NotTo(BeNil())
+				g.Expect(ic.Spec.QuayCABundle.ConfigMapName).To(Equal("my-ca-bundle"))
+				g.Expect(ic.Spec.QuayCABundle.Key).To(Equal("ca.crt"))
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 
-		It("should update ImageController CR spec when Konflux CR spec changes", func() {
+		It("should update ImageController CR spec when Konflux CR spec changes", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
 			By("creating Konflux CR with imageController.spec.quayCABundle")
 			enabled := true
-			konflux := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: resourceName,
-				},
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
 					ImageController: &konfluxv1alpha1.ImageControllerConfig{
 						Enabled: &enabled,
@@ -806,37 +561,30 @@ var _ = Describe("Konflux Controller", func() {
 					},
 				},
 			}
-			Expect(k8sClient.Create(ctx, konflux)).To(Succeed())
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			DeferCleanup(testutil.DeleteAndWait, k8sClient,
+				&konfluxv1alpha1.KonfluxImageController{ObjectMeta: metav1.ObjectMeta{Name: imagecontroller.CRName}})
 
-			By("reconciling to create the ImageController CR")
-			clusterInfo := createTestClusterInfo()
-			reconciler := &KonfluxReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ClusterInfo: clusterInfo,
-			}
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			By("waiting for ImageController CR to be created with quayCABundle")
+			Eventually(func(g Gomega) {
+				ic := &konfluxv1alpha1.KonfluxImageController{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: imagecontroller.CRName}, ic)).To(Succeed())
+				g.Expect(ic.Spec.QuayCABundle).NotTo(BeNil())
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 
 			By("updating the Konflux CR to remove quayCABundle")
 			updatedKonflux := &konfluxv1alpha1.Konflux{}
-			Expect(k8sClient.Get(ctx, typeNamespacedName, updatedKonflux)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updatedKonflux)).To(Succeed())
 			updatedKonflux.Spec.ImageController.Spec = nil
 			Expect(k8sClient.Update(ctx, updatedKonflux)).To(Succeed())
 
-			By("reconciling again after update")
-			_, err = reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
 			By("verifying ImageController CR no longer has quayCABundle")
-			ic := &konfluxv1alpha1.KonfluxImageController{}
-			err = k8sClient.Get(ctx, imageControllerNamespacedName, ic)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(ic.Spec.QuayCABundle).To(BeNil())
+			Eventually(func(g Gomega) {
+				ic := &konfluxv1alpha1.KonfluxImageController{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: imagecontroller.CRName}, ic)).To(Succeed())
+				g.Expect(ic.Spec.QuayCABundle).To(BeNil())
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 	})
 })
@@ -847,8 +595,8 @@ func createTestClusterInfo() *clusterinfo.Info {
 		resources:     map[string]*metav1.APIResourceList{},
 		serverVersion: &version.Info{GitVersion: "v1.30.0"},
 	}
-	info, _ := clusterinfo.DetectWithClient(mockClient)
-	return info
+	clusterInfo, _ := clusterinfo.DetectWithClient(mockClient)
+	return clusterInfo
 }
 
 // testMockDiscoveryClient implements clusterinfo.DiscoveryClient for general testing

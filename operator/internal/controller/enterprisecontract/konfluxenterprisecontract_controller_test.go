@@ -22,67 +22,32 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 )
 
 var _ = Describe("KonfluxEnterpriseContract Controller", func() {
 	Context("When reconciling a resource", func() {
+		It("should successfully reconcile the resource", func(ctx context.Context) {
+			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxEnterpriseContract{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			})).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxEnterpriseContract{ObjectMeta: metav1.ObjectMeta{Name: CRName}})
+			})
 
-		ctx := context.Background()
-
-		typeNamespacedName := types.NamespacedName{
-			Name:      CRName,
-			Namespace: "default",
-		}
-		konfluxenterprisecontract := &konfluxv1alpha1.KonfluxEnterpriseContract{}
-
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind KonfluxEnterpriseContract")
-			err := k8sClient.Get(ctx, typeNamespacedName, konfluxenterprisecontract)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &konfluxv1alpha1.KonfluxEnterpriseContract{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      CRName,
-						Namespace: "default",
-					},
-					// TODO(user): Specify other spec details if needed.
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
-		})
-
-		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &konfluxv1alpha1.KonfluxEnterpriseContract{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the specific resource instance KonfluxEnterpriseContract")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
-			controllerReconciler := &KonfluxEnterpriseContractReconciler{
-				Client:      k8sClient,
-				Scheme:      k8sClient.Scheme(),
-				ObjectStore: objectStore,
-			}
-
-			By("Waiting for reconciliation to succeed (CRD may need to establish first)")
-			Eventually(func() error {
-				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				return err
-			}).WithTimeout(15 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.KonfluxEnterpriseContract{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
+				readyCond := meta.FindStatusCondition(updated.Status.Conditions, condition.TypeReady)
+				g.Expect(readyCond).NotTo(BeNil())
+				g.Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
+			}).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
 		})
 	})
 })
