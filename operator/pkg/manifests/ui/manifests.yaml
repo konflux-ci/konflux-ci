@@ -361,7 +361,7 @@ spec:
             secretKeyRef:
               key: client-secret
               name: oauth2-proxy-client-secret
-        image: quay.io/konflux-ci/dex@sha256:105c8545ee68283024e797406ce48061b524d6d646a559bbcada3d2e2fc0f17e
+        image: quay.io/konflux-ci/dex@sha256:a75c16d89938dc150ad17bbd286a8a554baecde26e34d7a81af2939baf401a96
         name: dex
         ports:
         - containerPort: 9443
@@ -433,7 +433,7 @@ spec:
         - daemon off;
         - -c
         - /etc/nginx/nginx.conf
-        image: registry.access.redhat.com/ubi9/nginx-124@sha256:a58ed1b3229e6fb750a8459b2c1bdd7a278aa4c65e96ae40957fc7fba37ca89f
+        image: registry.access.redhat.com/ubi9/nginx-124@sha256:b60dbaf28a767ede611ff98127e0f5a8db8b1afb0c531074fe29c9aef3e0e44a
         livenessProbe:
           failureThreshold: 3
           httpGet:
@@ -526,7 +526,7 @@ spec:
         - -R
         - /opt/app-root/src/.
         - /mnt/static-content/
-        image: quay.io/konflux-ci/konflux-ui@sha256:e31f62f9209832f85aa76a30daff131a786fbdd08012624f6190fd3f89d54bf0
+        image: quay.io/konflux-ci/konflux-ui@sha256:ae1280c728f8753ff60583dbc62f1d3964271d5f2e2c4e68974e79f039ea2d36
         name: copy-static-content
         resources:
           limits:
@@ -565,7 +565,7 @@ spec:
           fi
           sed "s/__TEKTON_RESULTS_HOSTNAME__/$results_hostname/" /mnt/nginx-templates/tekton-results.conf > /mnt/nginx-generated-location-config/tekton-results.conf
           chmod 640 /mnt/nginx-generated-location-config/tekton-results.conf
-        image: quay.io/konflux-ci/konflux-ui@sha256:e31f62f9209832f85aa76a30daff131a786fbdd08012624f6190fd3f89d54bf0
+        image: quay.io/konflux-ci/konflux-ui@sha256:ae1280c728f8753ff60583dbc62f1d3964271d5f2e2c4e68974e79f039ea2d36
         name: generate-nginx-configs
         resources:
           limits:
