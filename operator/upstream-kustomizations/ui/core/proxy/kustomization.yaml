@@ -12,7 +12,7 @@ images:
   newName: quay.io/konflux-ci/oauth2-proxy
   digest: sha256:1f4a37529de4f750099af18e113556bd995fe6922030c614b7d6d23eaa0bd318
 - name: registry.access.redhat.com/ubi9/nginx-124
-  digest: sha256:b60dbaf28a767ede611ff98127e0f5a8db8b1afb0c531074fe29c9aef3e0e44a
+  digest: sha256:a82017a45fece95f30e4e7a88401b583998dcc282eefdce9513269e498ee8711
 
 configMapGenerator:
   - name: proxy
