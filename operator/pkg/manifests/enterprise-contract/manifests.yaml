@@ -401,7 +401,7 @@ spec:
       include:
       - '@redhat'
     data:
-    - github.com/konflux-ci/konflux-operator-trusted-sources//data?ref=93cde7802fc249a6e5c6ae09b132efb222ddc090
+    - github.com/konflux-ci/konflux-operator-trusted-sources//data?ref=95b1ba6bd85fa2117c544f4adb446f9b74a870e3
     - github.com/redhat-appstudio/tsf-conforma-data//data?ref=1966f21842d507441a7a5e1c7de9071cf3f9ec53
     name: Default
     policy:
