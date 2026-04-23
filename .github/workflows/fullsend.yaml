@@ -93,8 +93,7 @@ jobs:
         github.event.comment.body == '/review' ||
         startsWith(github.event.comment.body, '/review ')
       )) ||
-      github.event_name == 'pull_request_target' ||
-      github.event_name == 'pull_request_review'
+      github.event_name == 'pull_request_target'
     steps:
       - name: Dispatch review
         env:
