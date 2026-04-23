@@ -83,9 +83,10 @@ data:
   setup-release.sh: "#!/bin/bash -e\n\n# Script to set up release resources for a
     Konflux application.\n# Creates a managed namespace with all required resources
     (EnterpriseContractPolicy,\n# ImageRepositories, ReleasePlanAdmission) and a ReleasePlan
-    in the tenant namespace.\n\nset -o pipefail\nset -eu\n\nWAIT_TIMEOUT=120  # seconds
-    to wait for ImageRepositories to become ready\nPOLL_INTERVAL=5   # seconds between
-    polls\n\nusage() {\n    cat <<EOF\nUsage: $(basename \"$0\") [OPTIONS]\n\nSet
+    in the tenant namespace.\n# Note: this script needs to be compatible with Bash
+    3.x to support both macOS and Linux.\n\nset -o pipefail\nset -eu\n\nWAIT_TIMEOUT=120
+    \ # seconds to wait for ImageRepositories to become ready\nPOLL_INTERVAL=5   #
+    seconds between polls\n\nusage() {\n    cat <<EOF\nUsage: $(basename \"$0\") [OPTIONS]\n\nSet
     up release resources for a Konflux application. Creates a managed namespace\nwith
     ImageRepositories, EnterpriseContractPolicy, and ReleasePlanAdmission,\nand a
     ReleasePlan in the tenant namespace.\n\nOptions:\n  -t, --tenant-namespace    Source
