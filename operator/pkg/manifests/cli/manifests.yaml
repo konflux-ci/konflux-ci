@@ -141,8 +141,11 @@ data:
     (after args parsing)\nPRODUCT_NAME=${PRODUCT_NAME:-$APPLICATION}\n\n# Generate
     a unique image name prefix to avoid credential collisions between\n# concurrent
     CI runs that share the same Quay organization.\nif [[ -z \"${IMAGE_NAME_PREFIX}\"
-    ]]; then\n    RANDOM_SUFFIX=$(od -An -tx1 -N3 /dev/urandom | tr -d ' ')\n    IMAGE_NAME_PREFIX=\"${MANAGED_NS}-${RANDOM_SUFFIX}\"\nfi\n\nIS_OPENSHIFT=false\nif
-    kubectl api-resources --api-group=config.openshift.io &>/dev/null; then\n    IS_OPENSHIFT=true\nfi\n#
+    ]]; then\n    RANDOM_SUFFIX=$(od -An -tx1 -N3 /dev/urandom | tr -d ' ')\n    IMAGE_NAME_PREFIX=\"${MANAGED_NS}-${RANDOM_SUFFIX}\"\nfi\n\n#
+    OpenShift registers config.openshift.io API resources. Without -o name, kubectl
+    still exits 0\n# when the group is absent (header-only table); -o name yields
+    no lines on vanilla k8s / Kind.\nIS_OPENSHIFT=false\nif [[ -n \"$(kubectl api-resources
+    --api-group=config.openshift.io -o name 2>/dev/null)\" ]]; then\n    IS_OPENSHIFT=true\nfi\n#
     Auto-detect components if none specified\nif [[ ${#COMPONENTS[@]} -eq 0 ]]; then\n
     \   echo \"\U0001F50D No components specified, auto-detecting from application
     '${APPLICATION}' in namespace '${TENANT_NS}'...\"\n    while IFS= read -r line;

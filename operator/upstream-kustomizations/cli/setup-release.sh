@@ -150,8 +150,10 @@ if [[ -z "${IMAGE_NAME_PREFIX}" ]]; then
     IMAGE_NAME_PREFIX="${MANAGED_NS}-${RANDOM_SUFFIX}"
 fi
 
+# OpenShift registers config.openshift.io API resources. Without -o name, kubectl still exits 0
+# when the group is absent (header-only table); -o name yields no lines on vanilla k8s / Kind.
 IS_OPENSHIFT=false
-if kubectl api-resources --api-group=config.openshift.io &>/dev/null; then
+if [[ -n "$(kubectl api-resources --api-group=config.openshift.io -o name 2>/dev/null)" ]]; then
     IS_OPENSHIFT=true
 fi
 # Auto-detect components if none specified
