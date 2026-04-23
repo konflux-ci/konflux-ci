@@ -13,13 +13,11 @@ name: fullsend
 
 on:
   issues:
-    types: [opened, edited, labeled]
+    types: [labeled]
   issue_comment:
     types: [created]
   pull_request_target:
     types: [opened, synchronize, ready_for_review]
-  pull_request_review:
-    types: [submitted]
 
 jobs:
   dispatch-triage:
@@ -28,14 +26,7 @@ jobs:
       group: triage-${{ github.event.issue.number || github.event.pull_request.number }}
       cancel-in-progress: true
     if: >-
-      (github.event_name == 'issues' && (
-        github.event.action == 'opened' ||
-        (github.event.action == 'edited' &&
-          !contains(toJSON(github.event.issue.labels.*.name), 'ready-to-code') &&
-          !contains(toJSON(github.event.issue.labels.*.name), 'needs-info') &&
-          !contains(toJSON(github.event.issue.labels.*.name), 'duplicate'))
-      )) ||
-      (github.event_name == 'issue_comment' && (
+      github.event_name == 'issue_comment' && (
         github.event.comment.body == '/triage' ||
         startsWith(github.event.comment.body, '/triage ') ||
         (
@@ -44,7 +35,7 @@ jobs:
           !endsWith(github.event.comment.user.login, '[bot]') &&
           contains(toJSON(github.event.issue.labels.*.name), 'needs-info')
         )
-      ))
+      )
     steps:
       - name: Dispatch triage
         env:
