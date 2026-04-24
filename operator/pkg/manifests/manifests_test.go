@@ -12,8 +12,8 @@ import (
 
 func TestAllComponents(t *testing.T) {
 	components := AllComponents()
-	if len(components) != 14 {
-		t.Errorf("expected 14 components, got %d", len(components))
+	if len(components) != 15 {
+		t.Errorf("expected 15 components, got %d", len(components))
 	}
 }
 
@@ -25,6 +25,7 @@ func TestGetManifest(t *testing.T) {
 		{ApplicationAPI, false},
 		{BuildService, false},
 		{CertManager, false},
+		{CLI, false},
 		{DefaultTenant, false},
 		{EnterpriseContract, false},
 		{ImageController, false},
@@ -59,8 +60,8 @@ func TestGetAllManifests(t *testing.T) {
 		t.Fatalf("GetAllManifests() error = %v", err)
 	}
 
-	if len(manifests) != 14 {
-		t.Errorf("expected 14 manifests, got %d", len(manifests))
+	if len(manifests) != 15 {
+		t.Errorf("expected 15 manifests, got %d", len(manifests))
 	}
 
 	for component, content := range manifests {

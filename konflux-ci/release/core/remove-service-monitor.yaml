@@ -1,6 +1,0 @@
----
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: release-service-controller-manager-metrics-monitor
-$patch: delete
