@@ -35,6 +35,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 )
 
 // HashSuffixLength is the number of characters to use from the hash for the suffix.
@@ -127,7 +129,7 @@ func (h *HashedConfigMap) Apply(ctx context.Context, content string, owner clien
 
 	// Apply using server-side apply
 	patchOpts := []client.PatchOption{client.FieldOwner(h.fieldManager), client.ForceOwnership}
-	if err := h.client.Patch(ctx, configMap, client.Apply, patchOpts...); err != nil {
+	if err := h.client.Patch(ctx, configMap, kubernetes.SSAPatch, patchOpts...); err != nil {
 		return nil, fmt.Errorf("failed to apply ConfigMap %s: %w", configMapName, err)
 	}
 
