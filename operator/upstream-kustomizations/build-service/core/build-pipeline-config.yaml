@@ -18,5 +18,5 @@ data:
     - name: tekton-bundle-builder-oci-ta
       bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder-oci-ta@sha256:45fa5b802c2d3d79f1b2811407a4e573916e8ffd22eed2329e3bdb5d55dad2e7
     - name: docker-build-oci-ta-min
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta-min@sha256:5596db15d773ea5892b0c6a3d701a19757fed875d20cc862b3bcfb9fcf32523b
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta-min@sha256:426a1c4b2100645014ae9dc7220981341cc66fc139191620d14efa69059cc5fb
       description: minimal version of the docker-build-oci-ta pipeline, which requires less compute resources. In addition, it doesn't contain tasks which require user provided secrets.
