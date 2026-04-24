@@ -39,6 +39,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/common"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/segmentbridge"
@@ -180,7 +181,7 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	})
 
 	// Ensure konflux-ui namespace exists
-	if err := r.ensureNamespaceExists(ctx, tc); err != nil {
+	if err := common.EnsureNamespaceExists(ctx, r.ObjectStore, manifests.UI, uiNamespace, tc); err != nil {
 		return errHandler.HandleWithReason(ctx, err, condition.ReasonNamespaceCreationFailed, "ensure namespace exists")
 	}
 
@@ -260,27 +261,6 @@ func updateIngressStatus(ui *konfluxv1alpha1.KonfluxUI, isOnOpenShift bool, endp
 		Hostname: endpoint.Hostname(),
 		URL:      endpoint.String(),
 	}
-}
-
-func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, tc *tracking.Client) error {
-	objects, err := r.ObjectStore.GetForComponent(manifests.UI)
-	if err != nil {
-		return fmt.Errorf("failed to get parsed manifests for UI: %w", err)
-	}
-
-	for _, obj := range objects {
-		if namespace, ok := obj.(*corev1.Namespace); ok {
-			// Validate that the namespace name matches the expected uiNamespace
-			if namespace.Name != uiNamespace {
-				return fmt.Errorf(
-					"unexpected namespace name in manifest: expected %s, got %s", uiNamespace, namespace.Name)
-			}
-			if err := tc.ApplyOwned(ctx, namespace); err != nil {
-				return fmt.Errorf("failed to apply namespace %s: %w", namespace.Name, err)
-			}
-		}
-	}
-	return nil
 }
 
 // applyManifests loads and applies all embedded manifests to the cluster.

@@ -33,6 +33,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/common"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
@@ -148,7 +149,7 @@ func (r *KonfluxBuildServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 	})
 
 	// Ensure the build-service namespace exists before creating ConfigMaps in it.
-	if err := r.ensureNamespaceExists(ctx, tc); err != nil {
+	if err := common.EnsureNamespaceExists(ctx, r.ObjectStore, manifests.BuildService, webhookConfigNamespace, tc); err != nil {
 		return errHandler.HandleWithReason(ctx, err, condition.ReasonNamespaceCreationFailed, "ensure namespace exists")
 	}
 
@@ -284,28 +285,6 @@ func buildBuildControllerManagerOverlay(spec konfluxv1alpha1.KonfluxBuildService
 		customization.WithContainerBuilder(buildManagerContainerName, containerOpts...)(customization.DeploymentContext{Replicas: spec.BuildControllerManager.Replicas}),
 	)
 	return customization.NewPodOverlay(podOpts...)
-}
-
-// ensureNamespaceExists applies the build-service Namespace from the embedded manifests.
-// This must run before any resources are created in the namespace (e.g., ConfigMaps).
-func (r *KonfluxBuildServiceReconciler) ensureNamespaceExists(ctx context.Context, tc *tracking.Client) error {
-	objects, err := r.ObjectStore.GetForComponent(manifests.BuildService)
-	if err != nil {
-		return fmt.Errorf("failed to get parsed manifests for BuildService: %w", err)
-	}
-
-	for _, obj := range objects {
-		if namespace, ok := obj.(*corev1.Namespace); ok {
-			if namespace.Name != webhookConfigNamespace {
-				return fmt.Errorf(
-					"unexpected namespace name in manifest: expected %s, got %s", webhookConfigNamespace, namespace.Name)
-			}
-			if err := tc.ApplyOwned(ctx, namespace); err != nil {
-				return fmt.Errorf("failed to apply namespace %s: %w", namespace.Name, err)
-			}
-		}
-	}
-	return nil
 }
 
 // reconcileWebhookConfig ensures the webhook config ConfigMap exists.
