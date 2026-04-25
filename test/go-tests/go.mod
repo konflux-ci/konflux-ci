@@ -29,7 +29,7 @@ require (
 	github.com/redhat-appstudio/jvm-build-service v0.0.0-20240126122210-0e2ee7e2e5b0
 	github.com/stretchr/testify v1.11.1
 	github.com/tektoncd/cli v0.43.0
-	github.com/tektoncd/pipeline v1.7.0
+	github.com/tektoncd/pipeline v1.11.1
 	github.com/xanzy/go-gitlab v0.114.0
 	golang.org/x/oauth2 v0.34.0
 	k8s.io/api v0.35.2
