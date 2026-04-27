@@ -162,7 +162,7 @@ func TestClient_Patch(t *testing.T) {
 		},
 	}
 
-	err := tc.Patch(ctx, patched, client.Apply, client.FieldOwner("test-manager"), client.ForceOwnership)
+	err := tc.Patch(ctx, patched, kubernetes.SSAPatch, client.FieldOwner("test-manager"), client.ForceOwnership)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Verify the resource is tracked

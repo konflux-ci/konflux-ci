@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/gomega"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
@@ -50,6 +51,11 @@ func (m *mockStatusWriter) Patch(ctx context.Context, obj client.Object, patch c
 func (m *mockStatusWriter) Create(ctx context.Context, obj client.Object, subResource client.Object, opts ...client.SubResourceCreateOption) error {
 	return nil
 }
+
+func (m *mockStatusWriter) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.SubResourceApplyOption) error {
+	return nil
+}
+
 
 var _ = Describe("ReconcileErrorHandler", func() {
 	var (
