@@ -398,6 +398,7 @@ spec:
       - hermetic_task
       - source_image
       - rpm_repos
+      - cve.cve_results_found
       include:
       - '@redhat'
     data:

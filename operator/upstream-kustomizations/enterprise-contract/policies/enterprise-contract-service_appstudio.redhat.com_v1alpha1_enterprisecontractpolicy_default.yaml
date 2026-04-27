@@ -30,6 +30,10 @@ spec:
         # https://github.com/release-engineering/rhtap-ec-policy/blob/main/data/known_rpm_repositories.yml
         # However, it is not possible to include just that file in the rule data.
         - rpm_repos
+        # The minimal build pipeline we use does not include Clair scan for finding CVEs.
+        # The Clair scan task is also expected to be excluded from the the list of required
+        # tasks defined in `data` section.
+        - cve.cve_results_found
       include:
       - '@redhat'
     data:
