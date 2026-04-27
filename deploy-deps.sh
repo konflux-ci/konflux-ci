@@ -2,6 +2,10 @@
 
 script_path="$(dirname -- "${BASH_SOURCE[0]}")"
 
+# Configurable retry settings (override via environment variables)
+RETRY_COUNT="${RETRY_COUNT:-3}"
+RETRY_SLEEP="${RETRY_SLEEP:-3}"
+
 # Track deployment progress for failure reporting
 COMPLETED_STEPS=()
 CURRENT_STEP=""
@@ -574,15 +578,16 @@ init_quay_admin() {
 }
 
 retry() {
-    for i in {1..3}; do
+    local i
+    for ((i=1; i<=RETRY_COUNT; i++)); do
         local ret=0
         $1 || ret="$?"
         if [[ "$ret" -eq 0 ]]; then
             return 0
         fi
-        if [[ "$i" -lt 3 ]]; then
-            echo "🔄 Retrying command (attempt $((i+1))/3)..." >&2
-            sleep 3
+        if [[ "$i" -lt "$RETRY_COUNT" ]]; then
+            echo "🔄 Retrying command (attempt $((i+1))/${RETRY_COUNT})..." >&2
+            sleep "$RETRY_SLEEP"
         fi
     done
 
