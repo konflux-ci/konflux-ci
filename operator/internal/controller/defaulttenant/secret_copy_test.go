@@ -57,6 +57,15 @@ var _ = Describe("Secret copy helpers", func() {
 		return &konfluxv1alpha1.KonfluxInternalRegistry{ObjectMeta: metav1.ObjectMeta{Name: "konflux-internal-registry"}}
 	}
 
+	integrationRunnerSA := func() *corev1.ServiceAccount {
+		return &corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      IntegrationRunnerServiceAccountName,
+				Namespace: DefaultTenantNamespace,
+			},
+		}
+	}
+
 	It("does nothing when internal registry CR is not present", func() {
 		ctx := context.Background()
 		scheme := runtime.NewScheme()
@@ -73,6 +82,30 @@ var _ = Describe("Secret copy helpers", func() {
 		Expect(res).To(Equal(ctrl.Result{}))
 	})
 
+	It("removes stale registry credentials from integration runner when internal registry CR is absent", func() {
+		ctx := context.Background()
+		scheme := runtime.NewScheme()
+		Expect(corev1.AddToScheme(scheme)).To(Succeed())
+		Expect(konfluxv1alpha1.AddToScheme(scheme)).To(Succeed())
+
+		dt := newDefaultTenant()
+		sa := integrationRunnerSA()
+		sa.ImagePullSecrets = []corev1.LocalObjectReference{{Name: RegistryCredentialsSecretName}}
+		sa.Secrets = []corev1.ObjectReference{{Name: RegistryCredentialsSecretName}}
+		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(dt, sa).Build()
+		r := &KonfluxDefaultTenantReconciler{Client: cl, Scheme: scheme}
+		tc := buildTrackingClient(cl, dt)
+
+		res, err := r.syncInternalRegistryCredentialsSecret(ctx, tc)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res).To(Equal(ctrl.Result{}))
+
+		updated := &corev1.ServiceAccount{}
+		Expect(cl.Get(ctx, client.ObjectKey{Namespace: DefaultTenantNamespace, Name: IntegrationRunnerServiceAccountName}, updated)).To(Succeed())
+		Expect(updated.ImagePullSecrets).To(BeEmpty())
+		Expect(updated.Secrets).To(BeEmpty())
+	})
+
 	It("copies credentials after internal registry is created later", func() {
 		ctx := context.Background()
 		scheme := runtime.NewScheme()
@@ -80,7 +113,7 @@ var _ = Describe("Secret copy helpers", func() {
 		Expect(konfluxv1alpha1.AddToScheme(scheme)).To(Succeed())
 
 		dt := newDefaultTenant()
-		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(dt).Build()
+		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(dt, integrationRunnerSA()).Build()
 		r := &KonfluxDefaultTenantReconciler{Client: cl, Scheme: scheme}
 		tc := buildTrackingClient(cl, dt)
 
@@ -105,6 +138,11 @@ var _ = Describe("Secret copy helpers", func() {
 		target := &corev1.Secret{}
 		Expect(cl.Get(ctx, client.ObjectKey{Namespace: DefaultTenantNamespace, Name: RegistryCredentialsSecretName}, target)).To(Succeed())
 		Expect(target.Data[corev1.DockerConfigJsonKey]).To(Equal([]byte("late-created-creds")))
+
+		saOut := &corev1.ServiceAccount{}
+		Expect(cl.Get(ctx, client.ObjectKey{Namespace: DefaultTenantNamespace, Name: IntegrationRunnerServiceAccountName}, saOut)).To(Succeed())
+		Expect(saOut.ImagePullSecrets).To(ContainElement(corev1.LocalObjectReference{Name: RegistryCredentialsSecretName}))
+		Expect(saOut.Secrets).To(ContainElement(corev1.ObjectReference{Name: RegistryCredentialsSecretName}))
 	})
 
 	It("requeues when internal registry exists but source credentials are missing", func() {
@@ -140,7 +178,7 @@ var _ = Describe("Secret copy helpers", func() {
 		}
 		dt := newDefaultTenant()
 		registry := newInternalRegistry()
-		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(src, dt, registry).Build()
+		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(src, dt, registry, integrationRunnerSA()).Build()
 		r := &KonfluxDefaultTenantReconciler{Client: cl, Scheme: scheme}
 		tc := buildTrackingClient(cl, dt)
 
@@ -154,6 +192,11 @@ var _ = Describe("Secret copy helpers", func() {
 		Expect(out.Type).To(Equal(corev1.SecretTypeDockerConfigJson))
 		Expect(out.Data[corev1.DockerConfigJsonKey]).To(Equal(srcData))
 		Expect(out.Immutable).To(BeNil(), "copied target secret should stay mutable for rotation")
+
+		saOut := &corev1.ServiceAccount{}
+		Expect(cl.Get(ctx, client.ObjectKey{Namespace: DefaultTenantNamespace, Name: IntegrationRunnerServiceAccountName}, saOut)).To(Succeed())
+		Expect(saOut.ImagePullSecrets).To(ContainElement(corev1.LocalObjectReference{Name: RegistryCredentialsSecretName}))
+		Expect(saOut.Secrets).To(ContainElement(corev1.ObjectReference{Name: RegistryCredentialsSecretName}))
 	})
 
 	It("updates the copied target secret when source credentials rotate", func() {
@@ -169,7 +212,7 @@ var _ = Describe("Secret copy helpers", func() {
 		}
 		dt := newDefaultTenant()
 		registry := newInternalRegistry()
-		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(src, dt, registry).Build()
+		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(src, dt, registry, integrationRunnerSA()).Build()
 		r := &KonfluxDefaultTenantReconciler{Client: cl, Scheme: scheme}
 		tc := buildTrackingClient(cl, dt)
 

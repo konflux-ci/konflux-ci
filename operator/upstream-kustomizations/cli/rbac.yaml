@@ -8,6 +8,7 @@ rules:
   - ""
   resourceNames:
   - create-tenant
+  - setup-component
   - setup-release
   resources:
   - configmaps

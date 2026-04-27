@@ -147,6 +147,14 @@ var _ = Describe("KonfluxDefaultTenant Controller", func() {
 				}, got)).To(Succeed())
 				g.Expect(got.Data).To(HaveKey(corev1.DockerConfigJsonKey))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			sa := &corev1.ServiceAccount{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      IntegrationRunnerServiceAccountName,
+				Namespace: defaultTenantNamespace,
+			}, sa)).To(Succeed())
+			Expect(sa.ImagePullSecrets).To(ContainElement(corev1.LocalObjectReference{Name: RegistryCredentialsSecretName}))
+			Expect(sa.Secrets).To(ContainElement(corev1.ObjectReference{Name: RegistryCredentialsSecretName}))
 		})
 	})
 })

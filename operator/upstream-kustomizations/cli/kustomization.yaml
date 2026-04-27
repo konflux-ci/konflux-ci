@@ -14,6 +14,9 @@ configMapGenerator:
   - name: create-tenant
     files:
       - create-tenant.sh
+  - name: setup-component
+    files:
+      - setup-component.sh
   - name: setup-release
     files:
       - setup-release.sh
