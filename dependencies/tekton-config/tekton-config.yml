@@ -45,7 +45,6 @@ spec:
     disabled: false
   pipeline:
     default-service-account: default
-    default-imagepullbackoff-timeout: "10m"
     options:
       disabled: false
       deployments:
