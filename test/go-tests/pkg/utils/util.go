@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -24,15 +23,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	dockerconfig "github.com/docker/cli/cli/config"
-	dockerconfigfile "github.com/docker/cli/cli/config/configfile"
-	dockerconfigtypes "github.com/docker/cli/cli/config/types"
-
 	"github.com/devfile/library/v2/pkg/util"
-	"github.com/google/go-containerregistry/pkg/authn"
-	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/constants"
-	"github.com/mitchellh/go-homedir"
 	"k8s.io/klog/v2"
 
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -191,28 +183,6 @@ func MergeMaps(m1, m2 map[string]string) map[string]string {
 		resultMap[k] = v
 	}
 	return resultMap
-}
-
-// CreateDockerConfigFile takes base64 encoded dockerconfig.json and saves it locally (/<home-directory/.docker/config.json)
-func CreateDockerConfigFile(base64EncodedString string) error {
-	var rawRegistryCreds []byte
-	var homeDir string
-	var err error
-
-	if rawRegistryCreds, err = base64.StdEncoding.DecodeString(base64EncodedString); err != nil {
-		return fmt.Errorf("unable to decode container registry credentials: %v", err)
-	}
-	if homeDir, err = homedir.Dir(); err != nil {
-		return fmt.Errorf("unable to locate home directory: %v", err)
-	}
-	if err = os.MkdirAll(homeDir+"/.docker", 0775); err != nil {
-		return fmt.Errorf("failed to create '.docker' config directory: %v", err)
-	}
-	if err = os.WriteFile(homeDir+"/.docker/config.json", rawRegistryCreds, 0644); err != nil {
-		return fmt.Errorf("failed to create a docker config file: %v", err)
-	}
-
-	return nil
 }
 
 // Return a container logs from a given pod and namespace
@@ -419,67 +389,3 @@ func FilterSliceUsingPattern(pattern string, lString []string) []string {
 	return results
 }
 
-// getAuthForImageRef searches a given Docker configuration file for authentication credentials
-// that match the provided image reference. It attempts to find the most specific match first
-// (e.g., full repository name), then falls back to less specific matches (e.g., namespace,
-// or just the registry host). It returns the first suitable AuthConfig found.
-func getAuthForImageRef(cfg *dockerconfigfile.ConfigFile, imageRef name.Reference) (dockerconfigtypes.AuthConfig, error) {
-	// Extract namespace from image reference repository
-	// i.e. namespace/repository -> namespace
-	var namespace string
-	parts := strings.Split(imageRef.Context().RepositoryStr(), "/")
-	if len(parts) > 1 {
-		namespace = parts[0]
-	}
-
-	matchingEntries := []string{
-		// quay.io/namespace/repo
-		imageRef.Context().Name(),
-		// quay.io/namespace
-		fmt.Sprintf("%s/%s", imageRef.Context().RegistryStr(), namespace),
-		// quay.io
-		imageRef.Context().RegistryStr(),
-	}
-
-	for _, entry := range matchingEntries {
-		authConfig, err := cfg.GetAuthConfig(entry)
-		if err != nil {
-			return authConfig, fmt.Errorf("failed to get auth config for %s: %+v", entry, err)
-		}
-		if authConfig.ServerAddress == entry && authConfig.Username != "" {
-			return authConfig, nil
-		}
-	}
-
-	return dockerconfigtypes.AuthConfig{}, fmt.Errorf("no suitable auth config matches image ref %s", imageRef.String())
-}
-
-// GetAuthenticatorForImageRef decodes a base64-encoded Docker configuration JSON string,
-// loads it into a Docker config object, and then uses it to find appropriate
-// authentication credentials for the given image reference. If suitable credentials
-// (with a username) are found, it returns an `authn.Authenticator` instance
-// that can be used for authenticating with container registries.
-func GetAuthenticatorForImageRef(imageRef name.Reference, encodedDockerconfigjson string) (authenticator authn.Authenticator, err error) {
-	var rawRegistryCreds []byte
-	if rawRegistryCreds, err = base64.StdEncoding.DecodeString(encodedDockerconfigjson); err != nil {
-		return authenticator, fmt.Errorf("unable to decode container registry credentials: %v", err)
-	}
-	dockerConfig, err := dockerconfig.LoadFromReader(strings.NewReader(string(rawRegistryCreds)))
-	if err != nil {
-		return authenticator, fmt.Errorf("failed to load docker config from supplied dockerconfigjson: %+v", err)
-	}
-	// Resolve credentials for a specified image reference
-	authConfig, err := getAuthForImageRef(dockerConfig, imageRef)
-	if err != nil {
-		return authenticator, fmt.Errorf("failed to get auth for image ref: %+v", err)
-	}
-
-	if authConfig.Username != "" {
-		klog.Infof("found credentials for image ref %s -> user: %s\n", imageRef.String(), authConfig.Username)
-		return authn.FromConfig(authn.AuthConfig{
-			Username: authConfig.Username,
-			Password: authConfig.Password,
-		}), nil
-	}
-	return authenticator, fmt.Errorf("did not find any suitable credentials for image ref %s", imageRef.String())
-}
