@@ -14,6 +14,7 @@ compatible with the installed operator version and services.
 | ConfigMap | Script | Purpose |
 |-----------|--------|---------|
 | `create-tenant` | `create-tenant.sh` | Create a new tenant namespace with all required RBAC resources |
+| `setup-component` | `setup-component.sh` | Onboard an application component and optionally add an IntegrationTestScenario |
 | `setup-release` | `setup-release.sh` | Set up a managed namespace with release pipeline resources |
 
 ## Downloading the scripts
@@ -30,6 +31,11 @@ kubectl get configmap setup-release -n konflux-cli -o jsonpath='{.data.setup-rel
 chmod +x setup-release.sh
 ```
 
+```bash
+kubectl get configmap setup-component -n konflux-cli -o jsonpath='{.data.setup-component\.sh}' > setup-component.sh
+chmod +x setup-component.sh
+```
+
 ## create-tenant.sh
 
 Creates a new tenant namespace with a ServiceAccount for integration pipelines and
@@ -40,6 +46,19 @@ RoleBindings for both the pipeline runner and an admin user.
 ```
 
 Run `./create-tenant.sh -h` for the full list of options.
+
+## setup-component.sh
+
+Creates an application + component onboarding setup in a tenant namespace.
+It creates Application, Component, and Repository resources, and can optionally
+create an IntegrationTestScenario.
+
+```bash
+./setup-component.sh -t <tenant-namespace> -a <application> -c <component> \
+  -g <component-git-url> -r <git-revision>
+```
+
+Run `./setup-component.sh -h` for the full list of options.
 
 ## setup-release.sh
 

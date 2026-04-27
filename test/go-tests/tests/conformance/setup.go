@@ -52,6 +52,64 @@ func runSetupRelease(appName, componentName, tenantNS, managedNS string) error {
 	return cmd.Run()
 }
 
+// runSetupComponent downloads setup-component.sh from the ConfigMap shipped by
+// the operator (konflux-cli/setup-component) and executes it to create the
+// onboarding resources in the tenant namespace.
+func runSetupComponent(appName, componentName, tenantNS, gitURL, gitRevision, gitContext, dockerfilePath, repositoryURL, buildPipelineAnnotation, integrationGitURL, integrationRevision, integrationPath, registryMode string, skipRepository bool) error {
+	scriptContent, err := downloadScriptFromConfigMap("konflux-cli", "setup-component", "setup-component.sh")
+	if err != nil {
+		return fmt.Errorf("download setup-component.sh from ConfigMap: %w", err)
+	}
+
+	tmpDir, err := os.MkdirTemp("", "setup-component-*")
+	if err != nil {
+		return fmt.Errorf("create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	scriptPath := filepath.Join(tmpDir, "setup-component.sh")
+	if err := os.WriteFile(scriptPath, scriptContent, 0o755); err != nil {
+		return fmt.Errorf("write setup-component.sh: %w", err)
+	}
+
+	args := []string{
+		"-t", tenantNS,
+		"-a", appName,
+		"-c", componentName,
+		"-g", gitURL,
+		"-r", gitRevision,
+		"-M", registryMode,
+	}
+	if gitContext != "" {
+		args = append(args, "-x", gitContext)
+	}
+	if dockerfilePath != "" {
+		args = append(args, "-d", dockerfilePath)
+	}
+	if repositoryURL != "" {
+		args = append(args, "-u", repositoryURL)
+	}
+	if skipRepository {
+		args = append(args, "-s")
+	}
+	if buildPipelineAnnotation != "" {
+		args = append(args, "-p", buildPipelineAnnotation)
+	}
+	if integrationGitURL != "" && integrationRevision != "" && integrationPath != "" {
+		args = append(args,
+			"-i", integrationGitURL,
+			"-j", integrationRevision,
+			"-k", integrationPath,
+		)
+	}
+
+	klog.Infof("conformance: running setup-component.sh %v (from ConfigMap konflux-cli/setup-component)", args)
+	cmd := exec.Command(scriptPath, args...)
+	cmd.Stdout = ginkgo.GinkgoWriter
+	cmd.Stderr = ginkgo.GinkgoWriter
+	return cmd.Run()
+}
+
 // e2eECPExclusions lists policy rules to exclude during E2E tests. The default
 // build pipeline sets skip-checks=true which disables security scans/tests, so
 // the corresponding required_tasks_found rules must be excluded to avoid EC

@@ -95,29 +95,37 @@ Your application is now onboarded, and you can continue to the
 
 ### Option 2: Onboard Application with Kubernetes Manifests
 
-With this approach, we use `kubectl` to deploy the manifests for creating the
-`Application` and `Component` resources and we manually create the PR for introducing
-the pipelines to run using Konflux.
+With this approach, we use a cluster-shipped script to create the Kubernetes
+resources for onboarding and then manually create the PR that introduces the
+pipelines Konflux will run.
 
 To do that:
 
-1. Use a text editor to edit your local copy of
-   `test/resources/demo-users/user/sample-components/ns2/application-and-component.yaml`.
-
-   Under the `Component` and `Repository` resources, change the `url` fields so they
-   point to your newly-created fork.
-
-   Note the format differences between the two fields — the `Component` URL has a `.git`
-   suffix, while the `Repository` URL does not.
-
-   Deploy the manifests:
+1. Download the onboarding script from the cluster and make it executable:
 
    ```bash
-   kubectl create -f ./test/resources/demo-users/user/sample-components/ns2/application-and-component.yaml
+   kubectl get configmap setup-component -n konflux-cli \
+     -o jsonpath='{.data.setup-component\.sh}' > setup-component.sh
+   chmod +x setup-component.sh
    ```
 
-2. Log into the Konflux UI as `user2@konflux.dev` (password: `password`). You should be
-   able to see your new Application and Component by clicking "View my applications".
+2. Run the script to onboard your fork into the default tenant namespace and use the
+   in-cluster registry mode:
+
+   ```bash
+   REPO=https://github.com/<your-user>/testrepo
+   ./setup-component.sh \
+     -t default-tenant \
+     -a testrepo \
+     -c testrepo \
+     -g "$REPO" \
+     -r main \
+     -M in-cluster
+   ```
+
+3. Log into the Konflux UI and make sure your workspace is set to `default-tenant`.
+   You should be able to see your new Application and Component by clicking
+   "View my applications".
 
 #### Image Registry
 
@@ -245,28 +253,28 @@ curl -k https://localhost:30001/v2/_catalog
 The output should look like this:
 
 ```bash
-{"repositories":["test-component"]}
+{"repositories":["testrepo"]}
 ```
 
-List the tags on the `test-component` repository (assuming you did not change the
+List the tags on the `testrepo` repository (assuming you did not change the
 pipeline's `output-image` parameter):
 
 ```bash
-curl -k https://localhost:30001/v2/test-component/tags/list
+curl -k https://localhost:30001/v2/testrepo/tags/list
 ```
 
 You should see a list of tags pushed to that repository:
 
 ```bash
-{"name":"test-component","tags":["on-pr-1ab9e6d756fbe84aa727fc8bb27c7362d40eb3a4","sha256-b63f3d381f8bb2789f2080716d88ed71fe5060421277746d450fbcf938538119.sbom"]}
+{"name":"testrepo","tags":["on-pr-1ab9e6d756fbe84aa727fc8bb27c7362d40eb3a4","sha256-b63f3d381f8bb2789f2080716d88ed71fe5060421277746d450fbcf938538119.sbom"]}
 ```
 
 Pull the image starting with `on-pr-` (using `podman` below, but the commands should be
 similar for `docker`):
 
 ```bash
-podman pull --tls-verify=false localhost:30001/test-component:on-pr-1ab9e6d756fbe84aa727fc8bb27c7362d40eb3a4
-Trying to pull localhost:30001/test-component:on-pr-1ab9e6d756fbe84aa727fc8bb27c7362d40eb3a4...
+podman pull --tls-verify=false localhost:30001/testrepo:on-pr-1ab9e6d756fbe84aa727fc8bb27c7362d40eb3a4
+Trying to pull localhost:30001/testrepo:on-pr-1ab9e6d756fbe84aa727fc8bb27c7362d40eb3a4...
 Getting image source signatures
 Copying blob cde118a3f567 done   |
 Copying blob 2efec45cd878 done   |

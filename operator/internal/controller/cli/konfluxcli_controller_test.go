@@ -142,6 +142,14 @@ var _ = Describe("KonfluxCLI Controller", func() {
 				Namespace: "konflux-cli",
 			}, setupReleaseCM)).To(Succeed())
 			Expect(setupReleaseCM.Data).To(HaveKey("setup-release.sh"))
+
+			By("Verifying the setup-component ConfigMap was created")
+			setupComponentCM := &corev1.ConfigMap{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      "setup-component",
+				Namespace: "konflux-cli",
+			}, setupComponentCM)).To(Succeed())
+			Expect(setupComponentCM.Data).To(HaveKey("setup-component.sh"))
 		})
 
 		It("should return no error when the CR does not exist", func() {
