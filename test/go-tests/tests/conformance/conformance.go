@@ -116,22 +116,6 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 
 			// --- Application & Component Setup ---
 
-			ginkgo.It("creates an application", ginkgo.Label(devEnvTestLabel, upstreamKonfluxTestLabel), func() {
-				createdApplication, createErr := fw.AsKubeAdmin.HasController.CreateApplication(appSpec.ApplicationName, userNamespace)
-				gomega.Expect(createErr).NotTo(gomega.HaveOccurred())
-				gomega.Expect(createdApplication.Spec.DisplayName).To(gomega.Equal(appSpec.ApplicationName))
-				gomega.Expect(createdApplication.Namespace).To(gomega.Equal(userNamespace))
-			})
-
-			ginkgo.It("creates an IntegrationTestScenario", ginkgo.Label(devEnvTestLabel, upstreamKonfluxTestLabel), func() {
-				its := appSpec.ComponentSpec.IntegrationTestScenario
-				gomega.Eventually(func() error {
-					var createErr error
-					integrationTestScenario, createErr = fw.AsKubeAdmin.IntegrationController.CreateIntegrationTestScenario("", appSpec.ApplicationName, userNamespace, its.GitURL, its.GitRevision, its.TestPath, "", []string{})
-					return createErr
-				}, time.Minute*2, time.Second*5).Should(gomega.Succeed(), "timed out creating IntegrationTestScenario")
-			})
-
 			ginkgo.It("creates new branch for the build", ginkgo.Label(devEnvTestLabel, upstreamKonfluxTestLabel), func() {
 				componentNewBaseBranch = fmt.Sprintf("base-%s", util.GenerateRandomString(6))
 				gitRevision = componentNewBaseBranch
@@ -139,23 +123,53 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			})
 
-			ginkgo.It(fmt.Sprintf("creates component %s (private: %t) from git source %s", appSpec.ComponentSpec.Name, appSpec.ComponentSpec.Private, appSpec.ComponentSpec.GitSourceUrl), ginkgo.Label(devEnvTestLabel, upstreamKonfluxTestLabel), func() {
-				componentObj := appservice.ComponentSpec{
-					ComponentName: componentName,
-					Application:   appSpec.ApplicationName,
-					Source: appservice.ComponentSource{
-						ComponentSourceUnion: appservice.ComponentSourceUnion{
-							GitSource: &appservice.GitSource{
-								URL:           appSpec.ComponentSpec.GitSourceUrl,
-								Revision:      gitRevision,
-								Context:       appSpec.ComponentSpec.GitSourceContext,
-								DockerfileURL: appSpec.ComponentSpec.DockerFilePath,
-							},
-						},
-					},
-				}
-				component, err = fw.AsKubeAdmin.HasController.CreateComponentCheckImageRepository(componentObj, userNamespace, "", "", appSpec.ApplicationName, false, utils.MergeMaps(constants.ComponentPaCRequestAnnotation, buildPipelineAnnotation))
-				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
+			ginkgo.It("onboards resources using setup-component.sh from the cluster", ginkgo.Label(devEnvTestLabel, upstreamKonfluxTestLabel), func() {
+				its := appSpec.ComponentSpec.IntegrationTestScenario
+				buildPipelineJSON := buildPipelineAnnotation["build.appstudio.openshift.io/pipeline"]
+
+				gomega.Expect(runSetupComponent(
+					appSpec.ApplicationName,
+					componentName,
+					userNamespace,
+					appSpec.ComponentSpec.GitSourceUrl,
+					gitRevision,
+					appSpec.ComponentSpec.GitSourceContext,
+					appSpec.ComponentSpec.DockerFilePath,
+					appSpec.ComponentSpec.GitSourceUrl,
+					buildPipelineJSON,
+					its.GitURL,
+					its.GitRevision,
+					its.TestPath,
+					"image-controller",
+					true,
+				)).To(gomega.Succeed())
+
+				gomega.Eventually(func() error {
+					var getErr error
+					component, getErr = fw.AsKubeAdmin.HasController.GetComponent(componentName, userNamespace)
+					if getErr != nil {
+						return getErr
+					}
+					if component.Spec.Application != appSpec.ApplicationName {
+						return fmt.Errorf("component %s/%s points to application %q, expected %q", userNamespace, componentName, component.Spec.Application, appSpec.ApplicationName)
+					}
+					return nil
+				}, time.Minute*2, time.Second*5).Should(gomega.Succeed(), "timed out waiting for Component created by setup-component.sh")
+
+				expectedITSName := fmt.Sprintf("%s-integration", componentName)
+				gomega.Eventually(func() error {
+					scenarios, getErr := fw.AsKubeAdmin.IntegrationController.GetIntegrationTestScenarios(appSpec.ApplicationName, userNamespace)
+					if getErr != nil {
+						return getErr
+					}
+					for i := range *scenarios {
+						if (*scenarios)[i].Name == expectedITSName {
+							integrationTestScenario = &(*scenarios)[i]
+							return nil
+						}
+					}
+					return fmt.Errorf("integration test scenario %s not found in namespace %s", expectedITSName, userNamespace)
+				}, time.Minute*2, time.Second*5).Should(gomega.Succeed(), "timed out waiting for IntegrationTestScenario created by setup-component.sh")
 			})
 
 			// --- PaC Pull Request & Build ---
