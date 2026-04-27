@@ -17,6 +17,7 @@ limitations under the License.
 package info
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -325,7 +326,15 @@ func (r *KonfluxInfoReconciler) ensureNamespaceExists(ctx context.Context, tc *t
 // clusterId is the stable cluster identifier (OpenShift ClusterVersion UID or kube-system namespace UID).
 func (r *KonfluxInfoReconciler) generateInfoJSON(config *konfluxv1alpha1.PublicInfo, k8sVersion, openShiftVersion, clusterId string) ([]byte, error) {
 	info := r.applyInfoDefaults(config, k8sVersion, openShiftVersion, clusterId)
-	return json.MarshalIndent(info, "", "    ")
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "    ")
+	if err := encoder.Encode(info); err != nil {
+		return nil, err
+	}
+	// Encode appends a trailing newline; trim it to match MarshalIndent behavior.
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }
 
 // applyInfoDefaults applies default values to PublicInfo if not specified.

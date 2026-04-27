@@ -737,6 +737,47 @@ func TestKonfluxInfoClusterIdIntegration(t *testing.T) {
 	})
 }
 
+func TestGenerateInfoJSONDoesNotEscapeAngleBrackets(t *testing.T) {
+	r := &KonfluxInfoReconciler{}
+
+	t.Run("should preserve angle brackets in info.json", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		config := &konfluxv1alpha1.PublicInfo{
+			Integrations: &konfluxv1alpha1.IntegrationsConfig{
+				SBOMServer: &konfluxv1alpha1.SBOMServerConfig{
+					URL:     "https://sbom.example.com/content/<PLACEHOLDER>",
+					SBOMSha: "https://sbom.example.com/sboms/<PLACEHOLDER>",
+				},
+			},
+		}
+
+		jsonBytes, err := r.generateInfoJSON(config, "v1.29.0", "", "")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		jsonStr := string(jsonBytes)
+		g.Expect(jsonStr).To(gomega.ContainSubstring("<PLACEHOLDER>"))
+		g.Expect(jsonStr).NotTo(gomega.ContainSubstring("\\u003c"))
+		g.Expect(jsonStr).NotTo(gomega.ContainSubstring("\\u003e"))
+	})
+
+	t.Run("should preserve angle brackets in status page URL", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		config := &konfluxv1alpha1.PublicInfo{
+			StatusPageUrl: "https://status.example.com/<org>",
+		}
+
+		jsonBytes, err := r.generateInfoJSON(config, "v1.29.0", "", "")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		jsonStr := string(jsonBytes)
+		g.Expect(jsonStr).To(gomega.ContainSubstring("<org>"))
+		g.Expect(jsonStr).NotTo(gomega.ContainSubstring("\\u003c"))
+		g.Expect(jsonStr).NotTo(gomega.ContainSubstring("\\u003e"))
+	})
+}
+
 func TestKonfluxInfoEdgeCases(t *testing.T) {
 	// Skip if k8sClient is not initialized (tests need to run as part of Ginkgo suite)
 	if k8sClient == nil || objectStore == nil {
