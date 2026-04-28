@@ -83,9 +83,10 @@ data:
   setup-release.sh: "#!/bin/bash -e\n\n# Script to set up release resources for a
     Konflux application.\n# Creates a managed namespace with all required resources
     (EnterpriseContractPolicy,\n# ImageRepositories, ReleasePlanAdmission) and a ReleasePlan
-    in the tenant namespace.\n\nset -o pipefail\nset -eu\n\nWAIT_TIMEOUT=120  # seconds
-    to wait for ImageRepositories to become ready\nPOLL_INTERVAL=5   # seconds between
-    polls\n\nusage() {\n    cat <<EOF\nUsage: $(basename \"$0\") [OPTIONS]\n\nSet
+    in the tenant namespace.\n# Note: this script needs to be compatible with Bash
+    3.x to support both macOS and Linux.\n\nset -o pipefail\nset -eu\n\nWAIT_TIMEOUT=120
+    \ # seconds to wait for ImageRepositories to become ready\nPOLL_INTERVAL=5   #
+    seconds between polls\n\nusage() {\n    cat <<EOF\nUsage: $(basename \"$0\") [OPTIONS]\n\nSet
     up release resources for a Konflux application. Creates a managed namespace\nwith
     ImageRepositories, EnterpriseContractPolicy, and ReleasePlanAdmission,\nand a
     ReleasePlan in the tenant namespace.\n\nOptions:\n  -t, --tenant-namespace    Source
@@ -123,7 +124,7 @@ data:
     \"${name}\" -n \"${MANAGED_NS}\" -o jsonpath='{.status.message}' 2>/dev/null ||
     echo 'none')\"\n    return 1\n}\n\n# Parse arguments\nTENANT_NS=\"default-tenant\"\nMANAGED_NS=\"default-managed-tenant\"\nAPPLICATION=\"sample-component\"\nPRODUCT_VERSION=\"0.1\"\nCONFORMA_POLICY=\"default\"\nRELEASE_NAME=\"local-release\"\n#
     renovate: datasource=git-refs depName=https://github.com/konflux-ci/release-service-catalog
-    currentValue=development\nCATALOG_REVISION=\"2c240d6a1b551a1e152e299567175872bb10fb16\"\nIMAGE_NAME_PREFIX=\"\"\nCOMPONENTS=()\n\nwhile
+    currentValue=development\nCATALOG_REVISION=\"64f719dac16c7fa1dec0eeefa38f885ee3c1f7e1\"\nIMAGE_NAME_PREFIX=\"\"\nCOMPONENTS=()\n\nwhile
     [[ $# -gt 0 ]]; do\n    case $1 in\n        -t|--tenant-namespace)\n            TENANT_NS=\"$2\"\n
     \           shift 2\n            ;;\n        -m|--managed-namespace)\n            MANAGED_NS=\"$2\"\n
     \           shift 2\n            ;;\n        -a|--application)\n            APPLICATION=\"$2\"\n
