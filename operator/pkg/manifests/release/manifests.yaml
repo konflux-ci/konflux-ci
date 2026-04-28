@@ -4177,16 +4177,36 @@ spec:
                               description: Timeout defines adjustment for timeout
                                 failures.
                               properties:
-                                increment:
-                                  description: Increment is the duration to add to
-                                    the timeout on each retry.
-                                  type: string
-                                maxTimeout:
-                                  description: MaxTimeout is the maximum time allowed
-                                    across retries.
-                                  type: string
-                              required:
-                              - increment
+                                pipeline:
+                                  description: Pipeline defines the timeout adjustment
+                                    for PipelineRun timeouts.
+                                  properties:
+                                    increment:
+                                      description: Increment is the duration to add
+                                        to the timeout on each retry.
+                                      type: string
+                                    maxTimeout:
+                                      description: MaxTimeout is the maximum time
+                                        allowed across retries.
+                                      type: string
+                                  required:
+                                  - increment
+                                  type: object
+                                task:
+                                  description: Task defines the timeout adjustment
+                                    for TaskRun timeouts.
+                                  properties:
+                                    increment:
+                                      description: Increment is the duration to add
+                                        to the timeout on each retry.
+                                      type: string
+                                    maxTimeout:
+                                      description: MaxTimeout is the maximum time
+                                        allowed across retries.
+                                      type: string
+                                  required:
+                                  - increment
+                                  type: object
                               type: object
                           type: object
                       required:
@@ -5034,11 +5054,13 @@ spec:
               key: DEFAULT_RELEASE_WORKSPACE_SIZE
               name: release-service-manager-properties
               optional: true
+        - name: MAX_CONCURRENT_RECONCILES
+          value: "10"
         - name: SERVICE_NAMESPACE
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: quay.io/konflux-ci/release-service:01b53f7ce587698ac50167289027d00dab88517c
+        image: quay.io/konflux-ci/release-service:87c8fb85d557b3256121ca39d74f4692f90634e6
         livenessProbe:
           httpGet:
             path: /healthz
