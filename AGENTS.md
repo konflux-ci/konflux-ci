@@ -107,7 +107,4 @@ PRs trigger the following workflows:
 
 ## Skills
 
-Detailed guides in `skills/`:
-- [create-pr](skills/create-pr/SKILL.md) — PR workflow and CI behavior
-- [local-dev-setup](skills/local-dev-setup/SKILL.md) — Kind cluster deployment
-- [update-upstream-deps](skills/update-upstream-deps/SKILL.md) — Bump component versions
+Detailed guides live in `skills/` — each subdirectory contains a `SKILL.md` with instructions.
