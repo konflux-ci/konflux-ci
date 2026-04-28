@@ -10,4 +10,4 @@ resources:
 images:
   - name: quay.io/konflux-ci/zot
     newName: quay.io/konflux-ci/zot
-    newTag: 208b9a64ab9ef4682e838945a1a1582fafe600ae
+    digest: sha256:d2fd37b87f958304907296c22f599a898b49909ce8e72558634f1eb2d8fdd3d5
