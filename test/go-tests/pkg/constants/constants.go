@@ -8,7 +8,6 @@ const (
 	GITHUB_TOKEN_ENV            string = "GITHUB_TOKEN"            // #nosec
 	GITHUB_E2E_ORGANIZATION_ENV string = "MY_GITHUB_ORG"           // #nosec
 	QUAY_E2E_ORGANIZATION_ENV   string = "QUAY_E2E_ORGANIZATION"   // #nosec
-	DEFAULT_QUAY_ORG_ENV        string = "DEFAULT_QUAY_ORG"        // #nosec
 
 	TEKTON_CHAINS_NS string = "openshift-pipelines" // #nosec
 
@@ -37,7 +36,6 @@ const (
 	TenantLabelValue string = "tenant"
 	WorkspaceLabelKey string = "appstudio.redhat.com/workspace_name"
 
-	DefaultQuayOrg        = "redhat-appstudio-qe"
 	DefaultGitLabAPIURL   = "https://gitlab.com/api/v4"
 	DefaultGitLabQEOrg    = "konflux-qe"
 
@@ -48,8 +46,6 @@ const (
 	QuayRepositorySecretNamespace = "e2e-secrets"
 
 	BuildPipelineConfigConfigMapYamlURL = "https://raw.githubusercontent.com/redhat-appstudio/infra-deployments/main/components/build-service/base/build-pipeline-config/build-pipeline-config.yaml"
-
-	DefaultImagePushRepo = "quay.io/" + DefaultQuayOrg + "/test-images"
 
 	TektonTaskTestOutputName     = "TEST_OUTPUT"
 	DefaultPipelineServiceAccount = "konflux-integration-runner"
