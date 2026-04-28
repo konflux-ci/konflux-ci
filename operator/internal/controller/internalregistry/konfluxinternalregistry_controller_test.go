@@ -60,11 +60,13 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 		})
 
 		It("should successfully reconcile the resource", func() {
-			updated := &konfluxv1alpha1.KonfluxInternalRegistry{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
-			Expect(updated.Status.Conditions).NotTo(BeEmpty())
-			readyCond := meta.FindStatusCondition(updated.Status.Conditions, condition.TypeReady)
-			Expect(readyCond).NotTo(BeNil(), "Ready condition should be present")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.KonfluxInternalRegistry{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
+				g.Expect(updated.Status.Conditions).NotTo(BeEmpty())
+				readyCond := meta.FindStatusCondition(updated.Status.Conditions, condition.TypeReady)
+				g.Expect(readyCond).NotTo(BeNil(), "Ready condition should be present")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
 		It("should set ownership labels on applied resources", func() {

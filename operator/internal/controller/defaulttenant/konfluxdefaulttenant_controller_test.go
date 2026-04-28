@@ -21,12 +21,14 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/internalregistry"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 )
 
@@ -91,6 +93,60 @@ var _ = Describe("KonfluxDefaultTenant Controller", func() {
 			Expect(rbAuth.Subjects).To(HaveLen(1))
 			Expect(rbAuth.Subjects[0].Kind).To(Equal("Group"))
 			Expect(rbAuth.Subjects[0].Name).To(Equal("system:authenticated"))
+		})
+
+		It("should reconcile when registry source secret appears after default-tenant", func() {
+			// Ensure target secret is absent before the source secret event.
+			target := &corev1.Secret{}
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name:      RegistryCredentialsSecretName,
+				Namespace: defaultTenantNamespace,
+			}, target)
+			Expect(apierrors.IsNotFound(err)).To(BeTrue())
+
+			registry := &konfluxv1alpha1.KonfluxInternalRegistry{
+				ObjectMeta: metav1.ObjectMeta{Name: internalregistry.CRName},
+			}
+			Expect(k8sClient.Create(ctx, registry)).To(Succeed())
+			DeferCleanup(func() {
+				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxInternalRegistry{
+					ObjectMeta: metav1.ObjectMeta{Name: internalregistry.CRName},
+				})
+			})
+
+			Expect(k8sClient.Create(ctx, &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{Name: RegistrySourceSecretNamespace},
+			})).To(Succeed())
+
+			source := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      RegistrySourceSecretName,
+					Namespace: RegistrySourceSecretNamespace,
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+				Data: map[string][]byte{
+					corev1.DockerConfigJsonKey: []byte(`{"auths":{"registry-service.kind-registry":{"auth":"abc"}}}`),
+				},
+			}
+			Expect(k8sClient.Create(ctx, source)).To(Succeed())
+			DeferCleanup(func() {
+				testutil.DeleteAndWait(ctx, k8sClient, &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      RegistrySourceSecretName,
+						Namespace: RegistrySourceSecretNamespace,
+					},
+				})
+			})
+
+			// Source secret watch should enqueue KonfluxDefaultTenant reconcile.
+			Eventually(func(g Gomega) {
+				got := &corev1.Secret{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      RegistryCredentialsSecretName,
+					Namespace: defaultTenantNamespace,
+				}, got)).To(Succeed())
+				g.Expect(got.Data).To(HaveKey(corev1.DockerConfigJsonKey))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})
 })

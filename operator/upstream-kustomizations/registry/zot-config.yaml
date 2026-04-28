@@ -1,4 +1,7 @@
 ---
+# http.compat docker2s2: Zot is OCI-native; this mode exposes Docker Registry HTTP API V2 schema2
+# compatibility so buildah, skopeo, and Konflux pipelines can push/pull images the same way as
+# against docker distribution / Quay.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -14,9 +17,15 @@ data:
       "http": {
         "address": "0.0.0.0",
         "port": 5000,
+        "compat": ["docker2s2"],
         "tls": {
           "cert": "/certs/tls.crt",
           "key": "/certs/tls.key"
+        },
+        "auth": {
+          "htpasswd": {
+            "path": "/etc/zot/auth/htpasswd"
+          }
         }
       },
       "log": {

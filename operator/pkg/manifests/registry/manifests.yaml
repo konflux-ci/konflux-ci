@@ -14,9 +14,15 @@ data:
       "http": {
         "address": "0.0.0.0",
         "port": 5000,
+        "compat": ["docker2s2"],
         "tls": {
           "cert": "/certs/tls.crt",
           "key": "/certs/tls.key"
+        },
+        "auth": {
+          "htpasswd": {
+            "path": "/etc/zot/auth/htpasswd"
+          }
         }
       },
       "log": {
@@ -69,22 +75,18 @@ spec:
         - /etc/zot/config.json
         image: quay.io/konflux-ci/zot@sha256:e99c877789aecdb18fa8a8a3e6570a8117730fe2fc915d76b39b52afc286d93a
         livenessProbe:
-          httpGet:
-            path: /v2/
-            port: 5000
-            scheme: HTTPS
           initialDelaySeconds: 15
           periodSeconds: 20
+          tcpSocket:
+            port: 5000
         name: registry
         ports:
         - containerPort: 5000
         readinessProbe:
-          httpGet:
-            path: /v2/
-            port: 5000
-            scheme: HTTPS
           initialDelaySeconds: 5
           periodSeconds: 10
+          tcpSocket:
+            port: 5000
         resources:
           limits:
             cpu: 100m
@@ -99,6 +101,9 @@ spec:
         - mountPath: /etc/zot
           name: zot-config
           readOnly: true
+        - mountPath: /etc/zot/auth
+          name: zot-auth
+          readOnly: true
         - mountPath: /var/lib/registry
           name: storage
       volumes:
@@ -108,6 +113,9 @@ spec:
       - configMap:
           name: zot-config
         name: zot-config
+      - name: zot-auth
+        secret:
+          secretName: zot-htpasswd
       - emptyDir: {}
         name: storage
 ---
