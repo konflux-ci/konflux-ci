@@ -404,6 +404,8 @@ deploy_dex() {
 }
 
 deploy_registry() {
+    # NOTE: This dependency-registry deployment path is currently unused in our
+    # regular flows and is to be removed.
     : "${SKIP_INTERNAL_REGISTRY:=false}"
     if [[ "${SKIP_INTERNAL_REGISTRY}" == "true" ]]; then
         echo "⏭️  Skipping Internal Registry deployment (managed by operator)" >&2

@@ -37,18 +37,16 @@ spec:
             memory: 250Mi
         ports:
         - containerPort: 5000
+        # With registry auth enabled, unauthenticated HTTP probes against /v2/
+        # return 401 and flap the pod. Use TCP probes to verify the listener is up;
         readinessProbe:
-          httpGet:
-            path: /v2/
+          tcpSocket:
             port: 5000
-            scheme: HTTPS
           initialDelaySeconds: 5
           periodSeconds: 10
         livenessProbe:
-          httpGet:
-            path: /v2/
+          tcpSocket:
             port: 5000
-            scheme: HTTPS
           initialDelaySeconds: 15
           periodSeconds: 20
         volumeMounts:
@@ -57,6 +55,9 @@ spec:
           readOnly: true
         - name: zot-config
           mountPath: /etc/zot
+          readOnly: true
+        - name: zot-auth
+          mountPath: /etc/zot/auth
           readOnly: true
         - name: storage
           mountPath: /var/lib/registry
@@ -67,6 +68,9 @@ spec:
         - name: zot-config
           configMap:
             name: zot-config
+        - name: zot-auth
+          secret:
+            secretName: zot-htpasswd
         - name: storage
           emptyDir: {}
 ---

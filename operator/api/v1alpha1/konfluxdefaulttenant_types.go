@@ -24,10 +24,7 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // KonfluxDefaultTenantSpec defines the desired state of KonfluxDefaultTenant.
-type KonfluxDefaultTenantSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-}
+type KonfluxDefaultTenantSpec struct{}
 
 // KonfluxDefaultTenantStatus defines the observed state of KonfluxDefaultTenant.
 type KonfluxDefaultTenantStatus struct {
