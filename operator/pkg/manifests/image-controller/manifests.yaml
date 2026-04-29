@@ -480,6 +480,7 @@ data:
     QUAY_API_URL = "https://quay.io/api/v1"
 
     processed_repos_counter = itertools.count()
+    auth_errors_limit = 1000
 
 
     ImageRepo = Dict[str, Any]
@@ -488,8 +489,9 @@ data:
     def get_quay_tags(quay_token: str, namespace: str, name: str) -> Dict[str, Any]:
         next_page = None
         resp: HTTPResponse
-
+        auth_errors_counter = 0
         all_tags = {}
+
         while True:
             query_args = {"limit": 100, "onlyActiveTags": True}
             if next_page is not None:
@@ -505,7 +507,18 @@ data:
                     if resp.status != 200:
                         raise RuntimeError(resp.reason)
                     json_data = json.loads(resp.read())
+                auth_errors_counter = 0
             except HTTPError as ex:
+                if ex.status == 401:
+                    if auth_errors_counter > auth_errors_limit:
+                        raise(ex)
+
+                    auth_errors_counter += 1
+                    LOGGER.info("Auth error, will retry")
+                    time.sleep(1)
+                    continue
+
+                auth_errors_counter = 0
                 if ex.status == 404:
                     LOGGER.info("Repository doesn't exist anymore %s/%s", namespace, name)
                     return {}
@@ -514,8 +527,13 @@ data:
                     LOGGER.info("Gateway error, will retry")
                     time.sleep(1)
                     continue
-                raise
+
+                LOGGER.info("Http %s error, will retry", ex.status)
+                time.sleep(1)
+                continue
+
             except json.JSONDecodeError:
+                auth_errors_counter = 0
                 LOGGER.info("Json decoder error, will retry")
                 continue
 
@@ -544,12 +562,24 @@ data:
             "Authorization": f"Bearer {quay_token}",
         })
         resp: HTTPResponse
+        auth_errors_counter = 0
+
         while True:
             try:
                 with urlopen(request) as resp:
                     if resp.status != 200 and resp.status != 204:
                         raise RuntimeError(resp.reason)
             except HTTPError as ex:
+                if ex.status == 401:
+                    if auth_errors_counter > auth_errors_limit:
+                        raise(ex)
+
+                    auth_errors_counter += 1
+                    LOGGER.info("Auth error, will retry")
+                    time.sleep(1)
+                    continue
+
+                auth_errors_counter = 0
                 if ex.status == 502 or ex.status == 504:
                     LOGGER.info("Gateway error, will retry")
                     time.sleep(1)
@@ -557,7 +587,9 @@ data:
 
                 # ignore if not found
                 if ex.status != 404:
-                    raise(ex)
+                    LOGGER.info("Http %s error, will retry", ex.status)
+                    time.sleep(1)
+                    continue
             break
 
 
@@ -568,21 +600,35 @@ data:
         })
         resp: HTTPResponse
         manifest_exists = True
+        auth_errors_counter = 0
+
         while True:
             try:
                 with urlopen(request) as resp:
                     if resp.status != 200 and resp.status != 204:
                         raise RuntimeError(resp.reason)
             except HTTPError as ex:
+                if ex.status == 401:
+                    if auth_errors_counter > auth_errors_limit:
+                        raise(ex)
+
+                    auth_errors_counter += 1
+                    LOGGER.info("Auth error, will retry")
+                    time.sleep(1)
+                    continue
+
+                auth_errors_counter = 0
                 if ex.status == 502 or ex.status == 504:
                     LOGGER.info("Gateway error, will retry")
                     time.sleep(1)
                     continue
 
-                if ex.status != 404:
-                    raise(ex)
-                else:
+                if ex.status == 404:
                     manifest_exists = False
+                else:
+                    LOGGER.info("Http %s error, will retry", ex.status)
+                    time.sleep(1)
+                    continue
             break
         return manifest_exists
 
@@ -647,6 +693,8 @@ data:
     def fetch_image_repos(access_token: str, namespace: str) -> Iterator[List[ImageRepo]]:
         next_page = None
         resp: HTTPResponse
+        auth_errors_counter = 0
+
         while True:
             query_args = {"namespace": namespace}
             if next_page is not None:
@@ -662,7 +710,30 @@ data:
                     if resp.status != 200:
                         raise RuntimeError(resp.reason)
                     json_data = json.loads(resp.read())
+                auth_errors_counter = 0
+
+            except HTTPError as ex:
+                if ex.status == 401:
+                    if auth_errors_counter > auth_errors_limit:
+                        raise(ex)
+
+                    auth_errors_counter += 1
+                    LOGGER.info("Auth error, will retry")
+                    time.sleep(1)
+                    continue
+
+                auth_errors_counter = 0
+                if ex.status == 502 or ex.status == 504:
+                    LOGGER.info("Gateway error, will retry")
+                    time.sleep(1)
+                    continue
+
+                LOGGER.info("Http %s error, will retry", ex.status)
+                time.sleep(1)
+                continue
+
             except json.JSONDecodeError:
+                auth_errors_counter = 0
                 LOGGER.info("Json decoder error, will retry")
                 continue
 
@@ -700,7 +771,7 @@ data:
         main()
 kind: ConfigMap
 metadata:
-  name: image-controller-image-pruner-configmap-9c277hthc8
+  name: image-controller-image-pruner-configmap-hgm7kmgb6k
   namespace: image-controller
 ---
 apiVersion: v1
@@ -988,7 +1059,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/konflux-ci/image-controller:89d8e83c82fc1dc88fcb12dd13db5ec2dbab7274
+        image: quay.io/konflux-ci/image-controller:67cc74626bb768336d375413d93725d380474417
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1062,12 +1133,12 @@ spec:
               valueFrom:
                 secretKeyRef:
                   key: quaytoken
-                  name: quaytoken
+                  name: image-pruner-token
             - name: NAMESPACE
               valueFrom:
                 secretKeyRef:
                   key: organization
-                  name: quaytoken
+                  name: image-pruner-token
             image: registry.access.redhat.com/ubi8/python-39:1-201.1729679484
             imagePullPolicy: IfNotPresent
             name: image-pruner
@@ -1088,11 +1159,11 @@ spec:
             runAsNonRoot: true
           volumes:
           - configMap:
-              name: image-controller-image-pruner-configmap-9c277hthc8
+              name: image-controller-image-pruner-configmap-hgm7kmgb6k
             name: image-pruner-volume
-          - name: quaytoken
+          - name: image-pruner-token
             secret:
-              secretName: quaytoken
+              secretName: image-pruner-token
   schedule: 0 0 * * *
 ---
 apiVersion: batch/v1
