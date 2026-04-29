@@ -67,7 +67,7 @@ After changing APIs or RBAC annotations, run `make manifests generate` from `ope
 **Two distinct test suites:**
 
 1. **Platform conformance** (`test/go-tests/tests/conformance/`) — end-to-end tests against a deployed Konflux instance, run via `test/e2e/run-e2e.sh`. Uses Ginkgo/Gomega with a shared `Framework` in `test/go-tests/pkg/framework/`.
-2. **Operator unit/integration** (`operator/`) — controller tests using controller-runtime **envtest** (no real cluster needed). Shared test utilities in `operator/internal/controller/testutil/`. Run via `make test` from `operator/`.
+2. **Operator unit/integration** (`operator/`) — controller tests using controller-runtime **envtest** (no real cluster needed). **Prefer Gomega matchers** for assertions in unit and functional tests. Shared test utilities in `operator/internal/controller/testutil/`. Run via `make test` from `operator/`.
 
 ```bash
 # Kube-linter (before PR)
