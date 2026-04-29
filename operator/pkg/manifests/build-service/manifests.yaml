@@ -178,7 +178,6 @@ rules:
   - appstudio.redhat.com
   resources:
   - components
-  - components/status
   verbs:
   - get
   - list
@@ -188,6 +187,7 @@ rules:
 - apiGroups:
   - appstudio.redhat.com
   resources:
+  - components/status
   - imagerepositories
   - imagerepositories/status
   - releaseplanadmissions
@@ -412,7 +412,7 @@ spec:
         - -webhook-config-path=/mnt/webhook-config.json
         command:
         - /manager
-        image: quay.io/konflux-ci/build-service:1ab65e0ebddb63612210e6649dbf68c2559b718a
+        image: quay.io/konflux-ci/build-service:ca44d2b8386e0af3ce29d2dc2d639a4e8fae3199
         livenessProbe:
           httpGet:
             path: /healthz
