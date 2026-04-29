@@ -171,7 +171,7 @@ spec:
   sources:
     - name: Release policies
       policy:
-        - oci::quay.io/conforma/release-policy:konflux
+        - oci::quay.io/conforma/release-policy:latest
       data:
         - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest
         - github.com/release-engineering/rhtap-ec-policy//data

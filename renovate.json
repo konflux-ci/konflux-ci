@@ -147,10 +147,10 @@
         "operator/upstream-kustomizations/enterprise-contract/policies/.*\\.yaml$"
       ],
       "matchStrings": [
-        "- oci::(?<depName>quay\\.io/conforma/[^:]+):konflux@(?<currentDigest>sha256:[a-f0-9]{64})"
+        "- oci::(?<depName>quay\\.io/conforma/[^:]+):latest@(?<currentDigest>sha256:[a-f0-9]{64})"
       ],
       "datasourceTemplate": "docker",
-      "currentValueTemplate": "konflux"
+      "currentValueTemplate": "latest"
     },
     {
       "customType": "regex",
