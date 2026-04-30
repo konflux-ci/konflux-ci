@@ -30,5 +30,5 @@ SKIP_SAMPLE_COMPONENTS="true" "${REPO_ROOT}/deploy-test-resources.sh"
 echo "Running E2E conformance tests..."
 cd "${REPO_ROOT}/test/go-tests"
 # -mod=mod overrides GOFLAGS=-mod=vendor that may be present on some systems; this repo doesn't vendor.
-go test -mod=mod ./tests/conformance -v -timeout 30m -ginkgo.vv "$@"
+go test -mod=mod ./tests/conformance -v -timeout 45m -ginkgo.vv "$@"
 

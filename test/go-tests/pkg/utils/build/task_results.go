@@ -24,14 +24,16 @@ import (
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var taskNames = []string{"clair-scan", "clamav-scan", "deprecated-base-image-check", "validate-fbc"}
+// taskNames lists pipeline tasks whose Tekton results are validated for default (docker) builds.
+// docker-build-oci-ta-min and related pipelines use tpa-scan instead of the former clair-scan task.
+var taskNames = []string{"tpa-scan", "clamav-scan", "deprecated-base-image-check", "validate-fbc"}
 
 // tasksGatedBySkipChecks are pipeline tasks that run only when params.skip-checks is "false".
 // When skip-checks is "true", Tekton skips them and they have no TaskRun in ChildReferences.
 var tasksGatedBySkipChecks = map[string]bool{
-	"clair-scan":                   true,
-	"clamav-scan":                  true,
-	"deprecated-base-image-check":  true,
+	"tpa-scan":                    true,
+	"clamav-scan":                 true,
+	"deprecated-base-image-check": true,
 }
 
 type TestOutput struct {
@@ -44,11 +46,13 @@ type TestOutput struct {
 	Warnings  int    `json:"warnings"`
 }
 
-type ClairScanResult struct {
+// scanVulnerabilitySummary matches the vulnerabilities object in SCAN_OUTPUT from
+// task-tpa-scan (and legacy task-clair-scan) for JSON unmarshalling.
+type scanVulnerabilitySummary struct {
 	Vulnerabilities Vulnerabilities `json:"vulnerabilities"`
 }
 
-type ClairScanReports map[string]string
+type attachedScanReports map[string]string
 
 type Vulnerabilities struct {
 	Critical int `json:"critical"`
@@ -58,7 +62,7 @@ type Vulnerabilities struct {
 }
 
 // isSkipChecksEnabled returns true if the PipelineRun has skip-checks set to "true".
-// When true, the pipeline skips security/check tasks (clair-scan, clamav-scan, deprecated-base-image-check).
+// When true, the pipeline skips security/check tasks (tpa-scan, clamav-scan, deprecated-base-image-check).
 // It checks spec.params first (runtime value), then status.pipelineSpec.params default.
 func isSkipChecksEnabled(pr *pipeline.PipelineRun) bool {
 	for _, p := range pr.Spec.Params {
@@ -94,7 +98,7 @@ func ValidateBuildPipelineTestResults(pipelineRun *pipeline.PipelineRun, c crcli
 		if !isFBCBuild && taskName == "validate-fbc" {
 			continue
 		}
-		if isFBCBuild && (taskName == "clair-scan" || taskName == "clamav-scan") {
+		if isFBCBuild && (taskName == "tpa-scan" || taskName == "clamav-scan") {
 			continue
 		}
 		// When skip-checks is true, Tekton skips the check tasks; they have no TaskRun. Skip validating them.
@@ -109,11 +113,9 @@ func ValidateBuildPipelineTestResults(pipelineRun *pipeline.PipelineRun, c crcli
 		resultsToValidate := []string{constants.TektonTaskTestOutputName}
 
 		switch taskName {
-		case "clair-scan":
+		case "tpa-scan":
 			resultsToValidate = append(resultsToValidate, "SCAN_OUTPUT")
 			resultsToValidate = append(resultsToValidate, "REPORTS")
-		case "deprecated-image-check":
-			resultsToValidate = append(resultsToValidate, "PYXIS_HTTP_CODE")
 		}
 
 		if err := validateTaskRunResult(imageURL, results, resultsToValidate, taskName); err != nil {
@@ -154,13 +156,13 @@ func validateTaskRunResult(imageURL string, trResults []pipeline.TaskRunResult, 
 						return fmt.Errorf("cannot parse %q result: %+v", constants.TektonTaskTestOutputName, err)
 					}
 				case "SCAN_OUTPUT":
-					var testOutput = &ClairScanResult{}
+					var testOutput = &scanVulnerabilitySummary{}
 					err := json.Unmarshal([]byte(r.Value.StringVal), &testOutput)
 					if err != nil {
 						return fmt.Errorf("cannot parse SCAN_OUTPUT result: %+v", err)
 					}
 				case "REPORTS":
-					var reports = ClairScanReports{}
+					var reports = attachedScanReports{}
 					err := json.Unmarshal([]byte(r.Value.StringVal), &reports)
 					if err != nil {
 						return fmt.Errorf("cannot parse REPORTS result: %w", err)
