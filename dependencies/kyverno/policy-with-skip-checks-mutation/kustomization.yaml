@@ -1,0 +1,9 @@
+---
+# Optional bundle: policy-base plus Kyverno mutation to default skip-checks to true
+# for matched PipelineRuns (used by operator-test-e2e on GitHub Actions).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../policy-base
+components:
+  - ../policy-components/skip-checks-mutation

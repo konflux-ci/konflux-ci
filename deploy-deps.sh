@@ -446,7 +446,17 @@ deploy_kyverno() {
     echo "  ⏳ Waiting for Kyverno admission controller..." >&2
     retry "kubectl wait --for=condition=Available deployment/kyverno-admission-controller -n kyverno --timeout=30s" \
           "Kyverno admission controller did not become available within the allocated time"
-    retry "kubectl apply -k ${script_path}/dependencies/kyverno/policy" \
+    # Default SET_SKIP_CHECKS=false: reduce-tekton only (pipeline security checks are not defaulted off).
+    # SET_SKIP_CHECKS=true applies set-skip-checks-parameter (e.g. GitHub Actions operator e2e; flaky scans).
+    : "${SET_SKIP_CHECKS:=false}"
+    local kyverno_policy_dir="${script_path}/dependencies/kyverno/policy"
+    if [[ "${SET_SKIP_CHECKS}" == "true" ]]; then
+        kyverno_policy_dir="${script_path}/dependencies/kyverno/policy-with-skip-checks-mutation"
+    fi
+    echo "  🛡️  Applying Kyverno policies from ${kyverno_policy_dir}" >&2
+    local kyverno_apply_cmd
+    kyverno_apply_cmd=$(printf 'kubectl apply -k %q' "${kyverno_policy_dir}")
+    retry "${kyverno_apply_cmd}" \
           "Failed to apply Kyverno policies (webhook may not be ready yet)"
 }
 

@@ -147,6 +147,7 @@ SKIP_DEX=true \
 SKIP_KONFLUX_INFO=true \
 SKIP_CLUSTER_ISSUER=true \
 SKIP_INTERNAL_REGISTRY=true \
+SET_SKIP_CHECKS="${SET_SKIP_CHECKS:-false}" \
 "${REPO_ROOT}/deploy-deps.sh"
 
 # Step 3: Deploy Konflux operator
