@@ -102,24 +102,9 @@ deploy() {
     deploy_trust_manager
     COMPLETED_STEPS+=("$CURRENT_STEP")
 
-    CURRENT_STEP="Cluster Issuer"
-    echo "📜 Setting up Cluster Issuer..." >&2
-    deploy_cluster_issuer
-    COMPLETED_STEPS+=("$CURRENT_STEP")
-
     CURRENT_STEP="Tekton"
     echo "🐱 Deploying Tekton..." >&2
     deploy_tekton
-    COMPLETED_STEPS+=("$CURRENT_STEP")
-
-    CURRENT_STEP="Dex"
-    echo "🔑 Deploying Dex..." >&2
-    deploy_dex
-    COMPLETED_STEPS+=("$CURRENT_STEP")
-
-    CURRENT_STEP="Registry"
-    echo "📦 Deploying Registry..." >&2
-    deploy_registry
     COMPLETED_STEPS+=("$CURRENT_STEP")
 
     CURRENT_STEP="Smee"
@@ -130,11 +115,6 @@ deploy() {
     CURRENT_STEP="Kyverno"
     echo "🛡️  Deploying Kyverno..." >&2
     deploy_kyverno
-    COMPLETED_STEPS+=("$CURRENT_STEP")
-
-    CURRENT_STEP="Konflux Info"
-    echo "📋 Deploying Konflux Info..." >&2
-    deploy_konflux_info
     COMPLETED_STEPS+=("$CURRENT_STEP")
 
     CURRENT_STEP="Quay"
@@ -377,43 +357,6 @@ deploy_trust_manager() {
           "Trust manager did not become available within the allocated time"
 }
 
-deploy_cluster_issuer() {
-    : "${SKIP_CLUSTER_ISSUER:=false}"
-    if [[ "${SKIP_CLUSTER_ISSUER}" == "true" ]]; then
-        echo "⏭️  Skipping Cluster Issuer deployment (managed by operator)" >&2
-        return 0
-    fi
-    kubectl apply -k "${script_path}/dependencies/cluster-issuer"
-}
-
-deploy_dex() {
-    : "${SKIP_DEX:=false}"
-    if [[ "${SKIP_DEX}" == "true" ]]; then
-        echo "⏭️  Skipping Dex deployment (managed by operator)" >&2
-        return 0
-    fi
-    kubectl apply -k "${script_path}/dependencies/dex"
-    if ! kubectl get secret oauth2-proxy-client-secret -n dex; then
-        echo "🔑 Creating secret oauth2-proxy-client-secret" >&2
-        local client_secret
-        client_secret="$(openssl rand -base64 20 | tr '+/' '-_' | tr -d '\n' | tr -d '=')"
-        kubectl create secret generic oauth2-proxy-client-secret \
-            --namespace=dex \
-            --from-literal=client-secret="$client_secret"
-    fi
-}
-
-deploy_registry() {
-    : "${SKIP_INTERNAL_REGISTRY:=false}"
-    if [[ "${SKIP_INTERNAL_REGISTRY}" == "true" ]]; then
-        echo "⏭️  Skipping Internal Registry deployment (managed by operator)" >&2
-        return 0
-    fi
-    kubectl apply -k "${script_path}/dependencies/registry"
-    retry "kubectl wait --for=condition=Ready --timeout=240s -n kind-registry -l run=registry pod" \
-          "The local registry did not become available within the allocated time"
-}
-
 deploy_smee() {
     : "${SKIP_SMEE:=false}"
     if [[ "${SKIP_SMEE}" == "true" ]]; then
@@ -448,15 +391,6 @@ deploy_kyverno() {
           "Kyverno admission controller did not become available within the allocated time"
     retry "kubectl apply -k ${script_path}/dependencies/kyverno/policy" \
           "Failed to apply Kyverno policies (webhook may not be ready yet)"
-}
-
-deploy_konflux_info() {
-    : "${SKIP_KONFLUX_INFO:=false}"
-    if [[ "${SKIP_KONFLUX_INFO}" == "true" ]]; then
-        echo "⏭️  Skipping Konflux Info deployment (managed by operator)" >&2
-        return 0
-    fi
-    kubectl apply -k "${script_path}/dependencies/konflux-info"
 }
 
 deploy_quay() {

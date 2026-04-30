@@ -148,11 +148,6 @@ if [ -n "${SMEE_CHANNEL:-}" ]; then
         > "${SMEE_DIR}/smee-channel-id.yaml"
 fi
 
-# Skip components managed by the operator
-SKIP_DEX=true \
-SKIP_KONFLUX_INFO=true \
-SKIP_CLUSTER_ISSUER=true \
-SKIP_INTERNAL_REGISTRY=true \
 "${REPO_ROOT}/deploy-deps.sh"
 
 # Step 3: Deploy Konflux operator
