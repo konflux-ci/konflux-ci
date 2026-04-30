@@ -19,18 +19,24 @@ package enterprisecontract
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
@@ -63,11 +69,29 @@ var EnterpriseContractCleanupGVKs = []schema.GroupVersionKind{}
 // applied, so no allow list is needed (they're always tracked and never become orphans).
 var EnterpriseContractClusterScopedAllowList tracking.ClusterScopedAllowList = nil
 
+// ecPolicyGVK is the GroupVersionKind for the EnterpriseContractPolicy CRD
+// managed by this controller.
+var ecPolicyGVK = schema.GroupVersionKind{
+	Group:   "appstudio.redhat.com",
+	Version: "v1alpha1",
+	Kind:    "EnterpriseContractPolicy",
+}
+
 // KonfluxEnterpriseContractReconciler reconciles a KonfluxEnterpriseContract object
 type KonfluxEnterpriseContractReconciler struct {
 	client.Client
 	Scheme      *runtime.Scheme
 	ObjectStore *manifests.ObjectStore
+
+	// Fields for dynamic watch of EnterpriseContractPolicy resources.
+	// The CRD is deployed by this controller, so the watch cannot be
+	// registered at startup (the CRD does not exist yet). Instead, we
+	// start the watch on the first successful reconcile.
+	ctrl       controller.Controller
+	cache      cache.Cache
+	restMapper meta.RESTMapper
+	mu         sync.Mutex
+	watching   bool
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxenterprisecontracts,verbs=get;list;watch;create;update;patch;delete
@@ -115,9 +139,14 @@ func (r *KonfluxEnterpriseContractReconciler) Reconcile(ctx context.Context, req
 		FieldManager:      FieldManager,
 	})
 
-	// Apply all embedded manifests
+	// Apply all embedded manifests (including the EnterpriseContractPolicy CRD and CRs)
 	if err := r.applyManifests(ctx, tc); err != nil {
 		return errHandler.HandleApplyError(ctx, err)
+	}
+
+	// Start watching EnterpriseContractPolicy CRs once the CRD has been applied.
+	if err := r.startECPolicyWatch(ctx); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// Cleanup orphaned resources
@@ -159,17 +188,57 @@ func (r *KonfluxEnterpriseContractReconciler) applyManifests(ctx context.Context
 	return nil
 }
 
+// startECPolicyWatch registers a dynamic watch for EnterpriseContractPolicy
+// CRs. The watch is deferred because this controller creates the ECP CRD
+// itself; registering the watch at startup would deadlock the manager
+// (WaitForCacheSync blocks until the informer syncs, but the CRD does not
+// exist until Reconcile runs). Instead, we start the watch after the first
+// successful manifest apply, when the CRD is guaranteed to exist.
+func (r *KonfluxEnterpriseContractReconciler) startECPolicyWatch(ctx context.Context) error {
+	if r.ctrl == nil {
+		return nil
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.watching {
+		return nil
+	}
+
+	log := logf.FromContext(ctx)
+
+	ecPolicy := &unstructured.Unstructured{}
+	ecPolicy.SetGroupVersionKind(ecPolicyGVK)
+
+	if err := r.ctrl.Watch(
+		source.Kind(
+			r.cache,
+			ecPolicy,
+			handler.TypedEnqueueRequestForOwner[*unstructured.Unstructured](
+				r.Scheme, r.restMapper,
+				&konfluxv1alpha1.KonfluxEnterpriseContract{}),
+		),
+	); err != nil {
+		log.Error(err, "Failed to start watch for EnterpriseContractPolicy, will retry next reconcile")
+		return nil
+	}
+
+	r.watching = true
+	log.Info("Started dynamic watch for EnterpriseContractPolicy resources")
+	return nil
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxEnterpriseContractReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	crdMapFunc, err := crdhandler.MapCRDToRequest(r.ObjectStore, manifests.EnterpriseContract, CRName)
 	if err != nil {
 		return err
 	}
-	return ctrl.NewControllerManagedBy(mgr).
+
+	c, err := ctrl.NewControllerManagedBy(mgr).
 		For(&konfluxv1alpha1.KonfluxEnterpriseContract{}).
 		Named("konfluxenterprisecontract").
-		// Use predicates to filter out unnecessary updates and prevent reconcile loops
-		// Deployments: watch spec changes AND readiness status changes
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(predicate.DeploymentReadinessPredicate)).
 		Owns(&corev1.Service{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&corev1.ConfigMap{}).
@@ -179,8 +248,18 @@ func (r *KonfluxEnterpriseContractReconciler) SetupWithManager(mgr ctrl.Manager)
 		Owns(&rbacv1.RoleBinding{}).
 		Owns(&rbacv1.ClusterRole{}).
 		Owns(&rbacv1.ClusterRoleBinding{}).
-		// Watch CRDs so that out-of-band deletion triggers reconcile and re-apply.
+		// EnterpriseContractPolicy is NOT watched here; its CRD is created by
+		// this controller, so the watch is started dynamically in Reconcile
+		// via startECPolicyWatch to avoid a startup deadlock.
 		Watches(&apiextensionsv1.CustomResourceDefinition{},
 			handler.EnqueueRequestsFromMapFunc(crdMapFunc)).
-		Complete(r)
+		Build(r)
+	if err != nil {
+		return err
+	}
+
+	r.ctrl = c
+	r.cache = mgr.GetCache()
+	r.restMapper = mgr.GetRESTMapper()
+	return nil
 }
