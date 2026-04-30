@@ -52,13 +52,11 @@ func runSetupRelease(appName, componentName, tenantNS, managedNS string) error {
 	return cmd.Run()
 }
 
-// e2eECPExclusions lists policy rules to exclude during E2E tests. The default
-// build pipeline sets skip-checks=true which disables security scans/tests, so
-// the corresponding required_tasks_found rules must be excluded to avoid EC
-// failures during the release.
+// e2eECPExclusions lists policy rules to exclude during E2E tests. Conformance runs
+// docker-build-oci-ta-min with security tasks; exclude EC rules that are not required
+// for this environment or that reference tasks outside the minimal pipeline bundle.
 var e2eECPExclusions = []string{
 	"cve",
-	"tasks.required_tasks_found:clair-scan",
 	"tasks.required_tasks_found:roxctl-scan",
 	"tasks.required_tasks_found:clamav-scan",
 	"tasks.required_tasks_found:tpa-scan",

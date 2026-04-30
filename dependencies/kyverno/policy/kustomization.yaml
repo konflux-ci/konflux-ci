@@ -1,6 +1,9 @@
 ---
+# Default Kyverno policy bundle: reduce Tekton resource requests for CI.
+# Does not include set-skip-checks-parameter (full pipeline checks remain default).
+# Default bundle (SET_SKIP_CHECKS unset/false in deploy-deps): reduce-tekton only; full pipeline checks.
+# SET_SKIP_CHECKS=true selects policy-with-skip-checks-mutation (see deploy-deps.sh deploy_kyverno).
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - reduce-tekton-pr-taskrun-resource-requests.yaml
-  - set-skip-checks-parameter.yaml
+  - ../policy-base
