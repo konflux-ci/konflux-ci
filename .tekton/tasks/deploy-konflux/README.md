@@ -17,7 +17,7 @@ This Task does **not** use Tekton `workspaces`. It clones `konflux-ci` into an `
 
 ## Required secrets / env sources
 
-Reads keys from Secret `konflux-operator-e2e-credentials` in the Task namespace:
+Reads keys from Secret `konflux-operator-e2e-credentials` in the Task namespace (for `deploy-prep` → `scripts/deploy-local.sh` / `deploy-secrets.sh`, matching `.github/workflows/operator-test-e2e.yaml` deploy step):
 
 - `GITHUB_APP_ID`
 - `GITHUB_PRIVATE_KEY`
@@ -25,10 +25,6 @@ Reads keys from Secret `konflux-operator-e2e-credentials` in the Task namespace:
 - `QUAY_TOKEN`
 - `QUAY_ORGANIZATION`
 - `SMEE_CHANNEL`
-- `GH_ORG`
-- `GH_TOKEN`
-- `QUAY_DOCKERCONFIGJSON`
-- `RELEASE_CATALOG_TA_QUAY_TOKEN`
 
 ## Steps / images
 

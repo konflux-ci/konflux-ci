@@ -162,26 +162,6 @@ spec:
             secretKeyRef:
               name: konflux-operator-e2e-credentials
               key: SMEE_CHANNEL
-        - name: GH_ORG
-          valueFrom:
-            secretKeyRef:
-              name: konflux-operator-e2e-credentials
-              key: GH_ORG
-        - name: GH_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: konflux-operator-e2e-credentials
-              key: GH_TOKEN
-        - name: QUAY_DOCKERCONFIGJSON
-          valueFrom:
-            secretKeyRef:
-              name: konflux-operator-e2e-credentials
-              key: QUAY_DOCKERCONFIGJSON
-        - name: RELEASE_CATALOG_TA_QUAY_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: konflux-operator-e2e-credentials
-              key: RELEASE_CATALOG_TA_QUAY_TOKEN
       script: |
         #!/bin/bash
         set -euo pipefail
