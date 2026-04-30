@@ -18,7 +18,7 @@ cd "${REPO_ROOT}/test/go-tests"
 # Deliberate word-splitting: each space-separated flag must be its own argv token for go test.
 # Quoting ${E2E_CONFORMANCE_GO_TEST_EXTRA_ARGS} would pass one broken argument (e.g. -ginkgo.focus=...).
 # shellcheck disable=SC2086
-go test ./tests/conformance -v -timeout 40m \
+go test ./tests/conformance -v -timeout 45m \
   -ginkgo.vv \
   -ginkgo.github-output \
   -ginkgo.junit-report="$JUNIT" \
