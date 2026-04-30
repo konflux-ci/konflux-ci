@@ -18,7 +18,10 @@ limitations under the License.
 package kubernetes
 
 import (
+	"encoding/json"
+
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -33,4 +36,18 @@ func IsCustomResourceDefinition(obj client.Object) bool {
 	// Fallback for typed CRD when GVK is not set (e.g. struct literal).
 	_, ok := obj.(*apiextensionsv1.CustomResourceDefinition)
 	return ok
+}
+
+// SSAApplyPatch is a client.Patch that uses server-side apply.
+// Use this instead of the deprecated client.Apply constant.
+var SSAApplyPatch client.Patch = ssaPatch{}
+
+type ssaPatch struct{}
+
+func (p ssaPatch) Type() types.PatchType {
+	return types.ApplyPatchType
+}
+
+func (p ssaPatch) Data(obj client.Object) ([]byte, error) {
+	return json.Marshal(obj)
 }

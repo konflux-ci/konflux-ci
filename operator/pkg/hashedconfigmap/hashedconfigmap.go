@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -127,7 +128,7 @@ func (h *HashedConfigMap) Apply(ctx context.Context, content string, owner clien
 
 	// Apply using server-side apply
 	patchOpts := []client.PatchOption{client.FieldOwner(h.fieldManager), client.ForceOwnership}
-	if err := h.client.Patch(ctx, configMap, client.Apply, patchOpts...); err != nil {
+	if err := h.client.Patch(ctx, configMap, kubernetes.SSAApplyPatch, patchOpts...); err != nil {
 		return nil, fmt.Errorf("failed to apply ConfigMap %s: %w", configMapName, err)
 	}
 

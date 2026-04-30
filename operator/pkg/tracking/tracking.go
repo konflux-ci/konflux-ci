@@ -206,7 +206,7 @@ func (c *Client) ApplyObject(
 	opts ...client.PatchOption,
 ) error {
 	patchOpts := append([]client.PatchOption{client.FieldOwner(fieldManager), client.ForceOwnership}, opts...)
-	if err := c.Client.Patch(ctx, obj, client.Apply, patchOpts...); err != nil {
+	if err := c.Client.Patch(ctx, obj, kubernetes.SSAApplyPatch, patchOpts...); err != nil {
 		return err
 	}
 	c.track(obj)
