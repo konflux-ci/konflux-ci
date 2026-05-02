@@ -48,7 +48,7 @@ replace (
 	github.com/antlr/antlr4 => github.com/antlr/antlr4 v0.0.0-20211106181442-e4c1a74c66bd
 	github.com/apcera/gssapi => github.com/openshift/gssapi v0.0.0-20161010215902-5fb4217df13b
 	github.com/docker/distribution => github.com/docker/distribution v2.8.2+incompatible
-	github.com/docker/distribution/reference => github.com/distribution/reference v0.5.0
+	github.com/docker/distribution/reference => github.com/distribution/reference v0.6.0
 	github.com/docker/docker => github.com/docker/docker v23.0.7+incompatible
 	k8s.io/api => k8s.io/api v0.34.2
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.34.2
