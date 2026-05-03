@@ -192,6 +192,15 @@
       "extractVersionTemplate": "^v?(?<version>.*)$"
     },
     {
+      "description": "Track golangci-lint version for operator (CI + make lint). File is version-only; golangci-lint-action does not support extra lines.",
+      "customType": "regex",
+      "fileMatch": ["^operator/\\.golangci-lint-version$"],
+      "matchStrings": ["^(?<currentValue>v?\\d+\\.\\d+\\.\\d+)\\s*$"],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "golangci/golangci-lint",
+      "extractVersionTemplate": "^v?(?<version>.*)$"
+    },
+    {
       "description": "Track curl image version in e2e tests",
       "customType": "regex",
       "matchStringsStrategy": "combination",
