@@ -67,7 +67,7 @@ spec:
       containers:
       - args:
         - /etc/zot/config.json
-        image: quay.io/konflux-ci/zot@sha256:d2fd37b87f958304907296c22f599a898b49909ce8e72558634f1eb2d8fdd3d5
+        image: quay.io/konflux-ci/zot@sha256:b81addd8f738c37652910881de8bd0f9cb8a1e821b01e2410f7c781639bbc5b6
         livenessProbe:
           httpGet:
             path: /v2/
