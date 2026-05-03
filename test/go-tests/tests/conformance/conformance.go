@@ -31,6 +31,17 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// conformanceCleanupBudget returns the max wall time to wait for AfterAll cleanup.
+// Set E2E_CLEANUP_TIMEOUT to a Go duration (e.g. 90s, 1m30s); invalid or empty values use the default.
+func conformanceCleanupBudget() time.Duration {
+	if s := strings.TrimSpace(os.Getenv("E2E_CLEANUP_TIMEOUT")); s != "" {
+		if d, err := time.ParseDuration(s); err == nil && d > 0 {
+			return d
+		}
+	}
+	return conformanceCleanupMaxDuration
+}
+
 var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamKonfluxTestLabel), func() {
 	defer ginkgo.GinkgoRecover()
 
@@ -87,15 +98,19 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 					return
 				}
 				klog.Info("conformance: cleaning up")
-				_ = fw.AsKubeAdmin.CommonController.KubeInterface().CoreV1().Namespaces().Delete(context.Background(), managedNamespace, metav1.DeleteOptions{})
-				cleanupWithRetry("delete PaC branch", func() error {
-					return fw.AsKubeAdmin.CommonController.GitHub.DeleteRef(componentRepositoryName, pacBranchName)
+				budget := conformanceCleanupBudget()
+				ctx, cancel := context.WithTimeout(context.Background(), budget)
+				defer cancel()
+
+				_ = fw.AsKubeAdmin.CommonController.KubeInterface().CoreV1().Namespaces().Delete(ctx, managedNamespace, metav1.DeleteOptions{})
+				cleanupWithRetry(ctx, "delete PaC branch", func() error {
+					return fw.AsKubeAdmin.CommonController.GitHub.DeleteRef(ctx, componentRepositoryName, pacBranchName)
 				})
-				cleanupWithRetry("delete base branch", func() error {
-					return fw.AsKubeAdmin.CommonController.GitHub.DeleteRef(componentRepositoryName, componentNewBaseBranch)
+				cleanupWithRetry(ctx, "delete base branch", func() error {
+					return fw.AsKubeAdmin.CommonController.GitHub.DeleteRef(ctx, componentRepositoryName, componentNewBaseBranch)
 				})
-				cleanupWithRetry("cleanup webhooks", func() error {
-					return build.CleanupWebhooks(fw, componentRepositoryName)
+				cleanupWithRetry(ctx, "cleanup webhooks", func() error {
+					return build.CleanupWebhooks(ctx, fw, componentRepositoryName)
 				})
 			})
 

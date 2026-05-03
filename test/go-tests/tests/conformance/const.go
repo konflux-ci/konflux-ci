@@ -12,6 +12,11 @@ const (
 	snapshotTimeout             = time.Minute * 4
 	releaseTimeout              = time.Minute * 4
 
+	// conformanceCleanupMaxDuration caps how long AfterAll waits for namespace + Git
+	// cleanup. After the budget, the suite still passes; override with E2E_CLEANUP_TIMEOUT
+	// (Go duration string, e.g. 90s, 2m).
+	conformanceCleanupMaxDuration = 2 * time.Minute
+
 	// Intervals
 	defaultPollingInterval  = time.Second * 2
 	snapshotPollingInterval = time.Second * 1

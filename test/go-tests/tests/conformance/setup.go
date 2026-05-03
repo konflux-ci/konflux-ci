@@ -14,7 +14,6 @@ import (
 
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/framework"
 	ginkgo "github.com/onsi/ginkgo/v2"
-	gomega "github.com/onsi/gomega"
 	"k8s.io/klog/v2"
 )
 
@@ -210,14 +209,41 @@ func dumpDiagnostics(hub *framework.ControllerHub, componentName, appName, names
 	}
 }
 
-func cleanupWithRetry(description string, fn func() error) {
-	err := gomega.InterceptGomegaFailure(func() {
-		gomega.Eventually(fn).
-			WithTimeout(30 * time.Second).
-			WithPolling(5 * time.Second).
-			Should(gomega.Succeed())
-	})
-	if err != nil {
-		klog.Warningf("conformance cleanup: %s failed after retries: %v", description, err)
+// cleanupWithRetry runs fn until it returns nil, ctx is done, or a 30s per-step retry budget elapses.
+// fn should use ctx for outbound calls so they honor the overall cleanup deadline.
+func cleanupWithRetry(ctx context.Context, description string, fn func() error) {
+	const maxStep = 30 * time.Second
+	const poll = 5 * time.Second
+	stepStart := time.Now()
+	var lastErr error
+	for {
+		if err := ctx.Err(); err != nil {
+			if lastErr != nil {
+				klog.Warningf("conformance cleanup: %s stopped: %v (last attempt error: %v)", description, err, lastErr)
+			} else {
+				klog.Warningf("conformance cleanup: %s stopped: %v", description, err)
+			}
+			return
+		}
+		lastErr = fn()
+		if lastErr == nil {
+			return
+		}
+		stepElapsed := time.Since(stepStart)
+		if stepElapsed >= maxStep {
+			klog.Warningf("conformance cleanup: %s failed after retries: %v", description, lastErr)
+			return
+		}
+		remainingStep := maxStep - stepElapsed
+		d := poll
+		if remainingStep < d {
+			d = remainingStep
+		}
+		select {
+		case <-ctx.Done():
+			klog.Warningf("conformance cleanup: %s stopped: %v (last error: %v)", description, ctx.Err(), lastErr)
+			return
+		case <-time.After(d):
+		}
 	}
 }
