@@ -1,13 +1,14 @@
 package build
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
-	ginkgo "github.com/onsi/ginkgo/v2"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/klog/v2"
 
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/clients/github"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/constants"
@@ -83,16 +84,19 @@ func CreateCodebergBuildSecret(f *framework.Framework, secretName string, annota
 	return nil
 }
 
-func CleanupWebhooks(f *framework.Framework, repoName string) error {
-	hooks, err := f.AsKubeAdmin.CommonController.GitHub.ListRepoWebhooks(repoName)
+func CleanupWebhooks(ctx context.Context, f *framework.Framework, repoName string) error {
+	hooks, err := f.AsKubeAdmin.CommonController.GitHub.ListRepoWebhooks(ctx, repoName)
 	if err != nil {
 		return err
 	}
 	for _, h := range hooks {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		hookUrl := h.Config["url"].(string)
 		if strings.Contains(hookUrl, f.ClusterAppDomain) {
-			ginkgo.GinkgoWriter.Printf("removing webhook URL: %s\n", hookUrl)
-			err = f.AsKubeAdmin.CommonController.GitHub.DeleteWebhook(repoName, h.GetID())
+			klog.Infof("removing webhook URL: %s", hookUrl)
+			err = f.AsKubeAdmin.CommonController.GitHub.DeleteWebhook(ctx, repoName, h.GetID())
 			if err != nil {
 				return err
 			}

@@ -10,8 +10,8 @@ import (
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/utils"
 )
 
-func (c *Client) DeleteRef(repository, branchName string) error {
-	_, err := c.client.Git.DeleteRef(context.Background(), c.organization, repository, fmt.Sprintf(HEADS, branchName))
+func (c *Client) DeleteRef(ctx context.Context, repository, branchName string) error {
+	_, err := c.client.Git.DeleteRef(ctx, c.organization, repository, fmt.Sprintf(HEADS, branchName))
 	if err != nil {
 		return err
 	}
