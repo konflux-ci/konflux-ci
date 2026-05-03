@@ -301,7 +301,14 @@ CONTROLLER_TOOLS_VERSION ?= v0.18.0
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries
 ENVTEST_K8S_VERSION ?= 1.33.0
-GOLANGCI_LINT_VERSION ?= v2.8.0
+# Pinned alongside .github/workflows/operator-lint.yaml (golangci-lint-action version-file).
+# File must be a single semver line (no comments): golangci-lint-action reads the whole file as the version.
+# Co-located with this Makefile (OPERATOR_ROOT); any env that runs this Makefile from a full tree has the file.
+GOLANGCI_LINT_VERSION_FILE := $(OPERATOR_ROOT).golangci-lint-version
+ifeq ($(wildcard $(GOLANGCI_LINT_VERSION_FILE)),)
+$(error Missing $(GOLANGCI_LINT_VERSION_FILE). It must live next to the operator Makefile.)
+endif
+GOLANGCI_LINT_VERSION ?= $(shell tr -d ' \r\n' < $(GOLANGCI_LINT_VERSION_FILE))
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
@@ -338,7 +345,7 @@ $(ENVTEST): $(LOCALBIN)
 
 .PHONY: golangci-lint
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
-$(GOLANGCI_LINT): $(LOCALBIN)
+$(GOLANGCI_LINT): $(LOCALBIN) $(OPERATOR_ROOT).golangci-lint-version
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist

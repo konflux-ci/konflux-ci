@@ -43,7 +43,7 @@ All targets run from the `operator/` directory:
 
 - **`make test`** — Unit/integration tests (envtest, excludes e2e)
 - **`make test-e2e`** — Operator e2e tests
-- **`make lint`** / **`make lint-fix`** — golangci-lint
+- **`make lint`** / **`make lint-fix`** — golangci-lint (version in `operator/.golangci-lint-version`; must stay a single semver line—shared with CI **operator-lint**)
 - **`make fmt`** / **`make vet`** — Go formatting and vetting
 - **`make manifests`** — Regenerate CRDs and RBAC from code markers
 - **`make generate`** — Regenerate deepcopy and other generated code
