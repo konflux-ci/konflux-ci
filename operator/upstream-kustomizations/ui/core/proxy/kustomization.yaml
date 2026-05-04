@@ -22,5 +22,16 @@ configMapGenerator:
     files:
       - auth.conf
       - tekton-results.conf
+  - name: proxy-nginx-run
+    files:
+    - proxy-nginx-run.sh
+    options:
+      disableNameSuffixHash: true
+  - name: proxy-nginx-generate-loop
+    files:
+    - proxy-nginx-generate-loop.sh
+    - proxy-nginx-generate-loop-probe.sh
+    options:
+      disableNameSuffixHash: true
 
 namespace: konflux-ui
