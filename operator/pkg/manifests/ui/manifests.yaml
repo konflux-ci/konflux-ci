@@ -263,6 +263,114 @@ metadata:
 ---
 apiVersion: v1
 data:
+  proxy-nginx-generate-loop-probe.sh: |
+    #!/bin/bash
+
+    set -euo pipefail
+
+    AUTH_CONF_FILE=/mnt/nginx-generated-config/auth.conf
+    AUTH_CONF_NEW_FILE=/mnt/nginx-generated-config/auth.conf.new
+
+    { [ -f "${AUTH_CONF_NEW_FILE}" ] && [ $(( $(date +%s) - $(stat -c %Y "${AUTH_CONF_NEW_FILE}") )) -lt 60 ]; } || \
+      { [ -f "${AUTH_CONF_FILE}" ] && [ $(( $(date +%s) - $(stat -c %Y "${AUTH_CONF_FILE}") )) -lt 60 ]; }
+  proxy-nginx-generate-loop.sh: |
+    #!/bin/bash
+
+    set -euo pipefail
+
+    RETRY_INTERVAL=10
+    TOKEN_FILEPATH=/var/run/secrets/konflux-ci.dev/serviceaccount/token
+    AUTH_CONF_FILE=/mnt/nginx-generated-config/auth.conf.new
+    AUTH_CONF_TMP_FILE=/mnt/nginx-generated-config/auth.conf.new.tmp
+    AUTH_CONF_TEMPLATE_FILE=/mnt/nginx-templates/auth.conf
+
+    produceToken() (
+      # Copy the auth.conf template and replace the bearer token
+      token=$(cat "${TOKEN_FILEPATH}")
+
+      # Produce a tmp file
+      sed "s/__BEARER_TOKEN__/${token}/" "${AUTH_CONF_TEMPLATE_FILE}" > "${AUTH_CONF_TMP_FILE}"
+      chmod 640 "${AUTH_CONF_TMP_FILE}"
+
+      # Rename (atomic) the file to avoid sync issues
+      mv "${AUTH_CONF_TMP_FILE}" "${AUTH_CONF_FILE}"
+    )
+
+    produceTokenWithRetry() (
+      produceToken || \
+        { sleep 3; produceToken; } || \
+        { sleep 5; produceToken; }
+    )
+
+    while produceTokenWithRetry; do sleep "${RETRY_INTERVAL}"; done
+
+    echo "loop broke, crashing"
+    exit 1
+kind: ConfigMap
+metadata:
+  name: proxy-nginx-generate-loop
+  namespace: konflux-ui
+---
+apiVersion: v1
+data:
+  proxy-nginx-run.sh: |
+    #!/bin/bash
+
+    set -euo pipefail
+
+    NGINX_AUTH_CONF_FILE='/mnt/nginx-generated-config/auth.conf'
+    NGINX_NEW_AUTH_CONF_FILE='/mnt/nginx-generated-config/auth.conf.new'
+
+    NGINX_CONF_FILE='/etc/nginx/nginx.conf'
+    RETRY_INTERVAL=10
+
+    # test configuration
+    nginx -g "daemon off;" -c "${NGINX_CONF_FILE}" -t
+
+    # run the hot-reload loop in background
+    (
+      # wait for nginx to start before first reload attempt
+      while [ ! -f /run/nginx.pid ]; do sleep 1; done
+
+      # retries hot reloading the nginx configuration multiple
+      # times with increasing timeouts before returning the error
+      reloadWithRetry() {
+        if [ -f "${NGINX_NEW_AUTH_CONF_FILE}" ] && \
+          ! cmp -s "${NGINX_NEW_AUTH_CONF_FILE}" "${NGINX_AUTH_CONF_FILE}"; then
+          # Move (atomic) the new configuration and reload it in NGINX
+          mv "${NGINX_NEW_AUTH_CONF_FILE}" "${NGINX_AUTH_CONF_FILE}" && \
+            {
+              nginx -s reload || \
+                { sleep 3; nginx -s reload; } || \
+                { sleep 5; nginx -s reload; }
+            }
+        fi
+      }
+
+      # hot reload infinite loop
+      while reloadWithRetry; do sleep "${RETRY_INTERVAL}"; done
+
+      # not supposed to be terminated
+      echo "loop broke, crashing"
+      exit 1
+    ) &
+
+    # run the nginx server in background
+    (
+      nginx -g "daemon off;" -c "${NGINX_CONF_FILE}"
+      echo "nginx crashed"
+      exit 1
+    ) &
+
+    # wait for any of the background tasks to crash
+    wait -n
+kind: ConfigMap
+metadata:
+  name: proxy-nginx-run
+  namespace: konflux-ui
+---
+apiVersion: v1
+data:
   auth.conf: |
     # Auth configuration with impersonate headers
     auth_request_set $user  $upstream_http_x_auth_request_email;
@@ -282,15 +390,6 @@ kind: ConfigMap
 metadata:
   name: proxy-nginx-templates-dt292585th
   namespace: konflux-ui
----
-apiVersion: v1
-kind: Secret
-metadata:
-  annotations:
-    kubernetes.io/service-account.name: proxy
-  name: proxy
-  namespace: konflux-ui
-type: kubernetes.io/service-account-token
 ---
 apiVersion: v1
 kind: Service
@@ -427,12 +526,45 @@ spec:
         app: proxy
     spec:
       containers:
-      - command:
-        - nginx
-        - -g
-        - daemon off;
-        - -c
-        - /etc/nginx/nginx.conf
+      - args:
+        - /var/run/scripts/konflux-ci.dev/proxy-nginx-generate-loop.sh
+        command:
+        - bash
+        image: quay.io/konflux-ci/konflux-ui@sha256:db1ed966d9d0d89a37b31cdec23684e653cd11e53387c549e6d381f4ba7811e1
+        livenessProbe:
+          exec:
+            args:
+            - /var/run/scripts/konflux-ci.dev/proxy-nginx-generate-loop-probe.sh
+            command:
+            - bash
+          failureThreshold: 3
+          periodSeconds: 30
+        name: generate-nginx-configs-loop
+        resources:
+          limits:
+            cpu: 50m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+        volumeMounts:
+        - mountPath: /var/run/scripts/konflux-ci.dev/
+          name: proxy-generate-loop-script
+          readOnly: true
+        - mountPath: /var/run/secrets/konflux-ci.dev/serviceaccount
+          name: kube-api-token
+          readOnly: true
+        - mountPath: /mnt/nginx-generated-config
+          name: nginx-generated-config
+        - mountPath: /mnt/nginx-templates
+          name: nginx-templates
+      - args:
+        - /var/run/scripts/konflux-ci.dev/proxy-nginx-run.sh
+        command:
+        - bash
         image: registry.access.redhat.com/ubi9/nginx-124@sha256:6cfc252017036e3a6b5eaff546ac72d1a2fe8d3aec1d3a4305f40cded79331e0
         livenessProbe:
           failureThreshold: 3
@@ -473,6 +605,9 @@ spec:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
         volumeMounts:
+        - mountPath: /var/run/scripts/konflux-ci.dev/
+          name: proxy-nginx-run-script
+          readOnly: true
         - mountPath: /etc/nginx/nginx.conf
           name: proxy
           readOnly: true
@@ -548,7 +683,7 @@ spec:
           set -e
 
           # Copy the auth.conf template and replace the bearer token
-          token=$(cat /mnt/api-token/token)
+          token=$(cat /var/run/secrets/konflux-ci.dev/serviceaccount/token)
           sed "s/__BEARER_TOKEN__/$token/" /mnt/nginx-templates/auth.conf > /mnt/nginx-generated-config/auth.conf
           chmod 640 /mnt/nginx-generated-config/auth.conf
 
@@ -578,12 +713,13 @@ spec:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
         volumeMounts:
+        - mountPath: /var/run/secrets/konflux-ci.dev/serviceaccount
+          name: kube-api-token
+          readOnly: true
         - mountPath: /mnt/nginx-generated-config
           name: nginx-generated-config
         - mountPath: /mnt/nginx-templates
           name: nginx-templates
-        - mountPath: /mnt/api-token
-          name: api-token
         - mountPath: /mnt/nginx-generated-location-config
           name: nginx-generated-location-config
       serviceAccountName: proxy
@@ -595,6 +731,27 @@ spec:
         topologyKey: topology.kubernetes.io/zone
         whenUnsatisfiable: ScheduleAnyway
       volumes:
+      - configMap:
+          defaultMode: 488
+          items:
+          - key: proxy-nginx-generate-loop.sh
+            path: proxy-nginx-generate-loop.sh
+          name: proxy-nginx-generate-loop
+        name: proxy-generate-loop-script
+      - configMap:
+          defaultMode: 488
+          items:
+          - key: proxy-nginx-run.sh
+            path: proxy-nginx-run.sh
+          name: proxy-nginx-run
+        name: proxy-nginx-run-script
+      - name: kube-api-token
+        projected:
+          defaultMode: 420
+          sources:
+          - serviceAccountToken:
+              expirationSeconds: 600
+              path: token
       - configMap:
           defaultMode: 420
           items:
@@ -619,9 +776,6 @@ spec:
         name: nginx-generated-config
       - emptyDir: {}
         name: nginx-generated-location-config
-      - name: api-token
-        secret:
-          secretName: proxy
       - emptyDir: {}
         name: static-content
       - name: segment-bridge-config
