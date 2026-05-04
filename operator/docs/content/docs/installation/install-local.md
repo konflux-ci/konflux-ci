@@ -13,6 +13,11 @@ It relies on sourcing `deploy-local.env` file which provides it with environment
 variables. The following steps guide you through setting up the env file and running
 the script.
 
+It is also possible to install Konflux Locally
+[without configuring any integration](#setup-without-integration).
+This is useful for trying Konflux locally with zero effort or to test changes not related
+to GitHub, like changes to some UI's pages or the Auth layer.
+
 ## Prerequisites
 
 - Verify that the following tools are installed:
@@ -70,6 +75,18 @@ The script performs all of the following automatically:
 - Applies the Konflux CR configuration
 - Sets up GitHub App integration and smee webhook proxy
 - Provides a local OCI registry at `localhost:5001`
+
+### Setup Without Integration
+
+To skip the setup of all the integrations you just set
+`SKIP_SECRETS=true` when executing the `deploy-local.sh` script:
+
+```bash
+SKIP_SECRETS=true ./scripts/deploy-local.sh
+```
+
+It's not required to create the GitHub App and
+to populate the `scripts/deploy-local.env` file.
 
 ## Verify the installation
 
