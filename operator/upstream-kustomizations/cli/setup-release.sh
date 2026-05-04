@@ -84,7 +84,7 @@ PRODUCT_VERSION="0.1"
 CONFORMA_POLICY="default"
 RELEASE_NAME="local-release"
 # renovate: datasource=git-refs depName=https://github.com/konflux-ci/release-service-catalog currentValue=development
-CATALOG_REVISION="a3ee7d595e88c753ceb799bea4ca8b377ebe9d35"
+CATALOG_REVISION="d9e2b654a52e0f9c70d8bbb80167efd1e8c3f7bd"
 IMAGE_NAME_PREFIX=""
 COMPONENTS=()
 
