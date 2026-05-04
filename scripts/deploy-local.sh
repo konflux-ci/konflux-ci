@@ -79,6 +79,7 @@ INCREASE_PODMAN_PIDS_LIMIT="${INCREASE_PODMAN_PIDS_LIMIT:-1}"
 ENABLE_IMAGE_CACHE="${ENABLE_IMAGE_CACHE:-0}"
 OPERATOR_INSTALL_METHOD="${OPERATOR_INSTALL_METHOD:-release}"
 OPERATOR_IMAGE="${OPERATOR_IMAGE:-quay.io/konflux-ci/konflux-operator:latest}"
+SKIP_SECRETS="${SKIP_SECRETS:-false}"
 
 # Export variables for child scripts
 export KIND_CLUSTER KIND_MEMORY_GB PODMAN_MACHINE_NAME REGISTRY_HOST_PORT ENABLE_REGISTRY_PORT
@@ -88,7 +89,7 @@ export SEGMENT_WRITE_KEY
 
 # Child scripts only see exported variables (values from deploy-local.env are not
 # exported by sourcing); validate secrets after exports so checks see the same env.
-VALIDATE_ONLY=true "${SCRIPT_DIR}/deploy-secrets.sh"
+[ "${SKIP_SECRETS}" = "true" ] || VALIDATE_ONLY=true "${SCRIPT_DIR}/deploy-secrets.sh"
 
 # Get Konflux CR file path (command-line arg takes highest precedence)
 KONFLUX_CR="${1:-${KONFLUX_CR:-}}"
@@ -245,13 +246,15 @@ echo "========================================="
 
 # In 'none' mode, namespaces don't exist yet (operator isn't running),
 # so create them directly and skip waiting for pods that don't exist yet.
-if [ "${INSTALL_METHOD}" = "none" ]; then
-    env CREATE_NAMESPACES=true WAIT_FOR_PODS=false "${SCRIPT_DIR}/deploy-secrets.sh"
-else
-    "${SCRIPT_DIR}/deploy-secrets.sh"
-fi
+if [ "${SKIP_SECRETS}" != "true" ]; then
+  if [ "${INSTALL_METHOD}" = "none" ]; then
+      env CREATE_NAMESPACES=true WAIT_FOR_PODS=false "${SCRIPT_DIR}/deploy-secrets.sh"
+  else
+      "${SCRIPT_DIR}/deploy-secrets.sh"
+  fi
 
-echo "✓ Secrets created"
+  echo "✓ Secrets created"
+fi
 
 if [ "${INSTALL_METHOD}" != "none" ]; then
     # Step 7: Wait for Konflux to be ready
