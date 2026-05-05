@@ -4,6 +4,7 @@ Contributing Guidelines
 <!-- toc -->
 
 - [Documentation Conventions](#documentation-conventions)
+- [Cross-Platform Script Compatibility](#cross-platform-script-compatibility)
 - [Editing Markdown Files](#editing-markdown-files)
 - [Using KubeLinter](#using-kubelinter)
 - [Operator Development](#operator-development)
@@ -41,6 +42,32 @@ cp scripts/deploy-local.env.template scripts/deploy-local.env
 ./scripts/deploy-local.sh
 \`\`\`
 ```
+
+# Cross-Platform Script Compatibility
+
+Scripts in this repository that are intended to run on the user's machine must
+work on both **Linux** and **macOS**. This applies to:
+
+- **Deployment scripts** — e.g. `scripts/deploy-local.sh`, `deploy-deps.sh`,
+  `deploy-konflux-on-ocp.sh`
+- **CLI helper scripts** — e.g. scripts under `operator/upstream-kustomizations/cli/`
+- **ConfigMap-hosted scripts** — scripts stored as ConfigMaps on the cluster
+  that users fetch and run locally (e.g. `setup-release.sh`, `create-tenant.sh`)
+
+When writing or modifying these scripts, follow these guidelines:
+
+- **Prefer POSIX-compatible constructs** over Bash-specific or GNU-specific
+  extensions.
+- **Avoid GNU-only flags** for common utilities. For example, `sed -i`
+  requires a backup extension argument on macOS (`sed -i '' ...`), `date`
+  flags differ between GNU and BSD, and `readlink -f` is not available on
+  macOS without `coreutils`.
+- **Test with both GNU and BSD coreutils** — utilities like `sed`, `grep`,
+  `date`, `readlink`, and `mktemp` behave differently across platforms.
+- **Do not assume `/bin/bash` is Bash 4+** — macOS ships Bash 3.2 by default.
+  Avoid associative arrays (`declare -A`), `mapfile`/`readarray`, and other
+  Bash 4+ features unless the script explicitly requires and checks for a
+  newer version.
 
 # Editing Markdown Files
 

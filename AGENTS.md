@@ -57,7 +57,7 @@ After changing APIs or RBAC annotations, run `make manifests generate` from `ope
 
 ## Code Style
 
-- Shell: `set -euo pipefail`, quote variables
+- Shell: `set -euo pipefail`, quote variables. Scripts that run on the user's host (deployment scripts, CLI helpers, and scripts stored in ConfigMaps that users fetch and run locally) must be compatible with both Linux and macOS — avoid GNU-only flags, prefer POSIX-compatible constructs, and test with both GNU and BSD coreutils (e.g. `sed`, `date`, `readlink`)
 - Go: Standard formatting, Ginkgo for tests, Gomega for assertions/matchers (all test types: unit, functional, e2e)
 - Kustomizations: Pin exact SHAs, not branches
 - Markdown: Update TOC with `npx markdown-toc -i` if structure changes
