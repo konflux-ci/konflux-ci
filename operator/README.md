@@ -57,7 +57,7 @@ For **operator development and building**:
 > [!NOTE]
 > For complete Konflux deployment requirements (including machine resources, Kind setup,
 > and additional dependencies), see the
-> [main repository's prerequisites](https://github.com/konflux-ci/konflux-ci/blob/main/README.md#installing-software-dependencies).
+> [Installation Guide](https://konflux-ci.dev/konflux-ci/docs/installation/install-local/).
 
 ## Install the CRDs
 
