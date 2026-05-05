@@ -233,6 +233,9 @@ jobs:
           OPERATOR_INSTALL_METHOD: "build"
           OPERATOR_IMAGE: ${{ env.OPERATOR_IMAGE }}
 
+          # Kyverno: default pipeline checks on; true mutates PR builds to skip-checks (flaky on GHA).
+          # SET_SKIP_CHECKS: "true"
+
           KONFLUX_CR: ${{ matrix.konflux_cr }}
 
           # GitHub App secrets (secret names in matrix; one set per row to avoid shared rate limits)
