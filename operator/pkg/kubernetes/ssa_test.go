@@ -27,13 +27,13 @@ import (
 )
 
 func TestSSAPatch(t *testing.T) {
-	g := gomega.NewWithT(t)
-
 	t.Run("Type returns ApplyPatchType", func(t *testing.T) {
+		g := gomega.NewWithT(t)
 		g.Expect(SSAPatch.Type()).To(gomega.Equal(types.ApplyPatchType))
 	})
 
 	t.Run("Data returns valid JSON", func(t *testing.T) {
+		g := gomega.NewWithT(t)
 		cm := &corev1.ConfigMap{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "v1",
