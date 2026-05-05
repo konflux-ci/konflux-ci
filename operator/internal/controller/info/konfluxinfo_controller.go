@@ -42,6 +42,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/common"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
@@ -176,7 +177,7 @@ func (r *KonfluxInfoReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	})
 
 	// Ensure konflux-info namespace exists
-	if err := r.ensureNamespaceExists(ctx, tc); err != nil {
+	if err := common.EnsureNamespaceExists(ctx, r.ObjectStore, manifests.Info, infoNamespace, tc); err != nil {
 		return errHandler.HandleWithReason(ctx, err, condition.ReasonNamespaceCreationFailed, "ensure namespace exists")
 	}
 
@@ -295,30 +296,6 @@ func (r *KonfluxInfoReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return controllerBuilder.Complete(r)
-}
-
-// ensureNamespaceExists ensures the konflux-info namespace exists before creating ConfigMaps.
-func (r *KonfluxInfoReconciler) ensureNamespaceExists(ctx context.Context, tc *tracking.Client) error {
-	objects, err := r.ObjectStore.GetForComponent(manifests.Info)
-	if err != nil {
-		return fmt.Errorf("failed to get parsed manifests for Info: %w", err)
-	}
-
-	for _, obj := range objects {
-		if namespace, ok := obj.(*corev1.Namespace); ok {
-			// Validate that the namespace name matches the expected infoNamespace
-			if namespace.Name != infoNamespace {
-				return fmt.Errorf(
-					"unexpected namespace name in manifest: expected %s, got %s", infoNamespace, namespace.Name)
-			}
-			// Apply with ownership using the tracking client
-			if err := tc.ApplyOwned(ctx, namespace); err != nil {
-				return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
-					namespace.GetNamespace(), namespace.GetName(), tracking.GetKind(namespace), manifests.Info, err)
-			}
-		}
-	}
-	return nil
 }
 
 // generateInfoJSON generates info.json content from PublicInfo.
