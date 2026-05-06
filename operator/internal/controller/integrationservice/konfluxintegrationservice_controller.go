@@ -25,6 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -127,15 +128,11 @@ func (r *KonfluxIntegrationServiceReconciler) Reconcile(ctx context.Context, req
 		FieldManager:      FieldManager,
 	})
 
-	// Fetch KonfluxUI to get console URL
-	konfluxUI := &konfluxv1alpha1.KonfluxUI{}
-	consoleURL := ""
-	if err := r.Get(ctx, types.NamespacedName{Name: ui.CRName}, konfluxUI); err != nil {
-		// Log warning but don't fail - URL might not be available yet
-		log.Info("KonfluxUI not found, console URL will not be set", "error", err)
-	} else if konfluxUI.Status.Ingress != nil && konfluxUI.Status.Ingress.URL != "" {
-		consoleURL = konfluxUI.Status.Ingress.URL
-		log.Info("Found console URL from KonfluxUI", "url", consoleURL)
+	// Fetch KonfluxUI to get console URL. Non-NotFound read errors must fail reconcile
+	// so we don't accidentally overwrite CONSOLE_URL with an empty value.
+	consoleURL, err := getConsoleURLFromKonfluxUI(ctx, r.Client)
+	if err != nil {
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxUI status for console URL")
 	}
 
 	// Apply all embedded manifests
@@ -162,6 +159,27 @@ func (r *KonfluxIntegrationServiceReconciler) Reconcile(ctx context.Context, req
 
 	log.Info("Successfully reconciled KonfluxIntegrationService")
 	return ctrl.Result{}, nil
+}
+
+func getConsoleURLFromKonfluxUI(ctx context.Context, c client.Client) (string, error) {
+	log := logf.FromContext(ctx)
+	konfluxUI := &konfluxv1alpha1.KonfluxUI{}
+
+	if err := c.Get(ctx, types.NamespacedName{Name: ui.CRName}, konfluxUI); err != nil {
+		if apierrors.IsNotFound(err) {
+			log.Info("KonfluxUI not found, console URL will not be set")
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to get KonfluxUI: %w", err)
+	}
+
+	if konfluxUI.Status.Ingress != nil && konfluxUI.Status.Ingress.URL != "" {
+		consoleURL := konfluxUI.Status.Ingress.URL
+		log.Info("Found console URL from KonfluxUI", "url", consoleURL)
+		return consoleURL, nil
+	}
+
+	return "", nil
 }
 
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
