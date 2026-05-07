@@ -116,11 +116,6 @@ echo "Success: All sample files have Title and Description comments."
 # Read the current homepage
 HOMEPAGE_CONTENT=$(cat "$HOMEPAGE")
 
-# Check if examples section already exists and has content
-if echo "$HOMEPAGE_CONTENT" | grep -q "^###.*Example" && [ "$(echo "$HOMEPAGE_CONTENT" | grep -c "^###")" -gt 1 ]; then
-    echo "Examples section already populated in homepage, skipping update..."
-    exit 0
-fi
 
 # Create examples section content
 EXAMPLES_CONTENT=""
@@ -154,24 +149,24 @@ $(cat "$sample_file")
 "
 done < <(find "$SAMPLES_DIR" -maxdepth 1 -name "*.yaml" -type f 2>/dev/null | sort)
 
-# Create a temporary file with the new content
+# Create a temporary file with the new content.
+# Always write a fresh header (everything before the first ### heading or ## API Reference),
+# then the newly generated examples. This prevents stale/duplicate examples from accumulating
+# across multiple runs.
 TMP_FILE=$(mktemp)
 
-# Write content up to (but not including) "## API Reference" or end of file
+# Extract only the front-matter + intro paragraph (lines before any generated content).
+HEADER=$(echo "$HOMEPAGE_CONTENT" | sed '/^###/,$d' | sed '/^## API Reference/,$d')
+
+echo "$HEADER" > "$TMP_FILE"
+echo "$EXAMPLES_CONTENT" >> "$TMP_FILE"
+
+# Re-append the API Reference section if it exists.
 if echo "$HOMEPAGE_CONTENT" | grep -q "^## API Reference"; then
-    # Get everything before "## API Reference"
-    echo "$HOMEPAGE_CONTENT" | sed '/^## API Reference/,$d' > "$TMP_FILE"
-    # Add examples section
-    echo "$EXAMPLES_CONTENT" >> "$TMP_FILE"
-    # Add API Reference section and everything after
     echo "$HOMEPAGE_CONTENT" | sed -n '/^## API Reference/,$p' >> "$TMP_FILE"
-else
-    # No API Reference section, just append
-    echo "$HOMEPAGE_CONTENT" > "$TMP_FILE"
-    echo "" >> "$TMP_FILE"
-    echo "$EXAMPLES_CONTENT" >> "$TMP_FILE"
 fi
 
-# Write updated content
-mv "$TMP_FILE" "$HOMEPAGE"
+# Write updated content using cat to avoid SELinux mv restrictions on temp files.
+cat "$TMP_FILE" > "$HOMEPAGE"
+rm -f "$TMP_FILE"
 echo "Added examples to homepage: $HOMEPAGE"
