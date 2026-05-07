@@ -22,14 +22,18 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	securityv1 "github.com/openshift/api/security/v1"
+	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/version"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 )
@@ -156,6 +160,364 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				}, dep)).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 			Expect(sccExists()).To(BeFalse())
+		})
+	})
+
+	Context("PipelineConfig", func() {
+		var configMapNN types.NamespacedName
+
+		getConfigMapData := func(g Gomega, ctx context.Context) map[string]interface{} {
+			cm := &corev1.ConfigMap{}
+			g.ExpectWithOffset(1, k8sClient.Get(ctx, configMapNN, cm)).To(Succeed())
+
+			var data map[string]interface{}
+			g.ExpectWithOffset(1, yaml.Unmarshal([]byte(cm.Data["config.yaml"]), &data)).To(Succeed())
+			return data
+		}
+
+		getPipelines := func(g Gomega, ctx context.Context) []interface{} {
+			data := getConfigMapData(g, ctx)
+			pipelines, ok := data["pipelines"].([]interface{})
+			g.ExpectWithOffset(1, ok).To(BeTrue(), "pipelines should be an array")
+			return pipelines
+		}
+
+		findPipelineByName := func(pipelines []interface{}, name string) map[string]interface{} {
+			for _, p := range pipelines {
+				pipeline, ok := p.(map[string]interface{})
+				ExpectWithOffset(1, ok).To(BeTrue(), "pipeline entry should be a map")
+				if pipeline["name"] == name {
+					return pipeline
+				}
+			}
+			return nil
+		}
+
+		BeforeEach(func() {
+			configMapNN = types.NamespacedName{
+				Name:      "build-pipeline-config",
+				Namespace: "build-service",
+			}
+		})
+
+		It("Should create ConfigMap with defaults when pipelineConfig is not set", func(ctx context.Context) {
+			startManagerWithClusterInfo(nil)
+
+			By("creating a KonfluxBuildService with no pipelineConfig")
+			buildService := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+
+			By("waiting for the ConfigMap to be created with default pipelines")
+			Eventually(func(g Gomega) {
+				pipelines := getPipelines(g, ctx)
+				g.Expect(pipelines).ToNot(BeEmpty(), "should have default pipelines")
+
+				dockerBuild := findPipelineByName(pipelines, "docker-build-oci-ta-min")
+				g.Expect(dockerBuild).NotTo(BeNil(), "docker-build-oci-ta-min should exist")
+				g.Expect(dockerBuild["bundle"]).To(ContainSubstring("quay.io/konflux-ci/tekton-catalog"))
+
+				data := getConfigMapData(g, ctx)
+				g.Expect(data["default-pipeline-name"]).To(Equal("docker-build-oci-ta-min"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("Should override a default pipeline bundle", func(ctx context.Context) {
+			startManagerWithClusterInfo(nil)
+
+			buildService := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+
+			By("waiting for initial reconciliation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: configMapNN.Name, Namespace: configMapNN.Namespace}, &corev1.ConfigMap{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("updating the CR with a pipeline override")
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, buildService)).To(Succeed())
+			buildService.Spec.PipelineConfig = &konfluxv1alpha1.PipelineConfigSpec{
+				Pipelines: []konfluxv1alpha1.PipelineSpec{
+					{Name: "docker-build-oci-ta-min", Bundle: "quay.io/custom/pipeline@sha256:abcd1234"},
+				},
+			}
+			Expect(k8sClient.Update(ctx, buildService)).To(Succeed())
+
+			By("verifying the bundle was overridden and other defaults remain")
+			Eventually(func(g Gomega) {
+				pipelines := getPipelines(g, ctx)
+				dockerBuild := findPipelineByName(pipelines, "docker-build-oci-ta-min")
+				g.Expect(dockerBuild).NotTo(BeNil())
+				g.Expect(dockerBuild["bundle"]).To(Equal("quay.io/custom/pipeline@sha256:abcd1234"))
+
+				fbcBuilder := findPipelineByName(pipelines, "fbc-builder")
+				g.Expect(fbcBuilder).NotTo(BeNil(), "other defaults should remain")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("Should remove a pipeline with removed: true", func(ctx context.Context) {
+			startManagerWithClusterInfo(nil)
+
+			buildService := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+
+			By("waiting for initial reconciliation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: configMapNN.Name, Namespace: configMapNN.Namespace}, &corev1.ConfigMap{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("updating the CR to remove fbc-builder")
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, buildService)).To(Succeed())
+			buildService.Spec.PipelineConfig = &konfluxv1alpha1.PipelineConfigSpec{
+				Pipelines: []konfluxv1alpha1.PipelineSpec{
+					{Name: "fbc-builder", Removed: true},
+				},
+			}
+			Expect(k8sClient.Update(ctx, buildService)).To(Succeed())
+
+			By("verifying fbc-builder was removed and other defaults remain")
+			Eventually(func(g Gomega) {
+				pipelines := getPipelines(g, ctx)
+				g.Expect(findPipelineByName(pipelines, "fbc-builder")).To(BeNil(), "fbc-builder should be removed")
+				g.Expect(findPipelineByName(pipelines, "docker-build-oci-ta-min")).NotTo(BeNil(), "other defaults should remain")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("Should add a custom pipeline alongside defaults", func(ctx context.Context) {
+			startManagerWithClusterInfo(nil)
+
+			buildService := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+
+			By("waiting for initial reconciliation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: configMapNN.Name, Namespace: configMapNN.Namespace}, &corev1.ConfigMap{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("updating the CR with a custom pipeline")
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, buildService)).To(Succeed())
+			buildService.Spec.PipelineConfig = &konfluxv1alpha1.PipelineConfigSpec{
+				Pipelines: []konfluxv1alpha1.PipelineSpec{
+					{Name: "custom-pipeline", Bundle: "quay.io/custom/my-pipeline@sha256:xyz789"},
+				},
+			}
+			Expect(k8sClient.Update(ctx, buildService)).To(Succeed())
+
+			By("verifying the custom pipeline exists alongside defaults")
+			Eventually(func(g Gomega) {
+				pipelines := getPipelines(g, ctx)
+				customPipeline := findPipelineByName(pipelines, "custom-pipeline")
+				g.Expect(customPipeline).NotTo(BeNil())
+				g.Expect(customPipeline["bundle"]).To(Equal("quay.io/custom/my-pipeline@sha256:xyz789"))
+				g.Expect(findPipelineByName(pipelines, "docker-build-oci-ta-min")).NotTo(BeNil(), "defaults should remain")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("Should preserve description when overriding a default pipeline bundle", func(ctx context.Context) {
+			startManagerWithClusterInfo(nil)
+
+			buildService := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+
+			By("waiting for defaults and capturing the description")
+			var defaultDescription interface{}
+			Eventually(func(g Gomega) {
+				pipelines := getPipelines(g, ctx)
+				dockerBuild := findPipelineByName(pipelines, "docker-build-oci-ta-min")
+				g.Expect(dockerBuild).NotTo(BeNil())
+				g.Expect(dockerBuild["description"]).NotTo(BeEmpty(), "default should have a description")
+				defaultDescription = dockerBuild["description"]
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("updating the CR with a bundle override")
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, buildService)).To(Succeed())
+			buildService.Spec.PipelineConfig = &konfluxv1alpha1.PipelineConfigSpec{
+				Pipelines: []konfluxv1alpha1.PipelineSpec{
+					{Name: "docker-build-oci-ta-min", Bundle: "quay.io/custom/pipeline@sha256:override123"},
+				},
+			}
+			Expect(k8sClient.Update(ctx, buildService)).To(Succeed())
+
+			By("verifying the bundle was overridden but description is preserved")
+			Eventually(func(g Gomega) {
+				pipelines := getPipelines(g, ctx)
+				dockerBuild := findPipelineByName(pipelines, "docker-build-oci-ta-min")
+				g.Expect(dockerBuild).NotTo(BeNil())
+				g.Expect(dockerBuild["bundle"]).To(Equal("quay.io/custom/pipeline@sha256:override123"))
+				g.Expect(dockerBuild["description"]).To(Equal(defaultDescription), "description should be preserved from defaults")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("Should use only user-specified pipelines when removeDefaults is true", func(ctx context.Context) {
+			startManagerWithClusterInfo(nil)
+
+			buildService := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
+						RemoveDefaults:      true,
+						DefaultPipelineName: "my-only-pipeline",
+						Pipelines: []konfluxv1alpha1.PipelineSpec{
+							{Name: "my-only-pipeline", Bundle: "quay.io/custom/only@sha256:abc123"},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+
+			By("verifying only user-specified pipelines exist")
+			Eventually(func(g Gomega) {
+				pipelines := getPipelines(g, ctx)
+				g.Expect(pipelines).To(HaveLen(1), "should have exactly one pipeline")
+
+				myPipeline := findPipelineByName(pipelines, "my-only-pipeline")
+				g.Expect(myPipeline).NotTo(BeNil())
+				g.Expect(myPipeline["bundle"]).To(Equal("quay.io/custom/only@sha256:abc123"))
+
+				data := getConfigMapData(g, ctx)
+				g.Expect(data["default-pipeline-name"]).To(Equal("my-only-pipeline"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("Should set degraded condition on invalid defaultPipelineName", func(ctx context.Context) {
+			startManagerWithClusterInfo(nil)
+
+			buildService := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
+						DefaultPipelineName: "non-existent-pipeline",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+
+			By("verifying the Ready condition is set to False with ApplyFailed reason")
+			Eventually(func(g Gomega) {
+				bs := &konfluxv1alpha1.KonfluxBuildService{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, bs)).To(Succeed())
+
+				readyCond := apimeta.FindStatusCondition(bs.Status.Conditions, condition.TypeReady)
+				g.Expect(readyCond).NotTo(BeNil(), "Ready condition should exist")
+				g.Expect(readyCond.Status).To(Equal(metav1.ConditionFalse), "Ready should be False")
+				g.Expect(readyCond.Reason).To(Equal(condition.ReasonApplyFailed), "Reason should be ApplyFailed")
+				g.Expect(readyCond.Message).To(ContainSubstring("non-existent-pipeline"), "Message should mention the invalid pipeline")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
+	Context("CEL Validation", func() {
+		It("Should reject creation with a name other than 'konflux-build-service'", func(ctx context.Context) {
+			bs := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: "wrong-name"},
+			}
+			err := k8sClient.Create(ctx, bs)
+			Expect(err).To(HaveOccurred(), "creation with wrong name should be rejected")
+			Expect(err.Error()).To(ContainSubstring("konflux-build-service"))
+		})
+
+		It("Should allow creation with the required name", func(ctx context.Context) {
+			bs := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, bs)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, bs)
+		})
+
+		It("Should reject a pipeline with both bundle and removed: true", func(ctx context.Context) {
+			bs := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
+						Pipelines: []konfluxv1alpha1.PipelineSpec{
+							{Name: "test-pipeline", Bundle: "quay.io/test/bundle:latest", Removed: true},
+						},
+					},
+				},
+			}
+			err := k8sClient.Create(ctx, bs)
+			Expect(err).To(HaveOccurred(), "bundle + removed should be rejected")
+			Expect(err.Error()).To(ContainSubstring("bundle must not be set when removed is true"))
+		})
+
+		It("Should reject a pipeline without bundle and without removed", func(ctx context.Context) {
+			bs := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
+						Pipelines: []konfluxv1alpha1.PipelineSpec{
+							{Name: "test-pipeline"},
+						},
+					},
+				},
+			}
+			err := k8sClient.Create(ctx, bs)
+			Expect(err).To(HaveOccurred(), "missing bundle without removed should be rejected")
+			Expect(err.Error()).To(ContainSubstring("bundle is required when removed is not true"))
+		})
+
+		It("Should accept a pipeline with bundle set", func(ctx context.Context) {
+			bs := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
+						Pipelines: []konfluxv1alpha1.PipelineSpec{
+							{Name: "test-pipeline", Bundle: "quay.io/test/bundle:latest"},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, bs)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, bs)
+		})
+
+		It("Should accept a pipeline with removed: true and no bundle", func(ctx context.Context) {
+			bs := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
+						Pipelines: []konfluxv1alpha1.PipelineSpec{
+							{Name: "fbc-builder", Removed: true},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, bs)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, bs)
+		})
+
+		It("Should reject update that adds invalid pipeline spec", func(ctx context.Context) {
+			bs := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, bs)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, bs)
+
+			By("updating to add a pipeline with bundle + removed")
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, bs)).To(Succeed())
+			bs.Spec.PipelineConfig = &konfluxv1alpha1.PipelineConfigSpec{
+				Pipelines: []konfluxv1alpha1.PipelineSpec{
+					{Name: "test-pipeline", Bundle: "quay.io/test/bundle:latest", Removed: true},
+				},
+			}
+			err := k8sClient.Update(ctx, bs)
+			Expect(err).To(HaveOccurred(), "update with invalid pipeline should be rejected")
+			Expect(err.Error()).To(ContainSubstring("bundle must not be set when removed is true"))
 		})
 	})
 })

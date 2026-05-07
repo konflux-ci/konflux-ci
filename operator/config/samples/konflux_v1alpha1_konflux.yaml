@@ -89,6 +89,15 @@ spec:
             limits:
               cpu: 30m
               memory: 128Mi
+      # pipelineConfig:
+      #   # removeDefaults: true  # Discard all operator-provided default pipelines
+      #   pipelines:
+      #     - name: fbc-builder
+      #       removed: true  # Remove this specific default pipeline
+      #     - name: my-custom-pipeline
+      #       bundle: quay.io/myorg/pipeline:latest
+      #   # defaultPipelineName: fbc-builder  # Use existing default pipeline as default
+      #   # defaultPipelineName: my-custom-pipeline  # Use custom pipeline as default
   namespaceLister:
     spec:
       namespaceLister:
