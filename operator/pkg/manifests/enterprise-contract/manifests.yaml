@@ -370,9 +370,9 @@ subjects:
 ---
 apiVersion: v1
 data:
-  verify_ec_task_bundle: quay.io/enterprise-contract/ec-task-bundle@sha256:2a7a4575f59226bbb13b66719bb89b507c8b11a01455b5883e7ac7d49ef54c84
+  verify_ec_task_bundle: quay.io/enterprise-contract/ec-task-bundle@sha256:e931f81c8aafa340a225cacab29868e0a8527d0731fa9ec7757ea933a905a3e7
   verify_ec_task_git_pathInRepo: tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml
-  verify_ec_task_git_revision: 68bb316583831b63b6dac772d0f3aad202b29bfc
+  verify_ec_task_git_revision: f678eda689b45c959cf2bea1817861605bb015ed
   verify_ec_task_git_url: https://github.com/enterprise-contract/ec-cli.git
 kind: ConfigMap
 metadata:
@@ -401,8 +401,8 @@ spec:
       include:
       - '@redhat'
     data:
-    - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest@sha256:c7303e2d586614e47d7340ff8d7059c98c6c68fc8ca938b3448179fb8009372e
+    - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest@sha256:c75d0123e83efa6c182b6510c35982b48201143ce74a9a388680a0ee1aa4affb
     - github.com/redhat-appstudio/tsf-conforma-data//data?ref=1966f21842d507441a7a5e1c7de9071cf3f9ec53
     name: Default
     policy:
-    - oci::quay.io/conforma/release-policy:latest@sha256:41546d1f46b0825ded7700ab3941f76e5edcbcb40b2e1d652f2a2dc6440e0334
+    - oci::quay.io/conforma/release-policy:latest@sha256:ff94e0b54b4262f017581ed36c6706cdf855bd24b3324e74ea0dd1236f080958
