@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 )
 
 func TestNewPodOverlay(t *testing.T) {
@@ -477,7 +478,7 @@ func TestComplexScenario(t *testing.T) {
 					},
 				}),
 				WithEnv(corev1.EnvVar{Name: "LOG_LEVEL", Value: "info"}),
-				WithLeaderElection(),
+				WithLeaderElectionControl(ptr.To(true)),
 			),
 			WithContainerOpts("sidecar", ctx,
 				WithResources(corev1.ResourceRequirements{
@@ -909,5 +910,46 @@ func TestApplyToPodTemplateSpec_ContainerDeletionBug(t *testing.T) {
 
 		// Sidecar unchanged
 		g.Expect(spec.Containers[1].Image).To(gomega.Equal("sidecar:v1"))
+	})
+}
+
+func TestApplyContainerOpt(t *testing.T) {
+	makeDeployment := func(containerNames ...string) *appsv1.Deployment {
+		containers := make([]corev1.Container, len(containerNames))
+		for i, name := range containerNames {
+			containers[i] = corev1.Container{Name: name, Args: []string{"--existing-arg"}}
+		}
+		return &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{Containers: containers},
+				},
+			},
+		}
+	}
+
+	t.Run("applies option to the named container", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		d := makeDeployment("manager", "sidecar")
+		ApplyContainerOpt(d, "manager", WithArgs("--new-arg"))
+		g.Expect(d.Spec.Template.Spec.Containers[0].Args).To(gomega.ContainElement("--new-arg"))
+		// sidecar is untouched
+		g.Expect(d.Spec.Template.Spec.Containers[1].Args).NotTo(gomega.ContainElement("--new-arg"))
+	})
+
+	t.Run("preserves existing args on the target container", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		d := makeDeployment("manager")
+		ApplyContainerOpt(d, "manager", WithArgs("--new-arg"))
+		g.Expect(d.Spec.Template.Spec.Containers[0].Args).To(gomega.ContainElements("--existing-arg", "--new-arg"))
+	})
+
+	t.Run("no-op when container name is not found", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		d := makeDeployment("manager")
+		original := d.Spec.Template.Spec.Containers[0].Args
+		ApplyContainerOpt(d, "nonexistent", WithArgs("--new-arg"))
+		g.Expect(d.Spec.Template.Spec.Containers[0].Args).To(gomega.Equal(original))
 	})
 }

@@ -41,4 +41,10 @@ type ControllerManagerDeploymentSpec struct {
 	// Manager defines customizations for the manager container.
 	// +optional
 	Manager *ContainerSpec `json:"manager,omitempty"`
+
+	// LeaderElect controls the --leader-elect flag on the manager container.
+	// When nil the embedded manifest default is used.
+	// Set to false to disable leader election (e.g. single-replica development environments).
+	// +optional
+	LeaderElect *bool `json:"leaderElect,omitempty"`
 }

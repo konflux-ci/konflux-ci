@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"k8s.io/utils/ptr"
 )
 
 func TestNewContainerOverlay(t *testing.T) {
@@ -349,50 +350,72 @@ func TestWithImage(t *testing.T) {
 	})
 }
 
-func TestWithLeaderElection(t *testing.T) {
-	tests := []struct {
-		name          string
-		replicas      int32
-		expectedArgs  int
-		shouldContain string
-	}{
-		{
-			name:         "single replica - no leader election",
-			replicas:     1,
-			expectedArgs: 0,
-		},
-		{
-			name:          "multiple replicas - adds leader election",
-			replicas:      2,
-			expectedArgs:  1,
-			shouldContain: "--leader-elect=true",
-		},
-		{
-			name:          "many replicas - adds leader election",
-			replicas:      5,
-			expectedArgs:  1,
-			shouldContain: "--leader-elect=true",
-		},
-		{
-			name:         "zero replicas - no leader election",
-			replicas:     0,
-			expectedArgs: 0,
-		},
-	}
+func TestComputeLeaderElect(t *testing.T) {
+	t.Run("nil spec returns nil", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		g.Expect(ComputeLeaderElect(nil)).To(gomega.BeNil())
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := gomega.NewWithT(t)
-			ctx := DeploymentContext{Replicas: tt.replicas}
-			c := NewContainerOverlay(ctx, WithLeaderElection())
+	t.Run("explicit LeaderElect=true wins regardless of replicas", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{Replicas: 1, LeaderElect: ptr.To(true)}
+		g.Expect(ComputeLeaderElect(spec)).To(gomega.Equal(ptr.To(true)))
+	})
 
-			g.Expect(c.Args).To(gomega.HaveLen(tt.expectedArgs))
+	t.Run("explicit LeaderElect=false wins even when replicas>1", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{Replicas: 3, LeaderElect: ptr.To(false)}
+		g.Expect(ComputeLeaderElect(spec)).To(gomega.Equal(ptr.To(false)))
+	})
 
-			if tt.expectedArgs > 0 {
-				g.Expect(c.Args).To(gomega.ContainElement(tt.shouldContain))
-			}
-		})
-	}
+	t.Run("replicas>1 with no override auto-enables", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{Replicas: 3}
+		g.Expect(ComputeLeaderElect(spec)).To(gomega.Equal(ptr.To(true)))
+	})
+
+	t.Run("replicas=1 with no override returns nil (embedded manifest default wins)", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{Replicas: 1}
+		g.Expect(ComputeLeaderElect(spec)).To(gomega.BeNil())
+	})
+}
+
+func TestWithLeaderElectionControl(t *testing.T) {
+	t.Run("nil enabled leaves args unchanged", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ctx := DeploymentContext{Replicas: 1}
+		c := NewContainerOverlay(ctx, WithArgs("--metrics-bind-address=:8080", "--leader-elect"))
+		WithLeaderElectionControl(nil)(c, ctx)
+		g.Expect(c.Args).To(gomega.Equal([]string{"--metrics-bind-address=:8080", "--leader-elect"}))
+	})
+
+	t.Run("true replaces bare --leader-elect with --leader-elect=true", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ctx := DeploymentContext{Replicas: 1}
+		c := &corev1.Container{Args: []string{"--metrics-bind-address=:8080", "--leader-elect", "--lease-duration=30s"}}
+		WithLeaderElectionControl(ptr.To(true))(c, ctx)
+		g.Expect(c.Args).To(gomega.ContainElements(
+			"--metrics-bind-address=:8080", "--leader-elect=true", "--lease-duration=30s",
+		))
+		g.Expect(c.Args).NotTo(gomega.ContainElement("--leader-elect"))
+	})
+
+	t.Run("false sets --leader-elect=false", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ctx := DeploymentContext{Replicas: 1}
+		c := &corev1.Container{Args: []string{"--leader-elect"}}
+		WithLeaderElectionControl(ptr.To(false))(c, ctx)
+		g.Expect(c.Args).To(gomega.Equal([]string{"--leader-elect=false"}))
+	})
+
+	t.Run("replaces existing --leader-elect=value", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ctx := DeploymentContext{Replicas: 1}
+		c := &corev1.Container{Args: []string{"--leader-elect=false", "--other"}}
+		WithLeaderElectionControl(ptr.To(true))(c, ctx)
+		g.Expect(c.Args).To(gomega.Equal([]string{"--other", "--leader-elect=true"}))
+	})
 }
 
 func TestCombinedOptions(t *testing.T) {
@@ -415,7 +438,7 @@ func TestCombinedOptions(t *testing.T) {
 		WithImage("my-image:v1"),
 		WithArgs("--config=/etc/config"),
 		WithEnv(corev1.EnvVar{Name: "LOG_LEVEL", Value: "debug"}),
-		WithLeaderElection(),
+		WithLeaderElectionControl(ptr.To(true)),
 	)
 
 	// Verify all options were applied

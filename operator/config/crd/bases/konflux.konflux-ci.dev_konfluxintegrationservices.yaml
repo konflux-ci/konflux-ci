@@ -46,6 +46,12 @@ spec:
                 description: IntegrationControllerManager defines customizations for
                   the controller-manager deployment.
                 properties:
+                  leaderElect:
+                    description: |-
+                      LeaderElect controls the --leader-elect flag on the manager container.
+                      When nil the embedded manifest default is used.
+                      Set to false to disable leader election (e.g. single-replica development environments).
+                    type: boolean
                   manager:
                     description: Manager defines customizations for the manager container.
                     properties:

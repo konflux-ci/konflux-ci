@@ -236,6 +236,9 @@ func applyBuildServiceDeploymentCustomizations(deployment *appsv1.Deployment, sp
 		if err := buildBuildControllerManagerOverlay(spec, clusterInfo, webhookConfigMapName).ApplyToDeployment(deployment); err != nil {
 			return err
 		}
+		// Apply leader election directly on the merged container to avoid Args replacement via StrategicMerge
+		customization.ApplyContainerOpt(deployment, buildManagerContainerName,
+			customization.WithLeaderElectionControl(customization.ComputeLeaderElect(spec.BuildControllerManager)))
 	}
 	return nil
 }
@@ -277,7 +280,6 @@ func buildBuildControllerManagerOverlay(spec konfluxv1alpha1.KonfluxBuildService
 
 	containerOpts = append(containerOpts,
 		customization.FromContainerSpec(spec.BuildControllerManager.Manager),
-		customization.WithLeaderElection(),
 	)
 
 	podOpts = append(podOpts,

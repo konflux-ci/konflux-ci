@@ -214,21 +214,21 @@ func applyIntegrationServiceDeploymentCustomizations(deployment *appsv1.Deployme
 		if err := buildControllerManagerOverlay(spec.IntegrationControllerManager, consoleURL).ApplyToDeployment(deployment); err != nil {
 			return err
 		}
+		// Apply leader election directly on the merged container to avoid Args replacement via StrategicMerge
+		customization.ApplyContainerOpt(deployment, managerContainerName,
+			customization.WithLeaderElectionControl(customization.ComputeLeaderElect(spec.IntegrationControllerManager)))
 	}
 	return nil
 }
 
 // buildControllerManagerOverlay builds the pod overlay for the controller-manager deployment.
 func buildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploymentSpec, consoleURL string) *customization.PodOverlay {
-	// Build console URL template for pipeline run links in the UI.
-	// Format: https://<host>/ns/{{ .Namespace }}/pipelinerun/{{ .PipelineRunName }}
 	consoleURLTemplate := ""
 	if consoleURL != "" {
 		consoleURLTemplate = fmt.Sprintf("%s/ns/{{ .Namespace }}/pipelinerun/{{ .PipelineRunName }}",
 			strings.TrimSuffix(consoleURL, "/"))
 	}
 
-	// Determine replicas and manager spec (default replicas to 1 if no spec)
 	replicas := int32(1)
 	var managerSpec *konfluxv1alpha1.ContainerSpec
 	if spec != nil {
@@ -241,7 +241,6 @@ func buildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploy
 		customization.WithContainerBuilder(
 			managerContainerName,
 			customization.FromContainerSpec(managerSpec),
-			customization.WithLeaderElection(),
 			customization.WithEnvOverride("CONSOLE_URL", consoleURLTemplate),
 		),
 	)

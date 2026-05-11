@@ -182,6 +182,9 @@ func applyReleaseServiceDeploymentCustomizations(deployment *appsv1.Deployment, 
 		if err := buildReleaseControllerManagerOverlay(spec.ReleaseControllerManager).ApplyToDeployment(deployment); err != nil {
 			return err
 		}
+		// Apply leader election directly on the merged container to avoid Args replacement via StrategicMerge
+		customization.ApplyContainerOpt(deployment, releaseManagerContainerName,
+			customization.WithLeaderElectionControl(customization.ComputeLeaderElect(spec.ReleaseControllerManager)))
 	}
 	return nil
 }
@@ -197,7 +200,6 @@ func buildReleaseControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManage
 		customization.WithContainerBuilder(
 			releaseManagerContainerName,
 			customization.FromContainerSpec(spec.Manager),
-			customization.WithLeaderElection(),
 		),
 	)
 }

@@ -17,7 +17,11 @@ limitations under the License.
 package customization
 
 import (
+	"fmt"
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/utils/ptr"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 )
@@ -117,11 +121,36 @@ func WithImage(image string) ContainerOption {
 
 // --- Context-aware options ---
 
-// WithLeaderElection adds --leader-elect=true if replicas > 1.
-func WithLeaderElection() ContainerOption {
-	return func(c *corev1.Container, ctx DeploymentContext) {
-		if ctx.Replicas > 1 {
-			c.Args = append(c.Args, "--leader-elect=true")
+// ComputeLeaderElect derives the desired leader-election flag value from a
+// ControllerManagerDeploymentSpec. The CR-level LeaderElect field wins; when
+// unset, leader election is auto-enabled for replicas > 1. Nil is returned for
+// a single replica with no override, letting the embedded manifest default win.
+func ComputeLeaderElect(spec *konfluxv1alpha1.ControllerManagerDeploymentSpec) *bool {
+	if spec == nil {
+		return nil
+	}
+	if spec.LeaderElect != nil {
+		return spec.LeaderElect
+	}
+	if spec.Replicas > 1 {
+		return ptr.To(true)
+	}
+	return nil
+}
+
+// WithLeaderElectionControl overrides the --leader-elect flag on the container.
+// When enabled is nil it is a no-op and the embedded manifest default wins.
+func WithLeaderElectionControl(enabled *bool) ContainerOption {
+	return func(c *corev1.Container, _ DeploymentContext) {
+		if enabled == nil {
+			return
 		}
+		filtered := c.Args[:0]
+		for _, a := range c.Args {
+			if a != "--leader-elect" && !strings.HasPrefix(a, "--leader-elect=") {
+				filtered = append(filtered, a)
+			}
+		}
+		c.Args = append(filtered, fmt.Sprintf("--leader-elect=%v", *enabled))
 	}
 }

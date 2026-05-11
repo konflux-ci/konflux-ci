@@ -19,6 +19,7 @@ package customization
 import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // PodOverlay holds all customizations for a pod template.
@@ -213,6 +214,25 @@ func (p *PodOverlay) ApplyToDeployment(deployment *appsv1.Deployment) error {
 		return nil
 	}
 	return p.ApplyToPodTemplateSpec(&deployment.Spec.Template)
+}
+
+// ApplyContainerOpt applies a ContainerOption directly to a named container in a Deployment.
+// It is a post-merge helper: use it after ApplyToDeployment to mutate the already-merged
+// container in place, avoiding the atomic Args replacement that StrategicMerge performs on
+// slice fields without a patchMergeKey.
+// A warning is logged when the container is not found, since this typically indicates
+// manifest drift (e.g. an upstream container rename) and the option will be silently skipped.
+func ApplyContainerOpt(deployment *appsv1.Deployment, containerName string, opt ContainerOption) {
+	for i := range deployment.Spec.Template.Spec.Containers {
+		if deployment.Spec.Template.Spec.Containers[i].Name == containerName {
+			opt(&deployment.Spec.Template.Spec.Containers[i], DeploymentContext{})
+			return
+		}
+	}
+	logf.Log.WithName("customization").WithValues(
+		"deployment", deployment.Name,
+		"container", containerName,
+	).Info("WARN: container not found in deployment; customization option was not applied — possible manifest drift")
 }
 
 // ApplyToStatefulSet applies customizations to a StatefulSet.

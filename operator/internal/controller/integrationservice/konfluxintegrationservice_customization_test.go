@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
@@ -31,8 +32,9 @@ import (
 )
 
 const (
-	testConsoleURL         = "https://konflux.example.com"
-	testConsoleURLTemplate = "https://konflux.example.com/ns/{{ .Namespace }}/pipelinerun/{{ .PipelineRunName }}"
+	testConsoleURL              = "https://konflux.example.com"
+	testConsoleURLTemplate      = "https://konflux.example.com/ns/{{ .Namespace }}/pipelinerun/{{ .PipelineRunName }}"
+	testManagerArgPreserveProbe = "--health-probe-bind-address=:8081"
 )
 
 // getIntegrationServiceDeployment returns a deep copy of the IntegrationService controller-manager deployment from the manifests.
@@ -571,5 +573,102 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		envVar = findEnvVar(managerContainer.Env, "CONSOLE_URL")
 		g.Expect(envVar).NotTo(gomega.BeNil())
 		g.Expect(envVar.Value).To(gomega.Equal(testConsoleURLTemplate))
+	})
+}
+
+func TestBuildControllerManagerOverlay_LeaderElection(t *testing.T) {
+	t.Run("LeaderElect false forces --leader-elect=false", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+			IntegrationControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{LeaderElect: ptr.To(false)},
+		}
+		deployment := getIntegrationServiceDeployment(t)
+		mc := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(mc).NotTo(gomega.BeNil())
+		mc.Args = append(mc.Args, testManagerArgPreserveProbe)
+
+		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")).To(gomega.Succeed())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(testManagerArgPreserveProbe))
+		g.Expect(managerContainer.Args).To(gomega.ContainElement("--leader-elect=false"))
+		g.Expect(managerContainer.Args).NotTo(gomega.ContainElement("--leader-elect"))
+	})
+
+	t.Run("LeaderElect true forces --leader-elect=true", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+			IntegrationControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{LeaderElect: ptr.To(true)},
+		}
+		deployment := getIntegrationServiceDeployment(t)
+		mc := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(mc).NotTo(gomega.BeNil())
+		mc.Args = append(mc.Args, testManagerArgPreserveProbe)
+
+		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")).To(gomega.Succeed())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(testManagerArgPreserveProbe))
+		g.Expect(managerContainer.Args).To(gomega.ContainElement("--leader-elect=true"))
+	})
+
+	t.Run("nil LeaderElect with replicas=1 leaves embedded --leader-elect arg unchanged", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+			IntegrationControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{Replicas: 1},
+		}
+		deployment := getIntegrationServiceDeployment(t)
+		mc := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(mc).NotTo(gomega.BeNil())
+		mc.Args = append(mc.Args, testManagerArgPreserveProbe)
+
+		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")).To(gomega.Succeed())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(testManagerArgPreserveProbe))
+		g.Expect(managerContainer.Args).To(gomega.ContainElement("--leader-elect"))
+		g.Expect(managerContainer.Args).NotTo(gomega.ContainElement("--leader-elect=true"))
+		g.Expect(managerContainer.Args).NotTo(gomega.ContainElement("--leader-elect=false"))
+	})
+
+	t.Run("nil LeaderElect with replicas>1 auto-enables --leader-elect=true", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+			IntegrationControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{Replicas: 3},
+		}
+		deployment := getIntegrationServiceDeployment(t)
+		mc := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(mc).NotTo(gomega.BeNil())
+		mc.Args = append(mc.Args, testManagerArgPreserveProbe)
+
+		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")).To(gomega.Succeed())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(testManagerArgPreserveProbe))
+		g.Expect(managerContainer.Args).To(gomega.ContainElement("--leader-elect=true"))
+		g.Expect(managerContainer.Args).NotTo(gomega.ContainElement("--leader-elect=false"))
+	})
+
+	t.Run("LeaderElect false with replicas>1 overrides auto-enable", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+			IntegrationControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{Replicas: 3, LeaderElect: ptr.To(false)},
+		}
+		deployment := getIntegrationServiceDeployment(t)
+		mc := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(mc).NotTo(gomega.BeNil())
+		mc.Args = append(mc.Args, testManagerArgPreserveProbe)
+
+		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")).To(gomega.Succeed())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(testManagerArgPreserveProbe))
+		g.Expect(managerContainer.Args).To(gomega.ContainElement("--leader-elect=false"))
+		g.Expect(managerContainer.Args).NotTo(gomega.ContainElement("--leader-elect=true"))
 	})
 }

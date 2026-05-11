@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/version"
+	"k8s.io/utils/ptr"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
@@ -36,8 +37,9 @@ import (
 )
 
 const (
-	testWebhookConfigMapName = "webhook-config-abc1234567"
-	testCustomPaCURL         = "http://custom-pac.example.com:9999"
+	testWebhookConfigMapName    = "webhook-config-abc1234567"
+	testCustomPaCURL            = "http://custom-pac.example.com:9999"
+	testManagerArgPreserveProbe = "--health-probe-bind-address=:8081"
 )
 
 // getBuildServiceDeployment returns a deep copy of the BuildService controller-manager deployment from the manifests.
@@ -702,5 +704,75 @@ func TestApplyBuildServiceDeploymentCustomizations_ResourceMerging(t *testing.T)
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
 		g.Expect(managerContainer.Resources.Limits.Memory().String()).To(gomega.Equal("512Mi"))
 		g.Expect(managerContainer.Resources.Requests.Cpu().String()).To(gomega.Equal("100m"))
+	})
+}
+
+func TestBuildBuildControllerManagerOverlay_LeaderElection(t *testing.T) {
+	defaultClusterInfo := &clusterinfo.Info{}
+
+	t.Run("nil LeaderElect with replicas=1 preserves embedded --leader-elect=false", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{Replicas: 1},
+		}
+		deployment := getBuildServiceDeployment(t)
+		g.Expect(applyBuildServiceDeploymentCustomizations(deployment, spec, defaultClusterInfo, "")).To(gomega.Succeed())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(testManagerArgPreserveProbe))
+		// Build service embedded manifest has --leader-elect=false; with replicas=1 and no override the default is preserved.
+		g.Expect(managerContainer.Args).To(gomega.ContainElement("--leader-elect=false"))
+		g.Expect(managerContainer.Args).NotTo(gomega.ContainElement("--leader-elect=true"))
+	})
+
+	t.Run("nil LeaderElect with replicas>1 auto-enables --leader-elect=true", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{Replicas: 3},
+		}
+		deployment := getBuildServiceDeployment(t)
+		g.Expect(applyBuildServiceDeploymentCustomizations(deployment, spec, defaultClusterInfo, "")).To(gomega.Succeed())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(testManagerArgPreserveProbe))
+		g.Expect(managerContainer.Args).To(gomega.ContainElement("--leader-elect=true"))
+		g.Expect(managerContainer.Args).NotTo(gomega.ContainElement("--leader-elect=false"))
+	})
+
+	t.Run("LeaderElect false with replicas>1 overrides auto-enable", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+				Replicas:    3,
+				LeaderElect: ptr.To(false),
+			},
+		}
+		deployment := getBuildServiceDeployment(t)
+		g.Expect(applyBuildServiceDeploymentCustomizations(deployment, spec, defaultClusterInfo, "")).To(gomega.Succeed())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(testManagerArgPreserveProbe))
+		g.Expect(managerContainer.Args).To(gomega.ContainElement("--leader-elect=false"))
+		g.Expect(managerContainer.Args).NotTo(gomega.ContainElement("--leader-elect=true"))
+	})
+
+	t.Run("LeaderElect true with replicas=1 explicitly enables --leader-elect=true", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+				Replicas:    1,
+				LeaderElect: ptr.To(true),
+			},
+		}
+		deployment := getBuildServiceDeployment(t)
+		g.Expect(applyBuildServiceDeploymentCustomizations(deployment, spec, defaultClusterInfo, "")).To(gomega.Succeed())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(testManagerArgPreserveProbe))
+		g.Expect(managerContainer.Args).To(gomega.ContainElement("--leader-elect=true"))
 	})
 }

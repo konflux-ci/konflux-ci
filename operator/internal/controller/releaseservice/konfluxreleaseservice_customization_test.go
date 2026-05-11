@@ -24,11 +24,14 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
+
+const testManagerArgPreserveProbe = "--health-probe-bind-address=:8081"
 
 // getReleaseServiceDeployment returns a deep copy of the ReleaseService controller-manager deployment from the manifests.
 func getReleaseServiceDeployment(t *testing.T) *appsv1.Deployment {
@@ -349,5 +352,81 @@ func TestApplyReleaseServiceDeploymentCustomizations_ResourceMerging(t *testing.
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
 		g.Expect(managerContainer.Resources.Limits.Memory().String()).To(gomega.Equal("512Mi"))
 		g.Expect(managerContainer.Resources.Requests.Cpu().String()).To(gomega.Equal("100m"))
+	})
+}
+
+func TestBuildReleaseControllerManagerOverlay_LeaderElection(t *testing.T) {
+	t.Run("nil LeaderElect with replicas=1 leaves embedded --leader-elect arg unchanged", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
+			ReleaseControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{Replicas: 1},
+		}
+		deployment := getReleaseServiceDeployment(t)
+		mc := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
+		g.Expect(mc).NotTo(gomega.BeNil())
+		mc.Args = append(mc.Args, testManagerArgPreserveProbe)
+
+		g.Expect(applyReleaseServiceDeploymentCustomizations(deployment, spec)).To(gomega.Succeed())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(testManagerArgPreserveProbe))
+		g.Expect(managerContainer.Args).NotTo(gomega.ContainElement("--leader-elect=true"))
+	})
+
+	t.Run("nil LeaderElect with replicas>1 auto-enables --leader-elect=true", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
+			ReleaseControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{Replicas: 3},
+		}
+		deployment := getReleaseServiceDeployment(t)
+		mc := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
+		g.Expect(mc).NotTo(gomega.BeNil())
+		mc.Args = append(mc.Args, testManagerArgPreserveProbe)
+
+		g.Expect(applyReleaseServiceDeploymentCustomizations(deployment, spec)).To(gomega.Succeed())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(testManagerArgPreserveProbe))
+		g.Expect(managerContainer.Args).To(gomega.ContainElement("--leader-elect=true"))
+		g.Expect(managerContainer.Args).NotTo(gomega.ContainElement("--leader-elect=false"))
+	})
+
+	t.Run("LeaderElect false with replicas>1 overrides auto-enable", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
+			ReleaseControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{Replicas: 3, LeaderElect: ptr.To(false)},
+		}
+		deployment := getReleaseServiceDeployment(t)
+		mc := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
+		g.Expect(mc).NotTo(gomega.BeNil())
+		mc.Args = append(mc.Args, testManagerArgPreserveProbe)
+
+		g.Expect(applyReleaseServiceDeploymentCustomizations(deployment, spec)).To(gomega.Succeed())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(testManagerArgPreserveProbe))
+		g.Expect(managerContainer.Args).To(gomega.ContainElement("--leader-elect=false"))
+		g.Expect(managerContainer.Args).NotTo(gomega.ContainElement("--leader-elect=true"))
+	})
+
+	t.Run("LeaderElect true with replicas=1 explicitly enables --leader-elect=true", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
+			ReleaseControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{Replicas: 1, LeaderElect: ptr.To(true)},
+		}
+		deployment := getReleaseServiceDeployment(t)
+		mc := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
+		g.Expect(mc).NotTo(gomega.BeNil())
+		mc.Args = append(mc.Args, testManagerArgPreserveProbe)
+
+		g.Expect(applyReleaseServiceDeploymentCustomizations(deployment, spec)).To(gomega.Succeed())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(testManagerArgPreserveProbe))
+		g.Expect(managerContainer.Args).To(gomega.ContainElement("--leader-elect=true"))
 	})
 }
