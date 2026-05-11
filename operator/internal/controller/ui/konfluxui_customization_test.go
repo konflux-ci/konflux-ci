@@ -898,3 +898,85 @@ func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
 		g.Expect(nginxContainer.Resources.Requests.Cpu().String()).To(gomega.Equal("100m"))
 	})
 }
+
+func TestProxyDeploymentTokenHotReload(t *testing.T) {
+	deployment := getUIDeployment(t, proxyDeploymentName)
+	spec := deployment.Spec.Template.Spec
+
+	t.Run("generate-nginx-configs-loop container exists", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		container := testutil.FindContainer(spec.Containers, "generate-nginx-configs-loop")
+		g.Expect(container).NotTo(gomega.BeNil(), "generate-nginx-configs-loop sidecar must exist")
+	})
+
+	t.Run("generate-loop liveness probe uses exec command not args", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		container := testutil.FindContainer(spec.Containers, "generate-nginx-configs-loop")
+		g.Expect(container).NotTo(gomega.BeNil())
+		g.Expect(container.LivenessProbe).NotTo(gomega.BeNil(), "liveness probe must be set")
+		g.Expect(container.LivenessProbe.Exec).NotTo(gomega.BeNil(), "liveness probe must use exec")
+		g.Expect(container.LivenessProbe.Exec.Command).To(gomega.HaveLen(2),
+			"exec command must have 2 elements (bash + script path); args is not valid for exec probes")
+		g.Expect(container.LivenessProbe.Exec.Command[0]).To(gomega.Equal("bash"))
+		g.Expect(container.LivenessProbe.Exec.Command[1]).To(gomega.ContainSubstring("proxy-nginx-generate-loop-probe.sh"))
+		g.Expect(container.LivenessProbe.InitialDelaySeconds).To(gomega.BeNumerically(">", 0),
+			"liveness probe must have initialDelaySeconds to allow sidecar startup")
+	})
+
+	t.Run("generate-loop script volume projects both script and probe", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		var scriptVolume *corev1.Volume
+		for i := range spec.Volumes {
+			if spec.Volumes[i].Name == "proxy-generate-loop-script" {
+				scriptVolume = &spec.Volumes[i]
+				break
+			}
+		}
+		g.Expect(scriptVolume).NotTo(gomega.BeNil(), "proxy-generate-loop-script volume must exist")
+		g.Expect(scriptVolume.ConfigMap).NotTo(gomega.BeNil())
+
+		keys := make([]string, 0, len(scriptVolume.ConfigMap.Items))
+		for _, item := range scriptVolume.ConfigMap.Items {
+			keys = append(keys, item.Key)
+		}
+		g.Expect(keys).To(gomega.ContainElement("proxy-nginx-generate-loop.sh"),
+			"volume must project the main script")
+		g.Expect(keys).To(gomega.ContainElement("proxy-nginx-generate-loop-probe.sh"),
+			"volume must project the probe script")
+	})
+
+	t.Run("projected service account token volume exists with short TTL", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		var tokenVolume *corev1.Volume
+		for i := range spec.Volumes {
+			if spec.Volumes[i].Name == "kube-api-token" {
+				tokenVolume = &spec.Volumes[i]
+				break
+			}
+		}
+		g.Expect(tokenVolume).NotTo(gomega.BeNil(), "kube-api-token projected volume must exist")
+		g.Expect(tokenVolume.Projected).NotTo(gomega.BeNil())
+		g.Expect(tokenVolume.Projected.Sources).NotTo(gomega.BeEmpty())
+
+		var saTokenSource *corev1.ServiceAccountTokenProjection
+		for _, src := range tokenVolume.Projected.Sources {
+			if src.ServiceAccountToken != nil {
+				saTokenSource = src.ServiceAccountToken
+				break
+			}
+		}
+		g.Expect(saTokenSource).NotTo(gomega.BeNil(), "projected volume must include a serviceAccountToken source")
+		g.Expect(*saTokenSource.ExpirationSeconds).To(gomega.BeNumerically("<=", 3600),
+			"token TTL must be short-lived (<=1h) for security")
+	})
+
+	t.Run("no long-lived service account token secret volume", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		for _, vol := range spec.Volumes {
+			if vol.Secret != nil {
+				g.Expect(vol.Secret.SecretName).NotTo(gomega.Equal("proxy"),
+					"must not mount the long-lived service account token secret")
+			}
+		}
+	})
+}

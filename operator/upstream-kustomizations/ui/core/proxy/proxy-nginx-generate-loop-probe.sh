@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+for cmd in date stat; do
+  command -v "${cmd}" >/dev/null 2>&1 || { echo "required command not found: ${cmd}"; exit 1; }
+done
+
 AUTH_CONF_FILE=/mnt/nginx-generated-config/auth.conf
 AUTH_CONF_NEW_FILE=/mnt/nginx-generated-config/auth.conf.new
 
