@@ -1,0 +1,98 @@
+name: Renovate manifest companion PR
+
+# When dependency automation (Renovate, MintMaker, etc.) updates upstream pins or
+# bumps third-party versions in .github/scripts/export-third-party-chart-env.sh,
+# open/update a bot branch and PR with regenerated manifests (do not push to the bot's PR branch).
+# kustomize, helm, and yq are expected on PATH (ubuntu-latest image).
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      # Upstream digest/ref bumps (e.g. integration-service) live under here.
+      - "operator/upstream-kustomizations/**"
+      # MintMaker/Renovate bump Helm chart semvers here (see renovate.json customManagers).
+      - ".github/scripts/export-third-party-chart-env.sh"
+
+concurrency:
+  group: renovate-manifest-companion-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  companion:
+    name: Rebuild manifests and open companion PR
+    runs-on: ubuntu-latest
+    if: >
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(fromJSON('["renovate[bot]","red-hat-konflux[bot]"]'), github.event.pull_request.user.login)
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.UPDATE_BOT_APP_ID }}
+          private-key: ${{ secrets.UPDATE_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
+
+      - name: Checkout dependency PR head
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      # Refuse to run companion logic from the PR checkout unless the PR diff is
+      # limited to the same paths as the workflow trigger (defense in depth;
+      # keep this step inline so it is not replaced by PR-supplied script content).
+      - name: Verify PR diff allowlist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(
+            gh pr diff "${{ github.event.pull_request.number }}" \
+              --repo "${{ github.repository }}" \
+              --name-only | awk 'NF' | sort -u
+          )
+          disallowed=()
+          for file in "${files[@]}"; do
+            case "$file" in
+              operator/upstream-kustomizations/*) ;;
+              .github/scripts/export-third-party-chart-env.sh) ;;
+              *) disallowed+=("$file") ;;
+            esac
+          done
+          if ((${#disallowed[@]})); then
+            echo "::error::Refusing to run: PR changes files outside the manifest companion allowlist (only operator/upstream-kustomizations/** and .github/scripts/export-third-party-chart-env.sh)."
+            printf '%s\n' "${disallowed[@]}" | sed 's/^/  - /' >&2
+            exit 1
+          fi
+
+      - name: Run companion
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          SOURCE_PR: ${{ github.event.pull_request.number }}
+        run: bash .github/scripts/renovate-manifest-companion.sh
+
+      - name: Notify on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_NAME: Renovate manifest companion PR
+        run: |
+          .github/scripts/create-or-update-issue.sh \
+            "⚠️ Renovate manifest companion PR workflow failed" \
+            "The workflow that rebuilds manifests and opens a companion PR for dependency automation has failed. See the workflow run logs."
