@@ -51,9 +51,3 @@ patches:
       kind: ClusterRole
       name: integration-service-prometheus-viewer-role
     path: remove-prometheus-viewer-cluster-role.yaml
-  - target:
-      group: batch
-      version: v1
-      kind: CronJob
-      name: integration-service-snapshot-garbage-collector
-    path: snapshot-gc-resource-patch.yaml

@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -50,6 +51,47 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 					Name:      "integration-service-controller-manager",
 					Namespace: integrationServiceNamespace,
 				}, dep)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should inject snapshot GC retention env vars onto the CronJob when typed fields are set", func(ctx context.Context) {
+			prToKeep := "5"
+			nonPRToKeep := "10"
+			minToKeep := "2"
+
+			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxIntegrationService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+					PRSnapshotsToKeep:              prToKeep,
+					NonPRSnapshotsToKeep:           nonPRToKeep,
+					MinSnapshotsToKeepPerComponent: minToKeep,
+				},
+			})).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxIntegrationService{ObjectMeta: metav1.ObjectMeta{Name: CRName}})
+			})
+
+			Eventually(func(g Gomega) {
+				cj := &batchv1.CronJob{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      snapshotGCCronJobName,
+					Namespace: integrationServiceNamespace,
+				}, cj)).To(Succeed())
+
+				container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+				g.Expect(container).NotTo(BeNil())
+
+				prVar := findEnvVar(container.Env, envPRSnapshotsToKeep)
+				g.Expect(prVar).NotTo(BeNil())
+				g.Expect(prVar.Value).To(Equal(prToKeep))
+
+				nonPRVar := findEnvVar(container.Env, envNonPRSnapshotsToKeep)
+				g.Expect(nonPRVar).NotTo(BeNil())
+				g.Expect(nonPRVar.Value).To(Equal(nonPRToKeep))
+
+				minVar := findEnvVar(container.Env, envMinSnapshotsToKeepPerComponent)
+				g.Expect(minVar).NotTo(BeNil())
+				g.Expect(minVar.Value).To(Equal(minToKeep))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})

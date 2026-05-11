@@ -1631,8 +1631,8 @@ spec:
                 cpu: 1000m
                 memory: 2000Mi
               requests:
-                cpu: 50m
-                memory: 64Mi
+                cpu: 1000m
+                memory: 2000Mi
             securityContext:
               readOnlyRootFilesystem: true
               runAsNonRoot: true

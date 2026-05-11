@@ -65,6 +65,13 @@ spec:
             limits:
               cpu: 30m
               memory: 128Mi
+      # snapshotGarbageCollector.resources: lower the GC container requests for resource-constrained
+      # clusters (e.g. local Kind).
+      snapshotGarbageCollector:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
   releaseService:
     spec:
       releaseControllerManager:
