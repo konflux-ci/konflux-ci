@@ -59,6 +59,11 @@ const (
 
 	// Container names
 	managerContainerName = "manager"
+
+	// Env var names for pipeline run timeout configuration.
+	envPipelineTimeout = "PIPELINE_TIMEOUT"
+	envTasksTimeout    = "TASKS_TIMEOUT"
+	envFinallyTimeout  = "FINALLY_TIMEOUT"
 )
 
 // IntegrationServiceCleanupGVKs defines which resource types should be cleaned up when they are
@@ -211,7 +216,7 @@ func applyIntegrationServiceDeploymentCustomizations(deployment *appsv1.Deployme
 		if spec.IntegrationControllerManager != nil {
 			deployment.Spec.Replicas = &spec.IntegrationControllerManager.Replicas
 		}
-		if err := buildControllerManagerOverlay(spec.IntegrationControllerManager, consoleURL).ApplyToDeployment(deployment); err != nil {
+		if err := buildControllerManagerOverlay(spec.IntegrationControllerManager, consoleURL, spec).ApplyToDeployment(deployment); err != nil {
 			return err
 		}
 	}
@@ -219,16 +224,16 @@ func applyIntegrationServiceDeploymentCustomizations(deployment *appsv1.Deployme
 }
 
 // buildControllerManagerOverlay builds the pod overlay for the controller-manager deployment.
-func buildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploymentSpec, consoleURL string) *customization.PodOverlay {
-	// Build console URL template for pipeline run links in the UI.
-	// Format: https://<host>/ns/{{ .Namespace }}/pipelinerun/{{ .PipelineRunName }}
+// Typed timeout fields (PipelineTimeout, TasksTimeout, FinallyTimeout) are applied last and
+// take precedence over any env entry with the same name in integrationControllerManager.manager.env.
+// When not set in the CRD, the upstream integration-service defaults apply.
+func buildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploymentSpec, consoleURL string, integrationSpec konfluxv1alpha1.KonfluxIntegrationServiceSpec) *customization.PodOverlay {
 	consoleURLTemplate := ""
 	if consoleURL != "" {
 		consoleURLTemplate = fmt.Sprintf("%s/ns/{{ .Namespace }}/pipelinerun/{{ .PipelineRunName }}",
 			strings.TrimSuffix(consoleURL, "/"))
 	}
 
-	// Determine replicas and manager spec (default replicas to 1 if no spec)
 	replicas := int32(1)
 	var managerSpec *konfluxv1alpha1.ContainerSpec
 	if spec != nil {
@@ -243,6 +248,9 @@ func buildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploy
 			customization.FromContainerSpec(managerSpec),
 			customization.WithLeaderElection(),
 			customization.WithEnvOverride("CONSOLE_URL", consoleURLTemplate),
+			customization.WithOptionalEnvOverride(envPipelineTimeout, integrationSpec.PipelineTimeout),
+			customization.WithOptionalEnvOverride(envTasksTimeout, integrationSpec.TasksTimeout),
+			customization.WithOptionalEnvOverride(envFinallyTimeout, integrationSpec.FinallyTimeout),
 		),
 	)
 }

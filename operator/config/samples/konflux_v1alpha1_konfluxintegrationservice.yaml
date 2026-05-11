@@ -8,6 +8,12 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: konflux-integration-service
 spec:
+  # Pipeline run timeouts. Each field maps to the corresponding env var on the
+  # controller-manager container. Omit to use the upstream integration-service defaults.
+  pipelineTimeout: "6h"
+  tasksTimeout: "4h"
+  finallyTimeout: "2h"
+
   integrationControllerManager:
     replicas: 3
     manager:
@@ -18,14 +24,16 @@ spec:
         limits:
           cpu: 512m
           memory: 1Gi
-      env:
-        - name: EXAMPLE_CUSTOM_CONFIG
-          valueFrom:
-            configMapKeyRef:
-              name: integration-service-config
-              key: custom-config
-        - name: EXAMPLE_SECRET_VALUE
-          valueFrom:
-            secretKeyRef:
-              name: integration-service-secret
-              key: secret-key
+      # For env vars beyond the typed timeout fields above, use manager.env directly.
+      # Supports plain values and valueFrom references (ConfigMap, Secret).
+      # env:
+      #   - name: EXAMPLE_CUSTOM_CONFIG
+      #     valueFrom:
+      #       configMapKeyRef:
+      #         name: integration-service-config
+      #         key: custom-config
+      #   - name: EXAMPLE_SECRET_VALUE
+      #     valueFrom:
+      #       secretKeyRef:
+      #         name: integration-service-secret
+      #         key: secret-key

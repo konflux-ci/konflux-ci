@@ -25,6 +25,33 @@ type KonfluxIntegrationServiceSpec struct {
 	// IntegrationControllerManager defines customizations for the controller-manager deployment.
 	// +optional
 	IntegrationControllerManager *ControllerManagerDeploymentSpec `json:"integrationControllerManager,omitempty"`
+
+	// PipelineTimeout is the overall pipeline run timeout (e.g. "6h", "1h30m", "90m").
+	// Maps to the PIPELINE_TIMEOUT env var on the controller-manager container.
+	// Takes precedence over any PIPELINE_TIMEOUT entry in integrationControllerManager.manager.env.
+	// When omitted, the upstream integration-service default applies.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^([0-9]+h)?([0-9]+m)?([0-9]+s)?$`
+	// +kubebuilder:validation:MinLength=2
+	PipelineTimeout string `json:"pipelineTimeout,omitempty"`
+
+	// TasksTimeout is the timeout for tasks within a pipeline run (e.g. "4h", "90m").
+	// Maps to the TASKS_TIMEOUT env var on the controller-manager container.
+	// Takes precedence over any TASKS_TIMEOUT entry in integrationControllerManager.manager.env.
+	// When omitted, the upstream integration-service default applies.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^([0-9]+h)?([0-9]+m)?([0-9]+s)?$`
+	// +kubebuilder:validation:MinLength=2
+	TasksTimeout string `json:"tasksTimeout,omitempty"`
+
+	// FinallyTimeout is the timeout for finally tasks (e.g. "2h", "30m").
+	// Maps to the FINALLY_TIMEOUT env var on the controller-manager container.
+	// Takes precedence over any FINALLY_TIMEOUT entry in integrationControllerManager.manager.env.
+	// When omitted, the upstream integration-service default applies.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^([0-9]+h)?([0-9]+m)?([0-9]+s)?$`
+	// +kubebuilder:validation:MinLength=2
+	FinallyTimeout string `json:"finallyTimeout,omitempty"`
 }
 
 // KonfluxIntegrationServiceStatus defines the observed state of KonfluxIntegrationService
