@@ -17,6 +17,10 @@
 # Only the fields consumed by downstream workflows are dispatched. The full
 # github.event can exceed GitHub's 65KB workflow_dispatch input limit on
 # large dependency-update PRs (Renovate/Mintmaker bodies alone can be ~38KB).
+#
+# Command matching: exact, space-delimited args, or newline-delimited body.
+# fromJSON('"\n"') produces a literal newline (GHA strings lack escape support).
+# Assumes LF line endings; GitHub's web UI normalizes to LF (CRLF only via API).
 name: fullsend
 
 permissions:
@@ -28,13 +32,15 @@ on:
   issue_comment:
     types: [created]
   pull_request_target:
-    types: [opened, synchronize, ready_for_review]
+    types: [opened, synchronize, ready_for_review, closed]
   pull_request_review:
     types: [submitted]
 
 jobs:
   dispatch-triage:
     runs-on: ubuntu-latest
+    outputs:
+      agent: ${{ steps.dispatch.outputs.agent }}
     concurrency:
       group: triage-${{ github.event.issue.number || github.event.pull_request.number }}
       cancel-in-progress: true
@@ -42,6 +48,7 @@ jobs:
       github.event_name == 'issue_comment' && (
         github.event.comment.body == '/triage' ||
         startsWith(github.event.comment.body, '/triage ') ||
+        startsWith(github.event.comment.body, format('{0}{1}', '/triage', fromJSON('"\n"'))) ||
         (
           (github.event.comment.author_association != 'NONE' ||
             github.event.comment.user.login == github.event.issue.user.login) &&
@@ -64,6 +71,7 @@ jobs:
             '{issue: {number: (if $in != "" then ($in | tonumber) else null end), html_url: (if $iu != "" then $iu else null end)}}')
           echo "json=$PAYLOAD" >> "$GITHUB_OUTPUT"
       - name: Dispatch triage stage
+        id: dispatch
         env:
           GH_TOKEN: ${{ secrets.FULLSEND_DISPATCH_TOKEN }}
           EVENT_PAYLOAD: ${{ steps.payload.outputs.json }}
@@ -71,15 +79,19 @@ jobs:
           SOURCE_REPO: ${{ github.repository }}
           DISPATCH_REPO: ${{ github.repository_owner }}/.fullsend
         run: |
-          gh workflow run dispatch.yml \
+          DISPATCH_URL=$(gh workflow run dispatch.yml \
             --repo "$DISPATCH_REPO" \
             -f stage=triage \
             -f event_type="$EVENT_TYPE" \
             -f source_repo="$SOURCE_REPO" \
-            -f event_payload="$EVENT_PAYLOAD"
+            -f event_payload="$EVENT_PAYLOAD")
+          echo "::notice::Dispatched triage → ${DISPATCH_URL}"
+          echo "agent=triage" >> "$GITHUB_OUTPUT"
 
   dispatch-code:
     runs-on: ubuntu-latest
+    outputs:
+      agent: ${{ steps.dispatch.outputs.agent }}
     if: >-
       (github.event_name == 'issues' && github.event.action == 'labeled'
         && github.event.label.name == 'ready-to-code') ||
@@ -87,7 +99,8 @@ jobs:
         && !github.event.issue.pull_request
         && (
           github.event.comment.body == '/code' ||
-          startsWith(github.event.comment.body, '/code ')
+          startsWith(github.event.comment.body, '/code ') ||
+          startsWith(github.event.comment.body, format('{0}{1}', '/code', fromJSON('"\n"')))
         ))
     steps:
       - name: Build minimal payload
@@ -103,6 +116,7 @@ jobs:
             '{issue: {number: (if $in != "" then ($in | tonumber) else null end), html_url: (if $iu != "" then $iu else null end)}}')
           echo "json=$PAYLOAD" >> "$GITHUB_OUTPUT"
       - name: Dispatch code stage
+        id: dispatch
         env:
           GH_TOKEN: ${{ secrets.FULLSEND_DISPATCH_TOKEN }}
           EVENT_PAYLOAD: ${{ steps.payload.outputs.json }}
@@ -110,15 +124,19 @@ jobs:
           SOURCE_REPO: ${{ github.repository }}
           DISPATCH_REPO: ${{ github.repository_owner }}/.fullsend
         run: |
-          gh workflow run dispatch.yml \
+          DISPATCH_URL=$(gh workflow run dispatch.yml \
             --repo "$DISPATCH_REPO" \
             -f stage=code \
             -f event_type="$EVENT_TYPE" \
             -f source_repo="$SOURCE_REPO" \
-            -f event_payload="$EVENT_PAYLOAD"
+            -f event_payload="$EVENT_PAYLOAD")
+          echo "::notice::Dispatched code → ${DISPATCH_URL}"
+          echo "agent=code" >> "$GITHUB_OUTPUT"
 
   dispatch-review:
     runs-on: ubuntu-latest
+    outputs:
+      agent: ${{ steps.dispatch.outputs.agent }}
     # The review agent is NOT dispatched on pull_request_review events.
     # Bot changes_requested reviews dispatch the fix agent (dispatch-fix-bot).
     # All other review submissions (human approve/comment/etc.) are ignored —
@@ -128,9 +146,11 @@ jobs:
         && github.event.label.name == 'ready-for-review') ||
       (github.event_name == 'issue_comment' && (
         github.event.comment.body == '/review' ||
-        startsWith(github.event.comment.body, '/review ')
+        startsWith(github.event.comment.body, '/review ') ||
+        startsWith(github.event.comment.body, format('{0}{1}', '/review', fromJSON('"\n"')))
       )) ||
-      github.event_name == 'pull_request_target'
+      (github.event_name == 'pull_request_target'
+        && github.event.action != 'closed')
     steps:
       - name: Build minimal payload
         id: payload
@@ -150,6 +170,7 @@ jobs:
               pull_request: {number: (if $pn != "" then ($pn | tonumber) else null end), html_url: (if $pu != "" then $pu else null end)}}')
           echo "json=$PAYLOAD" >> "$GITHUB_OUTPUT"
       - name: Dispatch review stage
+        id: dispatch
         env:
           GH_TOKEN: ${{ secrets.FULLSEND_DISPATCH_TOKEN }}
           EVENT_PAYLOAD: ${{ steps.payload.outputs.json }}
@@ -157,15 +178,19 @@ jobs:
           SOURCE_REPO: ${{ github.repository }}
           DISPATCH_REPO: ${{ github.repository_owner }}/.fullsend
         run: |
-          gh workflow run dispatch.yml \
+          DISPATCH_URL=$(gh workflow run dispatch.yml \
             --repo "$DISPATCH_REPO" \
             -f stage=review \
             -f event_type="$EVENT_TYPE" \
             -f source_repo="$SOURCE_REPO" \
-            -f event_payload="$EVENT_PAYLOAD"
+            -f event_payload="$EVENT_PAYLOAD")
+          echo "::notice::Dispatched review → ${DISPATCH_URL}"
+          echo "agent=review" >> "$GITHUB_OUTPUT"
 
   dispatch-fix-bot:
     runs-on: ubuntu-latest
+    outputs:
+      agent: ${{ steps.dispatch.outputs.agent }}
     concurrency:
       group: fix-${{ github.event.pull_request.number }}
       cancel-in-progress: true
@@ -174,6 +199,7 @@ jobs:
         && github.event.review.state == 'changes_requested'
         && github.event.review.user.login == format('{0}-review[bot]', github.repository_owner)
         && github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name
+        && !contains(github.event.pull_request.labels.*.name, 'fullsend-no-fix')
     steps:
       - name: Build minimal payload
         id: payload
@@ -194,6 +220,7 @@ jobs:
             '{pull_request: {number: ($pn | tonumber), head: {ref: $hr, repo: {full_name: $hrepo}}, base: {ref: $br, repo: {full_name: $brepo}}}}')
           echo "json=$PAYLOAD" >> "$GITHUB_OUTPUT"
       - name: Dispatch fix stage (bot-triggered)
+        id: dispatch
         env:
           GH_TOKEN: ${{ secrets.FULLSEND_DISPATCH_TOKEN }}
           EVENT_PAYLOAD: ${{ steps.payload.outputs.json }}
@@ -202,16 +229,20 @@ jobs:
           DISPATCH_REPO: ${{ github.repository_owner }}/.fullsend
           TRIGGER_USER: ${{ github.event.review.user.login }}
         run: |
-          gh workflow run dispatch.yml \
+          DISPATCH_URL=$(gh workflow run dispatch.yml \
             --repo "$DISPATCH_REPO" \
             -f stage=fix \
             -f event_type="$EVENT_TYPE" \
             -f source_repo="$SOURCE_REPO" \
             -f event_payload="$EVENT_PAYLOAD" \
-            -f trigger_source="$TRIGGER_USER"
+            -f trigger_source="$TRIGGER_USER")
+          echo "::notice::Dispatched fix (bot) → ${DISPATCH_URL}"
+          echo "agent=fix" >> "$GITHUB_OUTPUT"
 
   dispatch-fix-human:
     runs-on: ubuntu-latest
+    outputs:
+      agent: ${{ steps.dispatch.outputs.agent }}
     concurrency:
       group: fix-${{ github.event.issue.number }}
       cancel-in-progress: true
@@ -222,6 +253,7 @@ jobs:
         && (
           github.event.comment.body == '/fix'
           || startsWith(github.event.comment.body, '/fix ')
+          || startsWith(github.event.comment.body, format('{0}{1}', '/fix', fromJSON('"\n"')))
         )
         && (
           github.event.comment.author_association == 'OWNER'
@@ -253,6 +285,7 @@ jobs:
             '{issue: {number: ($in | tonumber)}, comment: {body: $cb}}')
           echo "json=$PAYLOAD" >> "$GITHUB_OUTPUT"
       - name: Dispatch fix stage (human-triggered)
+        id: dispatch
         env:
           GH_TOKEN: ${{ secrets.FULLSEND_DISPATCH_TOKEN }}
           EVENT_PAYLOAD: ${{ steps.payload.outputs.json }}
@@ -261,10 +294,176 @@ jobs:
           DISPATCH_REPO: ${{ github.repository_owner }}/.fullsend
           TRIGGER_USER: ${{ github.event.comment.user.login }}
         run: |
-          gh workflow run dispatch.yml \
+          DISPATCH_URL=$(gh workflow run dispatch.yml \
             --repo "$DISPATCH_REPO" \
             -f stage=fix \
             -f event_type="$EVENT_TYPE" \
             -f source_repo="$SOURCE_REPO" \
             -f event_payload="$EVENT_PAYLOAD" \
-            -f trigger_source="$TRIGGER_USER"
+            -f trigger_source="$TRIGGER_USER")
+          echo "::notice::Dispatched fix (human) → ${DISPATCH_URL}"
+          echo "agent=fix" >> "$GITHUB_OUTPUT"
+
+  dispatch-retro:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: retro-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    # Fires on all closed PRs (merged and abandoned). Retrospectives on
+    # abandoned PRs are valuable — they surface why work was discarded.
+    if: >-
+      github.event_name == 'pull_request_target'
+        && github.event.action == 'closed'
+    steps:
+      - name: Build minimal payload
+        id: payload
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HTML_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          set -euo pipefail
+          PAYLOAD=$(jq -cn \
+            --arg pn "${PR_NUMBER}" \
+            --arg pu "${PR_HTML_URL}" \
+            '{pull_request: {number: ($pn | tonumber), html_url: $pu}}')
+          echo "json=$PAYLOAD" >> "$GITHUB_OUTPUT"
+      - name: Dispatch retro stage
+        env:
+          GH_TOKEN: ${{ secrets.FULLSEND_DISPATCH_TOKEN }}
+          EVENT_PAYLOAD: ${{ steps.payload.outputs.json }}
+          EVENT_TYPE: ${{ github.event_name }}
+          SOURCE_REPO: ${{ github.repository }}
+          DISPATCH_REPO: ${{ github.repository_owner }}/.fullsend
+        run: |
+          gh workflow run dispatch.yml \
+            --repo "$DISPATCH_REPO" \
+            -f stage=retro \
+            -f event_type="$EVENT_TYPE" \
+            -f source_repo="$SOURCE_REPO" \
+            -f event_payload="$EVENT_PAYLOAD"
+
+  dispatch-retro-command:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: retro-${{ github.event.issue.number }}
+      cancel-in-progress: true
+    if: >-
+      github.event_name == 'issue_comment'
+        && github.event.comment.user.type != 'Bot'
+        && (
+          github.event.comment.body == '/retro'
+          || startsWith(github.event.comment.body, '/retro ')
+          || startsWith(github.event.comment.body, format('{0}{1}', '/retro', fromJSON('"\n"')))
+          || github.event.comment.body == '/fullsend retro'
+          || startsWith(github.event.comment.body, '/fullsend retro ')
+          || startsWith(github.event.comment.body, format('{0}{1}', '/fullsend retro', fromJSON('"\n"')))
+        )
+        && (
+          github.event.comment.author_association == 'OWNER'
+          || github.event.comment.author_association == 'MEMBER'
+          || github.event.comment.author_association == 'COLLABORATOR'
+        )
+    steps:
+      - name: Build minimal payload
+        id: payload
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_HTML_URL: ${{ github.event.issue.html_url }}
+          # For PR comments, issue.pull_request.html_url gives the /pull/N URL.
+          # For issue comments, this is empty.
+          PR_HTML_URL: ${{ github.event.issue.pull_request.html_url || '' }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          set -euo pipefail
+          # Use PR URL if available (comment on a PR), otherwise issue URL.
+          ORIGINATING_URL="${PR_HTML_URL:-${ISSUE_HTML_URL}}"
+          PAYLOAD=$(jq -cn \
+            --arg in "${ISSUE_NUMBER}" \
+            --arg ou "${ORIGINATING_URL}" \
+            --arg cb "${COMMENT_BODY:-}" \
+            '{issue: {number: ($in | tonumber), html_url: $ou},
+              comment: {body: $cb}}')
+          echo "json=$PAYLOAD" >> "$GITHUB_OUTPUT"
+      - name: Dispatch retro stage
+        env:
+          GH_TOKEN: ${{ secrets.FULLSEND_DISPATCH_TOKEN }}
+          EVENT_PAYLOAD: ${{ steps.payload.outputs.json }}
+          EVENT_TYPE: ${{ github.event_name }}
+          SOURCE_REPO: ${{ github.repository }}
+          DISPATCH_REPO: ${{ github.repository_owner }}/.fullsend
+        run: |
+          gh workflow run dispatch.yml \
+            --repo "$DISPATCH_REPO" \
+            -f stage=retro \
+            -f event_type="$EVENT_TYPE" \
+            -f source_repo="$SOURCE_REPO" \
+            -f event_payload="$EVENT_PAYLOAD"
+
+  dispatch-stop-fix:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'issue_comment'
+        && github.event.issue.pull_request
+        && github.event.comment.user.type != 'Bot'
+        && github.event.comment.body == '/stop-fix'
+        && (
+          github.event.comment.author_association == 'OWNER'
+          || github.event.comment.author_association == 'MEMBER'
+          || github.event.comment.author_association == 'COLLABORATOR'
+          || github.event.comment.author_association == 'CONTRIBUTOR'
+          || github.event.comment.user.login == github.event.issue.user.login
+        )
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Add fullsend-no-fix label and notify
+        env:
+          GH_TOKEN: ${{ secrets.FULLSEND_DISPATCH_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh label create "fullsend-no-fix" --repo "$REPO" \
+            --description "Skip bot-triggered fix agent runs" --color "FBCA04" \
+            --force 2>/dev/null || true
+          gh pr edit "$PR_NUMBER" --repo "$REPO" \
+            --add-label "fullsend-no-fix"
+          gh pr comment "$PR_NUMBER" --repo "$REPO" \
+            --body "Fix agent disabled for this PR. Remove the \`fullsend-no-fix\` label or use \`/fix\` to re-engage."
+
+  post-run-link:
+    permissions:
+      issues: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    if: always() && !cancelled()
+    needs:
+      [
+        dispatch-triage,
+        dispatch-code,
+        dispatch-review,
+        dispatch-fix-bot,
+        dispatch-fix-human,
+      ]
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Post run link comment
+        env:
+          AGENT: >-
+            ${{ needs.dispatch-triage.outputs.agent
+             || needs.dispatch-code.outputs.agent
+             || needs.dispatch-review.outputs.agent
+             || needs.dispatch-fix-bot.outputs.agent
+             || needs.dispatch-fix-human.outputs.agent }}
+          SHIM_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ITEM_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+        run: |
+          if [ -z "${AGENT}" ] || [ -z "${ITEM_NUMBER}" ]; then
+            echo "No dispatch or item number — skipping comment"
+            exit 0
+          fi
+          gh issue comment "${ITEM_NUMBER}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --body "**fullsend ${AGENT}** is working on this — [view logs](${SHIM_URL})"
