@@ -468,6 +468,13 @@ func (r *KonfluxReconciler) applyKonfluxBuildService(ctx context.Context, tc *tr
 		spec = *owner.Spec.KonfluxBuildService.Spec
 	}
 
+	// Ensure PipelineConfig is always present in the SSA payload so the
+	// controller claims ownership. Combined with the atomic marker on
+	// PipelineConfigSpec, this causes SSA to prune any externally-set values.
+	if spec.PipelineConfig == nil {
+		spec.PipelineConfig = &konfluxv1alpha1.PipelineConfigSpec{}
+	}
+
 	buildService := &konfluxv1alpha1.KonfluxBuildService{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: konfluxv1alpha1.GroupVersion.String(),
