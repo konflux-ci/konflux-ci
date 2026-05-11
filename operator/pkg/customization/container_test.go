@@ -276,6 +276,46 @@ func TestWithEnvOverride(t *testing.T) {
 	})
 }
 
+func TestWithOptionalEnvOverride(t *testing.T) {
+	ctx := DeploymentContext{Replicas: 1}
+
+	t.Run("adds environment variable when value is non-empty", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		c := NewContainerOverlay(ctx, WithOptionalEnvOverride("VAR1", "value1"))
+		g.Expect(c.Env).To(gomega.HaveLen(1))
+		g.Expect(c.Env[0].Name).To(gomega.Equal("VAR1"))
+		g.Expect(c.Env[0].Value).To(gomega.Equal("value1"))
+	})
+
+	t.Run("is a no-op when value is empty", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		c := NewContainerOverlay(ctx, WithOptionalEnvOverride("VAR1", ""))
+		g.Expect(c.Env).To(gomega.BeEmpty())
+	})
+
+	t.Run("overrides existing variable when value is non-empty", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		c := NewContainerOverlay(ctx,
+			WithEnv(corev1.EnvVar{Name: "VAR1", Value: "original"}),
+			WithOptionalEnvOverride("VAR1", "override"),
+		)
+		g.Expect(c.Env).To(gomega.HaveLen(1))
+		g.Expect(c.Env[0].Name).To(gomega.Equal("VAR1"))
+		g.Expect(c.Env[0].Value).To(gomega.Equal("override"))
+	})
+
+	t.Run("leaves existing variable untouched when value is empty", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		c := NewContainerOverlay(ctx,
+			WithEnv(corev1.EnvVar{Name: "VAR1", Value: "original"}),
+			WithOptionalEnvOverride("VAR1", ""),
+		)
+		g.Expect(c.Env).To(gomega.HaveLen(1))
+		g.Expect(c.Env[0].Name).To(gomega.Equal("VAR1"))
+		g.Expect(c.Env[0].Value).To(gomega.Equal("original"))
+	})
+}
+
 func TestWithResources(t *testing.T) {
 	ctx := DeploymentContext{Replicas: 1}
 

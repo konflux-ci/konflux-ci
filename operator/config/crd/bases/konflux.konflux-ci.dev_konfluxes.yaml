@@ -747,6 +747,15 @@ spec:
                   spec:
                     description: Spec configures the integration-service component.
                     properties:
+                      finallyTimeout:
+                        description: |-
+                          FinallyTimeout is the timeout for finally tasks (e.g. "2h", "30m").
+                          Maps to the FINALLY_TIMEOUT env var on the controller-manager container.
+                          Takes precedence over any FINALLY_TIMEOUT entry in integrationControllerManager.manager.env.
+                          When omitted, the upstream integration-service default applies.
+                        minLength: 2
+                        pattern: ^([0-9]+h)?([0-9]+m)?([0-9]+s)?$
+                        type: string
                       integrationControllerManager:
                         description: IntegrationControllerManager defines customizations
                           for the controller-manager deployment.
@@ -988,6 +997,24 @@ spec:
                             minimum: 1
                             type: integer
                         type: object
+                      pipelineTimeout:
+                        description: |-
+                          PipelineTimeout is the overall pipeline run timeout (e.g. "6h", "1h30m", "90m").
+                          Maps to the PIPELINE_TIMEOUT env var on the controller-manager container.
+                          Takes precedence over any PIPELINE_TIMEOUT entry in integrationControllerManager.manager.env.
+                          When omitted, the upstream integration-service default applies.
+                        minLength: 2
+                        pattern: ^([0-9]+h)?([0-9]+m)?([0-9]+s)?$
+                        type: string
+                      tasksTimeout:
+                        description: |-
+                          TasksTimeout is the timeout for tasks within a pipeline run (e.g. "4h", "90m").
+                          Maps to the TASKS_TIMEOUT env var on the controller-manager container.
+                          Takes precedence over any TASKS_TIMEOUT entry in integrationControllerManager.manager.env.
+                          When omitted, the upstream integration-service default applies.
+                        minLength: 2
+                        pattern: ^([0-9]+h)?([0-9]+m)?([0-9]+s)?$
+                        type: string
                     type: object
                 type: object
               internalRegistry:

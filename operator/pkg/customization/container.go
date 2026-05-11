@@ -115,6 +115,16 @@ func WithImage(image string) ContainerOption {
 	}
 }
 
+// WithOptionalEnvOverride is like WithEnvOverride but is a no-op when value is empty,
+// leaving any existing variable (or the upstream manifest default) in place.
+// Use this when a CRD field should set an env var only when explicitly provided.
+func WithOptionalEnvOverride(name, value string) ContainerOption {
+	if value == "" {
+		return func(_ *corev1.Container, _ DeploymentContext) {}
+	}
+	return WithEnvOverride(name, value)
+}
+
 // --- Context-aware options ---
 
 // WithLeaderElection adds --leader-elect=true if replicas > 1.

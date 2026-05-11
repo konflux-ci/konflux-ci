@@ -58,14 +58,14 @@ func getIntegrationServiceDeployment(t *testing.T) *appsv1.Deployment {
 func TestBuildControllerManagerOverlay(t *testing.T) {
 	t.Run("nil spec returns empty overlay", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		overlay := buildControllerManagerOverlay(nil, "")
+		overlay := buildControllerManagerOverlay(nil, "", konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
 		g.Expect(overlay).NotTo(gomega.BeNil())
 	})
 
 	t.Run("empty spec returns overlay without customizations", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{}
-		overlay := buildControllerManagerOverlay(spec, "")
+		overlay := buildControllerManagerOverlay(spec, "", konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
 		g.Expect(overlay).NotTo(gomega.BeNil())
 	})
 
@@ -87,7 +87,7 @@ func TestBuildControllerManagerOverlay(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		overlay := buildControllerManagerOverlay(spec, "")
+		overlay := buildControllerManagerOverlay(spec, "", konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -116,7 +116,7 @@ func TestBuildControllerManagerOverlay(t *testing.T) {
 		g.Expect(managerContainer).NotTo(gomega.BeNil(), "manager container must exist in controller-manager deployment")
 		originalImage := managerContainer.Image
 
-		overlay := buildControllerManagerOverlay(spec, "")
+		overlay := buildControllerManagerOverlay(spec, "", konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -373,7 +373,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{}
 
 		deployment := getIntegrationServiceDeployment(t)
-		overlay := buildControllerManagerOverlay(spec, testConsoleURL)
+		overlay := buildControllerManagerOverlay(spec, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -389,7 +389,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		g := gomega.NewWithT(t)
 
 		deployment := getIntegrationServiceDeployment(t)
-		overlay := buildControllerManagerOverlay(nil, testConsoleURL)
+		overlay := buildControllerManagerOverlay(nil, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -406,7 +406,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{}
 
 		deployment := getIntegrationServiceDeployment(t)
-		overlay := buildControllerManagerOverlay(spec, "")
+		overlay := buildControllerManagerOverlay(spec, "", konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -432,7 +432,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		overlay := buildControllerManagerOverlay(spec, testConsoleURL)
+		overlay := buildControllerManagerOverlay(spec, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -461,7 +461,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		overlay := buildControllerManagerOverlay(spec, testConsoleURL)
+		overlay := buildControllerManagerOverlay(spec, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -492,7 +492,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		overlay := buildControllerManagerOverlay(spec, testConsoleURL)
+		overlay := buildControllerManagerOverlay(spec, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -522,7 +522,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		overlay := buildControllerManagerOverlay(spec, testConsoleURL)
+		overlay := buildControllerManagerOverlay(spec, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -547,7 +547,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 
 		// First, apply with old console URL
 		deployment := getIntegrationServiceDeployment(t)
-		overlay := buildControllerManagerOverlay(spec, oldConsoleURL)
+		overlay := buildControllerManagerOverlay(spec, oldConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -560,7 +560,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		g.Expect(envVar.Value).To(gomega.Equal(oldConsoleURLTemplate))
 
 		// Now apply with new console URL (simulating KonfluxUI ingress URL change)
-		overlay = buildControllerManagerOverlay(spec, testConsoleURL)
+		overlay = buildControllerManagerOverlay(spec, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -571,5 +571,139 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		envVar = findEnvVar(managerContainer.Env, "CONSOLE_URL")
 		g.Expect(envVar).NotTo(gomega.BeNil())
 		g.Expect(envVar.Value).To(gomega.Equal(testConsoleURLTemplate))
+	})
+}
+
+func TestBuildControllerManagerOverlay_PipelineTimeouts(t *testing.T) {
+	t.Run("typed timeout fields are injected as env vars", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		integrationSpec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+			PipelineTimeout: "6h",
+			TasksTimeout:    "4h",
+			FinallyTimeout:  "2h",
+		}
+		deployment := getIntegrationServiceDeployment(t)
+		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "")).To(gomega.Succeed())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		pipelineTimeoutVar := findEnvVar(managerContainer.Env, envPipelineTimeout)
+		g.Expect(pipelineTimeoutVar).NotTo(gomega.BeNil())
+		g.Expect(pipelineTimeoutVar.Value).To(gomega.Equal("6h"))
+		tasksTimeoutVar := findEnvVar(managerContainer.Env, envTasksTimeout)
+		g.Expect(tasksTimeoutVar).NotTo(gomega.BeNil())
+		g.Expect(tasksTimeoutVar.Value).To(gomega.Equal("4h"))
+		finallyTimeoutVar := findEnvVar(managerContainer.Env, envFinallyTimeout)
+		g.Expect(finallyTimeoutVar).NotTo(gomega.BeNil())
+		g.Expect(finallyTimeoutVar.Value).To(gomega.Equal("2h"))
+	})
+
+	t.Run("typed CRD field overrides explicit manager.env entry", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		integrationSpec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+			PipelineTimeout: "6h",
+			TasksTimeout:    "4h",
+			FinallyTimeout:  "2h",
+			IntegrationControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+				Manager: &konfluxv1alpha1.ContainerSpec{
+					Env: []corev1.EnvVar{
+						{Name: envPipelineTimeout, Value: "12h"},
+						{Name: envTasksTimeout, Value: "10h"},
+						{Name: envFinallyTimeout, Value: "8h"},
+					},
+				},
+			},
+		}
+		deployment := getIntegrationServiceDeployment(t)
+		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "")).To(gomega.Succeed())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		pipelineTimeoutVar := findEnvVar(managerContainer.Env, envPipelineTimeout)
+		g.Expect(pipelineTimeoutVar).NotTo(gomega.BeNil())
+		g.Expect(pipelineTimeoutVar.Value).To(gomega.Equal("6h"))
+		tasksTimeoutVar := findEnvVar(managerContainer.Env, envTasksTimeout)
+		g.Expect(tasksTimeoutVar).NotTo(gomega.BeNil())
+		g.Expect(tasksTimeoutVar.Value).To(gomega.Equal("4h"))
+		finallyTimeoutVar := findEnvVar(managerContainer.Env, envFinallyTimeout)
+		g.Expect(finallyTimeoutVar).NotTo(gomega.BeNil())
+		g.Expect(finallyTimeoutVar.Value).To(gomega.Equal("2h"))
+	})
+
+	t.Run("empty timeout fields do not inject env vars", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		integrationSpec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{}
+		deployment := getIntegrationServiceDeployment(t)
+		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "")).To(gomega.Succeed())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(findEnvVar(managerContainer.Env, envPipelineTimeout)).To(gomega.BeNil())
+		g.Expect(findEnvVar(managerContainer.Env, envTasksTimeout)).To(gomega.BeNil())
+		g.Expect(findEnvVar(managerContainer.Env, envFinallyTimeout)).To(gomega.BeNil())
+	})
+
+	t.Run("manager.env values pass through when CRD timeout fields are not set", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		integrationSpec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+			// PipelineTimeout, TasksTimeout, FinallyTimeout intentionally omitted
+			IntegrationControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+				Manager: &konfluxv1alpha1.ContainerSpec{
+					Env: []corev1.EnvVar{
+						{Name: envPipelineTimeout, Value: "8h"},
+						{Name: envTasksTimeout, Value: "5h"},
+						{Name: envFinallyTimeout, Value: "3h"},
+					},
+				},
+			},
+		}
+		deployment := getIntegrationServiceDeployment(t)
+		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "")).To(gomega.Succeed())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		pipelineTimeoutVar := findEnvVar(managerContainer.Env, envPipelineTimeout)
+		g.Expect(pipelineTimeoutVar).NotTo(gomega.BeNil())
+		g.Expect(pipelineTimeoutVar.Value).To(gomega.Equal("8h"))
+		tasksTimeoutVar := findEnvVar(managerContainer.Env, envTasksTimeout)
+		g.Expect(tasksTimeoutVar).NotTo(gomega.BeNil())
+		g.Expect(tasksTimeoutVar.Value).To(gomega.Equal("5h"))
+		finallyTimeoutVar := findEnvVar(managerContainer.Env, envFinallyTimeout)
+		g.Expect(finallyTimeoutVar).NotTo(gomega.BeNil())
+		g.Expect(finallyTimeoutVar.Value).To(gomega.Equal("3h"))
+	})
+
+	t.Run("typed field wins for its var, manager.env pass-through for unset ones", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		integrationSpec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+			PipelineTimeout: "6h", // typed field — should take precedence
+			// TasksTimeout and FinallyTimeout intentionally omitted — manager.env should pass through
+			IntegrationControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+				Manager: &konfluxv1alpha1.ContainerSpec{
+					Env: []corev1.EnvVar{
+						{Name: envPipelineTimeout, Value: "12h"}, // should be overridden by typed field
+						{Name: envTasksTimeout, Value: "5h"},     // should pass through unchanged
+						{Name: envFinallyTimeout, Value: "3h"},   // should pass through unchanged
+					},
+				},
+			},
+		}
+		deployment := getIntegrationServiceDeployment(t)
+		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "")).To(gomega.Succeed())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		pipelineTimeoutVar := findEnvVar(managerContainer.Env, envPipelineTimeout)
+		g.Expect(pipelineTimeoutVar).NotTo(gomega.BeNil())
+		g.Expect(pipelineTimeoutVar.Value).To(gomega.Equal("6h"))
+
+		tasksTimeoutVar := findEnvVar(managerContainer.Env, envTasksTimeout)
+		g.Expect(tasksTimeoutVar).NotTo(gomega.BeNil())
+		g.Expect(tasksTimeoutVar.Value).To(gomega.Equal("5h"))
+
+		finallyTimeoutVar := findEnvVar(managerContainer.Env, envFinallyTimeout)
+		g.Expect(finallyTimeoutVar).NotTo(gomega.BeNil())
+		g.Expect(finallyTimeoutVar.Value).To(gomega.Equal("3h"))
 	})
 }
