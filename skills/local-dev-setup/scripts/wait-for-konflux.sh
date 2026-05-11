@@ -4,7 +4,7 @@ set -euo pipefail
 # Wait for the Konflux CR to become Ready.
 #
 # Usage:
-#   bash .cursor/skills/local-dev-setup/scripts/wait-for-konflux.sh [timeout]
+#   bash skills/local-dev-setup/scripts/wait-for-konflux.sh [timeout]
 #
 # Default timeout: 15m
 
