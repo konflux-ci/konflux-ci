@@ -1,9 +1,5 @@
 name: Update Upstream Manifests
 
-env:
-  # renovate: datasource=github-releases depName=kubernetes-sigs/kustomize
-  KUSTOMIZE_VERSION: "5.4.1"
-
 on:
   # Run on a schedule (daily at 2 AM UTC)
   schedule:
@@ -41,29 +37,6 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-
-      - name: Install Kustomize
-        run: |
-          KUSTOMIZE_VERSION="${{ env.KUSTOMIZE_VERSION }}"
-          ARCH="linux_amd64"
-
-          echo "Installing kustomize v${KUSTOMIZE_VERSION}..."
-
-          # Download and install kustomize
-          # Kustomize release tags use format: kustomize/v{VERSION}
-          # Download URL format: .../kustomize/v{VERSION}/kustomize_v{VERSION}_{ARCH}.tar.gz
-          RELEASE_TAG="kustomize/v${KUSTOMIZE_VERSION}"
-          DOWNLOAD_URL="https://github.com/kubernetes-sigs/kustomize/releases/download/${RELEASE_TAG}/kustomize_v${KUSTOMIZE_VERSION}_${ARCH}.tar.gz"
-
-          echo "Downloading from: ${DOWNLOAD_URL}"
-          curl -L -f -o kustomize.tar.gz "${DOWNLOAD_URL}"
-          tar -xzf kustomize.tar.gz
-          chmod +x kustomize
-          sudo mv kustomize /usr/local/bin/kustomize
-
-          # Verify installation
-          kustomize version
-          rm -f kustomize.tar.gz
 
       - name: Process all components
         id: process
