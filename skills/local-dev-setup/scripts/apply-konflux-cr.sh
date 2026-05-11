@@ -7,7 +7,7 @@ set -euo pipefail
 # deploy-local.sh). Pass an explicit path to override.
 #
 # Usage:
-#   bash .cursor/skills/local-dev-setup/scripts/apply-konflux-cr.sh [cr-path]
+#   bash skills/local-dev-setup/scripts/apply-konflux-cr.sh [cr-path]
 
 REPO_ROOT=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)
 

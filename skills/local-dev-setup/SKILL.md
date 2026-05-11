@@ -118,22 +118,24 @@ Use `block_until_ms: 0` for `make run` since it runs indefinitely. Poll the term
 
 ### Step 4: Apply the Konflux CR and Wait
 
-In a **separate** shell (the operator terminal is occupied), apply the CR using the shim script. It uses `scripts/resolve-konflux-cr.sh` to pick the right CR (defaults to the base CR; auto-selects `konflux-e2e.yaml` when Quay credentials are set):
+In a **separate** shell (the operator terminal is occupied), apply the CR using the shim script. It uses `scripts/resolve-konflux-cr.sh` to pick the right CR (defaults to the base CR; auto-selects `konflux-e2e.yaml` when Quay credentials are set).
+
+**Run these commands from the repository root** (use `working_directory` parameter pointing to the repo root, since the previous step leaves the shell in `operator/`):
 
 ```bash
-bash .cursor/skills/local-dev-setup/scripts/apply-konflux-cr.sh
+bash skills/local-dev-setup/scripts/apply-konflux-cr.sh
 ```
 
 To use a specific CR file:
 
 ```bash
-bash .cursor/skills/local-dev-setup/scripts/apply-konflux-cr.sh operator/config/samples/konflux_v1alpha1_konflux.yaml
+bash skills/local-dev-setup/scripts/apply-konflux-cr.sh operator/config/samples/konflux_v1alpha1_konflux.yaml
 ```
 
 Then wait for Konflux to become ready:
 
 ```bash
-bash .cursor/skills/local-dev-setup/scripts/wait-for-konflux.sh
+bash skills/local-dev-setup/scripts/wait-for-konflux.sh
 ```
 
 Both scripts are in the command allowlist and run without user confirmation.
