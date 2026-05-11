@@ -8,6 +8,14 @@ AUTH_CONF_FILE=/mnt/nginx-generated-config/auth.conf.new
 AUTH_CONF_TMP_FILE=/mnt/nginx-generated-config/auth.conf.new.tmp
 AUTH_CONF_TEMPLATE_FILE=/mnt/nginx-templates/auth.conf
 
+for cmd in cat sed chmod mv sleep date; do
+  command -v "${cmd}" >/dev/null 2>&1 || { echo "required command not found: ${cmd}"; exit 1; }
+done
+
+log() { echo "$(date -Iseconds) generate-loop: $*"; }
+
+log "starting"
+
 produceToken() (
   # Copy the auth.conf template and replace the bearer token
   token=$(cat "${TOKEN_FILEPATH}")

@@ -268,6 +268,10 @@ data:
 
     set -euo pipefail
 
+    for cmd in date stat; do
+      command -v "${cmd}" >/dev/null 2>&1 || { echo "required command not found: ${cmd}"; exit 1; }
+    done
+
     AUTH_CONF_FILE=/mnt/nginx-generated-config/auth.conf
     AUTH_CONF_NEW_FILE=/mnt/nginx-generated-config/auth.conf.new
 
@@ -283,6 +287,14 @@ data:
     AUTH_CONF_FILE=/mnt/nginx-generated-config/auth.conf.new
     AUTH_CONF_TMP_FILE=/mnt/nginx-generated-config/auth.conf.new.tmp
     AUTH_CONF_TEMPLATE_FILE=/mnt/nginx-templates/auth.conf
+
+    for cmd in cat sed chmod mv sleep date; do
+      command -v "${cmd}" >/dev/null 2>&1 || { echo "required command not found: ${cmd}"; exit 1; }
+    done
+
+    log() { echo "$(date -Iseconds) generate-loop: $*"; }
+
+    log "starting"
 
     produceToken() (
       # Copy the auth.conf template and replace the bearer token
@@ -308,7 +320,7 @@ data:
     exit 1
 kind: ConfigMap
 metadata:
-  name: proxy-nginx-generate-loop
+  name: proxy-nginx-generate-loop-8745b5hf5k
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -324,6 +336,14 @@ data:
     NGINX_CONF_FILE='/etc/nginx/nginx.conf'
     RETRY_INTERVAL=10
 
+    for cmd in nginx cksum mv sleep date; do
+      command -v "${cmd}" >/dev/null 2>&1 || { echo "required command not found: ${cmd}"; exit 1; }
+    done
+
+    log() { echo "$(date -Iseconds) proxy-nginx-run: $*"; }
+
+    log "starting"
+
     # test configuration
     nginx -g "daemon off;" -c "${NGINX_CONF_FILE}" -t
 
@@ -332,11 +352,14 @@ data:
       # wait for nginx to start before first reload attempt
       while [ ! -f /run/nginx.pid ]; do sleep 1; done
 
+      log "hot-reload loop started"
+
       # retries hot reloading the nginx configuration multiple
       # times with increasing timeouts before returning the error
       reloadWithRetry() {
         if [ -f "${NGINX_NEW_AUTH_CONF_FILE}" ] && \
-          ! cmp -s "${NGINX_NEW_AUTH_CONF_FILE}" "${NGINX_AUTH_CONF_FILE}"; then
+          [ "$(cksum < "${NGINX_NEW_AUTH_CONF_FILE}")" != "$(cksum < "${NGINX_AUTH_CONF_FILE}")" ]; then
+          log "config changed, reloading nginx"
           # Move (atomic) the new configuration and reload it in NGINX
           mv "${NGINX_NEW_AUTH_CONF_FILE}" "${NGINX_AUTH_CONF_FILE}" && \
             {
@@ -350,23 +373,28 @@ data:
       # hot reload infinite loop
       while reloadWithRetry; do sleep "${RETRY_INTERVAL}"; done
 
-      # not supposed to be terminated
-      echo "loop broke, crashing"
+      log "loop broke, crashing"
       exit 1
     ) &
+    RELOAD_PID=$!
 
     # run the nginx server in background
     (
       nginx -g "daemon off;" -c "${NGINX_CONF_FILE}"
-      echo "nginx crashed"
+      log "nginx crashed"
       exit 1
     ) &
+    # forward SIGTERM/SIGINT for graceful shutdown
+    trap 'log "received signal, shutting down"; nginx -s quit 2>/dev/null; kill "${RELOAD_PID}" 2>/dev/null; wait; exit 0' TERM INT
 
     # wait for any of the background tasks to crash
     wait -n
+    EXIT_CODE=$?
+    log "child exited with code ${EXIT_CODE}, terminating"
+    exit "${EXIT_CODE}"
 kind: ConfigMap
 metadata:
-  name: proxy-nginx-run
+  name: proxy-nginx-run-k675kmbfc5
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -530,14 +558,14 @@ spec:
         - /var/run/scripts/konflux-ci.dev/proxy-nginx-generate-loop.sh
         command:
         - bash
-        image: quay.io/konflux-ci/konflux-ui@sha256:db1ed966d9d0d89a37b31cdec23684e653cd11e53387c549e6d381f4ba7811e1
+        image: quay.io/konflux-ci/konflux-ui@sha256:ba04b1f265e4dcdb38bbf289baee2173f6dcf6ee4bd1c6d4cdfb4fadbf2c5a82
         livenessProbe:
           exec:
-            args:
-            - /var/run/scripts/konflux-ci.dev/proxy-nginx-generate-loop-probe.sh
             command:
             - bash
+            - /var/run/scripts/konflux-ci.dev/proxy-nginx-generate-loop-probe.sh
           failureThreshold: 3
+          initialDelaySeconds: 30
           periodSeconds: 30
         name: generate-nginx-configs-loop
         resources:
@@ -565,7 +593,7 @@ spec:
         - /var/run/scripts/konflux-ci.dev/proxy-nginx-run.sh
         command:
         - bash
-        image: registry.access.redhat.com/ubi9/nginx-124@sha256:6cfc252017036e3a6b5eaff546ac72d1a2fe8d3aec1d3a4305f40cded79331e0
+        image: registry.access.redhat.com/ubi9/nginx-124@sha256:20ae3d2ced3df6a622d11334288f2fd31f568ae49858d1e0eac43eca332a1322
         livenessProbe:
           failureThreshold: 3
           httpGet:
@@ -736,14 +764,16 @@ spec:
           items:
           - key: proxy-nginx-generate-loop.sh
             path: proxy-nginx-generate-loop.sh
-          name: proxy-nginx-generate-loop
+          - key: proxy-nginx-generate-loop-probe.sh
+            path: proxy-nginx-generate-loop-probe.sh
+          name: proxy-nginx-generate-loop-8745b5hf5k
         name: proxy-generate-loop-script
       - configMap:
           defaultMode: 488
           items:
           - key: proxy-nginx-run.sh
             path: proxy-nginx-run.sh
-          name: proxy-nginx-run
+          name: proxy-nginx-run-k675kmbfc5
         name: proxy-nginx-run-script
       - name: kube-api-token
         projected:
