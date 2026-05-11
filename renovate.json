@@ -278,22 +278,26 @@
       "autoReplaceStringTemplate": "default: {{newDigest}}"
     },
     {
-      "description": "Track cert-manager Helm chart in Update Third-Party Manifests workflow",
+      "description": "Track cert-manager Helm chart version (export-third-party-chart-env.sh)",
       "customType": "regex",
-      "fileMatch": [".github/workflows/update-third-party-manifests.yaml"],
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["^\\.github/scripts/export-third-party-chart-env\\.sh$"],
       "matchStrings": [
-        "# renovate: datasource=helm depName=jetstack/cert-manager versioning=semver\\s+CERT_MANAGER_VERSION:\\s*\"(?<currentValue>[^\"]+)\""
+        "# renovate: datasource=helm depName=jetstack/cert-manager versioning=semver",
+        "CERT_MANAGER_CHART_VERSION=\"(?<currentValue>[^\"]+)\""
       ],
       "datasourceTemplate": "helm",
       "depNameTemplate": "cert-manager",
       "extractVersionTemplate": "^v?(?<version>.*)$"
     },
     {
-      "description": "Track trust-manager Helm chart in Update Third-Party Manifests workflow",
+      "description": "Track trust-manager Helm chart version (export-third-party-chart-env.sh)",
       "customType": "regex",
-      "fileMatch": [".github/workflows/update-third-party-manifests.yaml"],
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["^\\.github/scripts/export-third-party-chart-env\\.sh$"],
       "matchStrings": [
-        "# renovate: datasource=helm depName=jetstack/trust-manager versioning=semver\\s+TRUST_MANAGER_VERSION:\\s*\"(?<currentValue>[^\"]+)\""
+        "# renovate: datasource=helm depName=jetstack/trust-manager versioning=semver",
+        "TRUST_MANAGER_CHART_VERSION=\"(?<currentValue>[^\"]+)\""
       ],
       "datasourceTemplate": "helm",
       "depNameTemplate": "trust-manager",

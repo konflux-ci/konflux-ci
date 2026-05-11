@@ -12,8 +12,9 @@ set -euo pipefail
 #   REPO_ROOT - Repository root (default: GITHUB_WORKSPACE or git rev-parse --show-toplevel)
 #
 # Environment:
-#   CERT_MANAGER_VERSION   - Required. cert-manager chart version.
-#   TRUST_MANAGER_VERSION  - Required. trust-manager chart version.
+#   CERT_MANAGER_VERSION   - Required. cert-manager chart version (use vX.Y.Z; from CI or
+#                             eval "$(bash .github/scripts/export-third-party-chart-env.sh)").
+#   TRUST_MANAGER_VERSION  - Required. trust-manager chart version (same pattern).
 #
 # Requires: helm, yq on PATH.
 

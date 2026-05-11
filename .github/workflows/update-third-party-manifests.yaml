@@ -1,13 +1,8 @@
 # Updates cert-manager and trust-manager manifests under dependencies/ using Helm.
 # Generates the same manifests we use today (resource limits, namespace, etc.).
+# Chart semver pins live in .github/scripts/export-third-party-chart-env.sh (Renovate/MintMaker).
 # Logic lives in .github/scripts/ so it can be run locally (e.g. ./.github/scripts/update-third-party-manifests.sh).
 name: Update Third-Party Manifests
-
-env:
-  # renovate: datasource=helm depName=jetstack/cert-manager versioning=semver
-  CERT_MANAGER_VERSION: "1.19.4"
-  # renovate: datasource=helm depName=jetstack/trust-manager versioning=semver
-  TRUST_MANAGER_VERSION: "0.21.0"
 
 on:
   schedule:
@@ -40,17 +35,18 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
+      - name: Load chart version env
+        run: |
+          eval "$(bash "${GITHUB_WORKSPACE}/.github/scripts/export-third-party-chart-env.sh")"
+          echo "CERT_MANAGER_VERSION=${CERT_MANAGER_VERSION}" >> "${GITHUB_ENV}"
+          echo "TRUST_MANAGER_VERSION=${TRUST_MANAGER_VERSION}" >> "${GITHUB_ENV}"
+
       - name: Generate third-party manifests
-        env:
-          CERT_MANAGER_VERSION: "v${{ env.CERT_MANAGER_VERSION }}"
-          TRUST_MANAGER_VERSION: "v${{ env.TRUST_MANAGER_VERSION }}"
         run: .github/scripts/update-third-party-manifests.sh
 
       - name: Create or update PR if changed
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-          CERT_MANAGER_VERSION: "v${{ env.CERT_MANAGER_VERSION }}"
-          TRUST_MANAGER_VERSION: "v${{ env.TRUST_MANAGER_VERSION }}"
         run: .github/scripts/create-third-party-manifests-pr.sh
 
       - name: Notify on failure
