@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -57,13 +58,23 @@ const (
 	// Deployment names
 	controllerManagerDeploymentName = "integration-service-controller-manager"
 
+	// CronJob names
+	snapshotGCCronJobName = "integration-service-snapshot-garbage-collector"
+
 	// Container names
-	managerContainerName = "manager"
+	managerContainerName    = "manager"
+	snapshotGCContainerName = "test-gc"
 
 	// Env var names for pipeline run timeout configuration.
 	envPipelineTimeout = "PIPELINE_TIMEOUT"
 	envTasksTimeout    = "TASKS_TIMEOUT"
 	envFinallyTimeout  = "FINALLY_TIMEOUT"
+
+	// Env var names for snapshot garbage collector retention configuration.
+	// The binary reads these after flag.Parse(), so they override the command-line args.
+	envPRSnapshotsToKeep              = "PR_SNAPSHOTS_TO_KEEP"
+	envNonPRSnapshotsToKeep           = "NON_PR_SNAPSHOTS_TO_KEEP"
+	envMinSnapshotsToKeepPerComponent = "MIN_SNAPSHOTS_TO_KEEP_PER_COMPONENT"
 )
 
 // IntegrationServiceCleanupGVKs defines which resource types should be cleaned up when they are
@@ -187,6 +198,13 @@ func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context
 			}
 		}
 
+		// Apply customizations for the snapshot GC CronJob
+		if cronJob, ok := obj.(*batchv1.CronJob); ok && cronJob.Name == snapshotGCCronJobName {
+			if err := applySnapshotGCCustomizations(cronJob, owner.Spec); err != nil {
+				return fmt.Errorf("failed to apply customizations to CronJob %s: %w", cronJob.Name, err)
+			}
+		}
+
 		// Apply with ownership using the tracking client
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			gvk := obj.GetObjectKind().GroupVersionKind()
@@ -255,6 +273,53 @@ func buildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploy
 	)
 }
 
+// buildSnapshotGCOverlay builds a PodOverlay for the snapshot GC CronJob container.
+func buildSnapshotGCOverlay(integrationSpec konfluxv1alpha1.KonfluxIntegrationServiceSpec) *customization.PodOverlay {
+	return customization.BuildPodOverlay(
+		customization.DeploymentContext{},
+		customization.WithContainerBuilder(
+			snapshotGCContainerName,
+			customization.FromContainerSpec(integrationSpec.SnapshotGarbageCollector),
+			customization.WithOptionalEnvOverride(envPRSnapshotsToKeep, integrationSpec.PRSnapshotsToKeep),
+			customization.WithOptionalEnvOverride(envNonPRSnapshotsToKeep, integrationSpec.NonPRSnapshotsToKeep),
+			customization.WithOptionalEnvOverride(envMinSnapshotsToKeepPerComponent, integrationSpec.MinSnapshotsToKeepPerComponent),
+		),
+	)
+}
+
+// applySnapshotGCCustomizations applies user-defined customizations to the snapshot GC CronJob.
+// Typed retention fields are applied last and take precedence over any same-named entry in
+// snapshotGarbageCollector.env. The GC binary reads env vars after flag.Parse(), so injected
+// env vars override the command-arg defaults in the upstream manifest. When not set, the
+// upstream defaults apply.
+//
+// An error is returned if the user has configured any GC fields but the expected container
+// (snapshotGCContainerName) is not found in the CronJob spec — this prevents misconfigurations
+// from silently passing when the upstream container name changes.
+// Note: ApplyToPodTemplateSpec silently ignores unmatched containers, so the check is explicit.
+func applySnapshotGCCustomizations(cj *batchv1.CronJob, integrationSpec konfluxv1alpha1.KonfluxIntegrationServiceSpec) error {
+	hasCustomizations := integrationSpec.SnapshotGarbageCollector != nil ||
+		integrationSpec.PRSnapshotsToKeep != "" ||
+		integrationSpec.NonPRSnapshotsToKeep != "" ||
+		integrationSpec.MinSnapshotsToKeepPerComponent != ""
+
+	if hasCustomizations {
+		found := false
+		for _, c := range cj.Spec.JobTemplate.Spec.Template.Spec.Containers {
+			if c.Name == snapshotGCContainerName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("container %q not found in CronJob %s: snapshot GC customizations cannot be applied",
+				snapshotGCContainerName, cj.Name)
+		}
+	}
+
+	return buildSnapshotGCOverlay(integrationSpec).ApplyToPodTemplateSpec(&cj.Spec.JobTemplate.Spec.Template)
+}
+
 // mapKonfluxUIToIntegrationService maps KonfluxUI events to KonfluxIntegrationService reconcile requests.
 func (r *KonfluxIntegrationServiceReconciler) mapKonfluxUIToIntegrationService(_ context.Context, _ client.Object) []ctrl.Request {
 	// Return reconcile request for the singleton KonfluxIntegrationService CR
@@ -273,6 +338,7 @@ func (r *KonfluxIntegrationServiceReconciler) SetupWithManager(mgr ctrl.Manager)
 		// Use predicates to filter out unnecessary updates and prevent reconcile loops
 		// Deployments: watch spec changes AND readiness status changes
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(predicate.DeploymentReadinessPredicate)).
+		Owns(&batchv1.CronJob{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&corev1.Service{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).

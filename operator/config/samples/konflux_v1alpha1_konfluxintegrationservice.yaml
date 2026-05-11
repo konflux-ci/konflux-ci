@@ -37,3 +37,31 @@ spec:
       #       secretKeyRef:
       #         name: integration-service-secret
       #         key: secret-key
+
+  # Snapshot GC retention policy. Each field maps to the corresponding env var on the
+  # GC container. Omit any field to use the upstream integration-service default.
+  # Upstream defaults: prSnapshotsToKeep=70, nonPRSnapshotsToKeep=640, minSnapshotsToKeepPerComponent=5
+  prSnapshotsToKeep: "10"
+  nonPRSnapshotsToKeep: "100"  # upstream default is 640; set lower for tighter retention
+  minSnapshotsToKeepPerComponent: "4"
+
+  snapshotGarbageCollector:
+    # resources: override the GC container resource requests/limits.
+    # When omitted, the operator uses the values defined in the upstream integration-service
+    # repository (config/snapshotgc/snapshotgc.yaml at the pinned SHA).
+    # Set lower requests here only for resource-constrained environments (e.g. local Kind).
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: "1"
+        memory: 2000Mi
+    # For GC env vars beyond the typed fields above, use snapshotGarbageCollector.env directly.
+    # Supports plain values and valueFrom references (ConfigMap, Secret).
+    # env:
+    #   - name: EXAMPLE_GC_CONFIG
+    #     valueFrom:
+    #       configMapKeyRef:
+    #         name: snapshot-gc-config
+    #         key: some-key
