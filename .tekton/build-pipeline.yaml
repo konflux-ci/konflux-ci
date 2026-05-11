@@ -159,7 +159,7 @@ spec:
               optional: true
         steps:
           - name: read-secret
-            image: registry.access.redhat.com/ubi10/ubi-minimal@sha256:2a4785f399dc7ae2f3ca85f68bac0ccac47f3e73464a47c21e4f7ae46b55a053
+            image: registry.access.redhat.com/ubi10/ubi-minimal@sha256:a41db89ac688576827fbd3e8e3ef145fd7f4db28d7f533c154f96224fcd20595
             volumeMounts:
               - name: segment-key
                 mountPath: /var/run/secrets/segment
