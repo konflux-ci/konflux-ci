@@ -9,6 +9,7 @@ Contributing Guidelines
 - [Using KubeLinter](#using-kubelinter)
 - [Operator Development](#operator-development)
 - [CI/CD and Testing](#cicd-and-testing)
+  * [Operator rendered manifests](#operator-rendered-manifests)
   * [Automated E2E Tests](#automated-e2e-tests)
   * [OpenShift CI Periodic Tests](#openshift-ci-periodic-tests)
   * [ARM64 Testing](#arm64-testing)
@@ -111,6 +112,25 @@ For building and running the operator from source, see the
 Kind cluster, use `OPERATOR_INSTALL_METHOD=build` with `deploy-local.sh`.
 
 # CI/CD and Testing
+
+## Operator rendered manifests
+
+Pinned upstream components live under `operator/upstream-kustomizations/`. The
+operator bundles pre-rendered YAML under `operator/pkg/manifests/<component>/`.
+Those files must match `kustomize build` for the same pins; CI enforces that via
+`.github/workflows/verify-manifests-in-sync.yaml`.
+
+Helm-rendered **cert-manager** and **trust-manager** manifests under
+`dependencies/` (and extracted envtest CRDs) must match the chart versions in
+`.github/scripts/export-third-party-chart-env.sh`, which MintMaker/Renovate
+updates alongside the scheduled update workflow.
+
+When **MintMaker** or **Renovate** opens a PR that only bumps digests or chart
+versions, a **companion PR** may be opened automatically
+(`.github/workflows/renovate-manifest-companion.yaml`) that includes the matching
+rendered output. **Prefer merging the companion PR** (or a single PR that
+includes both pins and regenerated files) so `main` never carries mismatched
+pins and manifests.
 
 ## Automated E2E Tests
 
