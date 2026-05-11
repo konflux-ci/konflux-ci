@@ -320,6 +320,7 @@ spec:
                               DefaultPipelineName specifies which pipeline to use as the default.
                               The referenced pipeline must exist in the final merged pipeline list.
                               When not set, the operator-provided default is preserved.
+                            maxLength: 253
                             minLength: 1
                             type: string
                           pipelines:
@@ -334,9 +335,15 @@ spec:
                                   description: Bundle is the Tekton bundle reference
                                     for this pipeline.
                                   type: string
+                                description:
+                                  description: |-
+                                    Description is a human-readable description of this pipeline.
+                                    When overriding a default pipeline, this replaces the default description.
+                                  type: string
                                 name:
                                   description: Name is the pipeline identifier. Must
                                     match a default pipeline name to override it.
+                                  maxLength: 253
                                   minLength: 1
                                   type: string
                                 removed:
@@ -355,16 +362,36 @@ spec:
                               - message: bundle is required when removed is not true
                                 rule: (has(self.removed) && self.removed) || (has(self.bundle)
                                   && size(self.bundle) > 0)
+                            maxItems: 64
                             type: array
-                            x-kubernetes-list-map-keys:
-                            - name
-                            x-kubernetes-list-type: map
+                            x-kubernetes-list-type: atomic
                           removeDefaults:
                             description: |-
                               RemoveDefaults disables all operator-provided default pipelines.
                               When true, only user-specified pipelines in the Pipelines list are included.
                             type: boolean
                         type: object
+                        x-kubernetes-map-type: atomic
+                        x-kubernetes-validations:
+                        - message: defaultPipelineName is required when removeDefaults
+                            is true
+                          rule: '!has(self.removeDefaults) || !self.removeDefaults
+                            || has(self.defaultPipelineName)'
+                        - message: at least one pipeline with a bundle must be provided
+                            when removeDefaults is true
+                          rule: '!has(self.removeDefaults) || !self.removeDefaults
+                            || self.pipelines.exists(p, !has(p.removed) || !p.removed)'
+                        - message: defaultPipelineName must reference a pipeline in
+                            the pipelines list when removeDefaults is true
+                          rule: '!has(self.removeDefaults) || !self.removeDefaults
+                            || !has(self.defaultPipelineName) || self.pipelines.exists(p,
+                            p.name == self.defaultPipelineName && (!has(p.removed)
+                            || !p.removed))'
+                        - message: defaultPipelineName must not reference a pipeline
+                            that is being removed
+                          rule: '!has(self.defaultPipelineName) || !self.pipelines.exists(p,
+                            p.name == self.defaultPipelineName && has(p.removed) &&
+                            p.removed)'
                       webhookURLs:
                         additionalProperties:
                           type: string

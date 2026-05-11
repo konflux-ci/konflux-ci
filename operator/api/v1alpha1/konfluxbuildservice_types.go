@@ -61,6 +61,11 @@ type KonfluxBuildServiceSpec struct {
 }
 
 // PipelineConfigSpec defines how the operator should build the build-pipeline-config ConfigMap.
+// +mapType=atomic
+// +kubebuilder:validation:XValidation:rule="!has(self.removeDefaults) || !self.removeDefaults || has(self.defaultPipelineName)",message="defaultPipelineName is required when removeDefaults is true"
+// +kubebuilder:validation:XValidation:rule="!has(self.removeDefaults) || !self.removeDefaults || self.pipelines.exists(p, !has(p.removed) || !p.removed)",message="at least one pipeline with a bundle must be provided when removeDefaults is true"
+// +kubebuilder:validation:XValidation:rule="!has(self.removeDefaults) || !self.removeDefaults || !has(self.defaultPipelineName) || self.pipelines.exists(p, p.name == self.defaultPipelineName && (!has(p.removed) || !p.removed))",message="defaultPipelineName must reference a pipeline in the pipelines list when removeDefaults is true"
+// +kubebuilder:validation:XValidation:rule="!has(self.defaultPipelineName) || !self.pipelines.exists(p, p.name == self.defaultPipelineName && has(p.removed) && p.removed)",message="defaultPipelineName must not reference a pipeline that is being removed"
 type PipelineConfigSpec struct {
 	// RemoveDefaults disables all operator-provided default pipelines.
 	// When true, only user-specified pipelines in the Pipelines list are included.
@@ -72,13 +77,14 @@ type PipelineConfigSpec struct {
 	// When not set, the operator-provided default is preserved.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
 	DefaultPipelineName string `json:"defaultPipelineName,omitempty"`
 
 	// Pipelines specifies user-provided pipeline overrides or additions.
 	// Entries with matching names override operator defaults.
 	// +optional
-	// +listType=map
-	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=64
+	// +listType=atomic
 	Pipelines []PipelineSpec `json:"pipelines,omitempty"`
 }
 
@@ -88,17 +94,38 @@ type PipelineConfigSpec struct {
 type PipelineSpec struct {
 	// Name is the pipeline identifier. Must match a default pipeline name to override it.
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
 	Name string `json:"name"`
 
 	// Bundle is the Tekton bundle reference for this pipeline.
 	// +optional
 	Bundle string `json:"bundle,omitempty"`
 
+	// Description is a human-readable description of this pipeline.
+	// When overriding a default pipeline, this replaces the default description.
+	// +optional
+	Description string `json:"description,omitempty"`
+
 	// Removed excludes this pipeline from the final configuration.
 	// Use to remove a specific operator-provided default pipeline.
 	// When true, bundle must not be set.
 	// +optional
 	Removed bool `json:"removed,omitempty"`
+}
+
+// PipelineConfigData represents the structure of the config.yaml data in the
+// build-pipeline-config ConfigMap. This is the on-disk format consumed by the
+// build-service, not a CRD type.
+type PipelineConfigData struct {
+	DefaultPipelineName string              `json:"default-pipeline-name,omitempty"`
+	Pipelines           []PipelineEntryData `json:"pipelines"`
+}
+
+// PipelineEntryData represents a single pipeline entry in the config.yaml.
+type PipelineEntryData struct {
+	Name        string `json:"name"`
+	Bundle      string `json:"bundle"`
+	Description string `json:"description,omitempty"`
 }
 
 // KonfluxBuildServiceStatus defines the observed state of KonfluxBuildService
