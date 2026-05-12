@@ -25,9 +25,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/version"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/oauth2proxy"
@@ -98,7 +100,7 @@ func assertNoConflictingEnvVars(g *gomega.WithT, container *corev1.Container) {
 func TestBuildProxyOverlay(t *testing.T) {
 	t.Run("nil spec returns overlay with oauth2-proxy config", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		overlay := buildProxyOverlay(nil, "", buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay := buildProxyOverlay(nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(overlay).NotTo(gomega.BeNil())
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
@@ -114,7 +116,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 	t.Run("empty spec returns overlay with oauth2-proxy config", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := &konfluxv1alpha1.ProxyDeploymentSpec{}
-		overlay := buildProxyOverlay(spec, "", buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(overlay).NotTo(gomega.BeNil())
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
@@ -129,7 +131,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 
 	t.Run("adds CA bundle volume and mount", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		overlay := buildProxyOverlay(nil, "", buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay := buildProxyOverlay(nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(overlay).NotTo(gomega.BeNil())
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
@@ -170,10 +172,10 @@ func TestBuildProxyOverlay(t *testing.T) {
 		g.Expect(caMount.ReadOnly).To(gomega.BeTrue())
 	})
 
-	t.Run("nginx resources are applied", func(t *testing.T) {
+	t.Run("reverse proxy resources are applied", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := &konfluxv1alpha1.ProxyDeploymentSpec{
-			Nginx: &konfluxv1alpha1.ContainerSpec{
+			ReverseProxy: &konfluxv1alpha1.ContainerSpec{
 				Resources: &corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("500m"),
@@ -188,16 +190,16 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay := buildProxyOverlay(spec, "", buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		nginxContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, nginxContainerName)
-		g.Expect(nginxContainer).NotTo(gomega.BeNil())
-		g.Expect(nginxContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
-		g.Expect(nginxContainer.Resources.Limits.Memory().String()).To(gomega.Equal("256Mi"))
-		g.Expect(nginxContainer.Resources.Requests.Cpu().String()).To(gomega.Equal("100m"))
-		g.Expect(nginxContainer.Resources.Requests.Memory().String()).To(gomega.Equal("128Mi"))
+		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		g.Expect(rpContainer).NotTo(gomega.BeNil())
+		g.Expect(rpContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
+		g.Expect(rpContainer.Resources.Limits.Memory().String()).To(gomega.Equal("256Mi"))
+		g.Expect(rpContainer.Resources.Requests.Cpu().String()).To(gomega.Equal("100m"))
+		g.Expect(rpContainer.Resources.Requests.Memory().String()).To(gomega.Equal("128Mi"))
 	})
 
 	t.Run("oauth2-proxy resources are applied", func(t *testing.T) {
@@ -214,7 +216,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay := buildProxyOverlay(spec, "", buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -230,7 +232,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 	t.Run("both containers can be customized", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := &konfluxv1alpha1.ProxyDeploymentSpec{
-			Nginx: &konfluxv1alpha1.ContainerSpec{
+			ReverseProxy: &konfluxv1alpha1.ContainerSpec{
 				Resources: &corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
 						corev1.ResourceCPU: resource.MustParse("1"),
@@ -247,13 +249,13 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay := buildProxyOverlay(spec, "", buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		nginxContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, nginxContainerName)
-		g.Expect(nginxContainer).NotTo(gomega.BeNil())
-		g.Expect(nginxContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
+		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		g.Expect(rpContainer).NotTo(gomega.BeNil())
+		g.Expect(rpContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
 
 		oauth2Container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
 		g.Expect(oauth2Container).NotTo(gomega.BeNil())
@@ -266,7 +268,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 	t.Run("preserves existing container fields", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := &konfluxv1alpha1.ProxyDeploymentSpec{
-			Nginx: &konfluxv1alpha1.ContainerSpec{
+			ReverseProxy: &konfluxv1alpha1.ContainerSpec{
 				Resources: &corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
 						corev1.ResourceCPU: resource.MustParse("500m"),
@@ -276,17 +278,17 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		nginxContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, nginxContainerName)
-		g.Expect(nginxContainer).NotTo(gomega.BeNil(), "nginx container must exist in proxy deployment")
-		originalImage := nginxContainer.Image
+		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		g.Expect(rpContainer).NotTo(gomega.BeNil(), "reverse-proxy container must exist in proxy deployment")
+		originalImage := rpContainer.Image
 
-		overlay := buildProxyOverlay(spec, "", buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		nginxContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, nginxContainerName)
-		g.Expect(nginxContainer).NotTo(gomega.BeNil())
-		g.Expect(nginxContainer.Image).To(gomega.Equal(originalImage))
+		rpContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		g.Expect(rpContainer).NotTo(gomega.BeNil())
+		g.Expect(rpContainer.Image).To(gomega.Equal(originalImage))
 	})
 }
 
@@ -543,7 +545,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g := gomega.NewWithT(t)
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
-				Nginx: &konfluxv1alpha1.ContainerSpec{
+				ReverseProxy: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
 							corev1.ResourceCPU: resource.MustParse("1"),
@@ -557,9 +559,9 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		nginxContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, nginxContainerName)
-		g.Expect(nginxContainer).NotTo(gomega.BeNil())
-		g.Expect(nginxContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
+		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		g.Expect(rpContainer).NotTo(gomega.BeNil())
+		g.Expect(rpContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
 	})
 
 	t.Run("applies customizations to dex deployment", func(t *testing.T) {
@@ -589,7 +591,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g := gomega.NewWithT(t)
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
-				Nginx: &konfluxv1alpha1.ContainerSpec{
+				ReverseProxy: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
 							corev1.ResourceCPU: resource.MustParse("1"),
@@ -630,8 +632,8 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
-		nginxContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, nginxContainerName)
-		g.Expect(nginxContainer).NotTo(gomega.BeNil())
+		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		g.Expect(rpContainer).NotTo(gomega.BeNil())
 	})
 
 	t.Run("handles nil dex spec", func(t *testing.T) {
@@ -728,7 +730,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
 				Replicas: 5,
-				Nginx: &konfluxv1alpha1.ContainerSpec{
+				ReverseProxy: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
 							corev1.ResourceCPU: resource.MustParse("2"),
@@ -747,9 +749,9 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g.Expect(*deployment.Spec.Replicas).To(gomega.Equal(int32(5)))
 
 		// Check container resources
-		nginxContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, nginxContainerName)
-		g.Expect(nginxContainer).NotTo(gomega.BeNil())
-		g.Expect(nginxContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("2"))
+		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		g.Expect(rpContainer).NotTo(gomega.BeNil())
+		g.Expect(rpContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("2"))
 	})
 
 	t.Run("updates dex configmap volume reference", func(t *testing.T) {
@@ -835,16 +837,16 @@ func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
 
 		// Get deployment and set existing requests
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		nginxContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, nginxContainerName)
-		g.Expect(nginxContainer).NotTo(gomega.BeNil(), "nginx container must exist")
-		nginxContainer.Resources.Requests = corev1.ResourceList{
+		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		g.Expect(rpContainer).NotTo(gomega.BeNil(), "reverse-proxy container must exist")
+		rpContainer.Resources.Requests = corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("50m"),
 			corev1.ResourceMemory: resource.MustParse("64Mi"),
 		}
 
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
-				Nginx: &konfluxv1alpha1.ContainerSpec{
+				ReverseProxy: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
 							corev1.ResourceCPU: resource.MustParse("500m"),
@@ -857,11 +859,11 @@ func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
 		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		nginxContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, nginxContainerName)
-		g.Expect(nginxContainer).NotTo(gomega.BeNil())
-		g.Expect(nginxContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
-		g.Expect(nginxContainer.Resources.Requests.Cpu().String()).To(gomega.Equal("50m"))
-		g.Expect(nginxContainer.Resources.Requests.Memory().String()).To(gomega.Equal("64Mi"))
+		rpContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		g.Expect(rpContainer).NotTo(gomega.BeNil())
+		g.Expect(rpContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
+		g.Expect(rpContainer.Resources.Requests.Cpu().String()).To(gomega.Equal("50m"))
+		g.Expect(rpContainer.Resources.Requests.Memory().String()).To(gomega.Equal("64Mi"))
 	})
 
 	t.Run("merges requests without affecting limits", func(t *testing.T) {
@@ -869,16 +871,16 @@ func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
 
 		// Get deployment and set existing limits
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		nginxContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, nginxContainerName)
-		g.Expect(nginxContainer).NotTo(gomega.BeNil(), "nginx container must exist")
-		nginxContainer.Resources.Limits = corev1.ResourceList{
+		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		g.Expect(rpContainer).NotTo(gomega.BeNil(), "reverse-proxy container must exist")
+		rpContainer.Resources.Limits = corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("1"),
 			corev1.ResourceMemory: resource.MustParse("512Mi"),
 		}
 
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
-				Nginx: &konfluxv1alpha1.ContainerSpec{
+				ReverseProxy: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU: resource.MustParse("100m"),
@@ -891,11 +893,11 @@ func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
 		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		nginxContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, nginxContainerName)
-		g.Expect(nginxContainer).NotTo(gomega.BeNil())
-		g.Expect(nginxContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
-		g.Expect(nginxContainer.Resources.Limits.Memory().String()).To(gomega.Equal("512Mi"))
-		g.Expect(nginxContainer.Resources.Requests.Cpu().String()).To(gomega.Equal("100m"))
+		rpContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		g.Expect(rpContainer).NotTo(gomega.BeNil())
+		g.Expect(rpContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
+		g.Expect(rpContainer.Resources.Limits.Memory().String()).To(gomega.Equal("512Mi"))
+		g.Expect(rpContainer.Resources.Requests.Cpu().String()).To(gomega.Equal("100m"))
 	})
 }
 
@@ -903,45 +905,45 @@ func TestProxyDeploymentTokenHotReload(t *testing.T) {
 	deployment := getUIDeployment(t, proxyDeploymentName)
 	spec := deployment.Spec.Template.Spec
 
-	t.Run("generate-nginx-configs-loop container exists", func(t *testing.T) {
+	t.Run("config-refresh container exists", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		container := testutil.FindContainer(spec.Containers, "generate-nginx-configs-loop")
-		g.Expect(container).NotTo(gomega.BeNil(), "generate-nginx-configs-loop sidecar must exist")
+		container := testutil.FindContainer(spec.Containers, "config-refresh")
+		g.Expect(container).NotTo(gomega.BeNil(), "config-refresh sidecar must exist")
 	})
 
-	t.Run("generate-loop liveness probe uses exec command not args", func(t *testing.T) {
+	t.Run("config-refresh liveness probe uses exec command", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		container := testutil.FindContainer(spec.Containers, "generate-nginx-configs-loop")
+		container := testutil.FindContainer(spec.Containers, "config-refresh")
 		g.Expect(container).NotTo(gomega.BeNil())
 		g.Expect(container.LivenessProbe).NotTo(gomega.BeNil(), "liveness probe must be set")
 		g.Expect(container.LivenessProbe.Exec).NotTo(gomega.BeNil(), "liveness probe must use exec")
 		g.Expect(container.LivenessProbe.Exec.Command).To(gomega.HaveLen(2),
-			"exec command must have 2 elements (bash + script path); args is not valid for exec probes")
-		g.Expect(container.LivenessProbe.Exec.Command[0]).To(gomega.Equal("bash"))
-		g.Expect(container.LivenessProbe.Exec.Command[1]).To(gomega.ContainSubstring("proxy-nginx-generate-loop-probe.sh"))
+			"exec command must have 2 elements (sh + script path)")
+		g.Expect(container.LivenessProbe.Exec.Command[0]).To(gomega.Equal("sh"))
+		g.Expect(container.LivenessProbe.Exec.Command[1]).To(gomega.ContainSubstring("config-refresh-probe.sh"))
 		g.Expect(container.LivenessProbe.InitialDelaySeconds).To(gomega.BeNumerically(">", 0),
 			"liveness probe must have initialDelaySeconds to allow sidecar startup")
 	})
 
-	t.Run("generate-loop script volume projects both script and probe", func(t *testing.T) {
+	t.Run("config-refresh script volume projects both script and probe", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		var scriptVolume *corev1.Volume
 		for i := range spec.Volumes {
-			if spec.Volumes[i].Name == "proxy-generate-loop-script" {
+			if spec.Volumes[i].Name == "config-refresh-scripts" {
 				scriptVolume = &spec.Volumes[i]
 				break
 			}
 		}
-		g.Expect(scriptVolume).NotTo(gomega.BeNil(), "proxy-generate-loop-script volume must exist")
+		g.Expect(scriptVolume).NotTo(gomega.BeNil(), "config-refresh-scripts volume must exist")
 		g.Expect(scriptVolume.ConfigMap).NotTo(gomega.BeNil())
 
 		keys := make([]string, 0, len(scriptVolume.ConfigMap.Items))
 		for _, item := range scriptVolume.ConfigMap.Items {
 			keys = append(keys, item.Key)
 		}
-		g.Expect(keys).To(gomega.ContainElement("proxy-nginx-generate-loop.sh"),
+		g.Expect(keys).To(gomega.ContainElement("config-refresh.sh"),
 			"volume must project the main script")
-		g.Expect(keys).To(gomega.ContainElement("proxy-nginx-generate-loop-probe.sh"),
+		g.Expect(keys).To(gomega.ContainElement("config-refresh-probe.sh"),
 			"volume must project the probe script")
 	})
 
@@ -977,6 +979,82 @@ func TestProxyDeploymentTokenHotReload(t *testing.T) {
 				g.Expect(vol.Secret.SecretName).NotTo(gomega.Equal("proxy"),
 					"must not mount the long-lived service account token secret")
 			}
+		}
+	})
+}
+
+func TestProxyDeploymentRunAsUser(t *testing.T) {
+	const testConfigMapName = "dex-config-test123"
+
+	newOpenShiftInfo := func(t *testing.T) *clusterinfo.Info {
+		t.Helper()
+		info, err := clusterinfo.DetectWithClient(&mockDiscoveryClient{
+			resources: map[string]*metav1.APIResourceList{
+				"config.openshift.io/v1": {APIResources: []metav1.APIResource{{Kind: "ClusterVersion"}}},
+			},
+			serverVersion: &version.Info{GitVersion: "v1.29.0"},
+		})
+		if err != nil {
+			t.Fatalf("failed to create OpenShift cluster info: %v", err)
+		}
+		return info
+	}
+
+	newDefaultInfo := func(t *testing.T) *clusterinfo.Info {
+		t.Helper()
+		info, err := clusterinfo.DetectWithClient(&mockDiscoveryClient{
+			resources:     map[string]*metav1.APIResourceList{},
+			serverVersion: &version.Info{GitVersion: "v1.29.0"},
+		})
+		if err != nil {
+			t.Fatalf("failed to create default cluster info: %v", err)
+		}
+		return info
+	}
+
+	t.Run("sets runAsUser on non-OpenShift clusters", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
+		deployment := getUIDeployment(t, proxyDeploymentName)
+
+		err := applyUIDeploymentCustomizations(deployment, ui, newDefaultInfo(t), testConfigMapName, "", testEndpoint)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		g.Expect(rpContainer).NotTo(gomega.BeNil())
+		g.Expect(rpContainer.SecurityContext).NotTo(gomega.BeNil())
+		g.Expect(rpContainer.SecurityContext.RunAsUser).NotTo(gomega.BeNil())
+		g.Expect(*rpContainer.SecurityContext.RunAsUser).To(gomega.Equal(int64(1001)))
+	})
+
+	t.Run("sets runAsUser when clusterInfo is nil", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
+		deployment := getUIDeployment(t, proxyDeploymentName)
+
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		g.Expect(rpContainer).NotTo(gomega.BeNil())
+		g.Expect(rpContainer.SecurityContext).NotTo(gomega.BeNil())
+		g.Expect(rpContainer.SecurityContext.RunAsUser).NotTo(gomega.BeNil())
+		g.Expect(*rpContainer.SecurityContext.RunAsUser).To(gomega.Equal(int64(1001)))
+	})
+
+	t.Run("does not set runAsUser on OpenShift", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
+		deployment := getUIDeployment(t, proxyDeploymentName)
+
+		err := applyUIDeploymentCustomizations(deployment, ui, newOpenShiftInfo(t), testConfigMapName, "", testEndpoint)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		g.Expect(rpContainer).NotTo(gomega.BeNil())
+		if rpContainer.SecurityContext != nil {
+			g.Expect(rpContainer.SecurityContext.RunAsUser).To(gomega.BeNil(),
+				"OpenShift SCCs manage runAsUser; the operator must not set it")
 		}
 	})
 }

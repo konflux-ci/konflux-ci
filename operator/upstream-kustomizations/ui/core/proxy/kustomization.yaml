@@ -11,23 +11,24 @@ images:
 - name: quay.io/konflux-ci/oauth2-proxy
   newName: quay.io/konflux-ci/oauth2-proxy
   digest: sha256:1f4a37529de4f750099af18e113556bd995fe6922030c614b7d6d23eaa0bd318
-- name: registry.access.redhat.com/ubi9/nginx-124
-  digest: sha256:20ae3d2ced3df6a622d11334288f2fd31f568ae49858d1e0eac43eca332a1322
-
+- name: registry.access.redhat.com/hi/caddy
+  digest: sha256:c38cf847ae5f5de12f8c236b028ee9f823ec7f76708002a3310b4d2db75d7a41
 configMapGenerator:
-  - name: proxy
+  - name: proxy-caddyfile
     files:
-      - nginx.conf
-  - name: proxy-nginx-templates
+      - Caddyfile
+      - impersonate-groups.conf
+      - impersonate-headers.conf
+      - ns-lister-headers.conf
+  - name: proxy-caddy-templates
     files:
-      - auth.conf
-      - tekton-results.conf
-  - name: proxy-nginx-run
+      - tekton-results.caddy
+  - name: proxy-generate-config
     files:
-    - proxy-nginx-run.sh
-  - name: proxy-nginx-generate-loop
+      - generate-proxy-config.sh
+  - name: proxy-config-refresh
     files:
-    - proxy-nginx-generate-loop.sh
-    - proxy-nginx-generate-loop-probe.sh
+      - config-refresh.sh
+      - config-refresh-probe.sh
 
 namespace: konflux-ui

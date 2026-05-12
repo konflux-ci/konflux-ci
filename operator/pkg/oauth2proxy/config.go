@@ -105,12 +105,14 @@ func WithCookieConfig() customization.ContainerOption {
 // --- Authentication Settings ---
 
 // WithAuthSettings configures authentication behavior.
-// Sets email domain restrictions, X-Auth-Request header, and JWT handling.
+// Sets email domain restrictions, X-Auth-Request header, JWT handling,
+// and requests the "groups" scope so Dex includes group memberships in the ID token.
 func WithAuthSettings() customization.ContainerOption {
 	return customization.WithEnv(
 		corev1.EnvVar{Name: "OAUTH2_PROXY_EMAIL_DOMAINS", Value: "*"},
 		corev1.EnvVar{Name: "OAUTH2_PROXY_SET_XAUTHREQUEST", Value: "true"},
 		corev1.EnvVar{Name: "OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS", Value: "true"},
+		corev1.EnvVar{Name: "OAUTH2_PROXY_SCOPE", Value: "openid email profile groups"},
 	)
 }
 

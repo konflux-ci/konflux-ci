@@ -258,6 +258,8 @@ type Client struct {
 	LogoURL string `json:"logoURL,omitempty"`
 }
 
+// +kubebuilder:object:generate=true
+
 // Password represents a static user password entry.
 type Password struct {
 	// Email is the user's email address (used as the login identifier).
@@ -271,6 +273,11 @@ type Password struct {
 
 	// UserID is a unique identifier for the user.
 	UserID string `json:"userID,omitempty"`
+
+	// Groups is a list of groups the user belongs to.
+	// Requires Dex v2.45.0+. Groups are included in the ID token
+	// when the "groups" scope is requested.
+	Groups []string `json:"groups,omitempty"`
 }
 
 // ToYAML serializes the Config to YAML format.

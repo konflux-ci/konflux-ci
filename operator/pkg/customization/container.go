@@ -108,6 +108,19 @@ func WithSecurityContext(sc *corev1.SecurityContext) ContainerOption {
 	}
 }
 
+// WithRunAsUser sets securityContext.runAsUser on the container, initializing
+// the SecurityContext if needed. Uses strategic merge so other SecurityContext
+// fields (e.g. runAsNonRoot, readOnlyRootFilesystem) from the base manifest
+// are preserved.
+func WithRunAsUser(uid int64) ContainerOption {
+	return func(c *corev1.Container, _ DeploymentContext) {
+		if c.SecurityContext == nil {
+			c.SecurityContext = &corev1.SecurityContext{}
+		}
+		c.SecurityContext.RunAsUser = &uid
+	}
+}
+
 // WithImage sets the container image.
 func WithImage(image string) ContainerOption {
 	return func(c *corev1.Container, _ DeploymentContext) {

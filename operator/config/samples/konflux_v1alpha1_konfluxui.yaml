@@ -23,7 +23,7 @@ spec:
   # Proxy deployment configuration
   proxy:
     replicas: 3
-    nginx:
+    reverseProxy:
       resources:
         requests:
           cpu: 100m
@@ -31,13 +31,6 @@ spec:
         limits:
           cpu: 500m
           memory: 512Mi
-      env:
-        - name: NGINX_WORKER_PROCESSES
-          value: "4"
-        - name: NGINX_WORKER_CONNECTIONS
-          value: "1024"
-        - name: NGINX_KEEPALIVE_TIMEOUT
-          value: "65"
     oauth2Proxy:
       resources:
         requests:
@@ -134,13 +127,22 @@ spec:
           hash: REDACTED
           username: "user1"
           userID: "7138d2fe-724e-4e86-af8a-db7c4b080e20"
+          groups:
+            - "konflux-users"
+            - "team-alpha"
         - email: "user2@konflux.dev"
           # bcrypt hash of the string "password": $(echo password | htpasswd -BinC 10 admin | cut -d: -f2)
           hash: REDACTED
           username: "user2"
           userID: "ea8e8ee1-2283-4e03-83d4-b00f8b821b64"
+          groups:
+            - "konflux-users"
+            - "team-beta"
         - email: "admin@konflux.dev"
           # bcrypt hash of the string "admin": $(echo admin | htpasswd -BinC 10 admin | cut -d: -f2)
           hash: REDACTED
           username: "admin"
           userID: "admin-12345-67890-abcdef"
+          groups:
+            - "konflux-users"
+            - "konflux-admins"
