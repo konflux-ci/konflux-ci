@@ -10,7 +10,7 @@ set -euo pipefail
 # renovate: datasource=helm depName=jetstack/cert-manager versioning=semver
 CERT_MANAGER_CHART_VERSION="1.19.4"
 # renovate: datasource=helm depName=jetstack/trust-manager versioning=semver
-TRUST_MANAGER_CHART_VERSION="0.21.0"
+TRUST_MANAGER_CHART_VERSION="0.22.1"
 
 cert="${CERT_MANAGER_CHART_VERSION}"
 trust="${TRUST_MANAGER_CHART_VERSION}"
