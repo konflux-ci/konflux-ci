@@ -5,8 +5,9 @@
 name: Update Third-Party Manifests
 
 on:
+  # Weekly (Mondays 03:00 UTC); Renovate/MintMaker cover day-to-day updates.
   schedule:
-    - cron: '0 3 * * *'
+    - cron: '0 3 * * 1'
   workflow_dispatch:
 
 permissions:

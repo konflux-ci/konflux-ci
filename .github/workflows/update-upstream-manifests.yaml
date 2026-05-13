@@ -1,9 +1,9 @@
 name: Update Upstream Manifests
 
 on:
-  # Run on a schedule (daily at 2 AM UTC)
+  # Weekly (Mondays 02:00 UTC); Renovate companion PRs cover day-to-day updates.
   schedule:
-    - cron: '0 2 * * *'
+    - cron: '0 2 * * 1'
   # Allow manual triggering
   workflow_dispatch:
 

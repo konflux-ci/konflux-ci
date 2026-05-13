@@ -26,9 +26,9 @@ Other components (cli, ui, registry, namespace-lister, etc.) have local-only con
 
 ## Update Methods
 
-### Automated (daily)
+### Automated (weekly)
 
-`.github/workflows/update-upstream-manifests.yaml` runs at 2:00 UTC.
+`.github/workflows/update-upstream-manifests.yaml` runs weekly on Mondays at 02:00 UTC; use `workflow_dispatch` for an on-demand run.
 
 Renovate also proposes ref/tag bumps via `renovate.json`.
 
