@@ -150,9 +150,17 @@ rules:
   - create
   - patch
 - apiGroups:
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
   - ""
   resources:
   - namespaces
+  - services
   verbs:
   - get
   - list
@@ -412,7 +420,7 @@ spec:
         - -webhook-config-path=/mnt/webhook-config.json
         command:
         - /manager
-        image: quay.io/konflux-ci/build-service:211140a26c96e8f028a0595fb779ea13210ed5c8
+        image: quay.io/konflux-ci/build-service:6f73f821989b34c97e738e1e64d5dad336189248
         livenessProbe:
           httpGet:
             path: /healthz
