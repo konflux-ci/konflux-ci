@@ -133,6 +133,9 @@ spec:
         - name: service-ca
           mountPath: /mnt/service-ca
           readOnly: true
+        - name: serving-cert
+          mountPath: /mnt/serving-cert
+          readOnly: true
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true

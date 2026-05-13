@@ -17,6 +17,7 @@ CA_WATCH_PATHS=(
   /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
   /mnt/trusted-ca/ca-bundle.crt
   /mnt/service-ca/service-ca.crt
+  /mnt/serving-cert/tls.crt
 )
 
 HEARTBEAT_FILE=/mnt/caddy-snippets/config-refresh-heartbeat
