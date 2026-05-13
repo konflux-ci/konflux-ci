@@ -173,7 +173,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 	t.Run("nginx resources are applied", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := &konfluxv1alpha1.ProxyDeploymentSpec{
-			Nginx: &konfluxv1alpha1.ContainerSpec{
+			ReverseProxy: &konfluxv1alpha1.ContainerSpec{
 				Resources: &corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("500m"),
@@ -230,7 +230,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 	t.Run("both containers can be customized", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := &konfluxv1alpha1.ProxyDeploymentSpec{
-			Nginx: &konfluxv1alpha1.ContainerSpec{
+			ReverseProxy: &konfluxv1alpha1.ContainerSpec{
 				Resources: &corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
 						corev1.ResourceCPU: resource.MustParse("1"),
@@ -266,7 +266,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 	t.Run("preserves existing container fields", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := &konfluxv1alpha1.ProxyDeploymentSpec{
-			Nginx: &konfluxv1alpha1.ContainerSpec{
+			ReverseProxy: &konfluxv1alpha1.ContainerSpec{
 				Resources: &corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
 						corev1.ResourceCPU: resource.MustParse("500m"),
@@ -543,7 +543,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g := gomega.NewWithT(t)
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
-				Nginx: &konfluxv1alpha1.ContainerSpec{
+				ReverseProxy: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
 							corev1.ResourceCPU: resource.MustParse("1"),
@@ -589,7 +589,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g := gomega.NewWithT(t)
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
-				Nginx: &konfluxv1alpha1.ContainerSpec{
+				ReverseProxy: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
 							corev1.ResourceCPU: resource.MustParse("1"),
@@ -728,7 +728,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
 				Replicas: 5,
-				Nginx: &konfluxv1alpha1.ContainerSpec{
+				ReverseProxy: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
 							corev1.ResourceCPU: resource.MustParse("2"),
@@ -844,7 +844,7 @@ func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
 
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
-				Nginx: &konfluxv1alpha1.ContainerSpec{
+				ReverseProxy: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
 							corev1.ResourceCPU: resource.MustParse("500m"),
@@ -878,7 +878,7 @@ func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
 
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
-				Nginx: &konfluxv1alpha1.ContainerSpec{
+				ReverseProxy: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU: resource.MustParse("100m"),
