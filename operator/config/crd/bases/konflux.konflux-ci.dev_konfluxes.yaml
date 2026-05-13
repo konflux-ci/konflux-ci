@@ -1727,6 +1727,14 @@ spec:
                                       description: Email is the user's email address
                                         (used as the login identifier).
                                       type: string
+                                    groups:
+                                      description: |-
+                                        Groups is a list of groups the user belongs to.
+                                        Requires Dex v2.45.0+. Groups are included in the ID token
+                                        when the "groups" scope is requested.
+                                      items:
+                                        type: string
+                                      type: array
                                     hash:
                                       description: Hash is the bcrypt hash of the
                                         user's password.
