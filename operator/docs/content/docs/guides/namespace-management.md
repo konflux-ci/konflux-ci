@@ -154,6 +154,43 @@ subjects:
   apiGroup: rbac.authorization.k8s.io
 ```
 
+### Granting access to groups
+
+Instead of binding individual users, you can bind a **group** so that all members
+of that group automatically receive access. Groups come from the identity provider
+(GitHub teams, LDAP groups, OIDC groups claim, etc.) — see the
+[Group Support]({{< relref "oidc-configuration#group-support" >}}) section in
+the authentication guide.
+
+```bash
+kubectl create rolebinding <rolebinding-name> \
+  --clusterrole konflux-maintainer-user-actions \
+  --group <group-name> \
+  -n <namespace-name>
+```
+
+Or using a manifest:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: team-alpha-maintainers
+  namespace: my-team-tenant
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: konflux-maintainer-user-actions
+subjects:
+- kind: Group
+  name: team-alpha
+  apiGroup: rbac.authorization.k8s.io
+```
+
+This is the recommended approach for production environments — managing access
+through group memberships in your identity provider is easier to maintain than
+individual user bindings.
+
 ### Granting multiple users access
 
 You can bind multiple users to the same namespace either with individual `RoleBinding`
