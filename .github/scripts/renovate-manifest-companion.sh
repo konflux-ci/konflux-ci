@@ -30,6 +30,65 @@ GITHUB_REPOSITORY="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 BRANCH="bot/manifest-companion-pr-${SOURCE_PR}"
 RENOVATE_PR_URL="https://github.com/${GITHUB_REPOSITORY}/pull/${SOURCE_PR}"
 
+# ---------------------------------------------------------------------------
+# Build an enhanced companion PR title that includes a short dependency hint
+# derived from the source PR title, falling back to the original pattern.
+# ---------------------------------------------------------------------------
+
+# extract_dep_hint <source-pr-title>
+#   Strips conventional-commit prefixes, shortens GitHub/registry URLs to the
+#   trailing repo/image name, and caps the result so the full companion title
+#   stays within a practical length (~120 chars).
+extract_dep_hint() {
+  local raw="$1"
+  # Strip leading conventional-commit scope, e.g. "chore(deps): "
+  local hint="${raw}"
+  hint="${hint#chore(deps): }"
+  hint="${hint#chore: }"
+  hint="${hint#fix(deps): }"
+  hint="${hint#fix: }"
+
+  # Replace full GitHub URLs with the short repo name
+  # e.g. "update https://github.com/konflux-ci/release-service digest"
+  #   -> "update release-service digest"
+  hint="$(echo "${hint}" | sed -E 's|https?://github\.com/[^/]+/([^/ ]+)|\1|g')"
+
+  # Replace full container-image references with image short name
+  # e.g. "update quay.io/konflux-ci/dex docker digest"
+  #   -> "update dex docker digest"
+  hint="$(echo "${hint}" | sed -E 's|[a-zA-Z0-9._-]+\.[a-z]+/[^: ]+/([^: /]+)(:[^ ]*)?|\1|g')"
+
+  # Trim surrounding whitespace
+  hint="$(echo "${hint}" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+
+  # Cap length; truncate with ellipsis if needed
+  local max_hint_len=80
+  if (( ${#hint} > max_hint_len )); then
+    hint="${hint:0:$((max_hint_len - 1))}…"
+  fi
+
+  echo "${hint}"
+}
+
+FALLBACK_TITLE="chore: sync manifests (companion to #${SOURCE_PR})"
+COMPANION_TITLE="${FALLBACK_TITLE}"
+
+SOURCE_PR_TITLE="$(
+  gh pr view "${SOURCE_PR}" \
+    --repo "${GITHUB_REPOSITORY}" \
+    --json title \
+    --jq .title 2>/dev/null || true
+)"
+
+if [[ -n "${SOURCE_PR_TITLE}" ]]; then
+  DEP_HINT="$(extract_dep_hint "${SOURCE_PR_TITLE}")"
+  if [[ -n "${DEP_HINT}" ]]; then
+    COMPANION_TITLE="chore: sync rendered manifests (#${SOURCE_PR}: ${DEP_HINT})"
+  fi
+fi
+
+echo "Companion PR title: ${COMPANION_TITLE}"
+
 if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
   git config --local user.email "github-actions[bot]@users.noreply.github.com"
   git config --local user.name "github-actions[bot]"
@@ -101,7 +160,7 @@ If you expected manifest changes, check the [workflow run logs](${NOOP_RUN_LINK}
   exit 0
 fi
 
-git commit -m "chore: sync rendered manifests (companion to #${SOURCE_PR})
+git commit -m "${COMPANION_TITLE}
 
 Regenerated operator/pkg/manifests and Helm-rendered third-party files to match
 the dependency bump branch. Prefer merging this PR over #${SOURCE_PR} so rendered
@@ -137,13 +196,13 @@ COMPANION_PR=""
 if [[ -n "${EXISTING}" ]]; then
   COMPANION_PR="${EXISTING}"
   echo "Open companion PR already exists: #${COMPANION_PR}"
-  gh pr edit "${COMPANION_PR}" --repo "${GITHUB_REPOSITORY}" --body-file "${BODY_FILE}" || true
+  gh pr edit "${COMPANION_PR}" --repo "${GITHUB_REPOSITORY}" --title "${COMPANION_TITLE}" --body-file "${BODY_FILE}" || true
 else
   gh pr create \
     --repo "${GITHUB_REPOSITORY}" \
     --base main \
     --head "${BRANCH}" \
-    --title "chore: sync manifests (companion to #${SOURCE_PR})" \
+    --title "${COMPANION_TITLE}" \
     --body-file "${BODY_FILE}"
   COMPANION_PR="$(gh pr list --repo "${GITHUB_REPOSITORY}" --head "${BRANCH}" --json number --jq '.[0].number')"
   if [[ -n "${COMPANION_PR}" ]]; then
