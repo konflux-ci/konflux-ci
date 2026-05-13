@@ -558,7 +558,7 @@ spec:
         - /var/run/scripts/konflux-ci.dev/proxy-nginx-generate-loop.sh
         command:
         - bash
-        image: quay.io/konflux-ci/konflux-ui@sha256:ba04b1f265e4dcdb38bbf289baee2173f6dcf6ee4bd1c6d4cdfb4fadbf2c5a82
+        image: quay.io/konflux-ci/konflux-ui@sha256:f3cd59eab1dcff0fb2fdce943871e52260f7b256c3f3d801200cc2d429ff5714
         livenessProbe:
           exec:
             command:
@@ -689,7 +689,7 @@ spec:
         - -R
         - /opt/app-root/src/.
         - /mnt/static-content/
-        image: quay.io/konflux-ci/konflux-ui@sha256:ba04b1f265e4dcdb38bbf289baee2173f6dcf6ee4bd1c6d4cdfb4fadbf2c5a82
+        image: quay.io/konflux-ci/konflux-ui@sha256:f3cd59eab1dcff0fb2fdce943871e52260f7b256c3f3d801200cc2d429ff5714
         name: copy-static-content
         resources:
           limits:
@@ -728,7 +728,7 @@ spec:
           fi
           sed "s/__TEKTON_RESULTS_HOSTNAME__/$results_hostname/" /mnt/nginx-templates/tekton-results.conf > /mnt/nginx-generated-location-config/tekton-results.conf
           chmod 640 /mnt/nginx-generated-location-config/tekton-results.conf
-        image: quay.io/konflux-ci/konflux-ui@sha256:ba04b1f265e4dcdb38bbf289baee2173f6dcf6ee4bd1c6d4cdfb4fadbf2c5a82
+        image: quay.io/konflux-ci/konflux-ui@sha256:f3cd59eab1dcff0fb2fdce943871e52260f7b256c3f3d801200cc2d429ff5714
         name: generate-nginx-configs
         resources:
           limits:
