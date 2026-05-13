@@ -363,6 +363,28 @@ func TestWithVolumeMounts(t *testing.T) {
 	})
 }
 
+func TestWithRunAsUser(t *testing.T) {
+	ctx := DeploymentContext{Replicas: 1}
+
+	t.Run("sets runAsUser on nil security context", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		c := NewContainerOverlay(ctx, WithRunAsUser(1001))
+		g.Expect(c.SecurityContext).NotTo(gomega.BeNil())
+		g.Expect(*c.SecurityContext.RunAsUser).To(gomega.Equal(int64(1001)))
+	})
+
+	t.Run("preserves existing security context fields", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		runAsNonRoot := true
+		c := NewContainerOverlay(ctx,
+			WithSecurityContext(&corev1.SecurityContext{RunAsNonRoot: &runAsNonRoot}),
+			WithRunAsUser(1001),
+		)
+		g.Expect(*c.SecurityContext.RunAsUser).To(gomega.Equal(int64(1001)))
+		g.Expect(*c.SecurityContext.RunAsNonRoot).To(gomega.BeTrue())
+	})
+}
+
 func TestWithSecurityContext(t *testing.T) {
 	ctx := DeploymentContext{Replicas: 1}
 
