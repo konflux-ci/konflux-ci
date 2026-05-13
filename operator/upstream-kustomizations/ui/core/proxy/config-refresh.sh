@@ -10,14 +10,14 @@ BACKEND_AUTH_SNIPPET=/mnt/caddy-snippets/backend-auth.conf
 CADDYFILE=/etc/caddy/Caddyfile
 CADDY_ADMIN=http://localhost:2019
 
-# CA bundle files to watch for content changes. Missing files are
-# silently skipped. When any file's content changes, Caddy is reloaded
-# so tls_trust_pool picks up the new certificates.
-CA_WATCH_PATHS=(
-  /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-  /mnt/trusted-ca/ca-bundle.crt
-  /mnt/service-ca/service-ca.crt
-  /mnt/serving-cert/tls.crt
+# Directories to scan for certificate files (*.crt, *.pem).
+# Any volume mounted under these paths is automatically watched;
+# adding a new CA volume only requires mounting it to this container.
+CA_WATCH_DIRS=(
+  /var/run/secrets/kubernetes.io/serviceaccount
+  /mnt/trusted-ca
+  /mnt/service-ca
+  /mnt/serving-cert
 )
 
 HEARTBEAT_FILE=/mnt/caddy-snippets/config-refresh-heartbeat
@@ -49,11 +49,15 @@ reload_caddy() {
     }
 }
 
-# Read the combined content of all existing CA files. The concatenated
-# output is used as a fingerprint — if any file changes, the output differs.
+# Read the combined content of all cert files found under CA_WATCH_DIRS.
+# The concatenated output is used as a fingerprint — if any file changes,
+# the output differs and triggers a Caddy reload.
 read_ca_content() {
-  for f in "${CA_WATCH_PATHS[@]}"; do
-    [[ -f "${f}" ]] && cat "${f}"
+  for dir in "${CA_WATCH_DIRS[@]}"; do
+    [[ -d "${dir}" ]] || continue
+    for f in "${dir}"/*.crt "${dir}"/*.pem; do
+      [[ -f "${f}" ]] && cat "${f}"
+    done
   done
   true
 }
