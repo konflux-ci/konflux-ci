@@ -39,13 +39,13 @@ resolve_tekton_results() {
 
 # Process tekton-results template
 if [ -f "${TEMPLATES_DIR}/tekton-results.caddy" ]; then
-  hostname=$(resolve_tekton_results) && {
+  if hostname=$(resolve_tekton_results); then
     log "tekton-results resolved to ${hostname}"
     sed "s/__TEKTON_RESULTS_HOSTNAME__/${hostname}/" \
       "${TEMPLATES_DIR}/tekton-results.caddy" > "${SNIPPETS_DIR}/tekton-results.caddy"
-  } || {
+  else
     log "tekton-results not available, skipping"
-  }
+  fi
 fi
 
 # Seed the kube-auth snippet so Caddy can start with a valid Authorization header.

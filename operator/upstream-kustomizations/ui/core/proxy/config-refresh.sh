@@ -16,7 +16,6 @@ CADDY_ADMIN=http://localhost:2019
 CA_WATCH_PATHS=(
   /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
   /mnt/trusted-ca/ca-bundle.crt
-  /mnt/ca.crt
   /mnt/service-ca/service-ca.crt
 )
 
