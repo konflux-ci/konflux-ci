@@ -11,6 +11,14 @@ set -o pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
+# When not in GitHub Actions, export the pinned build bundle (same source as CI). TESTREPO_REVISION
+# is not set here; GitHub Actions writes it from test/e2e/testrepo-revision, Tekton uses
+# export-testrepo-revision-from-pin.sh. Locally omit it for main or eval that script before running.
+if [[ -z "${GITHUB_ENV:-}" ]]; then
+  # shellcheck disable=SC1090
+  eval "$(bash "${REPO_ROOT}/scripts/operator-e2e/prepare-conformance-env.sh" "${REPO_ROOT}")"
+fi
+
 # If kubectl is not available, alias oc as kubectl for this session.
 if ! command -v kubectl &>/dev/null; then
     if command -v oc &>/dev/null; then

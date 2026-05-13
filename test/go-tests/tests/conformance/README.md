@@ -46,4 +46,4 @@ They run against an upstream Konflux instance deployed via scripts in the [konfl
 
 ### Configuration
 
-The test scenarios are defined in [scenarios.go](./config/scenarios.go). Update `UpstreamAppSpecs` to test your own component/repository.
+The test scenarios are defined in [scenarios.go](./config/scenarios.go). Call `UpstreamAppSpecs()` to obtain scenarios. The **testrepo** git revision is **`TESTREPO_REVISION`** when set; otherwise **`main`**. Go code does not read the pin file. **GitHub Actions** sets `TESTREPO_REVISION` from `test/e2e/testrepo-revision` into `GITHUB_ENV` before `./test/e2e/run-e2e.sh`. **Tekton** runs `scripts/operator-e2e/export-testrepo-revision-from-pin.sh` inside `tekton-run-e2e-tests.sh` when the env is unset. **Local** `./test/e2e/run-e2e.sh` does not load the pin; run `eval "$(bash scripts/operator-e2e/export-testrepo-revision-from-pin.sh "$(pwd)")"` first if you want the same SHA as CI. The pin file is Renovate-tracked; override the env for a fork or another revision.

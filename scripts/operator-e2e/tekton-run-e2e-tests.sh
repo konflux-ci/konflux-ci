@@ -77,9 +77,10 @@ fi
   go test . ./pkg/... ${E2E_INTEGRATION_GO_TEST_EXTRA_ARGS:-}
 )
 eval "$(bash scripts/operator-e2e/prepare-conformance-env.sh "${REPO_ROOT}")"
+eval "$(bash scripts/operator-e2e/export-testrepo-revision-from-pin.sh "${REPO_ROOT}")"
 export GITHUB_TOKEN="${GH_TOKEN:-}"
 export MY_GITHUB_ORG="${GH_ORG:-}"
 export QUAY_TOKEN=""
-export E2E_APPLICATIONS_NAMESPACE=user-ns2
+export E2E_APPLICATIONS_NAMESPACE=default-tenant
 JUNIT="${REPO_ROOT}/junit-conformance.xml"
 bash scripts/operator-e2e/run-conformance-tests.sh "${REPO_ROOT}" "${JUNIT}"

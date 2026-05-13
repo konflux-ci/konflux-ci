@@ -9,6 +9,7 @@ import (
 	"time"
 
 	buildcontrollers "github.com/konflux-ci/build-service/controllers"
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/devfile/library/v2/pkg/util"
 	"github.com/google/go-github/v44/github"
@@ -63,7 +64,7 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 	var buildPipelineAnnotation map[string]string
 	var componentNewBaseBranch, gitRevision, componentRepositoryName, componentName string
 
-	for _, appSpec := range e2eConfig.UpstreamAppSpecs {
+	for _, appSpec := range e2eConfig.UpstreamAppSpecs() {
 		appSpec := appSpec
 		if appSpec.Skip {
 			continue
@@ -145,6 +146,20 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				)).To(gomega.Succeed())
 
 				gomega.Eventually(func() error {
+					createdApplication, getErr := fw.AsKubeAdmin.HasController.GetApplication(appSpec.ApplicationName, userNamespace)
+					if getErr != nil {
+						return getErr
+					}
+					if createdApplication.Spec.DisplayName != appSpec.ApplicationName {
+						return fmt.Errorf("application displayName %q, want %q", createdApplication.Spec.DisplayName, appSpec.ApplicationName)
+					}
+					if createdApplication.Namespace != userNamespace {
+						return fmt.Errorf("application namespace %q, want %q", createdApplication.Namespace, userNamespace)
+					}
+					return nil
+				}, time.Minute*2, time.Second*5).Should(gomega.Succeed(), "timed out waiting for Application created by setup-component.sh")
+
+				gomega.Eventually(func() error {
 					var getErr error
 					component, getErr = fw.AsKubeAdmin.HasController.GetComponent(componentName, userNamespace)
 					if getErr != nil {
@@ -153,8 +168,42 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 					if component.Spec.Application != appSpec.ApplicationName {
 						return fmt.Errorf("component %s/%s points to application %q, expected %q", userNamespace, componentName, component.Spec.Application, appSpec.ApplicationName)
 					}
+					if component.Spec.Source.GitSource == nil {
+						return fmt.Errorf("component %s/%s has no git source", userNamespace, componentName)
+					}
+					if component.Spec.Source.GitSource.URL != appSpec.ComponentSpec.GitSourceUrl {
+						return fmt.Errorf("component git url %q, want %q", component.Spec.Source.GitSource.URL, appSpec.ComponentSpec.GitSourceUrl)
+					}
+					if component.Spec.Source.GitSource.Revision != gitRevision {
+						return fmt.Errorf("component git revision %q, want %q", component.Spec.Source.GitSource.Revision, gitRevision)
+					}
+					if component.Spec.Source.GitSource.Context != appSpec.ComponentSpec.GitSourceContext {
+						return fmt.Errorf("component git context %q, want %q", component.Spec.Source.GitSource.Context, appSpec.ComponentSpec.GitSourceContext)
+					}
+					if component.Spec.Source.GitSource.DockerfileURL != appSpec.ComponentSpec.DockerFilePath {
+						return fmt.Errorf("component dockerfileUrl %q, want %q", component.Spec.Source.GitSource.DockerfileURL, appSpec.ComponentSpec.DockerFilePath)
+					}
+					if got := component.Annotations["build.appstudio.openshift.io/request"]; got != constants.ComponentPaCRequestAnnotation["build.appstudio.openshift.io/request"] {
+						return fmt.Errorf("component annotation build.appstudio.openshift.io/request %q, want %q", got, constants.ComponentPaCRequestAnnotation["build.appstudio.openshift.io/request"])
+					}
+					if got := component.Annotations["build.appstudio.openshift.io/pipeline"]; got != buildPipelineJSON {
+						return fmt.Errorf("component annotation build.appstudio.openshift.io/pipeline mismatch: got len %d want len %d", len(got), len(buildPipelineJSON))
+					}
+					wantImg := constants.ImageControllerAnnotationRequestPublicRepo["image.redhat.com/generate"]
+					if got := component.Annotations["image.redhat.com/generate"]; got != wantImg {
+						return fmt.Errorf("component annotation image.redhat.com/generate %q, want %q", got, wantImg)
+					}
+					if v, ok := component.Annotations["skip-initial-checks"]; ok && v != "false" {
+						return fmt.Errorf("component skip-initial-checks %q, want absent or \"false\"", v)
+					}
 					return nil
-				}, time.Minute*2, time.Second*5).Should(gomega.Succeed(), "timed out waiting for Component created by setup-component.sh")
+				}, time.Minute*2, time.Second*5).Should(gomega.Succeed(), "timed out waiting for Component created by setup-component.sh with expected spec and annotations")
+
+				gomega.Expect(utils.WaitUntilWithInterval(
+					fw.AsKubeAdmin.HasController.CheckImageRepositoryExists(userNamespace, componentName),
+					time.Second*10,
+					time.Minute*15,
+				)).To(gomega.Succeed(), "timed out waiting for image repository for component %s", componentName)
 
 				expectedITSName := fmt.Sprintf("%s-integration", componentName)
 				gomega.Eventually(func() error {
@@ -163,13 +212,53 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 						return getErr
 					}
 					for i := range *scenarios {
-						if (*scenarios)[i].Name == expectedITSName {
-							integrationTestScenario = &(*scenarios)[i]
-							return nil
+						if (*scenarios)[i].Name != expectedITSName {
+							continue
 						}
+						candidate := (*scenarios)[i].DeepCopy()
+						if candidate.Spec.Application != appSpec.ApplicationName {
+							return fmt.Errorf("ITS %s application %q, want %q", expectedITSName, candidate.Spec.Application, appSpec.ApplicationName)
+						}
+						if candidate.Spec.ResolverRef.Resolver != "git" {
+							return fmt.Errorf("ITS %s resolver %q, want git", expectedITSName, candidate.Spec.ResolverRef.Resolver)
+						}
+						url, ok := integrationScenarioResolverParam(candidate, "url")
+						if !ok || url != its.GitURL {
+							return fmt.Errorf("ITS %s resolver url %q, want %q", expectedITSName, url, its.GitURL)
+						}
+						rev, ok := integrationScenarioResolverParam(candidate, "revision")
+						if !ok || rev != its.GitRevision {
+							return fmt.Errorf("ITS %s resolver revision %q, want %q", expectedITSName, rev, its.GitRevision)
+						}
+						path, ok := integrationScenarioResolverParam(candidate, "pathInRepo")
+						if !ok || path != its.TestPath {
+							return fmt.Errorf("ITS %s resolver pathInRepo %q, want %q", expectedITSName, path, its.TestPath)
+						}
+						if got := candidate.Labels["test.appstudio.openshift.io/optional"]; got != constants.IntegrationTestScenarioDefaultLabels["test.appstudio.openshift.io/optional"] {
+							return fmt.Errorf("ITS %s optional label %q, want %q", expectedITSName, got, constants.IntegrationTestScenarioDefaultLabels["test.appstudio.openshift.io/optional"])
+						}
+						integrationTestScenario = candidate
+						return nil
 					}
 					return fmt.Errorf("integration test scenario %s not found in namespace %s", expectedITSName, userNamespace)
 				}, time.Minute*2, time.Second*5).Should(gomega.Succeed(), "timed out waiting for IntegrationTestScenario created by setup-component.sh")
+
+				gomega.Eventually(func() error {
+					sa, err := fw.AsKubeAdmin.CommonController.KubeInterface().CoreV1().ServiceAccounts(defaultTenantNamespace).Get(
+						context.Background(), konfluxIntegrationRunnerSAName, metav1.GetOptions{})
+					if err != nil {
+						return fmt.Errorf("get integration runner SA: %w", err)
+					}
+					if !localObjectRefNamesContains(sa.ImagePullSecrets, defaultTenantInternalRegistryCred) {
+						return fmt.Errorf("SA %s/%s imagePullSecrets missing %q", defaultTenantNamespace, konfluxIntegrationRunnerSAName, defaultTenantInternalRegistryCred)
+					}
+					if !objectRefNamesContains(sa.Secrets, defaultTenantInternalRegistryCred) {
+						return fmt.Errorf("SA %s/%s secrets list missing %q", defaultTenantNamespace, konfluxIntegrationRunnerSAName, defaultTenantInternalRegistryCred)
+					}
+					return nil
+				}, time.Minute*3, time.Second*5).Should(gomega.Succeed(),
+					"default-tenant konflux-integration-runner should reference %q (operator attaches internal-registry creds for Conforma)",
+					defaultTenantInternalRegistryCred)
 			})
 
 			// --- PaC Pull Request & Build ---
@@ -446,3 +535,30 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 		})
 	}
 })
+
+func integrationScenarioResolverParam(its *integrationv1beta2.IntegrationTestScenario, name string) (string, bool) {
+	for _, p := range its.Spec.ResolverRef.Params {
+		if p.Name == name {
+			return p.Value, true
+		}
+	}
+	return "", false
+}
+
+func localObjectRefNamesContains(refs []corev1.LocalObjectReference, name string) bool {
+	for _, r := range refs {
+		if r.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func objectRefNamesContains(refs []corev1.ObjectReference, name string) bool {
+	for _, r := range refs {
+		if r.Name == name {
+			return true
+		}
+	}
+	return false
+}

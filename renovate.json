@@ -304,6 +304,20 @@
       "extractVersionTemplate": "^v?(?<version>.*)$"
     },
     {
+      "description": "Pin konflux-ci/testrepo main HEAD for conformance (TESTREPO_REVISION / test/e2e/testrepo-revision)",
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["^test/e2e/testrepo-revision$"],
+      "matchStrings": [
+        "# renovate: datasource=git-refs depName=https://github.com/konflux-ci/testrepo",
+        "(?m)^(?<currentDigest>[a-f0-9]{40})\\s*$"
+      ],
+      "datasourceTemplate": "git-refs",
+      "depNameTemplate": "https://github.com/konflux-ci/testrepo",
+      "currentValueTemplate": "main",
+      "autoReplaceStringTemplate": "{{newDigest}}"
+    },
+    {
       "description": "Track sigstore scaffold Helm chart version in install script",
       "customType": "regex",
       "fileMatch": ["integrations/sigstore/install\\.sh$"],

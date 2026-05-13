@@ -25,4 +25,9 @@ const (
 	// test metadata
 	devEnvTestLabel          = "konflux"
 	upstreamKonfluxTestLabel = "upstream-konflux"
+
+	// default-tenant operator wiring (internal registry pull secret on integration runner SA)
+	defaultTenantNamespace            = "default-tenant"
+	konfluxIntegrationRunnerSAName    = "konflux-integration-runner"
+	defaultTenantInternalRegistryCred = "regcred-internal-registry"
 )

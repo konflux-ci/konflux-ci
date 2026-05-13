@@ -274,12 +274,13 @@ jobs:
           cd test/go-tests
           go test . ./pkg/...
 
-      - name: Set build pipeline bundle (min)
+      - name: Set E2E conformance pins (build bundle + testrepo revision)
         if: matrix.test_scope == 'integration+e2e'
         working-directory: ${{ github.workspace }}
         run: |
           BUNDLE=$(yq eval-all 'select(.kind == "ConfigMap" and .metadata.name == "build-pipeline-config") | .data["config.yaml"]' operator/pkg/manifests/build-service/manifests.yaml | yq eval '.pipelines[] | select(.name == "docker-build-oci-ta-min") | .bundle' -)
           echo "CUSTOM_DOCKER_BUILD_OCI_TA_MIN_PIPELINE_BUNDLE=$BUNDLE" >> $GITHUB_ENV
+          bash scripts/operator-e2e/export-testrepo-revision-from-pin.sh "${GITHUB_WORKSPACE}"
 
       - name: Run E2E tests
         if: matrix.test_scope == 'integration+e2e'

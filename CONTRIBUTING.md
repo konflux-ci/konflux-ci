@@ -144,11 +144,10 @@ and ARM64 architectures. There are **two test suites** in `test/go-tests`:
   `test/e2e/e2e.env.template` to `test/e2e/e2e.env`, fill in the values, then
   source it and run (from repo root): `source test/e2e/e2e.env` then `./test/e2e/run-e2e.sh`
   The E2E test code lives in `test/go-tests/tests/conformance/` and is maintained in this repo.
-  The default release catalog revision is `CATALOG_REVISION` in `operator/upstream-kustomizations/cli/setup-release.sh` (Renovate-tracked). Conformance tests that need a pinned build pipeline bundle read `CUSTOM_DOCKER_BUILD_OCI_TA_MIN_PIPELINE_BUNDLE` from the same `build-service` manifests as CI; the Tekton flow sets that via `scripts/operator-e2e/prepare-conformance-env.sh`.
+  The default release catalog revision is `CATALOG_REVISION` in `operator/upstream-kustomizations/cli/setup-release.sh` (Renovate-tracked). Conformance tests that need a pinned build pipeline bundle read `CUSTOM_DOCKER_BUILD_OCI_TA_MIN_PIPELINE_BUNDLE` from the same `build-service` manifests as CI; the Tekton flow sets that via `scripts/operator-e2e/prepare-conformance-env.sh`. The **testrepo** git revision is `TESTREPO_REVISION` when set (GitHub Actions writes it from `test/e2e/testrepo-revision` into `GITHUB_ENV`; Tekton uses `scripts/operator-e2e/export-testrepo-revision-from-pin.sh`); otherwise conformance uses **`main`**. Local `./test/e2e/run-e2e.sh` does not read the pin file—export `TESTREPO_REVISION` yourself or `eval` the export script if you need the pinned SHA instead of `main`.
 
 Workflow `.github/workflows/operator-test-e2e.yaml` runs both suites when
-operator-related changes are detected: first integration (`go test .`), then E2E
-(env set from secrets, then the same `go test` command).
+operator-related changes are detected: first integration (`cd test/go-tests && go test . ./pkg/...`), then E2E (`./test/e2e/run-e2e.sh` with secrets and `GITHUB_ENV` pins for the bundle and testrepo revision).
 
 ## OpenShift CI Periodic Tests
 

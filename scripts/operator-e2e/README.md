@@ -38,13 +38,14 @@ Use **one token per flag** where possible (e.g. `-ginkgo.skip=Flaky`). Values wi
 | Script | Purpose |
 |--------|---------|
 | `prepare-conformance-env.sh` | Exports `CUSTOM_DOCKER_BUILD_OCI_TA_MIN_PIPELINE_BUNDLE` from `operator/pkg/manifests/build-service/manifests.yaml` (same pin as GitHub Actions E2E). |
-| `run-conformance-tests.sh` | Runs conformance tests. Requires `GH_ORG`, `GH_TOKEN` (conformance clears `QUAY_TOKEN` for the test run). |
+| `export-testrepo-revision-from-pin.sh` | When `TESTREPO_REVISION` is unset and `test/e2e/testrepo-revision` exists, reads the pin (first non-`#` line). With `GITHUB_ENV` set, appends `TESTREPO_REVISION=...`; otherwise prints `export ...` for `eval`. Used by `tekton-run-e2e-tests.sh` and operator E2E workflow pins. |
+| `run-conformance-tests.sh` | Runs conformance tests. Requires `GH_ORG`, `GH_TOKEN` (conformance clears `QUAY_TOKEN` for the test run). Does not set `TESTREPO_REVISION` from the pin; callers (GitHub Actions env, `tekton-run-e2e-tests.sh`, or you) must export it or rely on **`main`**. |
 | `tekton-fetch-kubeconfig.sh` | **Tekton:** decodes kubeconfig from Secret into `/mnt/e2e-shared/kubeconfig`. Args: `SECRET_NAME` `[KEY]`. Env: `POD_NAMESPACE`. |
 | `tekton-copy-shared-tools.sh` | **Tekton:** copies `kubectl`, `yq`, `jq` into `/mnt/e2e-shared/bin` and **`jq`’s shared libraries** (`libjq`, `libonig`) into `/mnt/e2e-shared/lib` for `ubi10/go-toolset` steps. |
 | `tekton-deploy-prep.sh` | **Tekton (go-toolset):** optional overrides via `operator/cmd/overrides`, then `deploy-local.sh` with `OPERATOR_INSTALL_METHOD=none`. |
 | `tekton-push-operator-pkg-manifests-oci.sh` | **Tekton (task-runner):** after prep, push `operator/pkg/manifests` to OCI as `${oci-container-repo}:${pipelineRun}.pkg-manifests` (skips if `E2E_OCI_CONTAINER_REPO` blank). |
 | `tekton-deploy-operator-and-wait.sh` | **Tekton (go-toolset):** `make install`/build, `bin/manager`, apply CR, wait Ready. |
-| `tekton-run-e2e-tests.sh` | **Tekton:** waits for Konflux Ready, `deploy-test-resources.sh` (`SKIP_SAMPLE_COMPONENTS=true`), integration + conformance `go test`. Optional env: `E2E_INTEGRATION_GO_TEST_EXTRA_ARGS`, `E2E_CONFORMANCE_GO_TEST_EXTRA_ARGS` (space-separated; pipeline params `integration-go-test-extra-args` / `conformance-go-test-extra-args` set these). |
+| `tekton-run-e2e-tests.sh` | **Tekton:** waits for Konflux Ready, `deploy-test-resources.sh` (`SKIP_SAMPLE_COMPONENTS=true`), integration + conformance `go test`. Sets bundle via `prepare-conformance-env.sh` and `TESTREPO_REVISION` via `export-testrepo-revision-from-pin.sh` when unset. Optional env: `E2E_INTEGRATION_GO_TEST_EXTRA_ARGS`, `E2E_CONFORMANCE_GO_TEST_EXTRA_ARGS` (space-separated; pipeline params `integration-go-test-extra-args` / `conformance-go-test-extra-args` set these). |
 
 ## Override YAML schema
 

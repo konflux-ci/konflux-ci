@@ -43,6 +43,7 @@ Reads keys from Secret `konflux-operator-e2e-credentials` in the Task namespace:
 
 ## Notes
 
+- Conformance uses the same pins as GitHub E2E where applicable: `tekton-run-e2e-tests.sh` runs `prepare-conformance-env.sh` (build bundle) and `export-testrepo-revision-from-pin.sh` (`TESTREPO_REVISION` when unset and `test/e2e/testrepo-revision` exists); see `scripts/operator-e2e/README.md`.
 - This Task waits for the `konflux/konflux` resource to exist and be `Ready`, then runs:
   - `deploy-test-resources.sh` (with `SKIP_SAMPLE_COMPONENTS=true`)
   - `go test . ./pkg/...` under `test/go-tests` (integration)

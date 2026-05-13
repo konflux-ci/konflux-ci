@@ -14,6 +14,8 @@ spec:
   description: >-
     Clone konflux-ci (git-url/revision), fetch kubeconfig, copy shared CLIs, wait for Konflux CR Ready,
     then run deploy-test-resources, integration tests, and conformance tests.
+    Conformance loads TESTREPO_REVISION via scripts/operator-e2e/export-testrepo-revision-from-pin.sh
+    when unset (then Go uses main).
   volumes:
     - name: repo
       emptyDir: {}
