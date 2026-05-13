@@ -127,6 +127,12 @@ spec:
           subPath: ns-lister-headers.conf
           name: proxy-caddyfile
           readOnly: true
+        - name: trusted-ca
+          mountPath: /mnt/trusted-ca
+          readOnly: true
+        - name: service-ca
+          mountPath: /mnt/service-ca
+          readOnly: true
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
