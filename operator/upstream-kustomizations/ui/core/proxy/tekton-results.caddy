@@ -1,0 +1,17 @@
+handle_path /api/k8s/plugins/tekton-results/* {
+    route {
+        forward_auth 127.0.0.1:6000 {
+            uri /oauth2/auth
+            copy_headers X-Auth-Request-Email X-Auth-Request-Groups
+        }
+        import /etc/caddy/impersonate-groups.conf
+        import /etc/caddy/impersonate-headers.conf
+        reverse_proxy https://__TEKTON_RESULTS_HOSTNAME__:8080 {
+            # TODO: switch to backend-auth.conf once Tekton Results is configured
+            # to accept the "konflux-backend" audience in its TokenReview.
+            # See backend-token volume in proxy.yaml for context.
+            import /mnt/caddy-snippets/kube-auth.conf
+            import /mnt/caddy-snippets/backend-tls.conf
+        }
+    }
+}

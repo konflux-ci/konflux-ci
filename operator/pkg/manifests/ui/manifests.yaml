@@ -108,315 +108,466 @@ subjects:
 ---
 apiVersion: v1
 data:
-  nginx.conf: |
-    worker_processes auto;
-    error_log /var/log/nginx/error.log;
-    pid /run/nginx.pid;
-
-    # Load dynamic modules. See /usr/share/doc/nginx/README.dynamic.
-    include /usr/share/nginx/modules/*.conf;
-
-    events {
-        worker_connections 1024;
-    }
-
-    http {
-        log_format upstreamlog '[$time_local] $remote_addr - $remote_user - $server_name $host to: $proxy_host  $upstream_addr: $request $status upstream_response_time $upstream_response_time msec $msec request_time $request_time';
-        access_log /dev/stderr upstreamlog;
-        error_log /dev/stderr;
-
-        sendfile on;
-        tcp_nopush on;
-        tcp_nodelay on;
-        keepalive_timeout 65;
-        types_hash_max_size 4096;
-
-        default_type application/octet-stream;
-        include /etc/nginx/mime.types;
-
-        map $http_upgrade $connection_upgrade {
-            default upgrade;
-            '' close;
-        }
-
-        map $request_method $ns_target {
-            GET     @namespacelister;
-            default @kubeapi;
-        }
-
-        server {
-            listen 9443 ssl;
-            ssl_certificate /mnt/tls.crt;
-            ssl_certificate_key /mnt/tls.key;
-            server_name _;
-            root /opt/app-root/src;
-
-            location / {
-                alias /opt/app-root/src/static-content/;
-                try_files $uri /index.html;
+  tekton-results.caddy: |
+    handle_path /api/k8s/plugins/tekton-results/* {
+        route {
+            forward_auth 127.0.0.1:6000 {
+                uri /oauth2/auth
+                copy_headers X-Auth-Request-Email X-Auth-Request-Groups
             }
-
-            location = /404.html {
+            import /etc/caddy/impersonate-groups.conf
+            import /etc/caddy/impersonate-headers.conf
+            reverse_proxy https://__TEKTON_RESULTS_HOSTNAME__:8080 {
+                # TODO: switch to backend-auth.conf once Tekton Results is configured
+                # to accept the "konflux-backend" audience in its TokenReview.
+                # See backend-token volume in proxy.yaml for context.
+                import /mnt/caddy-snippets/kube-auth.conf
+                import /mnt/caddy-snippets/backend-tls.conf
             }
-
-            location /segment {
-                default_type text/plain;
-            }
-
-            location = /oauth2/auth {
-                internal;
-                proxy_pass       http://127.0.0.1:6000;
-                proxy_set_header Host             $host;
-                proxy_set_header X-Real-IP        $remote_addr;
-                proxy_set_header X-Scheme         $scheme;
-                # nginx auth_request includes headers but not body
-                proxy_set_header Content-Length   "";
-                proxy_pass_request_body           off;
-            }
-
-            location /oauth2/ {
-                proxy_pass       http://127.0.0.1:6000/oauth2/;
-                proxy_set_header Host             $host;
-                proxy_set_header X-Real-IP        $remote_addr;
-                proxy_set_header X-Scheme         $scheme;
-            }
-
-            location /api/k8s/ {
-                # Kube-API
-                auth_request /oauth2/auth;
-
-                proxy_pass https://kubernetes.default.svc/;
-                proxy_read_timeout 30m;
-                include /mnt/nginx-generated-config/auth.conf;
-            }
-
-            location /wss/k8s/ {
-                auth_request /oauth2/auth;
-
-                proxy_pass https://kubernetes.default.svc/;
-                proxy_http_version 1.1;
-                proxy_set_header Upgrade $http_upgrade;
-                proxy_set_header Connection $connection_upgrade;
-                proxy_read_timeout 30m;
-                include /mnt/nginx-generated-config/auth.conf;
-            }
-
-            location /health {
-                # Used for liveness probes
-                return 200;
-            }
-
-            # GET requests to /api/k8s/api/v1/namespaces and /api/k8s/api/v1/namespaces/
-            # are handled from the namespace-lister.
-            # Requests with other methods are handled by the Kube-API
-            location = /api/k8s/api/v1/namespaces {
-                try_files /dev/null $ns_target;
-            }
-            location = /api/k8s/api/v1/namespaces/ {
-                try_files /dev/null $ns_target;
-            }
-
-            location @namespacelister {
-                auth_request_set $email  $upstream_http_x_auth_request_email;
-                auth_request /oauth2/auth;
-                proxy_read_timeout 30m;
-                proxy_set_header X-User $email;
-                proxy_set_header X-Group system:authenticated;
-                proxy_hide_header X-Correlation-ID;
-
-                rewrite ^.*$ /api/v1/namespaces break;
-
-                proxy_pass https://namespace-lister.namespace-lister.svc.cluster.local:8080;
-            }
-
-            location @kubeapi {
-                auth_request /oauth2/auth;
-                proxy_read_timeout 30m;
-
-                rewrite ^/api/k8s/(.*)/$ /$1 break;
-
-                proxy_pass https://kubernetes.default.svc;
-                include /mnt/nginx-generated-config/auth.conf;
-            }
-
-            location /idp/ {
-                # Identity Provider
-                proxy_set_header    Host               $host;
-                proxy_set_header    X-Real-IP          $remote_addr;
-                proxy_set_header    X-Forwarded-For    $proxy_add_x_forwarded_for;
-                proxy_set_header    X-Forwarded-Host   $host;
-                proxy_set_header    X-Forwarded-Server $host;
-                proxy_set_header    X-Forwarded-Port   9443;
-                proxy_set_header    X-Forwarded-Proto  $scheme;
-                proxy_pass https://dex.konflux-ui.svc.cluster.local:9443;
-            }
-
-            include /mnt/nginx-generated-location-config/*.conf;
-
-            include /mnt/nginx-additional-location-configs/*.conf;
         }
     }
 kind: ConfigMap
 metadata:
-  name: proxy-5f87fc6759
+  name: proxy-caddy-templates-gd7k26k2h2
   namespace: konflux-ui
 ---
 apiVersion: v1
 data:
-  proxy-nginx-generate-loop-probe.sh: |
-    #!/bin/bash
+  Caddyfile: |
+    {
+        auto_https off
+        admin localhost:2019
+    }
 
-    set -euo pipefail
+    # TODO: protect metrics with kube-rbac-proxy sidecar (https://github.com/openshift/kube-rbac-proxy)
+    :2112 {
+        metrics /metrics
+    }
 
-    for cmd in date stat; do
-      command -v "${cmd}" >/dev/null 2>&1 || { echo "required command not found: ${cmd}"; exit 1; }
-    done
+    :9443 {
+        tls /mnt/tls.crt /mnt/tls.key
 
-    AUTH_CONF_FILE=/mnt/nginx-generated-config/auth.conf
-    AUTH_CONF_NEW_FILE=/mnt/nginx-generated-config/auth.conf.new
+        # Strip any client-supplied impersonation and proxy-auth headers to
+        # prevent spoofing. This runs at the server level, before any
+        # handle/route blocks.
+        request_header -Impersonate-User
+        request_header -Impersonate-Group
+        request_header -Impersonate-Uid
+        request_header -Impersonate-Extra-*
+        request_header -X-User
+        request_header -X-Group
 
-    { [ -f "${AUTH_CONF_NEW_FILE}" ] && [ $(( $(date +%s) - $(stat -c %Y "${AUTH_CONF_NEW_FILE}") )) -lt 60 ]; } || \
-      { [ -f "${AUTH_CONF_FILE}" ] && [ $(( $(date +%s) - $(stat -c %Y "${AUTH_CONF_FILE}") )) -lt 60 ]; }
-  proxy-nginx-generate-loop.sh: |
+        # Health endpoint for liveness/readiness probes
+        handle /health {
+            respond 200
+        }
+
+        # Segment bridge files
+        handle /segment/* {
+            root * /opt/app-root/src
+            header Content-Type text/plain
+            file_server
+        }
+
+        # OAuth2 proxy - browser-facing auth UI/callback
+        handle /oauth2/* {
+            reverse_proxy 127.0.0.1:6000
+        }
+
+        # Namespace lister (GET only on exact paths)
+        # The namespace-lister performs in-memory RBAC authorization: it checks
+        # RoleBindings for the user AND their groups to decide which namespaces
+        # to return. Without group headers, a user only sees namespaces where
+        # they are bound individually — group-based bindings are invisible.
+        # We use the same map + request_header pattern as the Kube API routes
+        # (see ns-lister-headers.conf) to split groups into multiple X-Group
+        # headers, which namespace-lister reads via req.Header.Values().
+        @nsListGet {
+            method GET
+            path /api/k8s/api/v1/namespaces /api/k8s/api/v1/namespaces/
+        }
+        handle @nsListGet {
+            route {
+                forward_auth 127.0.0.1:6000 {
+                    uri /oauth2/auth
+                    copy_headers X-Auth-Request-Email X-Auth-Request-Groups
+                }
+                import /etc/caddy/impersonate-groups.conf
+                import /etc/caddy/ns-lister-headers.conf
+                rewrite * /api/v1/namespaces
+                reverse_proxy https://namespace-lister.namespace-lister.svc.cluster.local:8080 {
+                    header_down -X-Correlation-ID
+                    transport http {
+                        tls_trust_pool file /mnt/trusted-ca/ca-bundle.crt
+                    }
+                }
+            }
+        }
+
+        # Backend snippets (tekton-results, kubearchive, etc.) loaded from init-generated configs
+        import /mnt/caddy-snippets/*.caddy
+
+        # --- Group impersonation ---
+        #
+        # The Kubernetes API requires each group to be sent as a separate
+        # Impersonate-Group header. oauth2-proxy returns all groups in a single
+        # comma-separated X-Auth-Request-Groups header (e.g. "group1,group2").
+        #
+        # We split them using a two-step approach:
+        #
+        # 1. impersonate-groups.conf — a Caddy `map` directive that extracts up
+        #    to 10 individual groups from the comma-separated header into
+        #    placeholders {ig1}…{ig10} via a regex with capture groups.
+        #
+        # 2. impersonate-headers.conf — `request_header +Impersonate-Group`
+        #    directives that add one header per placeholder, plus a static
+        #    "system:authenticated" group that is always included.
+        #
+        # Why request_header instead of header_up (reverse_proxy)?
+        #   Caddy's reverse_proxy `header_up` merges all operations for the same
+        #   header into a single HeaderOps struct and applies them as:
+        #   set → add → delete. When both `header_up Impersonate-Group` (set) and
+        #   `header_up +Impersonate-Group` (add) target the same header, the set
+        #   operation overwrites the add — only the first value survives. Using
+        #   `request_header` as a standalone handler in the route chain avoids
+        #   this: the server-level delete (above) runs first, then the route-level
+        #   add runs later in a separate handler, so all values are preserved.
+        #
+        # Why route { } blocks?
+        #   Caddy's default directive ordering sorts `map` before `forward_auth`,
+        #   so the map would read X-Auth-Request-Groups before forward_auth has
+        #   copied it from the auth response. Wrapping in `route` preserves the
+        #   written order: forward_auth → map → request_header → reverse_proxy.
+
+        # WebSocket to Kube API
+        handle_path /wss/k8s/* {
+            route {
+                forward_auth 127.0.0.1:6000 {
+                    uri /oauth2/auth
+                    copy_headers X-Auth-Request-Email X-Auth-Request-Groups
+                }
+                import /etc/caddy/impersonate-groups.conf
+                import /etc/caddy/impersonate-headers.conf
+                reverse_proxy https://kubernetes.default.svc {
+                    import /mnt/caddy-snippets/kube-auth.conf
+                    transport http {
+                        tls_trust_pool file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                    }
+                }
+            }
+        }
+
+        # Kube API (catch-all for /api/k8s/)
+        handle_path /api/k8s/* {
+            route {
+                forward_auth 127.0.0.1:6000 {
+                    uri /oauth2/auth
+                    copy_headers X-Auth-Request-Email X-Auth-Request-Groups
+                }
+                import /etc/caddy/impersonate-groups.conf
+                import /etc/caddy/impersonate-headers.conf
+                reverse_proxy https://kubernetes.default.svc {
+                    import /mnt/caddy-snippets/kube-auth.conf
+                    transport http {
+                        tls_trust_pool file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                    }
+                }
+            }
+        }
+
+        # Dex Identity Provider
+        handle /idp/* {
+            reverse_proxy https://dex.konflux-ui.svc.cluster.local:9443 {
+                header_up X-Forwarded-Port "9443"
+                transport http {
+                    tls_trust_pool file /mnt/ca.crt
+                }
+            }
+        }
+
+        # Static SPA (catch-all, must be last)
+        handle {
+            root * /opt/app-root/src/static-content
+            try_files {path} /index.html
+            file_server
+        }
+    }
+  impersonate-groups.conf: |
+    # Extract up to 10 comma-separated groups from the auth proxy header into
+    # individual placeholders so each can be sent as a separate Impersonate-Group
+    # header to the Kubernetes API server.
+    # This MUST run after forward_auth has set X-Auth-Request-Groups.
+    map {http.request.header.X-Auth-Request-Groups} {ig1} {ig2} {ig3} {ig4} {ig5} {ig6} {ig7} {ig8} {ig9} {ig10} {
+        ~^([^,]+)(?:,([^,]+))?(?:,([^,]+))?(?:,([^,]+))?(?:,([^,]+))?(?:,([^,]+))?(?:,([^,]+))?(?:,([^,]+))?(?:,([^,]+))?(?:,([^,]+))?$ "${1}" "${2}" "${3}" "${4}" "${5}" "${6}" "${7}" "${8}" "${9}" "${10}"
+        default "" "" "" "" "" "" "" "" "" ""
+    }
+  impersonate-headers.conf: |
+    # Set impersonation headers on the request. Client-supplied Impersonate-*
+    # headers are stripped at the server level before reaching this handler.
+    request_header Impersonate-User {http.request.header.X-Auth-Request-Email}
+    request_header +Impersonate-Group {ig1}
+    request_header +Impersonate-Group {ig2}
+    request_header +Impersonate-Group {ig3}
+    request_header +Impersonate-Group {ig4}
+    request_header +Impersonate-Group {ig5}
+    request_header +Impersonate-Group {ig6}
+    request_header +Impersonate-Group {ig7}
+    request_header +Impersonate-Group {ig8}
+    request_header +Impersonate-Group {ig9}
+    request_header +Impersonate-Group {ig10}
+    request_header +Impersonate-Group "system:authenticated"
+  ns-lister-headers.conf: |
+    # Set user/group headers for the namespace-lister service.
+    # Client-supplied X-User and X-Group headers are stripped at the server
+    # level before reaching this handler.
+    request_header X-User {http.request.header.X-Auth-Request-Email}
+    request_header +X-Group {ig1}
+    request_header +X-Group {ig2}
+    request_header +X-Group {ig3}
+    request_header +X-Group {ig4}
+    request_header +X-Group {ig5}
+    request_header +X-Group {ig6}
+    request_header +X-Group {ig7}
+    request_header +X-Group {ig8}
+    request_header +X-Group {ig9}
+    request_header +X-Group {ig10}
+    request_header +X-Group "system:authenticated"
+kind: ConfigMap
+metadata:
+  name: proxy-caddyfile-7ch57t7bt7
+  namespace: konflux-ui
+---
+apiVersion: v1
+data:
+  config-refresh-probe.sh: |
+    #!/bin/sh
+
+    set -eu
+
+    CADDY_ADMIN=http://localhost:2019
+    AUTH_SNIPPET=/mnt/caddy-snippets/kube-auth.conf
+    HEARTBEAT_FILE=/mnt/caddy-snippets/config-refresh-heartbeat
+    MAX_AGE=30
+
+    curl -sf "${CADDY_ADMIN}/config/" > /dev/null 2>&1 || exit 1
+
+    [ -s "${AUTH_SNIPPET}" ] || exit 1
+
+    # Verify the refresh loop is still running by checking heartbeat age.
+    [ -f "${HEARTBEAT_FILE}" ] || exit 1
+    last_beat=$(cat "${HEARTBEAT_FILE}")
+    now=$(date +%s)
+    age=$((now - last_beat))
+    [ "${age}" -le "${MAX_AGE}" ] || exit 1
+  config-refresh.sh: |
     #!/bin/bash
 
     set -euo pipefail
 
     RETRY_INTERVAL=10
     TOKEN_FILEPATH=/var/run/secrets/konflux-ci.dev/serviceaccount/token
-    AUTH_CONF_FILE=/mnt/nginx-generated-config/auth.conf.new
-    AUTH_CONF_TMP_FILE=/mnt/nginx-generated-config/auth.conf.new.tmp
-    AUTH_CONF_TEMPLATE_FILE=/mnt/nginx-templates/auth.conf
+    BACKEND_TOKEN_FILEPATH=/var/run/secrets/konflux-ci.dev/backend/token
+    AUTH_SNIPPET=/mnt/caddy-snippets/kube-auth.conf
+    BACKEND_AUTH_SNIPPET=/mnt/caddy-snippets/backend-auth.conf
+    CADDYFILE=/etc/caddy/Caddyfile
+    CADDY_ADMIN=http://localhost:2019
 
-    for cmd in cat sed chmod mv sleep date; do
+    # CA bundle files to watch for content changes. Missing files are
+    # silently skipped. When any file's content changes, Caddy is reloaded
+    # so tls_trust_pool picks up the new certificates.
+    CA_WATCH_PATHS=(
+      /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      /mnt/trusted-ca/ca-bundle.crt
+      /mnt/ca.crt
+      /mnt/service-ca/service-ca.crt
+    )
+
+    HEARTBEAT_FILE=/mnt/caddy-snippets/config-refresh-heartbeat
+
+    CURRENT_TOKEN=""
+    CURRENT_BACKEND_TOKEN=""
+    CURRENT_CA_CONTENT=""
+
+    for cmd in curl cat sleep date; do
       command -v "${cmd}" >/dev/null 2>&1 || { echo "required command not found: ${cmd}"; exit 1; }
     done
 
-    log() { echo "$(date -Iseconds) generate-loop: $*"; }
+    log() { echo "$(date -Iseconds) config-refresh: $*"; }
 
-    log "starting"
+    wait_for_caddy() {
+      log "waiting for Caddy admin API..."
+      until curl -sf "${CADDY_ADMIN}/config/" > /dev/null 2>&1; do
+        sleep 1
+      done
+      log "Caddy admin API ready"
+    }
 
-    produceToken() (
-      # Copy the auth.conf template and replace the bearer token
-      token=$(cat "${TOKEN_FILEPATH}")
+    reload_caddy() {
+      curl -sf -X POST "${CADDY_ADMIN}/load" \
+        -H "Content-Type: text/caddyfile" \
+        --data-binary @"${CADDYFILE}" || {
+          log "error: failed to reload Caddy config"
+          return 1
+        }
+    }
 
-      # Produce a tmp file
-      sed "s/__BEARER_TOKEN__/${token}/" "${AUTH_CONF_TEMPLATE_FILE}" > "${AUTH_CONF_TMP_FILE}"
-      chmod 640 "${AUTH_CONF_TMP_FILE}"
+    # Read the combined content of all existing CA files. The concatenated
+    # output is used as a fingerprint — if any file changes, the output differs.
+    read_ca_content() {
+      for f in "${CA_WATCH_PATHS[@]}"; do
+        [[ -f "${f}" ]] && cat "${f}"
+      done
+      true
+    }
 
-      # Rename (atomic) the file to avoid sync issues
-      mv "${AUTH_CONF_TMP_FILE}" "${AUTH_CONF_FILE}"
-    )
+    # Check for token, backend token, and CA changes, reload Caddy when needed.
+    refresh_cycle() {
+      changed=""
 
-    produceTokenWithRetry() (
-      produceToken || \
-        { sleep 3; produceToken; } || \
-        { sleep 5; produceToken; }
-    )
+      new_token=$(cat "${TOKEN_FILEPATH}")
+      if [ "${new_token}" != "${CURRENT_TOKEN}" ]; then
+        printf 'header_up Authorization "Bearer %s"\n' "${new_token}" > "${AUTH_SNIPPET}"
+        CURRENT_TOKEN="${new_token}"
+        changed="kube token"
+      fi
 
-    while produceTokenWithRetry; do sleep "${RETRY_INTERVAL}"; done
+      if [[ -f "${BACKEND_TOKEN_FILEPATH}" ]]; then
+        new_backend_token=$(cat "${BACKEND_TOKEN_FILEPATH}")
+        if [ "${new_backend_token}" != "${CURRENT_BACKEND_TOKEN}" ]; then
+          printf 'header_up Authorization "Bearer %s"\n' "${new_backend_token}" > "${BACKEND_AUTH_SNIPPET}"
+          CURRENT_BACKEND_TOKEN="${new_backend_token}"
+          changed="${changed:+${changed}, }backend token"
+        fi
+      fi
 
-    echo "loop broke, crashing"
+      new_ca=$(read_ca_content)
+      if [ "${new_ca}" != "${CURRENT_CA_CONTENT}" ]; then
+        CURRENT_CA_CONTENT="${new_ca}"
+        changed="${changed:+${changed}, }CA bundles"
+      fi
+
+      if [ -n "${changed}" ]; then
+        reload_caddy
+        log "reloaded (${changed} changed)"
+      fi
+    }
+
+    refresh_cycle_with_retry() {
+      refresh_cycle || \
+        { sleep 3; refresh_cycle; } || \
+        { sleep 5; refresh_cycle; }
+    }
+
+    wait_for_caddy
+
+    while refresh_cycle_with_retry; do
+      date +%s > "${HEARTBEAT_FILE}"
+      sleep "${RETRY_INTERVAL}"
+    done
+
+    log "loop broke, crashing"
     exit 1
 kind: ConfigMap
 metadata:
-  name: proxy-nginx-generate-loop-8745b5hf5k
+  name: proxy-config-refresh-4dk8c2mh6k
   namespace: konflux-ui
 ---
 apiVersion: v1
 data:
-  proxy-nginx-run.sh: |
-    #!/bin/bash
+  generate-proxy-config.sh: |
+    #!/bin/sh
 
-    set -euo pipefail
+    set -eu
 
-    NGINX_AUTH_CONF_FILE='/mnt/nginx-generated-config/auth.conf'
-    NGINX_NEW_AUTH_CONF_FILE='/mnt/nginx-generated-config/auth.conf.new'
+    TEMPLATES_DIR=/mnt/caddy-templates
+    SNIPPETS_DIR=/mnt/caddy-snippets
+    TOKEN_FILEPATH=/var/run/secrets/konflux-ci.dev/serviceaccount/token
+    BACKEND_TOKEN_FILEPATH=/var/run/secrets/konflux-ci.dev/backend/token
+    SERVICE_CA_PATH=/mnt/service-ca/service-ca.crt
 
-    NGINX_CONF_FILE='/etc/nginx/nginx.conf'
-    RETRY_INTERVAL=10
-
-    for cmd in nginx cksum mv sleep date; do
+    for cmd in sed nslookup cat; do
       command -v "${cmd}" >/dev/null 2>&1 || { echo "required command not found: ${cmd}"; exit 1; }
     done
 
-    log() { echo "$(date -Iseconds) proxy-nginx-run: $*"; }
+    log() { echo "$(date -Iseconds) generate-proxy-config: $*"; }
 
-    log "starting"
+    # resolve_tekton_results outputs the tekton-results hostname.
+    # Env var TEKTON_RESULTS_HOSTNAME takes precedence over DNS probing.
+    resolve_tekton_results() {
+      if [ -n "${TEKTON_RESULTS_HOSTNAME:-}" ]; then
+        echo "${TEKTON_RESULTS_HOSTNAME}"
+        return 0
+      fi
 
-    # test configuration
-    nginx -g "daemon off;" -c "${NGINX_CONF_FILE}" -t
+      k8s_host=tekton-results-api-service.tekton-pipelines.svc.cluster.local
+      ocp_host=tekton-results-api-service.openshift-pipelines.svc.cluster.local
 
-    # run the hot-reload loop in background
-    (
-      # wait for nginx to start before first reload attempt
-      while [ ! -f /run/nginx.pid ]; do sleep 1; done
+      if nslookup "${k8s_host}" > /dev/null 2>&1; then
+        echo "${k8s_host}"
+        return 0
+      fi
+      if nslookup "${ocp_host}" > /dev/null 2>&1; then
+        echo "${ocp_host}"
+        return 0
+      fi
 
-      log "hot-reload loop started"
-
-      # retries hot reloading the nginx configuration multiple
-      # times with increasing timeouts before returning the error
-      reloadWithRetry() {
-        if [ -f "${NGINX_NEW_AUTH_CONF_FILE}" ] && \
-          [ "$(cksum < "${NGINX_NEW_AUTH_CONF_FILE}")" != "$(cksum < "${NGINX_AUTH_CONF_FILE}")" ]; then
-          log "config changed, reloading nginx"
-          # Move (atomic) the new configuration and reload it in NGINX
-          mv "${NGINX_NEW_AUTH_CONF_FILE}" "${NGINX_AUTH_CONF_FILE}" && \
-            {
-              nginx -s reload || \
-                { sleep 3; nginx -s reload; } || \
-                { sleep 5; nginx -s reload; }
-            }
-        fi
-      }
-
-      # hot reload infinite loop
-      while reloadWithRetry; do sleep "${RETRY_INTERVAL}"; done
-
-      log "loop broke, crashing"
-      exit 1
-    ) &
-    RELOAD_PID=$!
-
-    # run the nginx server in background
-    (
-      nginx -g "daemon off;" -c "${NGINX_CONF_FILE}"
-      log "nginx crashed"
-      exit 1
-    ) &
-    # forward SIGTERM/SIGINT for graceful shutdown
-    trap 'log "received signal, shutting down"; nginx -s quit 2>/dev/null; kill "${RELOAD_PID}" 2>/dev/null; wait; exit 0' TERM INT
-
-    # wait for any of the background tasks to crash
-    wait -n
-    EXIT_CODE=$?
-    log "child exited with code ${EXIT_CODE}, terminating"
-    exit "${EXIT_CODE}"
-kind: ConfigMap
-metadata:
-  name: proxy-nginx-run-k675kmbfc5
-  namespace: konflux-ui
----
-apiVersion: v1
-data:
-  auth.conf: |
-    # Auth configuration with impersonate headers
-    auth_request_set $user  $upstream_http_x_auth_request_email;
-    proxy_set_header Impersonate-User $user;
-    proxy_set_header Impersonate-Group system:authenticated;
-    proxy_set_header Authorization "Bearer __BEARER_TOKEN__";
-  tekton-results.conf: |
-    location /api/k8s/plugins/tekton-results/ {
-        auth_request /oauth2/auth;
-
-        rewrite /api/k8s/plugins/tekton-results/(.+) /$1 break;
-        proxy_read_timeout 30m;
-        proxy_pass https://__TEKTON_RESULTS_HOSTNAME__:8080;
-        include /mnt/nginx-generated-config/auth.conf;
+      return 1
     }
+
+    # Process tekton-results template
+    if [ -f "${TEMPLATES_DIR}/tekton-results.caddy" ]; then
+      hostname=$(resolve_tekton_results) && {
+        log "tekton-results resolved to ${hostname}"
+        sed "s/__TEKTON_RESULTS_HOSTNAME__/${hostname}/" \
+          "${TEMPLATES_DIR}/tekton-results.caddy" > "${SNIPPETS_DIR}/tekton-results.caddy"
+      } || {
+        log "tekton-results not available, skipping"
+      }
+    fi
+
+    # Seed the kube-auth snippet so Caddy can start with a valid Authorization header.
+    # The config-refresh sidecar will keep this file updated and reload Caddy as needed.
+    if [ -f "${TOKEN_FILEPATH}" ]; then
+      token=$(cat "${TOKEN_FILEPATH}")
+      printf 'header_up Authorization "Bearer %s"\n' "${token}" > "${SNIPPETS_DIR}/kube-auth.conf"
+      log "seeded kube-auth.conf"
+    else
+      # Create an empty file so Caddy's import doesn't fail on missing file
+      touch "${SNIPPETS_DIR}/kube-auth.conf"
+      log "warning: token file not found, created empty kube-auth.conf"
+    fi
+
+    # Seed the backend-auth snippet for backend services (Tekton Results, KubeArchive, etc.).
+    # This token has audience "konflux-backend" and cannot be used against the Kube API directly.
+    # Backend services validate it via TokenReview.
+    if [ -f "${BACKEND_TOKEN_FILEPATH}" ]; then
+      token=$(cat "${BACKEND_TOKEN_FILEPATH}")
+      printf 'header_up Authorization "Bearer %s"\n' "${token}" > "${SNIPPETS_DIR}/backend-auth.conf"
+      log "seeded backend-auth.conf"
+    else
+      touch "${SNIPPETS_DIR}/backend-auth.conf"
+      log "warning: backend token file not found, created empty backend-auth.conf"
+    fi
+
+    # Generate TLS transport config for backend services (Tekton Results, KubeArchive, etc.).
+    # On OpenShift, the service-ca-operator injects the CA bundle into a ConfigMap
+    # mounted at SERVICE_CA_PATH. When present, backends are verified against this CA.
+    # Otherwise, fall back to skipping verification (the default for non-OpenShift
+    # clusters; see docs for how to configure cert-manager to issue trusted certs).
+    if [ -f "${SERVICE_CA_PATH}" ]; then
+      printf 'transport http {\n    tls_trust_pool file %s\n}\n' "${SERVICE_CA_PATH}" \
+        > "${SNIPPETS_DIR}/backend-tls.conf"
+      log "using service CA for backend TLS verification"
+    else
+      printf 'transport http {\n    tls_insecure_skip_verify\n}\n' \
+        > "${SNIPPETS_DIR}/backend-tls.conf"
+      log "no service CA found, backend TLS verification disabled"
+    fi
+
+    log "done"
 kind: ConfigMap
 metadata:
-  name: proxy-nginx-templates-dt292585th
+  name: proxy-generate-config-md9g47fd6d
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -447,14 +598,14 @@ spec:
   - IPv4
   ipFamilyPolicy: SingleStack
   ports:
-  - name: web
-    port: 8888
-    protocol: TCP
-    targetPort: web
   - name: web-tls
     port: 9443
     protocol: TCP
     targetPort: web-tls
+  - name: metrics
+    port: 2112
+    protocol: TCP
+    targetPort: metrics
   selector:
     app: proxy
   type: ClusterIP
@@ -555,19 +706,19 @@ spec:
     spec:
       containers:
       - args:
-        - /var/run/scripts/konflux-ci.dev/proxy-nginx-generate-loop.sh
+        - /var/run/scripts/konflux-ci.dev/config-refresh.sh
         command:
         - bash
         image: quay.io/konflux-ci/konflux-ui@sha256:f3cd59eab1dcff0fb2fdce943871e52260f7b256c3f3d801200cc2d429ff5714
         livenessProbe:
           exec:
             command:
-            - bash
-            - /var/run/scripts/konflux-ci.dev/proxy-nginx-generate-loop-probe.sh
+            - sh
+            - /var/run/scripts/konflux-ci.dev/config-refresh-probe.sh
           failureThreshold: 3
           initialDelaySeconds: 30
           periodSeconds: 30
-        name: generate-nginx-configs-loop
+        name: config-refresh
         resources:
           limits:
             cpu: 50m
@@ -580,20 +731,40 @@ spec:
           runAsNonRoot: true
         volumeMounts:
         - mountPath: /var/run/scripts/konflux-ci.dev/
-          name: proxy-generate-loop-script
+          name: config-refresh-scripts
           readOnly: true
         - mountPath: /var/run/secrets/konflux-ci.dev/serviceaccount
           name: kube-api-token
           readOnly: true
-        - mountPath: /mnt/nginx-generated-config
-          name: nginx-generated-config
-        - mountPath: /mnt/nginx-templates
-          name: nginx-templates
-      - args:
-        - /var/run/scripts/konflux-ci.dev/proxy-nginx-run.sh
-        command:
-        - bash
-        image: registry.access.redhat.com/ubi9/nginx-124@sha256:e0bddaa7a490d6a7475f815f66ef5f404c3cbbc6229754ea0379245d99a5718e
+        - mountPath: /var/run/secrets/konflux-ci.dev/backend
+          name: backend-token
+          readOnly: true
+        - mountPath: /mnt/caddy-snippets
+          name: caddy-snippets
+        - mountPath: /etc/caddy/Caddyfile
+          name: proxy-caddyfile
+          readOnly: true
+          subPath: Caddyfile
+        - mountPath: /etc/caddy/impersonate-groups.conf
+          name: proxy-caddyfile
+          readOnly: true
+          subPath: impersonate-groups.conf
+        - mountPath: /etc/caddy/impersonate-headers.conf
+          name: proxy-caddyfile
+          readOnly: true
+          subPath: impersonate-headers.conf
+        - mountPath: /etc/caddy/ns-lister-headers.conf
+          name: proxy-caddyfile
+          readOnly: true
+          subPath: ns-lister-headers.conf
+      - command:
+        - caddy
+        - run
+        - --config
+        - /etc/caddy/Caddyfile
+        - --adapter
+        - caddyfile
+        image: registry.access.redhat.com/hi/caddy@sha256:c38cf847ae5f5de12f8c236b028ee9f823ec7f76708002a3310b4d2db75d7a41
         livenessProbe:
           failureThreshold: 3
           httpGet:
@@ -604,13 +775,13 @@ spec:
           periodSeconds: 60
           successThreshold: 1
           timeoutSeconds: 1
-        name: nginx
+        name: reverse-proxy
         ports:
-        - containerPort: 8080
-          name: web
-          protocol: TCP
         - containerPort: 9443
           name: web-tls
+          protocol: TCP
+        - containerPort: 2112
+          name: metrics
           protocol: TCP
         readinessProbe:
           failureThreshold: 3
@@ -633,29 +804,41 @@ spec:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
         volumeMounts:
-        - mountPath: /var/run/scripts/konflux-ci.dev/
-          name: proxy-nginx-run-script
+        - mountPath: /etc/caddy/Caddyfile
+          name: proxy-caddyfile
           readOnly: true
-        - mountPath: /etc/nginx/nginx.conf
-          name: proxy
+          subPath: Caddyfile
+        - mountPath: /etc/caddy/impersonate-groups.conf
+          name: proxy-caddyfile
           readOnly: true
-          subPath: nginx.conf
-        - mountPath: /var/log/nginx
-          name: logs
-        - mountPath: /var/lib/nginx/tmp
-          name: nginx-tmp
-        - mountPath: /run
-          name: run
+          subPath: impersonate-groups.conf
+        - mountPath: /etc/caddy/impersonate-headers.conf
+          name: proxy-caddyfile
+          readOnly: true
+          subPath: impersonate-headers.conf
+        - mountPath: /etc/caddy/ns-lister-headers.conf
+          name: proxy-caddyfile
+          readOnly: true
+          subPath: ns-lister-headers.conf
         - mountPath: /mnt
           name: serving-cert
-        - mountPath: /mnt/nginx-generated-config
-          name: nginx-generated-config
-        - mountPath: /mnt/nginx-generated-location-config
-          name: nginx-generated-location-config
+        - mountPath: /mnt/caddy-snippets
+          name: caddy-snippets
+          readOnly: true
+        - mountPath: /mnt/trusted-ca
+          name: trusted-ca
+          readOnly: true
+        - mountPath: /mnt/service-ca
+          name: service-ca
+          readOnly: true
         - mountPath: /opt/app-root/src/static-content
           name: static-content
         - mountPath: /opt/app-root/src/segment
           name: segment-bridge-config
+        - mountPath: /data
+          name: caddy-data
+        - mountPath: /config
+          name: caddy-config
       - env:
         - name: OAUTH2_PROXY_CLIENT_SECRET
           valueFrom:
@@ -706,33 +889,9 @@ spec:
           name: static-content
       - command:
         - sh
-        - -c
-        - |
-          set -e
-
-          # Copy the auth.conf template and replace the bearer token
-          token=$(cat /var/run/secrets/konflux-ci.dev/serviceaccount/token)
-          sed "s/__BEARER_TOKEN__/$token/" /mnt/nginx-templates/auth.conf > /mnt/nginx-generated-config/auth.conf
-          chmod 640 /mnt/nginx-generated-config/auth.conf
-
-          # Resolve tekton-results hostname
-          results_hostname_k8s=tekton-results-api-service.tekton-pipelines.svc.cluster.local
-          results_hostname_openshift=tekton-results-api-service.openshift-pipelines.svc.cluster.local
-          results_hostname_dedicated=tekton-results-api-service.tekton-results.svc.cluster.local
-          if nslookup $results_hostname_k8s > /dev/null 2>&1; then
-            results_hostname=$results_hostname_k8s
-          elif nslookup $results_hostname_openshift > /dev/null 2>&1; then
-            results_hostname=$results_hostname_openshift
-          elif nslookup $results_hostname_dedicated > /dev/null 2>&1; then
-            results_hostname=$results_hostname_dedicated
-          else
-            echo "Error: Could not resolve tekton-results hostname"
-            exit 1
-          fi
-          sed "s/__TEKTON_RESULTS_HOSTNAME__/$results_hostname/" /mnt/nginx-templates/tekton-results.conf > /mnt/nginx-generated-location-config/tekton-results.conf
-          chmod 640 /mnt/nginx-generated-location-config/tekton-results.conf
+        - /var/run/scripts/konflux-ci.dev/generate-proxy-config.sh
         image: quay.io/konflux-ci/konflux-ui@sha256:f3cd59eab1dcff0fb2fdce943871e52260f7b256c3f3d801200cc2d429ff5714
-        name: generate-nginx-configs
+        name: generate-proxy-config
         resources:
           limits:
             cpu: 50m
@@ -744,15 +903,23 @@ spec:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
         volumeMounts:
+        - mountPath: /mnt/caddy-templates
+          name: caddy-templates
+          readOnly: true
+        - mountPath: /mnt/caddy-snippets
+          name: caddy-snippets
+        - mountPath: /var/run/scripts/konflux-ci.dev
+          name: generate-proxy-config-script
+          readOnly: true
         - mountPath: /var/run/secrets/konflux-ci.dev/serviceaccount
           name: kube-api-token
           readOnly: true
-        - mountPath: /mnt/nginx-generated-config
-          name: nginx-generated-config
-        - mountPath: /mnt/nginx-templates
-          name: nginx-templates
-        - mountPath: /mnt/nginx-generated-location-config
-          name: nginx-generated-location-config
+        - mountPath: /var/run/secrets/konflux-ci.dev/backend
+          name: backend-token
+          readOnly: true
+        - mountPath: /mnt/service-ca
+          name: service-ca
+          readOnly: true
       serviceAccountName: proxy
       topologySpreadConstraints:
       - labelSelector:
@@ -765,19 +932,19 @@ spec:
       - configMap:
           defaultMode: 488
           items:
-          - key: proxy-nginx-generate-loop.sh
-            path: proxy-nginx-generate-loop.sh
-          - key: proxy-nginx-generate-loop-probe.sh
-            path: proxy-nginx-generate-loop-probe.sh
-          name: proxy-nginx-generate-loop-8745b5hf5k
-        name: proxy-generate-loop-script
+          - key: generate-proxy-config.sh
+            path: generate-proxy-config.sh
+          name: proxy-generate-config-md9g47fd6d
+        name: generate-proxy-config-script
       - configMap:
           defaultMode: 488
           items:
-          - key: proxy-nginx-run.sh
-            path: proxy-nginx-run.sh
-          name: proxy-nginx-run-k675kmbfc5
-        name: proxy-nginx-run-script
+          - key: config-refresh.sh
+            path: config-refresh.sh
+          - key: config-refresh-probe.sh
+            path: config-refresh-probe.sh
+          name: proxy-config-refresh-4dk8c2mh6k
+        name: config-refresh-scripts
       - name: kube-api-token
         projected:
           defaultMode: 420
@@ -785,30 +952,48 @@ spec:
           - serviceAccountToken:
               expirationSeconds: 600
               path: token
+      - name: backend-token
+        projected:
+          defaultMode: 420
+          sources:
+          - serviceAccountToken:
+              audience: konflux-backend
+              expirationSeconds: 600
+              path: token
       - configMap:
           defaultMode: 420
           items:
-          - key: nginx.conf
-            path: nginx.conf
-          name: proxy-5f87fc6759
-        name: proxy
+          - key: Caddyfile
+            path: Caddyfile
+          - key: impersonate-groups.conf
+            path: impersonate-groups.conf
+          - key: impersonate-headers.conf
+            path: impersonate-headers.conf
+          - key: ns-lister-headers.conf
+            path: ns-lister-headers.conf
+          name: proxy-caddyfile-7ch57t7bt7
+        name: proxy-caddyfile
       - configMap:
           defaultMode: 420
-          name: proxy-nginx-templates-dt292585th
-        name: nginx-templates
+          name: proxy-caddy-templates-gd7k26k2h2
+        name: caddy-templates
       - emptyDir: {}
-        name: logs
+        name: caddy-snippets
       - emptyDir: {}
-        name: nginx-tmp
+        name: caddy-data
       - emptyDir: {}
-        name: run
+        name: caddy-config
       - name: serving-cert
         secret:
           secretName: serving-cert
-      - emptyDir: {}
-        name: nginx-generated-config
-      - emptyDir: {}
-        name: nginx-generated-location-config
+      - configMap:
+          name: trusted-ca
+          optional: true
+        name: trusted-ca
+      - configMap:
+          name: openshift-service-ca.crt
+          optional: true
+        name: service-ca
       - emptyDir: {}
         name: static-content
       - name: segment-bridge-config

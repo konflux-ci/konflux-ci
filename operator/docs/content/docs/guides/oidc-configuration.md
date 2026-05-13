@@ -250,6 +250,66 @@ kubectl create secret generic ldap-bind \
 Refer to the [Dex LDAP connector documentation](https://dexidp.io/docs/connectors/ldap/)
 for the complete reference.
 
+## Group Support
+
+Konflux supports group-based access control. When an identity provider returns
+group memberships, Konflux propagates them through the authentication chain so
+that Kubernetes RBAC group bindings work as expected.
+
+### How It Works
+
+1. The identity provider (GitHub orgs/teams, LDAP groups, OIDC groups claim, etc.)
+   returns the user's group memberships to Dex.
+2. Dex includes the groups in the ID token when the `groups` scope is requested.
+3. oauth2-proxy reads the groups from the token and passes them to the proxy in
+   the `X-Auth-Request-Groups` header.
+4. The proxy splits the groups and forwards each as a separate `Impersonate-Group`
+   header to the Kubernetes API, along with the static `system:authenticated`
+   group.
+
+### Enabling Groups
+
+Groups are enabled by default. The proxy requests the `groups` scope from Dex
+automatically. For most connectors (GitHub, LDAP, OIDC), groups are returned as
+long as the connector is configured to fetch them.
+
+For **GitHub**, teams within configured orgs are returned as groups automatically
+when `orgs` are specified in the connector config.
+
+For **LDAP**, configure a `groupSearch` section in the connector (see the
+[LDAP Connector](#ldap-connector) section above).
+
+For **OIDC**, ensure your identity provider includes a `groups` claim in the
+ID token and that Dex is configured to request it (most OIDC connectors do this
+by default).
+
+For **static passwords** (local development), groups can be set directly on
+each user entry (requires Dex v2.45.0+):
+
+```yaml
+        config:
+          staticPasswords:
+            - email: user1@konflux.dev
+              hash: "..."
+              username: user1
+              userID: "..."
+              groups:
+                - team-alpha
+                - team-beta
+```
+
+### Limitations
+
+- **Maximum 10 groups per user.** The proxy splits the comma-separated group
+  string into individual headers using a fixed regex with 10 capture groups.
+  Groups beyond the 10th are silently dropped. Empty headers from unused
+  capture groups are harmless — the Kubernetes API ignores them.
+
+- **Re-login required after group changes.** Group memberships are embedded in
+  the ID token at login time. If a user's groups change in the identity
+  provider, they must log out and log back in to get a fresh token with the
+  updated groups.
+
 ## Static Passwords (Local Development Only)
 
 For local development and CI testing, Dex supports a built-in password database. Enable

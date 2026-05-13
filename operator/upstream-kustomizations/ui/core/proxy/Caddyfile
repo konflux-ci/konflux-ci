@@ -1,0 +1,158 @@
+{
+    auto_https off
+    admin localhost:2019
+}
+
+# TODO: protect metrics with kube-rbac-proxy sidecar (https://github.com/openshift/kube-rbac-proxy)
+:2112 {
+    metrics /metrics
+}
+
+:9443 {
+    tls /mnt/tls.crt /mnt/tls.key
+
+    # Strip any client-supplied impersonation and proxy-auth headers to
+    # prevent spoofing. This runs at the server level, before any
+    # handle/route blocks.
+    request_header -Impersonate-User
+    request_header -Impersonate-Group
+    request_header -Impersonate-Uid
+    request_header -Impersonate-Extra-*
+    request_header -X-User
+    request_header -X-Group
+
+    # Health endpoint for liveness/readiness probes
+    handle /health {
+        respond 200
+    }
+
+    # Segment bridge files
+    handle /segment/* {
+        root * /opt/app-root/src
+        header Content-Type text/plain
+        file_server
+    }
+
+    # OAuth2 proxy - browser-facing auth UI/callback
+    handle /oauth2/* {
+        reverse_proxy 127.0.0.1:6000
+    }
+
+    # Namespace lister (GET only on exact paths)
+    # The namespace-lister performs in-memory RBAC authorization: it checks
+    # RoleBindings for the user AND their groups to decide which namespaces
+    # to return. Without group headers, a user only sees namespaces where
+    # they are bound individually — group-based bindings are invisible.
+    # We use the same map + request_header pattern as the Kube API routes
+    # (see ns-lister-headers.conf) to split groups into multiple X-Group
+    # headers, which namespace-lister reads via req.Header.Values().
+    @nsListGet {
+        method GET
+        path /api/k8s/api/v1/namespaces /api/k8s/api/v1/namespaces/
+    }
+    handle @nsListGet {
+        route {
+            forward_auth 127.0.0.1:6000 {
+                uri /oauth2/auth
+                copy_headers X-Auth-Request-Email X-Auth-Request-Groups
+            }
+            import /etc/caddy/impersonate-groups.conf
+            import /etc/caddy/ns-lister-headers.conf
+            rewrite * /api/v1/namespaces
+            reverse_proxy https://namespace-lister.namespace-lister.svc.cluster.local:8080 {
+                header_down -X-Correlation-ID
+                transport http {
+                    tls_trust_pool file /mnt/trusted-ca/ca-bundle.crt
+                }
+            }
+        }
+    }
+
+    # Backend snippets (tekton-results, kubearchive, etc.) loaded from init-generated configs
+    import /mnt/caddy-snippets/*.caddy
+
+    # --- Group impersonation ---
+    #
+    # The Kubernetes API requires each group to be sent as a separate
+    # Impersonate-Group header. oauth2-proxy returns all groups in a single
+    # comma-separated X-Auth-Request-Groups header (e.g. "group1,group2").
+    #
+    # We split them using a two-step approach:
+    #
+    # 1. impersonate-groups.conf — a Caddy `map` directive that extracts up
+    #    to 10 individual groups from the comma-separated header into
+    #    placeholders {ig1}…{ig10} via a regex with capture groups.
+    #
+    # 2. impersonate-headers.conf — `request_header +Impersonate-Group`
+    #    directives that add one header per placeholder, plus a static
+    #    "system:authenticated" group that is always included.
+    #
+    # Why request_header instead of header_up (reverse_proxy)?
+    #   Caddy's reverse_proxy `header_up` merges all operations for the same
+    #   header into a single HeaderOps struct and applies them as:
+    #   set → add → delete. When both `header_up Impersonate-Group` (set) and
+    #   `header_up +Impersonate-Group` (add) target the same header, the set
+    #   operation overwrites the add — only the first value survives. Using
+    #   `request_header` as a standalone handler in the route chain avoids
+    #   this: the server-level delete (above) runs first, then the route-level
+    #   add runs later in a separate handler, so all values are preserved.
+    #
+    # Why route { } blocks?
+    #   Caddy's default directive ordering sorts `map` before `forward_auth`,
+    #   so the map would read X-Auth-Request-Groups before forward_auth has
+    #   copied it from the auth response. Wrapping in `route` preserves the
+    #   written order: forward_auth → map → request_header → reverse_proxy.
+
+    # WebSocket to Kube API
+    handle_path /wss/k8s/* {
+        route {
+            forward_auth 127.0.0.1:6000 {
+                uri /oauth2/auth
+                copy_headers X-Auth-Request-Email X-Auth-Request-Groups
+            }
+            import /etc/caddy/impersonate-groups.conf
+            import /etc/caddy/impersonate-headers.conf
+            reverse_proxy https://kubernetes.default.svc {
+                import /mnt/caddy-snippets/kube-auth.conf
+                transport http {
+                    tls_trust_pool file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                }
+            }
+        }
+    }
+
+    # Kube API (catch-all for /api/k8s/)
+    handle_path /api/k8s/* {
+        route {
+            forward_auth 127.0.0.1:6000 {
+                uri /oauth2/auth
+                copy_headers X-Auth-Request-Email X-Auth-Request-Groups
+            }
+            import /etc/caddy/impersonate-groups.conf
+            import /etc/caddy/impersonate-headers.conf
+            reverse_proxy https://kubernetes.default.svc {
+                import /mnt/caddy-snippets/kube-auth.conf
+                transport http {
+                    tls_trust_pool file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                }
+            }
+        }
+    }
+
+    # Dex Identity Provider
+    handle /idp/* {
+        reverse_proxy https://dex.konflux-ui.svc.cluster.local:9443 {
+            header_up X-Forwarded-Port "9443"
+            transport http {
+                tls_trust_pool file /mnt/ca.crt
+            }
+        }
+    }
+
+    # Static SPA (catch-all, must be last)
+    handle {
+        root * /opt/app-root/src/static-content
+        try_files {path} /index.html
+        file_server
+    }
+}
