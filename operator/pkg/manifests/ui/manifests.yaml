@@ -378,7 +378,6 @@ data:
     CA_WATCH_PATHS=(
       /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
       /mnt/trusted-ca/ca-bundle.crt
-      /mnt/ca.crt
       /mnt/service-ca/service-ca.crt
     )
 
@@ -469,7 +468,7 @@ data:
     exit 1
 kind: ConfigMap
 metadata:
-  name: proxy-config-refresh-4dk8c2mh6k
+  name: proxy-config-refresh-79m799dgfk
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -516,13 +515,13 @@ data:
 
     # Process tekton-results template
     if [ -f "${TEMPLATES_DIR}/tekton-results.caddy" ]; then
-      hostname=$(resolve_tekton_results) && {
+      if hostname=$(resolve_tekton_results); then
         log "tekton-results resolved to ${hostname}"
         sed "s/__TEKTON_RESULTS_HOSTNAME__/${hostname}/" \
           "${TEMPLATES_DIR}/tekton-results.caddy" > "${SNIPPETS_DIR}/tekton-results.caddy"
-      } || {
+      else
         log "tekton-results not available, skipping"
-      }
+      fi
     fi
 
     # Seed the kube-auth snippet so Caddy can start with a valid Authorization header.
@@ -567,7 +566,7 @@ data:
     log "done"
 kind: ConfigMap
 metadata:
-  name: proxy-generate-config-md9g47fd6d
+  name: proxy-generate-config-6b24g28678
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -757,6 +756,12 @@ spec:
           name: proxy-caddyfile
           readOnly: true
           subPath: ns-lister-headers.conf
+        - mountPath: /mnt/trusted-ca
+          name: trusted-ca
+          readOnly: true
+        - mountPath: /mnt/service-ca
+          name: service-ca
+          readOnly: true
       - command:
         - caddy
         - run
@@ -934,7 +939,7 @@ spec:
           items:
           - key: generate-proxy-config.sh
             path: generate-proxy-config.sh
-          name: proxy-generate-config-md9g47fd6d
+          name: proxy-generate-config-6b24g28678
         name: generate-proxy-config-script
       - configMap:
           defaultMode: 488
@@ -943,7 +948,7 @@ spec:
             path: config-refresh.sh
           - key: config-refresh-probe.sh
             path: config-refresh-probe.sh
-          name: proxy-config-refresh-4dk8c2mh6k
+          name: proxy-config-refresh-79m799dgfk
         name: config-refresh-scripts
       - name: kube-api-token
         projected:
