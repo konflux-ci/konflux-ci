@@ -14,7 +14,7 @@ spec:
         enabled: true
       proxy:
         replicas: 1
-        nginx:
+        reverseProxy:
           resources:
             requests:
               cpu: 30m

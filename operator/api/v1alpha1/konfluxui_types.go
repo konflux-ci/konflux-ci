@@ -72,9 +72,9 @@ type ProxyDeploymentSpec struct {
 	// +kubebuilder:default=1
 	// +kubebuilder:validation:Minimum=1
 	Replicas int32 `json:"replicas,omitempty"`
-	// Nginx defines customizations for the nginx container.
+	// ReverseProxy defines customizations for the reverse proxy container.
 	// +optional
-	Nginx *ContainerSpec `json:"nginx,omitempty"`
+	ReverseProxy *ContainerSpec `json:"reverseProxy,omitempty"`
 	// OAuth2Proxy defines customizations for the oauth2-proxy container.
 	// +optional
 	OAuth2Proxy *ContainerSpec `json:"oauth2Proxy,omitempty"`
