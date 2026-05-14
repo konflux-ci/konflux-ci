@@ -222,4 +222,12 @@ Manifest companion PR (regenerated \`operator/pkg/manifests\` and third-party He
 
 **Prefer merging #${COMPANION_PR}** to \`main\` instead of this PR." || true
   fi
+
+  # Label the source bump PR so maintainers know a companion handles manifests
+  echo "Adding labels 'deps-only' and 'superseded-by-companion' to source PR #${SOURCE_PR}"
+  if ! gh pr edit "${SOURCE_PR}" \
+    --repo "${GITHUB_REPOSITORY}" \
+    --add-label "deps-only,superseded-by-companion"; then
+    echo "::warning::Failed to add labels to source PR #${SOURCE_PR}. Check token permissions (pull-requests: write) and that the labels exist in the repository." >&2
+  fi
 fi
