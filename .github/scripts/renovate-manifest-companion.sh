@@ -223,3 +223,11 @@ Manifest companion PR (regenerated \`operator/pkg/manifests\` and third-party He
 **Prefer merging #${COMPANION_PR}** to \`main\` instead of this PR." || true
   fi
 fi
+
+# Request GitHub auto-merge on the companion PR so it merges (or enters the
+# merge queue) automatically once branch protection and required checks pass.
+if [[ -n "${COMPANION_PR}" ]]; then
+  if ! gh pr merge "${COMPANION_PR}" --repo "${GITHUB_REPOSITORY}" --auto 2>&1; then
+    echo "::warning::Failed to enable auto-merge on companion PR #${COMPANION_PR} in ${GITHUB_REPOSITORY}" >&2
+  fi
+fi
