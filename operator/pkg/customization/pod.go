@@ -232,16 +232,25 @@ func (p *PodOverlay) ApplyToDaemonSet(daemonSet *appsv1.DaemonSet) error {
 }
 
 // mergeContainerList merges container overlay configurations into a list of containers.
+// Container.Args is tagged +listType=atomic in the Kubernetes API, so strategic merge
+// replaces the entire args list. We handle args separately: save them before merge,
+// then append after merge so overlay args are added to (not replace) the base args.
 func mergeContainerList(containers []corev1.Container, overlays map[string]*corev1.Container) error {
 	for i := range containers {
 		base := &containers[i]
 		if overlay := overlays[base.Name]; overlay != nil {
-			// Set the overlay's name to match the base to prevent strategic merge
-			// from overwriting the name with an empty string
 			overlay.Name = base.Name
+
+			extraArgs := overlay.Args
+			overlay.Args = nil
+
 			if err := StrategicMerge(base, overlay); err != nil {
+				overlay.Args = extraArgs
 				return err
 			}
+
+			overlay.Args = extraArgs
+			base.Args = append(base.Args, extraArgs...)
 		}
 	}
 	return nil

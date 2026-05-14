@@ -531,6 +531,187 @@ func TestComplexScenario(t *testing.T) {
 	})
 }
 
+func TestMergeContainerList_ArgsAppend(t *testing.T) {
+	t.Run("overlay args are appended to base args", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		ctx := DeploymentContext{Replicas: 3}
+		p := NewPodOverlay(
+			WithContainerOpts("manager", ctx,
+				WithLeaderElection(),
+			),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{
+									"--metrics-bind-address=:8443",
+									"--health-probe-bind-address=:8081",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.ContainElement("--metrics-bind-address=:8443"),
+			"base args must be preserved")
+		g.Expect(container.Args).To(gomega.ContainElement("--health-probe-bind-address=:8081"),
+			"base args must be preserved")
+		g.Expect(container.Args).To(gomega.ContainElement("--leader-elect=true"),
+			"overlay args must be appended")
+		g.Expect(container.Args).To(gomega.HaveLen(3))
+	})
+
+	t.Run("base args preserved when overlay has no args", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithContainerOpts("manager", DeploymentContext{},
+				WithResources(corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU: resource.MustParse("500m"),
+					},
+				}),
+			),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--flag1", "--flag2"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{"--flag1", "--flag2"}))
+		g.Expect(container.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
+	})
+
+	t.Run("overlay args work when base has no args", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithContainerOpts("app", DeploymentContext{},
+				WithArgs("--new-flag"),
+			),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{Name: "app", Image: "app:v1"},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{"--new-flag"}))
+	})
+
+	t.Run("multiple overlay args appended in order", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		ctx := DeploymentContext{Replicas: 2}
+		p := NewPodOverlay(
+			WithContainerOpts("manager", ctx,
+				WithArgs("--custom-flag=value"),
+				WithLeaderElection(),
+			),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--base-flag"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--base-flag",
+			"--custom-flag=value",
+			"--leader-elect=true",
+		}))
+	})
+
+	t.Run("overlay is reusable across multiple apply calls", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithContainerOpts("app", DeploymentContext{},
+				WithArgs("--injected"),
+			),
+		)
+
+		makeDeployment := func() *appsv1.Deployment {
+			return &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{Name: "app", Args: []string{"--base"}},
+							},
+						},
+					},
+				},
+			}
+		}
+
+		d1 := makeDeployment()
+		err := p.ApplyToDeployment(d1)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(d1.Spec.Template.Spec.Containers[0].Args).To(
+			gomega.Equal([]string{"--base", "--injected"}))
+
+		d2 := makeDeployment()
+		err = p.ApplyToDeployment(d2)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(d2.Spec.Template.Spec.Containers[0].Args).To(
+			gomega.Equal([]string{"--base", "--injected"}),
+			"second apply must produce the same result")
+	})
+}
+
 func TestWithConfigMapVolumeUpdate(t *testing.T) {
 	t.Run("updates existing configmap volume reference", func(t *testing.T) {
 		g := gomega.NewWithT(t)
