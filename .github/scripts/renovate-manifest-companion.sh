@@ -215,7 +215,24 @@ fi
 # links on the companion PR do not notify the source thread).
 NOTIFY_MARKER="<!-- konflux-manifest-companion-notify:${SOURCE_PR} -->"
 if [[ -n "${COMPANION_PR}" ]]; then
-  if ! gh pr view "${SOURCE_PR}" --repo "${GITHUB_REPOSITORY}" --json comments --jq -r '(.comments // [])[] | .body // empty' 2>/dev/null | grep -qF "${NOTIFY_MARKER}"; then
+  post_notify_comment=true
+  set +e
+  comment_bodies="$(
+    gh pr view "${SOURCE_PR}" --repo "${GITHUB_REPOSITORY}" --json comments \
+      --jq '(.comments // [])[] | .body // empty' 2>&1
+  )"
+  gh_list_rc=$?
+  set -e
+
+  if [[ "${gh_list_rc}" -ne 0 ]]; then
+    echo "::warning::Manifest companion: failed to list issue comments on PR #${SOURCE_PR} in ${GITHUB_REPOSITORY} (exit ${gh_list_rc}); skipping notify comment to avoid duplicates. Output follows on stderr." >&2
+    printf '%s\n' "${comment_bodies}" >&2
+    post_notify_comment=false
+  elif printf '%s' "${comment_bodies}" | grep -qF "${NOTIFY_MARKER}"; then
+    post_notify_comment=false
+  fi
+
+  if [[ "${post_notify_comment}" == true ]]; then
     gh pr comment "${SOURCE_PR}" --repo "${GITHUB_REPOSITORY}" --body "${NOTIFY_MARKER}
 
 Manifest companion PR (regenerated \`operator/pkg/manifests\` and third-party Helm outputs for this branch): #${COMPANION_PR}
