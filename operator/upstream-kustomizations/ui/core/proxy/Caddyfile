@@ -62,13 +62,19 @@
             reverse_proxy https://namespace-lister.namespace-lister.svc.cluster.local:8080 {
                 header_down -X-Correlation-ID
                 transport http {
+                    read_timeout 30m
+                    write_timeout 30m
                     tls_trust_pool file /mnt/trusted-ca/ca-bundle.crt
                 }
             }
         }
     }
 
-    # Backend snippets (tekton-results, kubearchive, etc.) loaded from init-generated configs
+    # Backend snippets (tekton-results, kubearchive, etc.) loaded from init-generated configs.
+    # NOTE: Imported snippets MUST use paths more specific than /api/k8s/ to avoid
+    # shadowing the Kube API catch-all handler below. Caddy evaluates handle blocks
+    # by specificity (longest path match first), so e.g. /api/k8s/plugins/tekton-results/
+    # is safe because it is more specific than /api/k8s/.
     import /mnt/caddy-snippets/*.caddy
 
     # --- Group impersonation ---
@@ -115,6 +121,8 @@
             reverse_proxy https://kubernetes.default.svc {
                 import /mnt/caddy-snippets/kube-auth.conf
                 transport http {
+                    read_timeout 30m
+                    write_timeout 30m
                     tls_trust_pool file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
                 }
             }
@@ -133,6 +141,8 @@
             reverse_proxy https://kubernetes.default.svc {
                 import /mnt/caddy-snippets/kube-auth.conf
                 transport http {
+                    read_timeout 30m
+                    write_timeout 30m
                     tls_trust_pool file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
                 }
             }
