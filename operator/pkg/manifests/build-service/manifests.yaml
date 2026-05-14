@@ -420,7 +420,7 @@ spec:
         - -webhook-config-path=/mnt/webhook-config.json
         command:
         - /manager
-        image: quay.io/konflux-ci/build-service:6f73f821989b34c97e738e1e64d5dad336189248
+        image: quay.io/konflux-ci/build-service:b87d4a134eb261e56389d487c5899f5e39229788
         livenessProbe:
           httpGet:
             path: /healthz
