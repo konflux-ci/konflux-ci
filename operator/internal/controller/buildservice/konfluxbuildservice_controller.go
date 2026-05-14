@@ -67,6 +67,9 @@ const (
 	pacWebhookURLEnvName      = "PAC_WEBHOOK_URL"
 	pacWebhookURLNonOpenShift = "http://pipelines-as-code-controller.pipelines-as-code.svc.cluster.local:8180"
 
+	// zapEncoderArg is the CLI flag that controls log encoding format.
+	zapEncoderArg = "--zap-encoder"
+
 	// Webhook config constants for the optional per-provider webhook URL mapping.
 	// The volume, mount, and arg are baked into the manifest with optional: true.
 	// The operator only needs to create the ConfigMap and update the volume reference.
@@ -276,6 +279,10 @@ func buildBuildControllerManagerOverlay(spec konfluxv1alpha1.KonfluxBuildService
 	// The volume, mount, and arg are already in the manifest with optional: true.
 	if webhookConfigMapName != "" {
 		podOpts = append(podOpts, customization.WithConfigMapVolumeUpdate(webhookConfigVolName, webhookConfigMapName))
+	}
+
+	if spec.LogEncoder != "" {
+		containerOpts = append(containerOpts, customization.WithArgs(zapEncoderArg+"="+spec.LogEncoder))
 	}
 
 	if spec.BuildControllerManager == nil {

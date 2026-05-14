@@ -18,6 +18,10 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: konflux-build-service
 spec:
+  # logEncoder: console  # Use human-readable logs (default: json)
+  # webhookURLs:  # Map repository URL prefixes to external webhook URLs (e.g. Smee proxies)
+  #   https://github.com: "https://smee.example.com/github-hook"
+  #   https://gitlab.com: "https://smee.example.com/gitlab-hook"
   # pipelineConfig:
   #   # removeDefaults: true  # Discard all operator-provided default pipelines
   #   pipelines:
