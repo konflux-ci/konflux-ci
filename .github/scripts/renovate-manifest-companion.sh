@@ -213,8 +213,8 @@ fi
 
 # Cross-link on the source PR so its timeline shows the companion (body-only
 # links on the companion PR do not notify the source thread).
-NOTIFY_MARKER="<!-- konflux-manifest-companion-notify:${SOURCE_PR} -->"
 if [[ -n "${COMPANION_PR}" ]]; then
+  NOTIFY_MARKER="<!-- konflux-manifest-companion-notify:${COMPANION_PR} -->"
   post_notify_comment=true
   set +e
   comment_bodies="$(
