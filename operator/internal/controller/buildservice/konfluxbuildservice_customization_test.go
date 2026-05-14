@@ -141,6 +141,96 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Image).To(gomega.Equal(originalImage))
 	})
+
+	t.Run("logEncoder=console appends zap-encoder arg", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			LogEncoder: "console",
+		}
+
+		deployment := getBuildServiceDeployment(t)
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		baseArgCount := len(managerContainer.Args)
+
+		overlay := buildBuildControllerManagerOverlay(spec, nil, "")
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.HaveLen(baseArgCount + 1))
+		g.Expect(managerContainer.Args).To(gomega.ContainElement("--zap-encoder=console"))
+	})
+
+	t.Run("logEncoder=json appends zap-encoder arg", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			LogEncoder: "json",
+		}
+
+		deployment := getBuildServiceDeployment(t)
+		overlay := buildBuildControllerManagerOverlay(spec, nil, "")
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.ContainElement("--zap-encoder=json"))
+	})
+
+	t.Run("empty logEncoder does not add zap-encoder arg", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+
+		deployment := getBuildServiceDeployment(t)
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		baseArgs := make([]string, len(managerContainer.Args))
+		copy(baseArgs, managerContainer.Args)
+
+		overlay := buildBuildControllerManagerOverlay(spec, nil, "")
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.Equal(baseArgs))
+	})
+
+	t.Run("logEncoder with buildControllerManager preserves base args and adds zap-encoder", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			LogEncoder: "console",
+			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+				Manager: &konfluxv1alpha1.ContainerSpec{
+					Resources: &corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU: resource.MustParse("500m"),
+						},
+					},
+				},
+			},
+		}
+
+		deployment := getBuildServiceDeployment(t)
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		baseArgs := make([]string, len(managerContainer.Args))
+		copy(baseArgs, managerContainer.Args)
+
+		overlay := buildBuildControllerManagerOverlay(spec, nil, "")
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		for _, arg := range baseArgs {
+			g.Expect(managerContainer.Args).To(gomega.ContainElement(arg))
+		}
+		g.Expect(managerContainer.Args).To(gomega.ContainElement("--zap-encoder=console"))
+		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
+	})
 }
 
 func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {

@@ -275,6 +275,16 @@ spec:
                     minimum: 1
                     type: integer
                 type: object
+              logEncoder:
+                description: |-
+                  LogEncoder sets the log encoding format for the build-service controller.
+                  "json" produces structured JSON logs (upstream default), "console" produces
+                  human-readable output useful for development and debugging.
+                  When not set, the upstream default (json) is used.
+                enum:
+                - json
+                - console
+                type: string
               pipelineConfig:
                 description: |-
                   PipelineConfig controls the contents of the build-pipeline-config ConfigMap.
