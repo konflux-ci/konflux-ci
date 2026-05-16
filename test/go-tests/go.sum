@@ -96,8 +96,8 @@ github.com/coder/websocket v1.8.14 h1:9L0p0iKiNOibykf283eHkKUHHrpG7f65OE3BhhO7v9
 github.com/coder/websocket v1.8.14/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
 github.com/codeready-toolchain/api v0.0.0-20260415142422-12ff40f3bdb6 h1:d4DTT/6zhDFTN9rlCggsz/PLZGUCRccbSATcDmdTjzI=
 github.com/codeready-toolchain/api v0.0.0-20260415142422-12ff40f3bdb6/go.mod h1:PMg6kNHuCGNlu3MOdrCisqGkBpvzB0qS1+E6nrXxPAc=
-github.com/conforma/crds/api v0.1.7 h1:IBsIw35A5QkP5i1Se6/BASaFvTnW+xTlWEqJMdX7EiA=
-github.com/conforma/crds/api v0.1.7/go.mod h1:vaUCN54r99HME4555KRKOUPGJxBNAlX1agZ4jlGI2YA=
+github.com/conforma/crds/api v0.1.10 h1:KE5S9qRyYJsnupDSKFPn3mBKBzNedjkKHzI+UCUrnbc=
+github.com/conforma/crds/api v0.1.10/go.mod h1:vaUCN54r99HME4555KRKOUPGJxBNAlX1agZ4jlGI2YA=
 github.com/containerd/stargz-snapshotter/estargz v0.18.1 h1:cy2/lpgBXDA3cDKSyEfNOFMA/c10O1axL69EU7iirO8=
 github.com/containerd/stargz-snapshotter/estargz v0.18.1/go.mod h1:ALIEqa7B6oVDsrF37GkGN20SuvG/pIMm7FwP7ZmRb0Q=
 github.com/coreos/go-semver v0.3.1 h1:yi21YpKnrx1gt5R+la8n5WgS0kCrsPp33dmEyHReZr4=
