@@ -66,12 +66,15 @@ jobs:
           for file in "${files[@]}"; do
             case "$file" in
               operator/upstream-kustomizations/*) ;;
+              # MintMaker bumps dependencies/registry/kustomization.yml together with
+              # operator/upstream-kustomizations/registry for quay.io/konflux-ci/zot digests.
+              dependencies/registry/kustomization.yml) ;;
               .github/scripts/export-third-party-chart-env.sh) ;;
               *) disallowed+=("$file") ;;
             esac
           done
           if ((${#disallowed[@]})); then
-            echo "::error::Refusing to run: PR changes files outside the manifest companion allowlist (only operator/upstream-kustomizations/** and .github/scripts/export-third-party-chart-env.sh)."
+            echo "::error::Refusing to run: PR changes files outside the manifest companion allowlist (operator/upstream-kustomizations/*, dependencies/registry/*, .github/scripts/export-third-party-chart-env.sh)."
             printf '%s\n' "${disallowed[@]}" | sed 's/^/  - /' >&2
             exit 1
           fi
