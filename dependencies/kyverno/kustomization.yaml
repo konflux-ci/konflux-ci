@@ -1,11 +1,29 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+namespace: konflux-kyverno
 resources:
 # renovate: datasource=git-refs depName=https://github.com/kyverno/kyverno versioning=semver
 - https://github.com/kyverno/kyverno/releases/download/v1.17.1/install.yaml
 - kyverno-rbac.yaml
 
 patches:
+# install.yaml pins SA subjects and ConfigMap filters to the default "kyverno"
+# namespace; patch them to konflux-kyverno (see patches/*). Re-check on upgrade.
+- path: patches/admission-controller-service-accounts.yaml
+  target:
+    kind: Deployment
+    name: kyverno-admission-controller
+- path: patches/kyverno-configmap-namespace.yaml
+  target:
+    kind: ConfigMap
+    name: kyverno
+- patch: |-
+    - op: replace
+      path: /metadata/name
+      value: konflux-kyverno
+  target:
+    kind: Namespace
+    name: kyverno
 - patch: |-
     - op: replace
       path: /spec/replicas
@@ -13,7 +31,7 @@ patches:
   target:
     kind: Deployment
     name: kyverno-background-controller
-    namespace: kyverno
+    namespace: konflux-kyverno
 - patch: |-
     - op: replace
       path: /spec/replicas
@@ -21,7 +39,7 @@ patches:
   target:
     kind: Deployment
     name: kyverno-cleanup-controller
-    namespace: kyverno
+    namespace: konflux-kyverno
 - patch: |-
     - op: replace
       path: /spec/replicas
@@ -29,7 +47,7 @@ patches:
   target:
     kind: Deployment
     name: kyverno-reports-controller
-    namespace: kyverno
+    namespace: konflux-kyverno
 # Reduce kyverno-admission-controller resources to absolute minimum
 - patch: |-
     - op: replace
@@ -41,7 +59,7 @@ patches:
   target:
     kind: Deployment
     name: kyverno-admission-controller
-    namespace: kyverno
+    namespace: konflux-kyverno
 # Reduce kyverno-background-controller resources to absolute minimum
 - patch: |-
     - op: replace
@@ -53,7 +71,7 @@ patches:
   target:
     kind: Deployment
     name: kyverno-background-controller
-    namespace: kyverno
+    namespace: konflux-kyverno
 - patch: |-
     - op: add
       path: /spec/jobTemplate/spec/template/spec/containers/0/resources
@@ -66,4 +84,4 @@ patches:
           memory: 10Mi
   target:
     kind: CronJob
-    namespace: kyverno
+    namespace: konflux-kyverno

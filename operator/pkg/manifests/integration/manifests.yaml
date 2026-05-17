@@ -1476,7 +1476,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: kyverno-background-controller
-  namespace: kyverno
+  namespace: konflux-kyverno
 ---
 apiVersion: v1
 data:
