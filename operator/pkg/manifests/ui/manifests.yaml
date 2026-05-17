@@ -133,175 +133,72 @@ metadata:
 ---
 apiVersion: v1
 data:
-  Caddyfile: |
-    {
-        auto_https off
-        admin localhost:2019
-    }
-
-    # TODO: protect metrics with kube-rbac-proxy sidecar (https://github.com/openshift/kube-rbac-proxy)
-    :2112 {
-        metrics /metrics
-    }
-
-    :9443 {
-        tls /mnt/tls.crt /mnt/tls.key
-
-        # Strip any client-supplied impersonation and proxy-auth headers to
-        # prevent spoofing. This runs at the server level, before any
-        # handle/route blocks.
-        request_header -Impersonate-User
-        request_header -Impersonate-Group
-        request_header -Impersonate-Uid
-        request_header -Impersonate-Extra-*
-        request_header -X-User
-        request_header -X-Group
-
-        # Health endpoint for liveness/readiness probes
-        handle /health {
-            respond 200
-        }
-
-        # Segment bridge files
-        handle /segment/* {
-            root * /opt/app-root/src
-            header Content-Type text/plain
-            file_server
-        }
-
-        # OAuth2 proxy - browser-facing auth UI/callback
-        handle /oauth2/* {
-            reverse_proxy 127.0.0.1:6000
-        }
-
-        # Namespace lister (GET only on exact paths)
-        # The namespace-lister performs in-memory RBAC authorization: it checks
-        # RoleBindings for the user AND their groups to decide which namespaces
-        # to return. Without group headers, a user only sees namespaces where
-        # they are bound individually — group-based bindings are invisible.
-        # We use the same map + request_header pattern as the Kube API routes
-        # (see ns-lister-headers.conf) to split groups into multiple X-Group
-        # headers, which namespace-lister reads via req.Header.Values().
-        @nsListGet {
-            method GET
-            path /api/k8s/api/v1/namespaces /api/k8s/api/v1/namespaces/
-        }
-        handle @nsListGet {
-            route {
-                forward_auth 127.0.0.1:6000 {
-                    uri /oauth2/auth
-                    copy_headers X-Auth-Request-Email X-Auth-Request-Groups
-                }
-                import /etc/caddy/impersonate-groups.conf
-                import /etc/caddy/ns-lister-headers.conf
-                rewrite * /api/v1/namespaces
-                reverse_proxy https://namespace-lister.namespace-lister.svc.cluster.local:8080 {
-                    header_down -X-Correlation-ID
-                    transport http {
-                        read_timeout 30m
-                        write_timeout 30m
-                        tls_trust_pool file /mnt/trusted-ca/ca-bundle.crt
-                    }
-                }
-            }
-        }
-
-        # Backend snippets (tekton-results, kubearchive, etc.) loaded from init-generated configs.
-        # NOTE: Imported snippets MUST use paths more specific than /api/k8s/ to avoid
-        # shadowing the Kube API catch-all handler below. Caddy evaluates handle blocks
-        # by specificity (longest path match first), so e.g. /api/k8s/plugins/tekton-results/
-        # is safe because it is more specific than /api/k8s/.
-        import /mnt/caddy-snippets/*.caddy
-
-        # --- Group impersonation ---
-        #
-        # The Kubernetes API requires each group to be sent as a separate
-        # Impersonate-Group header. oauth2-proxy returns all groups in a single
-        # comma-separated X-Auth-Request-Groups header (e.g. "group1,group2").
-        #
-        # We split them using a two-step approach:
-        #
-        # 1. impersonate-groups.conf — a Caddy `map` directive that extracts up
-        #    to 10 individual groups from the comma-separated header into
-        #    placeholders {ig1}…{ig10} via a regex with capture groups.
-        #
-        # 2. impersonate-headers.conf — `request_header +Impersonate-Group`
-        #    directives that add one header per placeholder, plus a static
-        #    "system:authenticated" group that is always included.
-        #
-        # Why request_header instead of header_up (reverse_proxy)?
-        #   Caddy's reverse_proxy `header_up` merges all operations for the same
-        #   header into a single HeaderOps struct and applies them as:
-        #   set → add → delete. When both `header_up Impersonate-Group` (set) and
-        #   `header_up +Impersonate-Group` (add) target the same header, the set
-        #   operation overwrites the add — only the first value survives. Using
-        #   `request_header` as a standalone handler in the route chain avoids
-        #   this: the server-level delete (above) runs first, then the route-level
-        #   add runs later in a separate handler, so all values are preserved.
-        #
-        # Why route { } blocks?
-        #   Caddy's default directive ordering sorts `map` before `forward_auth`,
-        #   so the map would read X-Auth-Request-Groups before forward_auth has
-        #   copied it from the auth response. Wrapping in `route` preserves the
-        #   written order: forward_auth → map → request_header → reverse_proxy.
-
-        # WebSocket to Kube API
-        handle_path /wss/k8s/* {
-            route {
-                forward_auth 127.0.0.1:6000 {
-                    uri /oauth2/auth
-                    copy_headers X-Auth-Request-Email X-Auth-Request-Groups
-                }
-                import /etc/caddy/impersonate-groups.conf
-                import /etc/caddy/impersonate-headers.conf
-                reverse_proxy https://kubernetes.default.svc {
-                    import /mnt/caddy-snippets/kube-auth.conf
-                    transport http {
-                        read_timeout 30m
-                        write_timeout 30m
-                        tls_trust_pool file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-                    }
-                }
-            }
-        }
-
-        # Kube API (catch-all for /api/k8s/)
-        handle_path /api/k8s/* {
-            route {
-                forward_auth 127.0.0.1:6000 {
-                    uri /oauth2/auth
-                    copy_headers X-Auth-Request-Email X-Auth-Request-Groups
-                }
-                import /etc/caddy/impersonate-groups.conf
-                import /etc/caddy/impersonate-headers.conf
-                reverse_proxy https://kubernetes.default.svc {
-                    import /mnt/caddy-snippets/kube-auth.conf
-                    transport http {
-                        read_timeout 30m
-                        write_timeout 30m
-                        tls_trust_pool file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-                    }
-                }
-            }
-        }
-
-        # Dex Identity Provider
-        handle /idp/* {
-            reverse_proxy https://dex.konflux-ui.svc.cluster.local:9443 {
-                header_up X-Forwarded-Port "9443"
-                transport http {
-                    tls_trust_pool file /mnt/ca.crt
-                }
-            }
-        }
-
-        # Static SPA (catch-all, must be last)
-        handle {
-            root * /opt/app-root/src/static-content
-            try_files {path} /index.html
-            file_server
-        }
-    }
+  Caddyfile: "{\n\tauto_https off\n\tadmin localhost:2019\n}\n\n# TODO: protect metrics
+    with kube-rbac-proxy sidecar (https://github.com/openshift/kube-rbac-proxy)\n:2112
+    {\n\tmetrics /metrics\n}\n\n:9443 {\n\ttls /mnt/tls.crt /mnt/tls.key\n\n\t# Strip
+    any client-supplied impersonation and proxy-auth headers to\n\t# prevent spoofing.
+    This runs at the server level, before any\n\t# handle/route blocks.\n\trequest_header
+    -Impersonate-User\n\trequest_header -Impersonate-Group\n\trequest_header -Impersonate-Uid\n\trequest_header
+    -Impersonate-Extra-*\n\trequest_header -X-User\n\trequest_header -X-Group\n\n\t#
+    Health endpoint for liveness/readiness probes\n\thandle /health {\n\t\trespond
+    200\n\t}\n\n\t# Segment bridge files\n\thandle /segment/* {\n\t\troot * /opt/app-root/src\n\t\theader
+    Content-Type text/plain\n\t\tfile_server\n\t}\n\n\t# OAuth2 proxy - browser-facing
+    auth UI/callback\n\thandle /oauth2/* {\n\t\treverse_proxy 127.0.0.1:6000\n\t}\n\n\t#
+    Namespace lister (GET only on exact paths)\n\t# The namespace-lister performs
+    in-memory RBAC authorization: it checks\n\t# RoleBindings for the user AND their
+    groups to decide which namespaces\n\t# to return. Without group headers, a user
+    only sees namespaces where\n\t# they are bound individually — group-based bindings
+    are invisible.\n\t# We use the same map + request_header pattern as the Kube API
+    routes\n\t# (see ns-lister-headers.conf) to split groups into multiple X-Group\n\t#
+    headers, which namespace-lister reads via req.Header.Values().\n\t@nsListGet {\n\t\tmethod
+    GET\n\t\tpath /api/k8s/api/v1/namespaces /api/k8s/api/v1/namespaces/\n\t}\n\thandle
+    @nsListGet {\n\t\troute {\n\t\t\tforward_auth 127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\tcopy_headers
+    X-Auth-Request-Email X-Auth-Request-Groups\n\t\t\t}\n\t\t\timport /etc/caddy/impersonate-groups.conf\n\t\t\timport
+    /etc/caddy/ns-lister-headers.conf\n\t\t\trewrite * /api/v1/namespaces\n\t\t\treverse_proxy
+    https://namespace-lister.namespace-lister.svc.cluster.local:8080 {\n\t\t\t\theader_down
+    -X-Correlation-ID\n\t\t\t\ttransport http {\n\t\t\t\t\tread_timeout 30m\n\t\t\t\t\twrite_timeout
+    30m\n\t\t\t\t\ttls_trust_pool file /mnt/trusted-ca/ca-bundle.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
+    Backend snippets (tekton-results, kubearchive, etc.) loaded from init-generated
+    configs.\n\t# NOTE: Imported snippets MUST use paths more specific than /api/k8s/
+    to avoid\n\t# shadowing the Kube API catch-all handler below. Caddy evaluates
+    handle blocks\n\t# by specificity (longest path match first), so e.g. /api/k8s/plugins/tekton-results/\n\t#
+    is safe because it is more specific than /api/k8s/.\n\timport /mnt/caddy-snippets/*.caddy\n\n\t#
+    --- Group impersonation ---\n\t#\n\t# The Kubernetes API requires each group to
+    be sent as a separate\n\t# Impersonate-Group header. oauth2-proxy returns all
+    groups in a single\n\t# comma-separated X-Auth-Request-Groups header (e.g. \"group1,group2\").\n\t#\n\t#
+    We split them using a two-step approach:\n\t#\n\t# 1. impersonate-groups.conf
+    — a Caddy `map` directive that extracts up\n\t#    to 10 individual groups from
+    the comma-separated header into\n\t#    placeholders {ig1}…{ig10} via a regex
+    with capture groups.\n\t#\n\t# 2. impersonate-headers.conf — `request_header +Impersonate-Group`\n\t#
+    \   directives that add one header per placeholder, plus a static\n\t#    \"system:authenticated\"
+    group that is always included.\n\t#\n\t# Why request_header instead of header_up
+    (reverse_proxy)?\n\t#   Caddy's reverse_proxy `header_up` merges all operations
+    for the same\n\t#   header into a single HeaderOps struct and applies them as:\n\t#
+    \  set → add → delete. When both `header_up Impersonate-Group` (set) and\n\t#
+    \  `header_up +Impersonate-Group` (add) target the same header, the set\n\t#   operation
+    overwrites the add — only the first value survives. Using\n\t#   `request_header`
+    as a standalone handler in the route chain avoids\n\t#   this: the server-level
+    delete (above) runs first, then the route-level\n\t#   add runs later in a separate
+    handler, so all values are preserved.\n\t#\n\t# Why route { } blocks?\n\t#   Caddy's
+    default directive ordering sorts `map` before `forward_auth`,\n\t#   so the map
+    would read X-Auth-Request-Groups before forward_auth has\n\t#   copied it from
+    the auth response. Wrapping in `route` preserves the\n\t#   written order: forward_auth
+    → map → request_header → reverse_proxy.\n\n\t# WebSocket to Kube API\n\thandle_path
+    /wss/k8s/* {\n\t\troute {\n\t\t\tforward_auth 127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\tcopy_headers
+    X-Auth-Request-Email X-Auth-Request-Groups\n\t\t\t}\n\t\t\timport /etc/caddy/impersonate-groups.conf\n\t\t\timport
+    /etc/caddy/impersonate-headers.conf\n\t\t\treverse_proxy https://kubernetes.default.svc
+    {\n\t\t\t\timport /mnt/caddy-snippets/kube-auth.conf\n\t\t\t\ttransport http {\n\t\t\t\t\tread_timeout
+    30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
+    Kube API (catch-all for /api/k8s/)\n\thandle_path /api/k8s/* {\n\t\troute {\n\t\t\tforward_auth
+    127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\tcopy_headers X-Auth-Request-Email
+    X-Auth-Request-Groups\n\t\t\t}\n\t\t\timport /etc/caddy/impersonate-groups.conf\n\t\t\timport
+    /etc/caddy/impersonate-headers.conf\n\t\t\treverse_proxy https://kubernetes.default.svc
+    {\n\t\t\t\timport /mnt/caddy-snippets/kube-auth.conf\n\t\t\t\ttransport http {\n\t\t\t\t\tread_timeout
+    30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
+    Dex Identity Provider\n\thandle /idp/* {\n\t\treverse_proxy https://dex.konflux-ui.svc.cluster.local:9443
+    {\n\t\t\theader_up X-Forwarded-Port \"9443\"\n\t\t\ttransport http {\n\t\t\t\ttls_trust_pool
+    file /mnt/ca.crt\n\t\t\t}\n\t\t}\n\t}\n\n\t# Static SPA (catch-all, must be last)\n\thandle
+    {\n\t\troot * /opt/app-root/src/static-content\n\t\ttry_files {path} /index.html\n\t\tfile_server\n\t}\n}\n"
   impersonate-groups.conf: |
     # Extract up to 10 comma-separated groups from the auth proxy header into
     # individual placeholders so each can be sent as a separate Impersonate-Group
@@ -344,7 +241,7 @@ data:
     request_header +X-Group "system:authenticated"
 kind: ConfigMap
 metadata:
-  name: proxy-caddyfile-7ch57t7bt7
+  name: proxy-caddyfile-2mc7cd29b9
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -994,7 +891,7 @@ spec:
             path: impersonate-headers.conf
           - key: ns-lister-headers.conf
             path: ns-lister-headers.conf
-          name: proxy-caddyfile-7ch57t7bt7
+          name: proxy-caddyfile-2mc7cd29b9
         name: proxy-caddyfile
       - configMap:
           defaultMode: 420
