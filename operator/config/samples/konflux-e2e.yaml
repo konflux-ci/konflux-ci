@@ -22,7 +22,7 @@ spec:
           httpsPort: 30011
       proxy:
         replicas: 1
-        nginx:
+        reverseProxy:
           resources:
             requests:
               cpu: 30m
