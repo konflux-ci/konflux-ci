@@ -29,6 +29,17 @@ type KonfluxBuildServiceSpec struct {
 	// +optional
 	BuildControllerManager *ControllerManagerDeploymentSpec `json:"buildControllerManager,omitempty"`
 
+	// PACWebhookInsecureSSL controls TLS certificate verification when the build-service
+	// configures webhooks on git providers.
+	// When set to true, sets PAC_WEBHOOK_INSECURE_SSL=1 on the controller
+	// (use only in development or test environments with self-signed certificates).
+	// When set to false, forces PAC_WEBHOOK_INSECURE_SSL off, overriding any
+	// value in buildControllerManager.manager.env.
+	// When omitted, the upstream default applies and PAC_WEBHOOK_INSECURE_SSL
+	// in buildControllerManager.manager.env (if set) takes effect.
+	// +optional
+	PACWebhookInsecureSSL *bool `json:"pacWebhookInsecureSSL,omitempty"`
+
 	// LogEncoder sets the log encoding format for the build-service controller.
 	// "json" produces structured JSON logs (upstream default), "console" produces
 	// human-readable output useful for development and debugging.
