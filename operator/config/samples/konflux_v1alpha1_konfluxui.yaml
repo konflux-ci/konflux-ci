@@ -23,7 +23,7 @@ spec:
   # Proxy deployment configuration
   proxy:
     replicas: 3
-    nginx:
+    reverseProxy:
       resources:
         requests:
           cpu: 100m
@@ -31,13 +31,6 @@ spec:
         limits:
           cpu: 500m
           memory: 512Mi
-      env:
-        - name: NGINX_WORKER_PROCESSES
-          value: "4"
-        - name: NGINX_WORKER_CONNECTIONS
-          value: "1024"
-        - name: NGINX_KEEPALIVE_TIMEOUT
-          value: "65"
     oauth2Proxy:
       resources:
         requests:
