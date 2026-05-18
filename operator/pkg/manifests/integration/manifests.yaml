@@ -1465,19 +1465,6 @@ subjects:
   name: integration-service-controller-manager
   namespace: integration-service
 ---
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: kyverno-background-controller-konflux-integration-runner
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: konflux-integration-runner
-subjects:
-- kind: ServiceAccount
-  name: kyverno-background-controller
-  namespace: kyverno
----
 apiVersion: v1
 data:
   controller_manager_config.yaml: |
@@ -1669,61 +1656,6 @@ metadata:
   namespace: integration-service
 spec:
   selfSigned: {}
----
-apiVersion: kyverno.io/v1
-kind: ClusterPolicy
-metadata:
-  annotations:
-    policies.kyverno.io/description: |
-      This policy creates a service account named konflux-integration-runner and
-      binds it to the konflux-integration-runner cluster role in tenant namespaces.
-  name: init-ns-integration
-  namespace: integration-service
-spec:
-  rules:
-  - generate:
-      apiVersion: v1
-      generateExisting: true
-      kind: ServiceAccount
-      name: konflux-integration-runner
-      namespace: '{{request.object.metadata.name}}'
-      synchronize: false
-    match:
-      any:
-      - resources:
-          kinds:
-          - Namespace
-          selector:
-            matchLabels:
-              konflux-ci.dev/type: tenant
-    name: create-konflux-integration-runner-serviceaccount
-    skipBackgroundRequests: true
-  - generate:
-      apiVersion: rbac.authorization.k8s.io/v1
-      data:
-        roleRef:
-          apiGroup: rbac.authorization.k8s.io
-          kind: ClusterRole
-          name: konflux-integration-runner
-        subjects:
-        - kind: ServiceAccount
-          name: konflux-integration-runner
-          namespace: '{{request.object.metadata.name}}'
-      generateExisting: true
-      kind: RoleBinding
-      name: konflux-integration-runner-rolebinding
-      namespace: '{{request.object.metadata.name}}'
-      synchronize: false
-    match:
-      any:
-      - resources:
-          kinds:
-          - Namespace
-          selector:
-            matchLabels:
-              konflux-ci.dev/type: tenant
-    name: create-konflux-integration-runner-rolebinding
-    skipBackgroundRequests: true
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration

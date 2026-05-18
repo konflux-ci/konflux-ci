@@ -67,10 +67,13 @@ spec:
             # Resolve tekton-results hostname
             results_hostname_k8s=tekton-results-api-service.tekton-pipelines.svc.cluster.local
             results_hostname_openshift=tekton-results-api-service.openshift-pipelines.svc.cluster.local
+            results_hostname_dedicated=tekton-results-api-service.tekton-results.svc.cluster.local
             if nslookup $results_hostname_k8s > /dev/null 2>&1; then
               results_hostname=$results_hostname_k8s
             elif nslookup $results_hostname_openshift > /dev/null 2>&1; then
               results_hostname=$results_hostname_openshift
+            elif nslookup $results_hostname_dedicated > /dev/null 2>&1; then
+              results_hostname=$results_hostname_dedicated
             else
               echo "Error: Could not resolve tekton-results hostname"
               exit 1
