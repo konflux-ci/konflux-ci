@@ -665,6 +665,11 @@ func (in *KonfluxBuildServiceSpec) DeepCopyInto(out *KonfluxBuildServiceSpec) {
 		*out = new(ControllerManagerDeploymentSpec)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.PACWebhookInsecureSSL != nil {
+		in, out := &in.PACWebhookInsecureSSL, &out.PACWebhookInsecureSSL
+		*out = new(bool)
+		**out = **in
+	}
 	if in.WebhookURLs != nil {
 		in, out := &in.WebhookURLs, &out.WebhookURLs
 		*out = make(map[string]string, len(*in))
