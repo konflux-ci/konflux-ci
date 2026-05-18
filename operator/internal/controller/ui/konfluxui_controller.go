@@ -402,7 +402,7 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, segmentSecretN
 	podOpts = append(podOpts,
 		customization.WithContainerBuilder(
 			nginxContainerName,
-			customization.FromContainerSpec(spec.Nginx),
+			customization.FromContainerSpec(spec.ReverseProxy),
 		)(customization.DeploymentContext{Replicas: spec.Replicas}),
 		customization.WithContainerBuilder(
 			oauth2ProxyContainerName,
