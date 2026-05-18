@@ -260,7 +260,8 @@ func applyBuildServiceDeploymentCustomizations(deployment *appsv1.Deployment, sp
 // On OpenShift, PAC_WEBHOOK_URL is never set — the build-service auto-discovers the PaC Route.
 // When webhookConfigMapName is non-empty, the webhook-config volume (baked into the manifest
 // with optional: true) is updated to reference the hashed ConfigMap.
-// User-provided env vars from the CR spec always take precedence.
+// Typed CRD fields (e.g. pacWebhookInsecureSSL) take precedence over
+// user-provided env vars in buildControllerManager.manager.env.
 func buildBuildControllerManagerOverlay(spec konfluxv1alpha1.KonfluxBuildServiceSpec, clusterInfo *clusterinfo.Info, webhookConfigMapName string) *customization.PodOverlay {
 	var containerOpts []customization.ContainerOption
 	var podOpts []customization.PodOverlayOption
@@ -285,20 +286,28 @@ func buildBuildControllerManagerOverlay(spec konfluxv1alpha1.KonfluxBuildService
 		containerOpts = append(containerOpts, customization.WithArgs(zapEncoderArg+"="+spec.LogEncoder))
 	}
 
-	if spec.BuildControllerManager == nil {
-		podOpts = append(podOpts,
-			customization.WithContainerOpts(buildManagerContainerName, customization.DeploymentContext{}, containerOpts...),
-		)
-		return customization.NewPodOverlay(podOpts...)
+	var deployCtx customization.DeploymentContext
+	var managerSpec *konfluxv1alpha1.ContainerSpec
+	if spec.BuildControllerManager != nil {
+		managerSpec = spec.BuildControllerManager.Manager
+		deployCtx = customization.DeploymentContext{Replicas: spec.BuildControllerManager.Replicas}
 	}
 
 	containerOpts = append(containerOpts,
-		customization.FromContainerSpec(spec.BuildControllerManager.Manager),
+		customization.FromContainerSpec(managerSpec),
 		customization.WithLeaderElection(),
 	)
 
+	if spec.PACWebhookInsecureSSL != nil {
+		if *spec.PACWebhookInsecureSSL {
+			containerOpts = append(containerOpts, customization.WithEnvOverride("PAC_WEBHOOK_INSECURE_SSL", "1"))
+		} else {
+			containerOpts = append(containerOpts, customization.WithoutEnv("PAC_WEBHOOK_INSECURE_SSL"))
+		}
+	}
+
 	podOpts = append(podOpts,
-		customization.WithContainerBuilder(buildManagerContainerName, containerOpts...)(customization.DeploymentContext{Replicas: spec.BuildControllerManager.Replicas}),
+		customization.WithContainerOpts(buildManagerContainerName, deployCtx, containerOpts...),
 	)
 	return customization.NewPodOverlay(podOpts...)
 }

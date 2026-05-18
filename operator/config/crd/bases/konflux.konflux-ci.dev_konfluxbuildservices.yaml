@@ -285,6 +285,17 @@ spec:
                 - json
                 - console
                 type: string
+              pacWebhookInsecureSSL:
+                description: |-
+                  PACWebhookInsecureSSL controls TLS certificate verification when the build-service
+                  configures webhooks on git providers.
+                  When set to true, sets PAC_WEBHOOK_INSECURE_SSL=1 on the controller
+                  (use only in development or test environments with self-signed certificates).
+                  When set to false, forces PAC_WEBHOOK_INSECURE_SSL off, overriding any
+                  value in buildControllerManager.manager.env.
+                  When omitted, the upstream default applies and PAC_WEBHOOK_INSECURE_SSL
+                  in buildControllerManager.manager.env (if set) takes effect.
+                type: boolean
               pipelineConfig:
                 description: |-
                   PipelineConfig controls the contents of the build-pipeline-config ConfigMap.

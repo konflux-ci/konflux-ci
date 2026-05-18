@@ -276,6 +276,37 @@ func TestWithEnvOverride(t *testing.T) {
 	})
 }
 
+func TestWithoutEnv(t *testing.T) {
+	ctx := DeploymentContext{Replicas: 1}
+
+	t.Run("removes existing variable", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		c := NewContainerOverlay(ctx,
+			WithEnv(corev1.EnvVar{Name: "KEEP", Value: "a"}),
+			WithEnv(corev1.EnvVar{Name: "REMOVE", Value: "b"}),
+			WithoutEnv("REMOVE"),
+		)
+		g.Expect(c.Env).To(gomega.HaveLen(1))
+		g.Expect(c.Env[0].Name).To(gomega.Equal("KEEP"))
+	})
+
+	t.Run("no-op when variable does not exist", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		c := NewContainerOverlay(ctx,
+			WithEnv(corev1.EnvVar{Name: "KEEP", Value: "a"}),
+			WithoutEnv("NONEXISTENT"),
+		)
+		g.Expect(c.Env).To(gomega.HaveLen(1))
+		g.Expect(c.Env[0].Name).To(gomega.Equal("KEEP"))
+	})
+
+	t.Run("no-op on empty env list", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		c := NewContainerOverlay(ctx, WithoutEnv("VAR1"))
+		g.Expect(c.Env).To(gomega.BeEmpty())
+	})
+}
+
 func TestWithOptionalEnvOverride(t *testing.T) {
 	ctx := DeploymentContext{Replicas: 1}
 
