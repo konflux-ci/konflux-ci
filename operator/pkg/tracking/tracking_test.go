@@ -1059,7 +1059,7 @@ func TestIsNoKindMatchError(t *testing.T) {
 	t.Run("returns true for deeply wrapped NoKindMatchError", func(t *testing.T) {
 		g := NewWithT(t)
 		noKindErr := &meta.NoKindMatchError{
-			GroupKind: schema.GroupKind{Group: "kyverno.io", Kind: "Policy"},
+			GroupKind: schema.GroupKind{Group: "example.com", Kind: "Widget"},
 		}
 		wrappedOnce := fmt.Errorf("cleanup failed: %w", noKindErr)
 		wrappedTwice := fmt.Errorf("reconcile error: %w", wrappedOnce)

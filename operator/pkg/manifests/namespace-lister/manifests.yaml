@@ -161,37 +161,6 @@ spec:
     name: ca-issuer
   secretName: namespace-lister-tls
 ---
-apiVersion: kyverno.io/v1
-kind: ClusterPolicy
-metadata:
-  name: deny-virtual-domain
-  namespace: namespace-lister
-spec:
-  rules:
-  - match:
-      any:
-      - resources:
-          kinds:
-          - /v1/Namespace
-          operations:
-          - CREATE
-          - UPDATE
-          selector:
-            matchLabels:
-              konflux-ci.dev/type: tenant
-    name: deny-virtual-domain-labels-annotations
-    skipBackgroundRequests: true
-    validate:
-      allowExistingViolations: true
-      cel:
-        expressions:
-        - expression: '!object.metadata.labels.exists(key, key.startsWith("virtual.konflux-ci.dev/"))'
-          message: Tenant namespaces can not have labels with domain 'virtual.konflux-ci.dev'
-        - expression: '!has(object.metadata.annotations) || !object.metadata.annotations.exists(key,
-            key.startsWith("virtual.konflux-ci.dev/"))'
-          message: Tenant namespaces can not have annotations with domain 'virtual.konflux-ci.dev'
-  validationFailureAction: Enforce
----
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

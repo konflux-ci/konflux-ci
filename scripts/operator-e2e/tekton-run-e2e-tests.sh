@@ -80,6 +80,5 @@ eval "$(bash scripts/operator-e2e/prepare-conformance-env.sh "${REPO_ROOT}")"
 export GITHUB_TOKEN="${GH_TOKEN:-}"
 export MY_GITHUB_ORG="${GH_ORG:-}"
 export QUAY_TOKEN=""
-export E2E_APPLICATIONS_NAMESPACE=user-ns2
 JUNIT="${REPO_ROOT}/junit-conformance.xml"
 bash scripts/operator-e2e/run-conformance-tests.sh "${REPO_ROOT}" "${JUNIT}"

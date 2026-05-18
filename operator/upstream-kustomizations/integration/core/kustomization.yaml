@@ -4,8 +4,6 @@ resources:
 - https://github.com/konflux-ci/integration-service/config/default?ref=ef2610ecd344292fb85e01321f7b613c7e621ec5
 - https://github.com/konflux-ci/integration-service/config/snapshotgc?ref=ef2610ecd344292fb85e01321f7b613c7e621ec5
 - konflux-integration-runner.yaml
-- kyverno-background-controller-binding.yaml
-- bootstrap-namespace.yaml
 
 namespace: integration-service
 

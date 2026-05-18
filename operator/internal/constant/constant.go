@@ -28,6 +28,4 @@ const (
 	ConditionTypeCertManagerAvailable = "CertManagerAvailable"
 	// CertManagerGroup is the API group for cert-manager resources
 	CertManagerGroup = "cert-manager.io"
-	// KyvernoGroup is the API group for Kyverno resources
-	KyvernoGroup = "kyverno.io"
 )

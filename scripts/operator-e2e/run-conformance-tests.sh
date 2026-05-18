@@ -12,7 +12,7 @@ JUNIT="${2:-${JUNIT_REPORT_PATH:-${GITHUB_WORKSPACE:-$REPO_ROOT}/junit-conforman
 export GITHUB_TOKEN="${GH_TOKEN:?GH_TOKEN required}"
 export MY_GITHUB_ORG="${GH_ORG:?GH_ORG required}"
 export QUAY_TOKEN=''
-export E2E_APPLICATIONS_NAMESPACE="${E2E_APPLICATIONS_NAMESPACE:-user-ns2}"
+export E2E_APPLICATIONS_NAMESPACE="${E2E_APPLICATIONS_NAMESPACE:-default-tenant}"
 
 cd "${REPO_ROOT}/test/go-tests"
 # Deliberate word-splitting: each space-separated flag must be its own argv token for go test.
