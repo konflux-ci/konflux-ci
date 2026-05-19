@@ -577,10 +577,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		BeforeEach(func(ctx context.Context) {
 			By("pre-cleaning any existing OpenShift OAuth resources")
 			_ = k8sClient.Delete(ctx, &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{
-				Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
-			}})
-			_ = k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-				Name: dex.DexClientSecretName, Namespace: uiNamespace,
+				Name: "dex", Namespace: uiNamespace,
 			}})
 
 			By("building cluster info for OpenShift and non-OpenShift platforms")
@@ -617,10 +614,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			DeferCleanup(func(ctx context.Context) {
 				testutil.DeleteAndWait(ctx, k8sClient, ui)
 				_ = k8sClient.Delete(ctx, &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{
-					Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
-				}})
-				_ = k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-					Name: dex.DexClientSecretName, Namespace: uiNamespace,
+					Name: "dex", Namespace: uiNamespace,
 				}})
 			})
 			return ui
@@ -633,38 +627,29 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Eventually(func(g Gomega) {
 				sa := &corev1.ServiceAccount{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
+					Name: "dex", Namespace: uiNamespace,
 				}, sa)).To(Succeed())
 				g.Expect(sa.Annotations).To(HaveKeyWithValue(
-					"serviceaccounts.openshift.io/oauth-redirecturi.dex",
+					dex.OpenShiftRedirectURIAnnotation,
 					"https://openshift-test.example.com/idp/callback",
-				))
-
-				secret := &corev1.Secret{}
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientSecretName, Namespace: uiNamespace,
-				}, secret)).To(Succeed())
-				g.Expect(secret.Type).To(Equal(corev1.SecretTypeServiceAccountToken))
-				g.Expect(secret.Annotations).To(HaveKeyWithValue(
-					"kubernetes.io/service-account.name",
-					dex.DexClientServiceAccountName,
 				))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
-		It("Should NOT create OpenShift OAuth resources when NOT running on OpenShift", func(ctx context.Context) {
+		It("Should NOT annotate dex ServiceAccount when NOT running on OpenShift", func(ctx context.Context) {
 			startManager(noDefaultSegmentKey, defaultClusterInfo)
 			createCR(ctx)
 
 			By("waiting for initial reconcile to complete")
 			waitForReconcile(ctx)
 
-			Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
-				Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
-			}, &corev1.ServiceAccount{}))).To(BeTrue())
-			Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
-				Name: dex.DexClientSecretName, Namespace: uiNamespace,
-			}, &corev1.Secret{}))).To(BeTrue())
+			Eventually(func(g Gomega) {
+				sa := &corev1.ServiceAccount{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: "dex", Namespace: uiNamespace,
+				}, sa)).To(Succeed())
+				g.Expect(sa.Annotations).NotTo(HaveKey(dex.OpenShiftRedirectURIAnnotation))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
 		It("Should NOT create OpenShift OAuth resources when ClusterInfo is nil", func(ctx context.Context) {
@@ -674,12 +659,13 @@ var _ = Describe("KonfluxUI Controller", func() {
 			By("waiting for initial reconcile to complete")
 			waitForReconcile(ctx)
 
-			Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
-				Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
-			}, &corev1.ServiceAccount{}))).To(BeTrue())
-			Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
-				Name: dex.DexClientSecretName, Namespace: uiNamespace,
-			}, &corev1.Secret{}))).To(BeTrue())
+			Eventually(func(g Gomega) {
+				sa := &corev1.ServiceAccount{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: "dex", Namespace: uiNamespace,
+				}, sa)).To(Succeed())
+				g.Expect(sa.Annotations).NotTo(HaveKey(dex.OpenShiftRedirectURIAnnotation))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
 		It("Should NOT create OpenShift OAuth resources when explicitly disabled on OpenShift", func(ctx context.Context) {
@@ -698,12 +684,13 @@ var _ = Describe("KonfluxUI Controller", func() {
 			By("waiting for reconcile to complete")
 			waitForReconcile(ctx)
 
-			Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
-				Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
-			}, &corev1.ServiceAccount{}))).To(BeTrue())
-			Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
-				Name: dex.DexClientSecretName, Namespace: uiNamespace,
-			}, &corev1.Secret{}))).To(BeTrue())
+			Eventually(func(g Gomega) {
+				sa := &corev1.ServiceAccount{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: "dex", Namespace: uiNamespace,
+				}, sa)).To(Succeed())
+				g.Expect(sa.Annotations).NotTo(HaveKey(dex.OpenShiftRedirectURIAnnotation))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
 		It("Should create OpenShift OAuth resources when explicitly enabled on OpenShift", func(ctx context.Context) {
@@ -720,12 +707,14 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
 
 			Eventually(func(g Gomega) {
+				sa := &corev1.ServiceAccount{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
-				}, &corev1.ServiceAccount{})).To(Succeed())
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientSecretName, Namespace: uiNamespace,
-				}, &corev1.Secret{})).To(Succeed())
+					Name: "dex", Namespace: uiNamespace,
+				}, sa)).To(Succeed())
+				g.Expect(sa.Annotations).To(HaveKeyWithValue(
+					dex.OpenShiftRedirectURIAnnotation,
+					"https://openshift-test.example.com/idp/callback",
+				))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
@@ -735,12 +724,11 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 			By("waiting for OAuth resources to be created")
 			Eventually(func(g Gomega) {
+				sa := corev1.ServiceAccount{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
-				}, &corev1.ServiceAccount{})).To(Succeed())
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientSecretName, Namespace: uiNamespace,
-				}, &corev1.Secret{})).To(Succeed())
+					Name: "dex", Namespace: uiNamespace,
+				}, &sa)).To(Succeed())
+				g.Expect(sa.Annotations).To(HaveKey(dex.OpenShiftRedirectURIAnnotation))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			By("disabling OpenShift login")
@@ -753,12 +741,11 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				g.Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
-				}, &corev1.ServiceAccount{}))).To(BeTrue())
-				g.Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientSecretName, Namespace: uiNamespace,
-				}, &corev1.Secret{}))).To(BeTrue())
+				sa := corev1.ServiceAccount{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: "dex", Namespace: uiNamespace,
+				}, &sa)).To(Succeed())
+				g.Expect(sa.Annotations).NotTo(HaveKey(dex.OpenShiftRedirectURIAnnotation))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
@@ -769,19 +756,11 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Eventually(func(g Gomega) {
 				sa := &corev1.ServiceAccount{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
+					Name: "dex", Namespace: uiNamespace,
 				}, sa)).To(Succeed())
 				g.Expect(sa.OwnerReferences).To(HaveLen(1))
 				g.Expect(sa.OwnerReferences[0].Name).To(Equal(CRName))
 				g.Expect(sa.OwnerReferences[0].Kind).To(Equal("KonfluxUI"))
-
-				secret := &corev1.Secret{}
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientSecretName, Namespace: uiNamespace,
-				}, secret)).To(Succeed())
-				g.Expect(secret.OwnerReferences).To(HaveLen(1))
-				g.Expect(secret.OwnerReferences[0].Name).To(Equal(CRName))
-				g.Expect(secret.OwnerReferences[0].Kind).To(Equal("KonfluxUI"))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
@@ -792,9 +771,9 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Eventually(func(g Gomega) {
 				sa := &corev1.ServiceAccount{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
+					Name: "dex", Namespace: uiNamespace,
 				}, sa)).To(Succeed())
-				g.Expect(sa.Annotations["serviceaccounts.openshift.io/oauth-redirecturi.dex"]).To(
+				g.Expect(sa.Annotations[dex.OpenShiftRedirectURIAnnotation]).To(
 					Equal("https://openshift-test.example.com/idp/callback"),
 				)
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())

@@ -73,6 +73,9 @@ const (
 	// Service names
 	proxyServiceName = "proxy"
 
+	// ServiceAccount names
+	serviceAccountName = "dex"
+
 	// Container names
 	reverseProxyContainerName = "reverse-proxy"
 	oauth2ProxyContainerName  = "oauth2-proxy"
@@ -216,11 +219,6 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return errHandler.HandleWithReason(ctx, err, condition.ReasonIngressReconcileFailed, "reconcile Ingress")
 	}
 
-	// Reconcile OpenShift OAuth resources if enabled
-	if err := r.reconcileOpenShiftOAuth(ctx, tc, ui, endpoint); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonOAuthFailed, "reconcile OpenShift OAuth resources")
-	}
-
 	// Ensure UI secrets are created
 	if err := r.ensureUISecrets(ctx, tc); err != nil {
 		return errHandler.HandleWithReason(ctx, err, condition.ReasonSecretCreationFailed, "ensure UI secrets")
@@ -294,6 +292,9 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 		return fmt.Errorf("failed to get parsed manifests for UI: %w", err)
 	}
 
+	// Resolve whether OpenShift login should be enabled
+	openShiftLoginEnabled := isOpenShiftLoginEnabled(ui, r.ClusterInfo)
+
 	for _, obj := range objects {
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
@@ -307,6 +308,11 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 			applyUIServiceCustomizations(service, ui)
 		}
 
+		// Apply customizations for service accounts
+		if serviceAccount, ok := obj.(*corev1.ServiceAccount); ok {
+			applyUIServiceAccountCustomizations(serviceAccount, openShiftLoginEnabled, endpoint)
+		}
+
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			return fmt.Errorf("failed to apply object %s/%s (%s): %w",
 				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), err)
@@ -317,13 +323,12 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 
 // applyUIDeploymentCustomizations applies user-defined customizations to UI deployments.
 func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv1alpha1.KonfluxUI, clusterInfo *clusterinfo.Info, dexConfigMapName, segmentSecretName string, endpoint *url.URL) error {
-	openShiftLoginEnabled := isOpenShiftLoginEnabled(ui, clusterInfo)
-
 	switch deployment.Name {
 	case proxyDeploymentName:
 		proxySpec := ui.Spec.GetProxy()
 		deployment.Spec.Replicas = &proxySpec.Replicas
 		// Build oauth2-proxy options based on endpoint URL and OpenShift login state
+		openShiftLoginEnabled := isOpenShiftLoginEnabled(ui, clusterInfo)
 		oauth2ProxyOpts := buildOAuth2ProxyOptions(endpoint, openShiftLoginEnabled)
 		// The Caddy image uses a non-numeric USER directive ("caddy"), which
 		// prevents Kubernetes from verifying runAsNonRoot on vanilla clusters.
@@ -336,7 +341,7 @@ func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv
 	case dexDeploymentName:
 		dexSpec := ui.Spec.GetDex()
 		deployment.Spec.Replicas = &dexSpec.Replicas
-		if err := buildDexOverlay(ui.Spec.Dex, dexConfigMapName, openShiftLoginEnabled).ApplyToDeployment(deployment); err != nil {
+		if err := buildDexOverlay(ui.Spec.Dex, dexConfigMapName).ApplyToDeployment(deployment); err != nil {
 			return err
 		}
 	}
@@ -366,6 +371,23 @@ func applyUIServiceCustomizations(service *corev1.Service, ui *konfluxv1alpha1.K
 			}
 		}
 	}
+}
+
+func applyUIServiceAccountCustomizations(serviceAccount *corev1.ServiceAccount, openShiftLoginEnabled bool, endpoint *url.URL) {
+	// no changes are needed if OpenShift Login is disabled or
+	// if it's not the ServiceAccount used to authenticate
+	// with OpenShift OAuth
+	if !openShiftLoginEnabled || serviceAccount.Name != serviceAccountName {
+		return
+	}
+
+	// initialize Annotations if needed
+	if serviceAccount.Annotations == nil {
+		serviceAccount.Annotations = make(map[string]string, 1)
+	}
+
+	// set OpenShift Annotation
+	serviceAccount.Annotations[dex.OpenShiftRedirectURIAnnotation] = endpoint.JoinPath(dex.DexCallbackPath).String()
 }
 
 // buildProxyOverlay builds the pod overlay for the proxy deployment.
@@ -470,19 +492,14 @@ func buildOAuth2ProxyOptions(endpoint *url.URL, openShiftLoginEnabled bool) []cu
 }
 
 // buildDexOverlay builds the pod overlay for the dex deployment.
-// openShiftLoginEnabled controls whether the OpenShift OAuth client secret env var is added.
-func buildDexOverlay(spec *konfluxv1alpha1.DexDeploymentSpec, configMapName string, openShiftLoginEnabled bool) *customization.PodOverlay {
+// openShiftLoginEnabled controls whether the OPENSHIFT_LOGIN_ENABLED env var is added.
+func buildDexOverlay(spec *konfluxv1alpha1.DexDeploymentSpec, configMapName string) *customization.PodOverlay {
 	opts := []customization.PodOverlayOption{
 		customization.WithConfigMapVolumeUpdate(dexConfigMapVolumeName, configMapName),
 	}
 
 	// Build container options
 	var containerOpts []customization.ContainerOption
-
-	// Add OpenShift OAuth client secret env var if enabled
-	if openShiftLoginEnabled {
-		containerOpts = append(containerOpts, customization.WithEnv(dex.OpenShiftOAuthClientSecretEnv()))
-	}
 
 	// Add user-provided container customizations if spec is provided
 	if spec != nil {
@@ -720,37 +737,6 @@ func (r *KonfluxUIReconciler) reconcileIngress(ctx context.Context, tc *tracking
 		if err := tc.ApplyOwned(ctx, consoleLinkResource); err != nil {
 			return fmt.Errorf("failed to apply ConsoleLink: %w", err)
 		}
-	}
-
-	return nil
-}
-
-// reconcileOpenShiftOAuth creates or updates the ServiceAccount and Secret required for
-// OpenShift OAuth integration when ConfigureLoginWithOpenShift is enabled.
-// If not enabled, the resources are not applied and will be automatically
-// cleaned up by the tracking client's CleanupOrphans method.
-// endpoint is used to construct the OAuth redirect URI.
-func (r *KonfluxUIReconciler) reconcileOpenShiftOAuth(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, endpoint *url.URL) error {
-	log := logf.FromContext(ctx)
-
-	// Check if OpenShift login is enabled (requires running on OpenShift and option not disabled)
-	if !isOpenShiftLoginEnabled(ui, r.ClusterInfo) {
-		log.Info("OpenShift login is disabled, skipping OAuth resources (will be cleaned up if exists)")
-		return nil
-	}
-
-	log.Info("Reconciling OpenShift OAuth resources", "endpoint", endpoint.String())
-
-	// Create the ServiceAccount for OAuth redirect with the full callback URI
-	sa := dex.BuildOpenShiftOAuthServiceAccount(uiNamespace, endpoint)
-	if err := tc.ApplyOwned(ctx, sa); err != nil {
-		return fmt.Errorf("failed to apply OpenShift OAuth ServiceAccount: %w", err)
-	}
-
-	// Create the Secret for the ServiceAccount token
-	secret := dex.BuildOpenShiftOAuthSecret(uiNamespace)
-	if err := tc.ApplyOwned(ctx, secret); err != nil {
-		return fmt.Errorf("failed to apply OpenShift OAuth Secret: %w", err)
 	}
 
 	return nil
