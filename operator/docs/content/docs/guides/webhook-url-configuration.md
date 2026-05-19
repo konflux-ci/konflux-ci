@@ -140,18 +140,13 @@ The webhook endpoint may use a self-signed certificate, which is common in test
 or development environments. When the build-service configures webhooks on the
 git provider, TLS verification will fail against such certificates.
 
-To skip TLS verification, set the `PAC_WEBHOOK_INSECURE_SSL` environment
-variable:
+To skip TLS verification, set `pacWebhookInsecureSSL` to `true`:
 
 ```yaml
 spec:
   buildService:
     spec:
-      buildControllerManager:
-        manager:
-          env:
-            - name: PAC_WEBHOOK_INSECURE_SSL
-              value: "1"
+      pacWebhookInsecureSSL: true
 ```
 
 > **Warning:** Only use this in test or development environments. Production
