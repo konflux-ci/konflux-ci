@@ -272,16 +272,6 @@ rules:
   - patch
   - update
 - apiGroups:
-  - kyverno.io
-  resources:
-  - clusterpolicies
-  verbs:
-  - create
-  - get
-  - list
-  - patch
-  - watch
-- apiGroups:
   - monitoring.coreos.com
   resources:
   - servicemonitors
@@ -361,7 +351,6 @@ rules:
   - integration-service-metrics-auth-rolebinding
   - integration-service-snapshot-garbage-collector
   - integration-service-tekton-role-binding
-  - kyverno-background-controller-konflux-integration-runner
   resources:
   - clusterrolebindings
   verbs:
