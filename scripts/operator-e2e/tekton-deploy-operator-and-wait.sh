@@ -11,8 +11,10 @@ export LD_LIBRARY_PATH="/mnt/e2e-shared/lib:${LD_LIBRARY_PATH:-}"
 export KUBECONFIG="${KUBECONFIG:-/mnt/e2e-shared/kubeconfig}"
 kubectl config current-context
 
-: "${E2E_KONFLUX_CR:?}"
 : "${E2E_KONFLUX_READY_TIMEOUT:?}"
+
+E2E_KONFLUX_CR="$(bash "${REPO_ROOT}/scripts/operator-e2e/tekton-resolve-konflux-cr.sh" "${REPO_ROOT}")"
+export E2E_KONFLUX_CR
 
 OP_PID=""
 cleanup() {
@@ -39,7 +41,7 @@ echo "Starting bin/manager (logs: ${OPERATOR_LOG})..."
 OP_PID=$!
 sleep 5
 echo "Applying Konflux CR: ${E2E_KONFLUX_CR}"
-kubectl apply -f "${REPO_ROOT}/${E2E_KONFLUX_CR}"
+kubectl apply -f "${E2E_KONFLUX_CR}"
 echo "Waiting for Konflux to be Ready (timeout ${E2E_KONFLUX_READY_TIMEOUT})..."
 if ! kubectl wait --for=condition=Ready konflux konflux --timeout="${E2E_KONFLUX_READY_TIMEOUT}"; then
   echo "Konflux CR did not become Ready; operator log tail:" >&2
