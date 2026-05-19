@@ -22,17 +22,15 @@ resolve_tekton_results() {
     return 0
   fi
 
-  k8s_host=tekton-results-api-service.tekton-pipelines.svc.cluster.local
-  ocp_host=tekton-results-api-service.openshift-pipelines.svc.cluster.local
-
-  if nslookup "${k8s_host}" > /dev/null 2>&1; then
-    echo "${k8s_host}"
-    return 0
-  fi
-  if nslookup "${ocp_host}" > /dev/null 2>&1; then
-    echo "${ocp_host}"
-    return 0
-  fi
+  for host in \
+    tekton-results-api-service.tekton-pipelines.svc.cluster.local \
+    tekton-results-api-service.openshift-pipelines.svc.cluster.local \
+    tekton-results-api-service.tekton-results.svc.cluster.local; do
+    if nslookup "${host}" > /dev/null 2>&1; then
+      echo "${host}"
+      return 0
+    fi
+  done
 
   return 1
 }
