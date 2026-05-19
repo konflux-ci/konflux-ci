@@ -91,6 +91,7 @@ PRs trigger the following workflows:
 
 ## PR Guidelines
 
+- **`.tekton` task/pipeline edits:** `pipeline.yaml` tasks `deploy-konflux-its` and `konflux-e2e-tests-its` hardcode `taskRef.revision: main`. To verify changes, temporarily point both at the PR’s git ref, run operator E2E, then restore `main` before merge (see `.tekton/pipelines/operator-e2e/README.md`).
 - **Same-repo branches preferred**: E2E tests run automatically
 - **Fork PRs**: Require maintainer `/allow` comment to trigger tests
 - Run kube-linter before submitting

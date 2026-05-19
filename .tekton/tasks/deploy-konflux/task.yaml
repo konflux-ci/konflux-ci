@@ -59,7 +59,21 @@ spec:
     - name: konflux-ready-timeout
       type: string
       default: "30m"
+    - name: konflux-cr-configmap
+      description: >-
+        Name of an optional ConfigMap in the Task namespace whose data key holds a Konflux CR
+        document. When the ConfigMap exists and the key is set, it takes precedence over
+        konflux-cr-relative-path. The reference is optional (missing ConfigMap uses the file path).
+      type: string
+      default: konflux-deploy-cr
+    - name: konflux-cr-configmap-key
+      description: Data key inside konflux-cr-configmap that contains the Konflux CR YAML.
+      type: string
+      default: konflux-cr.yaml
     - name: konflux-cr-relative-path
+      description: >-
+        Path to Konflux CR YAML relative to the repository root when the ConfigMap is absent or
+        the key is unset.
       type: string
       default: operator/config/samples/konflux-e2e.yaml
     - name: kind-cluster-name
@@ -87,6 +101,13 @@ spec:
         mountPath: /mnt/konflux-ci/repo
       - name: e2e-shared
         mountPath: /mnt/e2e-shared
+    env:
+      - name: E2E_KONFLUX_CR_YAML
+        valueFrom:
+          configMapKeyRef:
+            name: $(params.konflux-cr-configmap)
+            key: $(params.konflux-cr-configmap-key)
+            optional: true
   steps:
     - name: clone-repository
       image: quay.io/konflux-ci/task-runner:0.2.0@sha256:ba65585f5c8b0a74dc51590e95961765322427d1d62ccd4eb742ff0442291985
@@ -162,13 +183,14 @@ spec:
             secretKeyRef:
               name: konflux-operator-e2e-credentials
               key: SMEE_CHANNEL
+        - name: E2E_KONFLUX_CR_PATH
+          value: $(params.konflux-cr-relative-path)
       script: |
         #!/bin/bash
         set -euo pipefail
         cd /mnt/konflux-ci/repo
         exec env \
           E2E_OVERRIDES_YAML="$(params.overrides-yaml)" \
-          E2E_KONFLUX_CR="$(params.konflux-cr-relative-path)" \
           E2E_KIND_CLUSTER="$(params.kind-cluster-name)" \
           E2E_KONFLUX_READY_TIMEOUT="$(params.konflux-ready-timeout)" \
           bash scripts/operator-e2e/tekton-deploy-prep.sh /mnt/konflux-ci/repo
@@ -206,11 +228,13 @@ spec:
           memory: "8Gi"
       workingDir: /mnt/konflux-ci/repo
       image: registry.access.redhat.com/ubi10/go-toolset@sha256:0a1242b10a483946adcf3e35e18f5a19996869468f73deff2c5ce451ce0fa6bc
+      env:
+        - name: E2E_KONFLUX_CR_PATH
+          value: $(params.konflux-cr-relative-path)
       script: |
         #!/bin/bash
         set -euo pipefail
         cd /mnt/konflux-ci/repo
         exec env \
-          E2E_KONFLUX_CR="$(params.konflux-cr-relative-path)" \
           E2E_KONFLUX_READY_TIMEOUT="$(params.konflux-ready-timeout)" \
           bash scripts/operator-e2e/tekton-deploy-operator-and-wait.sh /mnt/konflux-ci/repo

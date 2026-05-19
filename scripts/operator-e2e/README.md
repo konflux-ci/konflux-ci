@@ -41,6 +41,7 @@ Use **one token per flag** where possible (e.g. `-ginkgo.skip=Flaky`). Values wi
 | `run-conformance-tests.sh` | Runs conformance tests. Requires `GH_ORG`, `GH_TOKEN` (conformance clears `QUAY_TOKEN` for the test run). |
 | `tekton-fetch-kubeconfig.sh` | **Tekton:** decodes kubeconfig from Secret into `/mnt/e2e-shared/kubeconfig`. Args: `SECRET_NAME` `[KEY]`. Env: `POD_NAMESPACE`. |
 | `tekton-copy-shared-tools.sh` | **Tekton:** copies `kubectl`, `yq`, `jq` into `/mnt/e2e-shared/bin` and **`jq`’s shared libraries** (`libjq`, `libonig`) into `/mnt/e2e-shared/lib` for `ubi10/go-toolset` steps. |
+| `tekton-resolve-konflux-cr.sh` | **Tekton:** resolves optional ConfigMap env (`E2E_KONFLUX_CR_YAML`) or `E2E_KONFLUX_CR_PATH` to an absolute CR file path (stdout). |
 | `tekton-deploy-prep.sh` | **Tekton (go-toolset):** optional overrides via `operator/cmd/overrides`, then `deploy-local.sh` with `OPERATOR_INSTALL_METHOD=none`. |
 | `tekton-push-operator-pkg-manifests-oci.sh` | **Tekton (task-runner):** after prep, push `operator/pkg/manifests` to OCI as `${oci-container-repo}:${pipelineRun}.pkg-manifests` (skips if `E2E_OCI_CONTAINER_REPO` blank). |
 | `tekton-deploy-operator-and-wait.sh` | **Tekton (go-toolset):** `make install`/build, `bin/manager`, apply CR, wait Ready. |

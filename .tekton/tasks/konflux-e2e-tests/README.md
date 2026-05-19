@@ -1,5 +1,7 @@
 # `konflux-e2e-tests` Task
 
+> **Changing this Task?** CI resolves its YAML from **`main`** (`konflux-e2e-tests-its` in [`pipeline.yaml`](../pipelines/operator-e2e/pipeline.yaml)). Temporarily point that `revision` at your branch/SHA to verify regressions, then restore **`main`** before merge. See [operator-e2e README](../pipelines/operator-e2e/README.md#verifying-task-or-pipeline-changes).
+
 Runs Konflux E2E test phases against an already deployed Konflux instance.
 
 ## Inputs (params)
