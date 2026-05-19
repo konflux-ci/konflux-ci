@@ -39,7 +39,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
-	"github.com/konflux-ci/konflux-ci/operator/internal/common"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/segmentbridge"
@@ -75,9 +74,9 @@ const (
 	proxyServiceName = "proxy"
 
 	// Container names
-	nginxContainerName       = "nginx"
-	oauth2ProxyContainerName = "oauth2-proxy"
-	dexContainerName         = "dex"
+	reverseProxyContainerName = "reverse-proxy"
+	oauth2ProxyContainerName  = "oauth2-proxy"
+	dexContainerName          = "dex"
 
 	// Dex ConfigMap constants
 	dexConfigMapBaseName   = "dex"
@@ -181,7 +180,7 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	})
 
 	// Ensure konflux-ui namespace exists
-	if err := common.EnsureNamespaceExists(ctx, r.ObjectStore, manifests.UI, uiNamespace, tc); err != nil {
+	if err := r.ensureNamespaceExists(ctx, tc); err != nil {
 		return errHandler.HandleWithReason(ctx, err, condition.ReasonNamespaceCreationFailed, "ensure namespace exists")
 	}
 
@@ -263,6 +262,27 @@ func updateIngressStatus(ui *konfluxv1alpha1.KonfluxUI, isOnOpenShift bool, endp
 	}
 }
 
+func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, tc *tracking.Client) error {
+	objects, err := r.ObjectStore.GetForComponent(manifests.UI)
+	if err != nil {
+		return fmt.Errorf("failed to get parsed manifests for UI: %w", err)
+	}
+
+	for _, obj := range objects {
+		if namespace, ok := obj.(*corev1.Namespace); ok {
+			// Validate that the namespace name matches the expected uiNamespace
+			if namespace.Name != uiNamespace {
+				return fmt.Errorf(
+					"unexpected namespace name in manifest: expected %s, got %s", uiNamespace, namespace.Name)
+			}
+			if err := tc.ApplyOwned(ctx, namespace); err != nil {
+				return fmt.Errorf("failed to apply namespace %s: %w", namespace.Name, err)
+			}
+		}
+	}
+	return nil
+}
+
 // applyManifests loads and applies all embedded manifests to the cluster.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
 // dexConfigMapName is the name of the Dex ConfigMap to use (empty if not configured).
@@ -305,7 +325,12 @@ func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv
 		deployment.Spec.Replicas = &proxySpec.Replicas
 		// Build oauth2-proxy options based on endpoint URL and OpenShift login state
 		oauth2ProxyOpts := buildOAuth2ProxyOptions(endpoint, openShiftLoginEnabled)
-		if err := buildProxyOverlay(ui.Spec.Proxy, segmentSecretName, oauth2ProxyOpts...).ApplyToDeployment(deployment); err != nil {
+		// The Caddy image uses a non-numeric USER directive ("caddy"), which
+		// prevents Kubernetes from verifying runAsNonRoot on vanilla clusters.
+		// OpenShift SCCs inject a numeric UID automatically so this is only
+		// needed on non-OpenShift (e.g. Kind).
+		needsRunAsUser := clusterInfo == nil || !clusterInfo.IsOpenShift()
+		if err := buildProxyOverlay(ui.Spec.Proxy, segmentSecretName, needsRunAsUser, oauth2ProxyOpts...).ApplyToDeployment(deployment); err != nil {
 			return err
 		}
 	case dexDeploymentName:
@@ -345,8 +370,9 @@ func applyUIServiceCustomizations(service *corev1.Service, ui *konfluxv1alpha1.K
 
 // buildProxyOverlay builds the pod overlay for the proxy deployment.
 // segmentSecretName is the content-hashed Secret name (empty if segment is not configured).
+// needsRunAsUser injects runAsUser on the reverse-proxy container for non-OpenShift clusters.
 // oauth2ProxyOpts are applied to the oauth2-proxy container before user-provided overrides.
-func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, segmentSecretName string, oauth2ProxyOpts ...customization.ContainerOption) *customization.PodOverlay {
+func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, segmentSecretName string, needsRunAsUser bool, oauth2ProxyOpts ...customization.ContainerOption) *customization.PodOverlay {
 	// Create CA bundle volume that will be mounted in oauth2-proxy container.
 	// The Secret is created by cert-manager from the oauth2-proxy-cert Certificate resource
 	// (see operator/upstream-kustomizations/ui/dex/dex.yaml).
@@ -387,8 +413,16 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, segmentSecretN
 		podOpts = append(podOpts, customization.WithSecretVolumeUpdate(segmentSecretVolume, segmentSecretName))
 	}
 
+	var reverseProxyOpts []customization.ContainerOption
+	if needsRunAsUser {
+		reverseProxyOpts = append(reverseProxyOpts, customization.WithRunAsUser(1001))
+	}
+
 	if spec == nil {
 		podOpts = append(podOpts,
+			customization.WithContainerBuilder(reverseProxyContainerName, reverseProxyOpts...)(
+				customization.DeploymentContext{},
+			),
 			customization.WithContainerBuilder(oauth2ProxyContainerName, oauth2ProxyOpts...)(
 				customization.DeploymentContext{},
 			),
@@ -396,13 +430,14 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, segmentSecretN
 		return customization.NewPodOverlay(podOpts...)
 	}
 
-	// Append user overrides after oauth2proxy options
+	// Append user overrides after system options
+	reverseProxyOpts = append(reverseProxyOpts, customization.FromContainerSpec(spec.ReverseProxy))
 	oauth2ProxyOpts = append(oauth2ProxyOpts, customization.FromContainerSpec(spec.OAuth2Proxy))
 
 	podOpts = append(podOpts,
 		customization.WithContainerBuilder(
-			nginxContainerName,
-			customization.FromContainerSpec(spec.ReverseProxy),
+			reverseProxyContainerName,
+			reverseProxyOpts...,
 		)(customization.DeploymentContext{Replicas: spec.Replicas}),
 		customization.WithContainerBuilder(
 			oauth2ProxyContainerName,
@@ -579,7 +614,7 @@ func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *kon
 
 // reconcileSegmentSecret creates a content-hashed Secret in the konflux-ui namespace
 // containing the Segment write key and API URL. The Secret is mounted into the
-// nginx container.
+// reverse proxy container.
 //
 // The Secret name includes a hash suffix derived from its content, so whenever the
 // Segment key or API URL changes the name changes, which updates the volume reference

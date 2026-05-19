@@ -51,43 +51,29 @@ spec:
           requests:
             cpu: 10m
             memory: 64Mi
-      - name: generate-nginx-configs
+      - name: generate-proxy-config
         image: quay.io/konflux-ci/konflux-ui
         command:
           - sh
-          - -c
-          - |
-            set -e
-
-            # Copy the auth.conf template and replace the bearer token
-            token=$(cat /var/run/secrets/konflux-ci.dev/serviceaccount/token)
-            sed "s/__BEARER_TOKEN__/$token/" /mnt/nginx-templates/auth.conf > /mnt/nginx-generated-config/auth.conf
-            chmod 640 /mnt/nginx-generated-config/auth.conf
-
-            # Resolve tekton-results hostname
-            results_hostname_k8s=tekton-results-api-service.tekton-pipelines.svc.cluster.local
-            results_hostname_openshift=tekton-results-api-service.openshift-pipelines.svc.cluster.local
-            if nslookup $results_hostname_k8s > /dev/null 2>&1; then
-              results_hostname=$results_hostname_k8s
-            elif nslookup $results_hostname_openshift > /dev/null 2>&1; then
-              results_hostname=$results_hostname_openshift
-            else
-              echo "Error: Could not resolve tekton-results hostname"
-              exit 1
-            fi
-            sed "s/__TEKTON_RESULTS_HOSTNAME__/$results_hostname/" /mnt/nginx-templates/tekton-results.conf > /mnt/nginx-generated-location-config/tekton-results.conf
-            chmod 640 /mnt/nginx-generated-location-config/tekton-results.conf
-
+          - /var/run/scripts/konflux-ci.dev/generate-proxy-config.sh
         volumeMounts:
-        - mountPath: /var/run/secrets/konflux-ci.dev/serviceaccount
-          name: kube-api-token
+        - name: caddy-templates
+          mountPath: /mnt/caddy-templates
           readOnly: true
-        - name: nginx-generated-config
-          mountPath: /mnt/nginx-generated-config
-        - name: nginx-templates
-          mountPath: /mnt/nginx-templates
-        - name: nginx-generated-location-config
-          mountPath: /mnt/nginx-generated-location-config
+        - name: caddy-snippets
+          mountPath: /mnt/caddy-snippets
+        - name: generate-proxy-config-script
+          mountPath: /var/run/scripts/konflux-ci.dev
+          readOnly: true
+        - name: kube-api-token
+          mountPath: /var/run/secrets/konflux-ci.dev/serviceaccount
+          readOnly: true
+        - name: backend-token
+          mountPath: /var/run/secrets/konflux-ci.dev/backend
+          readOnly: true
+        - name: service-ca
+          mountPath: /mnt/service-ca
+          readOnly: true
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
@@ -99,31 +85,57 @@ spec:
             cpu: 10m
             memory: 64Mi
       containers:
-      - name: generate-nginx-configs-loop
+      - name: config-refresh
         image: quay.io/konflux-ci/konflux-ui
         command:
           - bash
         args:
-          - "/var/run/scripts/konflux-ci.dev/proxy-nginx-generate-loop.sh"
+          - /var/run/scripts/konflux-ci.dev/config-refresh.sh
         livenessProbe:
           exec:
             command:
-            - bash
-            - "/var/run/scripts/konflux-ci.dev/proxy-nginx-generate-loop-probe.sh"
+            - sh
+            - /var/run/scripts/konflux-ci.dev/config-refresh-probe.sh
           initialDelaySeconds: 30
           periodSeconds: 30
           failureThreshold: 3
         volumeMounts:
         - mountPath: /var/run/scripts/konflux-ci.dev/
-          name: proxy-generate-loop-script
+          name: config-refresh-scripts
           readOnly: true
         - mountPath: /var/run/secrets/konflux-ci.dev/serviceaccount
           name: kube-api-token
           readOnly: true
-        - name: nginx-generated-config
-          mountPath: /mnt/nginx-generated-config
-        - name: nginx-templates
-          mountPath: /mnt/nginx-templates
+        - mountPath: /var/run/secrets/konflux-ci.dev/backend
+          name: backend-token
+          readOnly: true
+        - mountPath: /mnt/caddy-snippets
+          name: caddy-snippets
+        - mountPath: /etc/caddy/Caddyfile
+          subPath: Caddyfile
+          name: proxy-caddyfile
+          readOnly: true
+        - mountPath: /etc/caddy/impersonate-groups.conf
+          subPath: impersonate-groups.conf
+          name: proxy-caddyfile
+          readOnly: true
+        - mountPath: /etc/caddy/impersonate-headers.conf
+          subPath: impersonate-headers.conf
+          name: proxy-caddyfile
+          readOnly: true
+        - mountPath: /etc/caddy/ns-lister-headers.conf
+          subPath: ns-lister-headers.conf
+          name: proxy-caddyfile
+          readOnly: true
+        - name: trusted-ca
+          mountPath: /mnt/trusted-ca
+          readOnly: true
+        - name: service-ca
+          mountPath: /mnt/service-ca
+          readOnly: true
+        - name: serving-cert
+          mountPath: /mnt/serving-cert
+          readOnly: true
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
@@ -134,12 +146,15 @@ spec:
           requests:
             cpu: 10m
             memory: 64Mi
-      - image: registry.access.redhat.com/ubi9/nginx-124
-        name: nginx
+      - image: registry.access.redhat.com/hi/caddy
+        name: reverse-proxy
         command:
-          - bash
-        args:
-          - "/var/run/scripts/konflux-ci.dev/proxy-nginx-run.sh"
+          - caddy
+          - run
+          - --config
+          - /etc/caddy/Caddyfile
+          - --adapter
+          - caddyfile
         livenessProbe:
           failureThreshold: 3
           httpGet:
@@ -161,11 +176,11 @@ spec:
           successThreshold: 1
           timeoutSeconds: 1
         ports:
-        - containerPort: 8080
-          name: web
-          protocol: TCP
         - containerPort: 9443
           name: web-tls
+          protocol: TCP
+        - containerPort: 2112
+          name: metrics
           protocol: TCP
         resources:
           limits:
@@ -175,37 +190,47 @@ spec:
             cpu: 30m
             memory: 128Mi
         volumeMounts:
-          - mountPath: /var/run/scripts/konflux-ci.dev/
-            name: proxy-nginx-run-script
+          - mountPath: /etc/caddy/Caddyfile
+            subPath: Caddyfile
+            name: proxy-caddyfile
             readOnly: true
-          - mountPath: /etc/nginx/nginx.conf
-            subPath: nginx.conf
-            name: proxy
+          - mountPath: /etc/caddy/impersonate-groups.conf
+            subPath: impersonate-groups.conf
+            name: proxy-caddyfile
             readOnly: true
-          - name: logs
-            mountPath: /var/log/nginx
-          - name: nginx-tmp
-            mountPath: /var/lib/nginx/tmp
-          - name: run
-            mountPath: /run
+          - mountPath: /etc/caddy/impersonate-headers.conf
+            subPath: impersonate-headers.conf
+            name: proxy-caddyfile
+            readOnly: true
+          - mountPath: /etc/caddy/ns-lister-headers.conf
+            subPath: ns-lister-headers.conf
+            name: proxy-caddyfile
+            readOnly: true
           - name: serving-cert
             mountPath: /mnt
-          - name: nginx-generated-config
-            mountPath: /mnt/nginx-generated-config
-          - name: nginx-generated-location-config
-            mountPath: /mnt/nginx-generated-location-config
+          - name: caddy-snippets
+            mountPath: /mnt/caddy-snippets
+            readOnly: true
+          - name: trusted-ca
+            mountPath: /mnt/trusted-ca
+            readOnly: true
+          - name: service-ca
+            mountPath: /mnt/service-ca
+            readOnly: true
           - name: static-content
             mountPath: /opt/app-root/src/static-content
           - name: segment-bridge-config
             mountPath: /opt/app-root/src/segment
+          - name: caddy-data
+            mountPath: /data
+          - name: caddy-config
+            mountPath: /config
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
       - image: quay.io/konflux-ci/oauth2-proxy@sha256:latest
         name: oauth2-proxy
         env:
-        # Secrets are configured here; all other config is injected by the controller via env vars
-        # See: https://oauth2-proxy.github.io/oauth2-proxy/configuration/overview/#environment-variables
         - name: OAUTH2_PROXY_CLIENT_SECRET
           valueFrom:
             secretKeyRef:
@@ -231,22 +256,22 @@ spec:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
       volumes:
-        - name: proxy-generate-loop-script
+        - name: generate-proxy-config-script
           configMap:
             defaultMode: 0750
-            name: proxy-nginx-generate-loop
+            name: proxy-generate-config
             items:
-              - key: proxy-nginx-generate-loop.sh
-                path: proxy-nginx-generate-loop.sh
-              - key: proxy-nginx-generate-loop-probe.sh
-                path: proxy-nginx-generate-loop-probe.sh
-        - name: proxy-nginx-run-script
+              - key: generate-proxy-config.sh
+                path: generate-proxy-config.sh
+        - name: config-refresh-scripts
           configMap:
             defaultMode: 0750
-            name: proxy-nginx-run
+            name: proxy-config-refresh
             items:
-              - key: proxy-nginx-run.sh
-                path: proxy-nginx-run.sh
+              - key: config-refresh.sh
+                path: config-refresh.sh
+              - key: config-refresh-probe.sh
+                path: config-refresh-probe.sh
         - name: kube-api-token
           projected:
             defaultMode: 420
@@ -254,30 +279,52 @@ spec:
             - serviceAccountToken:
                 expirationSeconds: 600
                 path: token
-        - configMap:
+        # Separate token for backend services (Tekton Results, KubeArchive, etc.).
+        # The "konflux-backend" audience ensures this token is rejected by the
+        # Kube API for direct operations, limiting blast radius if a backend is
+        # compromised. Backend services validate it via TokenReview instead.
+        - name: backend-token
+          projected:
             defaultMode: 420
-            name: proxy
+            sources:
+            - serviceAccountToken:
+                audience: "konflux-backend"
+                expirationSeconds: 600
+                path: token
+        - name: proxy-caddyfile
+          configMap:
+            defaultMode: 420
+            name: proxy-caddyfile
             items:
-              - key: nginx.conf
-                path: nginx.conf
-          name: proxy
-        - configMap:
+              - key: Caddyfile
+                path: Caddyfile
+              - key: impersonate-groups.conf
+                path: impersonate-groups.conf
+              - key: impersonate-headers.conf
+                path: impersonate-headers.conf
+              - key: ns-lister-headers.conf
+                path: ns-lister-headers.conf
+        - name: caddy-templates
+          configMap:
             defaultMode: 420
-            name: proxy-nginx-templates
-          name: nginx-templates
-        - name: logs
+            name: proxy-caddy-templates
+        - name: caddy-snippets
           emptyDir: {}
-        - name: nginx-tmp
+        - name: caddy-data
           emptyDir: {}
-        - name: run
+        - name: caddy-config
           emptyDir: {}
         - name: serving-cert
           secret:
             secretName: serving-cert
-        - name: nginx-generated-config
-          emptyDir: {}
-        - name: nginx-generated-location-config
-          emptyDir: {}
+        - name: trusted-ca
+          configMap:
+            name: trusted-ca
+            optional: true
+        - name: service-ca
+          configMap:
+            name: openshift-service-ca.crt
+            optional: true
         - name: static-content
           emptyDir: {}
         - name: segment-bridge-config
@@ -304,13 +351,13 @@ spec:
     - IPv4
   ipFamilyPolicy: SingleStack
   ports:
-    - name: web
-      port: 8888
-      protocol: TCP
-      targetPort: web
     - name: web-tls
       port: 9443
       protocol: TCP
       targetPort: web-tls
+    - name: metrics
+      port: 2112
+      protocol: TCP
+      targetPort: metrics
   selector:
     app: proxy
