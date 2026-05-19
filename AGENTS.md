@@ -88,6 +88,7 @@ PRs trigger the following workflows:
 - **`kube-linter`** — lints rendered kustomize manifests
 - **`check-toc`** — validates markdown TOC (excludes `operator/docs/`, `.cursor/*`, `skills/*`)
 - **`differential-shellcheck`** — ShellCheck on changed shell scripts
+- **`caddy-fmt`** — verifies `Caddyfile` formatting (runs only when `Caddyfile` changes)
 
 ## PR Guidelines
 
