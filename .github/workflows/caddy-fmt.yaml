@@ -1,0 +1,36 @@
+name: Verify Caddyfile formatting
+
+on:
+  pull_request:
+    paths:
+      - operator/upstream-kustomizations/ui/core/proxy/Caddyfile
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+jobs:
+  caddy-fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Extract Caddy image reference
+        id: image
+        run: |
+          digest=$(grep -A1 'name: registry.access.redhat.com/hi/caddy' \
+            operator/upstream-kustomizations/ui/core/proxy/kustomization.yaml \
+            | grep 'digest:' | awk '{print $2}')
+          echo "ref=registry.access.redhat.com/hi/caddy@${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify Caddyfile is formatted
+        run: |
+          caddyfile="operator/upstream-kustomizations/ui/core/proxy/Caddyfile"
+          formatted=$(docker run --rm -i "${{ steps.image.outputs.ref }}" caddy fmt - < "$caddyfile")
+          if ! diff -u "$caddyfile" <(echo "$formatted"); then
+            echo "ERROR: Caddyfile is not formatted. Run the following to fix:" >&2
+            echo "  docker run --rm -i <caddy-image> caddy fmt - < $caddyfile > /tmp/Caddyfile && mv /tmp/Caddyfile $caddyfile" >&2
+            exit 1
+          fi
+          echo "Caddyfile formatting is correct"
