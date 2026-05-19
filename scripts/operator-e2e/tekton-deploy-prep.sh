@@ -34,4 +34,7 @@ if [[ -n "${E2E_OVERRIDES_YAML// }" ]]; then
   echo "Image overrides must be available before Konflux ready timeout (${E2E_KONFLUX_READY_TIMEOUT})."
 fi
 
+# Configure build-service webhookURLs to use smee channel for Codeberg/GitLab webhook support 
+yq -i '.spec.buildService.spec.webhookURLs = {"": strenv(SMEE_CHANNEL)}' "${KONFLUX_CR}"
+
 ./scripts/deploy-local.sh
