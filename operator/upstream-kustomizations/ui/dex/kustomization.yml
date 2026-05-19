@@ -1,10 +1,16 @@
----
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - dex.yaml
+- dex.yaml
 
 images:
   - name: quay.io/konflux-ci/dex
     newName: quay.io/konflux-ci/dex
     digest: sha256:22b30bfb5ad1ebe4e0c70be11f02ad1ee0f749fd25bf77737c9369c031d6e238
+
+configMapGenerator:
+- files:
+  - run-dex.sh
+  name: run-dex
+  options:
+    disableNameSuffixHash: false

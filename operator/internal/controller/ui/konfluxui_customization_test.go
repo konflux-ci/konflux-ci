@@ -31,6 +31,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/oauth2proxy"
 )
@@ -483,7 +484,7 @@ func TestBuildDexOverlay(t *testing.T) {
 		g.Expect(dexVolume.ConfigMap.Name).To(gomega.Equal("dex-newconfig-xyz789"))
 	})
 
-	t.Run("adds OpenShift OAuth client secret env var when enabled", func(t *testing.T) {
+	t.Run("adds Is OpenShift env var", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		deployment := getUIDeployment(t, dexDeploymentName)
 
@@ -494,19 +495,15 @@ func TestBuildDexOverlay(t *testing.T) {
 		dexContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, dexContainerName)
 		g.Expect(dexContainer).NotTo(gomega.BeNil())
 
-		// Find the OPENSHIFT_OAUTH_CLIENT_SECRET env var
 		var foundEnv *corev1.EnvVar
 		for i := range dexContainer.Env {
-			if dexContainer.Env[i].Name == "OPENSHIFT_OAUTH_CLIENT_SECRET" {
+			if dexContainer.Env[i].Name == dex.OpenShiftLoginEnabledEnvVar {
 				foundEnv = &dexContainer.Env[i]
 				break
 			}
 		}
-		g.Expect(foundEnv).NotTo(gomega.BeNil(), "OPENSHIFT_OAUTH_CLIENT_SECRET env var should exist")
-		g.Expect(foundEnv.ValueFrom).NotTo(gomega.BeNil())
-		g.Expect(foundEnv.ValueFrom.SecretKeyRef).NotTo(gomega.BeNil())
-		g.Expect(foundEnv.ValueFrom.SecretKeyRef.Name).To(gomega.Equal("dex-client"))
-		g.Expect(foundEnv.ValueFrom.SecretKeyRef.Key).To(gomega.Equal("token"))
+		g.Expect(foundEnv).NotTo(gomega.BeNil(), "%s env var should exist", dex.OpenShiftLoginEnabledEnvVar)
+		g.Expect(foundEnv.Value).To(gomega.Equal("true"))
 	})
 
 	t.Run("does not add OpenShift OAuth env var when disabled", func(t *testing.T) {
@@ -520,11 +517,96 @@ func TestBuildDexOverlay(t *testing.T) {
 		dexContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, dexContainerName)
 		g.Expect(dexContainer).NotTo(gomega.BeNil())
 
-		// Ensure OPENSHIFT_OAUTH_CLIENT_SECRET env var does NOT exist
-		for _, env := range dexContainer.Env {
-			g.Expect(env.Name).NotTo(gomega.Equal("OPENSHIFT_OAUTH_CLIENT_SECRET"),
-				"OPENSHIFT_OAUTH_CLIENT_SECRET should not be present when OpenShift login is disabled")
+		var foundEnv *corev1.EnvVar
+		for i := range dexContainer.Env {
+			if dexContainer.Env[i].Name == dex.OpenShiftLoginEnabledEnvVar {
+				foundEnv = &dexContainer.Env[i]
+				break
+			}
 		}
+		g.Expect(foundEnv).To(gomega.BeNil(), "%s env var should not exist", dex.OpenShiftLoginEnabledEnvVar)
+	})
+}
+
+func TestApplyUIServiceAccountCustomizations(t *testing.T) {
+	endpoint, err := url.Parse("https://dex.example.com:9443")
+	if err != nil {
+		t.Fatalf("failed to parse endpoint: %v", err)
+	}
+
+	t.Run("adds OpenShift redirect URI annotation to dex service account", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "dex"}}
+
+		applyUIServiceAccountCustomizations(sa, true, endpoint)
+
+		g.Expect(sa.Annotations).To(gomega.HaveKeyWithValue(
+			dex.OpenShiftRedirectURIAnnotation,
+			"https://dex.example.com:9443/idp/callback",
+		))
+	})
+
+	t.Run("initializes annotations map when nil", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "dex"}}
+
+		applyUIServiceAccountCustomizations(sa, true, endpoint)
+
+		g.Expect(sa.Annotations).NotTo(gomega.BeNil())
+	})
+
+	t.Run("does not modify dex service account when OpenShift login is disabled", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "dex"}}
+
+		applyUIServiceAccountCustomizations(sa, false, endpoint)
+
+		g.Expect(sa.Annotations).To(gomega.BeEmpty())
+	})
+
+	t.Run("preserves existing annotations when OpenShift login is disabled", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		sa := &corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "dex",
+				Annotations: map[string]string{
+					"example.com/existing": "value",
+				},
+			},
+		}
+
+		applyUIServiceAccountCustomizations(sa, false, endpoint)
+
+		g.Expect(sa.Annotations).To(gomega.HaveKeyWithValue("example.com/existing", "value"))
+		g.Expect(sa.Annotations).NotTo(gomega.HaveKey(dex.OpenShiftRedirectURIAnnotation))
+	})
+
+	t.Run("does not modify non-dex service accounts", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "proxy"}}
+
+		applyUIServiceAccountCustomizations(sa, true, endpoint)
+
+		g.Expect(sa.Annotations).To(gomega.BeEmpty())
+	})
+
+	t.Run("overwrites existing redirect URI annotation", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		sa := &corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "dex",
+				Annotations: map[string]string{
+					dex.OpenShiftRedirectURIAnnotation: "https://old.example.com/idp/callback",
+				},
+			},
+		}
+
+		applyUIServiceAccountCustomizations(sa, true, endpoint)
+
+		g.Expect(sa.Annotations).To(gomega.HaveKeyWithValue(
+			dex.OpenShiftRedirectURIAnnotation,
+			"https://dex.example.com:9443/idp/callback",
+		))
 	})
 }
 
