@@ -446,7 +446,7 @@ deploy_kyverno() {
     # by kyverno-admission-controller; if we apply policies before that deployment is ready,
     # the API server gets "connection refused" from the webhook. Wait for it to be Available.
     echo "  ⏳ Waiting for Kyverno admission controller..." >&2
-    retry "kubectl wait --for=condition=Available deployment/kyverno-admission-controller -n kyverno --timeout=30s" \
+    retry "kubectl wait --for=condition=Available deployment/kyverno-admission-controller -n kyverno --timeout=60s" \
           "Kyverno admission controller did not become available within the allocated time"
     # Default SET_SKIP_CHECKS=false: reduce-tekton only (pipeline security checks are not defaulted off).
     # SET_SKIP_CHECKS=true applies set-skip-checks-parameter (e.g. GitHub Actions operator e2e; flaky scans).

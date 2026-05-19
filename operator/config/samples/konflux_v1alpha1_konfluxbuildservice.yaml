@@ -18,6 +18,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: konflux-build-service
 spec:
+  # pacWebhookInsecureSSL: true  # Skip TLS verification for webhooks (dev/test only)
   # logEncoder: console  # Use human-readable logs (default: json)
   # webhookURLs:  # Map repository URL prefixes to external webhook URLs (e.g. Smee proxies)
   #   https://github.com: "https://smee.example.com/github-hook"

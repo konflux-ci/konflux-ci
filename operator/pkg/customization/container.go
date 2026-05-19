@@ -87,6 +87,20 @@ func WithEnvOverride(name, value string) ContainerOption {
 	}
 }
 
+// WithoutEnv removes an environment variable by name.
+// If the variable does not exist, this is a no-op.
+func WithoutEnv(name string) ContainerOption {
+	return func(c *corev1.Container, _ DeploymentContext) {
+		filtered := make([]corev1.EnvVar, 0, len(c.Env))
+		for _, env := range c.Env {
+			if env.Name != name {
+				filtered = append(filtered, env)
+			}
+		}
+		c.Env = filtered
+	}
+}
+
 // WithResources sets resource requirements for the container.
 func WithResources(resources corev1.ResourceRequirements) ContainerOption {
 	return func(c *corev1.Container, _ DeploymentContext) {

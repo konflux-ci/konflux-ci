@@ -60,19 +60,23 @@ func getBuildServiceDeployment(t *testing.T) *appsv1.Deployment {
 	return nil
 }
 
-// findPaCWebhookURLEnvValue returns the last PAC_WEBHOOK_URL env var value.
-// Returns the value and whether the env var was found. Checks the last match
-// to match Kubernetes behavior where later env entries override earlier ones.
-func findPaCWebhookURLEnvValue(envs []corev1.EnvVar) (string, bool) {
+// findEnvValue returns the last value of the named env var.
+// Checks the last match to match Kubernetes behavior where later entries override earlier ones.
+func findEnvValue(envs []corev1.EnvVar, name string) (string, bool) {
 	var value string
 	var found bool
 	for _, env := range envs {
-		if env.Name == pacWebhookURLEnvName {
+		if env.Name == name {
 			value = env.Value
 			found = true
 		}
 	}
 	return value, found
+}
+
+// findPaCWebhookURLEnvValue returns the last PAC_WEBHOOK_URL env var value.
+func findPaCWebhookURLEnvValue(envs []corev1.EnvVar) (string, bool) {
+	return findEnvValue(envs, pacWebhookURLEnvName)
 }
 
 func TestBuildBuildControllerManagerOverlay(t *testing.T) {
@@ -230,6 +234,159 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		}
 		g.Expect(managerContainer.Args).To(gomega.ContainElement("--zap-encoder=console"))
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
+	})
+
+	t.Run("pacWebhookInsecureSSL=true injects PAC_WEBHOOK_INSECURE_SSL env", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			PACWebhookInsecureSSL: boolPtr(true),
+		}
+
+		deployment := getBuildServiceDeployment(t)
+		overlay := buildBuildControllerManagerOverlay(spec, nil, "")
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		val, found := findEnvValue(managerContainer.Env, "PAC_WEBHOOK_INSECURE_SSL")
+		g.Expect(found).To(gomega.BeTrue())
+		g.Expect(val).To(gomega.Equal("1"))
+	})
+
+	t.Run("pacWebhookInsecureSSL omitted does not inject PAC_WEBHOOK_INSECURE_SSL env", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+
+		deployment := getBuildServiceDeployment(t)
+		overlay := buildBuildControllerManagerOverlay(spec, nil, "")
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		_, found := findEnvValue(managerContainer.Env, "PAC_WEBHOOK_INSECURE_SSL")
+		g.Expect(found).To(gomega.BeFalse())
+	})
+
+	t.Run("pacWebhookInsecureSSL=false removes PAC_WEBHOOK_INSECURE_SSL env", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			PACWebhookInsecureSSL: boolPtr(false),
+		}
+
+		deployment := getBuildServiceDeployment(t)
+		overlay := buildBuildControllerManagerOverlay(spec, nil, "")
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		_, found := findEnvValue(managerContainer.Env, "PAC_WEBHOOK_INSECURE_SSL")
+		g.Expect(found).To(gomega.BeFalse(), "explicit false should remove the env var entirely")
+	})
+
+	t.Run("pacWebhookInsecureSSL with logEncoder and resources", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			PACWebhookInsecureSSL: boolPtr(true),
+			LogEncoder:            "console",
+			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+				Manager: &konfluxv1alpha1.ContainerSpec{
+					Resources: &corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU: resource.MustParse("500m"),
+						},
+					},
+				},
+			},
+		}
+
+		deployment := getBuildServiceDeployment(t)
+		overlay := buildBuildControllerManagerOverlay(spec, nil, "")
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		val, found := findEnvValue(managerContainer.Env, "PAC_WEBHOOK_INSECURE_SSL")
+		g.Expect(found).To(gomega.BeTrue())
+		g.Expect(val).To(gomega.Equal("1"))
+		g.Expect(managerContainer.Args).To(gomega.ContainElement("--zap-encoder=console"))
+		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
+	})
+
+	t.Run("pacWebhookInsecureSSL=true takes precedence over manager.env", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			PACWebhookInsecureSSL: boolPtr(true),
+			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+				Manager: &konfluxv1alpha1.ContainerSpec{
+					Env: []corev1.EnvVar{
+						{Name: "PAC_WEBHOOK_INSECURE_SSL", Value: "0"},
+					},
+				},
+			},
+		}
+
+		deployment := getBuildServiceDeployment(t)
+		overlay := buildBuildControllerManagerOverlay(spec, nil, "")
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		val, found := findEnvValue(managerContainer.Env, "PAC_WEBHOOK_INSECURE_SSL")
+		g.Expect(found).To(gomega.BeTrue())
+		g.Expect(val).To(gomega.Equal("1"), "typed CRD field should take precedence over manager.env")
+	})
+
+	t.Run("pacWebhookInsecureSSL=false takes precedence over manager.env", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			PACWebhookInsecureSSL: boolPtr(false),
+			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+				Manager: &konfluxv1alpha1.ContainerSpec{
+					Env: []corev1.EnvVar{
+						{Name: "PAC_WEBHOOK_INSECURE_SSL", Value: "1"},
+					},
+				},
+			},
+		}
+
+		deployment := getBuildServiceDeployment(t)
+		overlay := buildBuildControllerManagerOverlay(spec, nil, "")
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		_, found := findEnvValue(managerContainer.Env, "PAC_WEBHOOK_INSECURE_SSL")
+		g.Expect(found).To(gomega.BeFalse(), "explicit false should remove env var even if set in manager.env")
+	})
+
+	t.Run("pacWebhookInsecureSSL omitted lets manager.env pass through", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+				Manager: &konfluxv1alpha1.ContainerSpec{
+					Env: []corev1.EnvVar{
+						{Name: "PAC_WEBHOOK_INSECURE_SSL", Value: "1"},
+					},
+				},
+			},
+		}
+
+		deployment := getBuildServiceDeployment(t)
+		overlay := buildBuildControllerManagerOverlay(spec, nil, "")
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		val, found := findEnvValue(managerContainer.Env, "PAC_WEBHOOK_INSECURE_SSL")
+		g.Expect(found).To(gomega.BeTrue())
+		g.Expect(val).To(gomega.Equal("1"), "env var should pass through when typed field is omitted")
 	})
 }
 
@@ -794,3 +951,5 @@ func TestApplyBuildServiceDeploymentCustomizations_ResourceMerging(t *testing.T)
 		g.Expect(managerContainer.Resources.Requests.Cpu().String()).To(gomega.Equal("100m"))
 	})
 }
+
+func boolPtr(b bool) *bool { return &b }
