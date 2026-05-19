@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -55,6 +56,10 @@ const (
 
 	// Container names
 	releaseManagerContainerName = "manager"
+
+	// ReleaseServiceConfig identification
+	releaseServiceConfigKind  = "ReleaseServiceConfig"
+	releaseServiceConfigGroup = "appstudio.redhat.com"
 )
 
 // ReleaseServiceCleanupGVKs defines which resource types should be cleaned up when they are
@@ -163,6 +168,13 @@ func (r *KonfluxReleaseServiceReconciler) applyManifests(ctx context.Context, tc
 			}
 		}
 
+		// Apply customizations for ReleaseServiceConfig
+		if isReleaseServiceConfig(obj) {
+			if err := applyReleaseServiceConfigCustomizations(obj, owner.Spec); err != nil {
+				return fmt.Errorf("failed to apply customizations to ReleaseServiceConfig %s: %w", obj.GetName(), err)
+			}
+		}
+
 		// Apply with ownership using the tracking client
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
@@ -202,6 +214,46 @@ func buildReleaseControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManage
 	)
 }
 
+// isReleaseServiceConfig returns true if the object is a ReleaseServiceConfig CR.
+func isReleaseServiceConfig(obj client.Object) bool {
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	return gvk.Kind == releaseServiceConfigKind && gvk.Group == releaseServiceConfigGroup
+}
+
+// applyReleaseServiceConfigCustomizations applies user-defined customizations to the
+// ReleaseServiceConfig CR. It modifies the unstructured object's spec based on
+// the KonfluxReleaseServiceSpec fields (debug, emptyDirOverrides).
+func applyReleaseServiceConfigCustomizations(obj client.Object, spec konfluxv1alpha1.KonfluxReleaseServiceSpec) error {
+	u, ok := obj.(*unstructured.Unstructured)
+	if !ok {
+		return fmt.Errorf("expected *unstructured.Unstructured, got %T", obj)
+	}
+
+	currentSpec, _ := u.Object["spec"].(map[string]interface{})
+	if currentSpec == nil {
+		currentSpec = map[string]interface{}{}
+	}
+
+	currentSpec["debug"] = spec.Debug
+
+	if len(spec.EmptyDirOverrides) > 0 {
+		overrides := make([]interface{}, len(spec.EmptyDirOverrides))
+		for i, o := range spec.EmptyDirOverrides {
+			overrides[i] = map[string]interface{}{
+				"url":        o.URL,
+				"revision":   o.Revision,
+				"pathInRepo": o.PathInRepo,
+			}
+		}
+		currentSpec["EmptyDirOverrides"] = overrides
+	} else {
+		delete(currentSpec, "EmptyDirOverrides")
+	}
+
+	u.Object["spec"] = currentSpec
+	return nil
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxReleaseServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	crdMapFunc, err := crdhandler.MapCRDToRequest(r.ObjectStore, manifests.Release, CRName)
@@ -222,6 +274,10 @@ func (r *KonfluxReleaseServiceReconciler) SetupWithManager(mgr ctrl.Manager) err
 		Owns(&rbacv1.RoleBinding{}).
 		Owns(&rbacv1.ClusterRole{}).
 		Owns(&rbacv1.ClusterRoleBinding{}).
+		// TODO(KFLUXVNGD-892): Add Owns() watch for ReleaseServiceConfig (unstructured)
+		// so that out-of-band deletion/mutation triggers reconcile and re-apply.
+		// Requires adding the upstream CRD to test/crds/ with a sync mechanism.
+		//
 		// Watch CRDs so that out-of-band deletion triggers reconcile and re-apply.
 		Watches(&apiextensionsv1.CustomResourceDefinition{},
 			handler.EnqueueRequestsFromMapFunc(crdMapFunc)).

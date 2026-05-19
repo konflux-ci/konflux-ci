@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
@@ -279,6 +280,237 @@ func TestApplyReleaseServiceDeploymentCustomizations(t *testing.T) {
 		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("2"))
+	})
+}
+
+// getReleaseServiceConfig returns a deep copy of the ReleaseServiceConfig from the manifests.
+func getReleaseServiceConfig(t *testing.T) *unstructured.Unstructured {
+	t.Helper()
+	store := testutil.GetTestObjectStore(t)
+	objects, err := store.GetForComponent(manifests.Release)
+	if err != nil {
+		t.Fatalf("failed to get ReleaseService manifests: %v", err)
+	}
+
+	for _, obj := range objects {
+		if isReleaseServiceConfig(obj) {
+			u, ok := obj.(*unstructured.Unstructured)
+			if !ok {
+				t.Fatalf("ReleaseServiceConfig is not *unstructured.Unstructured")
+			}
+			return u
+		}
+	}
+	t.Fatalf("ReleaseServiceConfig not found in ReleaseService manifests")
+	return nil
+}
+
+func TestIsReleaseServiceConfig(t *testing.T) {
+	t.Run("returns true for ReleaseServiceConfig", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		obj := &unstructured.Unstructured{}
+		obj.Object = map[string]interface{}{
+			"apiVersion": "appstudio.redhat.com/v1alpha1",
+			"kind":       "ReleaseServiceConfig",
+			"metadata": map[string]interface{}{
+				"name":      "release-service-config",
+				"namespace": "release-service",
+			},
+			"spec": map[string]interface{}{
+				"debug": false,
+			},
+		}
+		g.Expect(isReleaseServiceConfig(obj)).To(gomega.BeTrue())
+	})
+
+	t.Run("returns false for Deployment", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		deployment := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "test"},
+		}
+		g.Expect(isReleaseServiceConfig(deployment)).To(gomega.BeFalse())
+	})
+
+	t.Run("returns true for embedded ReleaseServiceConfig", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		rsc := getReleaseServiceConfig(t)
+		g.Expect(isReleaseServiceConfig(rsc)).To(gomega.BeTrue())
+	})
+}
+
+func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
+	t.Run("sets debug to true when spec.Debug is true", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		rsc := getReleaseServiceConfig(t)
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
+			Debug: true,
+		}
+
+		err := applyReleaseServiceConfigCustomizations(rsc, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
+		g.Expect(rscSpec).NotTo(gomega.BeNil())
+		g.Expect(rscSpec["debug"]).To(gomega.BeTrue())
+	})
+
+	t.Run("sets debug to false when spec.Debug is false", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		rsc := getReleaseServiceConfig(t)
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
+			Debug: false,
+		}
+
+		err := applyReleaseServiceConfigCustomizations(rsc, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
+		g.Expect(rscSpec).NotTo(gomega.BeNil())
+		g.Expect(rscSpec["debug"]).To(gomega.BeFalse())
+	})
+
+	t.Run("sets EmptyDirOverrides when provided", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		rsc := getReleaseServiceConfig(t)
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
+			EmptyDirOverrides: []konfluxv1alpha1.EmptyDirOverride{
+				{
+					URL:        ".*",
+					Revision:   ".*",
+					PathInRepo: "pipelines/managed/fbc-release/fbc-release.yaml",
+				},
+				{
+					URL:        "https://github.com/example/repo",
+					Revision:   "main",
+					PathInRepo: "pipelines/test.yaml",
+				},
+			},
+		}
+
+		err := applyReleaseServiceConfigCustomizations(rsc, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
+		g.Expect(rscSpec).NotTo(gomega.BeNil())
+		overrides, ok := rscSpec["EmptyDirOverrides"].([]interface{})
+		g.Expect(ok).To(gomega.BeTrue())
+		g.Expect(overrides).To(gomega.HaveLen(2))
+
+		first, _ := overrides[0].(map[string]interface{})
+		g.Expect(first["url"]).To(gomega.Equal(".*"))
+		g.Expect(first["revision"]).To(gomega.Equal(".*"))
+		g.Expect(first["pathInRepo"]).To(gomega.Equal("pipelines/managed/fbc-release/fbc-release.yaml"))
+
+		second, _ := overrides[1].(map[string]interface{})
+		g.Expect(second["url"]).To(gomega.Equal("https://github.com/example/repo"))
+		g.Expect(second["revision"]).To(gomega.Equal("main"))
+		g.Expect(second["pathInRepo"]).To(gomega.Equal("pipelines/test.yaml"))
+	})
+
+	t.Run("removes EmptyDirOverrides when not provided", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		rsc := getReleaseServiceConfig(t)
+		// First set some overrides
+		rsc.Object["spec"] = map[string]interface{}{
+			"debug": false,
+			"EmptyDirOverrides": []interface{}{
+				map[string]interface{}{"url": ".*", "revision": ".*", "pathInRepo": "test.yaml"},
+			},
+		}
+
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
+			EmptyDirOverrides: nil,
+		}
+
+		err := applyReleaseServiceConfigCustomizations(rsc, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
+		g.Expect(rscSpec).NotTo(gomega.BeNil())
+		_, exists := rscSpec["EmptyDirOverrides"]
+		g.Expect(exists).To(gomega.BeFalse())
+	})
+
+	t.Run("sets both debug and EmptyDirOverrides together", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		rsc := getReleaseServiceConfig(t)
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
+			Debug: true,
+			EmptyDirOverrides: []konfluxv1alpha1.EmptyDirOverride{
+				{
+					URL:        ".*",
+					Revision:   ".*",
+					PathInRepo: "pipelines/managed/rh-advisories/rh-advisories.yaml",
+				},
+			},
+		}
+
+		err := applyReleaseServiceConfigCustomizations(rsc, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
+		g.Expect(rscSpec).NotTo(gomega.BeNil())
+		g.Expect(rscSpec["debug"]).To(gomega.BeTrue())
+		overrides, ok := rscSpec["EmptyDirOverrides"].([]interface{})
+		g.Expect(ok).To(gomega.BeTrue())
+		g.Expect(overrides).To(gomega.HaveLen(1))
+	})
+
+	t.Run("empty spec preserves default behavior", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		rsc := getReleaseServiceConfig(t)
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{}
+
+		err := applyReleaseServiceConfigCustomizations(rsc, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
+		g.Expect(rscSpec).NotTo(gomega.BeNil())
+		g.Expect(rscSpec["debug"]).To(gomega.BeFalse())
+		_, exists := rscSpec["EmptyDirOverrides"]
+		g.Expect(exists).To(gomega.BeFalse())
+	})
+
+	t.Run("handles nil spec map in ReleaseServiceConfig", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		rsc := &unstructured.Unstructured{}
+		rsc.Object = map[string]interface{}{
+			"apiVersion": "appstudio.redhat.com/v1alpha1",
+			"kind":       "ReleaseServiceConfig",
+			"metadata": map[string]interface{}{
+				"name":      "release-service-config",
+				"namespace": "release-service",
+			},
+		}
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
+			Debug: true,
+			EmptyDirOverrides: []konfluxv1alpha1.EmptyDirOverride{
+				{URL: ".*", Revision: ".*", PathInRepo: "test.yaml"},
+			},
+		}
+
+		err := applyReleaseServiceConfigCustomizations(rsc, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
+		g.Expect(rscSpec).NotTo(gomega.BeNil())
+		g.Expect(rscSpec["debug"]).To(gomega.BeTrue())
+		overrides, ok := rscSpec["EmptyDirOverrides"].([]interface{})
+		g.Expect(ok).To(gomega.BeTrue())
+		g.Expect(overrides).To(gomega.HaveLen(1))
+	})
+
+	t.Run("handles non-unstructured object gracefully", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		deployment := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "test"},
+		}
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{Debug: true}
+
+		// Should not panic
+		err := applyReleaseServiceConfigCustomizations(deployment, spec)
+		g.Expect(err).To(gomega.HaveOccurred())
+		g.Expect(deployment.Name).To(gomega.Equal("test"))
 	})
 }
 

@@ -1,5 +1,6 @@
 # Title: Konflux Release Service Configuration
-# Description: KonfluxReleaseService configuration with custom resource limits and environment variables
+# Description: KonfluxReleaseService configuration with custom resource limits, environment variables,
+# and ReleaseServiceConfig overrides (debug mode, emptyDir pipeline overrides).
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: KonfluxReleaseService
 metadata:
@@ -8,6 +9,14 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: konflux-release-service
 spec:
+  debug: true
+  emptyDirOverrides:
+    - url: ".*"
+      revision: ".*"
+      pathInRepo: "pipelines/managed/fbc-release/fbc-release.yaml"
+    - url: ".*"
+      revision: ".*"
+      pathInRepo: "pipelines/managed/rh-advisories/rh-advisories.yaml"
   releaseControllerManager:
     replicas: 3
     manager:

@@ -25,9 +25,29 @@ import (
 
 // KonfluxReleaseServiceSpec defines the desired state of KonfluxReleaseService
 type KonfluxReleaseServiceSpec struct {
+	// Debug enables debug mode in the ReleaseServiceConfig.
+	// When true, the release-service operates in debug mode.
+	// +optional
+	Debug bool `json:"debug,omitempty"`
+
+	// EmptyDirOverrides defines pipeline patterns that should use emptyDir volumes
+	// instead of PVCs. Applied to the ReleaseServiceConfig CR managed by the operator.
+	// +optional
+	EmptyDirOverrides []EmptyDirOverride `json:"emptyDirOverrides,omitempty"`
+
 	// ReleaseControllerManager defines customizations for the controller-manager deployment.
 	// +optional
 	ReleaseControllerManager *ControllerManagerDeploymentSpec `json:"releaseControllerManager,omitempty"`
+}
+
+// EmptyDirOverride defines a pipeline pattern that should use emptyDir volumes.
+type EmptyDirOverride struct {
+	// URL is a regex pattern matching the pipeline repository URL.
+	URL string `json:"url"`
+	// Revision is a regex pattern matching the pipeline revision.
+	Revision string `json:"revision"`
+	// PathInRepo is the path to the pipeline file within the repository.
+	PathInRepo string `json:"pathInRepo"`
 }
 
 // KonfluxReleaseServiceStatus defines the observed state of KonfluxReleaseService
