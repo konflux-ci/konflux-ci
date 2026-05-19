@@ -593,7 +593,7 @@ spec:
         - /var/run/scripts/konflux-ci.dev/proxy-nginx-run.sh
         command:
         - bash
-        image: registry.access.redhat.com/ubi9/nginx-124@sha256:20ae3d2ced3df6a622d11334288f2fd31f568ae49858d1e0eac43eca332a1322
+        image: registry.access.redhat.com/ubi9/nginx-124@sha256:e0bddaa7a490d6a7475f815f66ef5f404c3cbbc6229754ea0379245d99a5718e
         livenessProbe:
           failureThreshold: 3
           httpGet:
