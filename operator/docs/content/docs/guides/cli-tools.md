@@ -14,6 +14,7 @@ compatible with the installed operator version and services.
 | ConfigMap | Script | Purpose |
 |-----------|--------|---------|
 | `create-tenant` | `create-tenant.sh` | Create a new tenant namespace with all required RBAC resources |
+| `setup-component` | `setup-component.sh` | Onboard an application component, optionally a git `IntegrationTestScenario` (`-i`/`-j`/`-k`), and optionally a UI-style Conforma `IntegrationTestScenario` (`--include-conforma-scenario`) |
 | `setup-release` | `setup-release.sh` | Set up a managed namespace with release pipeline resources |
 
 ## Downloading the scripts
@@ -30,6 +31,11 @@ kubectl get configmap setup-release -n konflux-cli -o jsonpath='{.data.setup-rel
 chmod +x setup-release.sh
 ```
 
+```bash
+kubectl get configmap setup-component -n konflux-cli -o jsonpath='{.data.setup-component\.sh}' > setup-component.sh
+chmod +x setup-component.sh
+```
+
 ## create-tenant.sh
 
 Creates a new tenant namespace with a ServiceAccount for integration pipelines and
@@ -40,6 +46,20 @@ RoleBindings for both the pipeline runner and an admin user.
 ```
 
 Run `./create-tenant.sh -h` for the full list of options.
+
+## setup-component.sh
+
+Creates an application + component onboarding setup in a tenant namespace.
+It creates Application and Component resources, optionally a Pipelines-as-Code Repository,
+an optional git-resolver `IntegrationTestScenario` (`-i`/`-j`/`-k`), and optionally a Conforma
+`IntegrationTestScenario` matching the Konflux UI (`--include-conforma-scenario`).
+
+```bash
+./setup-component.sh -t <tenant-namespace> -a <application> -c <component> \
+  -g <component-git-url> -r <git-revision>
+```
+
+Run `./setup-component.sh -h` for the full list of options (including `--include-conforma-scenario`).
 
 ## setup-release.sh
 
