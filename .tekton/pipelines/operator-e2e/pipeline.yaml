@@ -8,8 +8,8 @@
 # No Pipeline workspaces: deploy-konflux and konflux-e2e-tests clone konflux-ci into a Task emptyDir.
 #
 # Input modes:
-# - PAC / direct PipelineRun: leave SNAPSHOT empty; git-url, revision, overrides-yaml
-#   drive clone inside tasks, deploy resolver, and e2e.
+# - PAC / direct PipelineRun: leave SNAPSHOT empty; git-url, revision, overrides-yaml,
+#   konflux-cr-configmap / konflux-cr-relative-path drive deploy CR apply.
 # - IntegrationTestScenario: set SNAPSHOT (JSON); test-metadata supplies git-url and
 #   git-revision for clone inside tasks. Git taskRef for deploy/e2e Task YAML uses fixed
 #   konflux-ci + branch (Tekton does not substitute task results in remote Task resolver params).
@@ -72,6 +72,22 @@ spec:
       #     images:
       #       - orig: quay.io/konflux-ci/release-service
       #         replacement: $(tasks.test-metadata.results.container-image)
+    - name: konflux-cr-configmap
+      type: string
+      description: >-
+        Optional ConfigMap name in the PipelineRun namespace; when present, its key overrides
+        konflux-cr-relative-path. Missing ConfigMap is allowed (optional ref in deploy task).
+      default: konflux-deploy-cr
+    - name: konflux-cr-configmap-key
+      type: string
+      description: Data key in konflux-cr-configmap that holds the Konflux CR YAML.
+      default: konflux-cr.yaml
+    - name: konflux-cr-relative-path
+      type: string
+      description: >-
+        Path to Konflux CR YAML relative to the konflux-ci repository root when the ConfigMap is
+        absent or the key is unset.
+      default: operator/config/samples/konflux-e2e.yaml
     - name: konflux-ready-timeout
       type: string
       default: "30m"
@@ -203,6 +219,12 @@ spec:
           value: kfg-$(context.pipelineRun.name)
         - name: overrides-yaml
           value: $(params.overrides-yaml)
+        - name: konflux-cr-configmap
+          value: $(params.konflux-cr-configmap)
+        - name: konflux-cr-configmap-key
+          value: $(params.konflux-cr-configmap-key)
+        - name: konflux-cr-relative-path
+          value: $(params.konflux-cr-relative-path)
         - name: konflux-ready-timeout
           value: $(params.konflux-ready-timeout)
         - name: oci-container-repo
@@ -237,6 +259,12 @@ spec:
           value: kfg-$(context.pipelineRun.name)
         - name: overrides-yaml
           value: $(params.overrides-yaml)
+        - name: konflux-cr-configmap
+          value: $(params.konflux-cr-configmap)
+        - name: konflux-cr-configmap-key
+          value: $(params.konflux-cr-configmap-key)
+        - name: konflux-cr-relative-path
+          value: $(params.konflux-cr-relative-path)
         - name: konflux-ready-timeout
           value: $(params.konflux-ready-timeout)
         - name: oci-container-repo

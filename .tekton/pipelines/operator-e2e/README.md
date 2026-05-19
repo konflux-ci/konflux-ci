@@ -21,6 +21,9 @@ The current conformance suite is written for that model: it exercises deployed s
 - `git-url` (default: `https://github.com/konflux-ci/konflux-ci.git`): repository URL used for clone + git-resolved local tasks.
 - `revision` (required): git ref from `git-url` to test.
 - `overrides-yaml` (default: empty): optional inline overrides consumed by deploy task.
+- `konflux-cr-configmap` (default: `konflux-deploy-cr`): optional ConfigMap in the PipelineRun namespace; when present, overrides the file from the clone.
+- `konflux-cr-configmap-key` (default: `konflux-cr.yaml`): data key holding the Konflux CR YAML.
+- `konflux-cr-relative-path` (default: `operator/config/samples/konflux-e2e.yaml`): CR path relative to the konflux-ci repo root when the ConfigMap is absent or the key is unset.
 - `konflux-ready-timeout` (default: `30m`): readiness timeout for Konflux CR.
 - `oci-container-repo` (required): OCI registry/repo prefix for kind-aws provision/deprovision artifacts (logs/state); no tag suffix—the pipeline appends `:$(context.pipelineRun.name)` for provision/deprovision. The deploy task also pushes **post-prep** `operator/pkg/manifests` to the **same repo** with tag `$(context.pipelineRun.name).pkg-manifests` so it does not replace the provision artifact.
 - `oci-container-repo-credentials-secret` (required): name of a Secret with registry credentials for `oci-container-repo` (kind-aws `oci-credentials`). This repo’s PAC PipelineRun uses `konflux-test-infra`.
@@ -31,6 +34,25 @@ The current conformance suite is written for that model: it exercises deployed s
 - `conformance-go-test-extra-args` (default: empty): optional space-separated extra flags appended to conformance `go test` after the fixed Ginkgo options (e.g. `-ginkgo.focus=Subsuite`), same idea as `./test/e2e/run-e2e.sh` forwarding `"$@"`.
 - `catalog-url` (default: `https://github.com/konflux-ci/tekton-integration-catalog.git`): integration catalog repository.
 - `catalog-revision` (default: pinned commit SHA): `tekton-integration-catalog` ref for catalog tasks; override to move to a different commit.
+
+### Examples: Konflux CR (ConfigMap vs sample file)
+
+**Precedence:** ConfigMap in the run namespace → file at `konflux-cr-relative-path` in the konflux-ci clone. See `.tekton/tasks/deploy-konflux/README.md` for creating the ConfigMap.
+
+**Custom CR via ConfigMap** (typical for another repo’s PipelineRun—no CR YAML on the PipelineRun):
+
+```bash
+kubectl create configmap konflux-deploy-cr \
+  --from-file=konflux-cr.yaml=./my-konflux.yaml \
+  -n konflux-vanguard-tenant
+```
+
+**Sample CR from the konflux-ci clone** (no ConfigMap, or delete `konflux-deploy-cr` in the namespace):
+
+```yaml
+    - name: konflux-cr-relative-path
+      value: operator/config/samples/konflux_v1alpha1_konflux.yaml
+```
 
 ### Examples: `integration-go-test-extra-args` / `conformance-go-test-extra-args`
 
