@@ -1561,6 +1561,37 @@ spec:
                   spec:
                     description: Spec configures the release-service component.
                     properties:
+                      debug:
+                        description: |-
+                          Debug enables debug mode in the ReleaseServiceConfig.
+                          When true, the release-service operates in debug mode.
+                        type: boolean
+                      emptyDirOverrides:
+                        description: |-
+                          EmptyDirOverrides defines pipeline patterns that should use emptyDir volumes
+                          instead of PVCs. Applied to the ReleaseServiceConfig CR managed by the operator.
+                        items:
+                          description: EmptyDirOverride defines a pipeline pattern
+                            that should use emptyDir volumes.
+                          properties:
+                            pathInRepo:
+                              description: PathInRepo is the path to the pipeline
+                                file within the repository.
+                              type: string
+                            revision:
+                              description: Revision is a regex pattern matching the
+                                pipeline revision.
+                              type: string
+                            url:
+                              description: URL is a regex pattern matching the pipeline
+                                repository URL.
+                              type: string
+                          required:
+                          - pathInRepo
+                          - revision
+                          - url
+                          type: object
+                        type: array
                       releaseControllerManager:
                         description: ReleaseControllerManager defines customizations
                           for the controller-manager deployment.
