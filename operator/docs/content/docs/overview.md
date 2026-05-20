@@ -82,7 +82,7 @@ The operator manages the following platform components through the `Konflux` CR:
 
 | Component | Description |
 |---|---|
-| **UI** | The Konflux web interface, nginx reverse proxy, and [Dex](https://dexidp.io/) identity provider. Supports NodePort, Ingress, and OpenShift Route. |
+| **UI** | The Konflux web interface, Caddy reverse proxy, and [Dex](https://dexidp.io/) identity provider. Supports NodePort, Ingress, and OpenShift Route. |
 | **Build Service** | Controller that manages Tekton-based build pipelines for application components. |
 | **Integration Service** | Controller that triggers integration test pipelines after each build and evaluates their results. |
 | **Release Service** | Controller that manages the `Release`, `ReleasePlan`, and `ReleasePlanAdmission` lifecycle for publishing artifacts. |
