@@ -47,7 +47,7 @@ const (
 	// RegistryNamespace is the namespace where internal registry resources are deployed.
 	RegistryNamespace = "kind-registry"
 	// HtpasswdSecretName stores the htpasswd file used by Zot.
-	HtpasswdSecretName = "zot-htpasswd"
+	HtpasswdSecretName = "zot-htpasswd" //nolint:gosec // secret name, not a credential
 	// ClientCredentialsSecretName stores docker auth config for clients that push to the registry.
 	ClientCredentialsSecretName = "internal-registry-client-auth"
 	// RegistryServiceHost is the in-cluster host name for the internal registry service.

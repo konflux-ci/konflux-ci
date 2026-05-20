@@ -273,7 +273,7 @@ images:
 	written, err := r.applyGitRulesToKustomization(kPath, r.Overrides[0].Git)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(written).To(BeTrue())
-	got, err := os.ReadFile(kPath)
+	got, err := os.ReadFile(kPath) //nolint:gosec // test temp file
 	g.Expect(err).ToNot(HaveOccurred())
 	text := string(got)
 	g.Expect(text).To(ContainSubstring("https://github.com/konflux-ci/segment-bridge/config/default?ref=newref"))

@@ -80,7 +80,7 @@ var (
 func SetupTestEnv(basePath string) *TestEnv {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
-	ctx, cancel := context.WithCancel(context.TODO())
+	ctx, cancel := context.WithCancel(context.TODO()) //nolint:gosec // cancel is stored in TestEnv and called by the test teardown
 
 	var err error
 	err = konfluxv1alpha1.AddToScheme(scheme.Scheme)
@@ -158,7 +158,7 @@ func GetFirstFoundEnvTestBinaryDir(basePath string) string {
 
 // GetGoModuleDir returns the directory path of a Go module in the module cache.
 func GetGoModuleDir(modulePath string) string {
-	cmd := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", modulePath)
+	cmd := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", modulePath) //nolint:gosec // modulePath is developer-provided at compile time
 	output, err := cmd.Output()
 	if err != nil {
 		logf.Log.Error(err, "Failed to get Go module directory", "module", modulePath)
