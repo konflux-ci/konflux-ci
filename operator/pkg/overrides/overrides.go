@@ -113,7 +113,7 @@ func NewRunner(upstreamDir, manifestsDir, tmpDir string, overrides Overrides) (*
 // Apply executes override transformations and writes resulting manifest updates.
 func (r *Runner) Apply() error {
 	r.applyStats = ApplyStats{}
-	if err := os.MkdirAll(r.TmpDir, 0o755); err != nil { //nolint:gosec // operator-internal temp dir
+	if err := os.MkdirAll(r.TmpDir, 0o755); err != nil { //nolint:G301 // TmpDir resolved to absolute path in NewRunner
 		return fmt.Errorf("create .tmp: %w", err)
 	}
 	if err := r.writeComponentSources(); err != nil {
@@ -203,7 +203,7 @@ func (r *Runner) writeComponentSources() error {
 		return fmt.Errorf("marshal component sources: %w", err)
 	}
 	path := filepath.Join(r.TmpDir, "component-sources.json")
-	if err := os.WriteFile(path, b, 0o644); err != nil { //nolint:gosec // operator-internal metadata file
+	if err := os.WriteFile(path, b, 0o644); err != nil { //nolint:G306 // path is under TmpDir (fixed filename)
 		return fmt.Errorf("write component sources: %w", err)
 	}
 	return nil
@@ -225,6 +225,9 @@ func (r *Runner) applyGitRules(upstreamDir string) error {
 			continue
 		}
 		componentDir := filepath.Join(upstreamDir, component.Name)
+		if err := pathIsConfined(componentDir, upstreamDir); err != nil {
+			return fmt.Errorf("component %q: %w", component.Name, err)
+		}
 		if _, err := os.Stat(componentDir); err != nil {
 			continue
 		}
@@ -255,7 +258,7 @@ func (r *Runner) applyGitRules(upstreamDir string) error {
 }
 
 func (r *Runner) applyGitRulesToKustomization(path string, rules []GitRule) (bool, error) {
-	content, err := os.ReadFile(path) //nolint:gosec // path is constructed from operator-controlled directory tree
+	content, err := os.ReadFile(path) //nolint:G304 // path confined under upstreamDir via pathIsConfined + WalkDir
 	if err != nil {
 		return false, err
 	}
@@ -359,7 +362,7 @@ func (r *Runner) applyGitRulesToKustomization(path string, rules []GitRule) (boo
 	if err != nil {
 		return false, fmt.Errorf("marshal updated kustomization: %w", err)
 	}
-	if err := os.WriteFile(path, out, 0o644); err != nil { //nolint:gosec // operator-internal kustomization file
+	if err := os.WriteFile(path, out, 0o644); err != nil { //nolint:G306 // path confined under upstreamDir via pathIsConfined + WalkDir
 		return false, err
 	}
 	return true, nil
@@ -377,7 +380,7 @@ func (r *Runner) applyImageOverridesInKustomizations(upstreamDir string) error {
 		if d.IsDir() || (d.Name() != "kustomization.yaml" && d.Name() != "kustomization.yml") {
 			return nil
 		}
-		content, err := os.ReadFile(path) //nolint:gosec // path from filepath.WalkDir within operator tree
+		content, err := os.ReadFile(path) //nolint:G304 // path confined under upstreamDir via WalkDir
 		if err != nil {
 			return err
 		}
@@ -432,7 +435,7 @@ func (r *Runner) applyImageOverridesInKustomizations(upstreamDir string) error {
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(path, out, 0o644); err != nil { //nolint:gosec // operator-internal kustomization file
+		if err := os.WriteFile(path, out, 0o644); err != nil { //nolint:G306 // path confined under upstreamDir via WalkDir
 			return err
 		}
 		r.applyStats.KustomizationImagesPatched++
@@ -445,11 +448,11 @@ func (r *Runner) applyImageOverridesInKustomizations(upstreamDir string) error {
 // (Tekton deploy-prep copies kubectl onto PATH but does not ship the kustomize binary).
 func kustomizeBuildCommand(src string) (*exec.Cmd, string, error) {
 	if _, err := exec.LookPath("kustomize"); err == nil {
-		//nolint:gosec // src is operator-controlled
+		//nolint:G204 // src confined under upstreamDir via pathIsConfined at call site
 		return exec.Command("kustomize", "build", src), "kustomize build", nil
 	}
 	if _, err := exec.LookPath("kubectl"); err == nil {
-		//nolint:gosec // src is operator-controlled
+		//nolint:G204 // src confined under upstreamDir via pathIsConfined at call site
 		return exec.Command("kubectl", "kustomize", src), "kubectl kustomize", nil
 	}
 	return nil, "", errors.New("kustomize or kubectl is required in PATH to rebuild manifests")
@@ -458,11 +461,17 @@ func kustomizeBuildCommand(src string) (*exec.Cmd, string, error) {
 func (r *Runner) rebuildManifests(upstreamDir, manifestsDir string, components []string) error {
 	for _, component := range components {
 		src := filepath.Join(upstreamDir, component)
+		if err := pathIsConfined(src, upstreamDir); err != nil {
+			return fmt.Errorf("component %q: %w", component, err)
+		}
 		if _, err := os.Stat(src); err != nil {
 			continue
 		}
 		destDir := filepath.Join(manifestsDir, component)
-		if err := os.MkdirAll(destDir, 0o755); err != nil { //nolint:gosec // operator-internal output directory
+		if err := pathIsConfined(destDir, manifestsDir); err != nil {
+			return fmt.Errorf("component %q: %w", component, err)
+		}
+		if err := os.MkdirAll(destDir, 0o755); err != nil { //nolint:G301 // destDir confined under manifestsDir via pathIsConfined above
 			return err
 		}
 		cmd, label, err := kustomizeBuildCommand(src)
@@ -475,7 +484,7 @@ func (r *Runner) rebuildManifests(upstreamDir, manifestsDir string, components [
 			return fmt.Errorf("%s failed for %s: %w: %s", label, component, err, string(out))
 		}
 		dest := filepath.Join(destDir, "manifests.yaml")
-		if err := os.WriteFile(dest, out, 0o644); err != nil { //nolint:gosec // operator-internal manifest
+		if err := os.WriteFile(dest, out, 0o644); err != nil { //nolint:G306 // dest under destDir, confined under manifestsDir via pathIsConfined above
 			return err
 		}
 		r.applyStats.ComponentsRebuilt++
@@ -495,7 +504,7 @@ func (r *Runner) applyImageOverridesInManifests(manifestsDir string) error {
 		if d.IsDir() || d.Name() != "manifests.yaml" {
 			return nil
 		}
-		content, err := os.ReadFile(path) //nolint:gosec // path from filepath.WalkDir within operator tree
+		content, err := os.ReadFile(path) //nolint:G304 // path confined under manifestsDir via WalkDir
 		if err != nil {
 			return err
 		}
@@ -533,7 +542,7 @@ func (r *Runner) applyImageOverridesInManifests(manifestsDir string) error {
 			}
 		}
 		_ = enc.Close()
-		if err := os.WriteFile(path, out.Bytes(), 0o644); err != nil { //nolint:gosec // operator-internal manifest
+		if err := os.WriteFile(path, out.Bytes(), 0o644); err != nil { //nolint:G306 // path confined under manifestsDir via WalkDir
 			return err
 		}
 		r.applyStats.ManifestYAMLsImageTextReplaced++
@@ -573,6 +582,9 @@ func validateOverrides(overrides Overrides) error {
 			return fmt.Errorf("entry %d: name is required", i)
 		}
 		nameKey := strings.TrimSpace(c.Name)
+		if err := validatePathSegment(nameKey); err != nil {
+			return fmt.Errorf("entry %d: invalid component name %q: %w", i, nameKey, err)
+		}
 		if _, dup := seenNames[nameKey]; dup {
 			return fmt.Errorf("entry %d: duplicate component name %q", i, nameKey)
 		}
@@ -613,6 +625,34 @@ func validateOverrides(overrides Overrides) error {
 				)
 			}
 		}
+	}
+	return nil
+}
+
+// safePathSegment matches names that are safe to use as a single directory component.
+var safePathSegment = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$`)
+
+func validatePathSegment(name string) error {
+	if strings.Contains(name, "/") || strings.Contains(name, "\\") {
+		return fmt.Errorf("must not contain path separators")
+	}
+	if name == "." || name == ".." || strings.Contains(name, "..") {
+		return fmt.Errorf("must not contain path traversal sequences")
+	}
+	if !safePathSegment.MatchString(name) {
+		return fmt.Errorf("must match [a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]")
+	}
+	return nil
+}
+
+// pathIsConfined returns an error if resolved is not under root.
+func pathIsConfined(resolved, root string) error {
+	rel, err := filepath.Rel(root, resolved)
+	if err != nil {
+		return fmt.Errorf("cannot compute relative path: %w", err)
+	}
+	if strings.HasPrefix(rel, "..") {
+		return fmt.Errorf("path %q escapes root %q", resolved, root)
 	}
 	return nil
 }
@@ -719,9 +759,9 @@ func copyDir(src, dst string) error {
 		}
 		target := filepath.Join(dst, rel)
 		if d.IsDir() {
-			return os.MkdirAll(target, 0o755) //nolint:gosec // copying operator-internal directory structure
+			return os.MkdirAll(target, 0o755) //nolint:G301 // target confined under dst via WalkDir rooted at src
 		}
-		b, err := os.ReadFile(path) //nolint:gosec // path from filepath.WalkDir within operator tree
+		b, err := os.ReadFile(path) //nolint:G304 // path confined under src via WalkDir
 		if err != nil {
 			return err
 		}
@@ -729,6 +769,6 @@ func copyDir(src, dst string) error {
 		if info, statErr := d.Info(); statErr == nil {
 			mode = info.Mode()
 		}
-		return os.WriteFile(target, b, mode) //nolint:gosec // target constructed from operator-controlled paths
+		return os.WriteFile(target, b, mode) //nolint:G306 // target confined under dst via WalkDir rooted at src
 	})
 }
