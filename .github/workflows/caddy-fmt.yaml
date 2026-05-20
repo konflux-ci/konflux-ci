@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - operator/upstream-kustomizations/ui/core/proxy/Caddyfile
+      - .github/workflows/caddy-fmt.yaml
   merge_group:
     types: [checks_requested]
 
