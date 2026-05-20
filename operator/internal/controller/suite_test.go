@@ -140,7 +140,7 @@ func getFirstFoundEnvTestBinaryDir() string {
 // getGoModuleDir returns the directory path of a Go module in the module cache.
 // This is used to reference CRD files from external modules like github.com/openshift/api.
 func getGoModuleDir(modulePath string) string {
-	cmd := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", modulePath)
+	cmd := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", modulePath) //nolint:gosec // modulePath is developer-provided at compile time
 	output, err := cmd.Output()
 	if err != nil {
 		logf.Log.Error(err, "Failed to get Go module directory", "module", modulePath)

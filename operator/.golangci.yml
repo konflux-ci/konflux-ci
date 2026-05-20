@@ -21,6 +21,7 @@ linters:
     - unconvert
     - unparam
     - unused
+    - gosec
   settings:
     revive:
       rules:
@@ -36,6 +37,14 @@ linters:
           - dupl
           - lll
         path: internal/*
+      - linters:
+          - gosec
+        text: "G101:"
+        path: _test\.go$
+      - linters:
+          - gosec
+        text: "G301:|G304:|G306:"
+        path: (_test\.go$|^test/)
     paths:
       - third_party$
       - builtin$

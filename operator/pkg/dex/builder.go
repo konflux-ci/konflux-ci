@@ -88,7 +88,7 @@ func NewDexConfig(endpoint *url.URL, params *DexParams) *Config {
 			Type: "openshift",
 			ID:   "openshift",
 			Name: "OpenShift",
-			Config: &ConnectorConfig{
+			Config: &ConnectorConfig{ //nolint:gosec // env var placeholder, not a real credential
 				Issuer:       "https://kubernetes.default.svc",
 				ClientID:     "system:serviceaccount:konflux-ui:dex-client",
 				ClientSecret: "$OPENSHIFT_OAUTH_CLIENT_SECRET",

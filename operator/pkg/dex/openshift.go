@@ -31,7 +31,7 @@ const (
 	// DexClientSecretTokenKey is the key in the secret that contains the token.
 	DexClientSecretTokenKey = "token"
 	// OpenShiftOAuthClientSecretEnvVar is the environment variable name for the OAuth client secret.
-	OpenShiftOAuthClientSecretEnvVar = "OPENSHIFT_OAUTH_CLIENT_SECRET"
+	OpenShiftOAuthClientSecretEnvVar = "OPENSHIFT_OAUTH_CLIENT_SECRET" //nolint:gosec // env var name, not a credential
 	// DexCallbackPath is the OAuth callback path used by Dex.
 	DexCallbackPath = "/idp/callback"
 )
