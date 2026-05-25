@@ -81,7 +81,7 @@ spec:
                   name:
                     description: |-
                       Name of the image within configured Quay organization.
-                      If ommited, then defaults to "cr-namespace/cr-name".
+                      If omitted, then defaults to "cr-namespace/cr-name".
                       This field cannot be changed after the resource creation.
                     pattern: ^[a-z0-9][.a-z0-9_-]*(/[a-z0-9][.a-z0-9_-]*)*$
                     type: string
@@ -1059,7 +1059,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/konflux-ci/image-controller:2b1c320886f9b18b3e882634a8d1e64c8812fc93
+        image: quay.io/konflux-ci/image-controller:eff9a763361cf696a35086ccc0a6c451f0c1d4d2
         livenessProbe:
           httpGet:
             path: /healthz
