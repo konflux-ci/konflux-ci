@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - https://github.com/conforma/crds/config/crd?ref=f12d86c29ce48fc3de4a8be977dec2034cc10081
+  - https://github.com/conforma/crds/config/crd?ref=6f685d079f1991c801d39d011b74ffa9c1fb09e3
   - ns.yaml
   - public-ecp-rbac.yaml
 
