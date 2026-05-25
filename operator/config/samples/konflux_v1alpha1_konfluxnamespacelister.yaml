@@ -8,6 +8,8 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: konflux-namespace-lister
 spec:
+  authUsernameHeader: "X-User"
+  authGroupsHeader: "X-Group"
   namespaceLister:
     replicas: 3
     namespaceLister:

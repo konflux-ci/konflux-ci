@@ -33,6 +33,22 @@ import (
 
 const namespaceListerNamespace = "namespace-lister"
 
+// findEnvValue returns the last value of the named env var.
+// Checks the last match to match Kubernetes behavior where later entries override earlier ones.
+//
+//nolint:unparam
+func findEnvValue(envs []corev1.EnvVar, name string) (string, bool) {
+	var value string
+	var found bool
+	for _, env := range envs {
+		if env.Name == name {
+			value = env.Value
+			found = true
+		}
+	}
+	return value, found
+}
+
 var _ = Describe("KonfluxNamespaceLister Controller", func() {
 	Context("When reconciling a resource", func() {
 		It("should successfully reconcile the resource", func(ctx context.Context) {
@@ -69,7 +85,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{
-								Name: namespaceListerNamespace,
+								Name: namespaceListerContainerName,
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceCPU:    resource.MustParse("50m"),
@@ -155,5 +171,219 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*deployment.Spec.Replicas).To(Equal(int32(2)))
 		Expect(deployment.Spec.Template.Spec.Containers[0].Resources.Limits.Memory().String()).To(Equal("256Mi"))
+	})
+
+	Context("authGroupsHeader typed field", func() {
+		It("should inject AUTH_GROUPS_HEADER when set", func() {
+			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+				AuthGroupsHeader: "X-Group",
+			}
+			err := applyNamespaceListerCustomizations(deployment, spec)
+			Expect(err).NotTo(HaveOccurred())
+
+			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			Expect(container).NotTo(BeNil())
+			val, found := findEnvValue(container.Env, envAuthGroupsHeader)
+			Expect(found).To(BeTrue())
+			Expect(val).To(Equal("X-Group"))
+		})
+
+		It("should not inject AUTH_GROUPS_HEADER when omitted", func() {
+			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{}
+			err := applyNamespaceListerCustomizations(deployment, spec)
+			Expect(err).NotTo(HaveOccurred())
+
+			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			Expect(container).NotTo(BeNil())
+			_, found := findEnvValue(container.Env, envAuthGroupsHeader)
+			Expect(found).To(BeFalse())
+		})
+
+		It("should take precedence over same var in ContainerSpec.Env", func() {
+			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+				AuthGroupsHeader: "X-Forwarded-Groups",
+				NamespaceLister: &konfluxv1alpha1.NamespaceListerDeploymentSpec{
+					NamespaceLister: &konfluxv1alpha1.ContainerSpec{
+						Env: []corev1.EnvVar{
+							{Name: envAuthGroupsHeader, Value: "X-Remote-Groups"},
+						},
+					},
+				},
+			}
+			err := applyNamespaceListerCustomizations(deployment, spec)
+			Expect(err).NotTo(HaveOccurred())
+
+			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			Expect(container).NotTo(BeNil())
+			val, found := findEnvValue(container.Env, envAuthGroupsHeader)
+			Expect(found).To(BeTrue())
+			Expect(val).To(Equal("X-Forwarded-Groups"), "typed CRD field should take precedence over ContainerSpec.Env")
+		})
+
+		It("should let ContainerSpec.Env pass through when typed field is omitted", func() {
+			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+				NamespaceLister: &konfluxv1alpha1.NamespaceListerDeploymentSpec{
+					NamespaceLister: &konfluxv1alpha1.ContainerSpec{
+						Env: []corev1.EnvVar{
+							{Name: envAuthGroupsHeader, Value: "X-Remote-Groups"},
+						},
+					},
+				},
+			}
+			err := applyNamespaceListerCustomizations(deployment, spec)
+			Expect(err).NotTo(HaveOccurred())
+
+			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			Expect(container).NotTo(BeNil())
+			val, found := findEnvValue(container.Env, envAuthGroupsHeader)
+			Expect(found).To(BeTrue())
+			Expect(val).To(Equal("X-Remote-Groups"), "ContainerSpec.Env should pass through when typed field is omitted")
+		})
+	})
+
+	Context("both auth headers combined", func() {
+		It("should inject both when both are set", func() {
+			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+				AuthUsernameHeader: "X-User",
+				AuthGroupsHeader:   "X-Group",
+			}
+			err := applyNamespaceListerCustomizations(deployment, spec)
+			Expect(err).NotTo(HaveOccurred())
+
+			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			Expect(container).NotTo(BeNil())
+			uVal, uFound := findEnvValue(container.Env, envAuthUsernameHeader)
+			Expect(uFound).To(BeTrue())
+			Expect(uVal).To(Equal("X-User"))
+			gVal, gFound := findEnvValue(container.Env, envAuthGroupsHeader)
+			Expect(gFound).To(BeTrue())
+			Expect(gVal).To(Equal("X-Group"))
+		})
+
+		It("should inject neither when both are omitted", func() {
+			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{}
+			err := applyNamespaceListerCustomizations(deployment, spec)
+			Expect(err).NotTo(HaveOccurred())
+
+			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			Expect(container).NotTo(BeNil())
+			_, uFound := findEnvValue(container.Env, envAuthUsernameHeader)
+			Expect(uFound).To(BeFalse())
+			_, gFound := findEnvValue(container.Env, envAuthGroupsHeader)
+			Expect(gFound).To(BeFalse())
+		})
+
+		It("should inject only username header when groups header is omitted", func() {
+			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+				AuthUsernameHeader: "X-User",
+			}
+			err := applyNamespaceListerCustomizations(deployment, spec)
+			Expect(err).NotTo(HaveOccurred())
+
+			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			Expect(container).NotTo(BeNil())
+			uVal, uFound := findEnvValue(container.Env, envAuthUsernameHeader)
+			Expect(uFound).To(BeTrue())
+			Expect(uVal).To(Equal("X-User"))
+			_, gFound := findEnvValue(container.Env, envAuthGroupsHeader)
+			Expect(gFound).To(BeFalse())
+		})
+
+		It("should inject only groups header when username header is omitted", func() {
+			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+				AuthGroupsHeader: "X-Group",
+			}
+			err := applyNamespaceListerCustomizations(deployment, spec)
+			Expect(err).NotTo(HaveOccurred())
+
+			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			Expect(container).NotTo(BeNil())
+			_, uFound := findEnvValue(container.Env, envAuthUsernameHeader)
+			Expect(uFound).To(BeFalse())
+			gVal, gFound := findEnvValue(container.Env, envAuthGroupsHeader)
+			Expect(gFound).To(BeTrue())
+			Expect(gVal).To(Equal("X-Group"))
+		})
+	})
+
+	Context("authUsernameHeader typed field", func() {
+		It("should inject AUTH_USERNAME_HEADER when set", func() {
+			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+				AuthUsernameHeader: "X-User",
+			}
+			err := applyNamespaceListerCustomizations(deployment, spec)
+			Expect(err).NotTo(HaveOccurred())
+
+			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			Expect(container).NotTo(BeNil())
+			val, found := findEnvValue(container.Env, envAuthUsernameHeader)
+			Expect(found).To(BeTrue())
+			Expect(val).To(Equal("X-User"))
+		})
+
+		It("should not inject AUTH_USERNAME_HEADER when omitted", func() {
+			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{}
+			err := applyNamespaceListerCustomizations(deployment, spec)
+			Expect(err).NotTo(HaveOccurred())
+
+			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			Expect(container).NotTo(BeNil())
+			_, found := findEnvValue(container.Env, envAuthUsernameHeader)
+			Expect(found).To(BeFalse())
+		})
+
+		It("should treat explicit empty string the same as omitted", func() {
+			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+				AuthUsernameHeader: "",
+			}
+			err := applyNamespaceListerCustomizations(deployment, spec)
+			Expect(err).NotTo(HaveOccurred())
+
+			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			Expect(container).NotTo(BeNil())
+			_, found := findEnvValue(container.Env, envAuthUsernameHeader)
+			Expect(found).To(BeFalse())
+		})
+
+		It("should take precedence over same var in ContainerSpec.Env", func() {
+			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+				AuthUsernameHeader: "X-Forwarded-User",
+				NamespaceLister: &konfluxv1alpha1.NamespaceListerDeploymentSpec{
+					NamespaceLister: &konfluxv1alpha1.ContainerSpec{
+						Env: []corev1.EnvVar{
+							{Name: envAuthUsernameHeader, Value: "X-Remote-User"},
+						},
+					},
+				},
+			}
+			err := applyNamespaceListerCustomizations(deployment, spec)
+			Expect(err).NotTo(HaveOccurred())
+
+			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			Expect(container).NotTo(BeNil())
+			val, found := findEnvValue(container.Env, envAuthUsernameHeader)
+			Expect(found).To(BeTrue())
+			Expect(val).To(Equal("X-Forwarded-User"), "typed CRD field should take precedence over ContainerSpec.Env")
+		})
+
+		It("should let ContainerSpec.Env pass through when typed field is omitted", func() {
+			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+				NamespaceLister: &konfluxv1alpha1.NamespaceListerDeploymentSpec{
+					NamespaceLister: &konfluxv1alpha1.ContainerSpec{
+						Env: []corev1.EnvVar{
+							{Name: envAuthUsernameHeader, Value: "X-Remote-User"},
+						},
+					},
+				},
+			}
+			err := applyNamespaceListerCustomizations(deployment, spec)
+			Expect(err).NotTo(HaveOccurred())
+
+			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			Expect(container).NotTo(BeNil())
+			val, found := findEnvValue(container.Env, envAuthUsernameHeader)
+			Expect(found).To(BeTrue())
+			Expect(val).To(Equal("X-Remote-User"), "ContainerSpec.Env should pass through when typed field is omitted")
+		})
 	})
 })

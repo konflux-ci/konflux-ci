@@ -41,6 +41,22 @@ spec:
             default: {}
             description: KonfluxNamespaceListerSpec defines the desired state of KonfluxNamespaceLister.
             properties:
+              authGroupsHeader:
+                description: |-
+                  AuthGroupsHeader is the HTTP header name from which the namespace-lister
+                  extracts the authenticated user's group memberships.
+                  When set, the namespace-lister trusts the named header for groups.
+                  When omitted, group extraction from headers is disabled.
+                minLength: 1
+                type: string
+              authUsernameHeader:
+                description: |-
+                  AuthUsernameHeader is the HTTP header name from which the namespace-lister
+                  extracts the authenticated user's identity.
+                  When set, the namespace-lister trusts the named header for username.
+                  When omitted, header-based auth is disabled.
+                minLength: 1
+                type: string
               namespaceLister:
                 description: NamespaceLister defines customizations for the namespace-lister
                   deployment.

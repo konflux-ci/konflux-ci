@@ -94,10 +94,6 @@ spec:
           value: 10m
         - name: CACHE_NAMESPACE_LABELSELECTOR
           value: konflux-ci.dev/type=tenant
-        - name: AUTH_USERNAME_HEADER
-          value: X-User
-        - name: AUTH_GROUPS_HEADER
-          value: X-Group
         image: quay.io/konflux-ci/namespace-lister@sha256:990e0ad159168851beed23ecc32bc3b66983729167768b8b7d3e77fc12df0a42
         livenessProbe:
           httpGet:

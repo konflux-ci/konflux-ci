@@ -49,6 +49,9 @@ const (
 
 	// namespaceListerContainerName is the name of the namespace-lister container
 	namespaceListerContainerName = "namespace-lister"
+
+	envAuthUsernameHeader = "AUTH_USERNAME_HEADER"
+	envAuthGroupsHeader   = "AUTH_GROUPS_HEADER"
 )
 
 // NamespaceListerCleanupGVKs defines which resource types should be cleaned up when they are
@@ -168,23 +171,27 @@ func (r *KonfluxNamespaceListerReconciler) applyManifests(ctx context.Context, t
 
 // applyNamespaceListerCustomizations applies user-defined customizations to the namespace-lister deployment.
 func applyNamespaceListerCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxNamespaceListerSpec) error {
-	if spec.NamespaceLister == nil {
-		return nil
+	var containerSpec *konfluxv1alpha1.ContainerSpec
+	if spec.NamespaceLister != nil {
+		// Apply replicas if set (non-zero value)
+		if spec.NamespaceLister.Replicas > 0 {
+			deployment.Spec.Replicas = &spec.NamespaceLister.Replicas
+		}
+		containerSpec = spec.NamespaceLister.NamespaceLister
 	}
 
-	deploymentSpec := spec.NamespaceLister
-
-	// Apply replicas if set (non-zero value)
-	if deploymentSpec.Replicas > 0 {
-		deployment.Spec.Replicas = &deploymentSpec.Replicas
+	containerOpts := []customization.ContainerOption{
+		customization.FromContainerSpec(containerSpec),
+		// Typed CRD fields applied after FromContainerSpec — always take precedence
+		customization.WithOptionalEnvOverride(envAuthUsernameHeader, spec.AuthUsernameHeader),
+		customization.WithOptionalEnvOverride(envAuthGroupsHeader, spec.AuthGroupsHeader),
 	}
 
-	// Build and apply container customizations using pkg/customization
 	overlay := customization.BuildPodOverlay(
 		customization.DeploymentContext{},
 		customization.WithContainerBuilder(
 			namespaceListerContainerName,
-			customization.FromContainerSpec(deploymentSpec.NamespaceLister),
+			containerOpts...,
 		),
 	)
 	return overlay.ApplyToDeployment(deployment)

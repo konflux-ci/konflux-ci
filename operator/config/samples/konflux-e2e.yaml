@@ -102,6 +102,8 @@ spec:
               memory: 128Mi
   namespaceLister:
     spec:
+      authUsernameHeader: "X-User"
+      authGroupsHeader: "X-Group"
       namespaceLister:
         replicas: 1
         namespaceLister:

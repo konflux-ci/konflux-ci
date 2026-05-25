@@ -36,6 +36,22 @@ type KonfluxNamespaceListerSpec struct {
 	// NamespaceLister defines customizations for the namespace-lister deployment.
 	// +optional
 	NamespaceLister *NamespaceListerDeploymentSpec `json:"namespaceLister,omitempty"`
+
+	// AuthUsernameHeader is the HTTP header name from which the namespace-lister
+	// extracts the authenticated user's identity.
+	// When set, the namespace-lister trusts the named header for username.
+	// When omitted, header-based auth is disabled.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	AuthUsernameHeader string `json:"authUsernameHeader,omitempty"`
+
+	// AuthGroupsHeader is the HTTP header name from which the namespace-lister
+	// extracts the authenticated user's group memberships.
+	// When set, the namespace-lister trusts the named header for groups.
+	// When omitted, group extraction from headers is disabled.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	AuthGroupsHeader string `json:"authGroupsHeader,omitempty"`
 }
 
 // KonfluxNamespaceListerStatus defines the observed state of KonfluxNamespaceLister.
