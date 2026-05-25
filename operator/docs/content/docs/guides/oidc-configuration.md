@@ -300,11 +300,6 @@ each user entry (requires Dex v2.45.0+):
 
 ### Limitations
 
-- **Maximum 10 groups per user.** The proxy splits the comma-separated group
-  string into individual headers using a fixed regex with 10 capture groups.
-  Groups beyond the 10th are silently dropped. Empty headers from unused
-  capture groups are harmless — the Kubernetes API ignores them.
-
 - **Re-login required after group changes.** Group memberships are embedded in
   the ID token at login time. If a user's groups change in the identity
   provider, they must log out and log back in to get a fresh token with the

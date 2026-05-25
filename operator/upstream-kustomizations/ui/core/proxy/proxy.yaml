@@ -115,18 +115,6 @@ spec:
           subPath: Caddyfile
           name: proxy-caddyfile
           readOnly: true
-        - mountPath: /etc/caddy/impersonate-groups.conf
-          subPath: impersonate-groups.conf
-          name: proxy-caddyfile
-          readOnly: true
-        - mountPath: /etc/caddy/impersonate-headers.conf
-          subPath: impersonate-headers.conf
-          name: proxy-caddyfile
-          readOnly: true
-        - mountPath: /etc/caddy/ns-lister-headers.conf
-          subPath: ns-lister-headers.conf
-          name: proxy-caddyfile
-          readOnly: true
         - name: trusted-ca
           mountPath: /mnt/trusted-ca
           readOnly: true
@@ -146,7 +134,7 @@ spec:
           requests:
             cpu: 10m
             memory: 64Mi
-      - image: registry.access.redhat.com/hi/caddy
+      - image: quay.io/konflux-ci/reverse-proxy
         name: reverse-proxy
         command:
           - caddy
@@ -192,18 +180,6 @@ spec:
         volumeMounts:
           - mountPath: /etc/caddy/Caddyfile
             subPath: Caddyfile
-            name: proxy-caddyfile
-            readOnly: true
-          - mountPath: /etc/caddy/impersonate-groups.conf
-            subPath: impersonate-groups.conf
-            name: proxy-caddyfile
-            readOnly: true
-          - mountPath: /etc/caddy/impersonate-headers.conf
-            subPath: impersonate-headers.conf
-            name: proxy-caddyfile
-            readOnly: true
-          - mountPath: /etc/caddy/ns-lister-headers.conf
-            subPath: ns-lister-headers.conf
             name: proxy-caddyfile
             readOnly: true
           - name: serving-cert
@@ -298,12 +274,6 @@ spec:
             items:
               - key: Caddyfile
                 path: Caddyfile
-              - key: impersonate-groups.conf
-                path: impersonate-groups.conf
-              - key: impersonate-headers.conf
-                path: impersonate-headers.conf
-              - key: ns-lister-headers.conf
-                path: ns-lister-headers.conf
         - name: caddy-templates
           configMap:
             defaultMode: 420
