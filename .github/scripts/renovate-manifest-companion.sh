@@ -166,7 +166,18 @@ Regenerated operator/pkg/manifests and Helm-rendered third-party files to match
 the dependency bump branch. Prefer merging this PR over #${SOURCE_PR} so rendered
 artifacts stay aligned with pins."
 
-git push origin "${BRANCH}" --force
+push_err="$(mktemp)"
+if ! git push origin "${BRANCH}" --force 2>"${push_err}"; then
+  if grep -qE 'added to a merge queue|queued for merging cannot be updated' "${push_err}"; then
+    echo "::notice::Companion branch ${BRANCH} is in the merge queue; skipping push (source PR #${SOURCE_PR} updated while merge is in progress)."
+    rm -f "${push_err}"
+    exit 0
+  fi
+  cat "${push_err}" >&2
+  rm -f "${push_err}"
+  exit 1
+fi
+rm -f "${push_err}"
 
 EXISTING="$(
   gh pr list \
