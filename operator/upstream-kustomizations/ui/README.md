@@ -80,9 +80,7 @@ Browser ──HTTPS──▶ Caddy (:9443)
                      │                    │                                    + X-Auth-Request-Groups
                      │                    └─ No cookie? ──▶ 401 (Caddy returns login redirect)
                      │
-                     ├─ map: split X-Auth-Request-Groups into {ig1}..{ig10}
-                     │
-                     ├─ request_header: set Impersonate-User / +Impersonate-Group headers
+                     ├─ impersonate: set Impersonate-User / Impersonate-Group headers
                      │
                      └─ reverse_proxy ──▶ upstream (Kube API / Tekton Results / etc.)
 ```
@@ -147,10 +145,11 @@ sequenceDiagram
 4. **Subsequent requests (with session):** Caddy's `forward_auth` sends
    a subrequest to oauth2-proxy, which validates the cookie and returns
    200 with `X-Auth-Request-Email` and `X-Auth-Request-Groups` headers.
-   Caddy copies these onto the request, splits the groups into individual
-   `Impersonate-Group` headers (see [Group Impersonation](#group-impersonation)),
-   and forwards the request to the Kube API with the proxy's own service
-   account token in the `Authorization` header.
+   Caddy copies these onto the request, and the `impersonate` handler
+   plugin sets `Impersonate-User` and individual `Impersonate-Group`
+   headers (see [Group Impersonation](#group-impersonation)). The request
+   is then forwarded to the Kube API with the proxy's own service account
+   token in the `Authorization` header.
 
 5. **Kube API impersonation:** The API server authenticates the proxy's
    service account, verifies it has impersonation permissions, and then
@@ -162,75 +161,20 @@ sequenceDiagram
 The Kubernetes API requires each group as a separate `Impersonate-Group`
 header. oauth2-proxy returns all groups in a single comma-separated string.
 
-Splitting is done in two steps:
+The proxy uses a custom Caddy build from
+[konflux-ci/reverse-proxy](https://github.com/konflux-ci/reverse-proxy)
+that includes the `impersonate` handler plugin. This plugin reads
+`X-Auth-Request-Email` and `X-Auth-Request-Groups` from the auth response,
+sets `Impersonate-User`, and splits the comma-separated groups into
+individual `Impersonate-Group` headers — with no arbitrary group limit.
+It also always appends `system:authenticated`.
 
-1. **`impersonate-groups.conf`** — a `map` directive that extracts up to 10
-   groups from `X-Auth-Request-Groups` into placeholders `{ig1}`…`{ig10}`
-   using a regex with capture groups.
-
-2. **`impersonate-headers.conf`** — `request_header +Impersonate-Group`
-   directives that add one header per placeholder, plus a static
-   `system:authenticated` group.
-
-`request_header` is used instead of `header_up` because Caddy's
-reverse_proxy merges all `header_up` operations for the same header name
-into a single set/add/delete sequence, which causes only the first value
-to survive. Using `request_header` as a standalone handler avoids this.
-
-All Kube API and backend routes are wrapped in `route { }` blocks to
-preserve execution order (`forward_auth` → `map` → `request_header` →
-`reverse_proxy`), since Caddy's default directive ordering would run `map`
-before `forward_auth`.
-
-### Design Trade-offs
-
-We evaluated several approaches before settling on the `map` + `request_header`
-pattern. The core challenge is that Caddy has no built-in way to explode a
-single comma-separated header into multiple headers with the same name.
-
-**Approach 1: `header_up` with newline injection** — Replace commas with
-`\nImpersonate-Group: ` inside a `header_up` directive. Rejected because
-Go's `net/http` sanitizes newlines in header values to prevent HTTP header
-injection. The `\n` is stripped before the request reaches the upstream.
-
-**Approach 2: Custom Caddy plugin / CEL handler** — Write a plugin or use
-Caddy's CEL expression language to split the header programmatically.
-Rejected because it adds a build-time dependency (custom Caddy build) or
-relies on CEL features that are experimental in Caddy. Both would
-complicate the supply chain and make the proxy harder to maintain.
-
-**Approach 3: Helper sidecar** — Run a small HTTP service between Caddy
-and the upstream that splits the header. Rejected because it adds another
-hop (latency, failure mode, resource cost) for every API request, and
-complicates the pod topology.
-
-**Approach 4 (chosen): `map` with regex capture groups + `request_header`** —
-Use a `map` directive with a regex containing 10 optional capture groups to
-extract individual groups into placeholders, then add each as a separate
-header via `request_header +Impersonate-Group`. Trade-offs:
-
-- *Pro*: Pure Caddyfile, no custom builds, no extra sidecars, no latency
-  overhead.
-- *Pro*: Empty capture groups produce empty placeholders, which the
-  Kubernetes API server silently ignores — no harm from unused slots.
-- *Con*: Hard cap of 10 groups. Increasing the cap is straightforward
-  (add more capture groups and `request_header` lines) but increases config
-  verbosity. The regex is already complex at 10 groups.
-- *Con*: `request_header` must be used instead of the more natural
-  `header_up` (inside `reverse_proxy`) due to Caddy's header operation
-  merging. This requires explicit `route { }` blocks to control execution
-  order, making the Caddyfile less intuitive.
-
-The 10-group cap is a pragmatic choice. In practice, most identity
-providers return fewer than 10 groups per user. If a deployment needs more,
-the cap can be raised by adding entries to `impersonate-groups.conf` and
-`impersonate-headers.conf`.
+For the namespace-lister, the plugin is configured with custom target
+headers (`X-User` / `X-Group`) instead of the default Kubernetes
+impersonation headers.
 
 ### Limitations
 
-- Maximum of 10 groups per user. Groups beyond the 10th are silently
-  dropped. The cap can be raised by extending the regex and adding
-  `request_header` lines.
 - Group changes in the identity provider (Dex) require the user to log out
   and log back in to get a fresh ID token.
 
@@ -337,9 +281,6 @@ All proxy files live under `core/proxy/`:
 | File | Purpose |
 |------|---------|
 | `Caddyfile` | Main server configuration |
-| `impersonate-groups.conf` | `map` directive splitting comma-separated groups |
-| `impersonate-headers.conf` | `request_header` directives for Kube API impersonation |
-| `ns-lister-headers.conf` | `request_header` directives for namespace-lister (X-User/X-Group) |
 | `tekton-results.caddy` | Template for Tekton Results backend route |
 | `generate-proxy-config.sh` | Init container script: resolves backends, seeds auth/TLS snippets |
 | `config-refresh.sh` | Sidecar script: watches tokens and CAs, reloads Caddy |

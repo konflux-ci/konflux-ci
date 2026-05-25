@@ -230,17 +230,13 @@ var _ = Describe("Test Proxy endpoints", func() {
 		})
 	})
 
-	Describe("Test empty Impersonate-Group header tolerance", func() {
-		// The group impersonation regex (impersonate-groups.conf) splits up to
-		// 10 groups from X-Auth-Request-Groups into placeholders {ig1}…{ig10}.
-		// When a user has fewer than 10 groups (or none at all, as with the Dex
-		// local password connector), unused placeholders resolve to empty strings,
-		// producing empty Impersonate-Group headers. The Kubernetes API server
-		// must silently ignore these. This test explicitly validates that
-		// behavior rather than relying on it implicitly.
-		It("should succeed when the user has no IdP groups (all group placeholders empty)", func() {
-			// user2 has no groups in the Dex static password config, so all 10
-			// Impersonate-Group placeholders will be empty strings.
+	Describe("Test user with no IdP groups", func() {
+		// When a user has no groups in the identity provider (e.g. Dex local
+		// password connector), the impersonate plugin only adds the static
+		// "system:authenticated" group. This test validates that users with
+		// no IdP groups can still authenticate and access resources normally.
+		It("should succeed when the user has no IdP groups", func() {
+			// user2 has no groups in the Dex static password config.
 			token, err := ExtractTokenForUser(k8sClient, "user2@konflux.dev", "password")
 			Expect(err).NotTo(HaveOccurred())
 
@@ -256,7 +252,7 @@ var _ = Describe("Test Proxy endpoints", func() {
 			body, err := io.ReadAll(response.Body)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(response.StatusCode).To(Equal(200), string(body),
-				"Request should succeed despite empty Impersonate-Group headers from unused placeholders")
+				"Request should succeed when user has no IdP groups (plugin adds system:authenticated only)")
 		})
 	})
 

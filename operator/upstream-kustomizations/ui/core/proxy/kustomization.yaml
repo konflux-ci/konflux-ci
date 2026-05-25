@@ -1,34 +1,30 @@
-kind: Kustomization
 apiVersion: kustomize.config.k8s.io/v1beta1
-resources:
-  - proxy.yaml
-  - rbac.yaml
-
-images:
-- name: quay.io/konflux-ci/konflux-ui
-  newName: quay.io/konflux-ci/konflux-ui
-  digest: sha256:f3cd59eab1dcff0fb2fdce943871e52260f7b256c3f3d801200cc2d429ff5714
-- name: quay.io/konflux-ci/oauth2-proxy
-  newName: quay.io/konflux-ci/oauth2-proxy
-  digest: sha256:1f4a37529de4f750099af18e113556bd995fe6922030c614b7d6d23eaa0bd318
-- name: registry.access.redhat.com/hi/caddy
-  digest: sha256:c38cf847ae5f5de12f8c236b028ee9f823ec7f76708002a3310b4d2db75d7a41
 configMapGenerator:
-  - name: proxy-caddyfile
-    files:
-      - Caddyfile
-      - impersonate-groups.conf
-      - impersonate-headers.conf
-      - ns-lister-headers.conf
-  - name: proxy-caddy-templates
-    files:
-      - tekton-results.caddy
-  - name: proxy-generate-config
-    files:
-      - generate-proxy-config.sh
-  - name: proxy-config-refresh
-    files:
-      - config-refresh.sh
-      - config-refresh-probe.sh
-
+- files:
+  - Caddyfile
+  name: proxy-caddyfile
+- files:
+  - tekton-results.caddy
+  name: proxy-caddy-templates
+- files:
+  - generate-proxy-config.sh
+  name: proxy-generate-config
+- files:
+  - config-refresh.sh
+  - config-refresh-probe.sh
+  name: proxy-config-refresh
+images:
+- digest: sha256:f3cd59eab1dcff0fb2fdce943871e52260f7b256c3f3d801200cc2d429ff5714
+  name: quay.io/konflux-ci/konflux-ui
+  newName: quay.io/konflux-ci/konflux-ui
+- digest: sha256:1f4a37529de4f750099af18e113556bd995fe6922030c614b7d6d23eaa0bd318
+  name: quay.io/konflux-ci/oauth2-proxy
+  newName: quay.io/konflux-ci/oauth2-proxy
+- digest: sha256:8ef085215ce6451ad53eceae1c893a91e491abd8cd7f03b2d0464e9de4afb773
+  name: quay.io/konflux-ci/reverse-proxy
+  newName: quay.io/konflux-ci/reverse-proxy
+kind: Kustomization
 namespace: konflux-ui
+resources:
+- proxy.yaml
+- rbac.yaml
