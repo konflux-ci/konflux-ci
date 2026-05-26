@@ -35,8 +35,6 @@ spec:
         env:
         - name: LOG_LEVEL
           value: "0"
-        - name: CACHE_RESYNC_PERIOD
-          value: 10m
         - name: CACHE_NAMESPACE_LABELSELECTOR
           value: konflux-ci.dev/type=tenant
         livenessProbe:

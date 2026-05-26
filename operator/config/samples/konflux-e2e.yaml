@@ -102,6 +102,7 @@ spec:
               memory: 128Mi
   namespaceLister:
     spec:
+      cacheResyncPeriod: "10m"
       namespaceLister:
         replicas: 1
         namespaceLister:
