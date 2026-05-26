@@ -48,6 +48,95 @@ func getNamespaceListerDeployment(t *testing.T) *appsv1.Deployment {
 	return nil
 }
 
+func TestLogLevelWithRealManifest(t *testing.T) {
+	t.Run("embedded manifest does not contain LOG_LEVEL", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		deployment := getNamespaceListerDeployment(t)
+		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+		_, found := findEnvValue(container.Env, envLogLevel)
+		g.Expect(found).To(gomega.BeFalse(), "LOG_LEVEL should not be in the embedded base manifest")
+	})
+
+	t.Run("field set to info injects LOG_LEVEL=0 into real manifest", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		deployment := getNamespaceListerDeployment(t)
+		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+			LogLevel: konfluxv1alpha1.LogLevelInfo,
+		}
+		err := applyNamespaceListerCustomizations(deployment, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+		val, found := findEnvValue(container.Env, envLogLevel)
+		g.Expect(found).To(gomega.BeTrue())
+		g.Expect(val).To(gomega.Equal("0"))
+	})
+
+	t.Run("all enum values map to correct slog integers on real manifest", func(t *testing.T) {
+		cases := map[konfluxv1alpha1.LogLevel]string{
+			konfluxv1alpha1.LogLevelDebug: "-4",
+			konfluxv1alpha1.LogLevelInfo:  "0",
+			konfluxv1alpha1.LogLevelWarn:  "4",
+			konfluxv1alpha1.LogLevelError: "8",
+		}
+		for level, expected := range cases {
+			t.Run(string(level), func(t *testing.T) {
+				g := gomega.NewWithT(t)
+				deployment := getNamespaceListerDeployment(t)
+				spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+					LogLevel: level,
+				}
+				err := applyNamespaceListerCustomizations(deployment, spec)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+				g.Expect(container).NotTo(gomega.BeNil())
+				val, found := findEnvValue(container.Env, envLogLevel)
+				g.Expect(found).To(gomega.BeTrue())
+				g.Expect(val).To(gomega.Equal(expected))
+			})
+		}
+	})
+
+	t.Run("field omitted leaves env var absent in real manifest", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		deployment := getNamespaceListerDeployment(t)
+		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{}
+		err := applyNamespaceListerCustomizations(deployment, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+		_, found := findEnvValue(container.Env, envLogLevel)
+		g.Expect(found).To(gomega.BeFalse(), "upstream default should apply — env var should be absent")
+	})
+
+	t.Run("field overrides same var set via ContainerSpec.Env on real manifest", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		deployment := getNamespaceListerDeployment(t)
+		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+			LogLevel: konfluxv1alpha1.LogLevelDebug,
+			NamespaceLister: &konfluxv1alpha1.NamespaceListerDeploymentSpec{
+				NamespaceLister: &konfluxv1alpha1.ContainerSpec{
+					Env: []corev1.EnvVar{
+						{Name: envLogLevel, Value: "8"},
+					},
+				},
+			},
+		}
+		err := applyNamespaceListerCustomizations(deployment, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+		val, found := findEnvValue(container.Env, envLogLevel)
+		g.Expect(found).To(gomega.BeTrue())
+		g.Expect(val).To(gomega.Equal("-4"), "typed field should win over ContainerSpec.Env")
+	})
+}
+
 func TestCacheResyncPeriodWithRealManifest(t *testing.T) {
 	t.Run("embedded manifest does not contain CACHE_RESYNC_PERIOD", func(t *testing.T) {
 		g := gomega.NewWithT(t)

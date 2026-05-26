@@ -114,6 +114,7 @@ spec:
   namespaceLister:
     spec:
       cacheResyncPeriod: "10m"
+      logLevel: info
       namespaceLister:
         replicas: 1
         namespaceLister:

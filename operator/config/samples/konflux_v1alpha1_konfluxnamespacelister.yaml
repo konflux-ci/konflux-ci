@@ -9,6 +9,7 @@ metadata:
   name: konflux-namespace-lister
 spec:
   cacheResyncPeriod: "10m"
+  logLevel: info
   namespaceLister:
     replicas: 3
     namespaceLister:
@@ -20,8 +21,6 @@ spec:
           cpu: 512m
           memory: 1Gi
       env:
-        - name: LOG_LEVEL
-          value: "0"
         - name: EXAMPLE_CUSTOM_CONFIG
           valueFrom:
             configMapKeyRef:

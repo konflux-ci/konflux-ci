@@ -88,8 +88,6 @@ spec:
         - -cert-path=/var/tls/tls.crt
         - -key-path=/var/tls/tls.key
         env:
-        - name: LOG_LEVEL
-          value: "0"
         - name: CACHE_NAMESPACE_LABELSELECTOR
           value: konflux-ci.dev/type=tenant
         - name: AUTH_USERNAME_HEADER
