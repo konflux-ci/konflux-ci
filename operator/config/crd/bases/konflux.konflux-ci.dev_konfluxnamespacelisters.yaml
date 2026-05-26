@@ -50,6 +50,17 @@ spec:
                   with no periodic resync.
                 pattern: ^([0-9]+(s|m|h))+$
                 type: string
+              logLevel:
+                description: |-
+                  LogLevel sets the minimum log severity for the namespace-lister.
+                  Accepted values: debug, info, warn, error.
+                  When omitted, the namespace-lister defaults to error level.
+                enum:
+                - debug
+                - info
+                - warn
+                - error
+                type: string
               namespaceLister:
                 description: NamespaceLister defines customizations for the namespace-lister
                   deployment.

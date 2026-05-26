@@ -45,6 +45,12 @@ type KonfluxNamespaceListerSpec struct {
 	// +optional
 	// +kubebuilder:validation:Pattern=`^([0-9]+(s|m|h))+$`
 	CacheResyncPeriod string `json:"cacheResyncPeriod,omitempty"`
+
+	// LogLevel sets the minimum log severity for the namespace-lister.
+	// Accepted values: debug, info, warn, error.
+	// When omitted, the namespace-lister defaults to error level.
+	// +optional
+	LogLevel LogLevel `json:"logLevel,omitempty"`
 }
 
 // KonfluxNamespaceListerStatus defines the observed state of KonfluxNamespaceLister.

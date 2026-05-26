@@ -32,6 +32,17 @@ type ContainerSpec struct {
 	Env []corev1.EnvVar `json:"env,omitempty"`
 }
 
+// LogLevel sets the minimum severity for log output.
+// +kubebuilder:validation:Enum=debug;info;warn;error
+type LogLevel string
+
+const (
+	LogLevelDebug LogLevel = "debug"
+	LogLevelInfo  LogLevel = "info"
+	LogLevelWarn  LogLevel = "warn"
+	LogLevelError LogLevel = "error"
+)
+
 // ControllerManagerDeploymentSpec defines customizations for the controller-manager deployment.
 type ControllerManagerDeploymentSpec struct {
 	// Replicas is the number of replicas for the controller-manager deployment.

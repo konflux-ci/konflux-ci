@@ -51,7 +51,30 @@ const (
 	namespaceListerContainerName = "namespace-lister"
 
 	envCacheResyncPeriod = "CACHE_RESYNC_PERIOD"
+	envLogLevel          = "LOG_LEVEL"
 )
+
+// logLevelToEnvValue maps the CRD enum to the integer value the upstream namespace-lister expects.
+var logLevelToEnvValue = map[konfluxv1alpha1.LogLevel]string{
+	konfluxv1alpha1.LogLevelDebug: "-4",
+	konfluxv1alpha1.LogLevelInfo:  "0",
+	konfluxv1alpha1.LogLevelWarn:  "4",
+	konfluxv1alpha1.LogLevelError: "8",
+}
+
+// resolveLogLevelEnvValue converts a LogLevel to the env var value.
+// Returns ("", nil) when level is empty (field omitted), the mapped value when
+// known, or an error for unrecognised non-empty values.
+func resolveLogLevelEnvValue(level konfluxv1alpha1.LogLevel) (string, error) {
+	if level == "" {
+		return "", nil
+	}
+	v, ok := logLevelToEnvValue[level]
+	if !ok {
+		return "", fmt.Errorf("unsupported logLevel %q", level)
+	}
+	return v, nil
+}
 
 // NamespaceListerCleanupGVKs defines which resource types should be cleaned up when they are
 // no longer part of the desired state. All resources managed by this controller are always
@@ -178,9 +201,15 @@ func applyNamespaceListerCustomizations(deployment *appsv1.Deployment, spec konf
 		containerSpec = spec.NamespaceLister.NamespaceLister
 	}
 
+	logLevelValue, err := resolveLogLevelEnvValue(spec.LogLevel)
+	if err != nil {
+		return fmt.Errorf("invalid namespace-lister spec: %w", err)
+	}
+
 	containerOpts := []customization.ContainerOption{
 		customization.FromContainerSpec(containerSpec),
 		customization.WithOptionalEnvOverride(envCacheResyncPeriod, spec.CacheResyncPeriod),
+		customization.WithOptionalEnvOverride(envLogLevel, logLevelValue),
 	}
 
 	overlay := customization.BuildPodOverlay(

@@ -33,8 +33,6 @@ spec:
         name: namespace-lister
         image: quay.io/konflux-ci/namespace-lister:foo
         env:
-        - name: LOG_LEVEL
-          value: "0"
         - name: CACHE_NAMESPACE_LABELSELECTOR
           value: konflux-ci.dev/type=tenant
         livenessProbe:
