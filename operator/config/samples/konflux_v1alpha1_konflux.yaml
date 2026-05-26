@@ -113,6 +113,7 @@ spec:
       #   # defaultPipelineName: my-custom-pipeline  # Use custom pipeline as default
   namespaceLister:
     spec:
+      cacheResyncPeriod: "10m"
       namespaceLister:
         replicas: 1
         namespaceLister:

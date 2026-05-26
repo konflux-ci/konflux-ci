@@ -41,6 +41,15 @@ spec:
             default: {}
             description: KonfluxNamespaceListerSpec defines the desired state of KonfluxNamespaceLister.
             properties:
+              cacheResyncPeriod:
+                description: |-
+                  CacheResyncPeriod controls how often the namespace-lister's access cache
+                  fully re-evaluates RBAC permissions as a safety net.
+                  Accepts a Go duration string (e.g. "5s", "10m", "1h").
+                  When omitted, the namespace-lister relies solely on watch events
+                  with no periodic resync.
+                pattern: ^([0-9]+(s|m|h))+$
+                type: string
               namespaceLister:
                 description: NamespaceLister defines customizations for the namespace-lister
                   deployment.
