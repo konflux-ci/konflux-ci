@@ -5,6 +5,7 @@ operator/test/crds/cert-manager/**
 .github/workflows/verify-manifests-in-sync.yaml
 .github/path-filters/verify-manifests-in-sync.txt
 .github/scripts/verify-manifests-in-sync.sh
+.github/scripts/cancel-operator-e2e-on-verify-failure.sh
 .github/scripts/export-third-party-chart-env.sh
 operator/pkg/manifests/rebuild-upstream-manifests.sh
 .github/workflows/update-upstream-manifests.yaml
