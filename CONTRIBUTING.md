@@ -138,6 +138,10 @@ after verify starts are still caught). E2E was cancelled because manifests are
 out of sync; fix verify or use the manifest companion PR. To keep E2E running
 despite a verify failure, add the label `force-run-e2e` to the PR.
 
+Source PRs labeled `superseded-by-companion` fail the Operator E2E workflow gate
+(merge the manifest companion PR instead). Add `force-run-e2e` to run full E2E on
+the source PR anyway.
+
 ## Automated E2E Tests
 
 The repository includes automated tests that run in GitHub Actions on both x86_64

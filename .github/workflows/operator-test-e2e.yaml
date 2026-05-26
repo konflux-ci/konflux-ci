@@ -9,21 +9,33 @@ on:
     types: [e2e]
 
 jobs:
-  # Gate: only same-repo PRs run heavy jobs on push. Fork PRs need /allow. Trusted contexts (dispatch, merge_group) always run.
+  # Gate: fork PRs (inline, before checkout) and superseded-by-companion (script; opt out: force-run-e2e).
   check-prerequisites:
     runs-on: ubuntu-latest
     steps:
-    - name: Check prerequisites
-      run: |
-        # Fork PRs: fail so heavy jobs do not run on push (no secrets). Only /allow can trigger them.
-        if [[ "${{ github.event_name }}" == 'pull_request' && "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.event.pull_request.base.repo.full_name }}" ]]; then
-          echo "❌ Fork PR: heavy jobs do not run on push (no secrets). Comment /allow to trigger tests."
-          echo "### Fork PR" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Tests are not run automatically from forks." >> $GITHUB_STEP_SUMMARY
-          echo "**Action Required:** A maintainer must comment \`/allow\` on this PR to trigger tests." >> $GITHUB_STEP_SUMMARY
+      # Inline so fork PRs cannot replace checked-out script content (see renovate-manifest-companion.yaml).
+      - name: Reject fork PRs
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          set -euo pipefail
+          echo "❌ Fork PR: heavy jobs do not run on push (no secrets). Comment /allow to trigger tests." >&2
+          {
+            echo "### Fork PR"
+            echo ""
+            echo "Tests are not run automatically from forks."
+            echo "**Action Required:** A maintainer must comment \`/allow\` on this PR to trigger tests."
+          } >>"${GITHUB_STEP_SUMMARY}"
           exit 1
-        fi
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Check superseded-by-companion label
+        env:
+          PR_LABELS_JSON: ${{ toJson(github.event.pull_request.labels) }}
+        run: bash .github/scripts/check-operator-e2e-prerequisites.sh
 
   check-changes:
     name: Check for relevant changes
