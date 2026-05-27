@@ -144,6 +144,28 @@ the source PR anyway.
 
 ## Automated E2E Tests
 
+**Operator E2E concurrency:** PRs opened by the dependency bots (`konflux-ci-update-bot`
+or `red-hat-konflux`, including `app/…` and `…[bot]` login forms) share a single
+GitHub Actions concurrency group so only one Operator E2E workflow runs at a time
+during dependency bursts. Human and other bot PRs still run E2E in parallel (one
+group per PR number).
+
+If you need to merge a bot PR urgently, you can cancel all in-progress/queued
+**Operator E2E Tests** runs for currently open PRs from those two bot users:
+
+```bash
+REPO="konflux-ci/konflux-ci"
+
+SHAS_JSON="$(
+  gh pr list --repo "$REPO" --state open --json author,headRefOid \
+  | jq '[.[] | select(.author.login as $l | ["konflux-ci-update-bot[bot]","app/konflux-ci-update-bot","red-hat-konflux[bot]","app/red-hat-konflux"] | index($l)) | .headRefOid]'
+)"
+
+gh run list --repo "$REPO" --workflow "Operator E2E Tests" --limit 200 --json databaseId,headSha,status \
+| jq -r --argjson shas "$SHAS_JSON" '.[] | select(.status != "completed" and (.headSha as $h | $shas | index($h))) | .databaseId' \
+| xargs -r -n1 -I{} gh run cancel {} --repo "$REPO"
+```
+
 The repository includes automated tests that run in GitHub Actions on both x86_64
 and ARM64 architectures. There are **two test suites** in `test/go-tests`:
 

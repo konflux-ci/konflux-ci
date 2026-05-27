@@ -8,6 +8,39 @@ on:
   repository_dispatch:
     types: [e2e]
 
+# Serialize Operator E2E for dependency bots that open many PRs at once (MintMaker /
+# Renovate via konflux-ci-update-bot, Konflux image bumps via red-hat-konflux). All
+# runs from those authors share one concurrency group, so only one bot workflow runs
+# at a time and they do not compete for the shared GitHub App / smee channel.
+#
+# How the group expression works (GitHub evaluates the whole ${{ }} once):
+#   1. pull_request + bot author → fixed group "operator-e2e-serial-dependency-bots"
+#   2. pull_request + anyone else → per-PR group "operator-e2e-pr-<number>"
+#   3. repository_dispatch (/allow e2e) → per PR from client_payload
+#   4. all other events (including merge_group) → unique group per run
+#
+# cancel-in-progress:
+#   - false for dependency bots so their shared group is queued (never cancels peers)
+#   - true otherwise so a new push on the same PR/dispatched PR cancels stale runs
+concurrency:
+  group: >-
+    ${{
+      github.event_name == 'pull_request' && (
+        contains(fromJSON('["konflux-ci-update-bot[bot]","app/konflux-ci-update-bot","red-hat-konflux[bot]","app/red-hat-konflux"]'), github.event.pull_request.user.login)
+        && 'operator-e2e-serial-dependency-bots'
+        || format('operator-e2e-pr-{0}', github.event.pull_request.number)
+      )
+      || (github.event_name == 'repository_dispatch' && format('operator-e2e-dispatch-{0}', github.event.client_payload.pr_number))
+      || format('operator-e2e-fallback-{0}', github.run_id)
+    }}
+  cancel-in-progress: >-
+    ${{
+      !(
+        github.event_name == 'pull_request' &&
+        contains(fromJSON('["konflux-ci-update-bot[bot]","app/konflux-ci-update-bot","red-hat-konflux[bot]","app/red-hat-konflux"]'), github.event.pull_request.user.login)
+      )
+    }}
+
 jobs:
   # Gate: fork PRs (inline, before checkout) and superseded-by-companion (script; opt out: force-run-e2e).
   check-prerequisites:
