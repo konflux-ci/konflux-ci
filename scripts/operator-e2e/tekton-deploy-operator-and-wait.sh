@@ -31,7 +31,7 @@ echo "Out-of-cluster operator: make install, install-user-rbac, build (foregroun
   cd "${REPO_ROOT}/operator"
   make install
   make install-user-rbac
-  make build
+  VERSION="$(git rev-parse HEAD)" make build
 )
 echo "Starting bin/manager (logs: ${OPERATOR_LOG})..."
 (
