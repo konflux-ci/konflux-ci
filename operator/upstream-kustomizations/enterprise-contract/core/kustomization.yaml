@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - https://github.com/conforma/crds/config/crd?ref=6f685d079f1991c801d39d011b74ffa9c1fb09e3
   - ns.yaml
+  - configmap-viewer-role.yaml
   - public-ecp-rbac.yaml
 
 namespace: enterprise-contract-service
