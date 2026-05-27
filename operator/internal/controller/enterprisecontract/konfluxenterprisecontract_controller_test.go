@@ -57,6 +57,9 @@ var _ = Describe("KonfluxEnterpriseContract Controller", func() {
 
 			By("verifying a representative ClusterRole was created")
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "enterprisecontractpolicy-viewer-role"}, &rbacv1.ClusterRole{})).To(Succeed())
+
+			By("verifying the configmap-viewer ClusterRole was created")
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "enterprisecontract-configmap-viewer-role"}, &rbacv1.ClusterRole{})).To(Succeed())
 		})
 	})
 })
