@@ -5,4 +5,4 @@ resources:
 images:
 - name: quay.io/konflux-ci/segment-bridge
   newName: quay.io/konflux-ci/segment-bridge
-  newTag: d8f2d2b2c868c17d4eb51874a1ea2cbdc912a07f8666ea95618d573dd96fb093
+  newTag: d8f2d2b2c868c17d4eb51874a1ea2cbdc912a07f

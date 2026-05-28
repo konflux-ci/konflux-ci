@@ -82,6 +82,10 @@ spec:
         set of values is determined by the configuration of the multi-platform-controller.
       name: build-platforms
       type: array
+    - name: enable-package-registry-proxy
+      default: 'true'
+      description: Use the package registry proxy when prefetching dependencies
+      type: string
   results:
     - description: ""
       name: IMAGE_URL
@@ -174,6 +178,8 @@ spec:
           value: $(params.output-image).prefetch
         - name: ociArtifactExpiresAfter
           value: $(params.image-expires-after)
+        - name: enable-package-registry-proxy
+          value: $(params.enable-package-registry-proxy)
       runAfter:
         - clone-repository
       taskRef:
