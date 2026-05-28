@@ -454,6 +454,18 @@ spec:
                       Defaults to true if not specified.
                     type: boolean
                 type: object
+              enterpriseContract:
+                description: |-
+                  EnterpriseContract configures the enterprise-contract component.
+                  The runtime configuration is copied to the KonfluxEnterpriseContract CR by the operator.
+                properties:
+                  skipPolicies:
+                    description: |-
+                      SkipPolicies disables deployment of EnterpriseContractPolicy resources.
+                      When true, only CRDs, namespace, RBAC, and ConfigMap are deployed;
+                      users are expected to manage policies externally.
+                    type: boolean
+                type: object
               imageController:
                 description: |-
                   ImageController configures the image-controller component.

@@ -25,11 +25,11 @@ import (
 
 // KonfluxEnterpriseContractSpec defines the desired state of KonfluxEnterpriseContract.
 type KonfluxEnterpriseContractSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of KonfluxEnterpriseContract. Edit konfluxenterprisecontract_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// SkipPolicies disables deployment of EnterpriseContractPolicy resources.
+	// When true, only CRDs, namespace, RBAC, and ConfigMap are deployed;
+	// users are expected to manage policies externally.
+	// +optional
+	SkipPolicies bool `json:"skipPolicies"`
 }
 
 // KonfluxEnterpriseContractStatus defines the observed state of KonfluxEnterpriseContract.

@@ -25,6 +25,13 @@ The operator deploys an `EnterpriseContractPolicy` CR into the
 `enterprise-contract-service` namespace. This is publicly readable by any
 authenticated cluster user and can be referenced directly without creating your own.
 
+> **Note:** If you manage policies externally, you can disable the operator-managed
+> policy deployment by setting `spec.skipPolicies: true` on the
+> `KonfluxEnterpriseContract` CR (or `spec.enterpriseContract.skipPolicies: true` on
+> the top-level `Konflux` CR). When enabled, the operator still deploys CRDs,
+> namespace, RBAC, and ConfigMap — only `EnterpriseContractPolicy` resources are
+> skipped. Previously deployed policies are cleaned up automatically.
+
 | CR name | Display name | Rule collection(s) | Description |
 |---------|-------------|--------------------|-------------|
 | `default` | Default | `@redhat` | Used for new Konflux applications. Includes most Red Hat rules, excluding hermetic builds. |
