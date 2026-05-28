@@ -88,11 +88,10 @@
         "operator/upstream-kustomizations/enterprise-contract/core/kustomization.yaml"
       ],
       "matchStrings": [
-        "- verify_ec_task_bundle=(?<depName>quay\\.io/enterprise-contract/ec-task-bundle)@(?<currentDigest>sha256:[a-f0-9]{64})"
+        "- verify_ec_task_bundle=(?<depName>quay\\.io/conforma/tekton-task):latest@(?<currentDigest>sha256:[a-f0-9]{64})"
       ],
-      "autoReplaceStringTemplate": "- verify_ec_task_bundle={{depName}}@{{newDigest}}",
       "datasourceTemplate": "docker",
-      "currentValueTemplate": "snapshot"
+      "currentValueTemplate": "latest"
     },
     {
       "customType": "regex",
@@ -101,7 +100,7 @@
         "operator/upstream-kustomizations/enterprise-contract/core/kustomization.yaml"
       ],
       "matchStrings": [
-        "- verify_ec_task_git_url=(?<packageName>https:\/\/github\\.com\/enterprise-contract\/ec-cli)\\.git",
+        "- verify_ec_task_git_url=(?<packageName>https:\/\/github\\.com\/conforma\/cli)\\.git",
         "- verify_ec_task_git_revision=(?<currentDigest>[a-f0-9]{40})"
       ],
       "datasourceTemplate": "git-refs",
