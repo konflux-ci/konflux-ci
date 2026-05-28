@@ -4,11 +4,9 @@ set -eu
 
 TEMPLATES_DIR=/mnt/caddy-templates
 SNIPPETS_DIR=/mnt/caddy-snippets
-TOKEN_FILEPATH=/var/run/secrets/konflux-ci.dev/serviceaccount/token
-BACKEND_TOKEN_FILEPATH=/var/run/secrets/konflux-ci.dev/backend/token
 SERVICE_CA_PATH=/mnt/service-ca/service-ca.crt
 
-for cmd in sed nslookup cat; do
+for cmd in sed nslookup; do
   command -v "${cmd}" >/dev/null 2>&1 || { echo "required command not found: ${cmd}"; exit 1; }
 done
 
@@ -44,30 +42,6 @@ if [ -f "${TEMPLATES_DIR}/tekton-results.caddy" ]; then
   else
     log "tekton-results not available, skipping"
   fi
-fi
-
-# Seed the kube-auth snippet so Caddy can start with a valid Authorization header.
-# The config-refresh sidecar will keep this file updated and reload Caddy as needed.
-if [ -f "${TOKEN_FILEPATH}" ]; then
-  token=$(cat "${TOKEN_FILEPATH}")
-  printf 'header_up Authorization "Bearer %s"\n' "${token}" > "${SNIPPETS_DIR}/kube-auth.conf"
-  log "seeded kube-auth.conf"
-else
-  # Create an empty file so Caddy's import doesn't fail on missing file
-  touch "${SNIPPETS_DIR}/kube-auth.conf"
-  log "warning: token file not found, created empty kube-auth.conf"
-fi
-
-# Seed the backend-auth snippet for backend services (Tekton Results, KubeArchive, etc.).
-# This token has audience "konflux-backend" and cannot be used against the Kube API directly.
-# Backend services validate it via TokenReview.
-if [ -f "${BACKEND_TOKEN_FILEPATH}" ]; then
-  token=$(cat "${BACKEND_TOKEN_FILEPATH}")
-  printf 'header_up Authorization "Bearer %s"\n' "${token}" > "${SNIPPETS_DIR}/backend-auth.conf"
-  log "seeded backend-auth.conf"
-else
-  touch "${SNIPPETS_DIR}/backend-auth.conf"
-  log "warning: backend token file not found, created empty backend-auth.conf"
 fi
 
 # Generate TLS transport config for backend services (Tekton Results, KubeArchive, etc.).
