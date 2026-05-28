@@ -135,6 +135,12 @@ spec:
           # Display a banner at the top of the Konflux UI to all users.
           - summary: "Welcome to Konflux-CI! This development and testing environment has been deployed with default insecure passwords!"
             type: danger
+  # enterpriseContract:
+  #   # skipPolicies disables deployment of EnterpriseContractPolicy resources.
+  #   # When true, only CRDs, namespace, RBAC, and ConfigMap are deployed;
+  #   # users are expected to manage policies externally.
+  #   # When omitted or false, policies are deployed (the default behavior).
+  #   skipPolicies: true
   certManager:
     # CreateClusterIssuer controls whether cluster issuer resources are created
     # Defaults to true if not specified
