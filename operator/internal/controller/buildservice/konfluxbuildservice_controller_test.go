@@ -54,7 +54,6 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 	// the same objects concurrently, leading to race conditions on status updates.
 	startManagerWithClusterInfo := func(clusterInfo *clusterinfo.Info) {
 		mgrCtx, mgrCancel := context.WithCancel(testEnv.Ctx)
-		DeferCleanup(mgrCancel)
 		mgr := testutil.NewTestManager(testEnv)
 		Expect((&KonfluxBuildServiceReconciler{
 			Client:      mgr.GetClient(),
@@ -62,7 +61,11 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 			ObjectStore: objectStore,
 			ClusterInfo: clusterInfo,
 		}).SetupWithManager(mgr)).To(Succeed())
-		testutil.StartManagerWithContext(mgrCtx, mgr)
+		waitForStop := testutil.StartManagerWithContext(mgrCtx, mgr)
+		DeferCleanup(func() {
+			mgrCancel()
+			waitForStop()
+		})
 	}
 
 	Context("When reconciling a resource", func() {
