@@ -388,7 +388,7 @@ subjects:
 ---
 apiVersion: v1
 data:
-  verify_ec_task_bundle: quay.io/enterprise-contract/ec-task-bundle@sha256:862c5197adba555cb4347d96600938e62bb9aaef6a40b73b1d3854a10e8cc59a
+  verify_ec_task_bundle: quay.io/enterprise-contract/ec-task-bundle@sha256:bb9b38c0528c535ba4f79c87c6292648bc672ad98e579c3e2004f76b25957662
   verify_ec_task_git_pathInRepo: tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml
   verify_ec_task_git_revision: 1026da746d2717e25c0adac582f2d37694b0bd84
   verify_ec_task_git_url: https://github.com/enterprise-contract/ec-cli.git
