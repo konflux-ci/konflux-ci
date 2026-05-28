@@ -9,10 +9,6 @@ configMapGenerator:
 - files:
   - generate-proxy-config.sh
   name: proxy-generate-config
-- files:
-  - config-refresh.sh
-  - config-refresh-probe.sh
-  name: proxy-config-refresh
 images:
 - digest: sha256:f3cd59eab1dcff0fb2fdce943871e52260f7b256c3f3d801200cc2d429ff5714
   name: quay.io/konflux-ci/konflux-ui
@@ -20,7 +16,7 @@ images:
 - digest: sha256:1f4a37529de4f750099af18e113556bd995fe6922030c614b7d6d23eaa0bd318
   name: quay.io/konflux-ci/oauth2-proxy
   newName: quay.io/konflux-ci/oauth2-proxy
-- digest: sha256:d9a6aaeed63d3c79b9227f5aa435a39be747ffc64861d17278989c445fa2a5d1
+- digest: sha256:986d1f6c0ba119949a90edd4fec6b95d9dfce2889599154e368d36f798cc083a
   name: quay.io/konflux-ci/reverse-proxy
   newName: quay.io/konflux-ci/reverse-proxy
 kind: Kustomization

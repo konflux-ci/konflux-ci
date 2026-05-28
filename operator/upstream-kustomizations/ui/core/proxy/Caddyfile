@@ -1,6 +1,15 @@
 {
 	auto_https off
-	admin localhost:2019
+	admin off
+	order inject_cached_vars before reverse_proxy
+	file_watcher {
+		cache kube_token /var/run/secrets/konflux-ci.dev/serviceaccount/token
+		cache backend_token /var/run/secrets/konflux-ci.dev/backend/token
+		watch /var/run/secrets/kubernetes.io/serviceaccount
+		watch /mnt/trusted-ca
+		watch /mnt/service-ca
+		watch /mnt/serving-cert
+	}
 }
 
 # TODO: protect metrics with kube-rbac-proxy sidecar (https://github.com/openshift/kube-rbac-proxy)
@@ -9,7 +18,12 @@
 }
 
 :9443 {
-	tls /mnt/tls.crt /mnt/tls.key
+	tls {
+		get_certificate file {
+			cert /mnt/serving-cert/tls.crt
+			key /mnt/serving-cert/tls.key
+		}
+	}
 
 	# Strip any client-supplied impersonation and proxy-auth headers to
 	# prevent spoofing. This runs at the server level, before any
@@ -84,8 +98,9 @@
 				copy_headers X-Auth-Request-Email X-Auth-Request-Groups
 			}
 			impersonate
+			inject_cached_vars
 			reverse_proxy https://kubernetes.default.svc {
-				import /mnt/caddy-snippets/kube-auth.conf
+				header_up Authorization "Bearer {http.vars.kube_token}"
 				transport http {
 					read_timeout 30m
 					write_timeout 30m
@@ -103,8 +118,9 @@
 				copy_headers X-Auth-Request-Email X-Auth-Request-Groups
 			}
 			impersonate
+			inject_cached_vars
 			reverse_proxy https://kubernetes.default.svc {
-				import /mnt/caddy-snippets/kube-auth.conf
+				header_up Authorization "Bearer {http.vars.kube_token}"
 				transport http {
 					read_timeout 30m
 					write_timeout 30m
@@ -119,7 +135,7 @@
 		reverse_proxy https://dex.konflux-ui.svc.cluster.local:9443 {
 			header_up X-Forwarded-Port "9443"
 			transport http {
-				tls_trust_pool file /mnt/ca.crt
+				tls_trust_pool file /mnt/serving-cert/ca.crt
 			}
 		}
 	}

@@ -65,12 +65,6 @@ spec:
         - name: generate-proxy-config-script
           mountPath: /var/run/scripts/konflux-ci.dev
           readOnly: true
-        - name: kube-api-token
-          mountPath: /var/run/secrets/konflux-ci.dev/serviceaccount
-          readOnly: true
-        - name: backend-token
-          mountPath: /var/run/secrets/konflux-ci.dev/backend
-          readOnly: true
         - name: service-ca
           mountPath: /mnt/service-ca
           readOnly: true
@@ -85,55 +79,6 @@ spec:
             cpu: 10m
             memory: 64Mi
       containers:
-      - name: config-refresh
-        image: quay.io/konflux-ci/konflux-ui
-        command:
-          - bash
-        args:
-          - /var/run/scripts/konflux-ci.dev/config-refresh.sh
-        livenessProbe:
-          exec:
-            command:
-            - sh
-            - /var/run/scripts/konflux-ci.dev/config-refresh-probe.sh
-          initialDelaySeconds: 30
-          periodSeconds: 30
-          failureThreshold: 3
-        volumeMounts:
-        - mountPath: /var/run/scripts/konflux-ci.dev/
-          name: config-refresh-scripts
-          readOnly: true
-        - mountPath: /var/run/secrets/konflux-ci.dev/serviceaccount
-          name: kube-api-token
-          readOnly: true
-        - mountPath: /var/run/secrets/konflux-ci.dev/backend
-          name: backend-token
-          readOnly: true
-        - mountPath: /mnt/caddy-snippets
-          name: caddy-snippets
-        - mountPath: /etc/caddy/Caddyfile
-          subPath: Caddyfile
-          name: proxy-caddyfile
-          readOnly: true
-        - name: trusted-ca
-          mountPath: /mnt/trusted-ca
-          readOnly: true
-        - name: service-ca
-          mountPath: /mnt/service-ca
-          readOnly: true
-        - name: serving-cert
-          mountPath: /mnt/serving-cert
-          readOnly: true
-        securityContext:
-          readOnlyRootFilesystem: true
-          runAsNonRoot: true
-        resources:
-          limits:
-            cpu: 50m
-            memory: 128Mi
-          requests:
-            cpu: 10m
-            memory: 64Mi
       - image: quay.io/konflux-ci/reverse-proxy
         name: reverse-proxy
         command:
@@ -183,7 +128,14 @@ spec:
             name: proxy-caddyfile
             readOnly: true
           - name: serving-cert
-            mountPath: /mnt
+            mountPath: /mnt/serving-cert
+            readOnly: true
+          - name: kube-api-token
+            mountPath: /var/run/secrets/konflux-ci.dev/serviceaccount
+            readOnly: true
+          - name: backend-token
+            mountPath: /var/run/secrets/konflux-ci.dev/backend
+            readOnly: true
           - name: caddy-snippets
             mountPath: /mnt/caddy-snippets
             readOnly: true
@@ -239,15 +191,6 @@ spec:
             items:
               - key: generate-proxy-config.sh
                 path: generate-proxy-config.sh
-        - name: config-refresh-scripts
-          configMap:
-            defaultMode: 0750
-            name: proxy-config-refresh
-            items:
-              - key: config-refresh.sh
-                path: config-refresh.sh
-              - key: config-refresh-probe.sh
-                path: config-refresh-probe.sh
         - name: kube-api-token
           projected:
             defaultMode: 420

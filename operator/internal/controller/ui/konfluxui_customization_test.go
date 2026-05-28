@@ -905,46 +905,25 @@ func TestProxyDeploymentTokenHotReload(t *testing.T) {
 	deployment := getUIDeployment(t, proxyDeploymentName)
 	spec := deployment.Spec.Template.Spec
 
-	t.Run("config-refresh container exists", func(t *testing.T) {
+	t.Run("no config-refresh sidecar container", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		container := testutil.FindContainer(spec.Containers, "config-refresh")
-		g.Expect(container).NotTo(gomega.BeNil(), "config-refresh sidecar must exist")
+		g.Expect(container).To(gomega.BeNil(),
+			"config-refresh sidecar must not exist — token/cert refresh is handled by Caddy plugins")
 	})
 
-	t.Run("config-refresh liveness probe uses exec command", func(t *testing.T) {
+	t.Run("reverse-proxy container mounts token volumes", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		container := testutil.FindContainer(spec.Containers, "config-refresh")
+		container := testutil.FindContainer(spec.Containers, "reverse-proxy")
 		g.Expect(container).NotTo(gomega.BeNil())
-		g.Expect(container.LivenessProbe).NotTo(gomega.BeNil(), "liveness probe must be set")
-		g.Expect(container.LivenessProbe.Exec).NotTo(gomega.BeNil(), "liveness probe must use exec")
-		g.Expect(container.LivenessProbe.Exec.Command).To(gomega.HaveLen(2),
-			"exec command must have 2 elements (sh + script path)")
-		g.Expect(container.LivenessProbe.Exec.Command[0]).To(gomega.Equal("sh"))
-		g.Expect(container.LivenessProbe.Exec.Command[1]).To(gomega.ContainSubstring("config-refresh-probe.sh"))
-		g.Expect(container.LivenessProbe.InitialDelaySeconds).To(gomega.BeNumerically(">", 0),
-			"liveness probe must have initialDelaySeconds to allow sidecar startup")
-	})
-
-	t.Run("config-refresh script volume projects both script and probe", func(t *testing.T) {
-		g := gomega.NewWithT(t)
-		var scriptVolume *corev1.Volume
-		for i := range spec.Volumes {
-			if spec.Volumes[i].Name == "config-refresh-scripts" {
-				scriptVolume = &spec.Volumes[i]
-				break
-			}
+		mountNames := make([]string, 0, len(container.VolumeMounts))
+		for _, m := range container.VolumeMounts {
+			mountNames = append(mountNames, m.Name)
 		}
-		g.Expect(scriptVolume).NotTo(gomega.BeNil(), "config-refresh-scripts volume must exist")
-		g.Expect(scriptVolume.ConfigMap).NotTo(gomega.BeNil())
-
-		keys := make([]string, 0, len(scriptVolume.ConfigMap.Items))
-		for _, item := range scriptVolume.ConfigMap.Items {
-			keys = append(keys, item.Key)
-		}
-		g.Expect(keys).To(gomega.ContainElement("config-refresh.sh"),
-			"volume must project the main script")
-		g.Expect(keys).To(gomega.ContainElement("config-refresh-probe.sh"),
-			"volume must project the probe script")
+		g.Expect(mountNames).To(gomega.ContainElement("kube-api-token"),
+			"reverse-proxy must mount the projected SA token volume")
+		g.Expect(mountNames).To(gomega.ContainElement("backend-token"),
+			"reverse-proxy must mount the backend token volume")
 	})
 
 	t.Run("projected service account token volume exists with short TTL", func(t *testing.T) {
