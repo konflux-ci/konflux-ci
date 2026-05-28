@@ -58,6 +58,10 @@ type TestEnv struct {
 	Cfg         *rest.Config
 	K8sClient   client.Client
 	ObjectStore *manifests.ObjectStore
+
+	// stopManager is set by StartManager and called by TeardownTestEnv to
+	// wait for the suite-level manager's goroutines to fully stop.
+	stopManager func()
 }
 
 const (
@@ -136,6 +140,9 @@ func SetupTestEnv(basePath string) *TestEnv {
 func TeardownTestEnv(env *TestEnv) {
 	By("tearing down the test environment")
 	env.Cancel()
+	if env.stopManager != nil {
+		env.stopManager()
+	}
 	err := env.TestEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 }
@@ -218,13 +225,15 @@ func NewTestManager(env *TestEnv) ctrl.Manager {
 
 // StartManager starts mgr in a goroutine tied to env.Ctx and blocks until the
 // informer cache has synced. Must be called after all SetupWithManager calls.
+// The returned stop function is stored on env and called automatically by
+// TeardownTestEnv to wait for the manager's goroutines to fully stop.
 //
 // Note: use the suite-level k8sClient (direct API server client) for test assertions,
 // not mgr.GetClient() (cache-backed). Asserting against the live API server state
 // avoids cache staleness and keeps test setup and assertions on the same client.
 // See: https://github.com/konflux-ci/notification-service/tree/main/internal/controller
 func StartManager(env *TestEnv, mgr ctrl.Manager) {
-	StartManagerWithContext(env.Ctx, mgr)
+	env.stopManager = StartManagerWithContext(env.Ctx, mgr)
 }
 
 // DeleteAndWait deletes obj from the cluster if it exists and blocks until it is fully gone.
@@ -251,11 +260,16 @@ func DeleteAndWait(ctx context.Context, c client.Client, obj client.Object) {
 }
 
 // StartManagerWithContext starts mgr in a goroutine tied to the provided context and
-// blocks until the informer cache has synced. Use this for per-test managers whose
+// blocks until the informer cache has synced. It returns a stop function that blocks
+// until mgr.Start() has fully returned (i.e. all informer goroutines have drained).
+// Callers must cancel ctx and then call the returned stop function to ensure clean
+// shutdown — typically via DeferCleanup. Use this for per-test managers whose
 // lifecycle should be shorter than the suite (e.g. stop them via DeferCleanup when
 // different tests need different reconciler configurations).
-func StartManagerWithContext(ctx context.Context, mgr ctrl.Manager) {
+func StartManagerWithContext(ctx context.Context, mgr ctrl.Manager) func() {
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		defer GinkgoRecover()
 		Expect(mgr.Start(ctx)).To(Succeed())
 	}()
@@ -263,7 +277,9 @@ func StartManagerWithContext(ctx context.Context, mgr ctrl.Manager) {
 	// a blocking call — has a hard upper bound. The outer ctx has no deadline
 	// (it is a WithCancel of context.TODO()), so without this the call could
 	// block indefinitely and Eventually's timeout would never fire.
-	syncCtx, cancel := context.WithTimeout(ctx, EventuallyTimeout)
-	defer cancel()
+	syncCtx, syncCancel := context.WithTimeout(ctx, EventuallyTimeout)
+	defer syncCancel()
 	Expect(mgr.GetCache().WaitForCacheSync(syncCtx)).To(BeTrue())
+
+	return func() { <-done }
 }
