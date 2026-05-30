@@ -12,9 +12,9 @@ require (
 	github.com/google/go-containerregistry v0.20.7
 	github.com/google/go-github/v44 v44.1.0
 	github.com/h2non/gock v1.2.0
-	github.com/konflux-ci/application-api v0.0.0-20260312190025-5154ad273e17
+	github.com/konflux-ci/application-api v0.0.0-20260529131129-a9594acdc104
 	github.com/konflux-ci/build-service v0.0.0-20240611083846-2dee6cfe6fe4
-	github.com/konflux-ci/image-controller v0.0.0-20260428123836-67cc74626bb7
+	github.com/konflux-ci/image-controller v0.0.0-20260529185104-b31f86d8dce9
 	github.com/konflux-ci/integration-service v0.0.0-20260503050046-f49da9c1910e
 	github.com/konflux-ci/operator-toolkit v0.0.0-20260312101100-d4e398191a68
 	github.com/konflux-ci/release-service v0.0.0-20260130155849-48535a3e5ace

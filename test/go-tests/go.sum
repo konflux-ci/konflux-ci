@@ -367,12 +367,12 @@ github.com/klauspost/compress v1.18.1 h1:bcSGx7UbpBqMChDtsF28Lw6v/G94LPrrbMbdC3J
 github.com/klauspost/compress v1.18.1/go.mod h1:ZQFFVG+MdnR0P+l6wpXgIL4NTtwiKIdBnrBd8Nrxr+0=
 github.com/klauspost/cpuid/v2 v2.3.0 h1:S4CRMLnYUhGeDFDqkGriYKdfoFlDnMtqTiI/sFzhA9Y=
 github.com/klauspost/cpuid/v2 v2.3.0/go.mod h1:hqwkgyIinND0mEev00jJYCxPNVRVXFQeu1XKlok6oO0=
-github.com/konflux-ci/application-api v0.0.0-20260312190025-5154ad273e17 h1:auNv0idITCdlV3fP9i+V6EeT2MbZc/9+05GtKzOk1Ss=
-github.com/konflux-ci/application-api v0.0.0-20260312190025-5154ad273e17/go.mod h1:948Z+a1IbfRT0RtoHzWWSN9YEucSbMJTHaMhz7dVICc=
+github.com/konflux-ci/application-api v0.0.0-20260529131129-a9594acdc104 h1:OoqVKDkEgLfVGoCuqIzTn5QsRgk9mklgvfXjkLXjK58=
+github.com/konflux-ci/application-api v0.0.0-20260529131129-a9594acdc104/go.mod h1:948Z+a1IbfRT0RtoHzWWSN9YEucSbMJTHaMhz7dVICc=
 github.com/konflux-ci/build-service v0.0.0-20240611083846-2dee6cfe6fe4 h1:oZpPHgpAUI9OyvirRJ+0r0QFuiP8Par/CFZIwlr/6Ps=
 github.com/konflux-ci/build-service v0.0.0-20240611083846-2dee6cfe6fe4/go.mod h1:KgSj+voT2lpIu54zzUkHEXCMdnMGmf+Z9cQh+wTQ6ns=
-github.com/konflux-ci/image-controller v0.0.0-20260428123836-67cc74626bb7 h1:OBCv5p41av5Tav57TnzHbLOSp4jCOg8ePi2MoR1ErOM=
-github.com/konflux-ci/image-controller v0.0.0-20260428123836-67cc74626bb7/go.mod h1:BlGqw1KYe+ViDt2Y51V1OAfsPxzosa/gjTosH5xpnWw=
+github.com/konflux-ci/image-controller v0.0.0-20260529185104-b31f86d8dce9 h1:LVfLHgFsZszA1XhZrXAy08YXKl4SRJR5/D7mB4Uo8mU=
+github.com/konflux-ci/image-controller v0.0.0-20260529185104-b31f86d8dce9/go.mod h1:0KOAru0FoyWld0DJNVwHVRDuHCTydaIlvYSMWd/FPvs=
 github.com/konflux-ci/integration-service v0.0.0-20260503050046-f49da9c1910e h1:XoRRNF8Tkg1x/Sr040YEt/Rn+9/yKAUYy73N9F3ZGHE=
 github.com/konflux-ci/integration-service v0.0.0-20260503050046-f49da9c1910e/go.mod h1:y9lxuVx6qHecCDjzq1l0EKN94Ha3AFGmChOyCM5GmiA=
 github.com/konflux-ci/operator-toolkit v0.0.0-20260312101100-d4e398191a68 h1:iGsPIR8Jjo9z0OAgLcrw7uKT/xWqWg/j+D1tr10snkM=
