@@ -128,3 +128,14 @@ spec:
         startTime: "08:00"
         endTime: "20:00"
         timeZone: "Europe/London"
+
+  # Cluster-wide configuration (stored in "cluster-config" ConfigMap)
+  clusterConfig:
+    data:
+      # Proxy configuration for builds
+      allowCacheProxy: true
+      httpProxy: "squid.caching.svc.cluster.local:3128"
+      noProxy: ""
+      allowPackageRegistryProxy: true
+      packageRegistryProxyNpmUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/npm-proxy"
+      packageRegistryProxyYarnUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/yarn-proxy"

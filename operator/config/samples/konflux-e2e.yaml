@@ -125,6 +125,16 @@ spec:
           # Display a banner at the top of the Konflux UI to all users.
           - summary: "Welcome to Konflux-CI! This development and testing environment has been deployed with default insecure passwords!"
             type: danger
+      # clusterConfig:
+      #   data:
+      #     # Proxy configuration for builds (stored in "cluster-config" ConfigMap).
+      #     # These values are read by PipelineRuns to configure caching behavior.
+      #     # allowCacheProxy: true
+      #     # httpProxy: "squid.caching.svc.cluster.local:3128"
+      #     # noProxy: ""
+      #     # allowPackageRegistryProxy: true
+      #     # packageRegistryProxyNpmUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/npm-proxy"
+      #     # packageRegistryProxyYarnUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/yarn-proxy"
   # enterpriseContract:
   #   # skipPolicies disables deployment of EnterpriseContractPolicy resources.
   #   # When true, only CRDs, namespace, RBAC, and ConfigMap are deployed;

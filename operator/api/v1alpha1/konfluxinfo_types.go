@@ -274,11 +274,66 @@ type ClusterConfigData struct {
 	// the signature of attestations produced by Tekton Chains.
 	// +optional
 	TektonChainsIdentity string `json:"tektonChainsIdentity,omitempty"`
+
+	// AllowCacheProxy enables the HTTP caching proxy for builds.
+	// When true, the "allow-cache-proxy" key is set to "true" in the cluster-config ConfigMap.
+	// When false, the key is set to "false". When nil (omitted), the key is absent.
+	// +optional
+	AllowCacheProxy *bool `json:"allowCacheProxy,omitempty"`
+
+	// HTTPProxy is the HTTP proxy URL for builds (e.g., "squid.caching.svc.cluster.local:3128").
+	// Written as "http-proxy" in the cluster-config ConfigMap.
+	// Do not embed credentials in this URL — the ConfigMap is readable by all authenticated users.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="!self.contains('@')",message="URL must not contain credentials (userinfo). Use a Secret for proxy authentication."
+	HTTPProxy string `json:"httpProxy,omitempty"`
+
+	// NoProxy is a comma-separated list of hosts that should bypass the proxy.
+	// Written as "no-proxy" in the cluster-config ConfigMap.
+	// An empty string is a valid value meaning no hosts are excluded from proxying.
+	// When nil (omitted), the key is absent from the ConfigMap.
+	// +optional
+	NoProxy *string `json:"noProxy,omitempty"`
+
+	// AllowPackageRegistryProxy enables the package registry proxy for builds.
+	// When true, the "allow-package-registry-proxy" key is set to "true" in the cluster-config ConfigMap.
+	// When false, the key is set to "false". When nil (omitted), the key is absent.
+	// +optional
+	AllowPackageRegistryProxy *bool `json:"allowPackageRegistryProxy,omitempty"`
+
+	// PackageRegistryProxyNpmURL is the URL of the npm package registry proxy.
+	// Written as "package-registry-proxy-npm-url" in the cluster-config ConfigMap.
+	// Do not embed credentials in this URL — the ConfigMap is readable by all authenticated users.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="!self.contains('@')",message="URL must not contain credentials (userinfo). Use a Secret for proxy authentication."
+	PackageRegistryProxyNpmURL string `json:"packageRegistryProxyNpmUrl,omitempty"`
+
+	// PackageRegistryProxyYarnURL is the URL of the yarn package registry proxy.
+	// Written as "package-registry-proxy-yarn-url" in the cluster-config ConfigMap.
+	// Do not embed credentials in this URL — the ConfigMap is readable by all authenticated users.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="!self.contains('@')",message="URL must not contain credentials (userinfo). Use a Secret for proxy authentication."
+	PackageRegistryProxyYarnURL string `json:"packageRegistryProxyYarnUrl,omitempty"`
 }
+
+// ConfigMap key constants for cluster-config proxy fields.
+// These are the kebab-case keys written to the ConfigMap, mapped from camelCase CRD fields.
+const (
+	ClusterConfigKeyAllowCacheProxy             = "allow-cache-proxy"
+	ClusterConfigKeyHTTPProxy                   = "http-proxy"
+	ClusterConfigKeyNoProxy                     = "no-proxy"
+	ClusterConfigKeyAllowPackageRegistryProxy   = "allow-package-registry-proxy"
+	ClusterConfigKeyPackageRegistryProxyNpmURL  = "package-registry-proxy-npm-url"
+	ClusterConfigKeyPackageRegistryProxyYarnURL = "package-registry-proxy-yarn-url"
+)
 
 // All is an iterator that yields all non-empty key-value pairs from ClusterConfigData.
 // This enables using maps.Collect to convert the struct to a map[string]string.
 // The keys match the ConfigMap keys used in the cluster-config ConfigMap.
+// Note: CRD fields use camelCase but some ConfigMap keys use kebab-case for backward
+// compatibility with consumers (PipelineRuns).
+//
+//nolint:gocyclo // Linear field-by-field iteration; complexity is proportional to field count, not logic depth.
 func (d ClusterConfigData) All(yield func(key, value string) bool) {
 	if d.DefaultOIDCIssuer != "" {
 		if !yield("defaultOIDCIssuer", d.DefaultOIDCIssuer) {
@@ -342,6 +397,36 @@ func (d ClusterConfigData) All(yield func(key, value string) bool) {
 	}
 	if d.TektonChainsIdentity != "" {
 		if !yield("tektonChainsIdentity", d.TektonChainsIdentity) {
+			return
+		}
+	}
+	if d.AllowCacheProxy != nil {
+		if !yield(ClusterConfigKeyAllowCacheProxy, strconv.FormatBool(*d.AllowCacheProxy)) {
+			return
+		}
+	}
+	if d.HTTPProxy != "" {
+		if !yield(ClusterConfigKeyHTTPProxy, d.HTTPProxy) {
+			return
+		}
+	}
+	if d.NoProxy != nil {
+		if !yield(ClusterConfigKeyNoProxy, *d.NoProxy) {
+			return
+		}
+	}
+	if d.AllowPackageRegistryProxy != nil {
+		if !yield(ClusterConfigKeyAllowPackageRegistryProxy, strconv.FormatBool(*d.AllowPackageRegistryProxy)) {
+			return
+		}
+	}
+	if d.PackageRegistryProxyNpmURL != "" {
+		if !yield(ClusterConfigKeyPackageRegistryProxyNpmURL, d.PackageRegistryProxyNpmURL) {
+			return
+		}
+	}
+	if d.PackageRegistryProxyYarnURL != "" {
+		if !yield(ClusterConfigKeyPackageRegistryProxyYarnURL, d.PackageRegistryProxyYarnURL) {
 			return
 		}
 	}
