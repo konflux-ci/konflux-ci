@@ -26,7 +26,7 @@ This is not the only way to install Konflux on OpenShift. You can also use:
 | `oc` or [kubectl](https://kubernetes.io/docs/tasks/tools/) | v1.31.4 |
 | [git](https://git-scm.com/) | v2.46 |
 | [make](https://www.gnu.org/software/make/) | — |
-| [Go](https://go.dev/) | v1.25.0 |
+| [Go](https://go.dev/) | v1.26.0 |
 | [openssl](https://www.openssl.org/) | v3.0.13 |
 
 - `cluster-admin` permissions
