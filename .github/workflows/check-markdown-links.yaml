@@ -12,7 +12,7 @@ on:
       - RELEASE.md
       - operator/README.md
       - operator/docs/content/**
-      - .lychee.yml
+      - .lychee.toml
       - .github/workflows/check-markdown-links.yaml
   merge_group:
     types: [checks_requested]
@@ -37,8 +37,8 @@ jobs:
         with:
           args: >-
             --no-progress
-            --config .lychee.yml
-            --accept 429
+            --config .lychee.toml
+            --accept 200,429
             --max-retries 3
             --retry-wait-time 2
             --timeout 20
