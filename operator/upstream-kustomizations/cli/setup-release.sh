@@ -376,7 +376,8 @@ for ((i = 0; i < ${#COMPONENTS[@]}; i++)); do
     COMPONENT="${COMPONENTS[i]}"
     COMPONENTS_YAML="${COMPONENTS_YAML}
         - name: ${COMPONENT}
-          repository: ${REPO_IMAGE_URLS[i]}"
+          repositories:
+            - url: ${REPO_IMAGE_URLS[i]}"
 done
 
 kubectl apply -f - <<EOF

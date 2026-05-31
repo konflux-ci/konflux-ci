@@ -12,7 +12,8 @@ spec:
     mapping:
       components:
         - name: test-component
-          repository: registry-service.kind-registry/test-component-release
+          repositories:
+            - url: registry-service.kind-registry/test-component-release
           tags:
             - latest
   origin: user-ns2

@@ -230,13 +230,13 @@ data:
     SSO credentials creation\"\nfi\n\n# Step 12: Create ReleasePlanAdmission\necho
     \"\U0001F4CB Creating ReleasePlanAdmission...\"\n\n# Build the components mapping
     YAML\nCOMPONENTS_YAML=\"\"\nfor ((i = 0; i < ${#COMPONENTS[@]}; i++)); do\n    COMPONENT=\"${COMPONENTS[i]}\"\n
-    \   COMPONENTS_YAML=\"${COMPONENTS_YAML}\n        - name: ${COMPONENT}\n          repository:
-    ${REPO_IMAGE_URLS[i]}\"\ndone\n\nkubectl apply -f - <<EOF\napiVersion: appstudio.redhat.com/v1alpha1\nkind:
-    ReleasePlanAdmission\nmetadata:\n  name: ${RELEASE_NAME}\n  namespace: ${MANAGED_NS}\n
-    \ labels:\n    release.appstudio.openshift.io/auto-release: 'true'\nspec:\n  applications:\n
-    \   - ${APPLICATION}\n  origin: ${TENANT_NS}\n  policy: ${CONFORMA_POLICY}\n  data:\n
-    \   mapping:\n      defaults:\n        pushSourceContainer: false\n        tags:\n
-    \         - latest\n          - '{{ git_sha }}'\n      components:${COMPONENTS_YAML}\n
+    \   COMPONENTS_YAML=\"${COMPONENTS_YAML}\n        - name: ${COMPONENT}\n          repositories:\n
+    \           - url: ${REPO_IMAGE_URLS[i]}\"\ndone\n\nkubectl apply -f - <<EOF\napiVersion:
+    appstudio.redhat.com/v1alpha1\nkind: ReleasePlanAdmission\nmetadata:\n  name:
+    ${RELEASE_NAME}\n  namespace: ${MANAGED_NS}\n  labels:\n    release.appstudio.openshift.io/auto-release:
+    'true'\nspec:\n  applications:\n    - ${APPLICATION}\n  origin: ${TENANT_NS}\n
+    \ policy: ${CONFORMA_POLICY}\n  data:\n    mapping:\n      defaults:\n        pushSourceContainer:
+    false\n        tags:\n          - latest\n          - '{{ git_sha }}'\n      components:${COMPONENTS_YAML}\n
     \   releaseNotes:\n      product_name: '${PRODUCT_NAME}'\n      product_version:
     '${PRODUCT_VERSION}'\n  pipeline:\n    pipelineRef:\n      resolver: git\n      ociStorage:
     ${TA_IMAGE_URL}\n      useEmptyDir: true\n      params:\n        - name: url\n
