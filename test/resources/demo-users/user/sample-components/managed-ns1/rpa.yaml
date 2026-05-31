@@ -16,7 +16,8 @@ spec:
     mapping:
       components:
         - name: sample-component
-          repository: <repository url>
+          repositories:
+            - url: <repository url>
   origin: user-ns1
   pipeline:
     pipelineRef:
