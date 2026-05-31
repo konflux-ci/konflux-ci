@@ -408,18 +408,21 @@ spec:
                             Pipeline used for all versions, unless explicitly specified for a specific version.
                             When omitted it has to be specified in all versions.
                             Optional.
+                          nullable: true
                           properties:
                             pull:
                               description: |-
                                 Pipeline used for pull pipeline run.
                                 Can specify just one of: pipelinespec-from-bundle, pipelineref-by-name, pipelineref-by-git-resolver.
                                 Optional.
+                              nullable: true
                               properties:
                                 pipelineref-by-git-resolver:
                                   description: |-
                                     Will be used to fill out PipelineRef in pipeline runs to user specific pipeline via git resolver,
                                     specifying repository with a pipeline definition.
                                     Optional.
+                                  nullable: true
                                   properties:
                                     pathInRepo:
                                       description: |-
@@ -458,6 +461,7 @@ spec:
                                     When bundle is specified to specific image bundle, then that one will be used
                                     and pipeline name will be used to fetch pipeline from that bundle.
                                     Optional.
+                                  nullable: true
                                   properties:
                                     bundle:
                                       description: |-
@@ -480,12 +484,14 @@ spec:
                                 Pipeline used for pull and push pipeline runs.
                                 Can specify just one of: pipelinespec-from-bundle, pipelineref-by-name, pipelineref-by-git-resolver.
                                 Optional.
+                              nullable: true
                               properties:
                                 pipelineref-by-git-resolver:
                                   description: |-
                                     Will be used to fill out PipelineRef in pipeline runs to user specific pipeline via git resolver,
                                     specifying repository with a pipeline definition.
                                     Optional.
+                                  nullable: true
                                   properties:
                                     pathInRepo:
                                       description: |-
@@ -524,6 +530,7 @@ spec:
                                     When bundle is specified to specific image bundle, then that one will be used
                                     and pipeline name will be used to fetch pipeline from that bundle.
                                     Optional.
+                                  nullable: true
                                   properties:
                                     bundle:
                                       description: |-
@@ -546,12 +553,14 @@ spec:
                                 Pipeline used for push pipeline run.
                                 Can specify just one of: pipelinespec-from-bundle, pipelineref-by-name, pipelineref-by-git-resolver.
                                 Optional.
+                              nullable: true
                               properties:
                                 pipelineref-by-git-resolver:
                                   description: |-
                                     Will be used to fill out PipelineRef in pipeline runs to user specific pipeline via git resolver,
                                     specifying repository with a pipeline definition.
                                     Optional.
+                                  nullable: true
                                   properties:
                                     pathInRepo:
                                       description: |-
@@ -590,6 +599,7 @@ spec:
                                     When bundle is specified to specific image bundle, then that one will be used
                                     and pipeline name will be used to fetch pipeline from that bundle.
                                     Optional.
+                                  nullable: true
                                   properties:
                                     bundle:
                                       description: |-
@@ -868,18 +878,21 @@ spec:
                                       Used only when sending a PR with build pipeline configuration was requested via 'spec.actions.create-pipeline-configuration-pr'.
                                       Pipeline used for the version; when omitted, the default pipeline will be used from 'spec.default-build-pipeline'.
                                       Optional.
+                                    nullable: true
                                     properties:
                                       pull:
                                         description: |-
                                           Pipeline used for pull pipeline run.
                                           Can specify just one of: pipelinespec-from-bundle, pipelineref-by-name, pipelineref-by-git-resolver.
                                           Optional.
+                                        nullable: true
                                         properties:
                                           pipelineref-by-git-resolver:
                                             description: |-
                                               Will be used to fill out PipelineRef in pipeline runs to user specific pipeline via git resolver,
                                               specifying repository with a pipeline definition.
                                               Optional.
+                                            nullable: true
                                             properties:
                                               pathInRepo:
                                                 description: |-
@@ -918,6 +931,7 @@ spec:
                                               When bundle is specified to specific image bundle, then that one will be used
                                               and pipeline name will be used to fetch pipeline from that bundle.
                                               Optional.
+                                            nullable: true
                                             properties:
                                               bundle:
                                                 description: |-
@@ -940,12 +954,14 @@ spec:
                                           Pipeline used for pull and push pipeline runs.
                                           Can specify just one of: pipelinespec-from-bundle, pipelineref-by-name, pipelineref-by-git-resolver.
                                           Optional.
+                                        nullable: true
                                         properties:
                                           pipelineref-by-git-resolver:
                                             description: |-
                                               Will be used to fill out PipelineRef in pipeline runs to user specific pipeline via git resolver,
                                               specifying repository with a pipeline definition.
                                               Optional.
+                                            nullable: true
                                             properties:
                                               pathInRepo:
                                                 description: |-
@@ -984,6 +1000,7 @@ spec:
                                               When bundle is specified to specific image bundle, then that one will be used
                                               and pipeline name will be used to fetch pipeline from that bundle.
                                               Optional.
+                                            nullable: true
                                             properties:
                                               bundle:
                                                 description: |-
@@ -1006,12 +1023,14 @@ spec:
                                           Pipeline used for push pipeline run.
                                           Can specify just one of: pipelinespec-from-bundle, pipelineref-by-name, pipelineref-by-git-resolver.
                                           Optional.
+                                        nullable: true
                                         properties:
                                           pipelineref-by-git-resolver:
                                             description: |-
                                               Will be used to fill out PipelineRef in pipeline runs to user specific pipeline via git resolver,
                                               specifying repository with a pipeline definition.
                                               Optional.
+                                            nullable: true
                                             properties:
                                               pathInRepo:
                                                 description: |-
@@ -1050,6 +1069,7 @@ spec:
                                               When bundle is specified to specific image bundle, then that one will be used
                                               and pipeline name will be used to fetch pipeline from that bundle.
                                               Optional.
+                                            nullable: true
                                             properties:
                                               bundle:
                                                 description: |-
@@ -1343,18 +1363,21 @@ spec:
                   Pipeline used for all versions, unless explicitly specified for a specific version.
                   When omitted it has to be specified in all versions.
                   Optional.
+                nullable: true
                 properties:
                   pull:
                     description: |-
                       Pipeline used for pull pipeline run.
                       Can specify just one of: pipelinespec-from-bundle, pipelineref-by-name, pipelineref-by-git-resolver.
                       Optional.
+                    nullable: true
                     properties:
                       pipelineref-by-git-resolver:
                         description: |-
                           Will be used to fill out PipelineRef in pipeline runs to user specific pipeline via git resolver,
                           specifying repository with a pipeline definition.
                           Optional.
+                        nullable: true
                         properties:
                           pathInRepo:
                             description: |-
@@ -1393,6 +1416,7 @@ spec:
                           When bundle is specified to specific image bundle, then that one will be used
                           and pipeline name will be used to fetch pipeline from that bundle.
                           Optional.
+                        nullable: true
                         properties:
                           bundle:
                             description: |-
@@ -1415,12 +1439,14 @@ spec:
                       Pipeline used for pull and push pipeline runs.
                       Can specify just one of: pipelinespec-from-bundle, pipelineref-by-name, pipelineref-by-git-resolver.
                       Optional.
+                    nullable: true
                     properties:
                       pipelineref-by-git-resolver:
                         description: |-
                           Will be used to fill out PipelineRef in pipeline runs to user specific pipeline via git resolver,
                           specifying repository with a pipeline definition.
                           Optional.
+                        nullable: true
                         properties:
                           pathInRepo:
                             description: |-
@@ -1459,6 +1485,7 @@ spec:
                           When bundle is specified to specific image bundle, then that one will be used
                           and pipeline name will be used to fetch pipeline from that bundle.
                           Optional.
+                        nullable: true
                         properties:
                           bundle:
                             description: |-
@@ -1481,12 +1508,14 @@ spec:
                       Pipeline used for push pipeline run.
                       Can specify just one of: pipelinespec-from-bundle, pipelineref-by-name, pipelineref-by-git-resolver.
                       Optional.
+                    nullable: true
                     properties:
                       pipelineref-by-git-resolver:
                         description: |-
                           Will be used to fill out PipelineRef in pipeline runs to user specific pipeline via git resolver,
                           specifying repository with a pipeline definition.
                           Optional.
+                        nullable: true
                         properties:
                           pathInRepo:
                             description: |-
@@ -1525,6 +1554,7 @@ spec:
                           When bundle is specified to specific image bundle, then that one will be used
                           and pipeline name will be used to fetch pipeline from that bundle.
                           Optional.
+                        nullable: true
                         properties:
                           bundle:
                             description: |-
@@ -1801,18 +1831,21 @@ spec:
                             Used only when sending a PR with build pipeline configuration was requested via 'spec.actions.create-pipeline-configuration-pr'.
                             Pipeline used for the version; when omitted, the default pipeline will be used from 'spec.default-build-pipeline'.
                             Optional.
+                          nullable: true
                           properties:
                             pull:
                               description: |-
                                 Pipeline used for pull pipeline run.
                                 Can specify just one of: pipelinespec-from-bundle, pipelineref-by-name, pipelineref-by-git-resolver.
                                 Optional.
+                              nullable: true
                               properties:
                                 pipelineref-by-git-resolver:
                                   description: |-
                                     Will be used to fill out PipelineRef in pipeline runs to user specific pipeline via git resolver,
                                     specifying repository with a pipeline definition.
                                     Optional.
+                                  nullable: true
                                   properties:
                                     pathInRepo:
                                       description: |-
@@ -1851,6 +1884,7 @@ spec:
                                     When bundle is specified to specific image bundle, then that one will be used
                                     and pipeline name will be used to fetch pipeline from that bundle.
                                     Optional.
+                                  nullable: true
                                   properties:
                                     bundle:
                                       description: |-
@@ -1873,12 +1907,14 @@ spec:
                                 Pipeline used for pull and push pipeline runs.
                                 Can specify just one of: pipelinespec-from-bundle, pipelineref-by-name, pipelineref-by-git-resolver.
                                 Optional.
+                              nullable: true
                               properties:
                                 pipelineref-by-git-resolver:
                                   description: |-
                                     Will be used to fill out PipelineRef in pipeline runs to user specific pipeline via git resolver,
                                     specifying repository with a pipeline definition.
                                     Optional.
+                                  nullable: true
                                   properties:
                                     pathInRepo:
                                       description: |-
@@ -1917,6 +1953,7 @@ spec:
                                     When bundle is specified to specific image bundle, then that one will be used
                                     and pipeline name will be used to fetch pipeline from that bundle.
                                     Optional.
+                                  nullable: true
                                   properties:
                                     bundle:
                                       description: |-
@@ -1939,12 +1976,14 @@ spec:
                                 Pipeline used for push pipeline run.
                                 Can specify just one of: pipelinespec-from-bundle, pipelineref-by-name, pipelineref-by-git-resolver.
                                 Optional.
+                              nullable: true
                               properties:
                                 pipelineref-by-git-resolver:
                                   description: |-
                                     Will be used to fill out PipelineRef in pipeline runs to user specific pipeline via git resolver,
                                     specifying repository with a pipeline definition.
                                     Optional.
+                                  nullable: true
                                   properties:
                                     pathInRepo:
                                       description: |-
@@ -1983,6 +2022,7 @@ spec:
                                     When bundle is specified to specific image bundle, then that one will be used
                                     and pipeline name will be used to fetch pipeline from that bundle.
                                     Optional.
+                                  nullable: true
                                   properties:
                                     bundle:
                                       description: |-
@@ -3617,18 +3657,21 @@ spec:
                                   Used only when sending a PR with build pipeline configuration was requested via 'spec.actions.create-pipeline-configuration-pr'.
                                   Pipeline used for the version; when omitted, the default pipeline will be used from 'spec.default-build-pipeline'.
                                   Optional.
+                                nullable: true
                                 properties:
                                   pull:
                                     description: |-
                                       Pipeline used for pull pipeline run.
                                       Can specify just one of: pipelinespec-from-bundle, pipelineref-by-name, pipelineref-by-git-resolver.
                                       Optional.
+                                    nullable: true
                                     properties:
                                       pipelineref-by-git-resolver:
                                         description: |-
                                           Will be used to fill out PipelineRef in pipeline runs to user specific pipeline via git resolver,
                                           specifying repository with a pipeline definition.
                                           Optional.
+                                        nullable: true
                                         properties:
                                           pathInRepo:
                                             description: |-
@@ -3667,6 +3710,7 @@ spec:
                                           When bundle is specified to specific image bundle, then that one will be used
                                           and pipeline name will be used to fetch pipeline from that bundle.
                                           Optional.
+                                        nullable: true
                                         properties:
                                           bundle:
                                             description: |-
@@ -3689,12 +3733,14 @@ spec:
                                       Pipeline used for pull and push pipeline runs.
                                       Can specify just one of: pipelinespec-from-bundle, pipelineref-by-name, pipelineref-by-git-resolver.
                                       Optional.
+                                    nullable: true
                                     properties:
                                       pipelineref-by-git-resolver:
                                         description: |-
                                           Will be used to fill out PipelineRef in pipeline runs to user specific pipeline via git resolver,
                                           specifying repository with a pipeline definition.
                                           Optional.
+                                        nullable: true
                                         properties:
                                           pathInRepo:
                                             description: |-
@@ -3733,6 +3779,7 @@ spec:
                                           When bundle is specified to specific image bundle, then that one will be used
                                           and pipeline name will be used to fetch pipeline from that bundle.
                                           Optional.
+                                        nullable: true
                                         properties:
                                           bundle:
                                             description: |-
@@ -3755,12 +3802,14 @@ spec:
                                       Pipeline used for push pipeline run.
                                       Can specify just one of: pipelinespec-from-bundle, pipelineref-by-name, pipelineref-by-git-resolver.
                                       Optional.
+                                    nullable: true
                                     properties:
                                       pipelineref-by-git-resolver:
                                         description: |-
                                           Will be used to fill out PipelineRef in pipeline runs to user specific pipeline via git resolver,
                                           specifying repository with a pipeline definition.
                                           Optional.
+                                        nullable: true
                                         properties:
                                           pathInRepo:
                                             description: |-
@@ -3799,6 +3848,7 @@ spec:
                                           When bundle is specified to specific image bundle, then that one will be used
                                           and pipeline name will be used to fetch pipeline from that bundle.
                                           Optional.
+                                        nullable: true
                                         properties:
                                           bundle:
                                             description: |-
