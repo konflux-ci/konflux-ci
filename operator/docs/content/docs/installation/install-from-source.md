@@ -17,7 +17,7 @@ to run a custom build. There are two modes:
 
 | Tool | Minimum version |
 |------|----------------|
-| [Go](https://go.dev/) | v1.25.0 |
+| [Go](https://go.dev/) | v1.26.0 |
 | [podman](https://podman.io/docs/installation) or [docker](https://docs.docker.com/engine/install/) | podman v5.3.1 / docker v27.0.1 *(required only when building an Operator image)* |
 | [kubectl](https://kubernetes.io/docs/tasks/tools/) | v1.31.4 |
 | [make](https://www.gnu.org/software/make/) | — |
