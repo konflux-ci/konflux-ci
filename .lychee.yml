@@ -1,0 +1,12 @@
+# Lychee configuration for repository markdown link validation.
+# Only ignore Hugo shortcode markers and other non-link template syntax.
+exclude_mail = true
+exclude = [
+  '\{\{[<%]',
+  '^https?://localhost\b',
+  '^https?://127\.',
+  '^https?://10\.',
+  '^https?://192\.168\.',
+  '^https?://172\.(1[6-9]|2[0-9]|3[0-1])\.',
+  '^https?://169\.254\.',
+]
