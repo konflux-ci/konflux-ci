@@ -8,6 +8,11 @@ set -o nounset
 set -o errexit
 set -o pipefail
 
+# Temporary: OpenShift CI/Prow builder images ship Go 1.25 with GOTOOLCHAIN=local baked in.
+# Unconditionally override so Go can download the toolchain required by go.mod (currently 1.26).
+# Remove once openshift/release uses rhel-9-release-golang-1.26-openshift-* in konflux-ci job configs.
+export GOTOOLCHAIN=auto
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
@@ -29,6 +34,7 @@ SKIP_SAMPLE_COMPONENTS="true" "${REPO_ROOT}/deploy-test-resources.sh"
 # Run E2E conformance tests
 echo "Running E2E conformance tests..."
 cd "${REPO_ROOT}/test/go-tests"
+echo "DEBUG GOTOOLCHAIN=$GOTOOLCHAIN ($(go env GOTOOLCHAIN))"
 # -mod=mod overrides GOFLAGS=-mod=vendor that may be present on some systems; this repo doesn't vendor.
 go test -mod=mod ./tests/conformance -v -timeout 45m -ginkgo.vv "$@"
 

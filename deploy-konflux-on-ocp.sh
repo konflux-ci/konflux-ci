@@ -24,6 +24,11 @@ set -o nounset
 set -o errexit
 set -o pipefail
 
+# Temporary: OpenShift CI/Prow builder images ship Go 1.25 with GOTOOLCHAIN=local baked in.
+# Unconditionally override so Go can download the toolchain required by go.mod (currently 1.26).
+# Remove once openshift/release uses rhel-9-release-golang-1.26-openshift-* in konflux-ci job configs.
+export GOTOOLCHAIN=auto
+
 # Determine the absolute path of the repository root
 REPO_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 
@@ -113,6 +118,7 @@ echo ""
 echo "=== Step 2/6: Installing Operator CRDs ==="
 cd operator
 # Clear GOFLAGS to allow downloading tools (CI may have -mod=vendor set)
+echo "DEBUG GOTOOLCHAIN=$GOTOOLCHAIN ($(go env GOTOOLCHAIN))"
 GOFLAGS="" make install
 
 # Step 3: Deploy the operator using the Konflux-built image
