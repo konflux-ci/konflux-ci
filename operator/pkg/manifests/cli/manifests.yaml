@@ -124,7 +124,7 @@ data:
     \"${name}\" -n \"${MANAGED_NS}\" -o jsonpath='{.status.message}' 2>/dev/null ||
     echo 'none')\"\n    return 1\n}\n\n# Parse arguments\nTENANT_NS=\"default-tenant\"\nMANAGED_NS=\"default-managed-tenant\"\nAPPLICATION=\"sample-component\"\nPRODUCT_VERSION=\"0.1\"\nCONFORMA_POLICY=\"default\"\nRELEASE_NAME=\"local-release\"\n#
     renovate: datasource=git-refs depName=https://github.com/konflux-ci/release-service-catalog
-    currentValue=development\nCATALOG_REVISION=\"ebb5317989e4222d7e73c9fc2127adc3f0ec0e71\"\nIMAGE_NAME_PREFIX=\"\"\nCOMPONENTS=()\n\nwhile
+    currentValue=development\nCATALOG_REVISION=\"d7d1298d07251dd3c5398cb67121fd49f10fb41e\"\nIMAGE_NAME_PREFIX=\"\"\nCOMPONENTS=()\n\nwhile
     [[ $# -gt 0 ]]; do\n    case $1 in\n        -t|--tenant-namespace)\n            TENANT_NS=\"$2\"\n
     \           shift 2\n            ;;\n        -m|--managed-namespace)\n            MANAGED_NS=\"$2\"\n
     \           shift 2\n            ;;\n        -a|--application)\n            APPLICATION=\"$2\"\n
