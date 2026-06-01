@@ -92,6 +92,7 @@ PRs trigger the following workflows:
 
 ## PR Guidelines
 
+- **Go / `go.mod` PRs:** Apply **go-toolchain-upgrade** (`skills/go-toolchain-upgrade/SKILL.md`) and follow its triage table—do not summarize the workflow from memory.
 - **`.tekton` task/pipeline edits:** `pipeline.yaml` tasks `deploy-konflux-its` and `konflux-e2e-tests-its` hardcode `taskRef.revision: main`. To verify changes, temporarily point both at the PR’s git ref, run operator E2E, then restore `main` before merge (see `.tekton/pipelines/operator-e2e/README.md`).
 - **Same-repo branches preferred**: E2E tests run automatically
 - **Fork PRs**: Require maintainer `/allow` comment to trigger tests
@@ -110,3 +111,11 @@ PRs trigger the following workflows:
 ## Skills
 
 Detailed guides live in `skills/` — each subdirectory contains a `SKILL.md` with instructions.
+
+| Skill | Use when |
+|-------|----------|
+| [go-toolchain-upgrade](skills/go-toolchain-upgrade/SKILL.md) | `go.mod`/`go.sum`, Go pins, or `go.mod requires go` CI failures |
+| [create-pr](skills/create-pr/SKILL.md) | Opening PRs, fork `/allow` behavior |
+| [debug-e2e-tests](skills/debug-e2e-tests/SKILL.md) | Investigating failed e2e / OpenShift CI runs |
+| [update-upstream-deps](skills/update-upstream-deps/SKILL.md) | Bumping pinned upstream component SHAs |
+| [local-dev-setup](skills/local-dev-setup/SKILL.md) | Local Kind / dev environment |
