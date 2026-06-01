@@ -9,4 +9,6 @@ exclude = [
   '^https?://192\.168\.',
   '^https?://172\.(1[6-9]|2[0-9]|3[0-1])\.',
   '^https?://169\.254\.',
+  '^https://gitlab\.cee\.redhat\.com',
+  '^https://join\.slack\.com',
 ]

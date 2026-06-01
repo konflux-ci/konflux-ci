@@ -81,7 +81,7 @@ The script skips the Smee webhook proxy (<code>SKIP_SMEE=true</code>). For GitHu
 to deliver webhook events (triggering build pipelines on pull requests), your cluster
 must be reachable from the internet. If it is not, you will need to configure Smee
 manually after installation. See
-<a href="{{< relref "github-secrets" >}}">GitHub Application Secrets</a> for details.
+<a href="{{< relref "../guides/github-secrets" >}}">GitHub Application Secrets</a> for details.
 {{< /alert >}}
 
 ### Operator and Konflux
@@ -133,7 +133,7 @@ kubectl wait --for=condition=Ready=True konflux konflux --timeout=15m
 
 ## Verify the Konflux CR is ready
 
-See [Applying the Konflux Custom Resource]({{< relref "apply-konflux-cr" >}}) for instructions
+See [Applying the Konflux Custom Resource]({{< relref "../guides/apply-konflux-cr" >}}) for instructions
 on verifying the Konflux CR status and accessing the UI URL.
 
 
@@ -141,7 +141,7 @@ on verifying the Konflux CR status and accessing the UI URL.
 ## Create GitHub integration secrets
 
 After the script completes, follow the
-[GitHub Application Secrets]({{< relref "github-secrets" >}}) guide to create a
+[GitHub Application Secrets]({{< relref "../guides/github-secrets" >}}) guide to create a
 GitHub App and deploy its credentials into the cluster.
 
 ## Uninstall
@@ -162,9 +162,9 @@ make uninstall
 
 ## What's next
 
-- [GitHub Application Secrets]({{< relref "github-secrets" >}}) — create a GitHub App and configure webhook delivery
-- [Onboard a new Application]({{< relref "onboard" >}}) — onboard an application, run builds, tests, and releases
-- [Registry Configuration]({{< relref "registry-configuration" >}}) — configure an external container registry for build and release pipelines
+- [GitHub Application Secrets]({{< relref "../guides/github-secrets" >}}) — create a GitHub App and configure webhook delivery
+- [Onboard a new Application]({{< relref "../onboard" >}}) — onboard an application, run builds, tests, and releases
+- [Registry Configuration]({{< relref "../guides/registry-configuration" >}}) — configure an external container registry for build and release pipelines
 - [API Reference]({{< relref "../reference/konflux.v1alpha1" >}}) — full CR field reference
 - [Troubleshooting]({{< relref "../troubleshooting" >}}) — solutions to common issues
 - [Examples]({{< relref "../examples" >}}) — sample Konflux CR configurations
