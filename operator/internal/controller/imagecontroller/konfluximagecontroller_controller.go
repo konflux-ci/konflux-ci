@@ -176,6 +176,9 @@ func (r *KonfluxImageControllerReconciler) applyManifests(ctx context.Context, t
 func applyImageControllerDeploymentCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxImageControllerSpec) error {
 	switch deployment.Name {
 	case controllerManagerDeploymentName:
+		if spec.ImageControllerManager != nil {
+			deployment.Spec.Replicas = &spec.ImageControllerManager.Replicas
+		}
 		overlay, err := buildImageControllerManagerOverlay(spec)
 		if err != nil {
 			return err
@@ -188,34 +191,46 @@ func applyImageControllerDeploymentCustomizations(deployment *appsv1.Deployment,
 }
 
 // buildImageControllerManagerOverlay builds the pod overlay for the controller-manager deployment.
-// When QuayCABundle is configured, it updates the ConfigMap volume name and sets the
-// QUAY_ADDITIONAL_CA environment variable pointing to the mounted CA certificate file.
+// QuayCABundle logic (volume update + QUAY_ADDITIONAL_CA env var) is applied first.
+// User resources/env from ImageControllerManager.Manager are applied via FromContainerSpec,
+// followed by automatic leader election based on the replica count.
 func buildImageControllerManagerOverlay(spec konfluxv1alpha1.KonfluxImageControllerSpec) (*customization.PodOverlay, error) {
-	if spec.QuayCABundle == nil {
-		return customization.NewPodOverlay(), nil
-	}
-
-	key := spec.QuayCABundle.Key
-	if filepath.Base(key) != key || key == "." || key == ".." {
-		return nil, fmt.Errorf("invalid CA bundle key %q: must be a plain filename without path separators or traversal sequences", key)
-	}
-
-	certPath := filepath.Join(quayCABundleMountPath, key)
-
+	var containerOpts []customization.ContainerOption
 	var podOpts []customization.PodOverlayOption
-	if spec.QuayCABundle.ConfigMapName != defaultQuayCAConfigMapName {
-		podOpts = append(podOpts, customization.WithConfigMapVolumeUpdate(quayCABundleVolumeName, spec.QuayCABundle.ConfigMapName))
-	}
 
-	podOpts = append(podOpts, customization.WithContainerOpts(
-		managerContainerName,
-		customization.DeploymentContext{},
-		customization.WithEnv(corev1.EnvVar{
+	if spec.QuayCABundle != nil {
+		key := spec.QuayCABundle.Key
+		if filepath.Base(key) != key || key == "." || key == ".." {
+			return nil, fmt.Errorf("invalid CA bundle key %q: must be a plain filename without path separators or traversal sequences", key)
+		}
+
+		certPath := filepath.Join(quayCABundleMountPath, key)
+
+		if spec.QuayCABundle.ConfigMapName != defaultQuayCAConfigMapName {
+			podOpts = append(podOpts, customization.WithConfigMapVolumeUpdate(quayCABundleVolumeName, spec.QuayCABundle.ConfigMapName))
+		}
+
+		containerOpts = append(containerOpts, customization.WithEnv(corev1.EnvVar{
 			Name:  quayAdditionalCAEnvVar,
 			Value: certPath,
-		}),
-	))
+		}))
+	}
 
+	var deployCtx customization.DeploymentContext
+	var managerSpec *konfluxv1alpha1.ContainerSpec
+	if spec.ImageControllerManager != nil {
+		managerSpec = spec.ImageControllerManager.Manager
+		deployCtx = customization.DeploymentContext{Replicas: spec.ImageControllerManager.Replicas}
+	}
+
+	containerOpts = append(containerOpts,
+		customization.FromContainerSpec(managerSpec),
+		customization.WithLeaderElection(),
+	)
+
+	podOpts = append(podOpts,
+		customization.WithContainerOpts(managerContainerName, deployCtx, containerOpts...),
+	)
 	return customization.NewPodOverlay(podOpts...), nil
 }
 
