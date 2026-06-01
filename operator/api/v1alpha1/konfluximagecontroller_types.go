@@ -38,6 +38,10 @@ type QuayCABundleSpec struct {
 
 // KonfluxImageControllerSpec defines the desired state of KonfluxImageController.
 type KonfluxImageControllerSpec struct {
+	// ImageControllerManager defines customizations for the controller-manager deployment.
+	// +optional
+	ImageControllerManager *ControllerManagerDeploymentSpec `json:"imageControllerManager,omitempty"`
+
 	// QuayCABundle configures a custom CA bundle for Quay registry communication.
 	// When set, the CA certificate from the referenced ConfigMap is mounted into the
 	// image-controller pod and used for TLS verification when connecting to Quay.
