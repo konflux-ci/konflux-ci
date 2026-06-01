@@ -284,3 +284,10 @@ Present findings as:
 - File(s) to change: ...
 - If upstream: repo + what to fix
 ```
+
+## Go toolchain failures
+
+If logs contain `go.mod requires go >=` or `running go 1.X` with a lower toolchain,
+switch to [go-toolchain-upgrade](../go-toolchain-upgrade/SKILL.md) — the fix is usually
+bumping Prow `build_root` / runner images in openshift/release or rebuilding
+`e2e-test-runner`, not only changing this repo.
