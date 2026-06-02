@@ -10,8 +10,14 @@ metadata:
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "pull_request" && target_branch == "main" &&
-        (!has(body.pull_request) || !has(body.pull_request.labels) || !body.pull_request.labels.exists(l, l.name == "superseded-by-companion")) &&
-        (!has(body.issue) || !has(body.issue.labels) || !body.issue.labels.exists(l, l.name == "superseded-by-companion")) ||
+        (!has(body.pull_request) || !has(body.pull_request.labels) || (
+          !body.pull_request.labels.exists(l, l.name == "superseded-by-companion") &&
+          !body.pull_request.labels.exists(l, l.name == "pending-upstream-image")
+        )) &&
+        (!has(body.issue) || !has(body.issue.labels) || (
+          !body.issue.labels.exists(l, l.name == "superseded-by-companion") &&
+          !body.issue.labels.exists(l, l.name == "pending-upstream-image")
+        )) ||
       event == "push" && target_branch.startsWith("gh-readonly-queue/main/")
   creationTimestamp: null
   labels:
