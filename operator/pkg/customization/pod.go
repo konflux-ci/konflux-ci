@@ -17,6 +17,8 @@ limitations under the License.
 package customization
 
 import (
+	"strings"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -33,6 +35,9 @@ type PodOverlay struct {
 	configMapVolumeUpdates map[string]string
 	// secretVolumeUpdates holds updates to existing Secret volume references
 	secretVolumeUpdates map[string]string
+	// argReplacements holds args that replace (not append) base args with the same
+	// flag key. Key is the container name, value is the list of replacement args.
+	argReplacements map[string][]string
 }
 
 // PodOverlayOption is a functional option for configuring a PodOverlay.
@@ -141,6 +146,33 @@ func WithSecretVolumeUpdate(volumeName, secretName string) PodOverlayOption {
 	}
 }
 
+// WithArgReplace replaces a base arg that has the same flag key, or appends if no match.
+// The flag key is everything up to and including "=" (e.g. "--zap-encoder=" in
+// "--zap-encoder=console"). For standalone flags (no "="), the full arg is the key.
+//
+// This is a PodOverlayOption (not a ContainerOption) because replacements run after
+// the regular overlay merge — they can replace both original base args and args
+// appended by WithArgs in the same overlay.
+// Use this instead of WithArgs when an upstream manifest might already contain the flag.
+func WithArgReplace(containerName string, args ...string) PodOverlayOption {
+	return func(p *PodOverlay) {
+		if p.argReplacements == nil {
+			p.argReplacements = make(map[string][]string)
+		}
+		p.argReplacements[containerName] = append(p.argReplacements[containerName], args...)
+	}
+}
+
+// WithLeaderElection adds --leader-elect=true if replicas > 1.
+// It uses WithArgReplace so that any existing --leader-elect flag in the base
+// manifest is replaced rather than duplicated.
+func WithLeaderElection(containerName string, replicas int32) PodOverlayOption {
+	if replicas <= 1 {
+		return func(_ *PodOverlay) {}
+	}
+	return WithArgReplace(containerName, "--leader-elect=true")
+}
+
 // WithServiceAccountName sets the service account name for the pod.
 func WithServiceAccountName(name string) PodOverlayOption {
 	return func(p *PodOverlay) {
@@ -189,11 +221,11 @@ func (p *PodOverlay) ApplyToPodTemplateSpec(template *corev1.PodTemplateSpec) er
 	}
 
 	// Apply per-container customizations
-	if p.containerOverlays != nil {
-		if err := mergeContainerList(template.Spec.Containers, p.containerOverlays); err != nil {
+	if p.containerOverlays != nil || len(p.argReplacements) > 0 {
+		if err := mergeContainerList(template.Spec.Containers, p.containerOverlays, p.argReplacements); err != nil {
 			return err
 		}
-		if err := mergeContainerList(template.Spec.InitContainers, p.containerOverlays); err != nil {
+		if err := mergeContainerList(template.Spec.InitContainers, p.containerOverlays, p.argReplacements); err != nil {
 			return err
 		}
 	}
@@ -235,7 +267,14 @@ func (p *PodOverlay) ApplyToDaemonSet(daemonSet *appsv1.DaemonSet) error {
 // Container.Args is tagged +listType=atomic in the Kubernetes API, so strategic merge
 // replaces the entire args list. We handle args separately: save them before merge,
 // then append after merge so overlay args are added to (not replace) the base args.
-func mergeContainerList(containers []corev1.Container, overlays map[string]*corev1.Container) error {
+//
+// argReplacements are applied after the regular overlay merge. Each replacement arg
+// replaces a base arg with the same flag key, or is appended if no match exists.
+func mergeContainerList(
+	containers []corev1.Container,
+	overlays map[string]*corev1.Container,
+	argReplacements map[string][]string,
+) error {
 	for i := range containers {
 		base := &containers[i]
 		if overlay := overlays[base.Name]; overlay != nil {
@@ -252,8 +291,35 @@ func mergeContainerList(containers []corev1.Container, overlays map[string]*core
 			overlay.Args = extraArgs
 			base.Args = append(base.Args, extraArgs...)
 		}
+
+		for _, replacement := range argReplacements[base.Name] {
+			key := argKey(replacement)
+			replaced := false
+			for j, baseArg := range base.Args {
+				if argKey(baseArg) == key {
+					base.Args[j] = replacement
+					replaced = true
+					break
+				}
+			}
+			if !replaced {
+				base.Args = append(base.Args, replacement)
+			}
+		}
 	}
 	return nil
+}
+
+// argKey returns the flag key for deduplication.
+// For "--key=value" it returns "--key"; for standalone flags it returns the full arg.
+// This ensures "--leader-elect" and "--leader-elect=true" are treated as the same key.
+// Space-separated args (e.g. "--flag" "value" as two elements) are not handled;
+// controller-runtime uses --flag=value syntax exclusively.
+func argKey(arg string) string {
+	if idx := strings.Index(arg, "="); idx >= 0 {
+		return arg[:idx]
+	}
+	return arg
 }
 
 // applyConfigMapVolumeUpdates updates ConfigMap volume references in-place.

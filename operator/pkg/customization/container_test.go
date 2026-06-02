@@ -442,52 +442,6 @@ func TestWithImage(t *testing.T) {
 	})
 }
 
-func TestWithLeaderElection(t *testing.T) {
-	tests := []struct {
-		name          string
-		replicas      int32
-		expectedArgs  int
-		shouldContain string
-	}{
-		{
-			name:         "single replica - no leader election",
-			replicas:     1,
-			expectedArgs: 0,
-		},
-		{
-			name:          "multiple replicas - adds leader election",
-			replicas:      2,
-			expectedArgs:  1,
-			shouldContain: "--leader-elect=true",
-		},
-		{
-			name:          "many replicas - adds leader election",
-			replicas:      5,
-			expectedArgs:  1,
-			shouldContain: "--leader-elect=true",
-		},
-		{
-			name:         "zero replicas - no leader election",
-			replicas:     0,
-			expectedArgs: 0,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := gomega.NewWithT(t)
-			ctx := DeploymentContext{Replicas: tt.replicas}
-			c := NewContainerOverlay(ctx, WithLeaderElection())
-
-			g.Expect(c.Args).To(gomega.HaveLen(tt.expectedArgs))
-
-			if tt.expectedArgs > 0 {
-				g.Expect(c.Args).To(gomega.ContainElement(tt.shouldContain))
-			}
-		})
-	}
-}
-
 func TestCombinedOptions(t *testing.T) {
 	g := gomega.NewWithT(t)
 	ctx := DeploymentContext{Replicas: 3}
@@ -508,16 +462,12 @@ func TestCombinedOptions(t *testing.T) {
 		WithImage("my-image:v1"),
 		WithArgs("--config=/etc/config"),
 		WithEnv(corev1.EnvVar{Name: "LOG_LEVEL", Value: "debug"}),
-		WithLeaderElection(),
 	)
 
-	// Verify all options were applied
 	g.Expect(c.Image).To(gomega.Equal("my-image:v1"))
 	g.Expect(c.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
-	// Should have 2 args: --config and --leader-elect
-	g.Expect(c.Args).To(gomega.HaveLen(2))
-	g.Expect(c.Args).To(gomega.ContainElements("--config=/etc/config", "--leader-elect=true"))
-	// Should have 2 env vars: FROM_SPEC from spec and LOG_LEVEL from WithEnv
+	g.Expect(c.Args).To(gomega.HaveLen(1))
+	g.Expect(c.Args).To(gomega.ContainElement("--config=/etc/config"))
 	g.Expect(c.Env).To(gomega.HaveLen(2))
 	g.Expect(c.Env[0].Name).To(gomega.Equal("FROM_SPEC"))
 	g.Expect(c.Env[1].Name).To(gomega.Equal("LOG_LEVEL"))

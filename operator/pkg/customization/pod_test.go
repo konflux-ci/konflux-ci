@@ -477,8 +477,8 @@ func TestComplexScenario(t *testing.T) {
 					},
 				}),
 				WithEnv(corev1.EnvVar{Name: "LOG_LEVEL", Value: "info"}),
-				WithLeaderElection(),
 			),
+			WithLeaderElection("app", ctx.Replicas),
 			WithContainerOpts("sidecar", ctx,
 				WithResources(corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
@@ -535,10 +535,9 @@ func TestMergeContainerList_ArgsAppend(t *testing.T) {
 	t.Run("overlay args are appended to base args", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
-		ctx := DeploymentContext{Replicas: 3}
 		p := NewPodOverlay(
-			WithContainerOpts("manager", ctx,
-				WithLeaderElection(),
+			WithContainerOpts("manager", DeploymentContext{},
+				WithArgs("--custom-flag=value"),
 			),
 		)
 
@@ -568,7 +567,7 @@ func TestMergeContainerList_ArgsAppend(t *testing.T) {
 			"base args must be preserved")
 		g.Expect(container.Args).To(gomega.ContainElement("--health-probe-bind-address=:8081"),
 			"base args must be preserved")
-		g.Expect(container.Args).To(gomega.ContainElement("--leader-elect=true"),
+		g.Expect(container.Args).To(gomega.ContainElement("--custom-flag=value"),
 			"overlay args must be appended")
 		g.Expect(container.Args).To(gomega.HaveLen(3))
 	})
@@ -640,11 +639,10 @@ func TestMergeContainerList_ArgsAppend(t *testing.T) {
 	t.Run("multiple overlay args appended in order", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
-		ctx := DeploymentContext{Replicas: 2}
 		p := NewPodOverlay(
-			WithContainerOpts("manager", ctx,
+			WithContainerOpts("manager", DeploymentContext{},
 				WithArgs("--custom-flag=value"),
-				WithLeaderElection(),
+				WithArgs("--another-flag"),
 			),
 		)
 
@@ -670,7 +668,7 @@ func TestMergeContainerList_ArgsAppend(t *testing.T) {
 		g.Expect(container.Args).To(gomega.Equal([]string{
 			"--base-flag",
 			"--custom-flag=value",
-			"--leader-elect=true",
+			"--another-flag",
 		}))
 	})
 
@@ -710,6 +708,652 @@ func TestMergeContainerList_ArgsAppend(t *testing.T) {
 			gomega.Equal([]string{"--base", "--injected"}),
 			"second apply must produce the same result")
 	})
+}
+
+func TestWithArgReplace(t *testing.T) {
+	t.Run("replaces base arg with same flag key", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("manager", "--zap-encoder=console"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{
+									"--metrics-bind-address=:8443",
+									"--zap-encoder=json",
+									"--health-probe-bind-address=:8081",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--metrics-bind-address=:8443",
+			"--zap-encoder=console",
+			"--health-probe-bind-address=:8081",
+		}))
+	})
+
+	t.Run("appends when no matching base arg exists", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("manager", "--zap-encoder=console"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--metrics-bind-address=:8443"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--metrics-bind-address=:8443",
+			"--zap-encoder=console",
+		}))
+	})
+
+	t.Run("value-form replacement replaces standalone base flag", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("manager", "--leader-elect=true"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--leader-elect", "--other-flag"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--leader-elect=true",
+			"--other-flag",
+		}))
+	})
+
+	t.Run("standalone replacement replaces value-form base flag", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("manager", "--leader-elect"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--leader-elect=false", "--other-flag"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--leader-elect",
+			"--other-flag",
+		}))
+	})
+
+	t.Run("standalone flag replaces exact duplicate", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("manager", "--leader-elect"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--leader-elect", "--other-flag"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--leader-elect",
+			"--other-flag",
+		}))
+	})
+
+	t.Run("WithArgs still appends without dedup", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithContainerOpts("manager", DeploymentContext{},
+				WithArgs("--zap-encoder=console"),
+			),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--zap-encoder=json"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--zap-encoder=json",
+			"--zap-encoder=console",
+		}), "WithArgs must preserve existing append-only behavior")
+	})
+
+	t.Run("mixed WithArgs and WithArgReplace", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithContainerOpts("manager", DeploymentContext{},
+				WithArgs("--custom-flag=value"),
+			),
+			WithArgReplace("manager", "--leader-elect=true"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{
+									"--leader-elect=false",
+									"--metrics-bind-address=:8443",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--leader-elect=true",
+			"--metrics-bind-address=:8443",
+			"--custom-flag=value",
+		}))
+	})
+
+	t.Run("applies without container overlay", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("manager", "--zap-encoder=console"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "manager",
+								Image: "manager:v1",
+								Args:  []string{"--zap-encoder=json"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{"--zap-encoder=console"}))
+		g.Expect(container.Image).To(gomega.Equal("manager:v1"), "image should be unchanged")
+	})
+
+	t.Run("does not affect non-matching containers", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("manager", "--zap-encoder=console"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--zap-encoder=json"},
+							},
+							{
+								Name: "sidecar",
+								Args: []string{"--zap-encoder=json"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(deployment.Spec.Template.Spec.Containers[0].Args).To(
+			gomega.Equal([]string{"--zap-encoder=console"}))
+		g.Expect(deployment.Spec.Template.Spec.Containers[1].Args).To(
+			gomega.Equal([]string{"--zap-encoder=json"}),
+			"sidecar should be unchanged")
+	})
+
+	t.Run("appends when base has no args", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("manager", "--zap-encoder=console"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{Name: "manager", Image: "manager:v1"},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{"--zap-encoder=console"}))
+	})
+
+	t.Run("is reusable across multiple apply calls", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("manager", "--zap-encoder=console"),
+		)
+
+		makeDeployment := func() *appsv1.Deployment {
+			return &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{Name: "manager", Args: []string{"--zap-encoder=json"}},
+							},
+						},
+					},
+				},
+			}
+		}
+
+		d1 := makeDeployment()
+		err := p.ApplyToDeployment(d1)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(d1.Spec.Template.Spec.Containers[0].Args).To(
+			gomega.Equal([]string{"--zap-encoder=console"}))
+
+		d2 := makeDeployment()
+		err = p.ApplyToDeployment(d2)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(d2.Spec.Template.Spec.Containers[0].Args).To(
+			gomega.Equal([]string{"--zap-encoder=console"}),
+			"second apply must produce the same result")
+	})
+
+	t.Run("applies to init containers", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("init-db", "--log-level=debug"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						InitContainers: []corev1.Container{
+							{
+								Name: "init-db",
+								Args: []string{"--log-level=info", "--timeout=30s"},
+							},
+						},
+						Containers: []corev1.Container{
+							{Name: "app", Image: "app:v1"},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		initContainer := deployment.Spec.Template.Spec.InitContainers[0]
+		g.Expect(initContainer.Args).To(gomega.Equal([]string{
+			"--log-level=debug",
+			"--timeout=30s",
+		}))
+	})
+
+	t.Run("ignored when container name is absent from pod spec", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("nonexistent", "--zap-encoder=console"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--metrics-bind-address=:8443"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{"--metrics-bind-address=:8443"}),
+			"existing container args should be untouched")
+	})
+
+	t.Run("multiple replacements on same container", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("manager", "--zap-encoder=console", "--leader-elect=true"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{
+									"--leader-elect=false",
+									"--metrics-bind-address=:8443",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--leader-elect=true",
+			"--metrics-bind-address=:8443",
+			"--zap-encoder=console",
+		}))
+	})
+}
+
+func TestWithLeaderElection(t *testing.T) {
+	t.Run("single replica - no leader election arg", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithLeaderElection("manager", 1),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--metrics-bind-address=:8443"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{"--metrics-bind-address=:8443"}))
+	})
+
+	t.Run("multiple replicas - adds leader election", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithLeaderElection("manager", 2),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--metrics-bind-address=:8443"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--metrics-bind-address=:8443",
+			"--leader-elect=true",
+		}))
+	})
+
+	t.Run("zero replicas - no leader election arg", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithLeaderElection("manager", 0),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{Name: "manager", Args: []string{"--flag"}},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{"--flag"}))
+	})
+
+	t.Run("replaces existing leader-elect=false in base", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithLeaderElection("manager", 3),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{
+									"--metrics-bind-address=:8443",
+									"--leader-elect=false",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--metrics-bind-address=:8443",
+			"--leader-elect=true",
+		}))
+	})
+
+	t.Run("replaces standalone leader-elect in base", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithLeaderElection("manager", 5),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--leader-elect", "--other-flag"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--leader-elect=true",
+			"--other-flag",
+		}))
+	})
+}
+
+func TestArgKey(t *testing.T) {
+	tests := []struct {
+		arg  string
+		want string
+	}{
+		{"--zap-encoder=console", "--zap-encoder"},
+		{"--leader-elect=true", "--leader-elect"},
+		{"--leader-elect", "--leader-elect"},
+		{"--metrics-bind-address=:8443", "--metrics-bind-address"},
+		{"-v=5", "-v"},
+		{"positional", "positional"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.arg, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+			g.Expect(argKey(tt.arg)).To(gomega.Equal(tt.want))
+		})
+	}
 }
 
 func TestWithConfigMapVolumeUpdate(t *testing.T) {

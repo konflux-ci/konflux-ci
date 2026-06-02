@@ -154,12 +154,3 @@ func WithOptionalEnvOverride(name, value string) ContainerOption {
 }
 
 // --- Context-aware options ---
-
-// WithLeaderElection adds --leader-elect=true if replicas > 1.
-func WithLeaderElection() ContainerOption {
-	return func(c *corev1.Container, ctx DeploymentContext) {
-		if ctx.Replicas > 1 {
-			c.Args = append(c.Args, "--leader-elect=true")
-		}
-	}
-}
