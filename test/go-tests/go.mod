@@ -7,9 +7,9 @@ require (
 	github.com/codeready-toolchain/api v0.0.0-20260529071923-8f3b54022740
 	github.com/conforma/crds/api v0.1.11
 	github.com/devfile/library/v2 v2.4.0
-	github.com/docker/cli v29.4.0+incompatible
+	github.com/docker/cli v29.4.3+incompatible
 	github.com/gofri/go-github-ratelimit v1.1.1
-	github.com/google/go-containerregistry v0.21.5
+	github.com/google/go-containerregistry v0.21.6
 	github.com/google/go-github/v44 v44.1.0
 	github.com/h2non/gock v1.2.0
 	github.com/konflux-ci/application-api v0.0.0-20260529131129-a9594acdc104
@@ -17,7 +17,7 @@ require (
 	github.com/konflux-ci/image-controller v0.0.0-20260529185104-b31f86d8dce9
 	github.com/konflux-ci/integration-service v0.0.0-20260529092316-83730ca82bdd
 	github.com/konflux-ci/operator-toolkit v0.0.0-20260312101100-d4e398191a68
-	github.com/konflux-ci/release-service v0.0.0-20260529064849-74a4dd226399
+	github.com/konflux-ci/release-service v0.0.0-20260602124756-b97c146ba02e
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/onsi/ginkgo/v2 v2.29.0
 	github.com/onsi/gomega v1.41.0
@@ -29,10 +29,10 @@ require (
 	github.com/redhat-appstudio/jvm-build-service v0.0.0-20240126122210-0e2ee7e2e5b0
 	github.com/stretchr/testify v1.11.1
 	github.com/tektoncd/cli v0.43.0
-	github.com/tektoncd/pipeline v1.12.0
+	github.com/tektoncd/pipeline v1.13.0
 	github.com/xanzy/go-gitlab v0.114.0
 	golang.org/x/oauth2 v0.36.0
-	k8s.io/api v0.35.4
+	k8s.io/api v0.35.5
 	k8s.io/apimachinery v0.36.1
 	k8s.io/client-go v11.0.0+incompatible
 	k8s.io/klog v1.0.0
@@ -92,7 +92,6 @@ require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudflare/circl v1.6.3 // indirect
-	github.com/containerd/stargz-snapshotter/estargz v0.18.2 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/docker/docker v28.5.2+incompatible // indirect
@@ -146,9 +145,9 @@ require (
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kevinburke/ssh_config v1.6.0 // indirect
-	github.com/klauspost/compress v1.18.5 // indirect
+	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
-	github.com/mattn/go-colorable v0.1.14 // indirect
+	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
@@ -170,7 +169,6 @@ require (
 	github.com/skeema/knownhosts v1.3.2 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
-	github.com/vbatts/tar-split v0.12.2 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
@@ -209,7 +207,7 @@ require (
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/apiextensions-apiserver v0.35.4 // indirect
+	k8s.io/apiextensions-apiserver v0.35.5 // indirect
 	k8s.io/kube-openapi v0.0.0-20260520065146-aa012df4f4af // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
