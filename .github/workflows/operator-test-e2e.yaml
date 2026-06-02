@@ -180,7 +180,7 @@ jobs:
             smee_channel: SMEE_CHANNEL_ARM64
     env:
       # renovate: datasource=github-releases depName=kubernetes-sigs/kind
-      KIND_VERSION: "0.31.0"
+      KIND_VERSION: "0.32.0"
       # renovate: datasource=github-releases depName=kubernetes/kubernetes
       KUBECTL_VERSION: "1.35.2"
       OPERATOR_IMAGE: example.com/konflux-operator:v0.0.1${{ matrix.image_suffix }}
