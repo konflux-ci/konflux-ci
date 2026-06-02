@@ -242,17 +242,16 @@ func buildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploy
 		managerSpec = spec.Manager
 	}
 
-	return customization.BuildPodOverlay(
-		customization.DeploymentContext{Replicas: replicas},
-		customization.WithContainerBuilder(
-			managerContainerName,
+	deployCtx := customization.DeploymentContext{Replicas: replicas}
+	return customization.NewPodOverlay(
+		customization.WithContainerOpts(managerContainerName, deployCtx,
 			customization.FromContainerSpec(managerSpec),
-			customization.WithLeaderElection(),
 			customization.WithEnvOverride("CONSOLE_URL", consoleURLTemplate),
 			customization.WithOptionalEnvOverride(envPipelineTimeout, integrationSpec.PipelineTimeout),
 			customization.WithOptionalEnvOverride(envTasksTimeout, integrationSpec.TasksTimeout),
 			customization.WithOptionalEnvOverride(envFinallyTimeout, integrationSpec.FinallyTimeout),
 		),
+		customization.WithLeaderElection(managerContainerName, replicas),
 	)
 }
 

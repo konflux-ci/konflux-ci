@@ -295,7 +295,6 @@ func buildBuildControllerManagerOverlay(spec konfluxv1alpha1.KonfluxBuildService
 
 	containerOpts = append(containerOpts,
 		customization.FromContainerSpec(managerSpec),
-		customization.WithLeaderElection(),
 	)
 
 	if spec.PACWebhookInsecureSSL != nil {
@@ -308,6 +307,7 @@ func buildBuildControllerManagerOverlay(spec konfluxv1alpha1.KonfluxBuildService
 
 	podOpts = append(podOpts,
 		customization.WithContainerOpts(buildManagerContainerName, deployCtx, containerOpts...),
+		customization.WithLeaderElection(buildManagerContainerName, deployCtx.Replicas),
 	)
 	return customization.NewPodOverlay(podOpts...)
 }

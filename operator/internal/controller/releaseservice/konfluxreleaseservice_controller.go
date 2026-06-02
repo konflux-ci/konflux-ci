@@ -204,13 +204,12 @@ func buildReleaseControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManage
 		return customization.NewPodOverlay()
 	}
 
-	return customization.BuildPodOverlay(
-		customization.DeploymentContext{Replicas: spec.Replicas},
-		customization.WithContainerBuilder(
-			releaseManagerContainerName,
+	deployCtx := customization.DeploymentContext{Replicas: spec.Replicas}
+	return customization.NewPodOverlay(
+		customization.WithContainerOpts(releaseManagerContainerName, deployCtx,
 			customization.FromContainerSpec(spec.Manager),
-			customization.WithLeaderElection(),
 		),
+		customization.WithLeaderElection(releaseManagerContainerName, spec.Replicas),
 	)
 }
 

@@ -225,11 +225,11 @@ func buildImageControllerManagerOverlay(spec konfluxv1alpha1.KonfluxImageControl
 
 	containerOpts = append(containerOpts,
 		customization.FromContainerSpec(managerSpec),
-		customization.WithLeaderElection(),
 	)
 
 	podOpts = append(podOpts,
 		customization.WithContainerOpts(managerContainerName, deployCtx, containerOpts...),
+		customization.WithLeaderElection(managerContainerName, deployCtx.Replicas),
 	)
 	return customization.NewPodOverlay(podOpts...), nil
 }
