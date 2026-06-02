@@ -7,6 +7,8 @@ resources:
 - konflux-admin-user-actions-batch.yaml
 - konflux-contributor-user-actions-core.yaml
 - konflux-maintainer-user-actions-core.yaml
+- konflux-builder-bot-actions.yaml
+- konflux-releaser-bot-actions.yaml
 - konflux-self-access-reviewer.yaml
 - konflux-viewer-user-actions-core.yaml
 # Deprecated

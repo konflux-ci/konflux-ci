@@ -202,6 +202,24 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
+  name: konflux-builder-bot-actions
+rules:
+- apiGroups:
+  - tekton.dev
+  resources:
+  - pipelineruns
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
   labels:
     rbac.konflux-ci.dev/aggregate-to-contributor: "true"
   name: konflux-contributor-user-actions-core
@@ -444,6 +462,30 @@ rules:
   - get
   - list
   - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: konflux-releaser-bot-actions
+rules:
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - releases
+  verbs:
+  - list
+  - get
+  - watch
+  - create
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - snapshots
+  verbs:
+  - list
+  - get
+  - watch
+  - create
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
