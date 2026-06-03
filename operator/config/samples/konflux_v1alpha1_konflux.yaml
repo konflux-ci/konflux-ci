@@ -92,6 +92,7 @@ spec:
               memory: 128Mi
   buildService:
     spec:
+      # logEncoder: console  # Use human-readable logs (default: json)
       buildControllerManager:
         replicas: 1
         manager:

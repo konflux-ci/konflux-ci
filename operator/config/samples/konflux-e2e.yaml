@@ -90,6 +90,7 @@ spec:
       # Skip TLS verification for PaC webhook URLs — the e2e environment
       # exposes Pipelines-as-Code via a route with a self-signed certificate.
       pacWebhookInsecureSSL: true
+      # logEncoder: console  # Use human-readable logs (default: json)
       buildControllerManager:
         replicas: 1
         manager:
@@ -146,3 +147,5 @@ spec:
   # E2E-specific: Enable image-controller for E2E tests
   imageController:
     enabled: true
+    # spec:
+    #   logEncoder: console  # Use human-readable logs (default: json)
