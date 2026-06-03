@@ -9,6 +9,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: konflux-image-controller
 spec:
+  # logEncoder: console  # Use human-readable logs (default: json)
   imageControllerManager:
     replicas: 1
     manager:

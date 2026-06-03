@@ -42,6 +42,11 @@ type KonfluxImageControllerSpec struct {
 	// +optional
 	ImageControllerManager *ControllerManagerDeploymentSpec `json:"imageControllerManager,omitempty"`
 
+	// LogEncoder sets the log encoding format for the image-controller.
+	// When not set, the upstream default (json) is used.
+	// +optional
+	LogEncoder LogEncoder `json:"logEncoder,omitempty"`
+
 	// QuayCABundle configures a custom CA bundle for Quay registry communication.
 	// When set, the CA certificate from the referenced ConfigMap is mounted into the
 	// image-controller pod and used for TLS verification when connecting to Quay.

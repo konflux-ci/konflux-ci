@@ -275,6 +275,14 @@ spec:
                     minimum: 1
                     type: integer
                 type: object
+              logEncoder:
+                description: |-
+                  LogEncoder sets the log encoding format for the image-controller.
+                  When not set, the upstream default (json) is used.
+                enum:
+                - json
+                - console
+                type: string
               quayCABundle:
                 description: |-
                   QuayCABundle configures a custom CA bundle for Quay registry communication.

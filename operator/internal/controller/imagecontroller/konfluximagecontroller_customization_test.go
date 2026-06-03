@@ -222,6 +222,111 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		g.Expect(managerContainer.Args).To(gomega.ContainElement("--leader-elect=true"))
 	})
 
+	t.Run("logEncoder console adds zap-encoder arg", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+			LogEncoder: konfluxv1alpha1.LogEncoderConsole,
+		}
+
+		deployment := getImageControllerDeployment(t)
+		overlay, err := buildImageControllerManagerOverlay(spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		err = overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(konfluxv1alpha1.ZapEncoderArg + "=" + string(konfluxv1alpha1.LogEncoderConsole)))
+	})
+
+	t.Run("logEncoder json adds zap-encoder arg", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+			LogEncoder: konfluxv1alpha1.LogEncoderJSON,
+		}
+
+		deployment := getImageControllerDeployment(t)
+		overlay, err := buildImageControllerManagerOverlay(spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		err = overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(konfluxv1alpha1.ZapEncoderArg + "=" + string(konfluxv1alpha1.LogEncoderJSON)))
+	})
+
+	t.Run("empty logEncoder does not add zap-encoder arg", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxImageControllerSpec{}
+
+		deployment := getImageControllerDeployment(t)
+		originalContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(originalContainer).NotTo(gomega.BeNil())
+		originalArgs := make([]string, len(originalContainer.Args))
+		copy(originalArgs, originalContainer.Args)
+
+		overlay, err := buildImageControllerManagerOverlay(spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		err = overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.Equal(originalArgs))
+	})
+
+	t.Run("logEncoder with ImageControllerManager preserves base args", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+			LogEncoder: konfluxv1alpha1.LogEncoderConsole,
+			ImageControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+				Replicas: 3,
+				Manager: &konfluxv1alpha1.ContainerSpec{
+					Resources: &corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU: resource.MustParse("500m"),
+						},
+					},
+				},
+			},
+		}
+
+		deployment := getImageControllerDeployment(t)
+		overlay, err := buildImageControllerManagerOverlay(spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		err = overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(konfluxv1alpha1.ZapEncoderArg + "=" + string(konfluxv1alpha1.LogEncoderConsole)))
+		g.Expect(managerContainer.Args).To(gomega.ContainElement("--leader-elect=true"))
+		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
+	})
+
+	t.Run("logEncoder replaces existing base zap-encoder arg", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+			LogEncoder: konfluxv1alpha1.LogEncoderConsole,
+		}
+
+		deployment := getImageControllerDeployment(t)
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		managerContainer.Args = append(managerContainer.Args, konfluxv1alpha1.ZapEncoderArg+"="+string(konfluxv1alpha1.LogEncoderJSON))
+
+		overlay, err := buildImageControllerManagerOverlay(spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		err = overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(konfluxv1alpha1.ZapEncoderArg + "=" + string(konfluxv1alpha1.LogEncoderConsole)))
+		g.Expect(managerContainer.Args).NotTo(gomega.ContainElement(konfluxv1alpha1.ZapEncoderArg + "=" + string(konfluxv1alpha1.LogEncoderJSON)))
+	})
+
 	t.Run("QuayCABundle and ImageControllerManager combined", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := konfluxv1alpha1.KonfluxImageControllerSpec{

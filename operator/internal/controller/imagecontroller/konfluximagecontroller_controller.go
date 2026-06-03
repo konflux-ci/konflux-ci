@@ -227,6 +227,11 @@ func buildImageControllerManagerOverlay(spec konfluxv1alpha1.KonfluxImageControl
 		customization.FromContainerSpec(managerSpec),
 	)
 
+	if spec.LogEncoder != "" {
+		podOpts = append(podOpts, customization.WithArgReplace(
+			managerContainerName, konfluxv1alpha1.ZapEncoderArg+"="+string(spec.LogEncoder)))
+	}
+
 	podOpts = append(podOpts,
 		customization.WithContainerOpts(managerContainerName, deployCtx, containerOpts...),
 		customization.WithLeaderElection(managerContainerName, deployCtx.Replicas),
