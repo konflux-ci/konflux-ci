@@ -255,51 +255,40 @@ func buildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploy
 	)
 }
 
-// buildSnapshotGCOverlay builds a PodOverlay for the snapshot GC CronJob container.
-func buildSnapshotGCOverlay(integrationSpec konfluxv1alpha1.KonfluxIntegrationServiceSpec) *customization.PodOverlay {
-	return customization.BuildPodOverlay(
+// applySnapshotGCCustomizations applies user-defined customizations to the snapshot GC CronJob.
+// The ContainerSpec (resources, env) is applied first via ApplyCronJobContainerSpec, which
+// validates the container exists. Typed retention fields are validated separately and applied
+// last, taking precedence over any same-named entry in snapshotGarbageCollector.env.
+func applySnapshotGCCustomizations(cj *batchv1.CronJob, integrationSpec konfluxv1alpha1.KonfluxIntegrationServiceSpec) error {
+	if err := customization.ApplyCronJobContainerSpec(cj, snapshotGCContainerName, integrationSpec.SnapshotGarbageCollector); err != nil {
+		return err
+	}
+
+	hasTypedFields := integrationSpec.PRSnapshotsToKeep != "" ||
+		integrationSpec.NonPRSnapshotsToKeep != "" ||
+		integrationSpec.MinSnapshotsToKeepPerComponent != ""
+
+	if !hasTypedFields {
+		return nil
+	}
+
+	// Validate again: ApplyCronJobContainerSpec skips validation when
+	// SnapshotGarbageCollector is nil, so typed-fields-only configs still
+	// need the container existence check.
+	if err := customization.ValidateCronJobContainer(cj, snapshotGCContainerName); err != nil {
+		return err
+	}
+
+	envOverlay := customization.BuildPodOverlay(
 		customization.DeploymentContext{},
 		customization.WithContainerBuilder(
 			snapshotGCContainerName,
-			customization.FromContainerSpec(integrationSpec.SnapshotGarbageCollector),
 			customization.WithOptionalEnvOverride(envPRSnapshotsToKeep, integrationSpec.PRSnapshotsToKeep),
 			customization.WithOptionalEnvOverride(envNonPRSnapshotsToKeep, integrationSpec.NonPRSnapshotsToKeep),
 			customization.WithOptionalEnvOverride(envMinSnapshotsToKeepPerComponent, integrationSpec.MinSnapshotsToKeepPerComponent),
 		),
 	)
-}
-
-// applySnapshotGCCustomizations applies user-defined customizations to the snapshot GC CronJob.
-// Typed retention fields are applied last and take precedence over any same-named entry in
-// snapshotGarbageCollector.env. The GC binary reads env vars after flag.Parse(), so injected
-// env vars override the command-arg defaults in the upstream manifest. When not set, the
-// upstream defaults apply.
-//
-// An error is returned if the user has configured any GC fields but the expected container
-// (snapshotGCContainerName) is not found in the CronJob spec — this prevents misconfigurations
-// from silently passing when the upstream container name changes.
-// Note: ApplyToPodTemplateSpec silently ignores unmatched containers, so the check is explicit.
-func applySnapshotGCCustomizations(cj *batchv1.CronJob, integrationSpec konfluxv1alpha1.KonfluxIntegrationServiceSpec) error {
-	hasCustomizations := integrationSpec.SnapshotGarbageCollector != nil ||
-		integrationSpec.PRSnapshotsToKeep != "" ||
-		integrationSpec.NonPRSnapshotsToKeep != "" ||
-		integrationSpec.MinSnapshotsToKeepPerComponent != ""
-
-	if hasCustomizations {
-		found := false
-		for _, c := range cj.Spec.JobTemplate.Spec.Template.Spec.Containers {
-			if c.Name == snapshotGCContainerName {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return fmt.Errorf("container %q not found in CronJob %s: snapshot GC customizations cannot be applied",
-				snapshotGCContainerName, cj.Name)
-		}
-	}
-
-	return buildSnapshotGCOverlay(integrationSpec).ApplyToPodTemplateSpec(&cj.Spec.JobTemplate.Spec.Template)
+	return envOverlay.ApplyToCronJob(cj)
 }
 
 // mapKonfluxUIToIntegrationService maps KonfluxUI events to KonfluxIntegrationService reconcile requests.
