@@ -103,9 +103,9 @@ spec:
                 clientSecret: $GITHUB_CLIENT_SECRET
 ```
 
-### Restricting Access to Specific Organisations
+### Restricting Access to Specific Organizations
 
-To allow only members of certain GitHub organisations (and optionally specific teams)
+To allow only members of certain GitHub organizations (and optionally specific teams)
 to log in, add an `orgs` block to the connector `config`:
 
 ```yaml
@@ -158,8 +158,8 @@ spec:
           configureLoginWithOpenShift: true
 ```
 
-When the operator detects OpenShift and this value is unset or `true`, it creates a
-`ServiceAccount` and `Secret` in the `konflux-ui` namespace and registers the
+When the operator detects OpenShift and this value is unset or `true`, it annotates the
+dex `ServiceAccount` for redirection in the `konflux-ui` namespace and registers the
 cluster's OAuth server as a Dex connector automatically - no additional secrets or
 connector configuration is required.
 

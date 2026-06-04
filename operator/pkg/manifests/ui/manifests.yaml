@@ -248,6 +248,45 @@ metadata:
   namespace: konflux-ui
 ---
 apiVersion: v1
+data:
+  run-dex.sh: "#!/bin/bash\n\nset -euo pipefail\n\nORIGINAL_TOKEN=/tmp/var/run/secrets/dex/serviceaccount/token\nTOKEN_PATH=${TOKEN_PATH:-/var/run/secrets/kubernetes.io/serviceaccount/token}\nWAIT_TIME=10\nHALT_TIMEOUT=100\nMAX_JITTER_TIME=10\n\n#
+    auxiliary log function\nlog() { printf \"%s: %s\\n\" \"$(date -Iseconds)\" \"$*\";
+    }\n\n# forward SIGTERM/SIGINT for graceful shutdown\nshutdown() {\n  log \"received
+    signal, shutting down\"\n  if [ -n \"${dex_pid:-}\" ] && [ -d \"/proc/${dex_pid}\"
+    ]; then\n    kill -s TERM \"${dex_pid}\" 2>/dev/null || true\n    wait_for_halt
+    || true\n  fi\n  exit 143\n}\n\nwait_for_halt() (\n  counter=0\n  while [ -d \"/proc/${dex_pid}\"
+    ] && [ $(( counter++ )) -le \"${HALT_TIMEOUT}\" ]; do \n    sleep 1\n  done\n\n
+    \ if [ -d \"/proc/${dex_pid}\" ]; then\n    return 1\n  fi\n  return 0\n)\n\nstart_with_reload()
+    {\n  while true; do\n    # copy the original token for later use\n    log \"copying
+    the token to ${ORIGINAL_TOKEN}\"\n    mkdir -p \"$(dirname \"${ORIGINAL_TOKEN}\")\"\n
+    \   rm \"${ORIGINAL_TOKEN}\" || true\n    cp \"${TOKEN_PATH}\" \"${ORIGINAL_TOKEN}\"\n\n
+    \   # run dex in a subprocess\n    OPENSHIFT_OAUTH_CLIENT_SECRET=\"$(cat \"${ORIGINAL_TOKEN}\")\"
+    \\\n    OPENSHIFT_OAUTH_CLIENT_ID=\"${OPENSHIFT_OAUTH_CLIENT_ID:-system:serviceaccount:${NAMESPACE}:${POD_SERVICE_ACCOUNT}}\"
+    \\\n      /usr/local/bin/dex serve /etc/dex/cfg/config.yaml &\n    dex_pid=\"$!\"\n
+    \   log \"run Dex in background with pid ${dex_pid}\"\n\n    # wait for the token
+    to be refresh by kubelet\n    log \"waiting for the token to be refreshed\"\n
+    \   while [ \"$(cksum < \"${ORIGINAL_TOKEN}\")\" = \"$(cksum < \"${TOKEN_PATH}\")\"
+    ]; do sleep \"${WAIT_TIME}\"; done\n\n    # reduce likelihood of having all replicas
+    refreshing at the same time\n    jitter=\"$(( $(od -An -N2 -i /dev/urandom) %
+    MAX_JITTER_TIME ))\"\n    log \"sleeping ${jitter} seconds to prevent all replicas
+    to restart at the same time\"\n    sleep \"${jitter}\"\n\n    # Send SIGTERM to
+    Dex\n    log \"token refreshed, halting Dex via SIGTERM\"\n    if [ -d \"/proc/${dex_pid}\"
+    ]; then\n      kill -s TERM \"${dex_pid}\" || true\n    fi\n\n    # Wait for Dex
+    to halt\n    log \"waiting for Dex to gracefully stop\"\n    if ! wait_for_halt;
+    then\n      log \"Dex didn't stop in ${HALT_TIMEOUT} seconds, breaking\"\n      exit
+    1\n    fi\n  done\n\n  log \"the loop broke unexpectedly\"\n  exit 1\n}\n\nmain()
+    {\n  trap shutdown TERM INT\n\n  if [ \"${OPENSHIFT_LOGIN_ENABLED:-false}\" ==
+    \"true\" ]; then\n    # if it is running on openshift, the OpenShift OAuth2 client\n
+    \   # is registered and ServiceAccount token reloading is enabled\n    start_with_reload\n
+    \ else\n    # otherwise there is no need for reloading the token\n    /usr/local/bin/dex
+    serve /etc/dex/cfg/config.yaml &\n    dex_pid=\"$!\"\n    wait \"${dex_pid}\"\n
+    \ fi\n}\n\nmain\n"
+kind: ConfigMap
+metadata:
+  name: run-dex-g467thmkt7
+  namespace: konflux-ui
+---
+apiVersion: v1
 kind: Service
 metadata:
   name: dex
@@ -307,16 +346,29 @@ spec:
     spec:
       containers:
       - command:
-        - /usr/local/bin/dex
-        - serve
-        - /etc/dex/cfg/config.yaml
+        - /usr/local/bin/run-dex.sh
         env:
+        - name: TOKEN_PATH
+          value: /var/run/secrets/konflux-ci.dev/serviceaccount/token
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_SERVICE_ACCOUNT
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.serviceAccountName
         - name: CLIENT_SECRET
           valueFrom:
             secretKeyRef:
               key: client-secret
               name: oauth2-proxy-client-secret
         image: quay.io/konflux-ci/dex@sha256:22b30bfb5ad1ebe4e0c70be11f02ad1ee0f749fd25bf77737c9369c031d6e238
+        livenessProbe:
+          httpGet:
+            path: /healthz/ready
+            port: telemetry
+          initialDelaySeconds: 10
         name: dex
         ports:
         - containerPort: 9443
@@ -328,6 +380,7 @@ spec:
           httpGet:
             path: /healthz/ready
             port: telemetry
+          initialDelaySeconds: 10
         resources:
           limits:
             cpu: 50m
@@ -339,12 +392,30 @@ spec:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
         volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+          readOnly: false
+        - mountPath: /var/run/secrets/konflux-ci.dev/serviceaccount/
+          name: dex-token
+        - mountPath: /usr/local/bin/run-dex.sh
+          name: run-dex
+          subPath: run-dex.sh
         - mountPath: /etc/dex/cfg
           name: dex
         - mountPath: /etc/dex/tls
           name: tls
       serviceAccountName: dex
       volumes:
+      - emptyDir:
+          medium: Memory
+        name: tmp
+      - name: dex-token
+        projected:
+          defaultMode: 288
+          sources:
+          - serviceAccountToken:
+              expirationSeconds: 600
+              path: token
       - configMap:
           defaultMode: 420
           items:
@@ -352,6 +423,13 @@ spec:
             path: config.yaml
           name: dex
         name: dex
+      - configMap:
+          defaultMode: 493
+          items:
+          - key: run-dex.sh
+            path: run-dex.sh
+          name: run-dex-g467thmkt7
+        name: run-dex
       - name: tls
         secret:
           secretName: dex-cert
