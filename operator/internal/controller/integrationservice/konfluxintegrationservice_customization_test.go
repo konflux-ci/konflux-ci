@@ -747,11 +747,67 @@ func TestApplySnapshotGCCustomizations_ContainerNotFound(t *testing.T) {
 		}
 	}
 
-	t.Run("returns error when customizations are set but container is not found", func(t *testing.T) {
+	t.Run("returns error when ContainerSpec is set but container is not found", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cj := makeEmptyCronJob(snapshotGCCronJobName)
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+			SnapshotGarbageCollector: &konfluxv1alpha1.ContainerSpec{
+				Resources: &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
+				},
+			},
+		}
+		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.MatchError(gomega.ContainSubstring(snapshotGCContainerName)))
+	})
+
+	t.Run("returns error when typed fields are set but container is missing", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		cj := makeEmptyCronJob(snapshotGCCronJobName)
 		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
 			PRSnapshotsToKeep: "10",
+		}
+		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.MatchError(gomega.ContainSubstring(snapshotGCContainerName)))
+	})
+
+	t.Run("returns error when nonPRSnapshotsToKeep is set but container is missing", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cj := makeEmptyCronJob(snapshotGCCronJobName)
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+			NonPRSnapshotsToKeep: "100",
+		}
+		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.MatchError(gomega.ContainSubstring(snapshotGCContainerName)))
+	})
+
+	t.Run("returns error when minSnapshotsToKeepPerComponent is set but container is missing", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cj := makeEmptyCronJob(snapshotGCCronJobName)
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+			MinSnapshotsToKeepPerComponent: "4",
+		}
+		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.MatchError(gomega.ContainSubstring(snapshotGCContainerName)))
+	})
+
+	t.Run("returns error when ContainerSpec env-only is set but container is missing", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cj := makeEmptyCronJob(snapshotGCCronJobName)
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+			SnapshotGarbageCollector: &konfluxv1alpha1.ContainerSpec{
+				Env: []corev1.EnvVar{{Name: "CUSTOM", Value: "val"}},
+			},
+		}
+		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.MatchError(gomega.ContainSubstring(snapshotGCContainerName)))
+	})
+
+	t.Run("returns error when both ContainerSpec and typed fields are set but container is missing", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cj := makeEmptyCronJob(snapshotGCCronJobName)
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+			PRSnapshotsToKeep: "10",
+			SnapshotGarbageCollector: &konfluxv1alpha1.ContainerSpec{
+				Resources: &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("4Gi")},
+				},
+			},
 		}
 		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.MatchError(gomega.ContainSubstring(snapshotGCContainerName)))
 	})
@@ -852,6 +908,79 @@ func TestApplySnapshotGCCustomizations(t *testing.T) {
 		g.Expect(gc.Resources.Limits.Cpu().String()).To(gomega.Equal(origLimitsCPU))
 		g.Expect(gc.Resources.Limits.Memory().String()).To(gomega.Equal(origLimitsMem))
 	})
+
+	t.Run("typed fields only apply env vars without ContainerSpec", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cj := getIntegrationSnapshotGCCronJob(t)
+		gcBefore := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		g.Expect(gcBefore).NotTo(gomega.BeNil())
+		origLimitsCPU := gcBefore.Resources.Limits.Cpu().String()
+
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+			PRSnapshotsToKeep: "25",
+		}
+		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.Succeed())
+
+		gc := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		g.Expect(gc).NotTo(gomega.BeNil())
+		prVar := findEnvVar(gc.Env, envPRSnapshotsToKeep)
+		g.Expect(prVar).NotTo(gomega.BeNil())
+		g.Expect(prVar.Value).To(gomega.Equal("25"))
+		g.Expect(gc.Resources.Limits.Cpu().String()).To(gomega.Equal(origLimitsCPU))
+	})
+
+	t.Run("resources and typed fields applied together", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cj := getIntegrationSnapshotGCCronJob(t)
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+			PRSnapshotsToKeep:    "30",
+			NonPRSnapshotsToKeep: "200",
+			SnapshotGarbageCollector: &konfluxv1alpha1.ContainerSpec{
+				Resources: &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("4"),
+						corev1.ResourceMemory: resource.MustParse("8Gi"),
+					},
+				},
+			},
+		}
+		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.Succeed())
+
+		gc := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		g.Expect(gc).NotTo(gomega.BeNil())
+		g.Expect(gc.Resources.Limits.Cpu().String()).To(gomega.Equal("4"))
+		g.Expect(gc.Resources.Limits.Memory().String()).To(gomega.Equal("8Gi"))
+		prVar := findEnvVar(gc.Env, envPRSnapshotsToKeep)
+		g.Expect(prVar).NotTo(gomega.BeNil())
+		g.Expect(prVar.Value).To(gomega.Equal("30"))
+		nonPRVar := findEnvVar(gc.Env, envNonPRSnapshotsToKeep)
+		g.Expect(nonPRVar).NotTo(gomega.BeNil())
+		g.Expect(nonPRVar.Value).To(gomega.Equal("200"))
+	})
+
+	t.Run("ContainerSpec env-only applies without resources", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cj := getIntegrationSnapshotGCCronJob(t)
+		gcBefore := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		g.Expect(gcBefore).NotTo(gomega.BeNil())
+		origLimitsCPU := gcBefore.Resources.Limits.Cpu().String()
+
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+			SnapshotGarbageCollector: &konfluxv1alpha1.ContainerSpec{
+				Env: []corev1.EnvVar{
+					{Name: "CUSTOM_FLAG", Value: "enabled"},
+				},
+			},
+		}
+		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.Succeed())
+
+		gc := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		g.Expect(gc).NotTo(gomega.BeNil())
+		customVar := findEnvVar(gc.Env, "CUSTOM_FLAG")
+		g.Expect(customVar).NotTo(gomega.BeNil())
+		g.Expect(customVar.Value).To(gomega.Equal("enabled"))
+		g.Expect(gc.Resources.Limits.Cpu().String()).To(gomega.Equal(origLimitsCPU))
+	})
 }
 
 func TestApplySnapshotGCCustomizations_TypedFields(t *testing.T) {
@@ -950,6 +1079,31 @@ func TestApplySnapshotGCCustomizations_TypedFields(t *testing.T) {
 		minVar := findEnvVar(gc.Env, envMinSnapshotsToKeepPerComponent)
 		g.Expect(minVar).NotTo(gomega.BeNil())
 		g.Expect(minVar.Value).To(gomega.Equal(minToKeep))
+	})
+
+	t.Run("ContainerSpec resources and typed fields are applied together", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cj := getIntegrationSnapshotGCCronJob(t)
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+			PRSnapshotsToKeep: "15",
+			SnapshotGarbageCollector: &konfluxv1alpha1.ContainerSpec{
+				Resources: &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("2"),
+						corev1.ResourceMemory: resource.MustParse("4Gi"),
+					},
+				},
+			},
+		}
+		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.Succeed())
+
+		gc := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		g.Expect(gc).NotTo(gomega.BeNil())
+		g.Expect(gc.Resources.Limits.Cpu().String()).To(gomega.Equal("2"))
+		g.Expect(gc.Resources.Limits.Memory().String()).To(gomega.Equal("4Gi"))
+		prVar := findEnvVar(gc.Env, envPRSnapshotsToKeep)
+		g.Expect(prVar).NotTo(gomega.BeNil())
+		g.Expect(prVar.Value).To(gomega.Equal("15"))
 	})
 
 	t.Run("snapshotGarbageCollector.env values pass through when typed fields are not set", func(t *testing.T) {

@@ -21,6 +21,7 @@ import (
 
 	"github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -665,5 +666,306 @@ func TestApplyImageControllerDeploymentCustomizations(t *testing.T) {
 		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("2"))
+	})
+}
+
+func getImageControllerCronJob(t *testing.T, name string) *batchv1.CronJob {
+	t.Helper()
+	store := testutil.GetTestObjectStore(t)
+	objects, err := store.GetForComponent(manifests.ImageController)
+	if err != nil {
+		t.Fatalf("failed to get ImageController manifests: %v", err)
+	}
+
+	for _, obj := range objects {
+		if cj, ok := obj.(*batchv1.CronJob); ok && cj.Name == name {
+			return cj
+		}
+	}
+	t.Fatalf("CronJob %q not found in ImageController manifests", name)
+	return nil
+}
+
+func TestApplyImagePrunerCustomizations(t *testing.T) {
+	t.Run("resources are applied", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+			ImagePruner: &konfluxv1alpha1.ContainerSpec{
+				Resources: &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("500m"),
+						corev1.ResourceMemory: resource.MustParse("8Gi"),
+					},
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("150m"),
+						corev1.ResourceMemory: resource.MustParse("1Gi"),
+					},
+				},
+			},
+		}
+
+		cj := getImageControllerCronJob(t, imagePrunerCronJobName)
+		err := applyImagePrunerCustomizations(cj, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+		g.Expect(container.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
+		g.Expect(container.Resources.Limits.Memory().String()).To(gomega.Equal("8Gi"))
+		g.Expect(container.Resources.Requests.Cpu().String()).To(gomega.Equal("150m"))
+		g.Expect(container.Resources.Requests.Memory().String()).To(gomega.Equal("1Gi"))
+	})
+
+	t.Run("nil spec leaves CronJob unchanged", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxImageControllerSpec{}
+
+		cj := getImageControllerCronJob(t, imagePrunerCronJobName)
+		container := testutil.FindContainer(
+			cj.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+		originalLimits := container.Resources.Limits.Cpu().String()
+
+		err := applyImagePrunerCustomizations(cj, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container = testutil.FindContainer(
+			cj.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+		g.Expect(container.Resources.Limits.Cpu().String()).To(gomega.Equal(originalLimits))
+	})
+
+	t.Run("preserves existing container fields", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+			ImagePruner: &konfluxv1alpha1.ContainerSpec{
+				Resources: &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU: resource.MustParse("1"),
+					},
+				},
+			},
+		}
+
+		cj := getImageControllerCronJob(t, imagePrunerCronJobName)
+		container := testutil.FindContainer(
+			cj.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+		originalImage := container.Image
+
+		err := applyImagePrunerCustomizations(cj, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container = testutil.FindContainer(
+			cj.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+		g.Expect(container.Image).To(gomega.Equal(originalImage))
+		g.Expect(container.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
+	})
+
+	t.Run("env vars are applied", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+			ImagePruner: &konfluxv1alpha1.ContainerSpec{
+				Env: []corev1.EnvVar{
+					{Name: "PRUNE_DRY_RUN", Value: "true"},
+				},
+			},
+		}
+
+		cj := getImageControllerCronJob(t, imagePrunerCronJobName)
+		err := applyImagePrunerCustomizations(cj, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+		g.Expect(container.Env).To(gomega.ContainElement(
+			corev1.EnvVar{Name: "PRUNE_DRY_RUN", Value: "true"}))
+	})
+}
+
+func TestApplyNotificationResetterCustomizations(t *testing.T) {
+	t.Run("resources are applied", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+			NotificationResetter: &konfluxv1alpha1.ContainerSpec{
+				Resources: &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("500m"),
+						corev1.ResourceMemory: resource.MustParse("1Gi"),
+					},
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("150m"),
+						corev1.ResourceMemory: resource.MustParse("1Gi"),
+					},
+				},
+			},
+		}
+
+		cj := getImageControllerCronJob(t, notificationResetterCronJobName)
+		err := applyNotificationResetterCustomizations(cj, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := testutil.FindContainer(
+			cj.Spec.JobTemplate.Spec.Template.Spec.Containers, notificationResetterContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+		g.Expect(container.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
+		g.Expect(container.Resources.Limits.Memory().String()).To(gomega.Equal("1Gi"))
+		g.Expect(container.Resources.Requests.Cpu().String()).To(gomega.Equal("150m"))
+		g.Expect(container.Resources.Requests.Memory().String()).To(gomega.Equal("1Gi"))
+	})
+
+	t.Run("nil spec leaves CronJob unchanged", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxImageControllerSpec{}
+
+		cj := getImageControllerCronJob(t, notificationResetterCronJobName)
+		container := testutil.FindContainer(
+			cj.Spec.JobTemplate.Spec.Template.Spec.Containers, notificationResetterContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+		originalLimits := container.Resources.Limits.Cpu().String()
+
+		err := applyNotificationResetterCustomizations(cj, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container = testutil.FindContainer(
+			cj.Spec.JobTemplate.Spec.Template.Spec.Containers, notificationResetterContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+		g.Expect(container.Resources.Limits.Cpu().String()).To(gomega.Equal(originalLimits))
+	})
+
+	t.Run("preserves existing container fields", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+			NotificationResetter: &konfluxv1alpha1.ContainerSpec{
+				Resources: &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU: resource.MustParse("1"),
+					},
+				},
+			},
+		}
+
+		cj := getImageControllerCronJob(t, notificationResetterCronJobName)
+		container := testutil.FindContainer(
+			cj.Spec.JobTemplate.Spec.Template.Spec.Containers, notificationResetterContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+		originalImage := container.Image
+
+		err := applyNotificationResetterCustomizations(cj, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container = testutil.FindContainer(
+			cj.Spec.JobTemplate.Spec.Template.Spec.Containers, notificationResetterContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+		g.Expect(container.Image).To(gomega.Equal(originalImage))
+		g.Expect(container.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
+	})
+
+	t.Run("missing container returns error", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+			NotificationResetter: &konfluxv1alpha1.ContainerSpec{
+				Resources: &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU: resource.MustParse("1"),
+					},
+				},
+			},
+		}
+
+		cj := &batchv1.CronJob{
+			ObjectMeta: metav1.ObjectMeta{Name: notificationResetterCronJobName},
+			Spec: batchv1.CronJobSpec{
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{Name: "wrong-name"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := applyNotificationResetterCustomizations(cj, spec)
+		g.Expect(err).To(gomega.HaveOccurred())
+		g.Expect(err.Error()).To(gomega.ContainSubstring(notificationResetterContainerName))
+	})
+}
+
+func TestBothCronJobCustomizationsApplied(t *testing.T) {
+	t.Run("ImagePruner and NotificationResetter customized from same spec", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+			ImagePruner: &konfluxv1alpha1.ContainerSpec{
+				Resources: &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceMemory: resource.MustParse("8Gi"),
+					},
+				},
+			},
+			NotificationResetter: &konfluxv1alpha1.ContainerSpec{
+				Resources: &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceMemory: resource.MustParse("1Gi"),
+					},
+				},
+			},
+		}
+
+		prunerCJ := getImageControllerCronJob(t, imagePrunerCronJobName)
+		resetterCJ := getImageControllerCronJob(t, notificationResetterCronJobName)
+
+		g.Expect(applyImagePrunerCustomizations(prunerCJ, spec)).To(gomega.Succeed())
+		g.Expect(applyNotificationResetterCustomizations(resetterCJ, spec)).To(gomega.Succeed())
+
+		pruner := testutil.FindContainer(prunerCJ.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
+		g.Expect(pruner).NotTo(gomega.BeNil())
+		g.Expect(pruner.Resources.Limits.Memory().String()).To(gomega.Equal("8Gi"))
+
+		resetter := testutil.FindContainer(resetterCJ.Spec.JobTemplate.Spec.Template.Spec.Containers, notificationResetterContainerName)
+		g.Expect(resetter).NotTo(gomega.BeNil())
+		g.Expect(resetter.Resources.Limits.Memory().String()).To(gomega.Equal("1Gi"))
+	})
+}
+
+func TestApplyCronJobCustomizations_MissingContainer(t *testing.T) {
+	t.Run("missing container returns error", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+			ImagePruner: &konfluxv1alpha1.ContainerSpec{
+				Resources: &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU: resource.MustParse("1"),
+					},
+				},
+			},
+		}
+
+		cj := &batchv1.CronJob{
+			ObjectMeta: metav1.ObjectMeta{Name: imagePrunerCronJobName},
+			Spec: batchv1.CronJobSpec{
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{Name: "wrong-name"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := applyImagePrunerCustomizations(cj, spec)
+		g.Expect(err).To(gomega.HaveOccurred())
+		g.Expect(err.Error()).To(gomega.ContainSubstring("container"))
+		g.Expect(err.Error()).To(gomega.ContainSubstring(imagePrunerContainerName))
 	})
 }

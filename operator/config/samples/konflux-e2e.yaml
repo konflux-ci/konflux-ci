@@ -149,3 +149,11 @@ spec:
     enabled: true
     # spec:
     #   logEncoder: console  # Use human-readable logs (default: json)
+    #   imagePruner:  # Customize the image-pruner CronJob container
+    #     resources:
+    #       limits:
+    #         memory: 8Gi
+    #   notificationResetter:  # Customize the notification-resetter CronJob container
+    #     resources:
+    #       limits:
+    #         memory: 1Gi

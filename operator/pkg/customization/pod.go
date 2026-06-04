@@ -17,10 +17,14 @@ limitations under the License.
 package customization
 
 import (
+	"fmt"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+
+	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 )
 
 // PodOverlay holds all customizations for a pod template.
@@ -261,6 +265,51 @@ func (p *PodOverlay) ApplyToDaemonSet(daemonSet *appsv1.DaemonSet) error {
 		return nil
 	}
 	return p.ApplyToPodTemplateSpec(&daemonSet.Spec.Template)
+}
+
+// ApplyToCronJob applies customizations to a CronJob.
+func (p *PodOverlay) ApplyToCronJob(cronJob *batchv1.CronJob) error {
+	if cronJob == nil {
+		return nil
+	}
+	return p.ApplyToPodTemplateSpec(&cronJob.Spec.JobTemplate.Spec.Template)
+}
+
+// ValidateCronJobContainer checks that a container with the given name exists
+// in the CronJob's pod template. Returns an error if the container is not found.
+func ValidateCronJobContainer(cj *batchv1.CronJob, containerName string) error {
+	for _, c := range cj.Spec.JobTemplate.Spec.Template.Spec.Containers {
+		if c.Name == containerName {
+			return nil
+		}
+	}
+	return fmt.Errorf(
+		"container %q not found in CronJob %s: customizations cannot be applied",
+		containerName, cj.Name)
+}
+
+// ApplyCronJobContainerSpec applies a ContainerSpec to a CronJob container.
+// It validates that the expected container exists, builds an overlay from the
+// ContainerSpec, and applies it to the CronJob's pod template.
+// Returns nil immediately if spec is nil (no customizations requested).
+func ApplyCronJobContainerSpec(
+	cj *batchv1.CronJob,
+	containerName string,
+	spec *konfluxv1alpha1.ContainerSpec,
+) error {
+	if spec == nil {
+		return nil
+	}
+
+	if err := ValidateCronJobContainer(cj, containerName); err != nil {
+		return err
+	}
+
+	overlay := BuildPodOverlay(
+		DeploymentContext{},
+		WithContainerBuilder(containerName, FromContainerSpec(spec)),
+	)
+	return overlay.ApplyToCronJob(cj)
 }
 
 // mergeContainerList merges container overlay configurations into a list of containers.
