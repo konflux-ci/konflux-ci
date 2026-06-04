@@ -32,7 +32,7 @@ require (
 	github.com/tektoncd/pipeline v1.13.0
 	github.com/xanzy/go-gitlab v0.114.0
 	golang.org/x/oauth2 v0.36.0
-	k8s.io/api v0.35.5
+	k8s.io/api v0.36.0
 	k8s.io/apimachinery v0.36.1
 	k8s.io/client-go v11.0.0+incompatible
 	k8s.io/klog v1.0.0
@@ -40,7 +40,7 @@ require (
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2
 	knative.dev/pkg v0.0.0-20260507212125-df317a52d112
 	oras.land/oras-go/v2 v2.5.0
-	sigs.k8s.io/controller-runtime v0.23.3
+	sigs.k8s.io/controller-runtime v0.24.1
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -76,7 +76,7 @@ replace (
 	k8s.io/mount-utils => k8s.io/mount-utils v0.35.3
 	k8s.io/pod-security-admission => k8s.io/pod-security-admission v0.35.3
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.35.3
-	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.23.3
+	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.24.1
 	vbom.ml/util => github.com/fvbommel/util v0.0.3
 )
 
@@ -207,7 +207,7 @@ require (
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/apiextensions-apiserver v0.35.5 // indirect
+	k8s.io/apiextensions-apiserver v0.36.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260603220949-865597e52e25 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
