@@ -1,3 +1,4 @@
+<!-- Line count is capped; see MAX_AGENTS_MD_LINES in .github/workflows/validate-agents-md.yaml -->
 # AGENTS.md
 
 ## Project Overview
