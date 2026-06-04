@@ -1592,6 +1592,230 @@ func TestWithSecretVolumeUpdate(t *testing.T) {
 	})
 }
 
+// TestMergeContainerList_EnvOverride tests that overriding an env var by name
+// replaces the entire EnvVar struct, preventing invalid combinations of value
+// and valueFrom. See https://github.com/konflux-ci/konflux-ci/issues/7162.
+func TestMergeContainerList_EnvOverride(t *testing.T) {
+	t.Run("valueFrom base overridden by value overlay", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithContainer("app", &corev1.Container{
+				Env: []corev1.EnvVar{
+					{Name: "QUAY_TOKEN", Value: "literal-token"},
+				},
+			}),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "app",
+								Image: "app:v1",
+								Env: []corev1.EnvVar{
+									{
+										Name: "QUAY_TOKEN",
+										ValueFrom: &corev1.EnvVarSource{
+											SecretKeyRef: &corev1.SecretKeySelector{
+												LocalObjectReference: corev1.LocalObjectReference{Name: "quay-secret"},
+												Key:                  "token",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		env := deployment.Spec.Template.Spec.Containers[0].Env
+		g.Expect(env).To(gomega.HaveLen(1))
+		g.Expect(env[0].Name).To(gomega.Equal("QUAY_TOKEN"))
+		g.Expect(env[0].Value).To(gomega.Equal("literal-token"))
+		g.Expect(env[0].ValueFrom).To(gomega.BeNil(),
+			"valueFrom must be nil when value is set")
+	})
+
+	t.Run("value base overridden by valueFrom overlay", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithContainer("app", &corev1.Container{
+				Env: []corev1.EnvVar{
+					{
+						Name: "FOO",
+						ValueFrom: &corev1.EnvVarSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "my-secret"},
+								Key:                  "foo-key",
+							},
+						},
+					},
+				},
+			}),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "app",
+								Image: "app:v1",
+								Env: []corev1.EnvVar{
+									{Name: "FOO", Value: "bar"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		env := deployment.Spec.Template.Spec.Containers[0].Env
+		g.Expect(env).To(gomega.HaveLen(1))
+		g.Expect(env[0].Name).To(gomega.Equal("FOO"))
+		g.Expect(env[0].Value).To(gomega.BeEmpty(),
+			"value must be empty when valueFrom is set")
+		g.Expect(env[0].ValueFrom).NotTo(gomega.BeNil())
+		g.Expect(env[0].ValueFrom.SecretKeyRef.Key).To(gomega.Equal("foo-key"))
+	})
+
+	t.Run("mixed replacements and appends with no invalid combinations", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithContainer("app", &corev1.Container{
+				Env: []corev1.EnvVar{
+					{Name: "ENV_A", Value: "new-a"},
+					{Name: "ENV_C", Value: "new-c"},
+				},
+			}),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "app",
+								Image: "app:v1",
+								Env: []corev1.EnvVar{
+									{
+										Name: "ENV_A",
+										ValueFrom: &corev1.EnvVarSource{
+											SecretKeyRef: &corev1.SecretKeySelector{
+												LocalObjectReference: corev1.LocalObjectReference{Name: "secret"},
+												Key:                  "a",
+											},
+										},
+									},
+									{Name: "ENV_B", Value: "keep-b"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		env := deployment.Spec.Template.Spec.Containers[0].Env
+		g.Expect(env).To(gomega.HaveLen(3))
+
+		envMap := make(map[string]corev1.EnvVar)
+		for _, e := range env {
+			envMap[e.Name] = e
+		}
+
+		// ENV_A replaced: value set, valueFrom cleared
+		g.Expect(envMap["ENV_A"].Value).To(gomega.Equal("new-a"))
+		g.Expect(envMap["ENV_A"].ValueFrom).To(gomega.BeNil())
+
+		// ENV_B unchanged
+		g.Expect(envMap["ENV_B"].Value).To(gomega.Equal("keep-b"))
+
+		// ENV_C appended
+		g.Expect(envMap["ENV_C"].Value).To(gomega.Equal("new-c"))
+
+		// No env var should have both value and valueFrom
+		for _, e := range env {
+			hasValue := e.Value != ""
+			hasValueFrom := e.ValueFrom != nil
+			g.Expect(hasValue && hasValueFrom).To(gomega.BeFalse(),
+				"env var %s has both value and valueFrom", e.Name)
+		}
+	})
+
+	t.Run("overlay is reusable across multiple apply calls", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithContainer("app", &corev1.Container{
+				Env: []corev1.EnvVar{
+					{Name: "TOKEN", Value: "literal"},
+				},
+			}),
+		)
+
+		makeDeployment := func() *appsv1.Deployment {
+			return &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name: "app",
+									Env: []corev1.EnvVar{
+										{
+											Name: "TOKEN",
+											ValueFrom: &corev1.EnvVarSource{
+												SecretKeyRef: &corev1.SecretKeySelector{
+													LocalObjectReference: corev1.LocalObjectReference{Name: "s"},
+													Key:                  "k",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+		}
+
+		d1 := makeDeployment()
+		err := p.ApplyToDeployment(d1)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(d1.Spec.Template.Spec.Containers[0].Env[0].Value).To(gomega.Equal("literal"))
+		g.Expect(d1.Spec.Template.Spec.Containers[0].Env[0].ValueFrom).To(gomega.BeNil())
+
+		d2 := makeDeployment()
+		err = p.ApplyToDeployment(d2)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(d2.Spec.Template.Spec.Containers[0].Env[0].Value).To(gomega.Equal("literal"),
+			"second apply must produce the same result")
+		g.Expect(d2.Spec.Template.Spec.Containers[0].Env[0].ValueFrom).To(gomega.BeNil(),
+			"second apply must produce the same result")
+	})
+}
+
 // TestApplyToPodTemplateSpec_ContainerDeletionBug tests for a regression where
 // applying pod-level customizations (like ServiceAccountName) would accidentally
 // delete all containers from the deployment.

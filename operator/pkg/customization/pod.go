@@ -332,13 +332,26 @@ func mergeContainerList(
 			extraArgs := overlay.Args
 			overlay.Args = nil
 
+			// Extract env vars before strategic merge. Strategic merge merges
+			// env vars by name and preserves omitted fields from the base,
+			// which means overriding a valueFrom env var with a value (or vice
+			// versa) produces an invalid EnvVar with both fields set. By
+			// removing env from the overlay before merge and applying it
+			// manually afterward, we ensure the entire EnvVar struct is
+			// replaced for matching names.
+			extraEnv := overlay.Env
+			overlay.Env = nil
+
 			if err := StrategicMerge(base, overlay); err != nil {
 				overlay.Args = extraArgs
+				overlay.Env = extraEnv
 				return err
 			}
 
 			overlay.Args = extraArgs
+			overlay.Env = extraEnv
 			base.Args = append(base.Args, extraArgs...)
+			mergeEnvByName(base, extraEnv)
 		}
 
 		for _, replacement := range argReplacements[base.Name] {
@@ -357,6 +370,26 @@ func mergeContainerList(
 		}
 	}
 	return nil
+}
+
+// mergeEnvByName replaces or appends overlay env vars into a container by name.
+// When an overlay env var has the same name as a base env var, the entire EnvVar
+// struct is replaced. This prevents invalid combinations of value and valueFrom
+// that strategic merge can produce.
+func mergeEnvByName(base *corev1.Container, overlay []corev1.EnvVar) {
+	for _, ov := range overlay {
+		found := false
+		for j, baseEnv := range base.Env {
+			if baseEnv.Name == ov.Name {
+				base.Env[j] = ov
+				found = true
+				break
+			}
+		}
+		if !found {
+			base.Env = append(base.Env, ov)
+		}
+	}
 }
 
 // argKey returns the flag key for deduplication.
