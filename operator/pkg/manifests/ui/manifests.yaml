@@ -188,7 +188,7 @@ data:
     SNIPPETS_DIR=/mnt/caddy-snippets
     SERVICE_CA_PATH=/mnt/service-ca/service-ca.crt
 
-    for cmd in sed nslookup; do
+    for cmd in sed getent; do
       command -v "${cmd}" >/dev/null 2>&1 || { echo "required command not found: ${cmd}"; exit 1; }
     done
 
@@ -206,7 +206,7 @@ data:
         tekton-results-api-service.tekton-pipelines.svc.cluster.local \
         tekton-results-api-service.openshift-pipelines.svc.cluster.local \
         tekton-results-api-service.tekton-results.svc.cluster.local; do
-        if nslookup "${host}" > /dev/null 2>&1; then
+        if getent hosts "${host}" > /dev/null 2>&1; then
           echo "${host}"
           return 0
         fi
@@ -244,7 +244,7 @@ data:
     log "done"
 kind: ConfigMap
 metadata:
-  name: proxy-generate-config-t9m628m25k
+  name: proxy-generate-config-5d6g495t8m
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -492,7 +492,7 @@ spec:
         - -R
         - /opt/app-root/src/.
         - /mnt/static-content/
-        image: quay.io/konflux-ci/konflux-ui@sha256:2b99a8740f841b8ea22bb81ed6566ee7ebab9dd4a67af2c13acb4642665e1987
+        image: quay.io/konflux-ci/konflux-ui@sha256:5a0666f29d28b05d0696611b45562693cea5db9f5b5c6f109f501894e57b1c10
         name: copy-static-content
         resources:
           limits:
@@ -510,7 +510,7 @@ spec:
       - command:
         - sh
         - /var/run/scripts/konflux-ci.dev/generate-proxy-config.sh
-        image: quay.io/konflux-ci/konflux-ui@sha256:2b99a8740f841b8ea22bb81ed6566ee7ebab9dd4a67af2c13acb4642665e1987
+        image: quay.io/konflux-ci/konflux-ui@sha256:5a0666f29d28b05d0696611b45562693cea5db9f5b5c6f109f501894e57b1c10
         name: generate-proxy-config
         resources:
           limits:
@@ -548,7 +548,7 @@ spec:
           items:
           - key: generate-proxy-config.sh
             path: generate-proxy-config.sh
-          name: proxy-generate-config-t9m628m25k
+          name: proxy-generate-config-5d6g495t8m
         name: generate-proxy-config-script
       - name: kube-api-token
         projected:
