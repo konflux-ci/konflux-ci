@@ -127,7 +127,7 @@ data:
   Caddyfile: "{\n\tauto_https off\n\tadmin off\n\torder inject_cached_vars before
     reverse_proxy\n\tfile_watcher {\n\t\tcache kube_token /var/run/secrets/konflux-ci.dev/serviceaccount/token\n\t\tcache
     backend_token /var/run/secrets/konflux-ci.dev/backend/token\n\t\twatch /var/run/secrets/kubernetes.io/serviceaccount\n\t\twatch
-    /mnt/trusted-ca\n\t\twatch /mnt/service-ca\n\t\twatch /mnt/serving-cert\n\t}\n}\n\n#
+    /mnt/cluster-ca\n\t\twatch /mnt/service-ca\n\t\twatch /mnt/serving-cert\n\t}\n}\n\n#
     TODO: protect metrics with kube-rbac-proxy sidecar (https://github.com/openshift/kube-rbac-proxy)\n:2112
     {\n\tmetrics /metrics\n}\n\n:9443 {\n\ttls {\n\t\tget_certificate file {\n\t\t\tcert
     /mnt/serving-cert/tls.crt\n\t\t\tkey /mnt/serving-cert/tls.key\n\t\t}\n\t}\n\n\t#
@@ -149,7 +149,7 @@ data:
     X-Auth-Request-Groups\n\t\t\t}\n\t\t\timpersonate {\n\t\t\t\ttarget_user X-User\n\t\t\t\ttarget_group
     X-Group\n\t\t\t}\n\t\t\trewrite * /api/v1/namespaces\n\t\t\treverse_proxy https://namespace-lister.namespace-lister.svc.cluster.local:8080
     {\n\t\t\t\theader_down -X-Correlation-ID\n\t\t\t\ttransport http {\n\t\t\t\t\tread_timeout
-    30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool file /mnt/trusted-ca/ca-bundle.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
+    30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool file /mnt/cluster-ca/ca-bundle.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
     Backend snippets (tekton-results, kubearchive, etc.) loaded from init-generated
     configs.\n\t# NOTE: Imported snippets MUST use paths more specific than /api/k8s/
     to avoid\n\t# shadowing the Kube API catch-all handler below. Caddy evaluates
@@ -174,7 +174,7 @@ data:
     {path} /index.html\n\t\tfile_server\n\t}\n}\n"
 kind: ConfigMap
 metadata:
-  name: proxy-caddyfile-4k244mbkbd
+  name: proxy-caddyfile-8477t8hg9h
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -445,8 +445,8 @@ spec:
         - mountPath: /mnt/caddy-snippets
           name: caddy-snippets
           readOnly: true
-        - mountPath: /mnt/trusted-ca
-          name: trusted-ca
+        - mountPath: /mnt/cluster-ca
+          name: cluster-ca
           readOnly: true
         - mountPath: /mnt/service-ca
           name: service-ca
@@ -570,7 +570,7 @@ spec:
           items:
           - key: Caddyfile
             path: Caddyfile
-          name: proxy-caddyfile-4k244mbkbd
+          name: proxy-caddyfile-8477t8hg9h
         name: proxy-caddyfile
       - configMap:
           defaultMode: 420
@@ -585,10 +585,13 @@ spec:
       - name: serving-cert
         secret:
           secretName: serving-cert
-      - configMap:
-          name: trusted-ca
+      - name: cluster-ca
+        secret:
+          items:
+          - key: ca.crt
+            path: ca-bundle.crt
           optional: true
-        name: trusted-ca
+          secretName: ui-ca
       - configMap:
           name: openshift-service-ca.crt
           optional: true
@@ -663,7 +666,7 @@ spec:
   issuerRef:
     group: cert-manager.io
     kind: ClusterIssuer
-    name: self-signed-cluster-issuer
+    name: ca-issuer
   privateKey:
     algorithm: ECDSA
     size: 256

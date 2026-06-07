@@ -1,9 +1,10 @@
 ---
-# CA Certificate: creates a self-signed CA in the konflux-ui namespace.
-# The resulting Secret (ui-ca) contains the CA cert in tls.crt.
-# This Secret is referenced by the Ingress annotation
-# route.openshift.io/destination-ca-certificate-secret so that the
-# OpenShift Ingress-to-Route controller can read the CA for TLS re-encryption.
+# CA Certificate: creates a sub-CA under the shared cluster root (ca-issuer)
+# in the konflux-ui namespace.
+# The resulting Secret (ui-ca) contains:
+#   tls.crt = the sub-CA cert (CA:TRUE) — referenced by the Ingress annotation
+#             route.openshift.io/destination-ca-certificate-secret for TLS re-encryption
+#   ca.crt  = the cluster root CA — used by the proxy to verify namespace-lister TLS
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -16,7 +17,7 @@ spec:
     algorithm: ECDSA
     size: 256
   issuerRef:
-    name: self-signed-cluster-issuer
+    name: ca-issuer
     kind: ClusterIssuer
     group: cert-manager.io
 ---
