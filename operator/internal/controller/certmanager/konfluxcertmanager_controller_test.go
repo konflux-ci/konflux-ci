@@ -104,8 +104,8 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 		// OwnerReferences do not trigger cascading deletion.
 		AfterEach(func(ctx context.Context) {
 			testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxCertManager{ObjectMeta: metav1.ObjectMeta{Name: CRName}})
-			testutil.DeleteAndWait(ctx, k8sClient, newClusterIssuer("self-signed-cluster-issuer"))
-			testutil.DeleteAndWait(ctx, k8sClient, newClusterIssuer("ca-issuer"))
+			testutil.DeleteAndWait(ctx, k8sClient, newClusterIssuer("konflux-bootstrap-issuer"))
+			testutil.DeleteAndWait(ctx, k8sClient, newClusterIssuer("konflux-issuer"))
 		})
 
 		Context("with createClusterIssuer unset (defaults to enabled)", func() {
@@ -116,8 +116,8 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 				Eventually(waitForReady).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 				By("verifying ClusterIssuers were created")
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "self-signed-cluster-issuer"}, newClusterIssuer("self-signed-cluster-issuer"))).To(Succeed())
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "ca-issuer"}, newClusterIssuer("ca-issuer"))).To(Succeed())
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "konflux-bootstrap-issuer"}, newClusterIssuer("konflux-bootstrap-issuer"))).To(Succeed())
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "konflux-issuer"}, newClusterIssuer("konflux-issuer"))).To(Succeed())
 			})
 		})
 
@@ -131,8 +131,8 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 				Eventually(waitForReady).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 				By("verifying ClusterIssuers were created")
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "self-signed-cluster-issuer"}, newClusterIssuer("self-signed-cluster-issuer"))).To(Succeed())
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "ca-issuer"}, newClusterIssuer("ca-issuer"))).To(Succeed())
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "konflux-bootstrap-issuer"}, newClusterIssuer("konflux-bootstrap-issuer"))).To(Succeed())
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "konflux-issuer"}, newClusterIssuer("konflux-issuer"))).To(Succeed())
 			})
 		})
 
@@ -146,12 +146,13 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 				Eventually(waitForReady).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 				By("verifying no ClusterIssuers were created")
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "self-signed-cluster-issuer"}, newClusterIssuer("self-signed-cluster-issuer"))).
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "konflux-bootstrap-issuer"}, newClusterIssuer("konflux-bootstrap-issuer"))).
 					To(MatchError(ContainSubstring("not found")))
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "ca-issuer"}, newClusterIssuer("ca-issuer"))).
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "konflux-issuer"}, newClusterIssuer("konflux-issuer"))).
 					To(MatchError(ContainSubstring("not found")))
 			})
 		})
+
 	})
 
 	Context("tracking.IsNoKindMatchError helper function", func() {

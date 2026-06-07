@@ -17,7 +17,7 @@ spec:
     algorithm: ECDSA
     size: 256
   issuerRef:
-    name: self-signed-cluster-issuer
+    name: konflux-bootstrap-issuer
     kind: ClusterIssuer
     group: cert-manager.io
 ---
@@ -49,8 +49,9 @@ spec:
   secretName: serving-cert
 ---
 # Reference certificate whose sole purpose is to surface the cluster root CA
-# (from ca-issuer / root-secret) in this namespace. The proxy mounts its
-# ca.crt field to verify namespace-lister TLS, which is issued by ca-issuer.
+# (from konflux-issuer / konflux-ca-secret) in this namespace. The proxy mounts
+# its ca.crt field to verify namespace-lister TLS, which is issued by
+# konflux-issuer.
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -61,6 +62,6 @@ spec:
     - cluster-root-ref.konflux-ui.svc
   secretName: cluster-root-ref
   issuerRef:
-    name: ca-issuer
+    name: konflux-issuer
     kind: ClusterIssuer
     group: cert-manager.io
