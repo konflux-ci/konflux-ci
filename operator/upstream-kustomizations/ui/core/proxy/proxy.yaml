@@ -139,8 +139,8 @@ spec:
           - name: caddy-snippets
             mountPath: /mnt/caddy-snippets
             readOnly: true
-          - name: trusted-ca
-            mountPath: /mnt/trusted-ca
+          - name: cluster-ca
+            mountPath: /mnt/cluster-ca
             readOnly: true
           - name: service-ca
             mountPath: /mnt/service-ca
@@ -230,10 +230,13 @@ spec:
         - name: serving-cert
           secret:
             secretName: serving-cert
-        - name: trusted-ca
-          configMap:
-            name: trusted-ca
+        - name: cluster-ca
+          secret:
+            secretName: ui-ca
             optional: true
+            items:
+              - key: ca.crt
+                path: ca-bundle.crt
         - name: service-ca
           configMap:
             name: openshift-service-ca.crt
