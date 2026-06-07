@@ -154,7 +154,7 @@ spec:
   - namespace-lister.namespace-lister.svc.cluster.local
   issuerRef:
     kind: ClusterIssuer
-    name: ca-issuer
+    name: konflux-issuer
   secretName: namespace-lister-tls
 ---
 apiVersion: networking.k8s.io/v1

@@ -131,7 +131,7 @@ spec:
   isCA: true
   issuerRef:
     kind: ClusterIssuer
-    name: ca-issuer
+    name: konflux-issuer
   secretName: local-registry-tls
   subject:
     organizations:
@@ -146,7 +146,7 @@ spec:
   - useDefaultCAs: true
   - secret:
       key: ca.crt
-      name: root-secret
+      name: konflux-ca-secret
   target:
     configMap:
       key: ca-bundle.crt

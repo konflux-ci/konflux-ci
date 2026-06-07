@@ -15,5 +15,5 @@ spec:
     - quay-service.quay.svc.cluster.local
   issuerRef:
     kind: ClusterIssuer
-    name: ca-issuer
+    name: konflux-issuer
   secretName: quay-tls

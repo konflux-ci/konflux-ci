@@ -2,24 +2,24 @@
 
 Konflux uses [cert-manager](https://cert-manager.io/) to manage TLS certificates
 for internal service-to-service communication. Most services share a cluster-wide
-trust root (`ca-issuer`). The UI namespace uses its own self-signed root for the
+trust root (`konflux-issuer`). The UI namespace uses its own self-signed root for the
 OpenShift route trust chain (see "Why the UI uses a self-signed root CA" below).
 
 ## Architecture
 
 ```
-self-signed-cluster-issuer (SelfSigned ClusterIssuer)
+konflux-bootstrap-issuer (SelfSigned ClusterIssuer)
 │
 │   Bootstraps both the cluster root CA and the UI namespace root.
 │
-├── selfsigned-ca (Certificate, isCA: true, cert-manager ns)
+├── konflux-ca (Certificate, isCA: true, cert-manager ns)
 │       │
 │       ▼
-│   Secret "root-secret" (cert-manager namespace)
+│   Secret "konflux-ca-secret" (cert-manager namespace)
 │   Contains the cluster root CA key + cert.
 │       │
 │       ▼
-│   ca-issuer (ClusterIssuer)
+│   konflux-issuer (ClusterIssuer)
 │   The issuer for cluster-wide services.
 │       │
 │       ├── namespace-lister cert (leaf, in namespace-lister ns)
@@ -38,22 +38,23 @@ self-signed-cluster-issuer (SelfSigned ClusterIssuer)
 
 ## Bootstrap sequence
 
-1. **`self-signed-cluster-issuer`** — A SelfSigned ClusterIssuer. Its only job is
+1. **`konflux-bootstrap-issuer`** — A SelfSigned ClusterIssuer. Its only job is
    to issue the root CA certificate. If you could manually create a CA key pair
    and store it in a Secret, you wouldn't need this at all. It's purely a
    cert-manager pattern for declarative root CA generation.
 
-2. **`selfsigned-ca` Certificate** — An `isCA: true` Certificate issued by the
-   self-signed issuer. cert-manager generates a key pair and stores it in
-   `root-secret` in the `cert-manager` namespace.
+2. **`konflux-ca` Certificate** — An `isCA: true` Certificate issued by the
+   bootstrap issuer. cert-manager generates a key pair and stores it in
+   `konflux-ca-secret` in the `cert-manager` namespace.
 
-3. **`ca-issuer` ClusterIssuer** — A CA issuer backed by `root-secret`. This is
-   the "real" issuer that all Konflux services reference.
+3. **`konflux-issuer` ClusterIssuer** — A CA issuer backed by
+   `konflux-ca-secret`. This is the "real" issuer that all Konflux services
+   reference.
 
 ## How services get their certificates
 
-Services reference `ca-issuer` (or a namespace-scoped sub-CA issued by it) in
-their Certificate resources:
+Services reference `konflux-issuer` (or a namespace-scoped sub-CA issued by it)
+in their Certificate resources:
 
 ```yaml
 apiVersion: cert-manager.io/v1
@@ -66,7 +67,7 @@ spec:
     - my-service.my-namespace.svc.cluster.local
   issuerRef:
     kind: ClusterIssuer
-    name: ca-issuer
+    name: konflux-issuer
   secretName: my-service-tls
 ```
 
@@ -88,11 +89,11 @@ For TLS re-encryption to succeed, the trust anchor must be a **self-signed**
 CA:TRUE certificate — HAProxy requires a complete chain ending at a self-signed
 root. cert-manager intentionally omits self-signed roots from `tls.crt` of
 certificates it issues (per TLS spec), so an intermediate CA issued by
-`ca-issuer` would produce a `tls.crt` containing only the intermediate, causing
+`konflux-issuer` would produce a `tls.crt` containing only the intermediate, causing
 chain verification failures (503 errors).
 
 The fix: `ui-ca` is a **self-signed** root CA (issued by
-`self-signed-cluster-issuer`). Its `tls.crt` is inherently self-signed, so the
+`konflux-bootstrap-issuer`). Its `tls.crt` is inherently self-signed, so the
 router can verify: `serving-cert → ui-ca (self-signed root)`.
 
 ## Cross-service TLS verification
@@ -102,16 +103,16 @@ The UI namespace has two trust domains:
 1. **Internal (ui-ca)** — Dex, serving-cert, and oauth2-proxy-cert all chain to
    `ui-ca`. The proxy verifies Dex using `serving-cert`'s `ca.crt` (= `ui-ca`).
 
-2. **Cluster (ca-issuer)** — namespace-lister and other cluster services chain
-   to the cluster root (`root-secret`). The proxy verifies namespace-lister
+2. **Cluster (konflux-issuer)** — namespace-lister and other cluster services chain
+   to the cluster root (`konflux-ca-secret`). The proxy verifies namespace-lister
    using `cluster-root-ref`'s `ca.crt` field, which cert-manager populates with
-   the cluster root CA (the signing CA of `ca-issuer`).
+   the cluster root CA (the signing CA of `konflux-issuer`).
 
 ## Operator management
 
 The `KonfluxCertManager` controller (reconciling the `KonfluxCertManager` CR)
 manages the bootstrap resources in this directory. When
-`spec.createClusterIssuer` is true (the default), it applies the
-self-signed-cluster-issuer, selfsigned-ca Certificate, and ca-issuer
+`spec.createClusterIssuer` is true (the default), it applies
+`konflux-bootstrap-issuer`, `konflux-ca` Certificate, and `konflux-issuer`
 ClusterIssuer. Individual component controllers then manage their own
 Certificate/Issuer resources in their respective namespaces.
