@@ -590,7 +590,6 @@ spec:
           items:
           - key: ca.crt
             path: ca-bundle.crt
-          optional: true
           secretName: ui-ca
       - configMap:
           name: openshift-service-ca.crt
