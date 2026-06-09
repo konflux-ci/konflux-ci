@@ -259,7 +259,7 @@ Each upstream uses a different trust anchor:
 |----------|-----------|--------|
 | Kubernetes API | Mounted SA CA | `tls_trust_pool file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt` |
 | Dex | cert-manager Secret | `tls_trust_pool file /mnt/serving-cert/ca.crt` |
-| Namespace-lister | trust-manager ConfigMap | `tls_trust_pool file /mnt/trusted-ca/ca-bundle.crt` |
+| Namespace-lister | cert-manager Secret (cluster root CA) | `tls_trust_pool file /mnt/cluster-ca/ca-bundle.crt` |
 | Backend services | Platform-dependent | `import /mnt/caddy-snippets/backend-tls.conf` |
 
 Backend TLS is determined at init time by `generate-proxy-config.sh`:

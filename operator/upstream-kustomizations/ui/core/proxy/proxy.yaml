@@ -233,7 +233,6 @@ spec:
         - name: cluster-ca
           secret:
             secretName: ui-ca
-            optional: true
             items:
               - key: ca.crt
                 path: ca-bundle.crt
