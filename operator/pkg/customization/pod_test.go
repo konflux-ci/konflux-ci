@@ -1816,6 +1816,101 @@ func TestMergeContainerList_EnvOverride(t *testing.T) {
 	})
 }
 
+// TestMergeEnvByName is a focused unit test for the mergeEnvByName helper,
+// verifying its behavior in isolation from the full mergeContainerList flow.
+func TestMergeEnvByName(t *testing.T) {
+	t.Run("nil overlay is a no-op", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		base := &corev1.Container{
+			Env: []corev1.EnvVar{
+				{Name: "EXISTING", Value: "keep"},
+			},
+		}
+		mergeEnvByName(base, nil)
+
+		g.Expect(base.Env).To(gomega.HaveLen(1))
+		g.Expect(base.Env[0].Name).To(gomega.Equal("EXISTING"))
+		g.Expect(base.Env[0].Value).To(gomega.Equal("keep"))
+	})
+
+	t.Run("empty overlay is a no-op", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		base := &corev1.Container{
+			Env: []corev1.EnvVar{
+				{Name: "EXISTING", Value: "keep"},
+			},
+		}
+		mergeEnvByName(base, []corev1.EnvVar{})
+
+		g.Expect(base.Env).To(gomega.HaveLen(1))
+		g.Expect(base.Env[0].Name).To(gomega.Equal("EXISTING"))
+		g.Expect(base.Env[0].Value).To(gomega.Equal("keep"))
+	})
+
+	t.Run("base with no env vars gets all overlay vars appended", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		base := &corev1.Container{}
+		overlay := []corev1.EnvVar{
+			{Name: "NEW_A", Value: "a"},
+			{Name: "NEW_B", Value: "b"},
+		}
+		mergeEnvByName(base, overlay)
+
+		g.Expect(base.Env).To(gomega.HaveLen(2))
+		g.Expect(base.Env[0].Name).To(gomega.Equal("NEW_A"))
+		g.Expect(base.Env[0].Value).To(gomega.Equal("a"))
+		g.Expect(base.Env[1].Name).To(gomega.Equal("NEW_B"))
+		g.Expect(base.Env[1].Value).To(gomega.Equal("b"))
+	})
+
+	t.Run("replacement preserves position in the slice", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		base := &corev1.Container{
+			Env: []corev1.EnvVar{
+				{Name: "FIRST", Value: "1"},
+				{Name: "TARGET", Value: "old"},
+				{Name: "LAST", Value: "3"},
+			},
+		}
+		overlay := []corev1.EnvVar{
+			{Name: "TARGET", Value: "new"},
+		}
+		mergeEnvByName(base, overlay)
+
+		g.Expect(base.Env).To(gomega.HaveLen(3))
+		// TARGET must remain at index 1
+		g.Expect(base.Env[0].Name).To(gomega.Equal("FIRST"))
+		g.Expect(base.Env[1].Name).To(gomega.Equal("TARGET"))
+		g.Expect(base.Env[1].Value).To(gomega.Equal("new"))
+		g.Expect(base.Env[2].Name).To(gomega.Equal("LAST"))
+	})
+
+	t.Run("duplicate overlay names last one wins", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		base := &corev1.Container{
+			Env: []corev1.EnvVar{
+				{Name: "DUP", Value: "original"},
+			},
+		}
+		overlay := []corev1.EnvVar{
+			{Name: "DUP", Value: "first-overlay"},
+			{Name: "DUP", Value: "second-overlay"},
+		}
+		mergeEnvByName(base, overlay)
+
+		// Both overlay entries match the same base entry; the second
+		// one overwrites the first, so last-write wins.
+		g.Expect(base.Env).To(gomega.HaveLen(1))
+		g.Expect(base.Env[0].Name).To(gomega.Equal("DUP"))
+		g.Expect(base.Env[0].Value).To(gomega.Equal("second-overlay"))
+	})
+}
+
 // TestApplyToPodTemplateSpec_ContainerDeletionBug tests for a regression where
 // applying pod-level customizations (like ServiceAccountName) would accidentally
 // delete all containers from the deployment.
