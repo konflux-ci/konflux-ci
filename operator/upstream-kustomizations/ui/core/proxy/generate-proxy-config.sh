@@ -6,7 +6,7 @@ TEMPLATES_DIR=/mnt/caddy-templates
 SNIPPETS_DIR=/mnt/caddy-snippets
 SERVICE_CA_PATH=/mnt/service-ca/service-ca.crt
 
-for cmd in sed nslookup; do
+for cmd in sed getent; do
   command -v "${cmd}" >/dev/null 2>&1 || { echo "required command not found: ${cmd}"; exit 1; }
 done
 
@@ -24,7 +24,7 @@ resolve_tekton_results() {
     tekton-results-api-service.tekton-pipelines.svc.cluster.local \
     tekton-results-api-service.openshift-pipelines.svc.cluster.local \
     tekton-results-api-service.tekton-results.svc.cluster.local; do
-    if nslookup "${host}" > /dev/null 2>&1; then
+    if getent hosts "${host}" > /dev/null 2>&1; then
       echo "${host}"
       return 0
     fi

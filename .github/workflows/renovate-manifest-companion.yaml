@@ -84,7 +84,16 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           SOURCE_PR: ${{ github.event.pull_request.number }}
-        run: bash .github/scripts/renovate-manifest-companion.sh
+          SKIP_IMAGE_VERIFY: ${{ contains(github.event.pull_request.labels.*.name, 'skip-image-verify') && 'true' || '' }}
+        run: |
+          set +e
+          bash .github/scripts/renovate-manifest-companion.sh
+          rc=$?
+          if [[ "${rc}" -eq 2 ]]; then
+            echo "Companion run stopped: upstream container image(s) not yet published (expected)."
+            exit 0
+          fi
+          exit "${rc}"
 
       - name: Notify on failure
         if: failure()

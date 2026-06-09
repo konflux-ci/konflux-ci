@@ -1244,6 +1244,265 @@ func TestKonfluxInfoClusterConfig(t *testing.T) {
 		g.Expect(clusterConfigMap.Data["fulcioInternalUrl"]).To(gomega.Equal("https://discovered-fulcio-internal.example.com"))
 		g.Expect(clusterConfigMap.Data["tufExternalUrl"]).To(gomega.Equal("https://discovered-tuf-external.example.com"))
 	})
+
+	t.Run("should create cluster-config ConfigMap with proxy fields using kebab-case keys", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		allowCache := true
+		allowPkgRegistry := true
+		noProxy := ""
+
+		resource := &konfluxv1alpha1.KonfluxInfo{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+			},
+			Spec: konfluxv1alpha1.KonfluxInfoSpec{
+				ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+					Data: &konfluxv1alpha1.ClusterConfigData{
+						AllowCacheProxy:             &allowCache,
+						HTTPProxy:                   "squid.caching.svc.cluster.local:3128",
+						NoProxy:                     &noProxy,
+						AllowPackageRegistryProxy:   &allowPkgRegistry,
+						PackageRegistryProxyNpmURL:  "https://artifact-registry-proxy.caching.svc.cluster.local/repository/npm-proxy",
+						PackageRegistryProxyYarnURL: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/yarn-proxy",
+					},
+				},
+			},
+		}
+		err := k8sClient.Create(ctx, resource)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		defer func() {
+			_ = k8sClient.Delete(ctx, resource)
+		}()
+
+		controllerReconciler := &KonfluxInfoReconciler{
+			Client:      k8sClient,
+			Scheme:      k8sClient.Scheme(),
+			ObjectStore: objectStore,
+		}
+		_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: typeNamespacedName,
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		clusterConfigMap := &corev1.ConfigMap{}
+		err = k8sClient.Get(ctx, types.NamespacedName{
+			Name:      clusterConfigMapName,
+			Namespace: infoNamespace,
+		}, clusterConfigMap)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyAllowCacheProxy, "true"))
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyHTTPProxy, "squid.caching.svc.cluster.local:3128"))
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyNoProxy, ""))
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyAllowPackageRegistryProxy, "true"))
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyNpmURL, "https://artifact-registry-proxy.caching.svc.cluster.local/repository/npm-proxy"))
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyYarnURL, "https://artifact-registry-proxy.caching.svc.cluster.local/repository/yarn-proxy"))
+	})
+
+	t.Run("should omit proxy keys from cluster-config ConfigMap when fields are nil/empty", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		resource := &konfluxv1alpha1.KonfluxInfo{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+			},
+			Spec: konfluxv1alpha1.KonfluxInfoSpec{
+				ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+					Data: &konfluxv1alpha1.ClusterConfigData{
+						DefaultOIDCIssuer: "https://oidc.example.com",
+					},
+				},
+			},
+		}
+		err := k8sClient.Create(ctx, resource)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		defer func() {
+			_ = k8sClient.Delete(ctx, resource)
+		}()
+
+		controllerReconciler := &KonfluxInfoReconciler{
+			Client:      k8sClient,
+			Scheme:      k8sClient.Scheme(),
+			ObjectStore: objectStore,
+		}
+		_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: typeNamespacedName,
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		clusterConfigMap := &corev1.ConfigMap{}
+		err = k8sClient.Get(ctx, types.NamespacedName{
+			Name:      clusterConfigMapName,
+			Namespace: infoNamespace,
+		}, clusterConfigMap)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKey("defaultOIDCIssuer"))
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyAllowCacheProxy))
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyHTTPProxy))
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyNoProxy))
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyAllowPackageRegistryProxy))
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyNpmURL))
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyYarnURL))
+	})
+
+	t.Run("should write allow-cache-proxy as false when explicitly set to false", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		allowCache := false
+
+		resource := &konfluxv1alpha1.KonfluxInfo{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+			},
+			Spec: konfluxv1alpha1.KonfluxInfoSpec{
+				ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+					Data: &konfluxv1alpha1.ClusterConfigData{
+						AllowCacheProxy: &allowCache,
+					},
+				},
+			},
+		}
+		err := k8sClient.Create(ctx, resource)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		defer func() {
+			_ = k8sClient.Delete(ctx, resource)
+		}()
+
+		controllerReconciler := &KonfluxInfoReconciler{
+			Client:      k8sClient,
+			Scheme:      k8sClient.Scheme(),
+			ObjectStore: objectStore,
+		}
+		_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: typeNamespacedName,
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		clusterConfigMap := &corev1.ConfigMap{}
+		err = k8sClient.Get(ctx, types.NamespacedName{
+			Name:      clusterConfigMapName,
+			Namespace: infoNamespace,
+		}, clusterConfigMap)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyAllowCacheProxy, "false"))
+	})
+}
+
+func TestClusterConfigDataProxyFieldsIterator(t *testing.T) {
+	t.Run("should yield kebab-case keys for all proxy fields", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		allowCache := true
+		allowPkgRegistry := true
+		noProxy := ""
+
+		data := konfluxv1alpha1.ClusterConfigData{
+			AllowCacheProxy:             &allowCache,
+			HTTPProxy:                   "squid.caching.svc.cluster.local:3128",
+			NoProxy:                     &noProxy,
+			AllowPackageRegistryProxy:   &allowPkgRegistry,
+			PackageRegistryProxyNpmURL:  "https://npm-proxy.example.com",
+			PackageRegistryProxyYarnURL: "https://yarn-proxy.example.com",
+		}
+
+		collected := make(map[string]string)
+		for k, v := range data.All {
+			collected[k] = v
+		}
+
+		g.Expect(collected).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyAllowCacheProxy, "true"))
+		g.Expect(collected).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyHTTPProxy, "squid.caching.svc.cluster.local:3128"))
+		g.Expect(collected).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyNoProxy, ""))
+		g.Expect(collected).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyAllowPackageRegistryProxy, "true"))
+		g.Expect(collected).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyNpmURL, "https://npm-proxy.example.com"))
+		g.Expect(collected).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyYarnURL, "https://yarn-proxy.example.com"))
+	})
+
+	t.Run("should not yield proxy keys when fields are nil/empty", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		data := konfluxv1alpha1.ClusterConfigData{
+			DefaultOIDCIssuer: "https://oidc.example.com",
+		}
+
+		collected := make(map[string]string)
+		for k, v := range data.All {
+			collected[k] = v
+		}
+
+		g.Expect(collected).To(gomega.HaveKeyWithValue("defaultOIDCIssuer", "https://oidc.example.com"))
+		g.Expect(collected).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyAllowCacheProxy))
+		g.Expect(collected).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyHTTPProxy))
+		g.Expect(collected).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyNoProxy))
+		g.Expect(collected).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyAllowPackageRegistryProxy))
+		g.Expect(collected).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyNpmURL))
+		g.Expect(collected).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyYarnURL))
+	})
+
+	t.Run("should yield false for *bool set to false", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		allowCache := false
+		allowPkgRegistry := false
+
+		data := konfluxv1alpha1.ClusterConfigData{
+			AllowCacheProxy:           &allowCache,
+			AllowPackageRegistryProxy: &allowPkgRegistry,
+		}
+
+		collected := make(map[string]string)
+		for k, v := range data.All {
+			collected[k] = v
+		}
+
+		g.Expect(collected).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyAllowCacheProxy, "false"))
+		g.Expect(collected).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyAllowPackageRegistryProxy, "false"))
+	})
+
+	t.Run("should yield no-proxy with non-empty value", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		noProxy := ".cluster.local,169.254.169.254"
+
+		data := konfluxv1alpha1.ClusterConfigData{
+			NoProxy: &noProxy,
+		}
+
+		collected := make(map[string]string)
+		for k, v := range data.All {
+			collected[k] = v
+		}
+
+		g.Expect(collected).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyNoProxy, ".cluster.local,169.254.169.254"))
+	})
+
+	t.Run("should produce correct MergeOver result with proxy fields", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		allowCache := true
+		noProxy := ""
+
+		user := konfluxv1alpha1.ClusterConfigData{
+			AllowCacheProxy: &allowCache,
+			HTTPProxy:       "user-proxy:3128",
+			NoProxy:         &noProxy,
+		}
+
+		discovered := konfluxv1alpha1.ClusterConfigData{
+			DefaultOIDCIssuer: "https://discovered-oidc.example.com",
+			HTTPProxy:         "discovered-proxy:3128",
+		}
+
+		result := user.MergeOver(discovered)
+
+		g.Expect(result).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyAllowCacheProxy, "true"))
+		g.Expect(result).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyHTTPProxy, "user-proxy:3128"))
+		g.Expect(result).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyNoProxy, ""))
+		g.Expect(result).To(gomega.HaveKeyWithValue("defaultOIDCIssuer", "https://discovered-oidc.example.com"))
+	})
 }
 
 // testClusterConfigDiscoverer is a test implementation of ClusterConfigDiscoverer

@@ -23,8 +23,8 @@ require (
 	github.com/onsi/gomega v1.41.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/openshift-pipelines/pipelines-as-code v0.46.0
-	github.com/openshift/api v0.0.0-20260602150417-b13acc5743d1
-	github.com/openshift/client-go v0.0.0-20260512113608-deb4dc54551a
+	github.com/openshift/api v0.0.0-20260603130340-1ad2ac3eb53d
+	github.com/openshift/client-go v0.0.0-20260603140539-6892dc3e1ffc
 	github.com/openshift/library-go v0.0.0-20260602070639-19be6ed11363
 	github.com/redhat-appstudio/jvm-build-service v0.0.0-20250301023318-b47170d413c5
 	github.com/stretchr/testify v1.11.1
@@ -188,7 +188,7 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/crypto v0.52.0 // indirect
-	golang.org/x/exp v0.0.0-20260529124908-c761662dc8c9 // indirect
+	golang.org/x/exp v0.0.0-20260603202125-055de637280b // indirect
 	golang.org/x/mod v0.36.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect

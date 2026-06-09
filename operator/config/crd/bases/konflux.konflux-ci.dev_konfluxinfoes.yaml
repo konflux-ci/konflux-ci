@@ -114,6 +114,18 @@ spec:
                       WARNING: Changing field names or JSON tags is a BREAKING CHANGE that will affect
                       all PipelineRuns reading from the ConfigMap. Field names must remain stable.
                     properties:
+                      allowCacheProxy:
+                        description: |-
+                          AllowCacheProxy enables the HTTP caching proxy for builds.
+                          When true, the "allow-cache-proxy" key is set to "true" in the cluster-config ConfigMap.
+                          When false, the key is set to "false". When nil (omitted), the key is absent.
+                        type: boolean
+                      allowPackageRegistryProxy:
+                        description: |-
+                          AllowPackageRegistryProxy enables the package registry proxy for builds.
+                          When true, the "allow-package-registry-proxy" key is set to "true" in the cluster-config ConfigMap.
+                          When false, the key is set to "false". When nil (omitted), the key is absent.
+                        type: boolean
                       buildIdentityRegexp:
                         description: |-
                           BuildIdentityRegexp is a regex pattern used for matching the identity
@@ -134,6 +146,43 @@ spec:
                       fulcioInternalUrl:
                         description: FulcioInternalUrl is the internal Fulcio URL.
                         type: string
+                      httpProxy:
+                        description: |-
+                          HTTPProxy is the HTTP proxy URL for builds (e.g., "squid.caching.svc.cluster.local:3128").
+                          Written as "http-proxy" in the cluster-config ConfigMap.
+                          Do not embed credentials in this URL — the ConfigMap is readable by all authenticated users.
+                        type: string
+                        x-kubernetes-validations:
+                        - message: URL must not contain credentials (userinfo). Use
+                            a Secret for proxy authentication.
+                          rule: '!self.contains(''@'')'
+                      noProxy:
+                        description: |-
+                          NoProxy is a comma-separated list of hosts that should bypass the proxy.
+                          Written as "no-proxy" in the cluster-config ConfigMap.
+                          An empty string is a valid value meaning no hosts are excluded from proxying.
+                          When nil (omitted), the key is absent from the ConfigMap.
+                        type: string
+                      packageRegistryProxyNpmUrl:
+                        description: |-
+                          PackageRegistryProxyNpmURL is the URL of the npm package registry proxy.
+                          Written as "package-registry-proxy-npm-url" in the cluster-config ConfigMap.
+                          Do not embed credentials in this URL — the ConfigMap is readable by all authenticated users.
+                        type: string
+                        x-kubernetes-validations:
+                        - message: URL must not contain credentials (userinfo). Use
+                            a Secret for proxy authentication.
+                          rule: '!self.contains(''@'')'
+                      packageRegistryProxyYarnUrl:
+                        description: |-
+                          PackageRegistryProxyYarnURL is the URL of the yarn package registry proxy.
+                          Written as "package-registry-proxy-yarn-url" in the cluster-config ConfigMap.
+                          Do not embed credentials in this URL — the ConfigMap is readable by all authenticated users.
+                        type: string
+                        x-kubernetes-validations:
+                        - message: URL must not contain credentials (userinfo). Use
+                            a Secret for proxy authentication.
+                          rule: '!self.contains(''@'')'
                       rekorExternalUrl:
                         description: RekorExternalUrl is the external Rekor URL.
                         type: string
