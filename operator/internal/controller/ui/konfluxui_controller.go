@@ -739,10 +739,13 @@ func (r *KonfluxUIReconciler) reconcileOpenShiftOAuth(ctx context.Context, tc *t
 		return nil
 	}
 
-	log.Info("Reconciling OpenShift OAuth resources", "endpoint", endpoint.String())
+	// Use the resolved Dex endpoint so the redirect URI matches the Dex issuer
+	// when hostname/port overrides are configured via spec.dex.config
+	effectiveEndpoint := ui.ResolveDexEndpoint(endpoint)
+	log.Info("Reconciling OpenShift OAuth resources", "endpoint", effectiveEndpoint.String())
 
 	// Create the ServiceAccount for OAuth redirect with the full callback URI
-	sa := dex.BuildOpenShiftOAuthServiceAccount(uiNamespace, endpoint)
+	sa := dex.BuildOpenShiftOAuthServiceAccount(uiNamespace, effectiveEndpoint)
 	if err := tc.ApplyOwned(ctx, sa); err != nil {
 		return fmt.Errorf("failed to apply OpenShift OAuth ServiceAccount: %w", err)
 	}
