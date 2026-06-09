@@ -1,0 +1,30 @@
+name: Validate AGENTS.md file
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'AGENTS.md'
+  pull_request:
+    paths:
+      - 'AGENTS.md'
+
+permissions:
+  contents: read
+
+jobs:
+  check-length:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Check AGENTS.md length (max 300 lines)
+        run: |
+          set -euo pipefail
+          lines=$(wc -l < AGENTS.md)
+          echo "AGENTS.md line count: ${lines}"
+          if [ "${lines}" -gt 300 ]; then
+            echo "::warning file=AGENTS.md::AGENTS.md has ${lines} lines (max 300)."
+            exit 1
+          fi
