@@ -201,6 +201,16 @@ test_pvc_binding(){
     echo "PVC binding successfull"
 }
 
+wait_for_chains_signing_secret() {
+    local namespace="$1"
+    echo "  ⏳ Waiting for tekton-chains-signing-secret Job in ${namespace}..." >&2
+    if ! retry "kubectl wait --for=condition=complete job/tekton-chains-signing-secret -n ${namespace} --timeout=120s" \
+          "tekton-chains-signing-secret Job did not complete in ${namespace}"; then
+        kubectl logs -n "${namespace}" -l job-name=tekton-chains-signing-secret --tail=50 >&2 || true
+        return 1
+    fi
+}
+
 deploy_tekton() {
     : "${USE_OPENSHIFT_PIPELINES:=false}"
     if [[ "${USE_OPENSHIFT_PIPELINES}" == "true" ]]; then
@@ -262,6 +272,7 @@ deploy_openshift_pipelines() {
     # Apply Tekton Chains RBAC for OpenShift Pipelines (uses openshift-pipelines namespace)
     echo "  🔐 Setting up Tekton Chains RBAC..." >&2
     kubectl apply -k "${script_path}/dependencies/tekton-chains-rbac-ocp"
+    wait_for_chains_signing_secret openshift-pipelines
 
     echo "  ✅ OpenShift Pipelines is ready!" >&2
 }
@@ -286,6 +297,7 @@ deploy_upstream_tekton() {
 
     echo "  🔐 Setting up Tekton Chains RBAC..." >&2
     kubectl apply -k "${script_path}/dependencies/tekton-chains-rbac"
+    wait_for_chains_signing_secret tekton-pipelines
 }
 
 deploy_cert_manager() {
