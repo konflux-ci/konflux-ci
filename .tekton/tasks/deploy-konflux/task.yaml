@@ -110,7 +110,7 @@ spec:
             optional: true
   steps:
     - name: clone-repository
-      image: quay.io/konflux-ci/task-runner:0.2.0@sha256:ba65585f5c8b0a74dc51590e95961765322427d1d62ccd4eb742ff0442291985
+      image: quay.io/konflux-ci/task-runner:v1@sha256:b9ef0479b57a494368a12a02886c650314c9ac7391c6228f21065865aab71c9e
       env:
         - name: GIT_URL
           value: $(params.git-url)
@@ -125,12 +125,14 @@ spec:
         mkdir -p "${REPO_ROOT}"
         # REPO_ROOT is an emptyDir mount point; rm -rf on it fails (device busy). Clear contents only.
         find "${REPO_ROOT}" -mindepth 1 -delete
+        # task-runner runs as non-root; emptyDir is root-owned (git safe.directory check).
+        git config --global --add safe.directory "${REPO_ROOT}"
         git init "${REPO_ROOT}"
         git -C "${REPO_ROOT}" remote add origin "${GIT_URL}"
         git -C "${REPO_ROOT}" fetch --depth "${GIT_DEPTH}" origin "${GIT_REVISION}"
         git -C "${REPO_ROOT}" checkout -q FETCH_HEAD
     - name: fetch-kubeconfig
-      image: quay.io/konflux-ci/task-runner:0.2.0@sha256:ba65585f5c8b0a74dc51590e95961765322427d1d62ccd4eb742ff0442291985
+      image: quay.io/konflux-ci/task-runner:v1@sha256:b9ef0479b57a494368a12a02886c650314c9ac7391c6228f21065865aab71c9e
       workingDir: /mnt/konflux-ci/repo
       env:
         - name: POD_NAMESPACE
@@ -143,7 +145,7 @@ spec:
         cd /mnt/konflux-ci/repo
         exec bash scripts/operator-e2e/tekton-fetch-kubeconfig.sh "$(params.cluster-access-secret)" "$(params.kubeconfig-secret-key)"
     - name: copy-shared-tools
-      image: quay.io/konflux-ci/task-runner:0.2.0@sha256:ba65585f5c8b0a74dc51590e95961765322427d1d62ccd4eb742ff0442291985
+      image: quay.io/konflux-ci/task-runner:v1@sha256:b9ef0479b57a494368a12a02886c650314c9ac7391c6228f21065865aab71c9e
       workingDir: /mnt/konflux-ci/repo
       script: |
         #!/bin/bash
@@ -195,7 +197,7 @@ spec:
           E2E_KONFLUX_READY_TIMEOUT="$(params.konflux-ready-timeout)" \
           bash scripts/operator-e2e/tekton-deploy-prep.sh /mnt/konflux-ci/repo
     - name: push-operator-pkg-manifests-oci
-      image: quay.io/konflux-ci/task-runner:0.2.0@sha256:ba65585f5c8b0a74dc51590e95961765322427d1d62ccd4eb742ff0442291985
+      image: quay.io/konflux-ci/task-runner:v1@sha256:b9ef0479b57a494368a12a02886c650314c9ac7391c6228f21065865aab71c9e
       workingDir: /mnt/konflux-ci/repo
       volumeMounts:
         - name: repo
