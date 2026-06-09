@@ -1202,6 +1202,16 @@ func (in *KonfluxImageControllerSpec) DeepCopyInto(out *KonfluxImageControllerSp
 		*out = new(ControllerManagerDeploymentSpec)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.ImagePruner != nil {
+		in, out := &in.ImagePruner, &out.ImagePruner
+		*out = new(ContainerSpec)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.NotificationResetter != nil {
+		in, out := &in.NotificationResetter, &out.NotificationResetter
+		*out = new(ContainerSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.QuayCABundle != nil {
 		in, out := &in.QuayCABundle, &out.QuayCABundle
 		*out = new(QuayCABundleSpec)

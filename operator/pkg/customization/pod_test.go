@@ -21,9 +21,12 @@ import (
 
 	"github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 )
 
 func TestNewPodOverlay(t *testing.T) {
@@ -1734,5 +1737,372 @@ func TestApplyToPodTemplateSpec_ContainerDeletionBug(t *testing.T) {
 
 		// Sidecar unchanged
 		g.Expect(spec.Containers[1].Image).To(gomega.Equal("sidecar:v1"))
+	})
+}
+
+func TestApplyToCronJob(t *testing.T) {
+	t.Run("nil CronJob is safe", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		p := NewPodOverlay()
+		err := p.ApplyToCronJob(nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+	})
+
+	t.Run("applies container resources to CronJob", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithContainerOpts("worker", DeploymentContext{},
+				WithResources(corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU: resource.MustParse("1"),
+					},
+				}),
+			),
+		)
+
+		cj := &batchv1.CronJob{
+			Spec: batchv1.CronJobSpec{
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{Name: "worker", Image: "worker:v1"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToCronJob(cj)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := cj.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
+		g.Expect(container.Image).To(gomega.Equal("worker:v1"))
+	})
+
+	t.Run("applies env vars to CronJob", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithContainerOpts("worker", DeploymentContext{},
+				WithEnv(corev1.EnvVar{Name: "FOO", Value: "bar"}),
+			),
+		)
+
+		cj := &batchv1.CronJob{
+			Spec: batchv1.CronJobSpec{
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{Name: "worker", Image: "worker:v1"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToCronJob(cj)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := cj.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Env).To(gomega.ContainElement(corev1.EnvVar{Name: "FOO", Value: "bar"}))
+	})
+
+	t.Run("preserves CronJob schedule and non-targeted containers", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithContainerOpts("worker", DeploymentContext{},
+				WithResources(corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")},
+				}),
+			),
+		)
+
+		cj := &batchv1.CronJob{
+			Spec: batchv1.CronJobSpec{
+				Schedule: "0 * * * *",
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{Name: "worker", Image: "worker:v1"},
+									{Name: "sidecar", Image: "sidecar:v1"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToCronJob(cj)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(cj.Spec.Schedule).To(gomega.Equal("0 * * * *"))
+		g.Expect(cj.Spec.JobTemplate.Spec.Template.Spec.Containers[1].Image).To(gomega.Equal("sidecar:v1"))
+	})
+}
+
+func TestApplyCronJobContainerSpec(t *testing.T) {
+	t.Run("nil spec is a no-op", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		cj := &batchv1.CronJob{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-cj"},
+			Spec: batchv1.CronJobSpec{
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{Name: "worker", Image: "worker:v1"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := ApplyCronJobContainerSpec(cj, "worker", nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(cj.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Image).To(gomega.Equal("worker:v1"))
+	})
+
+	t.Run("applies resources from ContainerSpec", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		cj := &batchv1.CronJob{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-cj"},
+			Spec: batchv1.CronJobSpec{
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{Name: "worker", Image: "worker:v1"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		spec := &konfluxv1alpha1.ContainerSpec{
+			Resources: &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("500m"),
+					corev1.ResourceMemory: resource.MustParse("8Gi"),
+				},
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("150m"),
+					corev1.ResourceMemory: resource.MustParse("1Gi"),
+				},
+			},
+		}
+
+		err := ApplyCronJobContainerSpec(cj, "worker", spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := cj.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
+		g.Expect(container.Resources.Limits.Memory().String()).To(gomega.Equal("8Gi"))
+		g.Expect(container.Resources.Requests.Cpu().String()).To(gomega.Equal("150m"))
+		g.Expect(container.Resources.Requests.Memory().String()).To(gomega.Equal("1Gi"))
+		g.Expect(container.Image).To(gomega.Equal("worker:v1"))
+	})
+
+	t.Run("missing container returns error", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		cj := &batchv1.CronJob{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-cj"},
+			Spec: batchv1.CronJobSpec{
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{Name: "other"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		spec := &konfluxv1alpha1.ContainerSpec{
+			Resources: &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
+			},
+		}
+
+		err := ApplyCronJobContainerSpec(cj, "worker", spec)
+		g.Expect(err).To(gomega.HaveOccurred())
+		g.Expect(err.Error()).To(gomega.ContainSubstring("worker"))
+		g.Expect(err.Error()).To(gomega.ContainSubstring("test-cj"))
+	})
+
+	t.Run("applies env vars from ContainerSpec", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		cj := &batchv1.CronJob{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-cj"},
+			Spec: batchv1.CronJobSpec{
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{Name: "worker", Image: "worker:v1"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		spec := &konfluxv1alpha1.ContainerSpec{
+			Env: []corev1.EnvVar{
+				{Name: "CUSTOM_VAR", Value: "custom-value"},
+			},
+		}
+
+		err := ApplyCronJobContainerSpec(cj, "worker", spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := cj.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Env).To(gomega.ContainElement(
+			corev1.EnvVar{Name: "CUSTOM_VAR", Value: "custom-value"}))
+	})
+
+	t.Run("applies resources and env together", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		cj := &batchv1.CronJob{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-cj"},
+			Spec: batchv1.CronJobSpec{
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{Name: "worker", Image: "worker:v1"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		spec := &konfluxv1alpha1.ContainerSpec{
+			Resources: &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")},
+			},
+			Env: []corev1.EnvVar{
+				{Name: "MODE", Value: "prod"},
+			},
+		}
+
+		err := ApplyCronJobContainerSpec(cj, "worker", spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := cj.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Resources.Limits.Cpu().String()).To(gomega.Equal("2"))
+		g.Expect(container.Env).To(gomega.ContainElement(corev1.EnvVar{Name: "MODE", Value: "prod"}))
+	})
+
+	t.Run("preserves non-targeted containers", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		cj := &batchv1.CronJob{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-cj"},
+			Spec: batchv1.CronJobSpec{
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{Name: "worker", Image: "worker:v1"},
+									{Name: "sidecar", Image: "sidecar:v1",
+										Resources: corev1.ResourceRequirements{
+											Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m")},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		spec := &konfluxv1alpha1.ContainerSpec{
+			Resources: &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")},
+			},
+		}
+
+		err := ApplyCronJobContainerSpec(cj, "worker", spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(cj.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Resources.Limits.Cpu().String()).To(gomega.Equal("4"))
+		sidecar := cj.Spec.JobTemplate.Spec.Template.Spec.Containers[1]
+		g.Expect(sidecar.Image).To(gomega.Equal("sidecar:v1"))
+		g.Expect(sidecar.Resources.Limits.Cpu().String()).To(gomega.Equal("100m"))
+	})
+}
+
+func TestValidateCronJobContainer(t *testing.T) {
+	makeCronJob := func(containerNames ...string) *batchv1.CronJob {
+		containers := make([]corev1.Container, 0, len(containerNames))
+		for _, name := range containerNames {
+			containers = append(containers, corev1.Container{Name: name})
+		}
+		return &batchv1.CronJob{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-cj"},
+			Spec: batchv1.CronJobSpec{
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{Containers: containers},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	t.Run("returns nil when container exists", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		g.Expect(ValidateCronJobContainer(makeCronJob("worker", "sidecar"), "worker")).To(gomega.Succeed())
+	})
+
+	t.Run("returns error when container is missing", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		err := ValidateCronJobContainer(makeCronJob("other"), "worker")
+		g.Expect(err).To(gomega.HaveOccurred())
+		g.Expect(err.Error()).To(gomega.ContainSubstring("worker"))
+		g.Expect(err.Error()).To(gomega.ContainSubstring("test-cj"))
+	})
+
+	t.Run("returns error when no containers exist", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		g.Expect(ValidateCronJobContainer(makeCronJob(), "worker")).To(gomega.MatchError(gomega.ContainSubstring("worker")))
 	})
 }
