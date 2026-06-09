@@ -323,26 +323,6 @@ func mergeContainerList(
 	return nil
 }
 
-// mergeEnvByName replaces or appends overlay env vars into a container by name.
-// When an overlay env var has the same name as a base env var, the entire EnvVar
-// struct is replaced. This prevents invalid combinations of value and valueFrom
-// that strategic merge can produce.
-func mergeEnvByName(base *corev1.Container, overlay []corev1.EnvVar) {
-	for _, ov := range overlay {
-		found := false
-		for j, baseEnv := range base.Env {
-			if baseEnv.Name == ov.Name {
-				base.Env[j] = ov
-				found = true
-				break
-			}
-		}
-		if !found {
-			base.Env = append(base.Env, ov)
-		}
-	}
-}
-
 // argKey returns the flag key for deduplication.
 // For "--key=value" it returns "--key"; for standalone flags it returns the full arg.
 // This ensures "--leader-elect" and "--leader-elect=true" are treated as the same key.
@@ -353,6 +333,26 @@ func argKey(arg string) string {
 		return arg[:idx]
 	}
 	return arg
+}
+
+// mergeEnvByName replaces or appends overlay env vars into a container by name.
+// When an overlay env var has the same name as a base env var, the entire EnvVar
+// struct is replaced. This prevents invalid combinations of value and valueFrom
+// that strategic merge can produce.
+func mergeEnvByName(base *corev1.Container, overlay []corev1.EnvVar) {
+	for _, overlayEnv := range overlay {
+		found := false
+		for j, baseEnv := range base.Env {
+			if baseEnv.Name == overlayEnv.Name {
+				base.Env[j] = overlayEnv
+				found = true
+				break
+			}
+		}
+		if !found {
+			base.Env = append(base.Env, overlayEnv)
+		}
+	}
 }
 
 // applyConfigMapVolumeUpdates updates ConfigMap volume references in-place.
