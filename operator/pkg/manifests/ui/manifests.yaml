@@ -590,7 +590,7 @@ spec:
           items:
           - key: ca.crt
             path: ca-bundle.crt
-          secretName: ui-ca
+          secretName: cluster-root-ref
       - configMap:
           name: openshift-service-ca.crt
           optional: true
@@ -606,6 +606,22 @@ spec:
             path: url
           optional: true
           secretName: segment-bridge-config
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: cluster-root-ref
+  namespace: konflux-ui
+spec:
+  commonName: cluster-root-ref
+  dnsNames:
+  - cluster-root-ref.konflux-ui.svc
+  duration: 87600h
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: ca-issuer
+  secretName: cluster-root-ref
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -665,7 +681,7 @@ spec:
   issuerRef:
     group: cert-manager.io
     kind: ClusterIssuer
-    name: ca-issuer
+    name: self-signed-cluster-issuer
   privateKey:
     algorithm: ECDSA
     size: 256
