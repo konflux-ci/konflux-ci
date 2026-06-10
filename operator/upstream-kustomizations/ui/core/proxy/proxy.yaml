@@ -232,7 +232,7 @@ spec:
             secretName: serving-cert
         - name: cluster-ca
           secret:
-            secretName: ui-ca
+            secretName: cluster-root-ref
             items:
               - key: ca.crt
                 path: ca-bundle.crt

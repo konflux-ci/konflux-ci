@@ -10,30 +10,30 @@ root CA.
 ```
 self-signed-cluster-issuer (SelfSigned ClusterIssuer)
 │
-│   Only purpose: bootstrap the root CA declaratively.
-│   Not used by any service directly.
+│   Bootstraps both the cluster root CA and the UI namespace root.
 │
-└── selfsigned-ca (Certificate, isCA: true)
+├── selfsigned-ca (Certificate, isCA: true, cert-manager ns)
+│       │
+│       ▼
+│   Secret "root-secret" (cert-manager namespace)
+│   Contains the cluster root CA key + cert.
+│       │
+│       ▼
+│   ca-issuer (ClusterIssuer)
+│   The issuer for cluster-wide services.
+│       │
+│       ├── namespace-lister cert (leaf, in namespace-lister ns)
+│       ├── registry cert (leaf, in kind-registry ns)
+│       └── cluster-root-ref (leaf, in konflux-ui ns — only for ca.crt)
+│
+└── ui-ca (Certificate, isCA: true, self-signed, in konflux-ui ns)
         │
         ▼
-    Secret "root-secret" (cert-manager namespace)
-    Contains the root CA key + cert.
+    ui-ca-issuer (namespace Issuer, in konflux-ui ns)
         │
-        ▼
-    ca-issuer (ClusterIssuer)
-    The single issuer all Konflux services use.
-        │
-        ├── namespace-lister cert (leaf, in namespace-lister ns)
-        ├── registry cert (leaf, in kind-registry ns)
-        │
-        └── ui-ca (sub-CA, isCA: true, in konflux-ui ns)
-                │
-                ▼
-            ui-ca-issuer (namespace Issuer, in konflux-ui ns)
-                │
-                ├── serving-cert (leaf, proxy TLS on port 9443)
-                ├── dex-cert (leaf, Dex TLS)
-                └── oauth2-proxy-cert (CA bundle for oauth2-proxy → Dex)
+        ├── serving-cert (leaf, proxy TLS on port 9443)
+        ├── dex-cert (leaf, Dex TLS)
+        └── oauth2-proxy-cert (CA bundle for oauth2-proxy → Dex)
 ```
 
 ## Bootstrap sequence
@@ -78,35 +78,34 @@ cert-manager creates a Secret containing:
 | `tls.key` | The private key                            |
 | `ca.crt`  | The CA certificate that signed this cert   |
 
-## Why the UI uses a sub-CA
+## Why the UI uses a self-signed root CA
 
-The UI (`konflux-ui` namespace) has a special constraint: OpenShift's
-Ingress-to-Route controller reads `tls.crt` (not `ca.crt`) from the Secret
-referenced by the `route.openshift.io/destination-ca-certificate-secret`
-annotation. It expects a **CA certificate** (CA:TRUE) in that field.
+OpenShift's Ingress-to-Route controller reads `tls.crt` (not `ca.crt`) from the
+Secret referenced by the `route.openshift.io/destination-ca-certificate-secret`
+annotation. The router uses this as a trust anchor to verify the backend's TLS.
 
-If the UI's serving-cert were issued directly by `ca-issuer`, the Secret's
-`tls.crt` would be a leaf cert (CA:FALSE) — which the OpenShift router rejects,
-causing 503 errors.
+For TLS re-encryption to succeed, the trust anchor must be a **self-signed**
+CA:TRUE certificate — HAProxy requires a complete chain ending at a self-signed
+root. cert-manager intentionally omits self-signed roots from `tls.crt` of
+certificates it issues (per TLS spec), so an intermediate CA issued by
+`ca-issuer` would produce a `tls.crt` containing only the intermediate, causing
+chain verification failures (503 errors).
 
-The fix: create `ui-ca` as a sub-CA (isCA: true) issued by `ca-issuer`. Its
-Secret has `tls.crt` = a CA cert, satisfying the Route. A namespace-scoped
-`ui-ca-issuer` then issues the actual leaf certs (serving-cert, dex-cert).
+The fix: `ui-ca` is a **self-signed** root CA (issued by
+`self-signed-cluster-issuer`). Its `tls.crt` is inherently self-signed, so the
+router can verify: `serving-cert → ui-ca (self-signed root)`.
 
 ## Cross-service TLS verification
 
-Since all certificates chain to the same root (`root-secret`), any service can
-verify any other service's TLS certificate using the root CA cert.
+The UI namespace has two trust domains:
 
-For example, the UI proxy verifies the namespace-lister's certificate by mounting
-`ui-ca` Secret's `ca.crt` field — which contains the root CA cert (because
-cert-manager stores the issuing CA in `ca.crt`, and `ui-ca` is issued by
-`ca-issuer` which uses `root-secret`).
+1. **Internal (ui-ca)** — Dex, serving-cert, and oauth2-proxy-cert all chain to
+   `ui-ca`. The proxy verifies Dex using `serving-cert`'s `ca.crt` (= `ui-ca`).
 
-If a service has its own intermediate CA (like the UI), the chain is:
-`leaf → intermediate → root`. The verifying party only needs the root CA to
-validate the entire chain, because the intermediate cert is included in the
-`tls.crt` bundle sent during the TLS handshake.
+2. **Cluster (ca-issuer)** — namespace-lister and other cluster services chain
+   to the cluster root (`root-secret`). The proxy verifies namespace-lister
+   using `cluster-root-ref`'s `ca.crt` field, which cert-manager populates with
+   the cluster root CA (the signing CA of `ca-issuer`).
 
 ## Operator management
 
