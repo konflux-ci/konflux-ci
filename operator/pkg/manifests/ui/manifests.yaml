@@ -616,7 +616,6 @@ spec:
   commonName: cluster-root-ref
   dnsNames:
   - cluster-root-ref.konflux-ui.svc
-  duration: 87600h
   issuerRef:
     group: cert-manager.io
     kind: ClusterIssuer

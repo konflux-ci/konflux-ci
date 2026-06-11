@@ -1,9 +1,9 @@
 # Konflux PKI (Public Key Infrastructure)
 
 Konflux uses [cert-manager](https://cert-manager.io/) to manage TLS certificates
-for internal service-to-service communication. All services share a single trust
-root so any service can verify any other service's certificate using just the
-root CA.
+for internal service-to-service communication. Most services share a cluster-wide
+trust root (`ca-issuer`). The UI namespace uses its own self-signed root for the
+OpenShift route trust chain (see "Why the UI uses a self-signed root CA" below).
 
 ## Architecture
 
