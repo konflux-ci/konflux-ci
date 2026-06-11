@@ -1,9 +1,10 @@
 ---
-# CA Certificate: creates a self-signed CA in the konflux-ui namespace.
-# The resulting Secret (ui-ca) contains the CA cert in tls.crt.
-# This Secret is referenced by the Ingress annotation
-# route.openshift.io/destination-ca-certificate-secret so that the
-# OpenShift Ingress-to-Route controller can read the CA for TLS re-encryption.
+# Self-signed root CA for the konflux-ui namespace.
+# This is the trust anchor for the OpenShift Route's TLS re-encryption:
+# the Ingress annotation route.openshift.io/destination-ca-certificate-secret
+# points at this Secret. Because it is self-signed, tls.crt contains a
+# CA:TRUE cert that HAProxy can use as a root trust anchor without needing
+# any parent CA in the chain.
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -30,7 +31,7 @@ spec:
   ca:
     secretName: ui-ca
 ---
-# Leaf certificate for the proxy's TLS serving endpoint (nginx on port 9443).
+# Leaf certificate for the proxy's TLS serving endpoint (Caddy on port 9443).
 # Issued by the namespace CA Issuer so the CA chain stays within konflux-ui.
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -46,3 +47,20 @@ spec:
     kind: Issuer
     name: ui-ca-issuer
   secretName: serving-cert
+---
+# Reference certificate whose sole purpose is to surface the cluster root CA
+# (from ca-issuer / root-secret) in this namespace. The proxy mounts its
+# ca.crt field to verify namespace-lister TLS, which is issued by ca-issuer.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: cluster-root-ref
+spec:
+  commonName: cluster-root-ref
+  dnsNames:
+    - cluster-root-ref.konflux-ui.svc
+  secretName: cluster-root-ref
+  issuerRef:
+    name: ca-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io

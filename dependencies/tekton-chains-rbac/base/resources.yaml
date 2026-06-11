@@ -154,7 +154,14 @@ spec:
           value: "tekton-pipelines"
         - name: EXTRA_NAMESPACE
           value: ""
-        image: quay.io/konflux-ci/appstudio-utils
+        # task-runner sets HOME=/home/taskuser (uid 1000), but this Job may run as a
+        # different UID (1001 on Kind; SCC-assigned on OpenShift). kubectl and cosign
+        # then fail reading $HOME/.kube/config instead of using in-cluster credentials.
+        # HOME=/tmp plus the emptyDir mount below provide a writable, explicit scratch
+        # path under readOnlyRootFilesystem.
+        - name: HOME
+          value: "/tmp"
+        image: quay.io/konflux-ci/task-runner
         imagePullPolicy: Always
         name: chains-secret-generation
         resources:
@@ -169,8 +176,14 @@ spec:
           runAsNonRoot: true
           runAsGroup: 1001
           runAsUser: 1001
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
       dnsPolicy: ClusterFirst
       restartPolicy: OnFailure
       serviceAccount: chains-secrets-admin
       serviceAccountName: chains-secrets-admin
       terminationGracePeriodSeconds: 30
+      volumes:
+      - emptyDir: {}
+        name: tmp

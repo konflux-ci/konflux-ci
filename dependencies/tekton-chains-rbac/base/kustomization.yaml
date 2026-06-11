@@ -4,5 +4,6 @@ resources:
   - resources.yaml
 
 images:
-  - name: quay.io/konflux-ci/appstudio-utils
-    digest: sha256:1227641f116c29de6c45bfea6bd9a8091603d548bba982fe2a51389cc3228b58
+  - name: quay.io/konflux-ci/task-runner
+    newTag: v1
+    digest: sha256:b9ef0479b57a494368a12a02886c650314c9ac7391c6228f21065865aab71c9e

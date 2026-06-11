@@ -53,4 +53,73 @@ var _ = Describe("KonfluxInfo Controller", func() {
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "konflux-info"}, &corev1.Namespace{})).To(Succeed())
 		})
 	})
+
+	Context("Proxy URL credential validation (CEL)", func() {
+		It("should reject httpProxy containing credentials", func(ctx context.Context) {
+			cr := &konfluxv1alpha1.KonfluxInfo{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxInfoSpec{
+					ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+						Data: &konfluxv1alpha1.ClusterConfigData{
+							HTTPProxy: "http://user:pass@proxy.example.com:3128",
+						},
+					},
+				},
+			}
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("must not contain credentials"))
+		})
+
+		It("should reject packageRegistryProxyNpmUrl containing credentials", func(ctx context.Context) {
+			cr := &konfluxv1alpha1.KonfluxInfo{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxInfoSpec{
+					ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+						Data: &konfluxv1alpha1.ClusterConfigData{
+							PackageRegistryProxyNpmURL: "https://token@registry.npmjs.org",
+						},
+					},
+				},
+			}
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("must not contain credentials"))
+		})
+
+		It("should reject packageRegistryProxyYarnUrl containing credentials", func(ctx context.Context) {
+			cr := &konfluxv1alpha1.KonfluxInfo{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxInfoSpec{
+					ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+						Data: &konfluxv1alpha1.ClusterConfigData{
+							PackageRegistryProxyYarnURL: "https://user:secret@yarn.example.com",
+						},
+					},
+				},
+			}
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("must not contain credentials"))
+		})
+
+		It("should allow proxy URLs without credentials", func(ctx context.Context) {
+			cr := &konfluxv1alpha1.KonfluxInfo{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxInfoSpec{
+					ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+						Data: &konfluxv1alpha1.ClusterConfigData{
+							HTTPProxy:                   "squid.caching.svc.cluster.local:3128",
+							PackageRegistryProxyNpmURL:  "https://npm-proxy.internal.svc:8080",
+							PackageRegistryProxyYarnURL: "https://yarn-proxy.internal.svc:8080",
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				testutil.DeleteAndWait(ctx, k8sClient, cr)
+			})
+		})
+	})
 })

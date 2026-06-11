@@ -245,7 +245,7 @@ func TestNewDexConfig_CustomConnectors(t *testing.T) {
 					Type: "github",
 					ID:   "github",
 					Name: "GitHub",
-					Config: &ConnectorConfig{
+					Config: &ConnectorConfig{ //nolint:gosec // test fixture, not a real credential
 						ClientID:     "github-client",
 						ClientSecret: "$GITHUB_SECRET",
 					},
@@ -311,7 +311,7 @@ func TestNewDexConfig_ConnectorRedirectURI(t *testing.T) {
 					Type: "github",
 					ID:   "github",
 					Name: "GitHub",
-					Config: &ConnectorConfig{
+					Config: &ConnectorConfig{ //nolint:gosec // test fixture
 						ClientID:     "github-client",
 						ClientSecret: "$GITHUB_SECRET",
 					},
@@ -335,7 +335,7 @@ func TestNewDexConfig_ConnectorRedirectURI(t *testing.T) {
 					Type: "github",
 					ID:   "github",
 					Name: "GitHub",
-					Config: &ConnectorConfig{
+					Config: &ConnectorConfig{ //nolint:gosec // test fixture
 						ClientID:     "github-client",
 						ClientSecret: "$GITHUB_SECRET",
 					},
@@ -359,7 +359,7 @@ func TestNewDexConfig_ConnectorRedirectURI(t *testing.T) {
 					Type: "github",
 					ID:   "github",
 					Name: "GitHub",
-					Config: &ConnectorConfig{
+					Config: &ConnectorConfig{ //nolint:gosec // test fixture
 						ClientID:     "github-client",
 						ClientSecret: "$GITHUB_SECRET",
 						RedirectURI:  "https://custom.example.com/callback",

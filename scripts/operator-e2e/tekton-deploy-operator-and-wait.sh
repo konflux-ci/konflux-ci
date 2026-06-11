@@ -5,6 +5,8 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "${1:?usage: $0 REPO_ROOT}" && pwd)"
 cd "${REPO_ROOT}"
+# Cloned on a root-owned emptyDir mount by task-runner; go-toolset runs as a different UID.
+git config --global --add safe.directory "${REPO_ROOT}"
 
 export PATH="/mnt/e2e-shared/bin:${PATH}"
 export LD_LIBRARY_PATH="/mnt/e2e-shared/lib:${LD_LIBRARY_PATH:-}"
