@@ -60,7 +60,6 @@ spec:
   dnsNames:
     - cluster-root-ref.konflux-ui.svc
   secretName: cluster-root-ref
-  duration: 87600h
   issuerRef:
     name: ca-issuer
     kind: ClusterIssuer
