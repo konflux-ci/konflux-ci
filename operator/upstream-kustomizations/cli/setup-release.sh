@@ -53,7 +53,6 @@ Examples:
   # Full customization
   $(basename "$0") -t my-tenant -m my-managed -a my-app -c comp1 -c comp2
 EOF
-    exit 1
 }
 
 # Wait for an ImageRepository to reach "ready" state
@@ -132,10 +131,12 @@ while [[ $# -gt 0 ]]; do
             ;;
         -h|--help)
             usage
+            exit 0
             ;;
         *)
-            echo "Unknown option: $1"
-            usage
+            echo "Unknown option: $1" >&2
+            usage >&2
+            exit 1
             ;;
     esac
 done
