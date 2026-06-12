@@ -50,8 +50,11 @@ var _ = Describe("Konflux Controller - Cert-Manager Dependency", func() {
 			ClusterInfo: clusterInfo,
 		}).SetupWithManager(mgr)).To(Succeed())
 		mgrCtx, cancel := context.WithCancel(testEnv.Ctx)
-		DeferCleanup(cancel)
-		testutil.StartManagerWithContext(mgrCtx, mgr)
+		waitForStop := testutil.StartManagerWithContext(mgrCtx, mgr)
+		DeferCleanup(func() {
+			cancel()
+			waitForStop()
+		})
 	}
 
 	Context("When cert-manager CRDs are not installed", func() {

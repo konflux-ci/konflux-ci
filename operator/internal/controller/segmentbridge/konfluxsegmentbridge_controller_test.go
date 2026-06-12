@@ -71,8 +71,11 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 			ClusterInfo:          clusterInfo,
 		}).SetupWithManager(mgr)).To(Succeed())
 		mgrCtx, cancel := context.WithCancel(testEnv.Ctx)
-		DeferCleanup(cancel)
-		testutil.StartManagerWithContext(mgrCtx, mgr)
+		waitForStop := testutil.StartManagerWithContext(mgrCtx, mgr)
+		DeferCleanup(func() {
+			cancel()
+			waitForStop()
+		})
 	}
 
 	// createCR creates the KonfluxSegmentBridge CR and registers cleanup for both

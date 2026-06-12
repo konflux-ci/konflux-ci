@@ -66,8 +66,11 @@ var _ = Describe("KonfluxUI Controller", func() {
 			ClusterInfo:          clusterInfo,
 		}).SetupWithManager(mgr)).To(Succeed())
 		mgrCtx, cancel := context.WithCancel(testEnv.Ctx)
-		DeferCleanup(cancel)
-		testutil.StartManagerWithContext(mgrCtx, mgr)
+		waitForStop := testutil.StartManagerWithContext(mgrCtx, mgr)
+		DeferCleanup(func() {
+			cancel()
+			waitForStop()
+		})
 	}
 
 	// waitForReconcile blocks until both UI Deployments exist, proving the initial
