@@ -383,6 +383,11 @@ deploy_upstream_certmanager() {
 }
 
 deploy_trust_manager() {
+    : "${SKIP_TRUST_MANAGER:=false}"
+    if [[ "${SKIP_TRUST_MANAGER}" == "true" ]]; then
+        echo "⏭️  Skipping Trust Manager deployment (not needed on OpenShift)" >&2
+        return 0
+    fi
     kubectl apply -k "${script_path}/dependencies/trust-manager"
     sleep 5
     retry "kubectl wait --for=condition=Ready --timeout=60s -l app.kubernetes.io/instance=trust-manager -n cert-manager pod" \
