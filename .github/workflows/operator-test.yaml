@@ -25,6 +25,7 @@ jobs:
           files: |
             operator/**
             .github/workflows/operator-test.yaml
+            .codecov.yml
 
   test:
     name: Run Operator Tests
