@@ -273,18 +273,11 @@ jobs:
         run: |
           kubectl get namespace
 
-      - name: Deploy Test Resources
-        working-directory: ${{ github.workspace }}
-        env:
-          SKIP_SAMPLE_COMPONENTS: "true"
-        run: |
-          ./deploy-test-resources.sh
-
-      - name: Run Konflux Integration Tests
+      - name: Run go-tests pkg unit tests
         working-directory: ${{ github.workspace }}
         run: |
           cd test/go-tests
-          go test . ./pkg/...
+          go test ./pkg/...
 
       - name: Set build pipeline bundle (min)
         if: matrix.test_scope == 'integration+e2e'

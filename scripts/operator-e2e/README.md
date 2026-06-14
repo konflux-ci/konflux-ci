@@ -45,7 +45,7 @@ Use **one token per flag** where possible (e.g. `-ginkgo.skip=Flaky`). Values wi
 | `tekton-deploy-prep.sh` | **Tekton (go-toolset):** optional overrides via `operator/cmd/overrides`, then `deploy-local.sh` with `OPERATOR_INSTALL_METHOD=none`. |
 | `tekton-push-operator-pkg-manifests-oci.sh` | **Tekton (task-runner):** after prep, push `operator/pkg/manifests` to OCI as `${oci-container-repo}:${pipelineRun}.pkg-manifests` (skips if `E2E_OCI_CONTAINER_REPO` blank). |
 | `tekton-deploy-operator-and-wait.sh` | **Tekton (go-toolset):** `make install`/build, `bin/manager`, apply CR, wait Ready. |
-| `tekton-run-e2e-tests.sh` | **Tekton:** waits for Konflux Ready, `deploy-test-resources.sh` (`SKIP_SAMPLE_COMPONENTS=true`), integration + conformance `go test`. Optional env: `E2E_INTEGRATION_GO_TEST_EXTRA_ARGS`, `E2E_CONFORMANCE_GO_TEST_EXTRA_ARGS` (space-separated; pipeline params `integration-go-test-extra-args` / `conformance-go-test-extra-args` set these). |
+| `tekton-run-e2e-tests.sh` | **Tekton:** `deploy-test-resources.sh` (`SKIP_SAMPLE_COMPONENTS=true`), optional `kubectl port-forward` + `KONFLUX_PROXY_URL` for remote Kind, integration + conformance `go test`. Proxy tests wait for Konflux Ready and read `status.uiURL` in Go (`BeforeSuite` in `test/go-tests/proxy_setup.go`). Optional env: `KONFLUX_PROXY_URL`, `E2E_INTEGRATION_GO_TEST_EXTRA_ARGS`, `E2E_CONFORMANCE_GO_TEST_EXTRA_ARGS`. |
 
 ## Override YAML schema
 
