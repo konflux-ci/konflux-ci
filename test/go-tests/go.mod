@@ -16,6 +16,7 @@ require (
 	github.com/konflux-ci/build-service v0.0.0-20240611083846-2dee6cfe6fe4
 	github.com/konflux-ci/image-controller v0.0.0-20260529185104-b31f86d8dce9
 	github.com/konflux-ci/integration-service v0.0.0-20260529092316-83730ca82bdd
+	github.com/konflux-ci/konflux-ci/operator v0.0.0
 	github.com/konflux-ci/operator-toolkit v0.0.0-20260312101100-d4e398191a68
 	github.com/konflux-ci/release-service v0.0.0-20260602124756-b97c146ba02e
 	github.com/mitchellh/go-homedir v1.1.0
@@ -50,6 +51,7 @@ replace (
 	github.com/docker/distribution => github.com/docker/distribution v2.8.3+incompatible
 	github.com/docker/distribution/reference => github.com/distribution/reference v0.5.0
 	github.com/docker/docker => github.com/docker/docker v23.0.18+incompatible
+	github.com/konflux-ci/konflux-ci/operator => ../../operator
 	k8s.io/api => k8s.io/api v0.35.3
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.35.3
 	k8s.io/apimachinery => k8s.io/apimachinery v0.35.3

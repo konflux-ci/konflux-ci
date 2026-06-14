@@ -38,7 +38,7 @@ They run against an upstream Konflux instance deployed via scripts in the [konfl
    ```bash
    ./test/e2e/run-e2e.sh
    ```
-   This deploys test resources and runs the conformance suite.
+   This deploys test resources, runs proxy integration tests (`test/go-tests`), then runs this conformance suite.
 
    You can also run `go test . -v` directly from this directory, but that
    skips test resource deployment — you must ensure resources are already
