@@ -168,8 +168,8 @@ data:
     tenant\nEOF\n\n# Step 2: On OpenShift, create a ConfigMap to inject the cluster-wide
     trusted CA bundle\nif [[ \"${IS_OPENSHIFT}\" == \"true\" ]]; then\n    echo \"\U0001F512
     OpenShift detected — creating trusted-ca ConfigMap in '${MANAGED_NS}'...\"\n    kubectl
-    apply -f - <<EOF\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: trusted-ca\n
-    \ namespace: ${MANAGED_NS}\n  labels:\n    config.openshift.io/inject-trusted-cabundle:
+    apply --server-side --force-conflicts -f - <<EOF\napiVersion: v1\nkind: ConfigMap\nmetadata:\n
+    \ name: trusted-ca\n  namespace: ${MANAGED_NS}\n  labels:\n    config.openshift.io/inject-trusted-cabundle:
     \"true\"\ndata: {}\nEOF\nfi\n\n# Step 3: Copy EnterpriseContractPolicy from enterprise-contract-service
     namespace\necho \"\U0001F4DC Copying EnterpriseContractPolicy '${CONFORMA_POLICY}'
     from enterprise-contract-service namespace...\"\nkubectl get enterprisecontractpolicy

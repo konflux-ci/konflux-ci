@@ -201,7 +201,7 @@ EOF
 # Step 2: On OpenShift, create a ConfigMap to inject the cluster-wide trusted CA bundle
 if [[ "${IS_OPENSHIFT}" == "true" ]]; then
     echo "🔒 OpenShift detected — creating trusted-ca ConfigMap in '${MANAGED_NS}'..."
-    kubectl apply -f - <<EOF
+    kubectl apply --server-side --force-conflicts -f - <<EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
