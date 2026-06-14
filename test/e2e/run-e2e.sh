@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-# Deploy test resources and run E2E conformance tests.
-# Extra arguments are forwarded to "go test", e.g.:
+# Deploy test resources, run proxy integration tests, then E2E conformance tests.
+# Extra arguments are forwarded to the conformance "go test" only, e.g.:
 #   ./test/e2e/run-e2e.sh -ginkgo.focus="build" -ginkgo.junit-report=report.xml
 
 set -o nounset
@@ -26,9 +26,12 @@ fi
 # Deploy test resources (idempotent — safe to run if already deployed)
 SKIP_SAMPLE_COMPONENTS="true" "${REPO_ROOT}/deploy-test-resources.sh"
 
-# Run E2E conformance tests
-echo "Running E2E conformance tests..."
 cd "${REPO_ROOT}/test/go-tests"
 # -mod=mod overrides GOFLAGS=-mod=vendor that may be present on some systems; this repo doesn't vendor.
+
+echo "Running proxy integration tests..."
+go test -mod=mod . -v -timeout 10m
+
+echo "Running E2E conformance tests..."
 go test -mod=mod ./tests/conformance -v -timeout 45m -ginkgo.vv "$@"
 
