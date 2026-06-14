@@ -264,8 +264,10 @@ func DeleteAndWait(ctx context.Context, c client.Client, obj client.Object) {
 }
 
 // StartManagerWithContext starts mgr in a goroutine tied to the provided context and
-// blocks until the informer cache has synced. It returns a stop function that blocks
-// until mgr.Start() has fully returned (i.e. all informer goroutines have drained).
+// blocks until the informer cache has synced. It returns a stop function that waits
+// (with a bounded timeout of EventuallyTimeout) for mgr.Start() to fully return
+// (i.e. all informer goroutines have drained). If the manager does not stop within
+// the timeout, the stop function fails the test with a diagnostic message.
 // Callers must cancel ctx and then call the returned stop function to ensure clean
 // shutdown — typically via DeferCleanup. Use this for per-test managers whose
 // lifecycle should be shorter than the suite (e.g. stop them via DeferCleanup when
@@ -285,5 +287,11 @@ func StartManagerWithContext(ctx context.Context, mgr ctrl.Manager) func() {
 	defer syncCancel()
 	Expect(mgr.GetCache().WaitForCacheSync(syncCtx)).To(BeTrue())
 
-	return func() { <-done }
+	return func() {
+		select {
+		case <-done:
+		case <-time.After(EventuallyTimeout):
+			Fail("manager did not stop within " + EventuallyTimeout.String() + " after context cancellation")
+		}
+	}
 }
