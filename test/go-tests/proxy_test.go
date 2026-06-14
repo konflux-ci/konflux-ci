@@ -22,56 +22,42 @@ import (
 )
 
 var (
-	tokenUrl = "https://localhost:9443/idp/token"
 	userName = "user2@konflux.dev"
 	password = "password"
 )
 
 var _ = Describe("Test Proxy endpoints", func() {
-	// Create insecure http client (skip TLS verification)
-	customTransport := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	client := &http.Client{
-		Transport: customTransport,
-	}
-	home := "https://localhost:9443"
-	DescribeTable("Test endpoints without token", func(url string, expectedStatus int) {
-		// Create a GET request
-		request, err := http.NewRequest("GET", url, nil)
-		Expect(err).NotTo(HaveOccurred())
-		// Send the request
-		response, err := client.Do(request)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(response.StatusCode).To(Equal(expectedStatus))
-	},
-		Entry("Home", home, 200),
-		Entry("Health", home+"/health", 200),
+	DescribeTable("Test endpoints without token",
+		func(path string, expectedStatus int) {
+			request, err := http.NewRequest("GET", proxyURL(path), nil)
+			Expect(err).NotTo(HaveOccurred())
+			response, err := proxyHTTPClient.Do(request)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(response.StatusCode).To(Equal(expectedStatus))
+		},
+		Entry("Home", "", 200),
+		Entry("Health", "/health", 200),
 		Entry("Secrets",
-			home+"/api/k8s/ns/user-ns2/api/v1/namespaces/user-ns2/secrets", 401),
+			"/api/k8s/ns/user-ns2/api/v1/namespaces/user-ns2/secrets", 401),
 		Entry("Release",
-			home+"/api/k8s/ns/user-ns2/apis/appstudio.redhat.com/v1alpha1/namespaces/user-ns2/releaseplans", 401),
+			"/api/k8s/ns/user-ns2/apis/appstudio.redhat.com/v1alpha1/namespaces/user-ns2/releaseplans", 401),
 		Entry("Applications",
-			home+"/api/k8s/ns/user-ns2/apis/appstudio.redhat.com/v1alpha1/namespaces/user-ns2/applications", 401),
+			"/api/k8s/ns/user-ns2/apis/appstudio.redhat.com/v1alpha1/namespaces/user-ns2/applications", 401),
 		Entry("Namespaces",
-			home+"/api/k8s/api/v1/namespaces", 401),
+			"/api/k8s/api/v1/namespaces", 401),
 	)
-	k8sClient, err := CreateK8sClient()
-	Expect(err).NotTo(HaveOccurred())
-	Expect(k8sClient).NotTo(BeNil())
 
 	DescribeTable("Test endpoints with token",
-		func(url string, expectedStatus int) {
-			token, err := ExtractToken(k8sClient)
+		func(path string, expectedStatus int) {
+			token, err := ExtractToken(proxyK8sClient)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(token).ToNot(BeEmpty())
-			// Create a Get request
-			request, err := http.NewRequest("GET", url, nil)
+
+			request, err := http.NewRequest("GET", proxyURL(path), nil)
 			Expect(err).NotTo(HaveOccurred())
-			// Add authorization header to the request
 			request.Header.Set("Authorization", "Bearer "+token)
-			// Send the request
-			response, err := client.Do(request)
+
+			response, err := proxyHTTPClient.Do(request)
 			Expect(err).NotTo(HaveOccurred())
 
 			defer response.Body.Close()
@@ -79,31 +65,30 @@ var _ = Describe("Test Proxy endpoints", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(response.StatusCode).To(Equal(expectedStatus), string(rbody))
 		},
-
-		Entry("Home", home, 200),
-		Entry("Health", home+"/health", 200),
+		Entry("Home", "", 200),
+		Entry("Health", "/health", 200),
 		Entry("Secrets",
-			home+"/api/k8s/api/v1/namespaces/user-ns2/secrets", 200),
+			"/api/k8s/api/v1/namespaces/user-ns2/secrets", 200),
 		Entry("Release",
-			home+"/api/k8s/apis/appstudio.redhat.com/v1alpha1/namespaces/user-ns2/releaseplans", 200),
+			"/api/k8s/apis/appstudio.redhat.com/v1alpha1/namespaces/user-ns2/releaseplans", 200),
 		Entry("Applications",
-			home+"/api/k8s/apis/appstudio.redhat.com/v1alpha1/namespaces/user-ns2/applications", 200),
+			"/api/k8s/apis/appstudio.redhat.com/v1alpha1/namespaces/user-ns2/applications", 200),
 		Entry("Namespaces",
-			home+"/api/k8s/api/v1/namespaces", 200),
+			"/api/k8s/api/v1/namespaces", 200),
 		Entry("PipelineRuns",
-			home+"/api/k8s/apis/tekton.dev/v1/namespaces/user-ns2/pipelineruns", 200),
+			"/api/k8s/apis/tekton.dev/v1/namespaces/user-ns2/pipelineruns", 200),
 	)
 
 	Describe("Test WebSocket endpoint", func() {
+		const wsPath = "/wss/k8s/apis/tekton.dev/v1/namespaces/user-ns2/pipelineruns?watch=true"
+
 		It("should establish a WebSocket connection through /wss/k8s/", func() {
-			token, err := ExtractToken(k8sClient)
+			token, err := ExtractToken(proxyK8sClient)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(token).ToNot(BeEmpty())
 
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-
-			wsURL := "wss://localhost:9443/wss/k8s/apis/tekton.dev/v1/namespaces/user-ns2/pipelineruns?watch=true"
 
 			httpClient := &http.Client{
 				Transport: &http.Transport{
@@ -111,13 +96,12 @@ var _ = Describe("Test Proxy endpoints", func() {
 				},
 			}
 
-			conn, resp, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
+			conn, resp, err := websocket.Dial(ctx, proxyWebSocketURL(wsPath), &websocket.DialOptions{
 				HTTPClient:   httpClient,
 				Subprotocols: []string{"base64.binary.k8s.io"},
 				HTTPHeader: http.Header{
 					"Authorization": []string{"Bearer " + token},
-					// This is needed to allow the WebSocket connection to be established
-					"Origin":        []string{"https://localhost:9443"},
+					"Origin":        []string{proxyHome},
 				},
 			})
 			Expect(err).NotTo(HaveOccurred(), "WebSocket connection should be established")
@@ -129,19 +113,16 @@ var _ = Describe("Test Proxy endpoints", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			wsURL := "wss://localhost:9443/wss/k8s/apis/tekton.dev/v1/namespaces/user-ns2/pipelineruns?watch=true"
-
 			httpClient := &http.Client{
 				Transport: &http.Transport{
 					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 				},
 			}
 
-			_, resp, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
+			_, resp, err := websocket.Dial(ctx, proxyWebSocketURL(wsPath), &websocket.DialOptions{
 				HTTPClient: httpClient,
 				HTTPHeader: http.Header{
-					// This is needed to allow the WebSocket connection to be established
-					"Origin": []string{"https://localhost:9443"},
+					"Origin": []string{proxyHome},
 				},
 			})
 			Expect(err).To(HaveOccurred(), "WebSocket connection should be rejected without token")
@@ -153,15 +134,15 @@ var _ = Describe("Test Proxy endpoints", func() {
 
 	Describe("Test Impersonate header stripping", func() {
 		It("should reject client-sent Impersonate-User headers", func() {
-			token, err := ExtractToken(k8sClient)
+			token, err := ExtractToken(proxyK8sClient)
 			Expect(err).NotTo(HaveOccurred())
 
-			request, err := http.NewRequest("GET", home+"/api/k8s/api/v1/namespaces", nil)
+			request, err := http.NewRequest("GET", proxyURL("/api/k8s/api/v1/namespaces"), nil)
 			Expect(err).NotTo(HaveOccurred())
 			request.Header.Set("Authorization", "Bearer "+token)
 			request.Header.Set("Impersonate-User", "system:admin")
 
-			response, err := client.Do(request)
+			response, err := proxyHTTPClient.Do(request)
 			Expect(err).NotTo(HaveOccurred())
 			defer response.Body.Close()
 			Expect(response.StatusCode).To(Equal(200),
@@ -169,15 +150,15 @@ var _ = Describe("Test Proxy endpoints", func() {
 		})
 
 		It("should reject client-sent Impersonate-Group headers", func() {
-			token, err := ExtractToken(k8sClient)
+			token, err := ExtractToken(proxyK8sClient)
 			Expect(err).NotTo(HaveOccurred())
 
-			request, err := http.NewRequest("GET", home+"/api/k8s/api/v1/namespaces", nil)
+			request, err := http.NewRequest("GET", proxyURL("/api/k8s/api/v1/namespaces"), nil)
 			Expect(err).NotTo(HaveOccurred())
 			request.Header.Set("Authorization", "Bearer "+token)
 			request.Header.Set("Impersonate-Group", "system:masters")
 
-			response, err := client.Do(request)
+			response, err := proxyHTTPClient.Do(request)
 			Expect(err).NotTo(HaveOccurred())
 			defer response.Body.Close()
 			Expect(response.StatusCode).To(Equal(200),
@@ -187,14 +168,14 @@ var _ = Describe("Test Proxy endpoints", func() {
 
 	Describe("Test group-based RBAC", func() {
 		It("should grant access to namespaces the user's groups are bound to", func() {
-			token, err := ExtractTokenForUser(k8sClient, "user1@konflux.dev", "password")
+			token, err := ExtractTokenForUser(proxyK8sClient, "user1@konflux.dev", "password")
 			Expect(err).NotTo(HaveOccurred())
 
-			request, err := http.NewRequest("GET", home+"/api/k8s/api/v1/namespaces", nil)
+			request, err := http.NewRequest("GET", proxyURL("/api/k8s/api/v1/namespaces"), nil)
 			Expect(err).NotTo(HaveOccurred())
 			request.Header.Set("Authorization", "Bearer "+token)
 
-			response, err := client.Do(request)
+			response, err := proxyHTTPClient.Do(request)
 			Expect(err).NotTo(HaveOccurred())
 			defer response.Body.Close()
 
@@ -204,23 +185,18 @@ var _ = Describe("Test Proxy endpoints", func() {
 		})
 
 		It("should pass groups from ID token as Impersonate-Group headers", func() {
-			token, err := ExtractTokenForUser(k8sClient, "user1@konflux.dev", "password")
+			token, err := ExtractTokenForUser(proxyK8sClient, "user1@konflux.dev", "password")
 			Expect(err).NotTo(HaveOccurred())
-
-			request, err := http.NewRequest("GET",
-				home+"/api/k8s/apis/authorization.k8s.io/v1/selfsubjectaccessreviews", nil)
-			Expect(err).NotTo(HaveOccurred())
-			request.Header.Set("Authorization", "Bearer "+token)
 
 			sarBody := `{"apiVersion":"authorization.k8s.io/v1","kind":"SelfSubjectAccessReview","spec":{"resourceAttributes":{"verb":"list","resource":"namespaces"}}}`
-			request, err = http.NewRequest("POST",
-				home+"/api/k8s/apis/authorization.k8s.io/v1/selfsubjectaccessreviews",
+			request, err := http.NewRequest("POST",
+				proxyURL("/api/k8s/apis/authorization.k8s.io/v1/selfsubjectaccessreviews"),
 				strings.NewReader(sarBody))
 			Expect(err).NotTo(HaveOccurred())
 			request.Header.Set("Authorization", "Bearer "+token)
 			request.Header.Set("Content-Type", "application/json")
 
-			response, err := client.Do(request)
+			response, err := proxyHTTPClient.Do(request)
 			Expect(err).NotTo(HaveOccurred())
 			defer response.Body.Close()
 
@@ -231,21 +207,16 @@ var _ = Describe("Test Proxy endpoints", func() {
 	})
 
 	Describe("Test user with no IdP groups", func() {
-		// When a user has no groups in the identity provider (e.g. Dex local
-		// password connector), the impersonate plugin only adds the static
-		// "system:authenticated" group. This test validates that users with
-		// no IdP groups can still authenticate and access resources normally.
 		It("should succeed when the user has no IdP groups", func() {
-			// user2 has no groups in the Dex static password config.
-			token, err := ExtractTokenForUser(k8sClient, "user2@konflux.dev", "password")
+			token, err := ExtractTokenForUser(proxyK8sClient, "user2@konflux.dev", "password")
 			Expect(err).NotTo(HaveOccurred())
 
 			request, err := http.NewRequest("GET",
-				home+"/api/k8s/api/v1/namespaces/user-ns2/secrets", nil)
+				proxyURL("/api/k8s/api/v1/namespaces/user-ns2/secrets"), nil)
 			Expect(err).NotTo(HaveOccurred())
 			request.Header.Set("Authorization", "Bearer "+token)
 
-			response, err := client.Do(request)
+			response, err := proxyHTTPClient.Do(request)
 			Expect(err).NotTo(HaveOccurred())
 			defer response.Body.Close()
 
@@ -258,14 +229,14 @@ var _ = Describe("Test Proxy endpoints", func() {
 
 	Describe("Test namespace-lister endpoint", func() {
 		It("should return namespaces for authenticated user", func() {
-			token, err := ExtractToken(k8sClient)
+			token, err := ExtractToken(proxyK8sClient)
 			Expect(err).NotTo(HaveOccurred())
 
-			request, err := http.NewRequest("GET", home+"/api/k8s/api/v1/namespaces", nil)
+			request, err := http.NewRequest("GET", proxyURL("/api/k8s/api/v1/namespaces"), nil)
 			Expect(err).NotTo(HaveOccurred())
 			request.Header.Set("Authorization", "Bearer "+token)
 
-			response, err := client.Do(request)
+			response, err := proxyHTTPClient.Do(request)
 			Expect(err).NotTo(HaveOccurred())
 			defer response.Body.Close()
 
@@ -280,30 +251,27 @@ var _ = Describe("Test Proxy endpoints", func() {
 		})
 
 		It("should route non-GET methods to Kube API, not namespace-lister", func() {
-			token, err := ExtractToken(k8sClient)
+			token, err := ExtractToken(proxyK8sClient)
 			Expect(err).NotTo(HaveOccurred())
 
-			request, err := http.NewRequest("POST", home+"/api/k8s/api/v1/namespaces",
+			request, err := http.NewRequest("POST", proxyURL("/api/k8s/api/v1/namespaces"),
 				strings.NewReader(`{"apiVersion":"v1","kind":"Namespace","metadata":{"name":"test-reject"}}`))
 			Expect(err).NotTo(HaveOccurred())
 			request.Header.Set("Authorization", "Bearer "+token)
 			request.Header.Set("Content-Type", "application/json")
 
-			response, err := client.Do(request)
+			response, err := proxyHTTPClient.Do(request)
 			Expect(err).NotTo(HaveOccurred())
 			defer response.Body.Close()
-			// Namespace-lister only handles GET; a POST reaching it would return 405.
-			// Any other status (201 if the user can create, 403 if not) proves
-			// the request was routed to the Kube API instead.
 			Expect(response.StatusCode).NotTo(Equal(405),
 				"POST should be routed to the Kube API, not namespace-lister")
 		})
 
 		It("should require authentication for namespace-lister", func() {
-			request, err := http.NewRequest("GET", home+"/api/k8s/api/v1/namespaces", nil)
+			request, err := http.NewRequest("GET", proxyURL("/api/k8s/api/v1/namespaces"), nil)
 			Expect(err).NotTo(HaveOccurred())
 
-			response, err := client.Do(request)
+			response, err := proxyHTTPClient.Do(request)
 			Expect(err).NotTo(HaveOccurred())
 			defer response.Body.Close()
 			Expect(response.StatusCode).To(Equal(401))
@@ -311,36 +279,30 @@ var _ = Describe("Test Proxy endpoints", func() {
 	})
 
 	Describe("Test Tekton Results endpoint", func() {
+		const resultsPath = "/api/k8s/plugins/tekton-results/apis/results.tekton.dev/v1alpha2/parents/-/results"
+
 		It("should proxy authenticated requests to Tekton Results", func() {
-			token, err := ExtractToken(k8sClient)
+			token, err := ExtractToken(proxyK8sClient)
 			Expect(err).NotTo(HaveOccurred())
 
-			request, err := http.NewRequest("GET",
-				home+"/api/k8s/plugins/tekton-results/apis/results.tekton.dev/v1alpha2/parents/-/results",
-				nil)
+			request, err := http.NewRequest("GET", proxyURL(resultsPath), nil)
 			Expect(err).NotTo(HaveOccurred())
 			request.Header.Set("Authorization", "Bearer "+token)
 
-			response, err := client.Do(request)
+			response, err := proxyHTTPClient.Do(request)
 			Expect(err).NotTo(HaveOccurred())
 			defer response.Body.Close()
 
-			// 200 if Tekton Results is deployed and the token is accepted,
-			// 502 if the upstream is unreachable,
-			// 401 if Tekton Results rejects the proxy SA token (known upstream
-			// limitation — see tektoncd/results#1331).
 			Expect(response.StatusCode).To(SatisfyAny(
 				Equal(200), Equal(502), Equal(401)),
 				"Tekton Results endpoint should be proxied")
 		})
 
 		It("should reject unauthenticated requests to Tekton Results", func() {
-			request, err := http.NewRequest("GET",
-				home+"/api/k8s/plugins/tekton-results/apis/results.tekton.dev/v1alpha2/parents/-/results",
-				nil)
+			request, err := http.NewRequest("GET", proxyURL(resultsPath), nil)
 			Expect(err).NotTo(HaveOccurred())
 
-			response, err := client.Do(request)
+			response, err := proxyHTTPClient.Do(request)
 			Expect(err).NotTo(HaveOccurred())
 			defer response.Body.Close()
 			Expect(response.StatusCode).To(Equal(401))
@@ -349,12 +311,7 @@ var _ = Describe("Test Proxy endpoints", func() {
 
 	Describe("Test metrics endpoint", func() {
 		It("should expose Prometheus metrics on the metrics port", func() {
-			k8sClient, err := CreateK8sClient()
-			Expect(err).NotTo(HaveOccurred())
-
-			// Caddy serves Prometheus metrics on port 2112, exposed via the
-			// proxy Service. Use the Kubernetes API service proxy to reach it.
-			raw, err := k8sClient.CoreV1().Services("konflux-ui").
+			raw, err := proxyK8sClient.CoreV1().Services("konflux-ui").
 				ProxyGet("http", "proxy", "metrics", "/metrics", nil).
 				DoRaw(context.TODO())
 			Expect(err).NotTo(HaveOccurred())
@@ -364,7 +321,6 @@ var _ = Describe("Test Proxy endpoints", func() {
 	})
 })
 
-// A struct to hold the response of a token request
 type TokenResponse struct {
 	AccessToken string `json:"access_token"`
 	ExpiresIn   int    `json:"expires_in"`
@@ -372,9 +328,6 @@ type TokenResponse struct {
 	IdToken     string `json:"id_token"`
 }
 
-// Create a header from a given secret.
-// It takes a pointer to a Kubernetes Secret as input and returns a string representing the header.
-// If the client-secret is not found in the secret, it returns an error
 func CreateHeaderFromSecret(secret *v1.Secret) (string, error) {
 	encodedSecret, exists := secret.Data["client-secret"]
 	if !exists {
@@ -385,45 +338,8 @@ func CreateHeaderFromSecret(secret *v1.Secret) (string, error) {
 	return header, nil
 }
 
-// Retrieve the id_token from the tokenUrl using the provided username, password, and header.
 func GetIdToken(header string) (string, error) {
-	// Build the Post request to retrieve the id_token
-	formData := url.Values{}
-	formData.Add("grant_type", "password")
-	formData.Add("scope", "openid profile email groups")
-	formData.Add("username", userName)
-	formData.Add("password", password)
-
-	request, err := http.NewRequest("POST", tokenUrl, bytes.NewBufferString(formData.Encode()))
-	if err != nil {
-		return " ", err
-	}
-	request.Header.Set("Authorization", "Basic "+header)
-	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	customTransport := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // Skip TLS verification (insecure!)
-	}
-	client := &http.Client{Transport: customTransport}
-	// send the request
-	resp, err := client.Do(request)
-	if err != nil {
-		return " ", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return " ", err
-	}
-
-	// Unmarshal the response body and send the id_token
-	var tokenResp TokenResponse
-	err = json.Unmarshal(body, &tokenResp)
-	if err != nil {
-		return " ", err
-	}
-	return tokenResp.IdToken, nil
+	return GetIdTokenForUser(header, userName, password)
 }
 
 func ExtractToken(k8sClient *kubernetes.Clientset) (string, error) {
@@ -445,11 +361,7 @@ func ExtractTokenForUser(k8sClient *kubernetes.Clientset, user, pass string) (st
 	if err != nil {
 		return "", err
 	}
-	token, err := GetIdTokenForUser(header, user, pass)
-	if err != nil {
-		return "", err
-	}
-	return token, nil
+	return GetIdTokenForUser(header, user, pass)
 }
 
 func GetIdTokenForUser(header, user, pass string) (string, error) {
@@ -459,17 +371,18 @@ func GetIdTokenForUser(header, user, pass string) (string, error) {
 	formData.Add("username", user)
 	formData.Add("password", pass)
 
-	request, err := http.NewRequest("POST", tokenUrl, bytes.NewBufferString(formData.Encode()))
+	request, err := http.NewRequest("POST", tokenURL, bytes.NewBufferString(formData.Encode()))
 	if err != nil {
 		return "", err
 	}
 	request.Header.Set("Authorization", "Basic "+header)
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	customTransport := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
 	}
-	client := &http.Client{Transport: customTransport}
 	resp, err := client.Do(request)
 	if err != nil {
 		return "", err

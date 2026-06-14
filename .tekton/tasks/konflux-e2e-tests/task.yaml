@@ -4,7 +4,8 @@
 # Requires a ServiceAccount that can read the cluster-access Secret in this namespace.
 #
 # task-runner: clone + kubeconfig fetch + copy kubectl/yq/jq to /mnt/e2e-shared/bin (+ jq .so to /mnt/e2e-shared/lib).
-# go-toolset: port-forward, go test (integration + conformance).
+# go-toolset: port-forward (remote Kind), go test (integration + conformance).
+# Proxy tests resolve the UI URL in Go from Konflux status.uiURL (see test/go-tests/proxy_endpoint.go).
 #
 apiVersion: tekton.dev/v1
 kind: Task
@@ -12,8 +13,9 @@ metadata:
   name: konflux-e2e-tests
 spec:
   description: >-
-    Clone konflux-ci (git-url/revision), fetch kubeconfig, copy shared CLIs, wait for Konflux CR Ready,
-    then run deploy-test-resources, integration tests, and conformance tests.
+    Clone konflux-ci (git-url/revision), fetch kubeconfig, copy shared CLIs, run deploy-test-resources,
+    then integration tests and conformance tests. Proxy integration tests wait for Konflux Ready and
+    read status.uiURL in Go (BeforeSuite).
   volumes:
     - name: repo
       emptyDir: {}

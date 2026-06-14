@@ -282,6 +282,8 @@ jobs:
 
       - name: Run Konflux Integration Tests
         working-directory: ${{ github.workspace }}
+        env:
+          KONFLUX_READY_TIMEOUT: 1m
         run: |
           cd test/go-tests
           go test . ./pkg/...
