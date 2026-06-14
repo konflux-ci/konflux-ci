@@ -619,7 +619,7 @@ spec:
   issuerRef:
     group: cert-manager.io
     kind: ClusterIssuer
-    name: ca-issuer
+    name: konflux-issuer
   secretName: cluster-root-ref
 ---
 apiVersion: cert-manager.io/v1
@@ -680,7 +680,7 @@ spec:
   issuerRef:
     group: cert-manager.io
     kind: ClusterIssuer
-    name: self-signed-cluster-issuer
+    name: konflux-bootstrap-issuer
   privateKey:
     algorithm: ECDSA
     size: 256
