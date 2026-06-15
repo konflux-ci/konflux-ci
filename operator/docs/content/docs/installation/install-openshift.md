@@ -71,7 +71,7 @@ The following components are not deployed by `deploy-deps.sh` in this configurat
 
 | Skipped | Reason |
 |---------|--------|
-| trust-manager | OpenShift natively injects trusted CA bundles via `config.openshift.io/inject-trusted-cabundle` |
+| trust-manager | Not needed — OpenShift has native CA bundle injection via `config.openshift.io/inject-trusted-cabundle` |
 | Dex | Managed by the Konflux Operator as part of the Konflux CR reconciliation |
 | Internal OCI registry | OpenShift has its own integrated registry |
 | Smee webhook proxy | Not needed when the cluster is internet-reachable |

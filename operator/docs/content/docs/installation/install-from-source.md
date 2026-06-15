@@ -61,7 +61,7 @@ SKIP_DEX=true SKIP_INTERNAL_REGISTRY=true SKIP_SMEE=true ./deploy-deps.sh
 
 # OpenShift - use native operators instead of upstream ones
 USE_OPENSHIFT_PIPELINES=true USE_OPENSHIFT_CERTMANAGER=true \
-SKIP_DEX=true SKIP_INTERNAL_REGISTRY=true SKIP_SMEE=true \
+SKIP_TRUST_MANAGER=true SKIP_DEX=true SKIP_INTERNAL_REGISTRY=true SKIP_SMEE=true \
 ./deploy-deps.sh
 ```
 
