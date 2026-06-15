@@ -18,12 +18,14 @@ package buildservice
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	securityv1 "github.com/openshift/api/security/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -31,12 +33,16 @@ import (
 	"k8s.io/apimachinery/pkg/version"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	sigyaml "sigs.k8s.io/yaml"
 )
 
-const buildServiceNamespace = "build-service"
+const (
+	buildServiceNamespace = "build-service"
+	sccName               = "appstudio-pipelines-scc"
+)
 
 var _ = Describe("KonfluxBuildService Controller", func() {
 	// startManagerWithClusterInfo starts a per-test manager with the given ClusterInfo
@@ -86,8 +92,6 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 	})
 
 	Context("OpenShift SecurityContextConstraints", func() {
-		const sccName = "appstudio-pipelines-scc"
-
 		var buildService *konfluxv1alpha1.KonfluxBuildService
 
 		sccExists := func() bool {
@@ -476,6 +480,345 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				g.Expect(defaultName).NotTo(Equal("docker-build-oci-ta-min"), "should not point to removed pipeline")
 				g.Expect(findPipelineByName(pipelines, defaultName)).NotTo(BeNil(), "default should reference an existing pipeline")
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
+	Context("Self-healing", func() {
+		It("recreates Deployment when deleted", func(ctx context.Context) {
+			startManagerWithClusterInfo(nil)
+
+			buildService := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+
+			deploymentNN := types.NamespacedName{
+				Name:      buildControllerManagerDeploymentName,
+				Namespace: buildServiceNamespace,
+			}
+
+			By("waiting for initial Deployment creation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, deploymentNN, &appsv1.Deployment{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("deleting the Deployment")
+			Expect(k8sClient.Delete(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: deploymentNN.Name, Namespace: deploymentNN.Namespace},
+			})).To(Succeed())
+
+			By("verifying the Deployment is recreated with correct spec")
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
+				g.Expect(dep.Labels).To(HaveKeyWithValue("control-plane", "controller-manager"))
+				manager := testutil.FindContainer(dep.Spec.Template.Spec.Containers, buildManagerContainerName)
+				g.Expect(manager).NotTo(BeNil(), "manager container should exist")
+				g.Expect(manager.Image).NotTo(BeEmpty(), "manager container image should be set")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("recreates ServiceAccount when deleted", func(ctx context.Context) {
+			startManagerWithClusterInfo(nil)
+
+			buildService := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+
+			saNN := types.NamespacedName{
+				Name:      buildControllerManagerDeploymentName,
+				Namespace: buildServiceNamespace,
+			}
+
+			By("waiting for initial ServiceAccount creation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, saNN, &corev1.ServiceAccount{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("deleting the ServiceAccount")
+			Expect(k8sClient.Delete(ctx, &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{Name: saNN.Name, Namespace: saNN.Namespace},
+			})).To(Succeed())
+
+			By("verifying the ServiceAccount is recreated with ownership labels")
+			Eventually(func(g Gomega) {
+				sa := &corev1.ServiceAccount{}
+				g.Expect(k8sClient.Get(ctx, saNN, sa)).To(Succeed())
+				g.Expect(sa.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("recreates Service when deleted", func(ctx context.Context) {
+			startManagerWithClusterInfo(nil)
+
+			buildService := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+
+			svcNN := types.NamespacedName{
+				Name:      "build-service-controller-manager-metrics-service",
+				Namespace: buildServiceNamespace,
+			}
+
+			By("waiting for initial Service creation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, svcNN, &corev1.Service{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("deleting the Service")
+			Expect(k8sClient.Delete(ctx, &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: svcNN.Name, Namespace: svcNN.Namespace},
+			})).To(Succeed())
+
+			By("verifying the Service is recreated with ownership labels")
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				g.Expect(svc.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("recreates ConfigMap when deleted", func(ctx context.Context) {
+			startManagerWithClusterInfo(nil)
+
+			buildService := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+
+			cmNN := types.NamespacedName{
+				Name:      "build-pipeline-config",
+				Namespace: buildServiceNamespace,
+			}
+
+			By("waiting for initial ConfigMap creation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, cmNN, &corev1.ConfigMap{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("deleting the ConfigMap")
+			Expect(k8sClient.Delete(ctx, &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: cmNN.Name, Namespace: cmNN.Namespace},
+			})).To(Succeed())
+
+			By("verifying the ConfigMap is recreated with ownership labels")
+			Eventually(func(g Gomega) {
+				cm := &corev1.ConfigMap{}
+				g.Expect(k8sClient.Get(ctx, cmNN, cm)).To(Succeed())
+				g.Expect(cm.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("recreates Role when deleted", func(ctx context.Context) {
+			startManagerWithClusterInfo(nil)
+
+			buildService := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+
+			roleNN := types.NamespacedName{
+				Name:      "build-service-build-pipeline-config-read-only",
+				Namespace: buildServiceNamespace,
+			}
+
+			By("waiting for initial Role creation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, roleNN, &rbacv1.Role{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("deleting the Role")
+			Expect(k8sClient.Delete(ctx, &rbacv1.Role{
+				ObjectMeta: metav1.ObjectMeta{Name: roleNN.Name, Namespace: roleNN.Namespace},
+			})).To(Succeed())
+
+			By("verifying the Role is recreated with ownership labels")
+			Eventually(func(g Gomega) {
+				role := &rbacv1.Role{}
+				g.Expect(k8sClient.Get(ctx, roleNN, role)).To(Succeed())
+				g.Expect(role.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("recreates RoleBinding when deleted", func(ctx context.Context) {
+			startManagerWithClusterInfo(nil)
+
+			buildService := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+
+			rbNN := types.NamespacedName{
+				Name:      "build-pipeline-config-read-only-binding",
+				Namespace: buildServiceNamespace,
+			}
+
+			By("waiting for initial RoleBinding creation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, rbNN, &rbacv1.RoleBinding{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("deleting the RoleBinding")
+			Expect(k8sClient.Delete(ctx, &rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: rbNN.Name, Namespace: rbNN.Namespace},
+			})).To(Succeed())
+
+			By("verifying the RoleBinding is recreated with ownership labels")
+			Eventually(func(g Gomega) {
+				rb := &rbacv1.RoleBinding{}
+				g.Expect(k8sClient.Get(ctx, rbNN, rb)).To(Succeed())
+				g.Expect(rb.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("recreates ClusterRole when deleted", func(ctx context.Context) {
+			startManagerWithClusterInfo(nil)
+
+			buildService := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+
+			crNN := types.NamespacedName{Name: "appstudio-pipelines-runner"}
+
+			By("waiting for initial ClusterRole creation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, crNN, &rbacv1.ClusterRole{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRole{
+				ObjectMeta: metav1.ObjectMeta{Name: crNN.Name},
+			})
+
+			By("deleting the ClusterRole")
+			Expect(k8sClient.Delete(ctx, &rbacv1.ClusterRole{
+				ObjectMeta: metav1.ObjectMeta{Name: crNN.Name},
+			})).To(Succeed())
+
+			By("verifying the ClusterRole is recreated with ownership labels")
+			Eventually(func(g Gomega) {
+				cr := &rbacv1.ClusterRole{}
+				g.Expect(k8sClient.Get(ctx, crNN, cr)).To(Succeed())
+				g.Expect(cr.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("recreates ClusterRoleBinding when deleted", func(ctx context.Context) {
+			startManagerWithClusterInfo(nil)
+
+			buildService := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+
+			crbNN := types.NamespacedName{Name: "build-pipeline-runner-rolebinding"}
+
+			By("waiting for initial ClusterRoleBinding creation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, crbNN, &rbacv1.ClusterRoleBinding{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRoleBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: crbNN.Name},
+			})
+
+			By("deleting the ClusterRoleBinding")
+			Expect(k8sClient.Delete(ctx, &rbacv1.ClusterRoleBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: crbNN.Name},
+			})).To(Succeed())
+
+			By("verifying the ClusterRoleBinding is recreated with ownership labels")
+			Eventually(func(g Gomega) {
+				crb := &rbacv1.ClusterRoleBinding{}
+				g.Expect(k8sClient.Get(ctx, crbNN, crb)).To(Succeed())
+				g.Expect(crb.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("recreates SecurityContextConstraints when deleted on OpenShift", func(ctx context.Context) {
+			openShiftClusterInfo, err := clusterinfo.DetectWithClient(&buildServiceMockDiscoveryClient{
+				resources: map[string]*metav1.APIResourceList{
+					"config.openshift.io/v1": {
+						APIResources: []metav1.APIResource{{Kind: "ClusterVersion"}},
+					},
+				},
+				serverVersion: &version.Info{GitVersion: "v1.29.0"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			startManagerWithClusterInfo(openShiftClusterInfo)
+
+			buildService := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+
+			By("waiting for initial SCC creation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: sccName}, &securityv1.SecurityContextConstraints{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, &securityv1.SecurityContextConstraints{
+				ObjectMeta: metav1.ObjectMeta{Name: sccName},
+			})
+
+			By("deleting the SCC")
+			Expect(k8sClient.Delete(ctx, &securityv1.SecurityContextConstraints{
+				ObjectMeta: metav1.ObjectMeta{Name: sccName},
+			})).To(Succeed())
+
+			By("verifying the SCC is recreated with correct spec")
+			Eventually(func(g Gomega) {
+				scc := &securityv1.SecurityContextConstraints{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: sccName}, scc)).To(Succeed())
+				g.Expect(scc.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+				g.Expect(scc.Priority).NotTo(BeNil())
+				g.Expect(*scc.Priority).To(Equal(int32(10)))
+				g.Expect(scc.RunAsUser.Type).To(Equal(securityv1.RunAsUserStrategyRunAsAny))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
+	Context("Self-healing SCC not watched on non-OpenShift", func() {
+		It("does not recreate SCC when deleted on non-OpenShift", func(ctx context.Context) {
+			startManagerWithClusterInfo(nil)
+
+			buildService := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+
+			By("waiting for the controller to finish reconciliation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      buildControllerManagerDeploymentName,
+					Namespace: buildServiceNamespace,
+				}, &appsv1.Deployment{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("manually creating an SCC (simulating out-of-band creation)")
+			scc := &securityv1.SecurityContextConstraints{
+				ObjectMeta: metav1.ObjectMeta{Name: sccName},
+			}
+			Expect(k8sClient.Create(ctx, scc)).To(Succeed())
+
+			By("deleting the SCC")
+			Expect(k8sClient.Delete(ctx, scc)).To(Succeed())
+
+			By("verifying the SCC stays deleted (no Owns watch to trigger re-reconcile)")
+			Consistently(func(g Gomega) {
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: sccName}, &securityv1.SecurityContextConstraints{})
+				g.Expect(errors.IsNotFound(err)).To(BeTrue())
+			}, 5*time.Second, time.Second).Should(Succeed())
 		})
 	})
 
