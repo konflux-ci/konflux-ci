@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 )
 
@@ -51,6 +52,72 @@ var _ = Describe("KonfluxImageController Controller", func() {
 					Name:      controllerManagerDeploymentName,
 					Namespace: imageControllerNamespace,
 				}, dep)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
+	Context("Self-healing", func() {
+		It("recreates Deployment when deleted", func(ctx context.Context) {
+			imageController := &konfluxv1alpha1.KonfluxImageController{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
+
+			deploymentNN := types.NamespacedName{
+				Name:      controllerManagerDeploymentName,
+				Namespace: imageControllerNamespace,
+			}
+
+			By("waiting for initial Deployment creation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, deploymentNN, &appsv1.Deployment{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("deleting the Deployment")
+			Expect(k8sClient.Delete(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: deploymentNN.Name, Namespace: deploymentNN.Namespace},
+			})).To(Succeed())
+
+			By("verifying the Deployment is recreated with correct spec")
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
+				g.Expect(dep.Labels).To(HaveKeyWithValue("control-plane", "controller-manager"))
+				manager := testutil.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
+				g.Expect(manager).NotTo(BeNil(), "manager container should exist")
+				g.Expect(manager.Image).NotTo(BeEmpty(), "manager container image should be set")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("recreates ServiceAccount when deleted", func(ctx context.Context) {
+			imageController := &konfluxv1alpha1.KonfluxImageController{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
+
+			saNN := types.NamespacedName{
+				Name:      controllerManagerDeploymentName,
+				Namespace: imageControllerNamespace,
+			}
+
+			By("waiting for initial ServiceAccount creation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, saNN, &corev1.ServiceAccount{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("deleting the ServiceAccount")
+			Expect(k8sClient.Delete(ctx, &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{Name: saNN.Name, Namespace: saNN.Namespace},
+			})).To(Succeed())
+
+			By("verifying the ServiceAccount is recreated with correct labels")
+			Eventually(func(g Gomega) {
+				sa := &corev1.ServiceAccount{}
+				g.Expect(k8sClient.Get(ctx, saNN, sa)).To(Succeed())
+				g.Expect(sa.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+				g.Expect(sa.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", "image-controller"))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})
