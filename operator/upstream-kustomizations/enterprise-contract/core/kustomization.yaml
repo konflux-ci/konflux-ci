@@ -16,7 +16,7 @@ configMapGenerator:
     literals:
       - verify_ec_task_bundle=quay.io/conforma/tekton-task:latest@sha256:89f0ba08e0579c3721b1cd7b1e2d17523a2e29b867da6c5e98ad936e328336b6
       - verify_ec_task_git_url=https://github.com/conforma/cli.git
-      - verify_ec_task_git_revision=a10b6af97f851bbbf12f08fc449e84bbd97c0707
+      - verify_ec_task_git_revision=8e0e5b548d2ef865e4c6695fd26d4ee115a3b11b
       - verify_ec_task_git_pathInRepo=tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml
 
 patches:
