@@ -348,7 +348,7 @@ func (r *KonfluxBuildServiceReconciler) reconcileWebhookConfig(ctx context.Conte
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxBuildServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	controllerBuilder := ctrl.NewControllerManagedBy(mgr).
 		For(&konfluxv1alpha1.KonfluxBuildService{}).
 		Named("konfluxbuildservice").
 		// Use predicates to filter out unnecessary updates and prevent reconcile loops
@@ -357,10 +357,18 @@ func (r *KonfluxBuildServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 		Owns(&corev1.Service{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
+		Owns(&corev1.ServiceAccount{}).
 		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).
 		Owns(&rbacv1.ClusterRole{}).
-		Owns(&rbacv1.ClusterRoleBinding{}).
-		Complete(r)
+		Owns(&rbacv1.ClusterRoleBinding{})
+
+	// Conditionally watch SCC only on OpenShift (the API doesn't exist on vanilla Kubernetes)
+	if r.ClusterInfo != nil && r.ClusterInfo.IsOpenShift() {
+		controllerBuilder = controllerBuilder.
+			Owns(&securityv1.SecurityContextConstraints{})
+	}
+
+	return controllerBuilder.Complete(r)
 }
