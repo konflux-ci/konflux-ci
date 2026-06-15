@@ -5,11 +5,12 @@ handle_path /api/k8s/plugins/tekton-results/* {
             copy_headers X-Auth-Request-Email X-Auth-Request-Groups
         }
 		impersonate
+		inject_cached_vars
         reverse_proxy https://__TEKTON_RESULTS_HOSTNAME__:8080 {
-            # TODO: switch to backend-auth.conf once Tekton Results is configured
-            # to accept the "konflux-backend" audience in its TokenReview.
+            # TODO: switch to {http.vars.backend_token} once Tekton Results
+            # accepts the "konflux-backend" audience in TokenReview.
             # See backend-token volume in proxy.yaml for context.
-            import /mnt/caddy-snippets/kube-auth.conf
+            header_up Authorization "Bearer {http.vars.kube_token}"
             import /mnt/caddy-snippets/backend-tls.conf
         }
     }

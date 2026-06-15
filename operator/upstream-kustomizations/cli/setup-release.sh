@@ -84,7 +84,7 @@ PRODUCT_VERSION="0.1"
 CONFORMA_POLICY="default"
 RELEASE_NAME="local-release"
 # renovate: datasource=git-refs depName=https://github.com/konflux-ci/release-service-catalog currentValue=development
-CATALOG_REVISION="ebb5317989e4222d7e73c9fc2127adc3f0ec0e71"
+CATALOG_REVISION="c194bc7304852c66394290d2d1d36a7e848e3652"
 IMAGE_NAME_PREFIX=""
 COMPONENTS=()
 
@@ -376,7 +376,8 @@ for ((i = 0; i < ${#COMPONENTS[@]}; i++)); do
     COMPONENT="${COMPONENTS[i]}"
     COMPONENTS_YAML="${COMPONENTS_YAML}
         - name: ${COMPONENT}
-          repository: ${REPO_IMAGE_URLS[i]}"
+          repositories:
+            - url: ${REPO_IMAGE_URLS[i]}"
 done
 
 kubectl apply -f - <<EOF

@@ -61,6 +61,11 @@ var CertManagerCleanupGVKs = []schema.GroupVersionKind{
 var CertManagerClusterScopedAllowList = tracking.ClusterScopedAllowList{
 	// ClusterIssuers are only created when spec.createClusterIssuer is true
 	{Group: "cert-manager.io", Version: "v1", Kind: "ClusterIssuer"}: sets.New(
+		"konflux-bootstrap-issuer",
+		"konflux-issuer",
+		// Legacy names (pre-rename) kept so orphan cleanup deletes them on
+		// upgrade from releases that used the old names.
+		// TODO(pki-renames): remove after v1.5 ships.
 		"self-signed-cluster-issuer",
 		"ca-issuer",
 	),

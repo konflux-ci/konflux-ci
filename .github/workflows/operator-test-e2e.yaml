@@ -9,7 +9,7 @@ on:
     types: [e2e]
 
 jobs:
-  # Gate: fork PRs (inline, before checkout) and superseded-by-companion (script; opt out: force-run-e2e).
+  # Gate: fork PRs (inline, before checkout) and companion skip labels (script; opt out: force-run-e2e).
   check-prerequisites:
     runs-on: ubuntu-latest
     steps:
@@ -32,7 +32,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Check superseded-by-companion label
+      - name: Check companion PR prerequisites
         env:
           PR_LABELS_JSON: ${{ toJson(github.event.pull_request.labels) }}
         run: bash .github/scripts/check-operator-e2e-prerequisites.sh

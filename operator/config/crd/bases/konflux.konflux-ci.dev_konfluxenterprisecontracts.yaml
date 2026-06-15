@@ -42,10 +42,12 @@ spec:
             description: KonfluxEnterpriseContractSpec defines the desired state of
               KonfluxEnterpriseContract.
             properties:
-              foo:
-                description: Foo is an example field of KonfluxEnterpriseContract.
-                  Edit konfluxenterprisecontract_types.go to remove/update
-                type: string
+              skipPolicies:
+                description: |-
+                  SkipPolicies disables deployment of EnterpriseContractPolicy resources.
+                  When true, only CRDs, namespace, RBAC, and ConfigMap are deployed;
+                  users are expected to manage policies externally.
+                type: boolean
             type: object
           status:
             description: KonfluxEnterpriseContractStatus defines the observed state

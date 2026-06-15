@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -58,6 +59,11 @@ const (
 	quayCABundleMountPath      = "/etc/ssl/certs/quay-ca"
 	quayAdditionalCAEnvVar     = "QUAY_ADDITIONAL_CA"
 	defaultQuayCAConfigMapName = "quay-ca-bundle"
+
+	imagePrunerCronJobName            = "image-controller-image-pruner-cronjob"
+	imagePrunerContainerName          = "image-pruner"
+	notificationResetterCronJobName   = "image-controller-notification-resetter-cronjob"
+	notificationResetterContainerName = "notification-resetter"
 )
 
 // ImageControllerCleanupGVKs defines which resource types should be cleaned up when they are
@@ -163,6 +169,20 @@ func (r *KonfluxImageControllerReconciler) applyManifests(ctx context.Context, t
 			}
 		}
 
+		if cronJob, ok := obj.(*batchv1.CronJob); ok {
+			var cronErr error
+			switch cronJob.Name {
+			case imagePrunerCronJobName:
+				cronErr = applyImagePrunerCustomizations(cronJob, owner.Spec)
+			case notificationResetterCronJobName:
+				cronErr = applyNotificationResetterCustomizations(cronJob, owner.Spec)
+			default:
+			}
+			if cronErr != nil {
+				return fmt.Errorf("failed to apply customizations to CronJob %s: %w", cronJob.Name, cronErr)
+			}
+		}
+
 		// Apply with ownership using the tracking client
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
@@ -176,6 +196,9 @@ func (r *KonfluxImageControllerReconciler) applyManifests(ctx context.Context, t
 func applyImageControllerDeploymentCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxImageControllerSpec) error {
 	switch deployment.Name {
 	case controllerManagerDeploymentName:
+		if spec.ImageControllerManager != nil {
+			deployment.Spec.Replicas = &spec.ImageControllerManager.Replicas
+		}
 		overlay, err := buildImageControllerManagerOverlay(spec)
 		if err != nil {
 			return err
@@ -188,35 +211,62 @@ func applyImageControllerDeploymentCustomizations(deployment *appsv1.Deployment,
 }
 
 // buildImageControllerManagerOverlay builds the pod overlay for the controller-manager deployment.
-// When QuayCABundle is configured, it updates the ConfigMap volume name and sets the
-// QUAY_ADDITIONAL_CA environment variable pointing to the mounted CA certificate file.
+// QuayCABundle logic (volume update + QUAY_ADDITIONAL_CA env var) is applied first.
+// User resources/env from ImageControllerManager.Manager are applied via FromContainerSpec,
+// followed by automatic leader election based on the replica count.
 func buildImageControllerManagerOverlay(spec konfluxv1alpha1.KonfluxImageControllerSpec) (*customization.PodOverlay, error) {
-	if spec.QuayCABundle == nil {
-		return customization.NewPodOverlay(), nil
-	}
-
-	key := spec.QuayCABundle.Key
-	if filepath.Base(key) != key || key == "." || key == ".." {
-		return nil, fmt.Errorf("invalid CA bundle key %q: must be a plain filename without path separators or traversal sequences", key)
-	}
-
-	certPath := filepath.Join(quayCABundleMountPath, key)
-
+	var containerOpts []customization.ContainerOption
 	var podOpts []customization.PodOverlayOption
-	if spec.QuayCABundle.ConfigMapName != defaultQuayCAConfigMapName {
-		podOpts = append(podOpts, customization.WithConfigMapVolumeUpdate(quayCABundleVolumeName, spec.QuayCABundle.ConfigMapName))
-	}
 
-	podOpts = append(podOpts, customization.WithContainerOpts(
-		managerContainerName,
-		customization.DeploymentContext{},
-		customization.WithEnv(corev1.EnvVar{
+	if spec.QuayCABundle != nil {
+		key := spec.QuayCABundle.Key
+		if filepath.Base(key) != key || key == "." || key == ".." {
+			return nil, fmt.Errorf("invalid CA bundle key %q: must be a plain filename without path separators or traversal sequences", key)
+		}
+
+		certPath := filepath.Join(quayCABundleMountPath, key)
+
+		if spec.QuayCABundle.ConfigMapName != defaultQuayCAConfigMapName {
+			podOpts = append(podOpts, customization.WithConfigMapVolumeUpdate(quayCABundleVolumeName, spec.QuayCABundle.ConfigMapName))
+		}
+
+		containerOpts = append(containerOpts, customization.WithEnv(corev1.EnvVar{
 			Name:  quayAdditionalCAEnvVar,
 			Value: certPath,
-		}),
-	))
+		}))
+	}
 
+	var deployCtx customization.DeploymentContext
+	var managerSpec *konfluxv1alpha1.ContainerSpec
+	if spec.ImageControllerManager != nil {
+		managerSpec = spec.ImageControllerManager.Manager
+		deployCtx = customization.DeploymentContext{Replicas: spec.ImageControllerManager.Replicas}
+	}
+
+	containerOpts = append(containerOpts,
+		customization.FromContainerSpec(managerSpec),
+	)
+
+	if spec.LogEncoder != "" {
+		podOpts = append(podOpts, customization.WithArgReplace(
+			managerContainerName, konfluxv1alpha1.ZapEncoderArg+"="+string(spec.LogEncoder)))
+	}
+
+	podOpts = append(podOpts,
+		customization.WithContainerOpts(managerContainerName, deployCtx, containerOpts...),
+		customization.WithLeaderElection(managerContainerName, deployCtx.Replicas),
+	)
 	return customization.NewPodOverlay(podOpts...), nil
+}
+
+// applyImagePrunerCustomizations applies user-defined customizations to the image-pruner CronJob.
+func applyImagePrunerCustomizations(cj *batchv1.CronJob, spec konfluxv1alpha1.KonfluxImageControllerSpec) error {
+	return customization.ApplyCronJobContainerSpec(cj, imagePrunerContainerName, spec.ImagePruner)
+}
+
+// applyNotificationResetterCustomizations applies user-defined customizations to the notification-resetter CronJob.
+func applyNotificationResetterCustomizations(cj *batchv1.CronJob, spec konfluxv1alpha1.KonfluxImageControllerSpec) error {
+	return customization.ApplyCronJobContainerSpec(cj, notificationResetterContainerName, spec.NotificationResetter)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -231,6 +281,7 @@ func (r *KonfluxImageControllerReconciler) SetupWithManager(mgr ctrl.Manager) er
 		// Use predicates to filter out unnecessary updates and prevent reconcile loops
 		// Deployments: watch spec changes AND readiness status changes
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(predicate.DeploymentReadinessPredicate)).
+		Owns(&batchv1.CronJob{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&corev1.Service{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).

@@ -50,14 +50,14 @@ const (
 	crKind = "KonfluxEnterpriseContract"
 )
 
-// EnterpriseContractCleanupGVKs defines which resource types should be cleaned up when they are
-// no longer part of the desired state. All resources managed by this controller are always
-// applied, so no cleanup GVKs are needed (they're always tracked and never become orphans).
-var EnterpriseContractCleanupGVKs = []schema.GroupVersionKind{}
+// ecPolicyGVK is the GVK for EnterpriseContractPolicy resources.
+var ecPolicyGVK = schema.GroupVersionKind{Group: "appstudio.redhat.com", Version: "v1alpha1", Kind: "EnterpriseContractPolicy"}
 
-// EnterpriseContractClusterScopedAllowList restricts which cluster-scoped resources can be deleted
-// during orphan cleanup. This is a security measure to prevent attackers from
-// triggering deletion of arbitrary cluster resources by adding the owner label.
+// EnterpriseContractCleanupGVKs defines which resource types should be cleaned up when they are
+// no longer part of the desired state. EnterpriseContractPolicy resources may be skipped
+// when spec.skipPolicies is true, so they must be listed here for orphan cleanup.
+var EnterpriseContractCleanupGVKs = []schema.GroupVersionKind{ecPolicyGVK}
+
 // EnterpriseContractClusterScopedAllowList restricts which cluster-scoped resources can be deleted
 // during orphan cleanup. All cluster-scoped resources managed by this controller are always
 // applied, so no allow list is needed (they're always tracked and never become orphans).
@@ -85,13 +85,6 @@ type KonfluxEnterpriseContractReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the KonfluxEnterpriseContract object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/reconcile
 func (r *KonfluxEnterpriseContractReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
@@ -115,8 +108,8 @@ func (r *KonfluxEnterpriseContractReconciler) Reconcile(ctx context.Context, req
 		FieldManager:      FieldManager,
 	})
 
-	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, tc); err != nil {
+	// Apply embedded manifests (policies are skipped when spec.skipPolicies is true)
+	if err := r.applyManifests(ctx, tc, konfluxEnterpriseContract.Spec); err != nil {
 		return errHandler.HandleApplyError(ctx, err)
 	}
 
@@ -142,14 +135,25 @@ func (r *KonfluxEnterpriseContractReconciler) Reconcile(ctx context.Context, req
 }
 
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
+// When spec.skipPolicies is true, EnterpriseContractPolicy resources are not applied.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
-func (r *KonfluxEnterpriseContractReconciler) applyManifests(ctx context.Context, tc *tracking.Client) error {
+func (r *KonfluxEnterpriseContractReconciler) applyManifests(ctx context.Context, tc *tracking.Client, spec konfluxv1alpha1.KonfluxEnterpriseContractSpec) error {
+	log := logf.FromContext(ctx)
+
 	objects, err := r.ObjectStore.GetForComponent(manifests.EnterpriseContract)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for EnterpriseContract: %w", err)
 	}
 
 	for _, obj := range objects {
+		if spec.SkipPolicies && obj.GetObjectKind().GroupVersionKind() == ecPolicyGVK {
+			log.Info("Skipping EnterpriseContractPolicy (spec.skipPolicies is true)",
+				"name", obj.GetName(),
+				"namespace", obj.GetNamespace(),
+			)
+			continue
+		}
+
 		// Apply with ownership using the tracking client
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",

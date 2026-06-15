@@ -94,7 +94,7 @@ spec:
           value: X-User
         - name: AUTH_GROUPS_HEADER
           value: X-Group
-        image: quay.io/konflux-ci/namespace-lister@sha256:66139d78a7ef01d10963f4f40960d4a1c220d78b61ab2a2aa783d4c655e86dd9
+        image: quay.io/konflux-ci/namespace-lister@sha256:c695bbc276039e5b6982c7168a7279db918f3460c5ea2e9137f00c072cd1c966
         livenessProbe:
           httpGet:
             path: /healthz
@@ -154,7 +154,7 @@ spec:
   - namespace-lister.namespace-lister.svc.cluster.local
   issuerRef:
     kind: ClusterIssuer
-    name: ca-issuer
+    name: konflux-issuer
   secretName: namespace-lister-tls
 ---
 apiVersion: networking.k8s.io/v1

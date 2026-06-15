@@ -124,7 +124,7 @@ data:
     \"${name}\" -n \"${MANAGED_NS}\" -o jsonpath='{.status.message}' 2>/dev/null ||
     echo 'none')\"\n    return 1\n}\n\n# Parse arguments\nTENANT_NS=\"default-tenant\"\nMANAGED_NS=\"default-managed-tenant\"\nAPPLICATION=\"sample-component\"\nPRODUCT_VERSION=\"0.1\"\nCONFORMA_POLICY=\"default\"\nRELEASE_NAME=\"local-release\"\n#
     renovate: datasource=git-refs depName=https://github.com/konflux-ci/release-service-catalog
-    currentValue=development\nCATALOG_REVISION=\"ebb5317989e4222d7e73c9fc2127adc3f0ec0e71\"\nIMAGE_NAME_PREFIX=\"\"\nCOMPONENTS=()\n\nwhile
+    currentValue=development\nCATALOG_REVISION=\"c194bc7304852c66394290d2d1d36a7e848e3652\"\nIMAGE_NAME_PREFIX=\"\"\nCOMPONENTS=()\n\nwhile
     [[ $# -gt 0 ]]; do\n    case $1 in\n        -t|--tenant-namespace)\n            TENANT_NS=\"$2\"\n
     \           shift 2\n            ;;\n        -m|--managed-namespace)\n            MANAGED_NS=\"$2\"\n
     \           shift 2\n            ;;\n        -a|--application)\n            APPLICATION=\"$2\"\n
@@ -230,13 +230,13 @@ data:
     SSO credentials creation\"\nfi\n\n# Step 12: Create ReleasePlanAdmission\necho
     \"\U0001F4CB Creating ReleasePlanAdmission...\"\n\n# Build the components mapping
     YAML\nCOMPONENTS_YAML=\"\"\nfor ((i = 0; i < ${#COMPONENTS[@]}; i++)); do\n    COMPONENT=\"${COMPONENTS[i]}\"\n
-    \   COMPONENTS_YAML=\"${COMPONENTS_YAML}\n        - name: ${COMPONENT}\n          repository:
-    ${REPO_IMAGE_URLS[i]}\"\ndone\n\nkubectl apply -f - <<EOF\napiVersion: appstudio.redhat.com/v1alpha1\nkind:
-    ReleasePlanAdmission\nmetadata:\n  name: ${RELEASE_NAME}\n  namespace: ${MANAGED_NS}\n
-    \ labels:\n    release.appstudio.openshift.io/auto-release: 'true'\nspec:\n  applications:\n
-    \   - ${APPLICATION}\n  origin: ${TENANT_NS}\n  policy: ${CONFORMA_POLICY}\n  data:\n
-    \   mapping:\n      defaults:\n        pushSourceContainer: false\n        tags:\n
-    \         - latest\n          - '{{ git_sha }}'\n      components:${COMPONENTS_YAML}\n
+    \   COMPONENTS_YAML=\"${COMPONENTS_YAML}\n        - name: ${COMPONENT}\n          repositories:\n
+    \           - url: ${REPO_IMAGE_URLS[i]}\"\ndone\n\nkubectl apply -f - <<EOF\napiVersion:
+    appstudio.redhat.com/v1alpha1\nkind: ReleasePlanAdmission\nmetadata:\n  name:
+    ${RELEASE_NAME}\n  namespace: ${MANAGED_NS}\n  labels:\n    release.appstudio.openshift.io/auto-release:
+    'true'\nspec:\n  applications:\n    - ${APPLICATION}\n  origin: ${TENANT_NS}\n
+    \ policy: ${CONFORMA_POLICY}\n  data:\n    mapping:\n      defaults:\n        pushSourceContainer:
+    false\n        tags:\n          - latest\n          - '{{ git_sha }}'\n      components:${COMPONENTS_YAML}\n
     \   releaseNotes:\n      product_name: '${PRODUCT_NAME}'\n      product_version:
     '${PRODUCT_VERSION}'\n  pipeline:\n    pipelineRef:\n      resolver: git\n      ociStorage:
     ${TA_IMAGE_URL}\n      useEmptyDir: true\n      params:\n        - name: url\n

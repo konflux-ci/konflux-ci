@@ -589,6 +589,119 @@ var _ = Describe("Konflux Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})
+
+	Context("EnterpriseContract spec propagation", func() {
+		const resourceName = "konflux"
+
+		It("should create EnterpriseContract CR with skipPolicies=false by default", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			By("creating Konflux CR without enterpriseContract config")
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			DeferCleanup(testutil.DeleteAndWait, k8sClient,
+				&konfluxv1alpha1.KonfluxEnterpriseContract{ObjectMeta: metav1.ObjectMeta{Name: enterprisecontract.CRName}})
+
+			By("verifying EnterpriseContract CR was created with skipPolicies=false")
+			ec := &konfluxv1alpha1.KonfluxEnterpriseContract{}
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: enterprisecontract.CRName}, ec)).To(Succeed())
+				g.Expect(ec.Spec.SkipPolicies).To(BeFalse())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should propagate skipPolicies=true from Konflux CR to EnterpriseContract CR", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			By("creating Konflux CR with enterpriseContract.skipPolicies=true")
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					EnterpriseContract: &konfluxv1alpha1.EnterpriseContractConfig{
+						SkipPolicies: true,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			DeferCleanup(testutil.DeleteAndWait, k8sClient,
+				&konfluxv1alpha1.KonfluxEnterpriseContract{ObjectMeta: metav1.ObjectMeta{Name: enterprisecontract.CRName}})
+
+			By("verifying EnterpriseContract CR has skipPolicies=true")
+			ec := &konfluxv1alpha1.KonfluxEnterpriseContract{}
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: enterprisecontract.CRName}, ec)).To(Succeed())
+				g.Expect(ec.Spec.SkipPolicies).To(BeTrue())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should update EnterpriseContract CR when Konflux CR spec changes", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			By("creating Konflux CR with enterpriseContract.skipPolicies=true")
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					EnterpriseContract: &konfluxv1alpha1.EnterpriseContractConfig{
+						SkipPolicies: true,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			DeferCleanup(testutil.DeleteAndWait, k8sClient,
+				&konfluxv1alpha1.KonfluxEnterpriseContract{ObjectMeta: metav1.ObjectMeta{Name: enterprisecontract.CRName}})
+
+			By("waiting for EnterpriseContract CR to be created with skipPolicies=true")
+			Eventually(func(g Gomega) {
+				ec := &konfluxv1alpha1.KonfluxEnterpriseContract{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: enterprisecontract.CRName}, ec)).To(Succeed())
+				g.Expect(ec.Spec.SkipPolicies).To(BeTrue())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("updating the Konflux CR to remove enterpriseContract config")
+			updatedKonflux := &konfluxv1alpha1.Konflux{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updatedKonflux)).To(Succeed())
+			updatedKonflux.Spec.EnterpriseContract = nil
+			Expect(k8sClient.Update(ctx, updatedKonflux)).To(Succeed())
+
+			By("verifying EnterpriseContract CR now has skipPolicies=false")
+			Eventually(func(g Gomega) {
+				ec := &konfluxv1alpha1.KonfluxEnterpriseContract{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: enterprisecontract.CRName}, ec)).To(Succeed())
+				g.Expect(ec.Spec.SkipPolicies).To(BeFalse())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should reset skipPolicies to false on a pre-existing EC CR created by another manager", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			By("pre-creating the KonfluxEnterpriseContract CR with skipPolicies=true (simulating user-created CR)")
+			preExisting := &konfluxv1alpha1.KonfluxEnterpriseContract{
+				ObjectMeta: metav1.ObjectMeta{Name: enterprisecontract.CRName},
+				Spec:       konfluxv1alpha1.KonfluxEnterpriseContractSpec{SkipPolicies: true},
+			}
+			Expect(k8sClient.Create(ctx, preExisting)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, preExisting)
+
+			By("creating Konflux CR without enterpriseContract config (defaults to skipPolicies=false)")
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+
+			By("verifying the Konflux controller resets skipPolicies to false via SSA")
+			Eventually(func(g Gomega) {
+				ec := &konfluxv1alpha1.KonfluxEnterpriseContract{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: enterprisecontract.CRName}, ec)).To(Succeed())
+				g.Expect(ec.Spec.SkipPolicies).To(BeFalse())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
 })
 
 // createTestClusterInfo creates a minimal ClusterInfo for testing

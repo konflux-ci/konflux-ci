@@ -57,6 +57,11 @@ type KonfluxSpec struct {
 	// +optional
 	KonfluxInfo *KonfluxInfoConfig `json:"info,omitempty"`
 
+	// EnterpriseContract configures the enterprise-contract component.
+	// The runtime configuration is copied to the KonfluxEnterpriseContract CR by the operator.
+	// +optional
+	EnterpriseContract *EnterpriseContractConfig `json:"enterpriseContract,omitempty"`
+
 	// CertManager configures the cert-manager component.
 	// The runtime configuration is copied to the KonfluxCertManager CR by the operator.
 	// +optional
@@ -135,6 +140,15 @@ type NamespaceListerConfig struct {
 	// Spec configures the namespace-lister component.
 	// +optional
 	Spec *KonfluxNamespaceListerSpec `json:"spec,omitempty"`
+}
+
+// EnterpriseContractConfig defines the configuration for the enterprise-contract component.
+type EnterpriseContractConfig struct {
+	// SkipPolicies disables deployment of EnterpriseContractPolicy resources.
+	// When true, only CRDs, namespace, RBAC, and ConfigMap are deployed;
+	// users are expected to manage policies externally.
+	// +optional
+	SkipPolicies bool `json:"skipPolicies,omitempty"`
 }
 
 // CertManagerConfig defines the configuration for the cert-manager component.

@@ -7,4 +7,8 @@ metadata:
     app.kubernetes.io/name: konflux-operator
     app.kubernetes.io/managed-by: kustomize
   name: konflux-enterprise-contract
+# To skip deployment of EnterpriseContractPolicy resources (users manage policies externally),
+# replace "spec: {}" with:
+#   spec:
+#     skipPolicies: true
 spec: {}

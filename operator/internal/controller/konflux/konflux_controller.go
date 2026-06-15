@@ -215,7 +215,7 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Apply the KonfluxEnterpriseContract CR
-	if err := r.applyKonfluxEnterpriseContract(ctx, tc); err != nil {
+	if err := r.applyKonfluxEnterpriseContract(ctx, tc, konflux); err != nil {
 		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxEnterpriseContract")
 	}
 
@@ -633,8 +633,13 @@ func (r *KonfluxReconciler) applyKonfluxNamespaceLister(ctx context.Context, tc 
 }
 
 // applyKonfluxEnterpriseContract creates or updates the KonfluxEnterpriseContract CR.
-func (r *KonfluxReconciler) applyKonfluxEnterpriseContract(ctx context.Context, tc *tracking.Client) error {
+func (r *KonfluxReconciler) applyKonfluxEnterpriseContract(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.Konflux) error {
 	log := logf.FromContext(ctx)
+
+	var spec konfluxv1alpha1.KonfluxEnterpriseContractSpec
+	if owner.Spec.EnterpriseContract != nil {
+		spec.SkipPolicies = owner.Spec.EnterpriseContract.SkipPolicies
+	}
 
 	konfluxEnterpriseContract := &konfluxv1alpha1.KonfluxEnterpriseContract{
 		TypeMeta: metav1.TypeMeta{
@@ -644,6 +649,7 @@ func (r *KonfluxReconciler) applyKonfluxEnterpriseContract(ctx context.Context, 
 		ObjectMeta: metav1.ObjectMeta{
 			Name: enterprisecontract.CRName,
 		},
+		Spec: spec,
 	}
 
 	log.Info("Applying KonfluxEnterpriseContract CR", "name", konfluxEnterpriseContract.Name)

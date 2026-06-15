@@ -41,12 +41,9 @@ type KonfluxBuildServiceSpec struct {
 	PACWebhookInsecureSSL *bool `json:"pacWebhookInsecureSSL,omitempty"`
 
 	// LogEncoder sets the log encoding format for the build-service controller.
-	// "json" produces structured JSON logs (upstream default), "console" produces
-	// human-readable output useful for development and debugging.
 	// When not set, the upstream default (json) is used.
 	// +optional
-	// +kubebuilder:validation:Enum=json;console
-	LogEncoder string `json:"logEncoder,omitempty"`
+	LogEncoder LogEncoder `json:"logEncoder,omitempty"`
 
 	// WebhookURLs maps repository URL prefixes to externally-reachable webhook URLs.
 	// When configured, the build-service uses these URLs instead of the default PaC webhook

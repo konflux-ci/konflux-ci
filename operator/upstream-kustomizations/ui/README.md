@@ -27,15 +27,10 @@ flowchart LR
 
   subgraph pod ["Proxy Pod"]
     direction LR
-    subgraph sidecars [" "]
-      direction TB
-      oauth2["oauth2-proxy :6000"]
-      sidecar["config-refresh sidecar"]
-    end
+    oauth2["oauth2-proxy :6000"]
     caddy["Caddy :9443"]
 
     caddy -- forward_auth --> oauth2
-    sidecar -- "reload via Admin API" --> caddy
   end
 
   browser -- HTTPS --> caddy
@@ -52,16 +47,15 @@ flowchart LR
 
 ## Pod Structure
 
-The proxy runs as a Kubernetes `Deployment` with three containers and two
+The proxy runs as a Kubernetes `Deployment` with two containers and two
 init containers:
 
 | Container | Type | Image | Purpose |
 |-----------|------|-------|---------|
 | `copy-static-content` | Init | `konflux-ui` | Copies SPA assets to emptyDir |
-| `generate-proxy-config` | Init | `konflux-ui` | Resolves backends, seeds auth snippets and TLS config |
-| `reverse-proxy` | Main | `caddy` | Caddy server on :9443 (HTTPS) and :2112 (metrics) |
+| `generate-proxy-config` | Init | `konflux-ui` | Resolves backends, generates TLS config |
+| `reverse-proxy` | Main | `reverse-proxy` | Custom Caddy build on :9443 (HTTPS) and :2112 (metrics) |
 | `oauth2-proxy` | Main | `oauth2-proxy` | OIDC authentication on :6000 |
-| `config-refresh` | Sidecar | `konflux-ui` | Watches tokens and CAs, reloads Caddy via admin API |
 
 ## Request Flow
 
@@ -197,30 +191,37 @@ to TokenReview-based identity verification only.
 
 The backend token infrastructure is in place but not yet active: Tekton
 Results currently does not support custom audiences in its TokenReview
-calls, so the proxy falls back to `kube-auth.conf` for now. We opened
+calls, so the proxy falls back to `kube_token` for now. We opened
 [tektoncd/results#1331](https://github.com/tektoncd/results/issues/1331)
 to request this capability upstream. Once supported, switching to the
-backend token requires changing a single `import` line in the backend's
+backend token requires changing a single `header_up` line in the backend's
 Caddy snippet (see the TODO in `tekton-results.caddy`).
 
-### Refresh Cycle
+### Dynamic File Rotation
 
-The **config-refresh** sidecar runs every 10 seconds and:
+All dynamic file content (tokens, certificates, CA bundles) is handled by
+Caddy plugins from the
+[reverse-proxy](https://github.com/konflux-ci/reverse-proxy) build — no
+sidecar is needed.
 
-1. Reads both token files.
-2. Compares against the last known value.
-3. If either token changed, writes the corresponding Caddy snippet
-   (`kube-auth.conf` or `backend-auth.conf`).
-4. Reads all mounted CA certificate files and compares their combined
-   content against the last known state.
-5. If any token or CA content changed, reloads Caddy via
-   `POST /load` on the admin API.
+| What changes | Frequency | Plugin | Reload? |
+|---|---|---|---|
+| Bearer tokens | Every 600s | `filewatcher` (`cache`) | No — atomic pointer swap |
+| Serving TLS cert | Every 60–90 days | `certwatcher` (`get_certificate file`) | No — fsnotify |
+| CA trust bundles | Rare (months/years) | `filewatcher` (`watch`) | Yes — SIGUSR1 seamless reload |
 
-CA files watched:
-- `/var/run/secrets/kubernetes.io/serviceaccount/ca.crt` (Kube API CA)
-- `/mnt/trusted-ca/ca-bundle.crt` (namespace-lister CA via trust-manager)
-- `/mnt/ca.crt` (Dex CA from cert-manager)
-- `/mnt/service-ca/service-ca.crt` (OpenShift service CA, optional)
+The `filewatcher` plugin caches token files in `atomic.Pointer[string]`
+values — reads are a single pointer load with zero allocations and zero
+syscalls per request. The `inject_cached_vars` middleware sets cached
+values as `{http.vars.*}` placeholders for use in `header_up` directives.
+
+The `certwatcher` plugin watches the serving certificate and key via
+fsnotify and serves the latest version during TLS handshakes without a
+Caddy reload.
+
+CA bundle directories are watched by `filewatcher`; changes trigger
+SIGUSR1, which causes Caddy to seamlessly re-provision its TLS config
+(required because Go's `x509.CertPool` is immutable once created).
 
 ## Extensible Backends
 
@@ -257,8 +258,8 @@ Each upstream uses a different trust anchor:
 | Upstream | CA Source | Config |
 |----------|-----------|--------|
 | Kubernetes API | Mounted SA CA | `tls_trust_pool file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt` |
-| Dex | cert-manager Secret | `tls_trust_pool file /mnt/ca.crt` |
-| Namespace-lister | trust-manager ConfigMap | `tls_trust_pool file /mnt/trusted-ca/ca-bundle.crt` |
+| Dex | cert-manager Secret | `tls_trust_pool file /mnt/serving-cert/ca.crt` |
+| Namespace-lister | cert-manager Secret (cluster root CA) | `tls_trust_pool file /mnt/cluster-ca/ca-bundle.crt` |
 | Backend services | Platform-dependent | `import /mnt/caddy-snippets/backend-tls.conf` |
 
 Backend TLS is determined at init time by `generate-proxy-config.sh`:
@@ -282,9 +283,7 @@ All proxy files live under `core/proxy/`:
 |------|---------|
 | `Caddyfile` | Main server configuration |
 | `tekton-results.caddy` | Template for Tekton Results backend route |
-| `generate-proxy-config.sh` | Init container script: resolves backends, seeds auth/TLS snippets |
-| `config-refresh.sh` | Sidecar script: watches tokens and CAs, reloads Caddy |
-| `config-refresh-probe.sh` | Liveness probe for the config-refresh sidecar |
+| `generate-proxy-config.sh` | Init container script: resolves backends, generates TLS config |
 | `proxy.yaml` | Deployment and Service manifests |
 | `rbac.yaml` | ServiceAccount and RBAC for the proxy |
 | `kustomization.yaml` | Kustomize overlay tying everything together |

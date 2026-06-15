@@ -38,6 +38,25 @@ type QuayCABundleSpec struct {
 
 // KonfluxImageControllerSpec defines the desired state of KonfluxImageController.
 type KonfluxImageControllerSpec struct {
+	// ImageControllerManager defines customizations for the controller-manager deployment.
+	// +optional
+	ImageControllerManager *ControllerManagerDeploymentSpec `json:"imageControllerManager,omitempty"`
+
+	// LogEncoder sets the log encoding format for the image-controller.
+	// When not set, the upstream default (json) is used.
+	// +optional
+	LogEncoder LogEncoder `json:"logEncoder,omitempty"`
+
+	// ImagePruner defines customizations for the image-pruner CronJob container
+	// (resources, env vars). When not set, the upstream defaults apply.
+	// +optional
+	ImagePruner *ContainerSpec `json:"imagePruner,omitempty"`
+
+	// NotificationResetter defines customizations for the notification-resetter CronJob
+	// container (resources, env vars). When not set, the upstream defaults apply.
+	// +optional
+	NotificationResetter *ContainerSpec `json:"notificationResetter,omitempty"`
+
 	// QuayCABundle configures a custom CA bundle for Quay registry communication.
 	// When set, the CA certificate from the referenced ConfigMap is mounted into the
 	// image-controller pod and used for TLS verification when connecting to Quay.

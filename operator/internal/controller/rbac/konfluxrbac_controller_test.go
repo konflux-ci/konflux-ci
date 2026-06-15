@@ -48,8 +48,10 @@ var _ = Describe("KonfluxRBAC Controller", func() {
 				g.Expect(condition.IsConditionTrue(cr, condition.TypeReady)).To(BeTrue())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
-			By("verifying a representative ClusterRole was created")
+			By("verifying representative ClusterRoles were created")
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "konflux-admin-user-actions-batch"}, &rbacv1.ClusterRole{})).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "konflux-builder-bot-actions"}, &rbacv1.ClusterRole{})).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "konflux-releaser-bot-actions"}, &rbacv1.ClusterRole{})).To(Succeed())
 		})
 	})
 })

@@ -14,6 +14,6 @@ spec:
   - registry-service.kind-registry
   issuerRef:
     kind: ClusterIssuer
-    name: ca-issuer
+    name: konflux-issuer
   secretName: local-registry-tls
   

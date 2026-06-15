@@ -1,5 +1,6 @@
 # Title: Konflux Image Controller Configuration
-# Description: KonfluxImageController configuration for image management
+# Description: KonfluxImageController configuration for image management with custom
+#              resource limits and environment variables.
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: KonfluxImageController
 metadata:
@@ -7,4 +8,37 @@ metadata:
     app.kubernetes.io/name: konflux-operator
     app.kubernetes.io/managed-by: kustomize
   name: konflux-image-controller
-spec: {}
+spec:
+  # logEncoder: console  # Use human-readable logs (default: json)
+  imageControllerManager:
+    replicas: 1
+    manager:
+      resources:
+        requests:
+          cpu: 100m
+          memory: 20Mi
+        limits:
+          cpu: 500m
+          memory: 2Gi
+      env:
+        - name: EXAMPLE_CUSTOM_CONFIG
+          valueFrom:
+            configMapKeyRef:
+              name: image-controller-config
+              key: custom-config
+  # imagePruner:  # Customize the image-pruner CronJob container
+  #   resources:
+  #     requests:
+  #       cpu: 150m
+  #       memory: 1Gi
+  #     limits:
+  #       cpu: 500m
+  #       memory: 8Gi
+  # notificationResetter:  # Customize the notification-resetter CronJob container
+  #   resources:
+  #     requests:
+  #       cpu: 150m
+  #       memory: 1Gi
+  #     limits:
+  #       cpu: 500m
+  #       memory: 1Gi

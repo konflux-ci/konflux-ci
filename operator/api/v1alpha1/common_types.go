@@ -43,6 +43,21 @@ const (
 	LogLevelError LogLevel = "error"
 )
 
+// LogEncoder sets the log encoding format for controller-runtime based services.
+// "json" produces structured JSON logs (upstream default), "console" produces
+// human-readable output useful for development and debugging.
+// +kubebuilder:validation:Enum=json;console
+type LogEncoder string
+
+const (
+	LogEncoderJSON    LogEncoder = "json"
+	LogEncoderConsole LogEncoder = "console"
+
+	// ZapEncoderArg is the CLI flag that sets the log encoding format on
+	// controller-runtime based services.
+	ZapEncoderArg = "--zap-encoder"
+)
+
 // ControllerManagerDeploymentSpec defines customizations for the controller-manager deployment.
 type ControllerManagerDeploymentSpec struct {
 	// Replicas is the number of replicas for the controller-manager deployment.

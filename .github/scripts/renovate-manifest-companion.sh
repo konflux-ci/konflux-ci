@@ -14,8 +14,13 @@
 # Chart versions for update-third-party-manifests.sh are read from
 # export-third-party-chart-env.sh (inline chart semver pins).
 #
-# Requires: kustomize, helm, yq, jq, git, gh on PATH (GitHub-hosted runners provide
-# the tools used by update-third-party-manifests / kustomize workflows without extra installs).
+# Requires: kustomize, helm, yq, jq, git, gh, skopeo on PATH (GitHub-hosted runners
+# provide the tools used by update-third-party-manifests / kustomize workflows without extra installs).
+#
+# Exit codes:
+#   0 — companion PR created/updated, or no manifest diff (noop)
+#   1 — unexpected failure
+#   2 — upstream container image(s) not yet published; source PR notified, no companion opened
 set -euo pipefail
 
 REPO_ROOT="${1:-${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel)}}"
@@ -68,6 +73,20 @@ extract_dep_hint() {
   fi
 
   echo "${hint}"
+}
+
+# clear_pending_upstream_image_label
+#   Drops pending-upstream-image after images verify successfully.
+clear_pending_upstream_image_label() {
+  if [[ -z "${GH_TOKEN:-}" ]]; then
+    return 0
+  fi
+  echo "Removing label 'pending-upstream-image' from source PR #${SOURCE_PR} (if present)"
+  if ! gh pr edit "${SOURCE_PR}" \
+    --repo "${GITHUB_REPOSITORY}" \
+    --remove-label "pending-upstream-image"; then
+    echo "::warning::Failed to remove 'pending-upstream-image' label from PR #${SOURCE_PR} (non-fatal)." >&2
+  fi
 }
 
 FALLBACK_TITLE="chore: sync manifests (companion to #${SOURCE_PR})"
@@ -156,8 +175,76 @@ If you expected manifest changes, check the [workflow run logs](${NOOP_RUN_LINK}
     else
       gh pr comment "${SOURCE_PR}" --repo "${GITHUB_REPOSITORY}" --body "${NOOP_BODY}" || true
     fi
+    clear_pending_upstream_image_label
   fi
   exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Verify container images only when a companion PR would be opened (staged diff
+# above). Rebuild does not pull images, so it is safe to run first. Deferring
+# verification avoids blocking noop runs (e.g. chart-only bumps or PRs already
+# in sync) when an unrelated upstream image pin is missing elsewhere.
+# ---------------------------------------------------------------------------
+echo "Staged manifest diff found; verifying image references in upstream kustomization files..."
+mapfile -t kust_files < <(
+  find "${REPO_ROOT}/operator/upstream-kustomizations" \
+    -name 'kustomization.yaml' -o -name 'kustomization.yml' | sort
+)
+if [[ "${#kust_files[@]}" -gt 0 ]]; then
+  verify_log="$(mktemp)"
+  set +e
+  bash "${REPO_ROOT}/.github/scripts/verify-image-refs.sh" "${kust_files[@]}" 2>&1 | tee "${verify_log}"
+  verify_rc="${PIPESTATUS[0]}"
+  set -e
+
+  if [[ "${verify_rc}" -eq 2 ]]; then
+    echo "Upstream container image(s) not found; companion PR will not be created."
+    MISSING_IMAGE_MARKER="<!-- konflux-manifest-companion-missing-image:${SOURCE_PR} -->"
+    if [[ -n "${GH_TOKEN:-}" ]]; then
+      if [[ -n "${GITHUB_RUN_ID:-}" ]]; then
+        MISSING_IMAGE_RUN_LINK="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+      else
+        MISSING_IMAGE_RUN_LINK="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY}/actions"
+      fi
+      missing_images_list="$(
+        grep '^::error::Image does not exist:' "${verify_log}" \
+          | sed 's/^::error::Image does not exist: /- /' \
+          | sed 's/ (referenced in / (in /' || true
+      )"
+      MISSING_IMAGE_BODY="${MISSING_IMAGE_MARKER}
+
+Manifest companion run **did not open a companion PR** because one or more container images referenced in upstream kustomizations are not yet available in their registries:
+
+${missing_images_list}
+
+This is usually caused by an upstream release process that failed to push the image. It is not something that can be fixed in this repository.
+
+**What will unblock companion PR creation:** once the upstream image is published, push a new commit to this PR or re-run the [manifest companion workflow](${MISSING_IMAGE_RUN_LINK}). Maintainers can also add the \`skip-image-verify\` label and re-run the workflow manually to bypass verification."
+      MISSING_IMAGE_COMMENT_ID="$(
+        gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${SOURCE_PR}/comments" \
+          --jq ".[] | select(.body | contains(\"<!-- konflux-manifest-companion-missing-image:${SOURCE_PR} -->\")) | .id" 2>/dev/null | tail -n1 || true
+      )"
+      if [[ -n "${MISSING_IMAGE_COMMENT_ID}" ]]; then
+        jq -n --arg body "${MISSING_IMAGE_BODY}" '{body: $body}' \
+          | gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${MISSING_IMAGE_COMMENT_ID}" --input - || true
+      else
+        gh pr comment "${SOURCE_PR}" --repo "${GITHUB_REPOSITORY}" --body "${MISSING_IMAGE_BODY}" || true
+      fi
+      echo "Adding labels 'deps-only' and 'pending-upstream-image' to source PR #${SOURCE_PR}"
+      if ! gh pr edit "${SOURCE_PR}" \
+        --repo "${GITHUB_REPOSITORY}" \
+        --add-label "deps-only,pending-upstream-image"; then
+        echo "::warning::Failed to add labels to source PR #${SOURCE_PR}. Check token permissions (pull-requests: write) and that the labels exist in the repository." >&2
+      fi
+    fi
+    rm -f "${verify_log}"
+    exit 2
+  elif [[ "${verify_rc}" -ne 0 ]]; then
+    rm -f "${verify_log}"
+    exit "${verify_rc}"
+  fi
+  rm -f "${verify_log}"
 fi
 
 git commit -m "${COMPANION_TITLE}
@@ -250,6 +337,8 @@ Manifest companion PR (regenerated \`operator/pkg/manifests\` and third-party He
 
 **Prefer merging #${COMPANION_PR}** to \`main\` instead of this PR." || true
   fi
+
+  clear_pending_upstream_image_label
 
   # Label the source bump PR so maintainers know a companion handles manifests
   echo "Adding labels 'deps-only' and 'superseded-by-companion' to source PR #${SOURCE_PR}"

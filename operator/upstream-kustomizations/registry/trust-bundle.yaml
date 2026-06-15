@@ -7,7 +7,7 @@ spec:
   sources:
   - useDefaultCAs: true
   - secret:
-      name: "root-secret"
+      name: "konflux-ca-secret"
       key: "ca.crt"
   target:
     configMap:

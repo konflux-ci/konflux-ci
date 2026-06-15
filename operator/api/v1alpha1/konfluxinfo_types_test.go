@@ -28,25 +28,32 @@ func TestClusterConfigData_All(t *testing.T) {
 	t.Run("should yield all non-empty fields", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		noProxy := ".cluster.local,169.254.169.254"
 		data := ClusterConfigData{
-			DefaultOIDCIssuer:         "https://oidc.example.com",
-			EnableKeylessSigning:      ptr.To(true),
-			FulcioInternalUrl:         "https://fulcio-internal.example.com",
-			FulcioExternalUrl:         "https://fulcio-external.example.com",
-			RekorInternalUrl:          "https://rekor-internal.example.com",
-			RekorExternalUrl:          "https://rekor-external.example.com",
-			TufInternalUrl:            "https://tuf-internal.example.com",
-			TufExternalUrl:            "https://tuf-external.example.com",
-			TrustifyServerInternalUrl: "https://trustify-internal.example.com",
-			TrustifyServerExternalUrl: "https://trustify-external.example.com",
-			BuildIdentityRegexp:       "^https://konflux\\.dev/build/.*$",
-			TrustifyOIDCIssuerUrl:     "https://keycloak-external/realm/foobar",
-			TektonChainsIdentity:      "https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/tekton-chains-controller",
+			DefaultOIDCIssuer:           "https://oidc.example.com",
+			EnableKeylessSigning:        ptr.To(true),
+			FulcioInternalUrl:           "https://fulcio-internal.example.com",
+			FulcioExternalUrl:           "https://fulcio-external.example.com",
+			RekorInternalUrl:            "https://rekor-internal.example.com",
+			RekorExternalUrl:            "https://rekor-external.example.com",
+			TufInternalUrl:              "https://tuf-internal.example.com",
+			TufExternalUrl:              "https://tuf-external.example.com",
+			TrustifyServerInternalUrl:   "https://trustify-internal.example.com",
+			TrustifyServerExternalUrl:   "https://trustify-external.example.com",
+			BuildIdentityRegexp:         "^https://konflux\\.dev/build/.*$",
+			TrustifyOIDCIssuerUrl:       "https://keycloak-external/realm/foobar",
+			TektonChainsIdentity:        "https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/tekton-chains-controller",
+			AllowCacheProxy:             ptr.To(true),
+			HTTPProxy:                   "squid.caching.svc.cluster.local:3128",
+			NoProxy:                     &noProxy,
+			AllowPackageRegistryProxy:   ptr.To(true),
+			PackageRegistryProxyNpmURL:  "https://npm-proxy.example.com",
+			PackageRegistryProxyYarnURL: "https://yarn-proxy.example.com",
 		}
 
 		collected := maps.Collect(data.All)
 
-		g.Expect(collected).To(gomega.HaveLen(13))
+		g.Expect(collected).To(gomega.HaveLen(19))
 		g.Expect(collected["defaultOIDCIssuer"]).To(gomega.Equal("https://oidc.example.com"))
 		g.Expect(collected["enableKeylessSigning"]).To(gomega.Equal("true"))
 		g.Expect(collected["fulcioInternalUrl"]).To(gomega.Equal("https://fulcio-internal.example.com"))
@@ -60,6 +67,12 @@ func TestClusterConfigData_All(t *testing.T) {
 		g.Expect(collected["buildIdentityRegexp"]).To(gomega.Equal("^https://konflux\\.dev/build/.*$"))
 		g.Expect(collected["trustifyOIDCIssuerUrl"]).To(gomega.Equal("https://keycloak-external/realm/foobar"))
 		g.Expect(collected["tektonChainsIdentity"]).To(gomega.Equal("https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/tekton-chains-controller"))
+		g.Expect(collected[ClusterConfigKeyAllowCacheProxy]).To(gomega.Equal("true"))
+		g.Expect(collected[ClusterConfigKeyHTTPProxy]).To(gomega.Equal("squid.caching.svc.cluster.local:3128"))
+		g.Expect(collected[ClusterConfigKeyNoProxy]).To(gomega.Equal(".cluster.local,169.254.169.254"))
+		g.Expect(collected[ClusterConfigKeyAllowPackageRegistryProxy]).To(gomega.Equal("true"))
+		g.Expect(collected[ClusterConfigKeyPackageRegistryProxyNpmURL]).To(gomega.Equal("https://npm-proxy.example.com"))
+		g.Expect(collected[ClusterConfigKeyPackageRegistryProxyYarnURL]).To(gomega.Equal("https://yarn-proxy.example.com"))
 	})
 
 	t.Run("should not yield empty fields", func(t *testing.T) {
@@ -131,20 +144,27 @@ func TestClusterConfigData_All(t *testing.T) {
 	t.Run("should yield fields in correct order", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
+		noProxy := ""
 		data := ClusterConfigData{
-			DefaultOIDCIssuer:         "oidc",
-			EnableKeylessSigning:      ptr.To(false),
-			FulcioInternalUrl:         "fulcio-internal",
-			FulcioExternalUrl:         "fulcio-external",
-			RekorInternalUrl:          "rekor-internal",
-			RekorExternalUrl:          "rekor-external",
-			TufInternalUrl:            "tuf-internal",
-			TufExternalUrl:            "tuf-external",
-			TrustifyServerInternalUrl: "trustify-internal",
-			TrustifyServerExternalUrl: "trustify-external",
-			BuildIdentityRegexp:       "^https://konflux\\.dev/build/.*$",
-			TrustifyOIDCIssuerUrl:     "https://keycloak-external/realm/foobar",
-			TektonChainsIdentity:      "https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/tekton-chains-controller",
+			DefaultOIDCIssuer:           "oidc",
+			EnableKeylessSigning:        ptr.To(false),
+			FulcioInternalUrl:           "fulcio-internal",
+			FulcioExternalUrl:           "fulcio-external",
+			RekorInternalUrl:            "rekor-internal",
+			RekorExternalUrl:            "rekor-external",
+			TufInternalUrl:              "tuf-internal",
+			TufExternalUrl:              "tuf-external",
+			TrustifyServerInternalUrl:   "trustify-internal",
+			TrustifyServerExternalUrl:   "trustify-external",
+			BuildIdentityRegexp:         "^https://konflux\\.dev/build/.*$",
+			TrustifyOIDCIssuerUrl:       "https://keycloak-external/realm/foobar",
+			TektonChainsIdentity:        "https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/tekton-chains-controller",
+			AllowCacheProxy:             ptr.To(true),
+			HTTPProxy:                   "proxy:3128",
+			NoProxy:                     &noProxy,
+			AllowPackageRegistryProxy:   ptr.To(false),
+			PackageRegistryProxyNpmURL:  "https://npm-proxy.example.com",
+			PackageRegistryProxyYarnURL: "https://yarn-proxy.example.com",
 		}
 
 		var keys []string
@@ -167,6 +187,12 @@ func TestClusterConfigData_All(t *testing.T) {
 			"buildIdentityRegexp",
 			"trustifyOIDCIssuerUrl",
 			"tektonChainsIdentity",
+			ClusterConfigKeyAllowCacheProxy,
+			ClusterConfigKeyHTTPProxy,
+			ClusterConfigKeyNoProxy,
+			ClusterConfigKeyAllowPackageRegistryProxy,
+			ClusterConfigKeyPackageRegistryProxyNpmURL,
+			ClusterConfigKeyPackageRegistryProxyYarnURL,
 		}
 
 		g.Expect(keys).To(gomega.Equal(expectedOrder))

@@ -21,9 +21,12 @@ import (
 
 	"github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 )
 
 func TestNewPodOverlay(t *testing.T) {
@@ -477,8 +480,8 @@ func TestComplexScenario(t *testing.T) {
 					},
 				}),
 				WithEnv(corev1.EnvVar{Name: "LOG_LEVEL", Value: "info"}),
-				WithLeaderElection(),
 			),
+			WithLeaderElection("app", ctx.Replicas),
 			WithContainerOpts("sidecar", ctx,
 				WithResources(corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
@@ -535,10 +538,9 @@ func TestMergeContainerList_ArgsAppend(t *testing.T) {
 	t.Run("overlay args are appended to base args", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
-		ctx := DeploymentContext{Replicas: 3}
 		p := NewPodOverlay(
-			WithContainerOpts("manager", ctx,
-				WithLeaderElection(),
+			WithContainerOpts("manager", DeploymentContext{},
+				WithArgs("--custom-flag=value"),
 			),
 		)
 
@@ -568,7 +570,7 @@ func TestMergeContainerList_ArgsAppend(t *testing.T) {
 			"base args must be preserved")
 		g.Expect(container.Args).To(gomega.ContainElement("--health-probe-bind-address=:8081"),
 			"base args must be preserved")
-		g.Expect(container.Args).To(gomega.ContainElement("--leader-elect=true"),
+		g.Expect(container.Args).To(gomega.ContainElement("--custom-flag=value"),
 			"overlay args must be appended")
 		g.Expect(container.Args).To(gomega.HaveLen(3))
 	})
@@ -640,11 +642,10 @@ func TestMergeContainerList_ArgsAppend(t *testing.T) {
 	t.Run("multiple overlay args appended in order", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
-		ctx := DeploymentContext{Replicas: 2}
 		p := NewPodOverlay(
-			WithContainerOpts("manager", ctx,
+			WithContainerOpts("manager", DeploymentContext{},
 				WithArgs("--custom-flag=value"),
-				WithLeaderElection(),
+				WithArgs("--another-flag"),
 			),
 		)
 
@@ -670,7 +671,7 @@ func TestMergeContainerList_ArgsAppend(t *testing.T) {
 		g.Expect(container.Args).To(gomega.Equal([]string{
 			"--base-flag",
 			"--custom-flag=value",
-			"--leader-elect=true",
+			"--another-flag",
 		}))
 	})
 
@@ -710,6 +711,652 @@ func TestMergeContainerList_ArgsAppend(t *testing.T) {
 			gomega.Equal([]string{"--base", "--injected"}),
 			"second apply must produce the same result")
 	})
+}
+
+func TestWithArgReplace(t *testing.T) {
+	t.Run("replaces base arg with same flag key", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("manager", "--zap-encoder=console"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{
+									"--metrics-bind-address=:8443",
+									"--zap-encoder=json",
+									"--health-probe-bind-address=:8081",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--metrics-bind-address=:8443",
+			"--zap-encoder=console",
+			"--health-probe-bind-address=:8081",
+		}))
+	})
+
+	t.Run("appends when no matching base arg exists", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("manager", "--zap-encoder=console"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--metrics-bind-address=:8443"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--metrics-bind-address=:8443",
+			"--zap-encoder=console",
+		}))
+	})
+
+	t.Run("value-form replacement replaces standalone base flag", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("manager", "--leader-elect=true"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--leader-elect", "--other-flag"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--leader-elect=true",
+			"--other-flag",
+		}))
+	})
+
+	t.Run("standalone replacement replaces value-form base flag", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("manager", "--leader-elect"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--leader-elect=false", "--other-flag"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--leader-elect",
+			"--other-flag",
+		}))
+	})
+
+	t.Run("standalone flag replaces exact duplicate", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("manager", "--leader-elect"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--leader-elect", "--other-flag"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--leader-elect",
+			"--other-flag",
+		}))
+	})
+
+	t.Run("WithArgs still appends without dedup", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithContainerOpts("manager", DeploymentContext{},
+				WithArgs("--zap-encoder=console"),
+			),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--zap-encoder=json"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--zap-encoder=json",
+			"--zap-encoder=console",
+		}), "WithArgs must preserve existing append-only behavior")
+	})
+
+	t.Run("mixed WithArgs and WithArgReplace", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithContainerOpts("manager", DeploymentContext{},
+				WithArgs("--custom-flag=value"),
+			),
+			WithArgReplace("manager", "--leader-elect=true"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{
+									"--leader-elect=false",
+									"--metrics-bind-address=:8443",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--leader-elect=true",
+			"--metrics-bind-address=:8443",
+			"--custom-flag=value",
+		}))
+	})
+
+	t.Run("applies without container overlay", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("manager", "--zap-encoder=console"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "manager",
+								Image: "manager:v1",
+								Args:  []string{"--zap-encoder=json"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{"--zap-encoder=console"}))
+		g.Expect(container.Image).To(gomega.Equal("manager:v1"), "image should be unchanged")
+	})
+
+	t.Run("does not affect non-matching containers", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("manager", "--zap-encoder=console"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--zap-encoder=json"},
+							},
+							{
+								Name: "sidecar",
+								Args: []string{"--zap-encoder=json"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(deployment.Spec.Template.Spec.Containers[0].Args).To(
+			gomega.Equal([]string{"--zap-encoder=console"}))
+		g.Expect(deployment.Spec.Template.Spec.Containers[1].Args).To(
+			gomega.Equal([]string{"--zap-encoder=json"}),
+			"sidecar should be unchanged")
+	})
+
+	t.Run("appends when base has no args", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("manager", "--zap-encoder=console"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{Name: "manager", Image: "manager:v1"},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{"--zap-encoder=console"}))
+	})
+
+	t.Run("is reusable across multiple apply calls", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("manager", "--zap-encoder=console"),
+		)
+
+		makeDeployment := func() *appsv1.Deployment {
+			return &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{Name: "manager", Args: []string{"--zap-encoder=json"}},
+							},
+						},
+					},
+				},
+			}
+		}
+
+		d1 := makeDeployment()
+		err := p.ApplyToDeployment(d1)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(d1.Spec.Template.Spec.Containers[0].Args).To(
+			gomega.Equal([]string{"--zap-encoder=console"}))
+
+		d2 := makeDeployment()
+		err = p.ApplyToDeployment(d2)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(d2.Spec.Template.Spec.Containers[0].Args).To(
+			gomega.Equal([]string{"--zap-encoder=console"}),
+			"second apply must produce the same result")
+	})
+
+	t.Run("applies to init containers", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("init-db", "--log-level=debug"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						InitContainers: []corev1.Container{
+							{
+								Name: "init-db",
+								Args: []string{"--log-level=info", "--timeout=30s"},
+							},
+						},
+						Containers: []corev1.Container{
+							{Name: "app", Image: "app:v1"},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		initContainer := deployment.Spec.Template.Spec.InitContainers[0]
+		g.Expect(initContainer.Args).To(gomega.Equal([]string{
+			"--log-level=debug",
+			"--timeout=30s",
+		}))
+	})
+
+	t.Run("ignored when container name is absent from pod spec", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("nonexistent", "--zap-encoder=console"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--metrics-bind-address=:8443"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{"--metrics-bind-address=:8443"}),
+			"existing container args should be untouched")
+	})
+
+	t.Run("multiple replacements on same container", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithArgReplace("manager", "--zap-encoder=console", "--leader-elect=true"),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{
+									"--leader-elect=false",
+									"--metrics-bind-address=:8443",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--leader-elect=true",
+			"--metrics-bind-address=:8443",
+			"--zap-encoder=console",
+		}))
+	})
+}
+
+func TestWithLeaderElection(t *testing.T) {
+	t.Run("single replica - no leader election arg", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithLeaderElection("manager", 1),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--metrics-bind-address=:8443"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{"--metrics-bind-address=:8443"}))
+	})
+
+	t.Run("multiple replicas - adds leader election", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithLeaderElection("manager", 2),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--metrics-bind-address=:8443"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--metrics-bind-address=:8443",
+			"--leader-elect=true",
+		}))
+	})
+
+	t.Run("zero replicas - no leader election arg", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithLeaderElection("manager", 0),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{Name: "manager", Args: []string{"--flag"}},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{"--flag"}))
+	})
+
+	t.Run("replaces existing leader-elect=false in base", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithLeaderElection("manager", 3),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{
+									"--metrics-bind-address=:8443",
+									"--leader-elect=false",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--metrics-bind-address=:8443",
+			"--leader-elect=true",
+		}))
+	})
+
+	t.Run("replaces standalone leader-elect in base", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithLeaderElection("manager", 5),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "manager",
+								Args: []string{"--leader-elect", "--other-flag"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Args).To(gomega.Equal([]string{
+			"--leader-elect=true",
+			"--other-flag",
+		}))
+	})
+}
+
+func TestArgKey(t *testing.T) {
+	tests := []struct {
+		arg  string
+		want string
+	}{
+		{"--zap-encoder=console", "--zap-encoder"},
+		{"--leader-elect=true", "--leader-elect"},
+		{"--leader-elect", "--leader-elect"},
+		{"--metrics-bind-address=:8443", "--metrics-bind-address"},
+		{"-v=5", "-v"},
+		{"positional", "positional"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.arg, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+			g.Expect(argKey(tt.arg)).To(gomega.Equal(tt.want))
+		})
+	}
 }
 
 func TestWithConfigMapVolumeUpdate(t *testing.T) {
@@ -945,6 +1592,325 @@ func TestWithSecretVolumeUpdate(t *testing.T) {
 	})
 }
 
+// TestMergeContainerList_EnvOverride tests that overriding an env var by name
+// replaces the entire EnvVar struct, preventing invalid combinations of value
+// and valueFrom. See https://github.com/konflux-ci/konflux-ci/issues/7162.
+func TestMergeContainerList_EnvOverride(t *testing.T) {
+	t.Run("valueFrom base overridden by value overlay", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithContainer("app", &corev1.Container{
+				Env: []corev1.EnvVar{
+					{Name: "QUAY_TOKEN", Value: "literal-token"},
+				},
+			}),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "app",
+								Image: "app:v1",
+								Env: []corev1.EnvVar{
+									{
+										Name: "QUAY_TOKEN",
+										ValueFrom: &corev1.EnvVarSource{
+											SecretKeyRef: &corev1.SecretKeySelector{
+												LocalObjectReference: corev1.LocalObjectReference{Name: "quay-secret"},
+												Key:                  "token",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		env := deployment.Spec.Template.Spec.Containers[0].Env
+		g.Expect(env).To(gomega.HaveLen(1))
+		g.Expect(env[0].Name).To(gomega.Equal("QUAY_TOKEN"))
+		g.Expect(env[0].Value).To(gomega.Equal("literal-token"))
+		g.Expect(env[0].ValueFrom).To(gomega.BeNil(),
+			"valueFrom must be nil when value is set")
+	})
+
+	t.Run("value base overridden by valueFrom overlay", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithContainer("app", &corev1.Container{
+				Env: []corev1.EnvVar{
+					{
+						Name: "FOO",
+						ValueFrom: &corev1.EnvVarSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "my-secret"},
+								Key:                  "foo-key",
+							},
+						},
+					},
+				},
+			}),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "app",
+								Image: "app:v1",
+								Env: []corev1.EnvVar{
+									{Name: "FOO", Value: "bar"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		env := deployment.Spec.Template.Spec.Containers[0].Env
+		g.Expect(env).To(gomega.HaveLen(1))
+		g.Expect(env[0].Name).To(gomega.Equal("FOO"))
+		g.Expect(env[0].Value).To(gomega.BeEmpty(),
+			"value must be empty when valueFrom is set")
+		g.Expect(env[0].ValueFrom).NotTo(gomega.BeNil())
+		g.Expect(env[0].ValueFrom.SecretKeyRef.Key).To(gomega.Equal("foo-key"))
+	})
+
+	t.Run("mixed replacements and appends with no invalid combinations", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithContainer("app", &corev1.Container{
+				Env: []corev1.EnvVar{
+					{Name: "ENV_A", Value: "new-a"},
+					{Name: "ENV_C", Value: "new-c"},
+				},
+			}),
+		)
+
+		deployment := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "app",
+								Image: "app:v1",
+								Env: []corev1.EnvVar{
+									{
+										Name: "ENV_A",
+										ValueFrom: &corev1.EnvVarSource{
+											SecretKeyRef: &corev1.SecretKeySelector{
+												LocalObjectReference: corev1.LocalObjectReference{Name: "secret"},
+												Key:                  "a",
+											},
+										},
+									},
+									{Name: "ENV_B", Value: "keep-b"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		env := deployment.Spec.Template.Spec.Containers[0].Env
+		g.Expect(env).To(gomega.HaveLen(3))
+
+		envMap := make(map[string]corev1.EnvVar)
+		for _, e := range env {
+			envMap[e.Name] = e
+		}
+
+		// ENV_A replaced: value set, valueFrom cleared
+		g.Expect(envMap["ENV_A"].Value).To(gomega.Equal("new-a"))
+		g.Expect(envMap["ENV_A"].ValueFrom).To(gomega.BeNil())
+
+		// ENV_B unchanged
+		g.Expect(envMap["ENV_B"].Value).To(gomega.Equal("keep-b"))
+
+		// ENV_C appended
+		g.Expect(envMap["ENV_C"].Value).To(gomega.Equal("new-c"))
+
+		// No env var should have both value and valueFrom
+		for _, e := range env {
+			hasValue := e.Value != ""
+			hasValueFrom := e.ValueFrom != nil
+			g.Expect(hasValue && hasValueFrom).To(gomega.BeFalse(),
+				"env var %s has both value and valueFrom", e.Name)
+		}
+	})
+
+	t.Run("overlay is reusable across multiple apply calls", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithContainer("app", &corev1.Container{
+				Env: []corev1.EnvVar{
+					{Name: "TOKEN", Value: "literal"},
+				},
+			}),
+		)
+
+		makeDeployment := func() *appsv1.Deployment {
+			return &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name: "app",
+									Env: []corev1.EnvVar{
+										{
+											Name: "TOKEN",
+											ValueFrom: &corev1.EnvVarSource{
+												SecretKeyRef: &corev1.SecretKeySelector{
+													LocalObjectReference: corev1.LocalObjectReference{Name: "s"},
+													Key:                  "k",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+		}
+
+		d1 := makeDeployment()
+		err := p.ApplyToDeployment(d1)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(d1.Spec.Template.Spec.Containers[0].Env[0].Value).To(gomega.Equal("literal"))
+		g.Expect(d1.Spec.Template.Spec.Containers[0].Env[0].ValueFrom).To(gomega.BeNil())
+
+		d2 := makeDeployment()
+		err = p.ApplyToDeployment(d2)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(d2.Spec.Template.Spec.Containers[0].Env[0].Value).To(gomega.Equal("literal"),
+			"second apply must produce the same result")
+		g.Expect(d2.Spec.Template.Spec.Containers[0].Env[0].ValueFrom).To(gomega.BeNil(),
+			"second apply must produce the same result")
+	})
+}
+
+// TestMergeEnvByName is a focused unit test for the mergeEnvByName helper,
+// verifying its behavior in isolation from the full mergeContainerList flow.
+func TestMergeEnvByName(t *testing.T) {
+	t.Run("nil overlay is a no-op", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		base := &corev1.Container{
+			Env: []corev1.EnvVar{
+				{Name: "EXISTING", Value: "keep"},
+			},
+		}
+		mergeEnvByName(base, nil)
+
+		g.Expect(base.Env).To(gomega.HaveLen(1))
+		g.Expect(base.Env[0].Name).To(gomega.Equal("EXISTING"))
+		g.Expect(base.Env[0].Value).To(gomega.Equal("keep"))
+	})
+
+	t.Run("empty overlay is a no-op", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		base := &corev1.Container{
+			Env: []corev1.EnvVar{
+				{Name: "EXISTING", Value: "keep"},
+			},
+		}
+		mergeEnvByName(base, []corev1.EnvVar{})
+
+		g.Expect(base.Env).To(gomega.HaveLen(1))
+		g.Expect(base.Env[0].Name).To(gomega.Equal("EXISTING"))
+		g.Expect(base.Env[0].Value).To(gomega.Equal("keep"))
+	})
+
+	t.Run("base with no env vars gets all overlay vars appended", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		base := &corev1.Container{}
+		overlay := []corev1.EnvVar{
+			{Name: "NEW_A", Value: "a"},
+			{Name: "NEW_B", Value: "b"},
+		}
+		mergeEnvByName(base, overlay)
+
+		g.Expect(base.Env).To(gomega.HaveLen(2))
+		g.Expect(base.Env[0].Name).To(gomega.Equal("NEW_A"))
+		g.Expect(base.Env[0].Value).To(gomega.Equal("a"))
+		g.Expect(base.Env[1].Name).To(gomega.Equal("NEW_B"))
+		g.Expect(base.Env[1].Value).To(gomega.Equal("b"))
+	})
+
+	t.Run("replacement preserves position in the slice", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		base := &corev1.Container{
+			Env: []corev1.EnvVar{
+				{Name: "FIRST", Value: "1"},
+				{Name: "TARGET", Value: "old"},
+				{Name: "LAST", Value: "3"},
+			},
+		}
+		overlay := []corev1.EnvVar{
+			{Name: "TARGET", Value: "new"},
+		}
+		mergeEnvByName(base, overlay)
+
+		g.Expect(base.Env).To(gomega.HaveLen(3))
+		// TARGET must remain at index 1
+		g.Expect(base.Env[0].Name).To(gomega.Equal("FIRST"))
+		g.Expect(base.Env[1].Name).To(gomega.Equal("TARGET"))
+		g.Expect(base.Env[1].Value).To(gomega.Equal("new"))
+		g.Expect(base.Env[2].Name).To(gomega.Equal("LAST"))
+	})
+
+	t.Run("duplicate overlay names last one wins", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		base := &corev1.Container{
+			Env: []corev1.EnvVar{
+				{Name: "DUP", Value: "original"},
+			},
+		}
+		overlay := []corev1.EnvVar{
+			{Name: "DUP", Value: "first-overlay"},
+			{Name: "DUP", Value: "second-overlay"},
+		}
+		mergeEnvByName(base, overlay)
+
+		// Both overlay entries match the same base entry; the second
+		// one overwrites the first, so last-write wins.
+		g.Expect(base.Env).To(gomega.HaveLen(1))
+		g.Expect(base.Env[0].Name).To(gomega.Equal("DUP"))
+		g.Expect(base.Env[0].Value).To(gomega.Equal("second-overlay"))
+	})
+}
+
 // TestApplyToPodTemplateSpec_ContainerDeletionBug tests for a regression where
 // applying pod-level customizations (like ServiceAccountName) would accidentally
 // delete all containers from the deployment.
@@ -1090,5 +2056,372 @@ func TestApplyToPodTemplateSpec_ContainerDeletionBug(t *testing.T) {
 
 		// Sidecar unchanged
 		g.Expect(spec.Containers[1].Image).To(gomega.Equal("sidecar:v1"))
+	})
+}
+
+func TestApplyToCronJob(t *testing.T) {
+	t.Run("nil CronJob is safe", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		p := NewPodOverlay()
+		err := p.ApplyToCronJob(nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+	})
+
+	t.Run("applies container resources to CronJob", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithContainerOpts("worker", DeploymentContext{},
+				WithResources(corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU: resource.MustParse("1"),
+					},
+				}),
+			),
+		)
+
+		cj := &batchv1.CronJob{
+			Spec: batchv1.CronJobSpec{
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{Name: "worker", Image: "worker:v1"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToCronJob(cj)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := cj.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
+		g.Expect(container.Image).To(gomega.Equal("worker:v1"))
+	})
+
+	t.Run("applies env vars to CronJob", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithContainerOpts("worker", DeploymentContext{},
+				WithEnv(corev1.EnvVar{Name: "FOO", Value: "bar"}),
+			),
+		)
+
+		cj := &batchv1.CronJob{
+			Spec: batchv1.CronJobSpec{
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{Name: "worker", Image: "worker:v1"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToCronJob(cj)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := cj.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Env).To(gomega.ContainElement(corev1.EnvVar{Name: "FOO", Value: "bar"}))
+	})
+
+	t.Run("preserves CronJob schedule and non-targeted containers", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		p := NewPodOverlay(
+			WithContainerOpts("worker", DeploymentContext{},
+				WithResources(corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")},
+				}),
+			),
+		)
+
+		cj := &batchv1.CronJob{
+			Spec: batchv1.CronJobSpec{
+				Schedule: "0 * * * *",
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{Name: "worker", Image: "worker:v1"},
+									{Name: "sidecar", Image: "sidecar:v1"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := p.ApplyToCronJob(cj)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(cj.Spec.Schedule).To(gomega.Equal("0 * * * *"))
+		g.Expect(cj.Spec.JobTemplate.Spec.Template.Spec.Containers[1].Image).To(gomega.Equal("sidecar:v1"))
+	})
+}
+
+func TestApplyCronJobContainerSpec(t *testing.T) {
+	t.Run("nil spec is a no-op", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		cj := &batchv1.CronJob{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-cj"},
+			Spec: batchv1.CronJobSpec{
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{Name: "worker", Image: "worker:v1"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := ApplyCronJobContainerSpec(cj, "worker", nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(cj.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Image).To(gomega.Equal("worker:v1"))
+	})
+
+	t.Run("applies resources from ContainerSpec", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		cj := &batchv1.CronJob{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-cj"},
+			Spec: batchv1.CronJobSpec{
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{Name: "worker", Image: "worker:v1"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		spec := &konfluxv1alpha1.ContainerSpec{
+			Resources: &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("500m"),
+					corev1.ResourceMemory: resource.MustParse("8Gi"),
+				},
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("150m"),
+					corev1.ResourceMemory: resource.MustParse("1Gi"),
+				},
+			},
+		}
+
+		err := ApplyCronJobContainerSpec(cj, "worker", spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := cj.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
+		g.Expect(container.Resources.Limits.Memory().String()).To(gomega.Equal("8Gi"))
+		g.Expect(container.Resources.Requests.Cpu().String()).To(gomega.Equal("150m"))
+		g.Expect(container.Resources.Requests.Memory().String()).To(gomega.Equal("1Gi"))
+		g.Expect(container.Image).To(gomega.Equal("worker:v1"))
+	})
+
+	t.Run("missing container returns error", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		cj := &batchv1.CronJob{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-cj"},
+			Spec: batchv1.CronJobSpec{
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{Name: "other"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		spec := &konfluxv1alpha1.ContainerSpec{
+			Resources: &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
+			},
+		}
+
+		err := ApplyCronJobContainerSpec(cj, "worker", spec)
+		g.Expect(err).To(gomega.HaveOccurred())
+		g.Expect(err.Error()).To(gomega.ContainSubstring("worker"))
+		g.Expect(err.Error()).To(gomega.ContainSubstring("test-cj"))
+	})
+
+	t.Run("applies env vars from ContainerSpec", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		cj := &batchv1.CronJob{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-cj"},
+			Spec: batchv1.CronJobSpec{
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{Name: "worker", Image: "worker:v1"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		spec := &konfluxv1alpha1.ContainerSpec{
+			Env: []corev1.EnvVar{
+				{Name: "CUSTOM_VAR", Value: "custom-value"},
+			},
+		}
+
+		err := ApplyCronJobContainerSpec(cj, "worker", spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := cj.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Env).To(gomega.ContainElement(
+			corev1.EnvVar{Name: "CUSTOM_VAR", Value: "custom-value"}))
+	})
+
+	t.Run("applies resources and env together", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		cj := &batchv1.CronJob{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-cj"},
+			Spec: batchv1.CronJobSpec{
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{Name: "worker", Image: "worker:v1"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		spec := &konfluxv1alpha1.ContainerSpec{
+			Resources: &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")},
+			},
+			Env: []corev1.EnvVar{
+				{Name: "MODE", Value: "prod"},
+			},
+		}
+
+		err := ApplyCronJobContainerSpec(cj, "worker", spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := cj.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
+		g.Expect(container.Resources.Limits.Cpu().String()).To(gomega.Equal("2"))
+		g.Expect(container.Env).To(gomega.ContainElement(corev1.EnvVar{Name: "MODE", Value: "prod"}))
+	})
+
+	t.Run("preserves non-targeted containers", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		cj := &batchv1.CronJob{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-cj"},
+			Spec: batchv1.CronJobSpec{
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{Name: "worker", Image: "worker:v1"},
+									{Name: "sidecar", Image: "sidecar:v1",
+										Resources: corev1.ResourceRequirements{
+											Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m")},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		spec := &konfluxv1alpha1.ContainerSpec{
+			Resources: &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")},
+			},
+		}
+
+		err := ApplyCronJobContainerSpec(cj, "worker", spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(cj.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Resources.Limits.Cpu().String()).To(gomega.Equal("4"))
+		sidecar := cj.Spec.JobTemplate.Spec.Template.Spec.Containers[1]
+		g.Expect(sidecar.Image).To(gomega.Equal("sidecar:v1"))
+		g.Expect(sidecar.Resources.Limits.Cpu().String()).To(gomega.Equal("100m"))
+	})
+}
+
+func TestValidateCronJobContainer(t *testing.T) {
+	makeCronJob := func(containerNames ...string) *batchv1.CronJob {
+		containers := make([]corev1.Container, 0, len(containerNames))
+		for _, name := range containerNames {
+			containers = append(containers, corev1.Container{Name: name})
+		}
+		return &batchv1.CronJob{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-cj"},
+			Spec: batchv1.CronJobSpec{
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{Containers: containers},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	t.Run("returns nil when container exists", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		g.Expect(ValidateCronJobContainer(makeCronJob("worker", "sidecar"), "worker")).To(gomega.Succeed())
+	})
+
+	t.Run("returns error when container is missing", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		err := ValidateCronJobContainer(makeCronJob("other"), "worker")
+		g.Expect(err).To(gomega.HaveOccurred())
+		g.Expect(err.Error()).To(gomega.ContainSubstring("worker"))
+		g.Expect(err.Error()).To(gomega.ContainSubstring("test-cj"))
+	})
+
+	t.Run("returns error when no containers exist", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		g.Expect(ValidateCronJobContainer(makeCronJob(), "worker")).To(gomega.MatchError(gomega.ContainSubstring("worker")))
 	})
 }
