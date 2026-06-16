@@ -46,6 +46,7 @@ import (
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	consolev1 "github.com/openshift/api/console/v1"
 	securityv1 "github.com/openshift/api/security/v1"
 )
@@ -93,6 +94,9 @@ func SetupTestEnv(basePath string) *TestEnv {
 	Expect(err).NotTo(HaveOccurred())
 
 	err = apiextensionsv1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = certmanagerv1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	objectStore, err := manifests.NewObjectStore(scheme.Scheme)
