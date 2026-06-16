@@ -385,14 +385,17 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 								klog.Errorf("release PipelineRun %s/%s condition: type=%s reason=%s message=%s",
 									pr.GetNamespace(), pr.GetName(), c.Type, c.Reason, c.Message)
 							}
-							if failedLogs, logErr := tekton.GetFailedPipelineRunLogs(
+							var failedLogs string
+							if logs, logErr := tekton.GetFailedPipelineRunLogs(
 								fw.AsKubeAdmin.ReleaseController.KubeRest(),
 								fw.AsKubeAdmin.ReleaseController.KubeInterface(),
 								pr); logErr == nil {
+								failedLogs = logs
 								klog.Errorf("release PipelineRun %s/%s failed task logs:\n%s", pr.GetNamespace(), pr.GetName(), failedLogs)
 							} else {
 								klog.Errorf("release PipelineRun %s/%s could not get failed logs: %v", pr.GetNamespace(), pr.GetName(), logErr)
 							}
+							logReleaseFailureDiagnostics(fw.AsKubeAdmin, pr, release, managedNamespace, failedLogs)
 							// Fetch verify-conforma logs separately: they contain EC policy
 							// violation details that are not captured by the generic failed-task
 							// logs above, and are useful even when another task caused the failure.
