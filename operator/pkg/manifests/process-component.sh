@@ -118,6 +118,42 @@ if [ "${component_changes}" = "false" ]; then
     exit 0
 fi
 
+# Step 3.5: Verify that container images referenced in kustomization files exist
+echo "Step 3.5: Verifying container image references for ${COMPONENT}..."
+VERIFY_SCRIPT="${WORKSPACE_ROOT}/.github/scripts/verify-image-refs.sh"
+if [[ -f "${VERIFY_SCRIPT}" ]] && command -v skopeo &>/dev/null && command -v yq &>/dev/null; then
+    mapfile -t kust_files < <(
+        find "${WORKSPACE_ROOT}/operator/upstream-kustomizations/${COMPONENT}" \
+            -name 'kustomization.yaml' -o -name 'kustomization.yml' 2>/dev/null | sort
+    )
+    if [[ "${#kust_files[@]}" -gt 0 ]]; then
+        set +e
+        verify_output=$(bash "${VERIFY_SCRIPT}" "${kust_files[@]}" 2>&1)
+        verify_rc=$?
+        set -e
+        echo "${verify_output}"
+
+        if [[ "${verify_rc}" -eq 2 ]]; then
+            echo "  ⚠ Container image(s) for ${COMPONENT} not found in registry, skipping PR creation"
+            echo "${COMPONENT}:image-not-found:upstream image not yet published"
+            git checkout main 2>/dev/null || true
+            exit 0
+        elif [[ "${verify_rc}" -ne 0 ]]; then
+            echo "  ⚠ Image verification failed (exit ${verify_rc}), skipping PR creation"
+            echo "${COMPONENT}:failed:image verification error"
+            git checkout main 2>/dev/null || true
+            exit 1
+        fi
+        echo "  ✓ All container images verified for ${COMPONENT}"
+    fi
+else
+    if [[ ! -f "${VERIFY_SCRIPT}" ]]; then
+        echo "  ⚠ verify-image-refs.sh not found, skipping image verification"
+    else
+        echo "  ⚠ skopeo or yq not available, skipping image verification"
+    fi
+fi
+
 # Step 4: Create branch and PR for this component
 echo "Step 4: Creating PR for ${COMPONENT}..."
 BRANCH_NAME="update-upstream-manifests-${COMPONENT}"

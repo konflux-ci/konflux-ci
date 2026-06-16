@@ -67,7 +67,7 @@ for component in "${COMPONENTS[@]}"; do
     echo "${SCRIPT_OUTPUT}"
 
     # Extract the result line (format: "component:status:message")
-    RESULT_LINE=$(echo "${SCRIPT_OUTPUT}" | grep -E "^${component}:(success|failed|up-to-date|no-changes):" | tail -1)
+    RESULT_LINE=$(echo "${SCRIPT_OUTPUT}" | grep -E "^${component}:(success|failed|up-to-date|no-changes|image-not-found):" | tail -1)
 
     if [[ -z "${RESULT_LINE}" ]]; then
         # If we didn't get a result line, treat as failed
@@ -86,9 +86,9 @@ for component in "${COMPONENTS[@]}"; do
     elif [[ "${status}" == "failed" ]]; then
         failed_components+=("${component}")
         component_messages["${component}"]="${message}"
-    elif [[ "${status}" == "up-to-date" ]] || [[ "${status}" == "no-changes" ]]; then
+    elif [[ "${status}" == "up-to-date" ]] || [[ "${status}" == "no-changes" ]] || [[ "${status}" == "image-not-found" ]]; then
         up_to_date_components+=("${component}")
-        component_messages["${component}"]="${status}"
+        component_messages["${component}"]="${message:-${status}}"
     else
         echo "  ⚠ Warning: Unknown status '${status}' for ${component}" >&2
         failed_components+=("${component}")
