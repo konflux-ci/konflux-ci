@@ -7,4 +7,4 @@ resources:
 images:
   - name: quay.io/konflux-ci/dex
     newName: quay.io/konflux-ci/dex
-    digest: sha256:22b30bfb5ad1ebe4e0c70be11f02ad1ee0f749fd25bf77737c9369c031d6e238
+    digest: sha256:447eef5ed78dbeacbade9ecc1ed5fea7186a8c4d10d20a42de1788e913ecc41b
