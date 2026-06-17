@@ -224,6 +224,81 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 
 		})
 
+		Context("Drift correction", func() {
+			It("restores ClusterIssuer labels when stripped", func(ctx context.Context) {
+				Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxCertManager{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				})).To(Succeed())
+
+				By("waiting for initial ClusterIssuer creation with ownership labels")
+				Eventually(func(g Gomega) {
+					obj := newClusterIssuer(issuerName)
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: issuerName}, obj)).To(Succeed())
+					labels, _, _ := unstructured.NestedStringMap(obj.Object, "metadata", "labels")
+					g.Expect(labels).To(HaveKey(constant.KonfluxOwnerLabel))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("stripping ownership labels from the ClusterIssuer")
+				Eventually(func(g Gomega) {
+					obj := newClusterIssuer(issuerName)
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: issuerName}, obj)).To(Succeed())
+					labels, _, _ := unstructured.NestedStringMap(obj.Object, "metadata", "labels")
+					delete(labels, constant.KonfluxOwnerLabel)
+					delete(labels, constant.KonfluxComponentLabel)
+					_ = unstructured.SetNestedStringMap(obj.Object, labels, "metadata", "labels")
+					g.Expect(k8sClient.Update(ctx, obj)).To(Succeed())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("verifying the ClusterIssuer labels are restored")
+				Eventually(func(g Gomega) {
+					obj := newClusterIssuer(issuerName)
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: issuerName}, obj)).To(Succeed())
+					labels, _, _ := unstructured.NestedStringMap(obj.Object, "metadata", "labels")
+					g.Expect(labels).To(HaveKey(constant.KonfluxOwnerLabel))
+					g.Expect(labels).To(HaveKey(constant.KonfluxComponentLabel))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			})
+
+			It("restores Certificate labels when stripped", func(ctx context.Context) {
+				Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxCertManager{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				})).To(Succeed())
+
+				certNN := types.NamespacedName{
+					Name:      certificateName,
+					Namespace: certManagerNamespace,
+				}
+
+				By("waiting for initial Certificate creation with ownership labels")
+				Eventually(func(g Gomega) {
+					obj := newCertificate(certNN.Name, certNN.Namespace)
+					g.Expect(k8sClient.Get(ctx, certNN, obj)).To(Succeed())
+					labels, _, _ := unstructured.NestedStringMap(obj.Object, "metadata", "labels")
+					g.Expect(labels).To(HaveKey(constant.KonfluxOwnerLabel))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("stripping ownership labels from the Certificate")
+				Eventually(func(g Gomega) {
+					obj := newCertificate(certNN.Name, certNN.Namespace)
+					g.Expect(k8sClient.Get(ctx, certNN, obj)).To(Succeed())
+					labels, _, _ := unstructured.NestedStringMap(obj.Object, "metadata", "labels")
+					delete(labels, constant.KonfluxOwnerLabel)
+					delete(labels, constant.KonfluxComponentLabel)
+					_ = unstructured.SetNestedStringMap(obj.Object, labels, "metadata", "labels")
+					g.Expect(k8sClient.Update(ctx, obj)).To(Succeed())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("verifying the Certificate labels are restored")
+				Eventually(func(g Gomega) {
+					obj := newCertificate(certNN.Name, certNN.Namespace)
+					g.Expect(k8sClient.Get(ctx, certNN, obj)).To(Succeed())
+					labels, _, _ := unstructured.NestedStringMap(obj.Object, "metadata", "labels")
+					g.Expect(labels).To(HaveKey(constant.KonfluxOwnerLabel))
+					g.Expect(labels).To(HaveKey(constant.KonfluxComponentLabel))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			})
+		})
+
 	})
 
 	Context("tracking.IsNoKindMatchError helper function", func() {
