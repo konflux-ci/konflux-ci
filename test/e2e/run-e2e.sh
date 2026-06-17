@@ -26,12 +26,9 @@ fi
 # Deploy test resources (idempotent — safe to run if already deployed)
 SKIP_SAMPLE_COMPONENTS="true" "${REPO_ROOT}/deploy-test-resources.sh"
 
-cd "${REPO_ROOT}/test/go-tests"
-# -mod=mod overrides GOFLAGS=-mod=vendor that may be present on some systems; this repo doesn't vendor.
-
-echo "Running proxy integration tests..."
-go test -mod=mod . -v -timeout 10m
+bash "${REPO_ROOT}/scripts/operator-e2e/run-proxy-integration-tests.sh" "${REPO_ROOT}"
 
 echo "Running E2E conformance tests..."
+cd "${REPO_ROOT}/test/go-tests"
+# -mod=mod overrides GOFLAGS=-mod=vendor that may be present on some systems; this repo doesn't vendor.
 go test -mod=mod ./tests/conformance -v -timeout 45m -ginkgo.vv "$@"
-
