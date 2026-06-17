@@ -21,7 +21,6 @@ import (
 	"fmt"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -171,7 +170,6 @@ func (r *KonfluxCertManagerReconciler) SetupWithManager(mgr ctrl.Manager) error 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&konfluxv1alpha1.KonfluxCertManager{}).
 		Named("konfluxcertmanager").
-		Owns(&corev1.Secret{}).
 		Owns(&certmanagerv1.Certificate{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&certmanagerv1.ClusterIssuer{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Complete(r)

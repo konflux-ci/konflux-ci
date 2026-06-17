@@ -678,8 +678,6 @@ func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
-		Owns(&rbacv1.Role{}).
-		Owns(&rbacv1.RoleBinding{}).
 		Owns(&rbacv1.ClusterRole{}).
 		Owns(&rbacv1.ClusterRoleBinding{}).
 		Owns(&networkingv1.Ingress{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).

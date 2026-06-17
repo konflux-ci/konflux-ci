@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -172,17 +171,10 @@ func (r *KonfluxEnterpriseContractReconciler) SetupWithManager(mgr ctrl.Manager)
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&konfluxv1alpha1.KonfluxEnterpriseContract{}).
 		Named("konfluxenterprisecontract").
-		// Use predicates to filter out unnecessary updates and prevent reconcile loops
-		// Deployments: watch spec changes AND readiness status changes
-		Owns(&appsv1.Deployment{}, builder.WithPredicates(predicate.DeploymentReadinessPredicate)).
-		Owns(&corev1.Service{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
-		Owns(&corev1.ConfigMap{}).
-		Owns(&corev1.Secret{}).
 		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
-		Owns(&rbacv1.Role{}).
-		Owns(&rbacv1.RoleBinding{}).
+		Owns(&corev1.ConfigMap{}).
 		Owns(&rbacv1.ClusterRole{}).
-		Owns(&rbacv1.ClusterRoleBinding{}).
+		Owns(&rbacv1.RoleBinding{}).
 		// Watch CRDs so that out-of-band deletion triggers reconcile and re-apply.
 		Watches(&apiextensionsv1.CustomResourceDefinition{},
 			handler.EnqueueRequestsFromMapFunc(crdMapFunc)).
