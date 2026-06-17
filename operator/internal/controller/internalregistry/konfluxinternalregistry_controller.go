@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"golang.org/x/crypto/bcrypt"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -86,6 +87,7 @@ type KonfluxInternalRegistryReconciler struct {
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=trust.cert-manager.io,resources=bundles,verbs=get;list;watch;create;patch;delete
@@ -191,11 +193,16 @@ func (r *KonfluxInternalRegistryReconciler) SetupWithManager(mgr ctrl.Manager) e
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&konfluxv1alpha1.KonfluxInternalRegistry{}).
 		Named("konfluxinternalregistry").
-		// Watch for changes to registry resources
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(predicate.DeploymentReadinessPredicate)).
 		Owns(&corev1.Service{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
+		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
+		Owns(&certmanagerv1.Certificate{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
+		// NOTE: trust-manager Bundle (trust.cert-manager.io/v1alpha1) is not owned here
+		// because trust-manager's Go module pulls controller-runtime/k8s.io versions
+		// incompatible with this operator. The Bundle is still applied via manifests
+		// but changes to it won't trigger reconciliation.
 		Complete(r)
 }
 
