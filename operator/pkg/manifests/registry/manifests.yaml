@@ -73,7 +73,7 @@ spec:
       containers:
       - args:
         - /etc/zot/config.json
-        image: quay.io/konflux-ci/zot@sha256:a5adb13fc49106d575cf9d1e27114a13e48bdeb1b9081e35c38b26ea00025f36
+        image: quay.io/konflux-ci/zot@sha256:6d8bd88c660378c80e91c675274781550c672ad59f32f4c73f8620868d78dcfa
         livenessProbe:
           initialDelaySeconds: 15
           periodSeconds: 20
