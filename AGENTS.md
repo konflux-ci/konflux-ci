@@ -108,6 +108,29 @@ PRs trigger the following workflows:
 - APIs defined in `operator/api/v1alpha1` — many `Konflux*` kinds (Konflux, BuildService, IntegrationService, ReleaseService, UI, RBAC, etc.)
 - Per-service reconcilers in `operator/internal/controller/<subservice>/`
 
+## Known Dependency Risks
+
+### `data-acceptable-bundles` digest garbage collection
+
+The image `quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles` is
+tagged only with `:latest`. Quay.io garbage-collects old digests that are
+no longer referenced by any tag, so once a new `:latest` is pushed the
+previous digest may be deleted from the registry at any time.
+
+PRs that update this digest reference (typically opened by Renovate or
+MintMaker) should **not** be auto-approved. The new digest itself may be
+garbage-collected before the change is deployed, breaking CI and any
+running instance that references it.
+
+**Review guidance:**
+
+- Flag any PR that updates the `data-acceptable-bundles` digest as
+  carrying GC risk.
+- Reference issue #6997 for full context on this recurring problem.
+- Until the upstream image is published with stable, versioned tags
+  (not just `:latest`), treat these updates as requiring human review
+  rather than automated approval.
+
 ## Skills
 
 Detailed guides live in `skills/` — each subdirectory contains a `SKILL.md` with instructions.
