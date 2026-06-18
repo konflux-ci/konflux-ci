@@ -29,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
@@ -276,12 +277,17 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			By("modifying the Deployment image")
-			dep := &appsv1.Deployment{}
-			Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-			container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, "registry")
-			Expect(container).NotTo(BeNil())
-			container.Image = "tampered-image:latest"
-			Expect(k8sClient.Update(ctx, dep)).To(Succeed())
+			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				dep := &appsv1.Deployment{}
+				if err := k8sClient.Get(ctx, deploymentNN, dep); err != nil {
+					return err
+				}
+				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, "registry")
+				Expect(container).NotTo(BeNil())
+				container.Image = "tampered-image:latest"
+				return k8sClient.Update(ctx, dep)
+			})
+			Expect(err).To(Succeed())
 
 			By("verifying the Deployment image is restored")
 			Eventually(func(g Gomega) {
@@ -315,10 +321,15 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			By("modifying the ConfigMap data")
-			cm := &corev1.ConfigMap{}
-			Expect(k8sClient.Get(ctx, cmNN, cm)).To(Succeed())
-			cm.Data = map[string]string{"config.json": "tampered"}
-			Expect(k8sClient.Update(ctx, cm)).To(Succeed())
+			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				cm := &corev1.ConfigMap{}
+				if err := k8sClient.Get(ctx, cmNN, cm); err != nil {
+					return err
+				}
+				cm.Data = map[string]string{"config.json": "tampered"}
+				return k8sClient.Update(ctx, cm)
+			})
+			Expect(err).To(Succeed())
 
 			By("verifying the ConfigMap data is restored")
 			Eventually(func(g Gomega) {
@@ -351,10 +362,15 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			By("modifying the Service target port")
-			svc := &corev1.Service{}
-			Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
-			svc.Spec.Ports[0].TargetPort.IntVal = 9999
-			Expect(k8sClient.Update(ctx, svc)).To(Succeed())
+			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				svc := &corev1.Service{}
+				if err := k8sClient.Get(ctx, svcNN, svc); err != nil {
+					return err
+				}
+				svc.Spec.Ports[0].TargetPort.IntVal = 9999
+				return k8sClient.Update(ctx, svc)
+			})
+			Expect(err).To(Succeed())
 
 			By("verifying the Service target port is restored")
 			Eventually(func(g Gomega) {
@@ -387,10 +403,15 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			By("modifying the Certificate DNS names")
-			cert := &certmanagerv1.Certificate{}
-			Expect(k8sClient.Get(ctx, certNN, cert)).To(Succeed())
-			cert.Spec.DNSNames = []string{"tampered.example.com"}
-			Expect(k8sClient.Update(ctx, cert)).To(Succeed())
+			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				cert := &certmanagerv1.Certificate{}
+				if err := k8sClient.Get(ctx, certNN, cert); err != nil {
+					return err
+				}
+				cert.Spec.DNSNames = []string{"tampered.example.com"}
+				return k8sClient.Update(ctx, cert)
+			})
+			Expect(err).To(Succeed())
 
 			By("verifying the Certificate DNS names are restored")
 			Eventually(func(g Gomega) {
