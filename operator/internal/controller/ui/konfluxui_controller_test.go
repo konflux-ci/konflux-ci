@@ -799,6 +799,46 @@ var _ = Describe("KonfluxUI Controller", func() {
 				)
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
+
+		It("Should use resolved Dex endpoint for redirect URI when hostname override is configured", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, openShiftClusterInfo)
+
+			ui := &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxUISpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled: ptr.To(true),
+						Host:    "openshift-test.example.com",
+					},
+					Dex: &konfluxv1alpha1.DexDeploymentSpec{
+						Config: &dex.DexParams{
+							Hostname: "custom-dex.example.com",
+							Port:     "8443",
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				testutil.DeleteAndWait(ctx, k8sClient, ui)
+				_ = k8sClient.Delete(ctx, &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{
+					Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
+				}})
+				_ = k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name: dex.DexClientSecretName, Namespace: uiNamespace,
+				}})
+			})
+
+			Eventually(func(g Gomega) {
+				sa := &corev1.ServiceAccount{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
+				}, sa)).To(Succeed())
+				g.Expect(sa.Annotations["serviceaccounts.openshift.io/oauth-redirecturi.dex"]).To(
+					Equal("https://custom-dex.example.com:8443/idp/callback"),
+				)
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
 	})
 
 	Context("NodePort Service configuration via Reconcile", Serial, func() {
