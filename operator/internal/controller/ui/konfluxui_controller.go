@@ -23,6 +23,8 @@ import (
 	"fmt"
 	"net/url"
 
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	consolev1 "github.com/openshift/api/console/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -87,6 +89,10 @@ const (
 	dexConfigMapLabel      = "app.kubernetes.io/managed-by-konflux-ui-reconciler"
 	dexConfigMapVolumeName = "dex"
 
+	// OAuth2 proxy secret names
+	oauth2ProxyClientSecretName = "oauth2-proxy-client-secret" //nolint:gosec // not credentials, just resource names
+	oauth2ProxyCookieSecretName = "oauth2-proxy-cookie-secret" //nolint:gosec // not credentials, just resource names
+
 	// Segment Secret constants
 	segmentSecretBaseName = "segment-bridge-config"
 	segmentSecretVolume   = "segment-bridge-config"
@@ -146,7 +152,7 @@ type KonfluxUIReconciler struct {
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=console.openshift.io,resources=consolelinks,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;patch
-// +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=cert-manager.io,resources=certificates;issuers,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=config.openshift.io,resources=ingresses,verbs=get
 // +kubebuilder:rbac:groups=dex.coreos.com,resources=*,verbs=*
 // +kubebuilder:rbac:groups=core,resources=users;groups,verbs=impersonate
@@ -560,10 +566,10 @@ func (r *KonfluxUIReconciler) ensureUISecrets(ctx context.Context, tc *tracking.
 	}
 
 	// Execute for both secrets
-	if err := ensureSecret("oauth2-proxy-client-secret", "client-secret", 20, true); err != nil {
+	if err := ensureSecret(oauth2ProxyClientSecretName, "client-secret", 20, true); err != nil {
 		return fmt.Errorf("client-secret: %w", err)
 	}
-	return ensureSecret("oauth2-proxy-cookie-secret", "cookie-secret", 16, false)
+	return ensureSecret(oauth2ProxyCookieSecretName, "cookie-secret", 16, false)
 }
 
 // generateRandomBytes generates a random secret value with the specified encoding.
@@ -685,7 +691,7 @@ func (r *KonfluxUIReconciler) mapSegmentBridgeToUI(_ context.Context, _ client.O
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	b := ctrl.NewControllerManagedBy(mgr).
 		For(&konfluxv1alpha1.KonfluxUI{}).
 		Named("konfluxui").
 		// Use predicates to filter out unnecessary updates and prevent reconcile loops
@@ -694,15 +700,25 @@ func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
+		Owns(&corev1.ServiceAccount{}).
 		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&rbacv1.ClusterRole{}).
 		Owns(&rbacv1.ClusterRoleBinding{}).
 		Owns(&networkingv1.Ingress{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
+		Owns(&certmanagerv1.Certificate{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
+		Owns(&certmanagerv1.Issuer{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		// Watch KonfluxSegmentBridge CR so Segment config changes trigger a UI reconcile
 		Watches(&konfluxv1alpha1.KonfluxSegmentBridge{},
 			handler.EnqueueRequestsFromMapFunc(r.mapSegmentBridgeToUI),
-			builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
-		Complete(r)
+			builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate))
+
+	// ConsoleLink CRD only exists on OpenShift; skip watch on non-OpenShift clusters
+	// to avoid informer startup failures when the CRD is absent.
+	if r.ClusterInfo != nil && r.ClusterInfo.IsOpenShift() {
+		b = b.Owns(&consolev1.ConsoleLink{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate))
+	}
+
+	return b.Complete(r)
 }
 
 // reconcileIngress creates or updates the Ingress resource for KonfluxUI when enabled.
