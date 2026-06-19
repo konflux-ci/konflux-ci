@@ -3,7 +3,7 @@ module github.com/konflux-ci/konflux-ci/test/go-tests
 go 1.26.0
 
 require (
-	github.com/coder/websocket v1.8.14
+	github.com/coder/websocket v1.8.15
 	github.com/codeready-toolchain/api v0.0.0-20260609071155-c8f486b1a581
 	github.com/conforma/crds/api v0.1.11
 	github.com/devfile/library/v2 v2.4.0
