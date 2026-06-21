@@ -208,6 +208,7 @@
       "customType": "regex",
       "fileMatch": ["^operator/\\.golangci-lint-version$"],
       "matchStrings": ["^(?<currentValue>v?\\d+\\.\\d+\\.\\d+)\\s*$"],
+      "autoReplaceStringTemplate": "v{{version}}\n",
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "golangci/golangci-lint",
       "extractVersionTemplate": "^v?(?<version>.*)$"
