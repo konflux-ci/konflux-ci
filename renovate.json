@@ -5,6 +5,8 @@
     "konflux-ci/**"
   ],
   "rebaseWhen": "conflicted",
+  "prConcurrentLimit": 30,
+  "prHourlyLimit": 3,
   "packageRules": [
     {
       "matchPackageNames": [
