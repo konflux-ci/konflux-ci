@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Check AGENTS.md length
         env:
           MAX_AGENTS_MD_LINES: ${{ env.MAX_AGENTS_MD_LINES }}

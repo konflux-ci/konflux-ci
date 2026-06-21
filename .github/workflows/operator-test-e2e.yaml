@@ -30,7 +30,7 @@ jobs:
           exit 1
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Check companion PR prerequisites
         env:
@@ -83,7 +83,7 @@ jobs:
             core.setOutput('check_run_id', e2e.id);
             core.setOutput('check_run_id_arm64', arm64.id);
       - name: Checkout PR branch
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ steps.set-ref.outputs.ref }}
           fetch-depth: 0
@@ -207,7 +207,7 @@ jobs:
           docker-images: false
 
       - name: Clone the code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ steps.set-ref.outputs.ref }}
 

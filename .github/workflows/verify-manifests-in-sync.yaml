@@ -24,7 +24,7 @@ jobs:
       manifests: ${{ steps.changed-files.outputs.any_changed }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Check for changes
@@ -44,7 +44,7 @@ jobs:
       pull-requests: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Verify manifests
         id: verify
