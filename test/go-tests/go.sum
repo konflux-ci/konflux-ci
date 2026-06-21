@@ -336,8 +336,8 @@ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/tektoncd/cli v0.43.0 h1:qDDRV2emFJousjZTAb0Dfd5uRFS6Yj8oxIKVaYgLKVk=
 github.com/tektoncd/cli v0.43.0/go.mod h1:AEL+0yRcScRJbeOcPp9XMm+9LVU8jmkh204hT+sZzFU=
-github.com/tektoncd/pipeline v1.13.0 h1:6qLWm+icspIYoZddPosjP2Dwn7ET+lt7VmEdVrgZ1WI=
-github.com/tektoncd/pipeline v1.13.0/go.mod h1:71cP/rC6s/j+f8McEdFCdbcrLEODIfPIFDUqvMHeouM=
+github.com/tektoncd/pipeline v1.13.1 h1:FluwzvfRuEKhxkGSQqXcjaaRK7IfGohjwFtA9/r0AMQ=
+github.com/tektoncd/pipeline v1.13.1/go.mod h1:71cP/rC6s/j+f8McEdFCdbcrLEODIfPIFDUqvMHeouM=
 github.com/tektoncd/triggers v0.34.0 h1:CuhG1moThPGEMlxPUcoBDDplJ3FAczzF8MMAjGScRY0=
 github.com/tektoncd/triggers v0.34.0/go.mod h1:iHqwCaS2ElaWt2RuxCbrHNd5lMfRzPxihqEEygkVn1w=
 github.com/tidwall/gjson v1.18.0 h1:FIDeeyB800efLX89e5a8Y0BNH+LOngJyGrIWxG2FKQY=
