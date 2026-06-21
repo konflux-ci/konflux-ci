@@ -296,6 +296,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           MY_GITHUB_ORG: ${{ secrets.GH_ORG }}
           E2E_APPLICATIONS_NAMESPACE: default-tenant
+          E2E_DEPLOY_TEST_RESOURCES: "true"
         run: |
           ./test/e2e/run-e2e.sh \
             -ginkgo.github-output \
