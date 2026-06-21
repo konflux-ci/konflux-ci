@@ -38,7 +38,7 @@ require (
 	k8s.io/client-go v11.0.0+incompatible
 	k8s.io/klog v1.0.0
 	k8s.io/klog/v2 v2.140.0
-	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2
+	k8s.io/utils v0.0.0-20260617174310-a95e086a2553
 	knative.dev/pkg v0.0.0-20260615201544-6300c57a9e78
 	oras.land/oras-go/v2 v2.5.0
 	sigs.k8s.io/controller-runtime v0.23.3
