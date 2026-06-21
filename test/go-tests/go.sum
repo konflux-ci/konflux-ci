@@ -278,8 +278,8 @@ github.com/openshift/api v0.0.0-20260619095050-5346161d1bf2 h1:oZkYkIvQHkQV8pN0o
 github.com/openshift/api v0.0.0-20260619095050-5346161d1bf2/go.mod h1:Jm45pE7O6/G0tYYhiLzNyZykTjmf9BfhsKYuGfLLwTE=
 github.com/openshift/client-go v0.0.0-20260618131434-17fd91ed6167 h1:TfqgEkvjjdzmVW3wkXWjh65rF+cjahnrBMbRdraT4Wo=
 github.com/openshift/client-go v0.0.0-20260618131434-17fd91ed6167/go.mod h1:SYV1Wn6Pd27K9olD4WbUtjn4RWU83b9UjG1rbaQsTRE=
-github.com/openshift/library-go v0.0.0-20260602070639-19be6ed11363 h1:ljGT24ZK56FN1argkaCCr47YJY8kYiQsmfeFLmPM1rM=
-github.com/openshift/library-go v0.0.0-20260602070639-19be6ed11363/go.mod h1:/HBhy6jm/igWI3Y1vYFwFG3ZCcXmnNsKUT6VBpPyM9A=
+github.com/openshift/library-go v0.0.0-20260618132022-b0f5231f2ed6 h1:Dqs4Fod1A+jnnosihh85xdU9yQVh+R/NcVQLH8sVWr0=
+github.com/openshift/library-go v0.0.0-20260618132022-b0f5231f2ed6/go.mod h1:/HBhy6jm/igWI3Y1vYFwFG3ZCcXmnNsKUT6VBpPyM9A=
 github.com/operator-framework/operator-lib v0.19.0 h1:az6ogYj21rtU0SF9uYctRLyKp2dtlqTsmpfehFy6Ce8=
 github.com/operator-framework/operator-lib v0.19.0/go.mod h1:KxycAjFnHt0DBtHmH3Jm7yHcY5sdrshPKTqM/HKAQ08=
 github.com/peterbourgon/diskv v2.0.1+incompatible h1:UBdAOUP5p4RWqPBg048CAvpKN+vxiaj6gdUUzhl4XmI=
