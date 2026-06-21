@@ -50,10 +50,11 @@ Use **one token per flag** where possible (e.g. `-ginkgo.skip=Flaky`). Values wi
 
 ## Proxy integration tests
 
-`test/e2e/run-e2e.sh` runs `run-proxy-integration-tests.sh` before conformance. OpenShift OAuth (kubeadmin → Dex `id_token`) is implemented in Go (`test/go-tests/proxy_oauth_openshift.go`) and runs in proxy test `BeforeSuite` when `KONFLUX_PROXY_AUTH=openshift`. Useful env vars:
+`test/e2e/run-e2e.sh` runs `run-proxy-integration-tests.sh` before conformance. Demo-user fixtures (`deploy-test-resources.sh`) run only when `E2E_DEPLOY_TEST_RESOURCES=true` (set in GHA; Tekton calls `deploy-test-resources.sh` directly). OpenShift OAuth (kubeadmin → Dex `id_token`) is implemented in Go (`test/go-tests/proxy_oauth_openshift.go`) and runs in proxy test `BeforeSuite` when `KONFLUX_PROXY_AUTH=openshift`. Useful env vars:
 
 | Variable | Purpose |
 |----------|---------|
+| `E2E_DEPLOY_TEST_RESOURCES` | When `true`, run `deploy-test-resources.sh` before tests (Kind Dex `proxy-dex` RBAC; off by default in `run-e2e.sh`) |
 | `KONFLUX_PROXY_AUTH` | `openshift` or `dex` (default: infer — openshift when `OPENSHIFT_PASSWORD`, `KUBEADMIN_PASSWORD_FILE`, or `SHARED_DIR/kubeadmin-password` is set and `TEST_ENVIRONMENT!=upstream`, else dex) |
 | `KONFLUX_PROXY_AUTH_METHOD` | Set by the runner: `openshift-oauth` or `dex-password-grant` |
 | `OPENSHIFT_PASSWORD` / `KUBEADMIN_PASSWORD_FILE` / `SHARED_DIR/kubeadmin-password` | Kubeadmin password for OpenShift OAuth (same sources as infra-deployments `ci-common.sh`) |
