@@ -332,7 +332,7 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
-		It("restores Service spec when modified", func(ctx context.Context) {
+		It("restores Service labels when stripped", func(ctx context.Context) {
 			registry := &konfluxv1alpha1.KonfluxInternalRegistry{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
@@ -344,30 +344,28 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 				Namespace: internalRegistryNamespace,
 			}
 
-			By("waiting for initial Service creation")
-			var originalTargetPort int32
+			By("waiting for initial Service creation with ownership labels")
 			Eventually(func(g Gomega) {
 				svc := &corev1.Service{}
 				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
-				g.Expect(svc.Spec.Ports).NotTo(BeEmpty())
-				originalTargetPort = svc.Spec.Ports[0].TargetPort.IntVal
-				g.Expect(originalTargetPort).NotTo(BeZero())
+				g.Expect(svc.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
-			By("modifying the Service target port")
+			By("stripping ownership labels from the Service")
 			Eventually(func(g Gomega) {
 				svc := &corev1.Service{}
 				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
-				svc.Spec.Ports[0].TargetPort.IntVal = 9999
+				delete(svc.Labels, constant.KonfluxOwnerLabel)
+				delete(svc.Labels, constant.KonfluxComponentLabel)
 				g.Expect(k8sClient.Update(ctx, svc)).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
-			By("verifying the Service target port is restored")
+			By("verifying the Service labels are restored")
 			Eventually(func(g Gomega) {
 				svc := &corev1.Service{}
 				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
-				g.Expect(svc.Spec.Ports).NotTo(BeEmpty())
-				g.Expect(svc.Spec.Ports[0].TargetPort.IntVal).To(Equal(originalTargetPort))
+				g.Expect(svc.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+				g.Expect(svc.Labels).To(HaveKey(constant.KonfluxComponentLabel))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
