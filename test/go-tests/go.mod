@@ -39,7 +39,7 @@ require (
 	k8s.io/klog/v2 v2.140.0
 	k8s.io/utils v0.0.0-20260617174310-a95e086a2553
 	knative.dev/pkg v0.0.0-20260615201544-6300c57a9e78
-	oras.land/oras-go/v2 v2.5.0
+	oras.land/oras-go/v2 v2.6.1
 	sigs.k8s.io/controller-runtime v0.23.3
 	sigs.k8s.io/yaml v1.6.0
 )
