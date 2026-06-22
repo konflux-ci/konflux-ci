@@ -54,6 +54,30 @@ patches:
     kind: Deployment
     name: kyverno-background-controller
     namespace: kyverno
+# OpenShift restricted-v2: upstream 1.18.1 sets runAsUser/runAsGroup 65534, which is outside the
+# namespace UID range. Remove so SCC (OCP) or the image default (Kind) can assign a non-root UID.
+- patch: |-
+    - op: remove
+      path: /spec/template/spec/initContainers/0/securityContext/runAsUser
+    - op: remove
+      path: /spec/template/spec/initContainers/0/securityContext/runAsGroup
+    - op: remove
+      path: /spec/template/spec/containers/0/securityContext/runAsUser
+    - op: remove
+      path: /spec/template/spec/containers/0/securityContext/runAsGroup
+  target:
+    kind: Deployment
+    name: kyverno-admission-controller
+    namespace: kyverno
+- patch: |-
+    - op: remove
+      path: /spec/template/spec/containers/0/securityContext/runAsUser
+    - op: remove
+      path: /spec/template/spec/containers/0/securityContext/runAsGroup
+  target:
+    kind: Deployment
+    name: kyverno-background-controller
+    namespace: kyverno
 - patch: |-
     - op: add
       path: /spec/jobTemplate/spec/template/spec/containers/0/resources
