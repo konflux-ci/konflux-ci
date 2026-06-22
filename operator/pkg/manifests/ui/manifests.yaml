@@ -360,7 +360,7 @@ spec:
             secretKeyRef:
               key: client-secret
               name: oauth2-proxy-client-secret
-        image: quay.io/konflux-ci/dex@sha256:68f87765e0f947a81791c476bdb7706d3632f483e8594aa5ce1ffc6796f9ab92
+        image: quay.io/konflux-ci/dex@sha256:5455171a6cce79d6b43a892b0336696d1b60427c8de6d288d66e374fd5ba82c5
         livenessProbe:
           httpGet:
             path: /healthz/ready
