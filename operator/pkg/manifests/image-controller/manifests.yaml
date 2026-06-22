@@ -1059,7 +1059,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/konflux-ci/image-controller:b31f86d8dce91a4b449c93874edc293eff79be03
+        image: quay.io/konflux-ci/image-controller:da57937270533fea146426141fd644f5b649ba69
         livenessProbe:
           httpGet:
             path: /healthz
