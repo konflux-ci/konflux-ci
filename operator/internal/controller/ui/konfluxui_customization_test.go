@@ -101,11 +101,12 @@ func assertNoConflictingEnvVars(g *gomega.WithT, container *corev1.Container) {
 func TestBuildProxyOverlay(t *testing.T) {
 	t.Run("nil spec returns overlay with oauth2-proxy config", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		overlay := buildProxyOverlay(nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(overlay).NotTo(gomega.BeNil())
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := overlay.ApplyToDeployment(deployment)
+		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
@@ -117,11 +118,12 @@ func TestBuildProxyOverlay(t *testing.T) {
 	t.Run("empty spec returns overlay with oauth2-proxy config", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := &konfluxv1alpha1.ProxyDeploymentSpec{}
-		overlay := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(overlay).NotTo(gomega.BeNil())
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := overlay.ApplyToDeployment(deployment)
+		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
@@ -132,11 +134,12 @@ func TestBuildProxyOverlay(t *testing.T) {
 
 	t.Run("adds CA bundle volume and mount", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		overlay := buildProxyOverlay(nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(overlay).NotTo(gomega.BeNil())
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := overlay.ApplyToDeployment(deployment)
+		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Verify CA bundle volume exists (Projected volume for rotation support)
@@ -191,8 +194,9 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
-		err := overlay.ApplyToDeployment(deployment)
+		overlay, err := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
@@ -217,8 +221,9 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
-		err := overlay.ApplyToDeployment(deployment)
+		overlay, err := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
@@ -250,8 +255,9 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
-		err := overlay.ApplyToDeployment(deployment)
+		overlay, err := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
@@ -283,8 +289,9 @@ func TestBuildProxyOverlay(t *testing.T) {
 		g.Expect(rpContainer).NotTo(gomega.BeNil(), "reverse-proxy container must exist in proxy deployment")
 		originalImage := rpContainer.Image
 
-		overlay := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
-		err := overlay.ApplyToDeployment(deployment)
+		overlay, err := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		rpContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
@@ -1075,4 +1082,239 @@ func TestProxyDeploymentRunAsUser(t *testing.T) {
 				"OpenShift SCCs manage runAsUser; the operator must not set it")
 		}
 	})
+}
+
+func TestAppendEndpointOverlays(t *testing.T) {
+	t.Run("nil endpoints returns unchanged slices", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		initOpts, podOpts, err := appendEndpointOverlays(nil, nil, nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(initOpts).To(gomega.BeNil())
+		g.Expect(podOpts).To(gomega.BeNil())
+	})
+
+	t.Run("empty endpoints returns unchanged slices", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		initOpts, podOpts, err := appendEndpointOverlays(&konfluxv1alpha1.ProxyEndpointsSpec{}, nil, nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(initOpts).To(gomega.BeNil())
+		g.Expect(podOpts).To(gomega.BeNil())
+	})
+
+	t.Run("disabled endpoints are skipped", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		endpoints := &konfluxv1alpha1.ProxyEndpointsSpec{
+			Kite:        &konfluxv1alpha1.EndpointSpec{Enabled: false},
+			KubeArchive: &konfluxv1alpha1.EndpointSpec{Enabled: false},
+			Watson:      &konfluxv1alpha1.WatsonEndpointSpec{Enabled: false},
+		}
+		initOpts, podOpts, err := appendEndpointOverlays(endpoints, nil, nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(initOpts).To(gomega.BeNil())
+		g.Expect(podOpts).To(gomega.BeNil())
+	})
+
+	t.Run("kite enabled sets env vars on init container", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		endpoints := &konfluxv1alpha1.ProxyEndpointsSpec{
+			Kite: &konfluxv1alpha1.EndpointSpec{Enabled: true},
+		}
+
+		initOpts, _, err := appendEndpointOverlays(endpoints, nil, nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		c := applyContainerOpts(initOpts)
+		envMap := envToMap(c.Env)
+
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("KITE_ENABLED", "true"))
+	})
+
+	t.Run("kite with custom hostname sets KITE_HOSTNAME", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		endpoints := &konfluxv1alpha1.ProxyEndpointsSpec{
+			Kite: &konfluxv1alpha1.EndpointSpec{
+				Enabled:  true,
+				Hostname: "custom-kite.svc.cluster.local",
+			},
+		}
+
+		initOpts, _, err := appendEndpointOverlays(endpoints, nil, nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		c := applyContainerOpts(initOpts)
+		envMap := envToMap(c.Env)
+
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("KITE_ENABLED", "true"))
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("KITE_HOSTNAME", "custom-kite.svc.cluster.local"))
+	})
+
+	t.Run("kubearchive enabled sets env vars on init container", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		endpoints := &konfluxv1alpha1.ProxyEndpointsSpec{
+			KubeArchive: &konfluxv1alpha1.EndpointSpec{Enabled: true},
+		}
+
+		initOpts, _, err := appendEndpointOverlays(endpoints, nil, nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		c := applyContainerOpts(initOpts)
+		envMap := envToMap(c.Env)
+
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("KUBEARCHIVE_ENABLED", "true"))
+	})
+
+	t.Run("kubearchive with custom hostname sets KUBEARCHIVE_HOSTNAME", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		endpoints := &konfluxv1alpha1.ProxyEndpointsSpec{
+			KubeArchive: &konfluxv1alpha1.EndpointSpec{
+				Enabled:  true,
+				Hostname: "kubearchive-api.product-kubearchive.svc.cluster.local",
+			},
+		}
+
+		initOpts, _, err := appendEndpointOverlays(endpoints, nil, nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		c := applyContainerOpts(initOpts)
+		envMap := envToMap(c.Env)
+
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("KUBEARCHIVE_ENABLED", "true"))
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("KUBEARCHIVE_HOSTNAME", "kubearchive-api.product-kubearchive.svc.cluster.local"))
+	})
+
+	t.Run("watson with custom hostname sets WATSON_HOSTNAME", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		endpoints := &konfluxv1alpha1.ProxyEndpointsSpec{
+			Watson: &konfluxv1alpha1.WatsonEndpointSpec{
+				Enabled:    true,
+				Hostname:   "watson.internal.svc.cluster.local",
+				SecretName: "watson-secret",
+			},
+		}
+
+		initOpts, _, err := appendEndpointOverlays(endpoints, nil, nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		c := applyContainerOpts(initOpts)
+		envMap := envToMap(c.Env)
+
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("WATSON_ENABLED", "true"))
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("WATSON_HOSTNAME", "watson.internal.svc.cluster.local"))
+	})
+
+	t.Run("watson enabled sets env vars and updates secret volume", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		endpoints := &konfluxv1alpha1.ProxyEndpointsSpec{
+			Watson: &konfluxv1alpha1.WatsonEndpointSpec{
+				Enabled:    true,
+				SecretName: "my-watson-secret",
+			},
+		}
+
+		initOpts, podOpts, err := appendEndpointOverlays(endpoints, nil, nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		c := applyContainerOpts(initOpts)
+		envMap := envToMap(c.Env)
+
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("WATSON_ENABLED", "true"))
+		g.Expect(podOpts).NotTo(gomega.BeEmpty(), "watson should add pod-level options for the secret volume update")
+	})
+
+	t.Run("watson without secret name returns error", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		endpoints := &konfluxv1alpha1.ProxyEndpointsSpec{
+			Watson: &konfluxv1alpha1.WatsonEndpointSpec{
+				Enabled: true,
+			},
+		}
+
+		_, _, err := appendEndpointOverlays(endpoints, nil, nil)
+		g.Expect(err).To(gomega.HaveOccurred())
+		g.Expect(err.Error()).To(gomega.ContainSubstring("secretName"))
+	})
+
+	t.Run("all endpoints enabled together", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		endpoints := &konfluxv1alpha1.ProxyEndpointsSpec{
+			Kite:        &konfluxv1alpha1.EndpointSpec{Enabled: true},
+			KubeArchive: &konfluxv1alpha1.EndpointSpec{Enabled: true, Hostname: "ka.ns.svc.cluster.local"},
+			Watson:      &konfluxv1alpha1.WatsonEndpointSpec{Enabled: true, SecretName: "watson-secret"},
+		}
+
+		initOpts, podOpts, err := appendEndpointOverlays(endpoints, nil, nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		c := applyContainerOpts(initOpts)
+		envMap := envToMap(c.Env)
+
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("KITE_ENABLED", "true"))
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("KUBEARCHIVE_ENABLED", "true"))
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("KUBEARCHIVE_HOSTNAME", "ka.ns.svc.cluster.local"))
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("WATSON_ENABLED", "true"))
+		g.Expect(podOpts).NotTo(gomega.BeEmpty())
+	})
+
+	t.Run("watson secret volume update applied to deployment", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := &konfluxv1alpha1.ProxyDeploymentSpec{
+			Endpoints: &konfluxv1alpha1.ProxyEndpointsSpec{
+				Watson: &konfluxv1alpha1.WatsonEndpointSpec{
+					Enabled:    true,
+					SecretName: "my-watson-creds",
+				},
+			},
+		}
+
+		deployment := getUIDeployment(t, proxyDeploymentName)
+		overlay, err := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		err = overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		var watsonVolume *corev1.Volume
+		for i := range deployment.Spec.Template.Spec.Volumes {
+			if deployment.Spec.Template.Spec.Volumes[i].Name == watsonConfigVolumeName {
+				watsonVolume = &deployment.Spec.Template.Spec.Volumes[i]
+				break
+			}
+		}
+		g.Expect(watsonVolume).NotTo(gomega.BeNil(), "watson-config volume must exist")
+		g.Expect(watsonVolume.Secret).NotTo(gomega.BeNil())
+		g.Expect(watsonVolume.Secret.SecretName).To(gomega.Equal("my-watson-creds"))
+
+		initContainer := testutil.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
+		g.Expect(initContainer).NotTo(gomega.BeNil())
+		envMap := envToMap(initContainer.Env)
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("WATSON_ENABLED", "true"))
+	})
+
+	t.Run("kite enabled sets env on init container in deployment", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := &konfluxv1alpha1.ProxyDeploymentSpec{
+			Endpoints: &konfluxv1alpha1.ProxyEndpointsSpec{
+				Kite: &konfluxv1alpha1.EndpointSpec{Enabled: true},
+			},
+		}
+
+		deployment := getUIDeployment(t, proxyDeploymentName)
+		overlay, err := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		err = overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		initContainer := testutil.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
+		g.Expect(initContainer).NotTo(gomega.BeNil())
+		envMap := envToMap(initContainer.Env)
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("KITE_ENABLED", "true"))
+	})
+}
+
+func applyContainerOpts(opts []customization.ContainerOption) *corev1.Container {
+	c := &corev1.Container{}
+	for _, opt := range opts {
+		opt(c, customization.DeploymentContext{})
+	}
+	return c
+}
+
+func envToMap(envVars []corev1.EnvVar) map[string]string {
+	m := make(map[string]string, len(envVars))
+	for _, e := range envVars {
+		m[e.Name] = e.Value
+	}
+	return m
 }

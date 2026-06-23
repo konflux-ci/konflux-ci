@@ -6,7 +6,7 @@ TEMPLATES_DIR=/mnt/caddy-templates
 SNIPPETS_DIR=/mnt/caddy-snippets
 SERVICE_CA_PATH=/mnt/service-ca/service-ca.crt
 
-for cmd in sed getent; do
+for cmd in sed getent printf; do
   command -v "${cmd}" >/dev/null 2>&1 || { echo "required command not found: ${cmd}"; exit 1; }
 done
 
@@ -42,6 +42,53 @@ if [ -f "${TEMPLATES_DIR}/tekton-results.caddy" ]; then
   else
     log "tekton-results not available, skipping"
   fi
+fi
+
+# Process kite template
+if [ "${KITE_ENABLED:-}" = "true" ] && [ -f "${TEMPLATES_DIR}/kite.caddy" ]; then
+  hostname="${KITE_HOSTNAME:-konflux-kite.konflux-kite.svc.cluster.local}"
+  sed "s/__KITE_HOSTNAME__/${hostname}/g" \
+    "${TEMPLATES_DIR}/kite.caddy" > "${SNIPPETS_DIR}/kite.caddy"
+  log "kite endpoint enabled (${hostname})"
+fi
+
+# Process kubearchive template
+if [ "${KUBEARCHIVE_ENABLED:-}" = "true" ] && [ -f "${TEMPLATES_DIR}/kubearchive.caddy" ]; then
+  hostname="${KUBEARCHIVE_HOSTNAME:-kubearchive-api-server.kubearchive.svc.cluster.local}"
+  sed "s/__KUBEARCHIVE_HOSTNAME__/${hostname}/g" \
+    "${TEMPLATES_DIR}/kubearchive.caddy" > "${SNIPPETS_DIR}/kubearchive.caddy"
+  log "kubearchive endpoint enabled (${hostname})"
+fi
+
+# Process watson template.
+# The API_KEY value is cached by file_watcher directly from the mounted Secret;
+# the init container only generates the Caddy route and TLS snippets.
+if [ "${WATSON_ENABLED:-}" = "true" ] && [ -f "${TEMPLATES_DIR}/watson.caddy" ]; then
+  watson_host="${WATSON_HOSTNAME:-api.us-east.assistant.watson.cloud.ibm.com}"
+  watson_default_host="api.us-east.assistant.watson.cloud.ibm.com"
+
+  sed "s/__WATSON_HOST__/${watson_host}/g" \
+    "${TEMPLATES_DIR}/watson.caddy" > "${SNIPPETS_DIR}/watson.caddy"
+
+  # Generate watson TLS transport config.
+  # - Default external host: always use system roots with SNI (never skip verification)
+  # - Overridden hostname + service CA: use service CA
+  # - Overridden hostname, no service CA: skip verification (in-cluster self-signed)
+  if [ "${watson_host}" = "${watson_default_host}" ]; then
+    printf 'transport http {\n    tls_server_name %s\n}\n' "${watson_host}" \
+      > "${SNIPPETS_DIR}/watson-tls.conf"
+    log "watson TLS: system roots with SNI (external host)"
+  elif [ -f "${SERVICE_CA_PATH}" ]; then
+    printf 'transport http {\n    tls_trust_pool file %s\n}\n' "${SERVICE_CA_PATH}" \
+      > "${SNIPPETS_DIR}/watson-tls.conf"
+    log "watson TLS: service CA (in-cluster override)"
+  else
+    printf 'transport http {\n    tls_insecure_skip_verify\n}\n' \
+      > "${SNIPPETS_DIR}/watson-tls.conf"
+    log "watson TLS: insecure (in-cluster, no service CA)"
+  fi
+
+  log "watson endpoint enabled (${watson_host})"
 fi
 
 # Generate TLS transport config for backend services (Tekton Results, KubeArchive, etc.).
