@@ -139,3 +139,5 @@ spec:
       allowPackageRegistryProxy: true
       packageRegistryProxyNpmUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/npm-proxy"
       packageRegistryProxyYarnUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/yarn-proxy"
+      packageRegistryProxyGomodUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/gomod-proxy"
+      packageRegistryProxyPipUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/pip-proxy"

@@ -1340,10 +1340,30 @@ spec:
                                   An empty string is a valid value meaning no hosts are excluded from proxying.
                                   When nil (omitted), the key is absent from the ConfigMap.
                                 type: string
+                              packageRegistryProxyGomodUrl:
+                                description: |-
+                                  PackageRegistryProxyGomodURL is the URL of the gomod package registry proxy.
+                                  Written as "package-registry-proxy-gomod-url" in the cluster-config ConfigMap.
+                                  Do not embed credentials in this URL — the ConfigMap is readable by all authenticated users.
+                                type: string
+                                x-kubernetes-validations:
+                                - message: URL must not contain credentials (userinfo).
+                                    Use a Secret for proxy authentication.
+                                  rule: '!self.contains(''@'')'
                               packageRegistryProxyNpmUrl:
                                 description: |-
                                   PackageRegistryProxyNpmURL is the URL of the npm package registry proxy.
                                   Written as "package-registry-proxy-npm-url" in the cluster-config ConfigMap.
+                                  Do not embed credentials in this URL — the ConfigMap is readable by all authenticated users.
+                                type: string
+                                x-kubernetes-validations:
+                                - message: URL must not contain credentials (userinfo).
+                                    Use a Secret for proxy authentication.
+                                  rule: '!self.contains(''@'')'
+                              packageRegistryProxyPipUrl:
+                                description: |-
+                                  PackageRegistryProxyPipURL is the URL of the pip package registry proxy.
+                                  Written as "package-registry-proxy-pip-url" in the cluster-config ConfigMap.
                                   Do not embed credentials in this URL — the ConfigMap is readable by all authenticated users.
                                 type: string
                                 x-kubernetes-validations:
