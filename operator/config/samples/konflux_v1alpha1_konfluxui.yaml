@@ -23,6 +23,18 @@ spec:
   # Proxy deployment configuration
   proxy:
     replicas: 3
+    # Optional backend endpoints proxied by the UI reverse proxy
+    endpoints:
+      kite:
+        enabled: true
+        # hostname: "custom-kite.namespace.svc.cluster.local"  # optional override
+      kubearchive:
+        enabled: true
+        # hostname: "kubearchive-api-server.kubearchive.svc.cluster.local"
+      watson:
+        enabled: false
+        # hostname: "api.us-east.assistant.watson.cloud.ibm.com"  # optional override
+        # secretName: "watson-config"  # Secret with API_KEY; required when enabled
     reverseProxy:
       resources:
         requests:
