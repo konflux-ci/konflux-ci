@@ -54,16 +54,13 @@ var _ = Describe("KonfluxEnterpriseContract Controller", Ordered, func() {
 		}
 	}
 
-	AfterEach(func(ctx context.Context) {
-		testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxEnterpriseContract{ObjectMeta: metav1.ObjectMeta{Name: CRName}})
-		testutil.DeleteAndWait(ctx, k8sClient, newDefaultECPolicy())
-	})
-
 	Context("with skipPolicies unset (defaults to deploying policies)", func() {
 		It("should successfully reconcile and create policies", func(ctx context.Context) {
-			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxEnterpriseContract{
+			ec := &konfluxv1alpha1.KonfluxEnterpriseContract{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			})).To(Succeed())
+			}
+			Expect(k8sClient.Create(ctx, ec)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, ec, newDefaultECPolicy())
 
 			Eventually(waitForReady(ctx)).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
@@ -86,12 +83,14 @@ var _ = Describe("KonfluxEnterpriseContract Controller", Ordered, func() {
 
 	Context("with skipPolicies set to true", func() {
 		It("should reconcile without creating EnterpriseContractPolicy resources", func(ctx context.Context) {
-			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxEnterpriseContract{
+			ec := &konfluxv1alpha1.KonfluxEnterpriseContract{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 				Spec: konfluxv1alpha1.KonfluxEnterpriseContractSpec{
 					SkipPolicies: true,
 				},
-			})).To(Succeed())
+			}
+			Expect(k8sClient.Create(ctx, ec)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, ec, newDefaultECPolicy())
 
 			Eventually(waitForReady(ctx)).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
@@ -118,6 +117,7 @@ var _ = Describe("KonfluxEnterpriseContract Controller", Ordered, func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, newDefaultECPolicy())
 
 			Eventually(waitForReady(ctx)).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
@@ -153,6 +153,7 @@ var _ = Describe("KonfluxEnterpriseContract Controller", Ordered, func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, newDefaultECPolicy())
 
 			Eventually(waitForReady(ctx)).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 

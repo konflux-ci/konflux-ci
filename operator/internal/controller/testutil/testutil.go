@@ -258,9 +258,25 @@ func DeleteAndWait(ctx context.Context, c client.Client, obj client.Object) {
 		// Propagate unexpected errors (e.g. network failure, unauthorized) immediately
 		// rather than masking them as a generic timeout.
 		g.Expect(err).NotTo(HaveOccurred(), "unexpected error while waiting for deletion of %s", key)
-		// err == nil: object still exists — keep retrying.
+		// Re-issue delete in case an in-flight reconcile recreated the object.
+		// After the parent CR is gone no new reconciles trigger, so this converges.
+		_ = c.Delete(ctx, obj) //nolint:errcheck
 		g.Expect(false).To(BeTrue(), "object %s still exists, waiting for deletion", key)
-	}).WithTimeout(10 * time.Second).WithPolling(250 * time.Millisecond).Should(Succeed())
+	}).WithTimeout(20 * time.Second).WithPolling(250 * time.Millisecond).Should(Succeed())
+}
+
+// DeferCleanupParentAndChildren registers a single DeferCleanup that deletes the parent
+// CR first (stopping the reconciler), then deletes orphaned cluster-scoped children
+// that envtest's missing GC won't cascade-delete. This avoids the Ginkgo DeferCleanup
+// LIFO ordering issue where separate DeferCleanup calls would delete children first
+// while the reconciler is still active and recreating them.
+func DeferCleanupParentAndChildren(c client.Client, parent client.Object, children ...client.Object) {
+	DeferCleanup(func(ctx context.Context) {
+		DeleteAndWait(ctx, c, parent)
+		for _, child := range children {
+			DeleteAndWait(ctx, c, child)
+		}
+	})
 }
 
 // StartManagerWithContext starts mgr in a goroutine tied to the provided context and

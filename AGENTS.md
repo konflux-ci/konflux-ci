@@ -70,6 +70,20 @@ After changing APIs or RBAC annotations, run `make manifests generate` from `ope
 1. **Platform conformance** (`test/go-tests/tests/conformance/`) — end-to-end tests against a deployed Konflux instance, run via `test/e2e/run-e2e.sh`. Uses Ginkgo/Gomega with a shared `Framework` in `test/go-tests/pkg/framework/`.
 2. **Operator unit/integration** (`operator/`) — controller tests using controller-runtime **envtest** (no real cluster needed). **Prefer Gomega matchers** for assertions in unit and functional tests. Shared test utilities in `operator/internal/controller/testutil/`. Run via `make test` from `operator/`.
 
+**Test cleanup pattern — `DeferCleanupParentAndChildren`:**
+
+Controller tests that create a parent CR and verify reconciler-managed children (ClusterRoles, ClusterRoleBindings, sub-CRs, etc.) **must** use `testutil.DeferCleanupParentAndChildren` for cleanup:
+
+```go
+Expect(k8sClient.Create(ctx, parentCR)).To(Succeed())
+testutil.DeferCleanupParentAndChildren(k8sClient, parentCR,
+    &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "child-role"}},
+    &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "child-binding"}},
+)
+```
+
+Why: envtest has no garbage collector, so child resources must be cleaned manually. Ginkgo's `DeferCleanup` executes in LIFO order — registering children after the parent causes children to be deleted first, triggering the reconciler to recreate them (flaky timeout). `DeferCleanupParentAndChildren` deletes parent first (stopping reconciles), then children. The helper also re-issues deletes during polling to handle in-flight reconcile races.
+
 ```bash
 # Kube-linter (before PR)
 mkdir -p .kube-linter

@@ -695,7 +695,9 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+			testutil.DeferCleanupParentAndChildren(k8sClient, buildService, &rbacv1.ClusterRole{
+				ObjectMeta: metav1.ObjectMeta{Name: pipelinesRunnerClusterRoleName},
+			})
 
 			crNN := types.NamespacedName{Name: pipelinesRunnerClusterRoleName}
 
@@ -703,9 +705,6 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, crNN, &rbacv1.ClusterRole{})).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRole{
-				ObjectMeta: metav1.ObjectMeta{Name: crNN.Name},
-			})
 
 			By("deleting the ClusterRole")
 			Expect(k8sClient.Delete(ctx, &rbacv1.ClusterRole{
@@ -727,7 +726,9 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+			testutil.DeferCleanupParentAndChildren(k8sClient, buildService, &rbacv1.ClusterRoleBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: pipelinesRunnerClusterRoleBindingName},
+			})
 
 			crbNN := types.NamespacedName{Name: pipelinesRunnerClusterRoleBindingName}
 
@@ -735,9 +736,6 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, crbNN, &rbacv1.ClusterRoleBinding{})).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRoleBinding{
-				ObjectMeta: metav1.ObjectMeta{Name: crbNN.Name},
-			})
 
 			By("deleting the ClusterRoleBinding")
 			Expect(k8sClient.Delete(ctx, &rbacv1.ClusterRoleBinding{
@@ -1123,7 +1121,9 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+			testutil.DeferCleanupParentAndChildren(k8sClient, buildService, &rbacv1.ClusterRole{
+				ObjectMeta: metav1.ObjectMeta{Name: pipelinesRunnerClusterRoleName},
+			})
 
 			crNN := types.NamespacedName{Name: pipelinesRunnerClusterRoleName}
 
@@ -1135,9 +1135,6 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				g.Expect(cr.Rules).NotTo(BeEmpty())
 				originalRules = cr.Rules
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRole{
-				ObjectMeta: metav1.ObjectMeta{Name: crNN.Name},
-			})
 
 			By("modifying the ClusterRole rules")
 			Eventually(func(g Gomega) {
@@ -1166,7 +1163,9 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+			testutil.DeferCleanupParentAndChildren(k8sClient, buildService, &rbacv1.ClusterRoleBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: pipelinesRunnerClusterRoleBindingName},
+			})
 
 			crbNN := types.NamespacedName{Name: pipelinesRunnerClusterRoleBindingName}
 
@@ -1178,9 +1177,6 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				g.Expect(crb.Subjects).NotTo(BeEmpty())
 				originalSubjects = crb.Subjects
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRoleBinding{
-				ObjectMeta: metav1.ObjectMeta{Name: crbNN.Name},
-			})
 
 			By("modifying the ClusterRoleBinding subjects")
 			Eventually(func(g Gomega) {

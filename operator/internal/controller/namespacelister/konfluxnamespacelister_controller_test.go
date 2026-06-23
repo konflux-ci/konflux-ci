@@ -270,7 +270,9 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, namespaceLister)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, namespaceLister)
+			testutil.DeferCleanupParentAndChildren(k8sClient, namespaceLister,
+				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: authorizerClusterRoleName}},
+			)
 
 			crNN := types.NamespacedName{Name: authorizerClusterRoleName}
 
@@ -278,9 +280,6 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, crNN, &rbacv1.ClusterRole{})).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRole{
-				ObjectMeta: metav1.ObjectMeta{Name: crNN.Name},
-			})
 
 			By("deleting the ClusterRole")
 			Expect(k8sClient.Delete(ctx, &rbacv1.ClusterRole{
@@ -300,7 +299,9 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, namespaceLister)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, namespaceLister)
+			testutil.DeferCleanupParentAndChildren(k8sClient, namespaceLister,
+				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: authorizerClusterRoleName}},
+			)
 
 			crbNN := types.NamespacedName{Name: authorizerClusterRoleName}
 
@@ -308,9 +309,6 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, crbNN, &rbacv1.ClusterRoleBinding{})).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRoleBinding{
-				ObjectMeta: metav1.ObjectMeta{Name: crbNN.Name},
-			})
 
 			By("deleting the ClusterRoleBinding")
 			Expect(k8sClient.Delete(ctx, &rbacv1.ClusterRoleBinding{
@@ -483,7 +481,9 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, namespaceLister)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, namespaceLister)
+			testutil.DeferCleanupParentAndChildren(k8sClient, namespaceLister,
+				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: authorizerClusterRoleName}},
+			)
 
 			crNN := types.NamespacedName{Name: authorizerClusterRoleName}
 
@@ -495,9 +495,6 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 				g.Expect(cr.Rules).NotTo(BeEmpty())
 				originalRules = cr.Rules
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRole{
-				ObjectMeta: metav1.ObjectMeta{Name: crNN.Name},
-			})
 
 			By("modifying the ClusterRole rules")
 			Eventually(func(g Gomega) {
@@ -524,7 +521,9 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, namespaceLister)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, namespaceLister)
+			testutil.DeferCleanupParentAndChildren(k8sClient, namespaceLister,
+				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: authorizerClusterRoleName}},
+			)
 
 			crbNN := types.NamespacedName{Name: authorizerClusterRoleName}
 
@@ -536,9 +535,6 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 				g.Expect(crb.Subjects).NotTo(BeEmpty())
 				originalSubjects = crb.Subjects
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRoleBinding{
-				ObjectMeta: metav1.ObjectMeta{Name: crbNN.Name},
-			})
 
 			By("modifying the ClusterRoleBinding subjects")
 			Eventually(func(g Gomega) {
