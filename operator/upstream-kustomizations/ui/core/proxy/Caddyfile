@@ -5,6 +5,9 @@
 	file_watcher {
 		cache kube_token /var/run/secrets/konflux-ci.dev/serviceaccount/token
 		cache backend_token /var/run/secrets/konflux-ci.dev/backend/token
+		cache watson_auth /mnt/watson-config/API_KEY {
+			default ""
+		}
 		watch /var/run/secrets/kubernetes.io/serviceaccount
 		watch /mnt/cluster-ca
 		watch /mnt/service-ca
