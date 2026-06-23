@@ -118,7 +118,7 @@ jobs:
       # 2) The token has workflow scope, required when the release target commit touches workflow files.
       - name: Generate GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.UPDATE_BOT_APP_ID }}
           private-key: ${{ secrets.UPDATE_BOT_PRIVATE_KEY }}
