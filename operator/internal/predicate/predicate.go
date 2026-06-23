@@ -48,6 +48,27 @@ func generationOrMetadataChanged(oldObj, newObj client.Object) bool {
 // IgnoreStatusUpdatesPredicate filters out status-only updates.
 // Reconciliation triggers on spec changes (generation bump), ownerReference
 // changes, and label/annotation changes.
+//
+// IMPORTANT: This predicate relies on metadata.generation incrementing on spec
+// changes. It must NOT be used on resources where generation is unreliable:
+//
+//   - Generation-exempt resources (hardcoded in kube-apiserver, generation
+//     always 0): Services, Namespaces, Nodes, PVs, PVCs, ResourceQuotas.
+//     Spec changes on these resources will NOT trigger reconciliation.
+//
+//   - Resources without a status subresource (Secrets, ConfigMaps,
+//     ServiceAccounts, RBAC resources). These never receive status-only
+//     updates, so the predicate provides no filtering benefit and can only
+//     block legitimate data changes.
+//
+// Safe to use on resources with a status subresource AND proper generation
+// tracking: Deployments (use DeploymentReadinessPredicate instead),
+// Certificates, Issuers, CronJobs, Ingresses, and all CRDs with /status.
+//
+// Exception: Namespaces keep this predicate because their spec only contains
+// .spec.finalizers (not managed by our controllers), and filtering
+// .status.phase transitions is desirable. Label/annotation drift is always
+// detected via the metadata comparison path regardless of generation.
 var IgnoreStatusUpdatesPredicate = predicate.Funcs{
 	UpdateFunc: func(e event.UpdateEvent) bool {
 		if e.ObjectOld == nil || e.ObjectNew == nil {
