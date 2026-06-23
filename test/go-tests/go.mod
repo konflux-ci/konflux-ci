@@ -93,7 +93,7 @@ require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudflare/circl v1.6.4 // indirect
-	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
+	github.com/cyphar/filepath-securejoin v0.7.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/docker/docker v28.5.2+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.8 // indirect
@@ -216,7 +216,7 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
 )
 
-replace github.com/cyphar/filepath-securejoin => github.com/cyphar/filepath-securejoin v0.3.6
+replace github.com/cyphar/filepath-securejoin => github.com/cyphar/filepath-securejoin v0.7.0
 
 replace github.com/expr-lang/expr => github.com/expr-lang/expr v1.17.8
 
