@@ -11,4 +11,6 @@ exclude = [
   '^https?://169\.254\.',
   '^https://gitlab\.cee\.redhat\.com',
   '^https://join\.slack\.com',
+  '^https://dexidp\.io',
+  '^https://kubernetes\.io',
 ]
