@@ -78,6 +78,51 @@ type ProxyDeploymentSpec struct {
 	// OAuth2Proxy defines customizations for the oauth2-proxy container.
 	// +optional
 	OAuth2Proxy *ContainerSpec `json:"oauth2Proxy,omitempty"`
+	// Endpoints configures optional backend services that the proxy routes to.
+	// Each endpoint can be independently enabled and customized.
+	// +optional
+	Endpoints *ProxyEndpointsSpec `json:"endpoints,omitempty"`
+}
+
+// ProxyEndpointsSpec configures optional backend endpoints proxied by the UI reverse proxy.
+type ProxyEndpointsSpec struct {
+	// Kite enables the Kite plugin endpoint.
+	// When enabled, requests to /api/k8s/plugins/kite/ are proxied to the Kite backend.
+	// +optional
+	Kite *EndpointSpec `json:"kite,omitempty"`
+	// KubeArchive enables the KubeArchive plugin endpoint.
+	// When enabled, requests to /api/k8s/plugins/kubearchive/ are proxied to the KubeArchive backend.
+	// +optional
+	KubeArchive *EndpointSpec `json:"kubearchive,omitempty"`
+	// Watson enables the Watson chatbot endpoint.
+	// When enabled, requests to /api/chatbot/ are proxied to the IBM Watson Assistant API.
+	// +optional
+	Watson *WatsonEndpointSpec `json:"watson,omitempty"`
+}
+
+// EndpointSpec configures an optional in-cluster backend endpoint.
+type EndpointSpec struct {
+	// Enabled controls whether this endpoint is active.
+	Enabled bool `json:"enabled"`
+	// Hostname overrides the default backend service address.
+	// +optional
+	Hostname string `json:"hostname,omitempty"`
+}
+
+// WatsonEndpointSpec configures the Watson chatbot endpoint.
+type WatsonEndpointSpec struct {
+	// Enabled controls whether the Watson chatbot endpoint is active.
+	Enabled bool `json:"enabled"`
+	// Hostname overrides the Watson API host.
+	// Defaults to api.us-east.assistant.watson.cloud.ibm.com.
+	// +optional
+	Hostname string `json:"hostname,omitempty"`
+	// SecretName is the name of the Secret containing the Watson API key.
+	// The Secret must have a key named API_KEY with the pre-encoded Basic auth
+	// value (e.g. base64("apikey:<your-api-key>")).
+	// +kubebuilder:default="watson-api-key"
+	// +kubebuilder:validation:MinLength=1
+	SecretName string `json:"secretName,omitempty"`
 }
 
 // DexDeploymentSpec defines customizations for the dex deployment.

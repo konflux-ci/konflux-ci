@@ -116,22 +116,23 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 			g.Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
 		}
 
-		// Clean up after each spec. DeleteAndWait is a no-op when the object is already absent,
-		// so all deletions are safe to run unconditionally.
-		// ClusterIssuers are cleaned up explicitly because envtest has no GC controller, so
-		// OwnerReferences do not trigger cascading deletion.
-		AfterEach(func(ctx context.Context) {
-			testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxCertManager{ObjectMeta: metav1.ObjectMeta{Name: CRName}})
-			testutil.DeleteAndWait(ctx, k8sClient, newClusterIssuer(bootstrapIssuerName))
-			testutil.DeleteAndWait(ctx, k8sClient, newClusterIssuer(issuerName))
-			testutil.DeleteAndWait(ctx, k8sClient, newCertificate(certificateName, certManagerNamespace))
-		})
+		// certManagerChildren lists all cluster-scoped/namespaced children that envtest's
+		// missing GC won't cascade-delete when the parent CR is removed.
+		certManagerChildren := func() []client.Object {
+			return []client.Object{
+				newClusterIssuer(bootstrapIssuerName),
+				newClusterIssuer(issuerName),
+				newCertificate(certificateName, certManagerNamespace),
+			}
+		}
 
 		Context("with createClusterIssuer unset (defaults to enabled)", func() {
 			It("should successfully reconcile the resource and create ClusterIssuers", func(ctx context.Context) {
-				Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxCertManager{
+				cm := &konfluxv1alpha1.KonfluxCertManager{
 					ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				})).To(Succeed())
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
 				Eventually(waitForReady).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 				By("verifying ClusterIssuers were created")
@@ -143,10 +144,12 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 		Context("with createClusterIssuer explicitly enabled", func() {
 			It("should successfully reconcile the resource and create ClusterIssuers", func(ctx context.Context) {
 				enabled := true
-				Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxCertManager{
+				cm := &konfluxv1alpha1.KonfluxCertManager{
 					ObjectMeta: metav1.ObjectMeta{Name: CRName},
 					Spec:       konfluxv1alpha1.KonfluxCertManagerSpec{CreateClusterIssuer: &enabled},
-				})).To(Succeed())
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
 				Eventually(waitForReady).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 				By("verifying ClusterIssuers were created")
@@ -158,10 +161,12 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 		Context("with createClusterIssuer disabled", func() {
 			It("should successfully reconcile the resource and not create ClusterIssuers", func(ctx context.Context) {
 				disabled := false
-				Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxCertManager{
+				cm := &konfluxv1alpha1.KonfluxCertManager{
 					ObjectMeta: metav1.ObjectMeta{Name: CRName},
 					Spec:       konfluxv1alpha1.KonfluxCertManagerSpec{CreateClusterIssuer: &disabled},
-				})).To(Succeed())
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
 				Eventually(waitForReady).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 				By("verifying no ClusterIssuers were created")
@@ -174,9 +179,11 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 
 		Context("Self-healing", func() {
 			It("recreates ClusterIssuer when deleted", func(ctx context.Context) {
-				Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxCertManager{
+				cm := &konfluxv1alpha1.KonfluxCertManager{
 					ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				})).To(Succeed())
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
 
 				By("waiting for initial ClusterIssuer creation")
 				Eventually(func(g Gomega) {
@@ -196,9 +203,11 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 			})
 
 			It("recreates Certificate when deleted", func(ctx context.Context) {
-				Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxCertManager{
+				cm := &konfluxv1alpha1.KonfluxCertManager{
 					ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				})).To(Succeed())
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
 
 				certNN := types.NamespacedName{
 					Name:      certificateName,
@@ -226,9 +235,11 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 
 		Context("Drift correction", func() {
 			It("restores ClusterIssuer labels when stripped", func(ctx context.Context) {
-				Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxCertManager{
+				cm := &konfluxv1alpha1.KonfluxCertManager{
 					ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				})).To(Succeed())
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
 
 				By("waiting for initial ClusterIssuer creation with ownership labels")
 				Eventually(func(g Gomega) {
@@ -260,9 +271,11 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 			})
 
 			It("restores Certificate labels when stripped", func(ctx context.Context) {
-				Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxCertManager{
+				cm := &konfluxv1alpha1.KonfluxCertManager{
 					ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				})).To(Succeed())
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
 
 				certNN := types.NamespacedName{
 					Name:      certificateName,

@@ -5,15 +5,18 @@ configMapGenerator:
   name: proxy-caddyfile
 - files:
   - tekton-results.caddy
+  - kite.caddy
+  - kubearchive.caddy
+  - watson.caddy
   name: proxy-caddy-templates
 - files:
   - generate-proxy-config.sh
   name: proxy-generate-config
 images:
-- digest: sha256:7c781d6356c69b96de0b6ed0484a3e753d96fa06e1d8b2417a91543afed783f4
+- digest: sha256:473d827845bef5823a88289f1789218f7c0ba6530b1c781349c42c0c91fa3dba
   name: quay.io/konflux-ci/konflux-ui
   newName: quay.io/konflux-ci/konflux-ui
-- digest: sha256:9141a22f047f059fc75c2d13f642c0d8a07b4d64f65650878aa886357716b4fa
+- digest: sha256:4ce68430a03c22c7b8bbdf8f948a92b5afc52877a434084f1e0df7cbbaf1b949
   name: quay.io/konflux-ci/oauth2-proxy
   newName: quay.io/konflux-ci/oauth2-proxy
 - digest: sha256:9a684ce63ffecb976811429bbd3b5491d28fb6f331c7840bea8beca722455925

@@ -78,7 +78,7 @@ var _ = Describe("Konflux Controller - Cert-Manager Dependency", func() {
 
 			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr)
 
 			Eventually(func(g Gomega) {
 				updated := &konfluxv1alpha1.Konflux{}
@@ -120,7 +120,7 @@ var _ = Describe("Konflux Controller - Cert-Manager Dependency", func() {
 
 			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr)
 
 			Eventually(func(g Gomega) {
 				updated := &konfluxv1alpha1.Konflux{}
@@ -139,7 +139,7 @@ var _ = Describe("Konflux Controller - Cert-Manager Dependency", func() {
 
 			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr)
 
 			// Wait for CertManagerAvailable=True to confirm reconcile ran.
 			Eventually(func(g Gomega) {
@@ -180,7 +180,7 @@ var _ = Describe("Konflux Controller - Cert-Manager Dependency", func() {
 
 			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr)
 
 			Eventually(func(g Gomega) {
 				updated := &konfluxv1alpha1.Konflux{}
@@ -199,7 +199,7 @@ var _ = Describe("Konflux Controller - Cert-Manager Dependency", func() {
 
 			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr)
 
 			// Wait for CertManagerAvailable=Unknown to confirm reconcile ran.
 			Eventually(func(g Gomega) {
