@@ -5,6 +5,9 @@ configMapGenerator:
   name: proxy-caddyfile
 - files:
   - tekton-results.caddy
+  - kite.caddy
+  - kubearchive.caddy
+  - watson.caddy
   name: proxy-caddy-templates
 - files:
   - generate-proxy-config.sh

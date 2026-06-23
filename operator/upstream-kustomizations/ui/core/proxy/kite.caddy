@@ -1,0 +1,14 @@
+handle_path /api/k8s/plugins/kite/* {
+    route {
+        forward_auth 127.0.0.1:6000 {
+            uri /oauth2/auth
+            copy_headers X-Auth-Request-Email X-Auth-Request-Groups
+        }
+		impersonate
+		inject_cached_vars
+        reverse_proxy https://__KITE_HOSTNAME__ {
+            header_up Authorization "Bearer {http.vars.kube_token}"
+            import /mnt/caddy-snippets/backend-tls.conf
+        }
+    }
+}

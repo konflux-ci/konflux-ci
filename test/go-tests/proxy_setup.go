@@ -90,6 +90,14 @@ var _ = BeforeSuite(func() {
 			logProxyAuthMethod(proxyAuthMethodOpenShiftOAuth)
 		}
 	}
+
+	deployEchoServers(ctx, proxyClient)
+})
+
+var _ = AfterSuite(func() {
+	if proxyClient != nil {
+		cleanupEchoServers(context.Background(), proxyClient)
+	}
 })
 
 func proxyWaitUIOnly() bool {

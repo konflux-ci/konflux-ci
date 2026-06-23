@@ -22,6 +22,15 @@ spec:
           httpsPort: 30011
       proxy:
         replicas: 1
+        endpoints:
+          kite:
+            enabled: true
+          kubearchive:
+            enabled: true
+          watson:
+            enabled: true
+            hostname: "echo-watson.test-echo-watson.svc.cluster.local"
+            secretName: watson-config
         reverseProxy:
           resources:
             requests:
