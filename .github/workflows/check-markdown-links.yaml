@@ -22,7 +22,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
   link-check:
@@ -52,10 +51,12 @@ jobs:
 
       - name: Create issue on scheduled failure
         if: ${{ failure() && github.event_name == 'schedule' }}
+        permissions:
+          issues: write
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WORKFLOW_NAME: Check Markdown Links
         run: >-
           .github/scripts/create-or-update-issue.sh
-          "Check Markdown Links failed"
+          "⚠️ Check Markdown Links failed"
           "The scheduled markdown link check failed."

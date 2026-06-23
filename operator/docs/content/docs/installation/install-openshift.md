@@ -11,9 +11,11 @@ This guide covers deploying Konflux on an existing OpenShift cluster using the
 
 {{< alert color="info" >}}
 This is not the only way to install Konflux on OpenShift. You can also use:
-- [Installing from OLM]({{< relref "install-olm" >}}) — install through the OpenShift OperatorHub
-- [Installing from Release]({{< relref "install-release" >}}) — apply the pre-built release bundle directly
-- [Building and Installing from Source]({{< relref "install-from-source" >}}) — build and run the operator from your local checkout
+<ul>
+<li><a href="{{< relref "install-olm" >}}">Installing from OLM</a> — install through the OpenShift OperatorHub</li>
+<li><a href="{{< relref "install-release" >}}">Installing from Release</a> — apply the pre-built release bundle directly</li>
+<li><a href="{{< relref "install-from-source" >}}">Building and Installing from Source</a> — build and run the operator from your local checkout</li>
+</ul>
 {{< /alert >}}
 
 ## Prerequisites
