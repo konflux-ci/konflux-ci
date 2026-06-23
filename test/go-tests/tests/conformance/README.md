@@ -38,11 +38,14 @@ They run against an upstream Konflux instance deployed via scripts in the [konfl
    ```bash
    ./test/e2e/run-e2e.sh
    ```
-   This deploys test resources and runs the conformance suite.
+   This runs proxy integration tests (`test/go-tests`), then this conformance suite.
+   Demo-user fixtures (`deploy-test-resources.sh`) run only when
+   `E2E_DEPLOY_TEST_RESOURCES=true` (required for Kind Dex `proxy-dex` tests; set in
+   `test/e2e/e2e.env` — see `test/e2e/e2e.env.template`).
 
    You can also run `go test . -v` directly from this directory, but that
-   skips test resource deployment — you must ensure resources are already
-   deployed (e.g. via `deploy-test-resources.sh`).
+   skips the proxy suite and fixture deployment — deploy fixtures first if needed
+   (e.g. `E2E_DEPLOY_TEST_RESOURCES=true ./test/e2e/run-e2e.sh` or `./deploy-test-resources.sh`).
 
 ### Configuration
 

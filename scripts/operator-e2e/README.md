@@ -45,7 +45,26 @@ Use **one token per flag** where possible (e.g. `-ginkgo.skip=Flaky`). Values wi
 | `tekton-deploy-prep.sh` | **Tekton (go-toolset):** optional overrides via `operator/cmd/overrides`, then `deploy-local.sh` with `OPERATOR_INSTALL_METHOD=none`. |
 | `tekton-push-operator-pkg-manifests-oci.sh` | **Tekton (task-runner):** after prep, push `operator/pkg/manifests` to OCI as `${oci-container-repo}:${pipelineRun}.pkg-manifests` (skips if `E2E_OCI_CONTAINER_REPO` blank). |
 | `tekton-deploy-operator-and-wait.sh` | **Tekton (go-toolset):** `make install`/build, `bin/manager`, apply CR, wait Ready. |
-| `tekton-run-e2e-tests.sh` | **Tekton:** waits for Konflux Ready, `deploy-test-resources.sh` (`SKIP_SAMPLE_COMPONENTS=true`), integration + conformance `go test`. Optional env: `E2E_INTEGRATION_GO_TEST_EXTRA_ARGS`, `E2E_CONFORMANCE_GO_TEST_EXTRA_ARGS` (space-separated; pipeline params `integration-go-test-extra-args` / `conformance-go-test-extra-args` set these). |
+| `tekton-run-e2e-tests.sh` | **Tekton:** `deploy-test-resources.sh` (`SKIP_SAMPLE_COMPONENTS=true`), optional `kubectl port-forward` + `KONFLUX_PROXY_URL` for remote Kind, integration + conformance `go test`. Proxy tests wait for Konflux Ready and read `status.uiURL` in Go (`BeforeSuite` in `test/go-tests/proxy_setup.go`). Optional env: `KONFLUX_PROXY_URL`, `E2E_INTEGRATION_GO_TEST_EXTRA_ARGS`, `E2E_CONFORMANCE_GO_TEST_EXTRA_ARGS`. |
+| `run-proxy-integration-tests.sh` | Select proxy auth mode and run `go test` in `test/go-tests`. OpenShift OAuth runs in test `BeforeSuite`. Called from `test/e2e/run-e2e.sh`. |
+
+## Proxy integration tests
+
+`test/e2e/run-e2e.sh` runs `run-proxy-integration-tests.sh` before conformance. Demo-user fixtures (`deploy-test-resources.sh`) run only when `E2E_DEPLOY_TEST_RESOURCES=true` (set in GHA; Tekton calls `deploy-test-resources.sh` directly). OpenShift OAuth (kubeadmin → Dex `id_token`) is implemented in Go (`test/go-tests/proxy_oauth_openshift.go`) and runs in proxy test `BeforeSuite` when `KONFLUX_PROXY_AUTH=openshift`. Useful env vars:
+
+| Variable | Purpose |
+|----------|---------|
+| `E2E_DEPLOY_TEST_RESOURCES` | When `true`, run `deploy-test-resources.sh` before tests (Kind Dex `proxy-dex` RBAC; off by default in `run-e2e.sh`) |
+| `KONFLUX_PROXY_AUTH` | `openshift` or `dex` (default: infer — openshift when `OPENSHIFT_PASSWORD`, `KUBEADMIN_PASSWORD_FILE`, or `SHARED_DIR/kubeadmin-password` is set and `TEST_ENVIRONMENT!=upstream`, else dex) |
+| `KONFLUX_PROXY_AUTH_METHOD` | Set by the runner: `openshift-oauth` or `dex-password-grant` |
+| `OPENSHIFT_PASSWORD` / `KUBEADMIN_PASSWORD_FILE` / `SHARED_DIR/kubeadmin-password` | Kubeadmin password for OpenShift OAuth (same sources as infra-deployments `ci-common.sh`) |
+| `KONFLUX_PROXY_ID_TOKEN` | Optional override: skip OAuth and use a pre-obtained Dex `id_token` |
+| `KONFLUX_PROXY_ID_TOKEN_USER1` / `KONFLUX_PROXY_ID_TOKEN_USER2` | Optional per-user tokens for Dex-only specs |
+| `KONFLUX_PROXY_URL` | Proxy base URL (default: `konflux/konflux` `status.uiURL`) |
+| `KONFLUX_PROXY_WAIT_UI_ONLY` | When `true`, `BeforeSuite` waits for `ui.Ready` instead of full Konflux Ready |
+| `KONFLUX_PROXY_TEST_NAMESPACE` | Tenant namespace for proxied API paths (default: `default-tenant`) |
+
+On OpenShift CI, Dex-only specs are skipped via `-ginkgo.label-filter='!proxy-dex'`.
 
 ## Override YAML schema
 

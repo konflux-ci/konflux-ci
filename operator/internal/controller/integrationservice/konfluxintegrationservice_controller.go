@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"strings"
 
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -312,12 +314,16 @@ func (r *KonfluxIntegrationServiceReconciler) SetupWithManager(mgr ctrl.Manager)
 		Owns(&batchv1.CronJob{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&corev1.Service{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&corev1.ConfigMap{}).
-		Owns(&corev1.Secret{}).
+		Owns(&corev1.ServiceAccount{}).
 		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).
 		Owns(&rbacv1.ClusterRole{}).
 		Owns(&rbacv1.ClusterRoleBinding{}).
+		Owns(&certmanagerv1.Certificate{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
+		Owns(&certmanagerv1.Issuer{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
+		Owns(&admissionregistrationv1.MutatingWebhookConfiguration{}).
+		Owns(&admissionregistrationv1.ValidatingWebhookConfiguration{}).
 		// Watch CRDs so that out-of-band deletion triggers reconcile and re-apply.
 		Watches(&apiextensionsv1.CustomResourceDefinition{},
 			handler.EnqueueRequestsFromMapFunc(crdMapFunc)).

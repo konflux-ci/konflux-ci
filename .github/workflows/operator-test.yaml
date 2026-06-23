@@ -24,6 +24,7 @@ jobs:
         with:
           files: |
             operator/**
+            test/go-tests/**
             .github/workflows/operator-test.yaml
             .codecov.yml
 

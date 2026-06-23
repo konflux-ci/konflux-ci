@@ -21,12 +21,14 @@ import (
 	"encoding/base64"
 	"time"
 
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	consolev1 "github.com/openshift/api/console/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -45,6 +47,14 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/hashedsecret"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/ingress"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
+)
+
+const (
+	proxyServiceAccountName   = "proxy"
+	dexClusterRoleName        = "dex"
+	dexClusterRoleBindingName = "dex"
+	servingCertificateName    = "serving-cert"
+	caIssuerName              = "ui-ca-issuer"
 )
 
 func noDefaultSegmentKey() string             { return "" }
@@ -66,8 +76,11 @@ var _ = Describe("KonfluxUI Controller", func() {
 			ClusterInfo:          clusterInfo,
 		}).SetupWithManager(mgr)).To(Succeed())
 		mgrCtx, cancel := context.WithCancel(testEnv.Ctx)
-		DeferCleanup(cancel)
-		testutil.StartManagerWithContext(mgrCtx, mgr)
+		waitForStop := testutil.StartManagerWithContext(mgrCtx, mgr)
+		DeferCleanup(func() {
+			cancel()
+			waitForStop()
+		})
 	}
 
 	// waitForReconcile blocks until both UI Deployments exist, proving the initial
@@ -106,10 +119,10 @@ var _ = Describe("KonfluxUI Controller", func() {
 	Context("ensureUISecrets", func() {
 		cleanupSecrets := func(ctx context.Context) {
 			_ = k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-				Name: "oauth2-proxy-client-secret", Namespace: uiNamespace,
+				Name: oauth2ProxyClientSecretName, Namespace: uiNamespace,
 			}})
 			_ = k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-				Name: "oauth2-proxy-cookie-secret", Namespace: uiNamespace,
+				Name: oauth2ProxyCookieSecretName, Namespace: uiNamespace,
 			}})
 		}
 
@@ -132,7 +145,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			existingData := []byte("existing-secret-value")
 			Expect(k8sClient.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "oauth2-proxy-client-secret", Namespace: uiNamespace,
+					Name: oauth2ProxyClientSecretName, Namespace: uiNamespace,
 				},
 				Data: map[string][]byte{"client-secret": existingData},
 			})).To(Succeed())
@@ -152,7 +165,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Eventually(func(g Gomega) {
 				secret := &corev1.Secret{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "oauth2-proxy-client-secret", Namespace: uiNamespace,
+					Name: oauth2ProxyClientSecretName, Namespace: uiNamespace,
 				}, secret)).To(Succeed())
 				// Owner reference being set proves reconcile ran
 				g.Expect(secret.OwnerReferences).NotTo(BeEmpty())
@@ -164,7 +177,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			By("creating the secret with wrong ownership before the CR exists")
 			Expect(k8sClient.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "oauth2-proxy-client-secret",
+					Name:      oauth2ProxyClientSecretName,
 					Namespace: uiNamespace,
 					Labels: map[string]string{
 						constant.KonfluxOwnerLabel:     "wrong-owner",
@@ -189,7 +202,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Eventually(func(g Gomega) {
 				secret := &corev1.Secret{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "oauth2-proxy-client-secret", Namespace: uiNamespace,
+					Name: oauth2ProxyClientSecretName, Namespace: uiNamespace,
 				}, secret)).To(Succeed())
 				g.Expect(secret.Labels).To(HaveKeyWithValue(constant.KonfluxOwnerLabel, CRName))
 				g.Expect(secret.Labels).To(HaveKeyWithValue(constant.KonfluxComponentLabel, string(manifests.UI)))
@@ -202,7 +215,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			By("creating the secret with empty data before the CR exists")
 			Expect(k8sClient.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "oauth2-proxy-client-secret", Namespace: uiNamespace,
+					Name: oauth2ProxyClientSecretName, Namespace: uiNamespace,
 				},
 				Data: map[string][]byte{},
 			})).To(Succeed())
@@ -222,7 +235,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Eventually(func(g Gomega) {
 				secret := &corev1.Secret{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "oauth2-proxy-client-secret", Namespace: uiNamespace,
+					Name: oauth2ProxyClientSecretName, Namespace: uiNamespace,
 				}, secret)).To(Succeed())
 				g.Expect(secret.Data).To(HaveKey("client-secret"))
 				g.Expect(secret.Data["client-secret"]).NotTo(BeEmpty())
@@ -243,7 +256,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Eventually(func(g Gomega) {
 				secret := &corev1.Secret{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "oauth2-proxy-client-secret", Namespace: uiNamespace,
+					Name: oauth2ProxyClientSecretName, Namespace: uiNamespace,
 				}, secret)).To(Succeed())
 				clientSecretValue := string(secret.Data["client-secret"])
 				g.Expect(clientSecretValue).NotTo(BeEmpty())
@@ -266,7 +279,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Eventually(func(g Gomega) {
 				secret := &corev1.Secret{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "oauth2-proxy-cookie-secret", Namespace: uiNamespace,
+					Name: oauth2ProxyCookieSecretName, Namespace: uiNamespace,
 				}, secret)).To(Succeed())
 				cookieSecretValue := string(secret.Data["cookie-secret"])
 				g.Expect(cookieSecretValue).NotTo(BeEmpty())
@@ -287,10 +300,10 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "oauth2-proxy-client-secret", Namespace: uiNamespace,
+					Name: oauth2ProxyClientSecretName, Namespace: uiNamespace,
 				}, &corev1.Secret{})).To(Succeed())
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "oauth2-proxy-cookie-secret", Namespace: uiNamespace,
+					Name: oauth2ProxyCookieSecretName, Namespace: uiNamespace,
 				}, &corev1.Secret{})).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
@@ -311,7 +324,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Eventually(func(g Gomega) {
 				secret := &corev1.Secret{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "oauth2-proxy-client-secret", Namespace: uiNamespace,
+					Name: oauth2ProxyClientSecretName, Namespace: uiNamespace,
 				}, secret)).To(Succeed())
 				g.Expect(secret.Data["client-secret"]).NotTo(BeEmpty())
 				firstValue = secret.Data["client-secret"]
@@ -321,7 +334,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Consistently(func(g Gomega) {
 				secret := &corev1.Secret{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "oauth2-proxy-client-secret", Namespace: uiNamespace,
+					Name: oauth2ProxyClientSecretName, Namespace: uiNamespace,
 				}, secret)).To(Succeed())
 				g.Expect(secret.Data["client-secret"]).To(Equal(firstValue))
 			}, 5*time.Second, time.Second).Should(Succeed())
@@ -574,10 +587,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		BeforeEach(func(ctx context.Context) {
 			By("pre-cleaning any existing OpenShift OAuth resources")
 			_ = k8sClient.Delete(ctx, &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{
-				Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
-			}})
-			_ = k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-				Name: dex.DexClientSecretName, Namespace: uiNamespace,
+				Name: "dex", Namespace: uiNamespace,
 			}})
 
 			By("building cluster info for OpenShift and non-OpenShift platforms")
@@ -614,10 +624,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			DeferCleanup(func(ctx context.Context) {
 				testutil.DeleteAndWait(ctx, k8sClient, ui)
 				_ = k8sClient.Delete(ctx, &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{
-					Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
-				}})
-				_ = k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-					Name: dex.DexClientSecretName, Namespace: uiNamespace,
+					Name: "dex", Namespace: uiNamespace,
 				}})
 			})
 			return ui
@@ -630,38 +637,29 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Eventually(func(g Gomega) {
 				sa := &corev1.ServiceAccount{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
+					Name: "dex", Namespace: uiNamespace,
 				}, sa)).To(Succeed())
 				g.Expect(sa.Annotations).To(HaveKeyWithValue(
-					"serviceaccounts.openshift.io/oauth-redirecturi.dex",
+					dex.OpenShiftRedirectURIAnnotation,
 					"https://openshift-test.example.com/idp/callback",
-				))
-
-				secret := &corev1.Secret{}
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientSecretName, Namespace: uiNamespace,
-				}, secret)).To(Succeed())
-				g.Expect(secret.Type).To(Equal(corev1.SecretTypeServiceAccountToken))
-				g.Expect(secret.Annotations).To(HaveKeyWithValue(
-					"kubernetes.io/service-account.name",
-					dex.DexClientServiceAccountName,
 				))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
-		It("Should NOT create OpenShift OAuth resources when NOT running on OpenShift", func(ctx context.Context) {
+		It("Should NOT annotate dex ServiceAccount when NOT running on OpenShift", func(ctx context.Context) {
 			startManager(noDefaultSegmentKey, defaultClusterInfo)
 			createCR(ctx)
 
 			By("waiting for initial reconcile to complete")
 			waitForReconcile(ctx)
 
-			Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
-				Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
-			}, &corev1.ServiceAccount{}))).To(BeTrue())
-			Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
-				Name: dex.DexClientSecretName, Namespace: uiNamespace,
-			}, &corev1.Secret{}))).To(BeTrue())
+			Eventually(func(g Gomega) {
+				sa := &corev1.ServiceAccount{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: "dex", Namespace: uiNamespace,
+				}, sa)).To(Succeed())
+				g.Expect(sa.Annotations).NotTo(HaveKey(dex.OpenShiftRedirectURIAnnotation))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
 		It("Should NOT create OpenShift OAuth resources when ClusterInfo is nil", func(ctx context.Context) {
@@ -671,12 +669,13 @@ var _ = Describe("KonfluxUI Controller", func() {
 			By("waiting for initial reconcile to complete")
 			waitForReconcile(ctx)
 
-			Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
-				Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
-			}, &corev1.ServiceAccount{}))).To(BeTrue())
-			Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
-				Name: dex.DexClientSecretName, Namespace: uiNamespace,
-			}, &corev1.Secret{}))).To(BeTrue())
+			Eventually(func(g Gomega) {
+				sa := &corev1.ServiceAccount{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: "dex", Namespace: uiNamespace,
+				}, sa)).To(Succeed())
+				g.Expect(sa.Annotations).NotTo(HaveKey(dex.OpenShiftRedirectURIAnnotation))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
 		It("Should NOT create OpenShift OAuth resources when explicitly disabled on OpenShift", func(ctx context.Context) {
@@ -695,12 +694,13 @@ var _ = Describe("KonfluxUI Controller", func() {
 			By("waiting for reconcile to complete")
 			waitForReconcile(ctx)
 
-			Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
-				Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
-			}, &corev1.ServiceAccount{}))).To(BeTrue())
-			Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
-				Name: dex.DexClientSecretName, Namespace: uiNamespace,
-			}, &corev1.Secret{}))).To(BeTrue())
+			Eventually(func(g Gomega) {
+				sa := &corev1.ServiceAccount{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: "dex", Namespace: uiNamespace,
+				}, sa)).To(Succeed())
+				g.Expect(sa.Annotations).NotTo(HaveKey(dex.OpenShiftRedirectURIAnnotation))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
 		It("Should create OpenShift OAuth resources when explicitly enabled on OpenShift", func(ctx context.Context) {
@@ -717,12 +717,14 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
 
 			Eventually(func(g Gomega) {
+				sa := &corev1.ServiceAccount{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
-				}, &corev1.ServiceAccount{})).To(Succeed())
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientSecretName, Namespace: uiNamespace,
-				}, &corev1.Secret{})).To(Succeed())
+					Name: "dex", Namespace: uiNamespace,
+				}, sa)).To(Succeed())
+				g.Expect(sa.Annotations).To(HaveKeyWithValue(
+					dex.OpenShiftRedirectURIAnnotation,
+					"https://openshift-test.example.com/idp/callback",
+				))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
@@ -732,12 +734,11 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 			By("waiting for OAuth resources to be created")
 			Eventually(func(g Gomega) {
+				sa := corev1.ServiceAccount{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
-				}, &corev1.ServiceAccount{})).To(Succeed())
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientSecretName, Namespace: uiNamespace,
-				}, &corev1.Secret{})).To(Succeed())
+					Name: "dex", Namespace: uiNamespace,
+				}, &sa)).To(Succeed())
+				g.Expect(sa.Annotations).To(HaveKey(dex.OpenShiftRedirectURIAnnotation))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			By("disabling OpenShift login")
@@ -750,12 +751,11 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				g.Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
-				}, &corev1.ServiceAccount{}))).To(BeTrue())
-				g.Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientSecretName, Namespace: uiNamespace,
-				}, &corev1.Secret{}))).To(BeTrue())
+				sa := corev1.ServiceAccount{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: "dex", Namespace: uiNamespace,
+				}, &sa)).To(Succeed())
+				g.Expect(sa.Annotations).NotTo(HaveKey(dex.OpenShiftRedirectURIAnnotation))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
@@ -766,19 +766,11 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Eventually(func(g Gomega) {
 				sa := &corev1.ServiceAccount{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
+					Name: "dex", Namespace: uiNamespace,
 				}, sa)).To(Succeed())
 				g.Expect(sa.OwnerReferences).To(HaveLen(1))
 				g.Expect(sa.OwnerReferences[0].Name).To(Equal(CRName))
 				g.Expect(sa.OwnerReferences[0].Kind).To(Equal("KonfluxUI"))
-
-				secret := &corev1.Secret{}
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientSecretName, Namespace: uiNamespace,
-				}, secret)).To(Succeed())
-				g.Expect(secret.OwnerReferences).To(HaveLen(1))
-				g.Expect(secret.OwnerReferences[0].Name).To(Equal(CRName))
-				g.Expect(secret.OwnerReferences[0].Kind).To(Equal("KonfluxUI"))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
@@ -789,9 +781,9 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Eventually(func(g Gomega) {
 				sa := &corev1.ServiceAccount{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: dex.DexClientServiceAccountName, Namespace: uiNamespace,
+					Name: "dex", Namespace: uiNamespace,
 				}, sa)).To(Succeed())
-				g.Expect(sa.Annotations["serviceaccounts.openshift.io/oauth-redirecturi.dex"]).To(
+				g.Expect(sa.Annotations[dex.OpenShiftRedirectURIAnnotation]).To(
 					Equal("https://openshift-test.example.com/idp/callback"),
 				)
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
@@ -1057,6 +1049,634 @@ var _ = Describe("KonfluxUI Controller", func() {
 					Name: consolelink.ConsoleLinkName,
 				}, cl)).To(Succeed())
 				g.Expect(cl.Spec.Href).To(Equal("https://updated-consolelink.example.com"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("recreates ConsoleLink when deleted while ingress is enabled", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, openShiftClusterInfo)
+			createCR(ctx)
+
+			By("waiting for initial ConsoleLink creation")
+			Eventually(func(g Gomega) {
+				cl := &consolev1.ConsoleLink{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: consolelink.ConsoleLinkName,
+				}, cl)).To(Succeed())
+				g.Expect(cl.Spec.Href).To(Equal("https://consolelink-test.example.com"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("deleting the ConsoleLink externally")
+			Expect(k8sClient.Delete(ctx, &consolev1.ConsoleLink{
+				ObjectMeta: metav1.ObjectMeta{Name: consolelink.ConsoleLinkName},
+			})).To(Succeed())
+
+			By("verifying the ConsoleLink is recreated with correct spec")
+			Eventually(func(g Gomega) {
+				cl := &consolev1.ConsoleLink{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: consolelink.ConsoleLinkName,
+				}, cl)).To(Succeed())
+				g.Expect(cl.Spec.Href).To(Equal("https://consolelink-test.example.com"))
+				g.Expect(cl.Spec.Text).To(Equal("Konflux Console"))
+				g.Expect(cl.Spec.Location).To(Equal(consolev1.ApplicationMenu))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
+	Context("Self-healing", func() {
+		It("recreates Deployment when deleted", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			deploymentNN := types.NamespacedName{Name: proxyDeploymentName, Namespace: uiNamespace}
+
+			By("waiting for initial Deployment creation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, deploymentNN, &appsv1.Deployment{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("deleting the Deployment")
+			Expect(k8sClient.Delete(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: deploymentNN.Name, Namespace: deploymentNN.Namespace},
+			})).To(Succeed())
+
+			By("verifying the Deployment is recreated with correct spec")
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
+				g.Expect(dep.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, reverseProxyContainerName)
+				g.Expect(container).NotTo(BeNil(), "reverse-proxy container should exist")
+				g.Expect(container.Image).NotTo(BeEmpty(), "container image should be set")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("recreates Service when deleted", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			svcNN := types.NamespacedName{Name: proxyServiceName, Namespace: uiNamespace}
+
+			By("waiting for initial Service creation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, svcNN, &corev1.Service{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("deleting the Service")
+			Expect(k8sClient.Delete(ctx, &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: svcNN.Name, Namespace: svcNN.Namespace},
+			})).To(Succeed())
+
+			By("verifying the Service is recreated with ownership labels")
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				g.Expect(svc.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("recreates ServiceAccount when deleted", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			saNN := types.NamespacedName{Name: proxyServiceAccountName, Namespace: uiNamespace}
+
+			By("waiting for initial ServiceAccount creation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, saNN, &corev1.ServiceAccount{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("deleting the ServiceAccount")
+			Expect(k8sClient.Delete(ctx, &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{Name: saNN.Name, Namespace: saNN.Namespace},
+			})).To(Succeed())
+
+			By("verifying the ServiceAccount is recreated with ownership labels")
+			Eventually(func(g Gomega) {
+				sa := &corev1.ServiceAccount{}
+				g.Expect(k8sClient.Get(ctx, saNN, sa)).To(Succeed())
+				g.Expect(sa.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("recreates ClusterRole when deleted", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			crNN := types.NamespacedName{Name: dexClusterRoleName}
+
+			By("waiting for initial ClusterRole creation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, crNN, &rbacv1.ClusterRole{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRole{
+				ObjectMeta: metav1.ObjectMeta{Name: crNN.Name},
+			})
+
+			By("deleting the ClusterRole")
+			Expect(k8sClient.Delete(ctx, &rbacv1.ClusterRole{
+				ObjectMeta: metav1.ObjectMeta{Name: crNN.Name},
+			})).To(Succeed())
+
+			By("verifying the ClusterRole is recreated with ownership labels")
+			Eventually(func(g Gomega) {
+				cr := &rbacv1.ClusterRole{}
+				g.Expect(k8sClient.Get(ctx, crNN, cr)).To(Succeed())
+				g.Expect(cr.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("recreates ClusterRoleBinding when deleted", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			crbNN := types.NamespacedName{Name: dexClusterRoleBindingName}
+
+			By("waiting for initial ClusterRoleBinding creation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, crbNN, &rbacv1.ClusterRoleBinding{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRoleBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: crbNN.Name},
+			})
+
+			By("deleting the ClusterRoleBinding")
+			Expect(k8sClient.Delete(ctx, &rbacv1.ClusterRoleBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: crbNN.Name},
+			})).To(Succeed())
+
+			By("verifying the ClusterRoleBinding is recreated with ownership labels")
+			Eventually(func(g Gomega) {
+				crb := &rbacv1.ClusterRoleBinding{}
+				g.Expect(k8sClient.Get(ctx, crbNN, crb)).To(Succeed())
+				g.Expect(crb.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("recreates Certificate when deleted", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			certNN := types.NamespacedName{Name: servingCertificateName, Namespace: uiNamespace}
+
+			By("waiting for initial Certificate creation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, certNN, &certmanagerv1.Certificate{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("deleting the Certificate")
+			Expect(k8sClient.Delete(ctx, &certmanagerv1.Certificate{
+				ObjectMeta: metav1.ObjectMeta{Name: certNN.Name, Namespace: certNN.Namespace},
+			})).To(Succeed())
+
+			By("verifying the Certificate is recreated with ownership labels")
+			Eventually(func(g Gomega) {
+				cert := &certmanagerv1.Certificate{}
+				g.Expect(k8sClient.Get(ctx, certNN, cert)).To(Succeed())
+				g.Expect(cert.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("recreates Issuer when deleted", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			issuerNN := types.NamespacedName{Name: caIssuerName, Namespace: uiNamespace}
+
+			By("waiting for initial Issuer creation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, issuerNN, &certmanagerv1.Issuer{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("deleting the Issuer")
+			Expect(k8sClient.Delete(ctx, &certmanagerv1.Issuer{
+				ObjectMeta: metav1.ObjectMeta{Name: issuerNN.Name, Namespace: issuerNN.Namespace},
+			})).To(Succeed())
+
+			By("verifying the Issuer is recreated with ownership labels")
+			Eventually(func(g Gomega) {
+				issuer := &certmanagerv1.Issuer{}
+				g.Expect(k8sClient.Get(ctx, issuerNN, issuer)).To(Succeed())
+				g.Expect(issuer.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("recreates ConfigMap when deleted", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			By("waiting for initial ConfigMap creation (discovered by label)")
+			var cmName string
+			Eventually(func(g Gomega) {
+				cmList := &corev1.ConfigMapList{}
+				g.Expect(k8sClient.List(ctx, cmList,
+					client.InNamespace(uiNamespace),
+					client.MatchingLabels{dexConfigMapLabel: "true"},
+				)).To(Succeed())
+				g.Expect(cmList.Items).NotTo(BeEmpty(), "expected at least one dex ConfigMap")
+				cmName = cmList.Items[0].Name
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("deleting the ConfigMap")
+			Expect(k8sClient.Delete(ctx, &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: cmName, Namespace: uiNamespace},
+			})).To(Succeed())
+
+			By("verifying a ConfigMap with the managed label is recreated")
+			Eventually(func(g Gomega) {
+				cmList := &corev1.ConfigMapList{}
+				g.Expect(k8sClient.List(ctx, cmList,
+					client.InNamespace(uiNamespace),
+					client.MatchingLabels{dexConfigMapLabel: "true"},
+				)).To(Succeed())
+				g.Expect(cmList.Items).NotTo(BeEmpty())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
+	Context("Drift correction", func() {
+		It("restores Deployment image when modified", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			deploymentNN := types.NamespacedName{Name: proxyDeploymentName, Namespace: uiNamespace}
+
+			By("waiting for initial Deployment creation")
+			var originalImage string
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
+				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, reverseProxyContainerName)
+				g.Expect(container).NotTo(BeNil())
+				originalImage = container.Image
+				g.Expect(originalImage).NotTo(BeEmpty())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the Deployment image")
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
+				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, reverseProxyContainerName)
+				g.Expect(container).NotTo(BeNil())
+				container.Image = "tampered-image:latest"
+				g.Expect(k8sClient.Update(ctx, dep)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the Deployment image is restored")
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
+				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, reverseProxyContainerName)
+				g.Expect(container).NotTo(BeNil())
+				g.Expect(container.Image).To(Equal(originalImage))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores ServiceAccount labels when stripped", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			saNN := types.NamespacedName{Name: proxyServiceAccountName, Namespace: uiNamespace}
+
+			By("waiting for initial ServiceAccount creation with ownership labels")
+			Eventually(func(g Gomega) {
+				sa := &corev1.ServiceAccount{}
+				g.Expect(k8sClient.Get(ctx, saNN, sa)).To(Succeed())
+				g.Expect(sa.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("stripping ownership labels from the ServiceAccount")
+			Eventually(func(g Gomega) {
+				sa := &corev1.ServiceAccount{}
+				g.Expect(k8sClient.Get(ctx, saNN, sa)).To(Succeed())
+				delete(sa.Labels, constant.KonfluxOwnerLabel)
+				delete(sa.Labels, constant.KonfluxComponentLabel)
+				g.Expect(k8sClient.Update(ctx, sa)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the ServiceAccount labels are restored")
+			Eventually(func(g Gomega) {
+				sa := &corev1.ServiceAccount{}
+				g.Expect(k8sClient.Get(ctx, saNN, sa)).To(Succeed())
+				g.Expect(sa.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+				g.Expect(sa.Labels).To(HaveKey(constant.KonfluxComponentLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores Service labels when stripped", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			svcNN := types.NamespacedName{Name: proxyServiceName, Namespace: uiNamespace}
+
+			By("waiting for initial Service creation with ownership labels")
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				g.Expect(svc.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("stripping ownership labels from the Service")
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				delete(svc.Labels, constant.KonfluxOwnerLabel)
+				delete(svc.Labels, constant.KonfluxComponentLabel)
+				g.Expect(k8sClient.Update(ctx, svc)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the Service labels are restored")
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				g.Expect(svc.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+				g.Expect(svc.Labels).To(HaveKey(constant.KonfluxComponentLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores Namespace labels when stripped", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			nsNN := types.NamespacedName{Name: uiNamespace}
+
+			By("waiting for initial Namespace creation with ownership labels")
+			Eventually(func(g Gomega) {
+				ns := &corev1.Namespace{}
+				g.Expect(k8sClient.Get(ctx, nsNN, ns)).To(Succeed())
+				g.Expect(ns.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("stripping ownership labels from the Namespace")
+			Eventually(func(g Gomega) {
+				ns := &corev1.Namespace{}
+				g.Expect(k8sClient.Get(ctx, nsNN, ns)).To(Succeed())
+				delete(ns.Labels, constant.KonfluxOwnerLabel)
+				delete(ns.Labels, constant.KonfluxComponentLabel)
+				g.Expect(k8sClient.Update(ctx, ns)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the Namespace labels are restored")
+			Eventually(func(g Gomega) {
+				ns := &corev1.Namespace{}
+				g.Expect(k8sClient.Get(ctx, nsNN, ns)).To(Succeed())
+				g.Expect(ns.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+				g.Expect(ns.Labels).To(HaveKey(constant.KonfluxComponentLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores ClusterRole rules when modified", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			crNN := types.NamespacedName{Name: dexClusterRoleName}
+
+			By("waiting for initial ClusterRole creation")
+			var originalRules []rbacv1.PolicyRule
+			Eventually(func(g Gomega) {
+				cr := &rbacv1.ClusterRole{}
+				g.Expect(k8sClient.Get(ctx, crNN, cr)).To(Succeed())
+				g.Expect(cr.Rules).NotTo(BeEmpty())
+				originalRules = cr.Rules
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRole{
+				ObjectMeta: metav1.ObjectMeta{Name: crNN.Name},
+			})
+
+			By("modifying the ClusterRole rules")
+			Eventually(func(g Gomega) {
+				cr := &rbacv1.ClusterRole{}
+				g.Expect(k8sClient.Get(ctx, crNN, cr)).To(Succeed())
+				cr.Rules = []rbacv1.PolicyRule{{
+					APIGroups: []string{""},
+					Resources: []string{"pods"},
+					Verbs:     []string{"delete"},
+				}}
+				g.Expect(k8sClient.Update(ctx, cr)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the ClusterRole rules are restored")
+			Eventually(func(g Gomega) {
+				cr := &rbacv1.ClusterRole{}
+				g.Expect(k8sClient.Get(ctx, crNN, cr)).To(Succeed())
+				g.Expect(cr.Rules).To(Equal(originalRules))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores ClusterRoleBinding subjects when modified", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			crbNN := types.NamespacedName{Name: dexClusterRoleBindingName}
+
+			By("waiting for initial ClusterRoleBinding creation")
+			var originalSubjects []rbacv1.Subject
+			Eventually(func(g Gomega) {
+				crb := &rbacv1.ClusterRoleBinding{}
+				g.Expect(k8sClient.Get(ctx, crbNN, crb)).To(Succeed())
+				g.Expect(crb.Subjects).NotTo(BeEmpty())
+				originalSubjects = crb.Subjects
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRoleBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: crbNN.Name},
+			})
+
+			By("modifying the ClusterRoleBinding subjects")
+			Eventually(func(g Gomega) {
+				crb := &rbacv1.ClusterRoleBinding{}
+				g.Expect(k8sClient.Get(ctx, crbNN, crb)).To(Succeed())
+				crb.Subjects = []rbacv1.Subject{{
+					Kind:      "ServiceAccount",
+					Name:      "tampered-sa",
+					Namespace: "default",
+				}}
+				g.Expect(k8sClient.Update(ctx, crb)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the ClusterRoleBinding subjects are restored")
+			Eventually(func(g Gomega) {
+				crb := &rbacv1.ClusterRoleBinding{}
+				g.Expect(k8sClient.Get(ctx, crbNN, crb)).To(Succeed())
+				g.Expect(crb.Subjects).To(Equal(originalSubjects))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores Certificate labels when stripped", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			certNN := types.NamespacedName{Name: servingCertificateName, Namespace: uiNamespace}
+
+			By("waiting for initial Certificate creation with ownership labels")
+			Eventually(func(g Gomega) {
+				cert := &certmanagerv1.Certificate{}
+				g.Expect(k8sClient.Get(ctx, certNN, cert)).To(Succeed())
+				g.Expect(cert.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("stripping ownership labels from the Certificate")
+			Eventually(func(g Gomega) {
+				cert := &certmanagerv1.Certificate{}
+				g.Expect(k8sClient.Get(ctx, certNN, cert)).To(Succeed())
+				delete(cert.Labels, constant.KonfluxOwnerLabel)
+				delete(cert.Labels, constant.KonfluxComponentLabel)
+				g.Expect(k8sClient.Update(ctx, cert)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the Certificate labels are restored")
+			Eventually(func(g Gomega) {
+				cert := &certmanagerv1.Certificate{}
+				g.Expect(k8sClient.Get(ctx, certNN, cert)).To(Succeed())
+				g.Expect(cert.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+				g.Expect(cert.Labels).To(HaveKey(constant.KonfluxComponentLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores Issuer labels when stripped", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			issuerNN := types.NamespacedName{Name: caIssuerName, Namespace: uiNamespace}
+
+			By("waiting for initial Issuer creation with ownership labels")
+			Eventually(func(g Gomega) {
+				issuer := &certmanagerv1.Issuer{}
+				g.Expect(k8sClient.Get(ctx, issuerNN, issuer)).To(Succeed())
+				g.Expect(issuer.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("stripping ownership labels from the Issuer")
+			Eventually(func(g Gomega) {
+				issuer := &certmanagerv1.Issuer{}
+				g.Expect(k8sClient.Get(ctx, issuerNN, issuer)).To(Succeed())
+				delete(issuer.Labels, constant.KonfluxOwnerLabel)
+				delete(issuer.Labels, constant.KonfluxComponentLabel)
+				g.Expect(k8sClient.Update(ctx, issuer)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the Issuer labels are restored")
+			Eventually(func(g Gomega) {
+				issuer := &certmanagerv1.Issuer{}
+				g.Expect(k8sClient.Get(ctx, issuerNN, issuer)).To(Succeed())
+				g.Expect(issuer.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+				g.Expect(issuer.Labels).To(HaveKey(constant.KonfluxComponentLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores Certificate DNSNames when modified", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			certNN := types.NamespacedName{Name: servingCertificateName, Namespace: uiNamespace}
+
+			By("waiting for initial Certificate creation")
+			var originalDNSNames []string
+			Eventually(func(g Gomega) {
+				cert := &certmanagerv1.Certificate{}
+				g.Expect(k8sClient.Get(ctx, certNN, cert)).To(Succeed())
+				g.Expect(cert.Spec.DNSNames).NotTo(BeEmpty())
+				originalDNSNames = cert.Spec.DNSNames
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the Certificate DNSNames")
+			Eventually(func(g Gomega) {
+				cert := &certmanagerv1.Certificate{}
+				g.Expect(k8sClient.Get(ctx, certNN, cert)).To(Succeed())
+				cert.Spec.DNSNames = []string{"tampered.example.com"}
+				g.Expect(k8sClient.Update(ctx, cert)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the Certificate DNSNames are restored")
+			Eventually(func(g Gomega) {
+				cert := &certmanagerv1.Certificate{}
+				g.Expect(k8sClient.Get(ctx, certNN, cert)).To(Succeed())
+				g.Expect(cert.Spec.DNSNames).To(Equal(originalDNSNames))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores Issuer CA secret name when modified", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			issuerNN := types.NamespacedName{Name: caIssuerName, Namespace: uiNamespace}
+
+			By("waiting for initial Issuer creation")
+			var originalSecretName string
+			Eventually(func(g Gomega) {
+				issuer := &certmanagerv1.Issuer{}
+				g.Expect(k8sClient.Get(ctx, issuerNN, issuer)).To(Succeed())
+				g.Expect(issuer.Spec.CA).NotTo(BeNil())
+				g.Expect(issuer.Spec.CA.SecretName).NotTo(BeEmpty())
+				originalSecretName = issuer.Spec.CA.SecretName
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the Issuer CA secret name")
+			Eventually(func(g Gomega) {
+				issuer := &certmanagerv1.Issuer{}
+				g.Expect(k8sClient.Get(ctx, issuerNN, issuer)).To(Succeed())
+				issuer.Spec.CA.SecretName = "tampered-secret"
+				g.Expect(k8sClient.Update(ctx, issuer)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the Issuer CA secret name is restored")
+			Eventually(func(g Gomega) {
+				issuer := &certmanagerv1.Issuer{}
+				g.Expect(k8sClient.Get(ctx, issuerNN, issuer)).To(Succeed())
+				g.Expect(issuer.Spec.CA.SecretName).To(Equal(originalSecretName))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})

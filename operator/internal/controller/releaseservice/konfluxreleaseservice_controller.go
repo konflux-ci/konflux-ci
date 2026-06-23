@@ -267,7 +267,6 @@ func (r *KonfluxReleaseServiceReconciler) SetupWithManager(mgr ctrl.Manager) err
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(predicate.DeploymentReadinessPredicate)).
 		Owns(&corev1.Service{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&corev1.ConfigMap{}).
-		Owns(&corev1.Secret{}).
 		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).
