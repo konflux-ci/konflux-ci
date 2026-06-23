@@ -180,9 +180,9 @@ jobs:
             smee_channel: SMEE_CHANNEL_ARM64
     env:
       # renovate: datasource=github-releases depName=kubernetes-sigs/kind
-      KIND_VERSION: "0.31.0"
+      KIND_VERSION: "0.32.0"
       # renovate: datasource=github-releases depName=kubernetes/kubernetes
-      KUBECTL_VERSION: "1.35.2"
+      KUBECTL_VERSION: "1.36.2"
       OPERATOR_IMAGE: example.com/konflux-operator:v0.0.1${{ matrix.image_suffix }}
       KIND_CLUSTER: konflux-operator-test-e2e${{ matrix.cluster_suffix }}
     defaults:
@@ -273,18 +273,11 @@ jobs:
         run: |
           kubectl get namespace
 
-      - name: Deploy Test Resources
-        working-directory: ${{ github.workspace }}
-        env:
-          SKIP_SAMPLE_COMPONENTS: "true"
-        run: |
-          ./deploy-test-resources.sh
-
-      - name: Run Konflux Integration Tests
+      - name: Run go-tests pkg unit tests
         working-directory: ${{ github.workspace }}
         run: |
           cd test/go-tests
-          go test . ./pkg/...
+          go test ./pkg/...
 
       - name: Set build pipeline bundle (min)
         if: matrix.test_scope == 'integration+e2e'
@@ -303,6 +296,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           MY_GITHUB_ORG: ${{ secrets.GH_ORG }}
           E2E_APPLICATIONS_NAMESPACE: default-tenant
+          E2E_DEPLOY_TEST_RESOURCES: "true"
         run: |
           ./test/e2e/run-e2e.sh \
             -ginkgo.github-output \

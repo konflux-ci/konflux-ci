@@ -71,25 +71,24 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 			ClusterInfo:          clusterInfo,
 		}).SetupWithManager(mgr)).To(Succeed())
 		mgrCtx, cancel := context.WithCancel(testEnv.Ctx)
-		DeferCleanup(cancel)
-		testutil.StartManagerWithContext(mgrCtx, mgr)
+		waitForStop := testutil.StartManagerWithContext(mgrCtx, mgr)
+		DeferCleanup(func() {
+			cancel()
+			waitForStop()
+		})
 	}
 
 	// createCR creates the KonfluxSegmentBridge CR and registers cleanup for both
 	// the CR and the Secret the controller will create.
 	createCR := func(ctx context.Context) {
-		Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxSegmentBridge{
+		segmentRes := &konfluxv1alpha1.KonfluxSegmentBridge{
 			ObjectMeta: metav1.ObjectMeta{Name: CRName},
-		})).To(Succeed())
-		DeferCleanup(func(ctx context.Context) {
-			testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxSegmentBridge{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			})
-			testutil.DeleteAndWait(ctx, k8sClient, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-				Name:      segmentBridgeSecretName,
-				Namespace: segmentBridgeNamespace,
-			}})
-		})
+		}
+		Expect(k8sClient.Create(ctx, segmentRes)).To(Succeed())
+		testutil.DeferCleanupParentAndChildren(k8sClient, segmentRes, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name:      segmentBridgeSecretName,
+			Namespace: segmentBridgeNamespace,
+		}})
 	}
 
 	// waitForSecret polls until the Secret exists and the caller's check passes.

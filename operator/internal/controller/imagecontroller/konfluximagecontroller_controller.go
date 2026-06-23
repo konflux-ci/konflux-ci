@@ -284,7 +284,7 @@ func (r *KonfluxImageControllerReconciler) SetupWithManager(mgr ctrl.Manager) er
 		Owns(&batchv1.CronJob{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&corev1.Service{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&corev1.ConfigMap{}).
-		Owns(&corev1.Secret{}).
+		Owns(&corev1.ServiceAccount{}).
 		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).

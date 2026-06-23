@@ -244,9 +244,8 @@ func (r *KonfluxDefaultTenantReconciler) SetupWithManager(mgr ctrl.Manager) erro
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&konfluxv1alpha1.KonfluxDefaultTenant{}).
 		Named("konfluxdefaulttenant").
-		// Watch Namespace, ConfigMap, ServiceAccount, and RoleBindings
+		// Watch Namespace, ServiceAccount, Secret, and RoleBindings
 		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
-		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&rbacv1.RoleBinding{}).

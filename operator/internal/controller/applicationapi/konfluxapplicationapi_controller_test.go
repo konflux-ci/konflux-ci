@@ -33,14 +33,11 @@ import (
 var _ = Describe("KonfluxApplicationAPI Controller", func() {
 	Context("When reconciling a resource", func() {
 		It("should successfully reconcile the resource", func(ctx context.Context) {
-			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxApplicationAPI{
+			appRes := &konfluxv1alpha1.KonfluxApplicationAPI{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			})).To(Succeed())
-			DeferCleanup(func(ctx context.Context) {
-				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxApplicationAPI{
-					ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				})
-			})
+			}
+			Expect(k8sClient.Create(ctx, appRes)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, appRes)
 
 			Eventually(func(g Gomega) {
 				updated := &konfluxv1alpha1.KonfluxApplicationAPI{}

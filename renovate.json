@@ -5,6 +5,8 @@
     "konflux-ci/**"
   ],
   "rebaseWhen": "conflicted",
+  "prConcurrentLimit": 50,
+  "prHourlyLimit": 20,
   "packageRules": [
     {
       "matchPackageNames": [
@@ -28,8 +30,7 @@
       "groupName": "tekton-core",
       "matchPackageNames": [
         "https://github.com/tektoncd/operator",
-        "https://github.com/tektoncd/pipeline",
-        "https://github.com/tektoncd/pipelines-as-code"
+        "https://github.com/tektoncd/pipeline"
       ],
       "description": "Group core Tekton components for coordinated updates. Note: tektoncd/results is managed by the operator and its version is determined by the operator version."
     },
@@ -130,6 +131,18 @@
       "versioningTemplate": "semver"
     },
     {
+      "description": "Track GitHub release download URLs in kustomization files",
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["(^|\/)kustomization\\.(yaml|yml)$"],
+      "matchStrings": [
+        "# renovate: datasource=github-releases depName=(?<depName>[^\\s]+)",
+        "- https:\\/\\/github\\.com\\/[^/]+\\/[^/]+\\/releases\\/download\\/v(?<currentValue>[^/]+)\\/"
+      ],
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v?(?<version>.*)$"
+    },
+    {
       "customType": "regex",
       "matchStringsStrategy": "combination",
       "fileMatch": ["(^|\/)kustomization\\.(yaml|yml)$"],
@@ -195,6 +208,7 @@
       "customType": "regex",
       "fileMatch": ["^operator/\\.golangci-lint-version$"],
       "matchStrings": ["^(?<currentValue>v?\\d+\\.\\d+\\.\\d+)\\s*$"],
+      "autoReplaceStringTemplate": "v{{{newValue}}}",
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "golangci/golangci-lint",
       "extractVersionTemplate": "^v?(?<version>.*)$"
