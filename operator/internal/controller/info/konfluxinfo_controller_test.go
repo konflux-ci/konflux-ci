@@ -103,15 +103,49 @@ var _ = Describe("KonfluxInfo Controller", func() {
 			Expect(err.Error()).To(ContainSubstring("must not contain credentials"))
 		})
 
+		It("should reject packageRegistryProxyGomodUrl containing credentials", func(ctx context.Context) {
+			cr := &konfluxv1alpha1.KonfluxInfo{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxInfoSpec{
+					ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+						Data: &konfluxv1alpha1.ClusterConfigData{
+							PackageRegistryProxyGomodURL: "https://token@goproxy.example.com",
+						},
+					},
+				},
+			}
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("must not contain credentials"))
+		})
+
+		It("should reject packageRegistryProxyPipUrl containing credentials", func(ctx context.Context) {
+			cr := &konfluxv1alpha1.KonfluxInfo{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxInfoSpec{
+					ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+						Data: &konfluxv1alpha1.ClusterConfigData{
+							PackageRegistryProxyPipURL: "https://user:pass@pypi.example.com",
+						},
+					},
+				},
+			}
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("must not contain credentials"))
+		})
+
 		It("should allow proxy URLs without credentials", func(ctx context.Context) {
 			cr := &konfluxv1alpha1.KonfluxInfo{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 				Spec: konfluxv1alpha1.KonfluxInfoSpec{
 					ClusterConfig: &konfluxv1alpha1.ClusterConfig{
 						Data: &konfluxv1alpha1.ClusterConfigData{
-							HTTPProxy:                   "squid.caching.svc.cluster.local:3128",
-							PackageRegistryProxyNpmURL:  "https://npm-proxy.internal.svc:8080",
-							PackageRegistryProxyYarnURL: "https://yarn-proxy.internal.svc:8080",
+							HTTPProxy:                    "squid.caching.svc.cluster.local:3128",
+							PackageRegistryProxyNpmURL:   "https://npm-proxy.internal.svc:8080",
+							PackageRegistryProxyYarnURL:  "https://yarn-proxy.internal.svc:8080",
+							PackageRegistryProxyGomodURL: "https://gomod-proxy.internal.svc:8080",
+							PackageRegistryProxyPipURL:   "https://pip-proxy.internal.svc:8080",
 						},
 					},
 				},
