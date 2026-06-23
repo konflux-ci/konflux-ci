@@ -13,4 +13,5 @@ exclude = [
   '^https://join\.slack\.com',
   '^https://dexidp\.io',
   '^https://kubernetes\.io',
+  '^https://olm\.operatorframework\.io',
 ]
