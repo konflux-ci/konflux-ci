@@ -33,12 +33,11 @@ import (
 var _ = Describe("KonfluxRBAC Controller", func() {
 	Context("When reconciling a resource", func() {
 		It("should successfully reconcile the resource", func(ctx context.Context) {
-			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxRBAC{
+			rbacRes := &konfluxv1alpha1.KonfluxRBAC{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			})).To(Succeed())
-			DeferCleanup(func(ctx context.Context) {
-				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxRBAC{ObjectMeta: metav1.ObjectMeta{Name: CRName}})
-			})
+			}
+			Expect(k8sClient.Create(ctx, rbacRes)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, rbacRes)
 
 			// The rbac manifests contain only ClusterRoles — no Deployments — so
 			// Ready=True is a reliable sentinel.

@@ -19,7 +19,7 @@ spec:
   - dex.dex
   issuerRef:
     kind: ClusterIssuer
-    name: self-signed-cluster-issuer
+    name: konflux-bootstrap-issuer
   secretName: dex-cert
 ---
 apiVersion: apps/v1

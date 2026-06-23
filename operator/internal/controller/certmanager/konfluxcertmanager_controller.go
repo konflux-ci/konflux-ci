@@ -20,17 +20,19 @@ import (
 	"context"
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
+	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
@@ -61,6 +63,11 @@ var CertManagerCleanupGVKs = []schema.GroupVersionKind{
 var CertManagerClusterScopedAllowList = tracking.ClusterScopedAllowList{
 	// ClusterIssuers are only created when spec.createClusterIssuer is true
 	{Group: "cert-manager.io", Version: "v1", Kind: "ClusterIssuer"}: sets.New(
+		"konflux-bootstrap-issuer",
+		"konflux-issuer",
+		// Legacy names (pre-rename) kept so orphan cleanup deletes them on
+		// upgrade from releases that used the old names.
+		// TODO(pki-renames): remove after v1.5 ships.
 		"self-signed-cluster-issuer",
 		"ca-issuer",
 	),
@@ -163,7 +170,7 @@ func (r *KonfluxCertManagerReconciler) SetupWithManager(mgr ctrl.Manager) error 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&konfluxv1alpha1.KonfluxCertManager{}).
 		Named("konfluxcertmanager").
-		// Watch for changes to cert-manager resources
-		Owns(&corev1.Secret{}).
+		Owns(&certmanagerv1.Certificate{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
+		Owns(&certmanagerv1.ClusterIssuer{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Complete(r)
 }

@@ -22,6 +22,15 @@ spec:
           httpsPort: 30011
       proxy:
         replicas: 1
+        endpoints:
+          kite:
+            enabled: true
+          kubearchive:
+            enabled: true
+          watson:
+            enabled: true
+            hostname: "echo-watson.test-echo-watson.svc.cluster.local"
+            secretName: watson-config
         reverseProxy:
           resources:
             requests:
@@ -90,6 +99,7 @@ spec:
       # Skip TLS verification for PaC webhook URLs — the e2e environment
       # exposes Pipelines-as-Code via a route with a self-signed certificate.
       pacWebhookInsecureSSL: true
+      # logEncoder: console  # Use human-readable logs (default: json)
       buildControllerManager:
         replicas: 1
         manager:
@@ -124,6 +134,16 @@ spec:
           # Display a banner at the top of the Konflux UI to all users.
           - summary: "Welcome to Konflux-CI! This development and testing environment has been deployed with default insecure passwords!"
             type: danger
+      # clusterConfig:
+      #   data:
+      #     # Proxy configuration for builds (stored in "cluster-config" ConfigMap).
+      #     # These values are read by PipelineRuns to configure caching behavior.
+      #     # allowCacheProxy: true
+      #     # httpProxy: "squid.caching.svc.cluster.local:3128"
+      #     # noProxy: ""
+      #     # allowPackageRegistryProxy: true
+      #     # packageRegistryProxyNpmUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/npm-proxy"
+      #     # packageRegistryProxyYarnUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/yarn-proxy"
   # enterpriseContract:
   #   # skipPolicies disables deployment of EnterpriseContractPolicy resources.
   #   # When true, only CRDs, namespace, RBAC, and ConfigMap are deployed;
@@ -146,3 +166,13 @@ spec:
   # E2E-specific: Enable image-controller for E2E tests
   imageController:
     enabled: true
+    # spec:
+    #   logEncoder: console  # Use human-readable logs (default: json)
+    #   imagePruner:  # Customize the image-pruner CronJob container
+    #     resources:
+    #       limits:
+    #         memory: 8Gi
+    #   notificationResetter:  # Customize the notification-resetter CronJob container
+    #     resources:
+    #       limits:
+    #         memory: 1Gi

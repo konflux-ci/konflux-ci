@@ -146,10 +146,10 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		g.Expect(managerContainer.Image).To(gomega.Equal(originalImage))
 	})
 
-	t.Run("logEncoder=console appends zap-encoder arg", func(t *testing.T) {
+	t.Run("logEncoder=console sets zap-encoder arg", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
-			LogEncoder: "console",
+			LogEncoder: konfluxv1alpha1.LogEncoderConsole,
 		}
 
 		deployment := getBuildServiceDeployment(t)
@@ -164,13 +164,13 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Args).To(gomega.HaveLen(baseArgCount + 1))
-		g.Expect(managerContainer.Args).To(gomega.ContainElement("--zap-encoder=console"))
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(konfluxv1alpha1.ZapEncoderArg + "=" + string(konfluxv1alpha1.LogEncoderConsole)))
 	})
 
-	t.Run("logEncoder=json appends zap-encoder arg", func(t *testing.T) {
+	t.Run("logEncoder=json sets zap-encoder arg", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
-			LogEncoder: "json",
+			LogEncoder: konfluxv1alpha1.LogEncoderJSON,
 		}
 
 		deployment := getBuildServiceDeployment(t)
@@ -180,7 +180,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 
 		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
-		g.Expect(managerContainer.Args).To(gomega.ContainElement("--zap-encoder=json"))
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(konfluxv1alpha1.ZapEncoderArg + "=" + string(konfluxv1alpha1.LogEncoderJSON)))
 	})
 
 	t.Run("empty logEncoder does not add zap-encoder arg", func(t *testing.T) {
@@ -205,7 +205,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 	t.Run("logEncoder with buildControllerManager preserves base args and adds zap-encoder", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
-			LogEncoder: "console",
+			LogEncoder: konfluxv1alpha1.LogEncoderConsole,
 			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
@@ -232,8 +232,29 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		for _, arg := range baseArgs {
 			g.Expect(managerContainer.Args).To(gomega.ContainElement(arg))
 		}
-		g.Expect(managerContainer.Args).To(gomega.ContainElement("--zap-encoder=console"))
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(konfluxv1alpha1.ZapEncoderArg + "=" + string(konfluxv1alpha1.LogEncoderConsole)))
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
+	})
+
+	t.Run("logEncoder replaces existing base zap-encoder arg", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+			LogEncoder: konfluxv1alpha1.LogEncoderConsole,
+		}
+
+		deployment := getBuildServiceDeployment(t)
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		managerContainer.Args = append(managerContainer.Args, konfluxv1alpha1.ZapEncoderArg+"="+string(konfluxv1alpha1.LogEncoderJSON))
+
+		overlay := buildBuildControllerManagerOverlay(spec, nil, "")
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(konfluxv1alpha1.ZapEncoderArg + "=" + string(konfluxv1alpha1.LogEncoderConsole)))
+		g.Expect(managerContainer.Args).NotTo(gomega.ContainElement(konfluxv1alpha1.ZapEncoderArg + "=" + string(konfluxv1alpha1.LogEncoderJSON)))
 	})
 
 	t.Run("pacWebhookInsecureSSL=true injects PAC_WEBHOOK_INSECURE_SSL env", func(t *testing.T) {
@@ -290,7 +311,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
 			PACWebhookInsecureSSL: boolPtr(true),
-			LogEncoder:            "console",
+			LogEncoder:            konfluxv1alpha1.LogEncoderConsole,
 			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
@@ -312,7 +333,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		val, found := findEnvValue(managerContainer.Env, "PAC_WEBHOOK_INSECURE_SSL")
 		g.Expect(found).To(gomega.BeTrue())
 		g.Expect(val).To(gomega.Equal("1"))
-		g.Expect(managerContainer.Args).To(gomega.ContainElement("--zap-encoder=console"))
+		g.Expect(managerContainer.Args).To(gomega.ContainElement(konfluxv1alpha1.ZapEncoderArg + "=" + string(konfluxv1alpha1.LogEncoderConsole)))
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
 	})
 

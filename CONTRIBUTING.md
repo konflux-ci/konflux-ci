@@ -142,6 +142,15 @@ Source PRs labeled `superseded-by-companion` fail the Operator E2E workflow gate
 (merge the manifest companion PR instead). Add `force-run-e2e` to run full E2E on
 the source PR anyway.
 
+Source PRs labeled `pending-upstream-image` are blocked for the same reason when
+the manifest companion workflow finds upstream container image(s) missing from
+their registries. A companion PR is not opened in that case; the workflow posts a
+comment on the source PR with the missing image(s). The label is removed
+automatically on the next successful companion run once images are available.
+Konflux Tekton build and E2E PipelineRuns are also skipped for this label.
+Maintainers can add the `skip-image-verify` label and re-run the manifest
+companion workflow to bypass image verification.
+
 **Operator E2E Tests** does not run when labels alone change (only on new
 commits, reopen, merge queue, or maintainer `/allow` on fork PRs). After you add
 `force-run-e2e`, start CI manually—for example re-run **Operator E2E Tests** from
@@ -230,7 +239,10 @@ source test/e2e/e2e.env
 ./test/e2e/run-e2e.sh
 ```
 
-The script deploys test resources and runs the conformance suite.
+The script runs proxy integration tests and the conformance suite. Demo-user fixtures
+(`deploy-test-resources.sh`) are skipped unless `E2E_DEPLOY_TEST_RESOURCES=true` is set
+(for Kind Dex `proxy-dex` RBAC; see `test/e2e/e2e.env.template`). GHA and Tekton enable
+fixtures in CI; OpenShift overlay e2e does not need them.
 
 Note: The deploy step uses `scripts/deploy-local.env` (GitHub App, Quay for image-controller, Smee). The E2E step uses `test/e2e/e2e.env` (GitHub token for PaC flows). They are separate so you never load deploy secrets into the shell where you only run tests.
 

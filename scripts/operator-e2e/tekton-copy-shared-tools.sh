@@ -4,8 +4,8 @@
 # jq is dynamically linked to libjq and libonig; copy those .so files into /mnt/e2e-shared/lib
 # and set LD_LIBRARY_PATH in go-toolset scripts (see tekton-run-e2e-tests.sh, deploy-prep, etc.).
 #
-# Clone / fetch-kubeconfig run as root; go-toolset runs non-root. Without fixing modes,
-# apply-overrides and other writers get "permission denied" on root-owned files under the repo.
+# task-runner steps run as non-root (taskuser); go-toolset runs as a different non-root UID.
+# Widen repo file modes so later go-toolset steps can write (apply-overrides, deploy-prep, etc.).
 set -euo pipefail
 
 DEST="${TEKTON_SHARED_BIN:-/mnt/e2e-shared/bin}"
@@ -24,5 +24,7 @@ chmod -R a+rX "${DEST_LIB}"
 
 REPO_ROOT="${TEKTON_REPO_ROOT:-/mnt/konflux-ci/repo}"
 if [[ -d "${REPO_ROOT}" ]]; then
-  chmod -R a+rwX "${REPO_ROOT}"
+  # chmod -R on REPO_ROOT itself fails: the emptyDir mount point stays root-owned and
+  # taskuser cannot change its mode ("Operation not permitted"). Only fix contents.
+  find "${REPO_ROOT}" -mindepth 1 -exec chmod a+rwX {} +
 fi

@@ -9,6 +9,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: konflux-image-controller
 spec:
+  # logEncoder: console  # Use human-readable logs (default: json)
   imageControllerManager:
     replicas: 1
     manager:
@@ -25,3 +26,19 @@ spec:
             configMapKeyRef:
               name: image-controller-config
               key: custom-config
+  # imagePruner:  # Customize the image-pruner CronJob container
+  #   resources:
+  #     requests:
+  #       cpu: 150m
+  #       memory: 1Gi
+  #     limits:
+  #       cpu: 500m
+  #       memory: 8Gi
+  # notificationResetter:  # Customize the notification-resetter CronJob container
+  #   resources:
+  #     requests:
+  #       cpu: 150m
+  #       memory: 1Gi
+  #     limits:
+  #       cpu: 500m
+  #       memory: 1Gi

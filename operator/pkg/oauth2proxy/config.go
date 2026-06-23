@@ -34,7 +34,7 @@ const (
 	// CABundleVolumeName is the name of the volume containing the CA bundle
 	CABundleVolumeName = "ca-bundle"
 	// CABundleSecretName is the name of the Secret containing the CA bundle
-	CABundleSecretName = "oauth2-proxy-cert"
+	CABundleSecretName = "oauth2-proxy-cert" //nolint:gosec // secret name, not a credential
 	// CABundleSecretKey is the key in the Secret containing the CA certificate
 	CABundleSecretKey = "ca.crt"
 	// CABundleFilename is the filename used in the projected volume for the CA certificate

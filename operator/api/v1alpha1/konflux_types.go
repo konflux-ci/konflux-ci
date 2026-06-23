@@ -17,6 +17,9 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"fmt"
+
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -261,6 +264,21 @@ func (k *Konflux) GetConditions() []metav1.Condition {
 // SetConditions sets the conditions on the Konflux status.
 func (k *Konflux) SetConditions(conditions []metav1.Condition) {
 	k.Status.Conditions = conditions
+}
+
+// IsReady reports whether the Konflux Ready condition is True.
+func (k *Konflux) IsReady() bool {
+	cond := apimeta.FindStatusCondition(k.Status.Conditions, "Ready")
+	return cond != nil && cond.Status == metav1.ConditionTrue
+}
+
+// ReadyConditionMessage returns a diagnostic string for the Ready condition.
+func (k *Konflux) ReadyConditionMessage() string {
+	cond := apimeta.FindStatusCondition(k.Status.Conditions, "Ready")
+	if cond == nil {
+		return "konflux Ready condition not found in status"
+	}
+	return fmt.Sprintf("konflux Ready=%s reason=%s message=%s", cond.Status, cond.Reason, cond.Message)
 }
 
 // IsImageControllerEnabled returns true if image-controller is enabled.

@@ -195,6 +195,46 @@ func TestParseAndValidateFromYAML_validationFailures(t *testing.T) {
 `,
 			wantSub: "non-empty name",
 		},
+		{
+			name: "component name with path separator",
+			yaml: `
+- name: "../escape"
+  images:
+    - orig: quay.io/a/b
+      replacement: quay.io/c/d:1
+`,
+			wantSub: "must not contain path separators",
+		},
+		{
+			name: "component name with slash",
+			yaml: `
+- name: "foo/bar"
+  images:
+    - orig: quay.io/a/b
+      replacement: quay.io/c/d:1
+`,
+			wantSub: "must not contain path separators",
+		},
+		{
+			name: "component name with backslash",
+			yaml: `
+- name: "foo\\bar"
+  images:
+    - orig: quay.io/a/b
+      replacement: quay.io/c/d:1
+`,
+			wantSub: "must not contain path separators",
+		},
+		{
+			name: "component name with special characters",
+			yaml: `
+- name: "foo bar"
+  images:
+    - orig: quay.io/a/b
+      replacement: quay.io/c/d:1
+`,
+			wantSub: "must match",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -273,7 +313,7 @@ images:
 	written, err := r.applyGitRulesToKustomization(kPath, r.Overrides[0].Git)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(written).To(BeTrue())
-	got, err := os.ReadFile(kPath)
+	got, err := os.ReadFile(kPath) //nolint:gosec // G304 - test temp file
 	g.Expect(err).ToNot(HaveOccurred())
 	text := string(got)
 	g.Expect(text).To(ContainSubstring("https://github.com/konflux-ci/segment-bridge/config/default?ref=newref"))

@@ -5,8 +5,11 @@
 	file_watcher {
 		cache kube_token /var/run/secrets/konflux-ci.dev/serviceaccount/token
 		cache backend_token /var/run/secrets/konflux-ci.dev/backend/token
+		cache watson_auth /mnt/watson-config/API_KEY {
+			default ""
+		}
 		watch /var/run/secrets/kubernetes.io/serviceaccount
-		watch /mnt/trusted-ca
+		watch /mnt/cluster-ca
 		watch /mnt/service-ca
 		watch /mnt/serving-cert
 	}
@@ -77,7 +80,7 @@
 				transport http {
 					read_timeout 30m
 					write_timeout 30m
-					tls_trust_pool file /mnt/trusted-ca/ca-bundle.crt
+					tls_trust_pool file /mnt/cluster-ca/ca-bundle.crt
 				}
 			}
 		}

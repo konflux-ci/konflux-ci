@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -58,6 +59,11 @@ const (
 	quayCABundleMountPath      = "/etc/ssl/certs/quay-ca"
 	quayAdditionalCAEnvVar     = "QUAY_ADDITIONAL_CA"
 	defaultQuayCAConfigMapName = "quay-ca-bundle"
+
+	imagePrunerCronJobName            = "image-controller-image-pruner-cronjob"
+	imagePrunerContainerName          = "image-pruner"
+	notificationResetterCronJobName   = "image-controller-notification-resetter-cronjob"
+	notificationResetterContainerName = "notification-resetter"
 )
 
 // ImageControllerCleanupGVKs defines which resource types should be cleaned up when they are
@@ -163,6 +169,20 @@ func (r *KonfluxImageControllerReconciler) applyManifests(ctx context.Context, t
 			}
 		}
 
+		if cronJob, ok := obj.(*batchv1.CronJob); ok {
+			var cronErr error
+			switch cronJob.Name {
+			case imagePrunerCronJobName:
+				cronErr = applyImagePrunerCustomizations(cronJob, owner.Spec)
+			case notificationResetterCronJobName:
+				cronErr = applyNotificationResetterCustomizations(cronJob, owner.Spec)
+			default:
+			}
+			if cronErr != nil {
+				return fmt.Errorf("failed to apply customizations to CronJob %s: %w", cronJob.Name, cronErr)
+			}
+		}
+
 		// Apply with ownership using the tracking client
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
@@ -227,11 +247,26 @@ func buildImageControllerManagerOverlay(spec konfluxv1alpha1.KonfluxImageControl
 		customization.FromContainerSpec(managerSpec),
 	)
 
+	if spec.LogEncoder != "" {
+		podOpts = append(podOpts, customization.WithArgReplace(
+			managerContainerName, konfluxv1alpha1.ZapEncoderArg+"="+string(spec.LogEncoder)))
+	}
+
 	podOpts = append(podOpts,
 		customization.WithContainerOpts(managerContainerName, deployCtx, containerOpts...),
 		customization.WithLeaderElection(managerContainerName, deployCtx.Replicas),
 	)
 	return customization.NewPodOverlay(podOpts...), nil
+}
+
+// applyImagePrunerCustomizations applies user-defined customizations to the image-pruner CronJob.
+func applyImagePrunerCustomizations(cj *batchv1.CronJob, spec konfluxv1alpha1.KonfluxImageControllerSpec) error {
+	return customization.ApplyCronJobContainerSpec(cj, imagePrunerContainerName, spec.ImagePruner)
+}
+
+// applyNotificationResetterCustomizations applies user-defined customizations to the notification-resetter CronJob.
+func applyNotificationResetterCustomizations(cj *batchv1.CronJob, spec konfluxv1alpha1.KonfluxImageControllerSpec) error {
+	return customization.ApplyCronJobContainerSpec(cj, notificationResetterContainerName, spec.NotificationResetter)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -246,9 +281,10 @@ func (r *KonfluxImageControllerReconciler) SetupWithManager(mgr ctrl.Manager) er
 		// Use predicates to filter out unnecessary updates and prevent reconcile loops
 		// Deployments: watch spec changes AND readiness status changes
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(predicate.DeploymentReadinessPredicate)).
+		Owns(&batchv1.CronJob{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&corev1.Service{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&corev1.ConfigMap{}).
-		Owns(&corev1.Secret{}).
+		Owns(&corev1.ServiceAccount{}).
 		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).

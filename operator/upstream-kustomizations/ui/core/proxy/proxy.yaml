@@ -139,8 +139,8 @@ spec:
           - name: caddy-snippets
             mountPath: /mnt/caddy-snippets
             readOnly: true
-          - name: trusted-ca
-            mountPath: /mnt/trusted-ca
+          - name: cluster-ca
+            mountPath: /mnt/cluster-ca
             readOnly: true
           - name: service-ca
             mountPath: /mnt/service-ca
@@ -149,6 +149,9 @@ spec:
             mountPath: /opt/app-root/src/static-content
           - name: segment-bridge-config
             mountPath: /opt/app-root/src/segment
+          - name: watson-config
+            mountPath: /mnt/watson-config
+            readOnly: true
           - name: caddy-data
             mountPath: /data
           - name: caddy-config
@@ -230,10 +233,12 @@ spec:
         - name: serving-cert
           secret:
             secretName: serving-cert
-        - name: trusted-ca
-          configMap:
-            name: trusted-ca
-            optional: true
+        - name: cluster-ca
+          secret:
+            secretName: cluster-root-ref
+            items:
+              - key: ca.crt
+                path: ca-bundle.crt
         - name: service-ca
           configMap:
             name: openshift-service-ca.crt
@@ -249,6 +254,10 @@ spec:
                 path: key
               - key: url
                 path: url
+        - name: watson-config
+          secret:
+            secretName: watson-config
+            optional: true
 
 ---
 apiVersion: v1
