@@ -15,4 +15,5 @@ exclude = [
   '^https://kubernetes\.io',
   '^https://olm\.operatorframework\.io',
   '^https://book\.kubebuilder\.io',
+  '^https://www\.gnu\.org',
 ]
