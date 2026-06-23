@@ -108,11 +108,7 @@ var _ = Describe("KonfluxDefaultTenant Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: internalregistry.CRName},
 			}
 			Expect(k8sClient.Create(ctx, registry)).To(Succeed())
-			DeferCleanup(func() {
-				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxInternalRegistry{
-					ObjectMeta: metav1.ObjectMeta{Name: internalregistry.CRName},
-				})
-			})
+			testutil.DeferCleanupParentAndChildren(k8sClient, registry)
 
 			Expect(k8sClient.Create(ctx, &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{Name: RegistrySourceSecretNamespace},
@@ -129,14 +125,7 @@ var _ = Describe("KonfluxDefaultTenant Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, source)).To(Succeed())
-			DeferCleanup(func() {
-				testutil.DeleteAndWait(ctx, k8sClient, &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      RegistrySourceSecretName,
-						Namespace: RegistrySourceSecretNamespace,
-					},
-				})
-			})
+			testutil.DeferCleanupParentAndChildren(k8sClient, source)
 
 			// Source secret watch should enqueue KonfluxDefaultTenant reconcile.
 			Eventually(func(g Gomega) {

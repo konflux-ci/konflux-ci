@@ -1,0 +1,14 @@
+handle_path /api/chatbot/* {
+    route {
+        forward_auth 127.0.0.1:6000 {
+            uri /oauth2/auth
+            copy_headers X-Auth-Request-Email X-Auth-Request-Groups
+        }
+        inject_cached_vars
+        reverse_proxy https://__WATSON_HOST__ {
+            header_up Authorization "Basic {http.vars.watson_auth}"
+            header_up Host __WATSON_HOST__
+            import /mnt/caddy-snippets/watson-tls.conf
+        }
+    }
+}
