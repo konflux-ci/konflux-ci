@@ -3126,6 +3126,69 @@ spec:
                       proxy:
                         description: Proxy defines customizations for the proxy deployment.
                         properties:
+                          endpoints:
+                            description: |-
+                              Endpoints configures optional backend services that the proxy routes to.
+                              Each endpoint can be independently enabled and customized.
+                            properties:
+                              kite:
+                                description: |-
+                                  Kite enables the Kite plugin endpoint.
+                                  When enabled, requests to /api/k8s/plugins/kite/ are proxied to the Kite backend.
+                                properties:
+                                  enabled:
+                                    description: Enabled controls whether this endpoint
+                                      is active.
+                                    type: boolean
+                                  hostname:
+                                    description: Hostname overrides the default backend
+                                      service address.
+                                    type: string
+                                required:
+                                - enabled
+                                type: object
+                              kubearchive:
+                                description: |-
+                                  KubeArchive enables the KubeArchive plugin endpoint.
+                                  When enabled, requests to /api/k8s/plugins/kubearchive/ are proxied to the KubeArchive backend.
+                                properties:
+                                  enabled:
+                                    description: Enabled controls whether this endpoint
+                                      is active.
+                                    type: boolean
+                                  hostname:
+                                    description: Hostname overrides the default backend
+                                      service address.
+                                    type: string
+                                required:
+                                - enabled
+                                type: object
+                              watson:
+                                description: |-
+                                  Watson enables the Watson chatbot endpoint.
+                                  When enabled, requests to /api/chatbot/ are proxied to the IBM Watson Assistant API.
+                                properties:
+                                  enabled:
+                                    description: Enabled controls whether the Watson
+                                      chatbot endpoint is active.
+                                    type: boolean
+                                  hostname:
+                                    description: |-
+                                      Hostname overrides the Watson API host.
+                                      Defaults to api.us-east.assistant.watson.cloud.ibm.com.
+                                    type: string
+                                  secretName:
+                                    default: watson-api-key
+                                    description: |-
+                                      SecretName is the name of the Secret containing the Watson API key.
+                                      The Secret must have a key named API_KEY with the pre-encoded Basic auth
+                                      value (e.g. base64("apikey:<your-api-key>")).
+                                    minLength: 1
+                                    type: string
+                                required:
+                                - enabled
+                                type: object
+                            type: object
                           oauth2Proxy:
                             description: OAuth2Proxy defines customizations for the
                               oauth2-proxy container.
