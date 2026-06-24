@@ -62,6 +62,7 @@ After changing APIs or RBAC annotations, run `make manifests generate` from `ope
 - Go: Standard formatting, Ginkgo for tests, Gomega for assertions/matchers (all test types: unit, functional, e2e)
 - Kustomizations: Pin exact SHAs, not branches
 - Markdown: Update TOC with `npx markdown-toc -i` if structure changes
+- Upstream/downstream: `konflux-ci/konflux-ci` is an upstream repo. Do not reference downstream consumers (e.g., `infra-deployments`) by name in code or comments. Use generic phrasing like "in some environments" or "by external policies" instead.
 
 ## Testing
 
