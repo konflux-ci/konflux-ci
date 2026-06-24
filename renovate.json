@@ -325,6 +325,19 @@
       "extractVersionTemplate": "^v?(?<version>.*)$"
     },
     {
+      "description": "Track envtest Kubernetes version in operator Makefile",
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["^operator/Makefile$"],
+      "matchStrings": [
+        "# renovate: datasource=github-releases depName=kubernetes/kubernetes",
+        "ENVTEST_K8S_VERSION \\?= (?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "kubernetes/kubernetes",
+      "extractVersionTemplate": "^v?(?<version>.*)$"
+    },
+    {
       "description": "Track sigstore scaffold Helm chart version in install script",
       "customType": "regex",
       "fileMatch": ["integrations/sigstore/install\\.sh$"],
