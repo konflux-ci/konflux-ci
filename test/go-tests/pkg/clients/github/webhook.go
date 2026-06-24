@@ -22,10 +22,10 @@ func (c *Client) ListRepoWebhooks(ctx context.Context, repository string) ([]*gi
 func (c *Client) CreateWebhook(repository, url string) (int64, error) {
 	newWebhook := &github.Hook{
 		Events: []string{"push"},
-		Config: map[string]interface{}{
-			"content_type": "json",
-			"insecure_ssl": 0,
-			"url":          url,
+		Config: &github.HookConfig{
+			ContentType: github.Ptr("json"),
+			InsecureSSL: github.Ptr("0"),
+			URL:         github.Ptr(url),
 		},
 	}
 

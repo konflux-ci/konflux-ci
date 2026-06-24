@@ -31,7 +31,10 @@ func NewClient(token, organization string) (*Client, error) {
 	// Wrap with retry transport so all API calls automatically retry on 5xx
 	rateLimiter.Transport = utils.NewRetryTransport(rateLimiter.Transport)
 
-	client := github.NewClient(rateLimiter)
+	client, err := github.NewClient(github.WithHTTPClient(rateLimiter))
+	if err != nil {
+		return &Client{}, err
+	}
 	githubClient := &Client{
 		client:       client,
 		organization: organization,
