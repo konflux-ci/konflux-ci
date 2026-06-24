@@ -50,7 +50,7 @@ replace (
 	github.com/apcera/gssapi => github.com/openshift/gssapi v0.0.0-20161010215902-5fb4217df13b
 	github.com/docker/distribution => github.com/docker/distribution v2.8.3+incompatible
 	github.com/docker/distribution/reference => github.com/distribution/reference v0.5.0
-	github.com/docker/docker => github.com/docker/docker v23.0.18+incompatible
+	github.com/docker/docker => github.com/docker/docker v28.5.2+incompatible
 	github.com/konflux-ci/konflux-ci/operator => ../../operator
 	k8s.io/api => k8s.io/api v0.35.3
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.35.3
