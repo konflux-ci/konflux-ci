@@ -70,6 +70,15 @@
     ],
     "schedule": ["* * * * *"]
   },
+  "customDatasources": {
+    "envtest": {
+      "defaultRegistryUrlTemplate": "https://raw.githubusercontent.com/kubernetes-sigs/controller-tools/master/envtest-releases.yaml",
+      "format": "yaml",
+      "transformTemplates": [
+        "{\"releases\": $keys(releases).{\"version\": $substring($, 1)} }"
+      ]
+    }
+  },
   "customManagers": [
     {
       "customType": "regex",
@@ -330,12 +339,12 @@
       "matchStringsStrategy": "combination",
       "fileMatch": ["^operator/Makefile$"],
       "matchStrings": [
-        "# renovate: datasource=github-releases depName=kubernetes/kubernetes",
+        "# renovate: datasource=custom.envtest depName=envtest",
         "ENVTEST_K8S_VERSION \\?= (?<currentValue>\\d+\\.\\d+\\.\\d+)"
       ],
-      "datasourceTemplate": "github-releases",
-      "depNameTemplate": "kubernetes/kubernetes",
-      "extractVersionTemplate": "^v?(?<version>.*)$"
+      "datasourceTemplate": "custom.envtest",
+      "depNameTemplate": "envtest",
+      "versioningTemplate": "semver"
     },
     {
       "description": "Track sigstore scaffold Helm chart version in install script",
