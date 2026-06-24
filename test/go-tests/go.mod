@@ -10,7 +10,7 @@ require (
 	github.com/docker/cli v29.6.0+incompatible
 	github.com/gofri/go-github-ratelimit v1.1.1
 	github.com/google/go-containerregistry v0.21.7
-	github.com/google/go-github/v44 v44.1.0
+	github.com/google/go-github/v88 v88.0.0
 	github.com/h2non/gock v1.2.0
 	github.com/konflux-ci/application-api v0.0.0-20260603073049-dd8c9b1a64c2
 	github.com/konflux-ci/build-service v0.0.0-20240611083846-2dee6cfe6fe4
@@ -132,7 +132,6 @@ require (
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-github/v45 v45.2.0 // indirect
-	github.com/google/go-github/v88 v88.0.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/gofuzz v1.2.1-0.20221018181003-5dfa3b7056d4 // indirect
 	github.com/google/pprof v0.0.0-20260604005048-7023385849c0 // indirect
