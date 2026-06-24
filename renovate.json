@@ -53,6 +53,14 @@
       "additionalBranchPrefix": "integrations/"
     }
   ],
+  "gomod": {
+    "packageRules": [
+      {
+        "matchDepTypes": ["indirect"],
+        "enabled": false
+      }
+    ]
+  },
   "tekton": {
     "fileMatch": [".*\\.ya?ml$"],
     "includePaths": [
