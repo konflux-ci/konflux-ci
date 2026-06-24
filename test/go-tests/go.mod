@@ -37,7 +37,6 @@ require (
 	k8s.io/apimachinery v0.36.2
 	k8s.io/client-go v11.0.0+incompatible
 	k8s.io/klog/v2 v2.140.0
-	k8s.io/klog/v2 v2.140.0
 	k8s.io/utils v0.0.0-20260617174310-a95e086a2553
 	knative.dev/pkg v0.0.0-20260615201544-6300c57a9e78
 	oras.land/oras-go/v2 v2.5.0
@@ -210,6 +209,7 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiextensions-apiserver v0.35.6 // indirect
+	k8s.io/klog v1.0.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260618221249-bc653b64f974 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
