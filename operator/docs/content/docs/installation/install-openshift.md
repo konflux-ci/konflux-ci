@@ -81,7 +81,7 @@ The script skips the Smee webhook proxy (<code>SKIP_SMEE=true</code>). For GitHu
 to deliver webhook events (triggering build pipelines on pull requests), your cluster
 must be reachable from the internet. If it is not, you will need to configure Smee
 manually after installation. See
-[GitHub Application Secrets]({{< relref "../guides/github-secrets" >}}) for details.
+<a href="{{< relref "../guides/github-secrets" >}}">GitHub Application Secrets</a> for details.
 {{< /alert >}}
 
 ### Operator and Konflux
