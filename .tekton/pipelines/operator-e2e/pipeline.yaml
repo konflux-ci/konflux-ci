@@ -135,7 +135,7 @@ spec:
       description: >-
         Pinned commit of tekton-integration-catalog for kind-aws and other catalog tasks (bump when upgrading tasks).
       # renovate: datasource=git-refs depName=https://github.com/konflux-ci/tekton-integration-catalog
-      default: 5586ff63bbf147aadf026fcf31ba5c5914814863
+      default: d7e56b0c8be8540af0eefc0d87faafbef57bb195
   tasks:
     - name: test-metadata
       when:
