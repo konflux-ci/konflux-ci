@@ -119,7 +119,7 @@ spec:
           cpu: "2"
           memory: "8Gi"
       workingDir: /mnt/konflux-ci/repo
-      image: registry.access.redhat.com/ubi10/go-toolset@sha256:8e7d4a24fd04a540afb033f4c8dcb3cb459c4dad3b6fa4e4e1059ade00839ca2
+      image: registry.access.redhat.com/ubi10/go-toolset@sha256:6a8be382811b81b25ed69d9918f47c46431f682b819bcbfa46ff0b016e2bdda7
       env:
         - name: GH_ORG
           valueFrom:
