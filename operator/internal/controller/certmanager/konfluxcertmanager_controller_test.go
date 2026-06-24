@@ -42,6 +42,7 @@ const (
 	bootstrapIssuerName  = "konflux-bootstrap-issuer"
 	issuerName           = "konflux-issuer"
 	certificateName      = "konflux-ca"
+	caSecretName         = "konflux-ca-secret"
 )
 
 // clusterIssuerGVK is the GVK for cert-manager ClusterIssuer resources.
@@ -308,6 +309,108 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 					labels, _, _ := unstructured.NestedStringMap(obj.Object, "metadata", "labels")
 					g.Expect(labels).To(HaveKey(constant.KonfluxOwnerLabel))
 					g.Expect(labels).To(HaveKey(constant.KonfluxComponentLabel))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			})
+
+			It("restores ClusterIssuer spec when modified", func(ctx context.Context) {
+				cm := &konfluxv1alpha1.KonfluxCertManager{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
+
+				By("waiting for initial ClusterIssuer creation")
+				Eventually(func(g Gomega) {
+					obj := newClusterIssuer(issuerName)
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: issuerName}, obj)).To(Succeed())
+					secretName, _, _ := unstructured.NestedString(obj.Object, "spec", "ca", "secretName")
+					g.Expect(secretName).To(Equal(caSecretName))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("modifying the ClusterIssuer CA secret name")
+				Eventually(func(g Gomega) {
+					obj := newClusterIssuer(issuerName)
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: issuerName}, obj)).To(Succeed())
+					g.Expect(unstructured.SetNestedField(obj.Object, "tampered-secret", "spec", "ca", "secretName")).To(Succeed())
+					g.Expect(k8sClient.Update(ctx, obj)).To(Succeed())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("verifying the ClusterIssuer CA secret name is restored")
+				Eventually(func(g Gomega) {
+					obj := newClusterIssuer(issuerName)
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: issuerName}, obj)).To(Succeed())
+					secretName, _, _ := unstructured.NestedString(obj.Object, "spec", "ca", "secretName")
+					g.Expect(secretName).To(Equal(caSecretName))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			})
+
+			It("restores bootstrap ClusterIssuer spec when modified", func(ctx context.Context) {
+				cm := &konfluxv1alpha1.KonfluxCertManager{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
+
+				By("waiting for initial bootstrap ClusterIssuer creation")
+				Eventually(func(g Gomega) {
+					obj := newClusterIssuer(bootstrapIssuerName)
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: bootstrapIssuerName}, obj)).To(Succeed())
+					_, found, _ := unstructured.NestedMap(obj.Object, "spec", "selfSigned")
+					g.Expect(found).To(BeTrue())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("replacing selfSigned with a CA spec")
+				Eventually(func(g Gomega) {
+					obj := newClusterIssuer(bootstrapIssuerName)
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: bootstrapIssuerName}, obj)).To(Succeed())
+					unstructured.RemoveNestedField(obj.Object, "spec", "selfSigned")
+					g.Expect(unstructured.SetNestedField(obj.Object, "fake-secret", "spec", "ca", "secretName")).To(Succeed())
+					g.Expect(k8sClient.Update(ctx, obj)).To(Succeed())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("verifying the bootstrap ClusterIssuer selfSigned spec is restored")
+				Eventually(func(g Gomega) {
+					obj := newClusterIssuer(bootstrapIssuerName)
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: bootstrapIssuerName}, obj)).To(Succeed())
+					_, found, _ := unstructured.NestedMap(obj.Object, "spec", "selfSigned")
+					g.Expect(found).To(BeTrue())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			})
+
+			It("restores Certificate spec when modified", func(ctx context.Context) {
+				cm := &konfluxv1alpha1.KonfluxCertManager{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
+
+				certNN := types.NamespacedName{
+					Name:      certificateName,
+					Namespace: certManagerNamespace,
+				}
+
+				By("waiting for initial Certificate creation")
+				Eventually(func(g Gomega) {
+					obj := newCertificate(certNN.Name, certNN.Namespace)
+					g.Expect(k8sClient.Get(ctx, certNN, obj)).To(Succeed())
+					issuer, _, _ := unstructured.NestedString(obj.Object, "spec", "issuerRef", "name")
+					g.Expect(issuer).To(Equal(bootstrapIssuerName))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("modifying the Certificate issuerRef name")
+				Eventually(func(g Gomega) {
+					obj := newCertificate(certNN.Name, certNN.Namespace)
+					g.Expect(k8sClient.Get(ctx, certNN, obj)).To(Succeed())
+					g.Expect(unstructured.SetNestedField(obj.Object, "tampered-issuer", "spec", "issuerRef", "name")).To(Succeed())
+					g.Expect(k8sClient.Update(ctx, obj)).To(Succeed())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("verifying the Certificate issuerRef name is restored")
+				Eventually(func(g Gomega) {
+					obj := newCertificate(certNN.Name, certNN.Namespace)
+					g.Expect(k8sClient.Get(ctx, certNN, obj)).To(Succeed())
+					issuer, _, _ := unstructured.NestedString(obj.Object, "spec", "issuerRef", "name")
+					g.Expect(issuer).To(Equal(bootstrapIssuerName))
 				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 			})
 		})

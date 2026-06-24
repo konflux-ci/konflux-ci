@@ -953,6 +953,47 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
+		It("restores Service spec when modified", func(ctx context.Context) {
+			startManagerWithClusterInfo(nil)
+
+			buildService := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+
+			svcNN := types.NamespacedName{
+				Name:      metricsServiceName,
+				Namespace: buildServiceNamespace,
+			}
+
+			By("waiting for initial Service creation")
+			var originalTargetPort int32
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				g.Expect(svc.Spec.Ports).NotTo(BeEmpty())
+				originalTargetPort = svc.Spec.Ports[0].TargetPort.IntVal
+				g.Expect(originalTargetPort).NotTo(BeZero())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the Service target port")
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				svc.Spec.Ports[0].TargetPort.IntVal = 9999
+				g.Expect(k8sClient.Update(ctx, svc)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the Service target port is restored")
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				g.Expect(svc.Spec.Ports).NotTo(BeEmpty())
+				g.Expect(svc.Spec.Ports[0].TargetPort.IntVal).To(Equal(originalTargetPort))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
 		It("restores ConfigMap data when modified", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
@@ -1195,6 +1236,52 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				crb := &rbacv1.ClusterRoleBinding{}
 				g.Expect(k8sClient.Get(ctx, crbNN, crb)).To(Succeed())
 				g.Expect(crb.Subjects).To(Equal(originalSubjects))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores SecurityContextConstraints spec when modified", func(ctx context.Context) {
+			openShiftClusterInfo, err := clusterinfo.DetectWithClient(&buildServiceMockDiscoveryClient{
+				resources: map[string]*metav1.APIResourceList{
+					"config.openshift.io/v1": {
+						APIResources: []metav1.APIResource{{Kind: "ClusterVersion"}},
+					},
+				},
+				serverVersion: &version.Info{GitVersion: "v1.29.0"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			startManagerWithClusterInfo(openShiftClusterInfo)
+
+			buildService := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, buildService, &securityv1.SecurityContextConstraints{
+				ObjectMeta: metav1.ObjectMeta{Name: sccName},
+			})
+
+			sccNN := types.NamespacedName{Name: sccName}
+
+			By("waiting for initial SCC creation")
+			Eventually(func(g Gomega) {
+				scc := &securityv1.SecurityContextConstraints{}
+				g.Expect(k8sClient.Get(ctx, sccNN, scc)).To(Succeed())
+				g.Expect(scc.RunAsUser.Type).To(Equal(securityv1.RunAsUserStrategyRunAsAny))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the SCC RunAsUser strategy")
+			Eventually(func(g Gomega) {
+				scc := &securityv1.SecurityContextConstraints{}
+				g.Expect(k8sClient.Get(ctx, sccNN, scc)).To(Succeed())
+				scc.RunAsUser.Type = securityv1.RunAsUserStrategyMustRunAsRange
+				g.Expect(k8sClient.Update(ctx, scc)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the SCC RunAsUser strategy is restored")
+			Eventually(func(g Gomega) {
+				scc := &securityv1.SecurityContextConstraints{}
+				g.Expect(k8sClient.Get(ctx, sccNN, scc)).To(Succeed())
+				g.Expect(scc.RunAsUser.Type).To(Equal(securityv1.RunAsUserStrategyRunAsAny))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})

@@ -665,6 +665,45 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
+		It("restores Service spec when modified", func(ctx context.Context) {
+			integrationService := &konfluxv1alpha1.KonfluxIntegrationService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, integrationService)
+
+			svcNN := types.NamespacedName{
+				Name:      metricsServiceName,
+				Namespace: integrationServiceNamespace,
+			}
+
+			By("waiting for initial Service creation")
+			var originalTargetPort int32
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				g.Expect(svc.Spec.Ports).NotTo(BeEmpty())
+				originalTargetPort = svc.Spec.Ports[0].TargetPort.IntVal
+				g.Expect(originalTargetPort).NotTo(BeZero())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the Service target port")
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				svc.Spec.Ports[0].TargetPort.IntVal = 9999
+				g.Expect(k8sClient.Update(ctx, svc)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the Service target port is restored")
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				g.Expect(svc.Spec.Ports).NotTo(BeEmpty())
+				g.Expect(svc.Spec.Ports[0].TargetPort.IntVal).To(Equal(originalTargetPort))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
 		It("restores ConfigMap data when modified", func(ctx context.Context) {
 			integrationService := &konfluxv1alpha1.KonfluxIntegrationService{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
@@ -1048,6 +1087,128 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				g.Expect(k8sClient.Get(ctx, mwcNN, mwc)).To(Succeed())
 				g.Expect(mwc.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
 				g.Expect(mwc.Labels).To(HaveKey(constant.KonfluxComponentLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores Issuer spec when modified", func(ctx context.Context) {
+			integrationService := &konfluxv1alpha1.KonfluxIntegrationService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, integrationService)
+
+			issuerNN := types.NamespacedName{
+				Name:      selfsignedIssuerName,
+				Namespace: integrationServiceNamespace,
+			}
+
+			By("waiting for initial Issuer creation with self-signed config")
+			Eventually(func(g Gomega) {
+				issuer := &certmanagerv1.Issuer{}
+				g.Expect(k8sClient.Get(ctx, issuerNN, issuer)).To(Succeed())
+				g.Expect(issuer.Spec.SelfSigned).NotTo(BeNil())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("replacing selfSigned with a CA spec")
+			Eventually(func(g Gomega) {
+				issuer := &certmanagerv1.Issuer{}
+				g.Expect(k8sClient.Get(ctx, issuerNN, issuer)).To(Succeed())
+				issuer.Spec.SelfSigned = nil
+				issuer.Spec.CA = &certmanagerv1.CAIssuer{SecretName: "tampered-secret"}
+				g.Expect(k8sClient.Update(ctx, issuer)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the Issuer selfSigned spec is restored")
+			Eventually(func(g Gomega) {
+				issuer := &certmanagerv1.Issuer{}
+				g.Expect(k8sClient.Get(ctx, issuerNN, issuer)).To(Succeed())
+				g.Expect(issuer.Spec.SelfSigned).NotTo(BeNil())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores ValidatingWebhookConfiguration spec when modified", func(ctx context.Context) {
+			integrationService := &konfluxv1alpha1.KonfluxIntegrationService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, integrationService,
+				&admissionregistrationv1.ValidatingWebhookConfiguration{
+					ObjectMeta: metav1.ObjectMeta{Name: validatingWebhookName},
+				},
+			)
+
+			vwcNN := types.NamespacedName{Name: validatingWebhookName}
+
+			By("waiting for initial ValidatingWebhookConfiguration creation")
+			var originalPath string
+			Eventually(func(g Gomega) {
+				vwc := &admissionregistrationv1.ValidatingWebhookConfiguration{}
+				g.Expect(k8sClient.Get(ctx, vwcNN, vwc)).To(Succeed())
+				g.Expect(vwc.Webhooks).NotTo(BeEmpty())
+				g.Expect(vwc.Webhooks[0].ClientConfig.Service).NotTo(BeNil())
+				originalPath = *vwc.Webhooks[0].ClientConfig.Service.Path
+				g.Expect(originalPath).NotTo(BeEmpty())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the webhook path")
+			Eventually(func(g Gomega) {
+				vwc := &admissionregistrationv1.ValidatingWebhookConfiguration{}
+				g.Expect(k8sClient.Get(ctx, vwcNN, vwc)).To(Succeed())
+				tampered := "/tampered-path"
+				vwc.Webhooks[0].ClientConfig.Service.Path = &tampered
+				g.Expect(k8sClient.Update(ctx, vwc)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the webhook path is restored")
+			Eventually(func(g Gomega) {
+				vwc := &admissionregistrationv1.ValidatingWebhookConfiguration{}
+				g.Expect(k8sClient.Get(ctx, vwcNN, vwc)).To(Succeed())
+				g.Expect(vwc.Webhooks).NotTo(BeEmpty())
+				g.Expect(vwc.Webhooks[0].ClientConfig.Service).NotTo(BeNil())
+				g.Expect(*vwc.Webhooks[0].ClientConfig.Service.Path).To(Equal(originalPath))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores MutatingWebhookConfiguration spec when modified", func(ctx context.Context) {
+			integrationService := &konfluxv1alpha1.KonfluxIntegrationService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, integrationService,
+				&admissionregistrationv1.MutatingWebhookConfiguration{
+					ObjectMeta: metav1.ObjectMeta{Name: mutatingWebhookName},
+				},
+			)
+
+			mwcNN := types.NamespacedName{Name: mutatingWebhookName}
+
+			By("waiting for initial MutatingWebhookConfiguration creation")
+			var originalPath string
+			Eventually(func(g Gomega) {
+				mwc := &admissionregistrationv1.MutatingWebhookConfiguration{}
+				g.Expect(k8sClient.Get(ctx, mwcNN, mwc)).To(Succeed())
+				g.Expect(mwc.Webhooks).NotTo(BeEmpty())
+				g.Expect(mwc.Webhooks[0].ClientConfig.Service).NotTo(BeNil())
+				originalPath = *mwc.Webhooks[0].ClientConfig.Service.Path
+				g.Expect(originalPath).NotTo(BeEmpty())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the webhook path")
+			Eventually(func(g Gomega) {
+				mwc := &admissionregistrationv1.MutatingWebhookConfiguration{}
+				g.Expect(k8sClient.Get(ctx, mwcNN, mwc)).To(Succeed())
+				tampered := "/tampered-path"
+				mwc.Webhooks[0].ClientConfig.Service.Path = &tampered
+				g.Expect(k8sClient.Update(ctx, mwc)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the webhook path is restored")
+			Eventually(func(g Gomega) {
+				mwc := &admissionregistrationv1.MutatingWebhookConfiguration{}
+				g.Expect(k8sClient.Get(ctx, mwcNN, mwc)).To(Succeed())
+				g.Expect(mwc.Webhooks).NotTo(BeEmpty())
+				g.Expect(mwc.Webhooks[0].ClientConfig.Service).NotTo(BeNil())
+				g.Expect(*mwc.Webhooks[0].ClientConfig.Service.Path).To(Equal(originalPath))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})
