@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/gofri/go-github-ratelimit/github_ratelimit"
-	"github.com/google/go-github/v44/github"
+	"github.com/google/go-github/v88/github"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/utils"
 	"golang.org/x/oauth2"
 )
@@ -31,7 +31,10 @@ func NewClient(token, organization string) (*Client, error) {
 	// Wrap with retry transport so all API calls automatically retry on 5xx
 	rateLimiter.Transport = utils.NewRetryTransport(rateLimiter.Transport)
 
-	client := github.NewClient(rateLimiter)
+	client, err := github.NewClient(github.WithHTTPClient(rateLimiter))
+	if err != nil {
+		return &Client{}, err
+	}
 	githubClient := &Client{
 		client:       client,
 		organization: organization,

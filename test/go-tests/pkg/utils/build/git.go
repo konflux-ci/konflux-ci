@@ -93,7 +93,7 @@ func CleanupWebhooks(ctx context.Context, f *framework.Framework, repoName strin
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		hookUrl := h.Config["url"].(string)
+		hookUrl := h.GetConfig().GetURL()
 		if strings.Contains(hookUrl, f.ClusterAppDomain) {
 			klog.Infof("removing webhook URL: %s", hookUrl)
 			err = f.AsKubeAdmin.CommonController.GitHub.DeleteWebhook(ctx, repoName, h.GetID())

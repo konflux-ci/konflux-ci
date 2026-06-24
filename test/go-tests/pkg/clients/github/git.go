@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-github/v44/github"
+	"github.com/google/go-github/v88/github"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/utils"
 )
 
@@ -28,13 +28,17 @@ func (c *Client) CreateRef(repository, baseBranchName, sha, newBranchName string
 		return fmt.Errorf("error when getting the base branch name '%s' for the repo '%s': %+v", baseBranchName, repository, err)
 	}
 
-	ref.Ref = github.String(fmt.Sprintf(HEADS, newBranchName))
-
+	commitSHA := ref.GetObject().GetSHA()
 	if sha != "" {
-		ref.Object.SHA = &sha
+		commitSHA = sha
 	}
 
-	_, _, err = c.client.Git.CreateRef(ctx, c.organization, repository, ref)
+	newRef := github.CreateRef{
+		Ref: fmt.Sprintf("refs/%s", fmt.Sprintf(HEADS, newBranchName)),
+		SHA: commitSHA,
+	}
+
+	_, _, err = c.client.Git.CreateRef(ctx, c.organization, repository, newRef)
 	if err != nil {
 		return fmt.Errorf("error when creating a new branch '%s' for the repo '%s': %+v", newBranchName, repository, err)
 	}
