@@ -497,6 +497,45 @@ var _ = Describe("KonfluxImageController Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
+		It("restores Service spec when modified", func(ctx context.Context) {
+			imageController := &konfluxv1alpha1.KonfluxImageController{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
+
+			svcNN := types.NamespacedName{
+				Name:      metricsServiceName,
+				Namespace: imageControllerNamespace,
+			}
+
+			By("waiting for initial Service creation")
+			var originalTargetPort int32
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				g.Expect(svc.Spec.Ports).NotTo(BeEmpty())
+				originalTargetPort = svc.Spec.Ports[0].TargetPort.IntVal
+				g.Expect(originalTargetPort).NotTo(BeZero())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the Service target port")
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				svc.Spec.Ports[0].TargetPort.IntVal = 9999
+				g.Expect(k8sClient.Update(ctx, svc)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the Service target port is restored")
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				g.Expect(svc.Spec.Ports).NotTo(BeEmpty())
+				g.Expect(svc.Spec.Ports[0].TargetPort.IntVal).To(Equal(originalTargetPort))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
 		It("restores ConfigMap data when modified", func(ctx context.Context) {
 			imageController := &konfluxv1alpha1.KonfluxImageController{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
