@@ -123,6 +123,37 @@ PRs trigger the following workflows:
 - APIs defined in `operator/api/v1alpha1` — many `Konflux*` kinds (Konflux, BuildService, IntegrationService, ReleaseService, UI, RBAC, etc.)
 - Per-service reconcilers in `operator/internal/controller/<subservice>/`
 
+## Upstream Kustomization Sync
+
+Files under `operator/upstream-kustomizations/<component>/` are **source
+inputs** to `kustomize build`. The rendered output lives at
+`operator/pkg/manifests/<component>/manifests.yaml`. After modifying
+**any** file in the `upstream-kustomizations/` tree (scripts, patches,
+`kustomization.yaml`, etc.), you **must** regenerate the corresponding
+rendered manifests before committing.
+
+**Rebuild a single component:**
+
+```bash
+kustomize build operator/upstream-kustomizations/<component> \
+  > operator/pkg/manifests/<component>/manifests.yaml
+```
+
+Or use the helper script:
+
+```bash
+./operator/pkg/manifests/process-component.sh <component> "$(pwd)"
+```
+
+**Rebuild all components** (when changes span multiple components):
+
+```bash
+./operator/pkg/manifests/rebuild-upstream-manifests.sh "$(pwd)"
+```
+
+The CI check **`operator-verify-generated-files`** will fail if rendered
+manifests are out of sync with their source kustomizations.
+
 ## Skills
 
 Detailed guides live in `skills/` — each subdirectory contains a `SKILL.md` with instructions.
