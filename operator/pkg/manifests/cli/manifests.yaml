@@ -169,7 +169,7 @@ data:
     trusted CA bundle\nif [[ \"${IS_OPENSHIFT}\" == \"true\" ]]; then\n    echo \"\U0001F512
     OpenShift detected — creating trusted-ca ConfigMap in '${MANAGED_NS}'...\"\n    #
     Use server-side apply with --force-conflicts because this ConfigMap is also\n
-    \   # managed by a Kyverno policy in infra-deployments. Plain apply would fail
+    \   # managed by a Kyverno policy in some environments. Plain apply would fail
     with\n    # resource version conflicts when both managers update the resource
     concurrently.\n    kubectl apply --server-side --force-conflicts -f - <<EOF\napiVersion:
     v1\nkind: ConfigMap\nmetadata:\n  name: trusted-ca\n  namespace: ${MANAGED_NS}\n
