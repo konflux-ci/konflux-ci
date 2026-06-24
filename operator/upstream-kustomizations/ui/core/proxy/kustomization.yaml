@@ -19,7 +19,7 @@ images:
 - digest: sha256:4ce68430a03c22c7b8bbdf8f948a92b5afc52877a434084f1e0df7cbbaf1b949
   name: quay.io/konflux-ci/oauth2-proxy
   newName: quay.io/konflux-ci/oauth2-proxy
-- digest: sha256:9a684ce63ffecb976811429bbd3b5491d28fb6f331c7840bea8beca722455925
+- digest: sha256:15656954fac84353db8f7f193bcd770c06819a8c42cf98f1a21ce3ef9e35455e
   name: quay.io/konflux-ci/reverse-proxy
   newName: quay.io/konflux-ci/reverse-proxy
 kind: Kustomization
