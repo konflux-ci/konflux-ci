@@ -110,7 +110,7 @@ spec:
             optional: true
   steps:
     - name: clone-repository
-      image: quay.io/konflux-ci/task-runner:v1@sha256:b9ef0479b57a494368a12a02886c650314c9ac7391c6228f21065865aab71c9e
+      image: quay.io/konflux-ci/task-runner:v2@sha256:4b01fbf98fa7155f5c21443c285f88853864ae7cc66981cf6b543fc6ba16b81b
       env:
         - name: GIT_URL
           value: $(params.git-url)
@@ -132,7 +132,7 @@ spec:
         git -C "${REPO_ROOT}" fetch --depth "${GIT_DEPTH}" origin "${GIT_REVISION}"
         git -C "${REPO_ROOT}" checkout -q FETCH_HEAD
     - name: fetch-kubeconfig
-      image: quay.io/konflux-ci/task-runner:v1@sha256:b9ef0479b57a494368a12a02886c650314c9ac7391c6228f21065865aab71c9e
+      image: quay.io/konflux-ci/task-runner:v2@sha256:4b01fbf98fa7155f5c21443c285f88853864ae7cc66981cf6b543fc6ba16b81b
       workingDir: /mnt/konflux-ci/repo
       env:
         - name: POD_NAMESPACE
@@ -145,7 +145,7 @@ spec:
         cd /mnt/konflux-ci/repo
         exec bash scripts/operator-e2e/tekton-fetch-kubeconfig.sh "$(params.cluster-access-secret)" "$(params.kubeconfig-secret-key)"
     - name: copy-shared-tools
-      image: quay.io/konflux-ci/task-runner:v1@sha256:b9ef0479b57a494368a12a02886c650314c9ac7391c6228f21065865aab71c9e
+      image: quay.io/konflux-ci/task-runner:v2@sha256:4b01fbf98fa7155f5c21443c285f88853864ae7cc66981cf6b543fc6ba16b81b
       workingDir: /mnt/konflux-ci/repo
       script: |
         #!/bin/bash
@@ -197,7 +197,7 @@ spec:
           E2E_KONFLUX_READY_TIMEOUT="$(params.konflux-ready-timeout)" \
           bash scripts/operator-e2e/tekton-deploy-prep.sh /mnt/konflux-ci/repo
     - name: push-operator-pkg-manifests-oci
-      image: quay.io/konflux-ci/task-runner:v1@sha256:b9ef0479b57a494368a12a02886c650314c9ac7391c6228f21065865aab71c9e
+      image: quay.io/konflux-ci/task-runner:v2@sha256:4b01fbf98fa7155f5c21443c285f88853864ae7cc66981cf6b543fc6ba16b81b
       workingDir: /mnt/konflux-ci/repo
       volumeMounts:
         - name: repo
