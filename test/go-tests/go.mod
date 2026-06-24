@@ -7,7 +7,7 @@ require (
 	github.com/codeready-toolchain/api v0.0.0-20260609071155-c8f486b1a581
 	github.com/conforma/crds/api v0.1.11
 	github.com/devfile/library/v2 v2.4.0
-	github.com/docker/cli v29.5.3+incompatible
+	github.com/docker/cli v29.6.0+incompatible
 	github.com/gofri/go-github-ratelimit v1.1.1
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v44 v44.1.0
@@ -50,7 +50,7 @@ replace (
 	github.com/apcera/gssapi => github.com/openshift/gssapi v0.0.0-20161010215902-5fb4217df13b
 	github.com/docker/distribution => github.com/docker/distribution v2.8.3+incompatible
 	github.com/docker/distribution/reference => github.com/distribution/reference v0.5.0
-	github.com/docker/docker => github.com/docker/docker v23.0.18+incompatible
+	github.com/docker/docker => github.com/docker/docker v28.5.2+incompatible
 	github.com/konflux-ci/konflux-ci/operator => ../../operator
 	k8s.io/api => k8s.io/api v0.35.3
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.35.3
