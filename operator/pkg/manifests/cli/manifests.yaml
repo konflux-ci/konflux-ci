@@ -167,13 +167,17 @@ data:
     Namespace\nmetadata:\n  name: ${MANAGED_NS}\n  labels:\n    konflux-ci.dev/type:
     tenant\nEOF\n\n# Step 2: On OpenShift, create a ConfigMap to inject the cluster-wide
     trusted CA bundle\nif [[ \"${IS_OPENSHIFT}\" == \"true\" ]]; then\n    echo \"\U0001F512
-    OpenShift detected — creating trusted-ca ConfigMap in '${MANAGED_NS}'...\"\n    kubectl
-    apply -f - <<EOF\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: trusted-ca\n
-    \ namespace: ${MANAGED_NS}\n  labels:\n    config.openshift.io/inject-trusted-cabundle:
-    \"true\"\ndata: {}\nEOF\nfi\n\n# Step 3: Copy EnterpriseContractPolicy from enterprise-contract-service
-    namespace\necho \"\U0001F4DC Copying EnterpriseContractPolicy '${CONFORMA_POLICY}'
-    from enterprise-contract-service namespace...\"\nkubectl get enterprisecontractpolicy
-    \"${CONFORMA_POLICY}\" -n enterprise-contract-service -o json \\\n    | jq 'del(.metadata.resourceVersion,
+    OpenShift detected — creating trusted-ca ConfigMap in '${MANAGED_NS}'...\"\n    #
+    Use server-side apply with --force-conflicts because this ConfigMap is also\n
+    \   # managed by a Kyverno policy in infra-deployments. Plain apply would fail
+    with\n    # resource version conflicts when both managers update the resource
+    concurrently.\n    kubectl apply --server-side --force-conflicts -f - <<EOF\napiVersion:
+    v1\nkind: ConfigMap\nmetadata:\n  name: trusted-ca\n  namespace: ${MANAGED_NS}\n
+    \ labels:\n    config.openshift.io/inject-trusted-cabundle: \"true\"\ndata: {}\nEOF\nfi\n\n#
+    Step 3: Copy EnterpriseContractPolicy from enterprise-contract-service namespace\necho
+    \"\U0001F4DC Copying EnterpriseContractPolicy '${CONFORMA_POLICY}' from enterprise-contract-service
+    namespace...\"\nkubectl get enterprisecontractpolicy \"${CONFORMA_POLICY}\" -n
+    enterprise-contract-service -o json \\\n    | jq 'del(.metadata.resourceVersion,
     .metadata.uid, .metadata.creationTimestamp, .metadata.generation, .metadata.managedFields,
     .metadata.ownerReferences, .status) | .metadata.namespace = \"'\"${MANAGED_NS}\"'\"'
     \\\n    | kubectl apply -f -\n\n# Step 4: Create RoleBinding for authenticated

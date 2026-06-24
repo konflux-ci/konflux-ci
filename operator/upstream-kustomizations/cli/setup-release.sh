@@ -201,6 +201,9 @@ EOF
 # Step 2: On OpenShift, create a ConfigMap to inject the cluster-wide trusted CA bundle
 if [[ "${IS_OPENSHIFT}" == "true" ]]; then
     echo "🔒 OpenShift detected — creating trusted-ca ConfigMap in '${MANAGED_NS}'..."
+    # Use server-side apply with --force-conflicts because this ConfigMap is also
+    # managed by a Kyverno policy in infra-deployments. Plain apply would fail with
+    # resource version conflicts when both managers update the resource concurrently.
     kubectl apply --server-side --force-conflicts -f - <<EOF
 apiVersion: v1
 kind: ConfigMap
