@@ -307,8 +307,8 @@ github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0t
 github.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7so1lCWt35ZSgc=
 github.com/santhosh-tekuri/jsonschema/v5 v5.3.1 h1:lZUw3E0/J3roVtGQ+SCrUrg3ON6NgVqpn3+iol9aGu4=
 github.com/santhosh-tekuri/jsonschema/v5 v5.3.1/go.mod h1:uToXkOrWAZ6/Oc07xWQrPOhJotwFIyu2bBVN41fcDUY=
-github.com/secure-systems-lab/go-securesystemslib v0.9.1 h1:nZZaNz4DiERIQguNy0cL5qTdn9lR8XKHf4RUyG1Sx3g=
-github.com/secure-systems-lab/go-securesystemslib v0.9.1/go.mod h1:np53YzT0zXGMv6x4iEWc9Z59uR+x+ndLwCLqPYpLXVU=
+github.com/secure-systems-lab/go-securesystemslib v0.10.0 h1:l+H5ErcW0PAehBNrBxoGv1jjNpGYdZ9RcheFkB2WI14=
+github.com/secure-systems-lab/go-securesystemslib v0.10.0/go.mod h1:MRKONWmRoFzPNQ9USRF9i1mc7MvAVvF1LlW8X5VWDvk=
 github.com/sergi/go-diff v1.4.0 h1:n/SP9D5ad1fORl+llWyN+D6qoUETXNZARKjyY2/KVCw=
 github.com/sergi/go-diff v1.4.0/go.mod h1:A0bzQcvG0E7Rwjx0REVgAGH58e96+X0MeOfepqsbeW4=
 github.com/sigstore/protobuf-specs v0.5.0 h1:F8YTI65xOHw70NrvPwJ5PhAzsvTnuJMGLkA4FIkofAY=
@@ -334,12 +334,12 @@ github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UV
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
-github.com/tektoncd/cli v0.43.0 h1:qDDRV2emFJousjZTAb0Dfd5uRFS6Yj8oxIKVaYgLKVk=
-github.com/tektoncd/cli v0.43.0/go.mod h1:AEL+0yRcScRJbeOcPp9XMm+9LVU8jmkh204hT+sZzFU=
+github.com/tektoncd/cli v0.45.0 h1:MXpREoHsS9gN5/h59OHcbpnr1DAffY/qHNFQg0Yrn04=
+github.com/tektoncd/cli v0.45.0/go.mod h1:0uB0U6W4JwP0FsXW3+s84aXnO9WVObhMOEFG2i7UWIA=
 github.com/tektoncd/pipeline v1.13.1 h1:FluwzvfRuEKhxkGSQqXcjaaRK7IfGohjwFtA9/r0AMQ=
 github.com/tektoncd/pipeline v1.13.1/go.mod h1:71cP/rC6s/j+f8McEdFCdbcrLEODIfPIFDUqvMHeouM=
-github.com/tektoncd/triggers v0.34.0 h1:CuhG1moThPGEMlxPUcoBDDplJ3FAczzF8MMAjGScRY0=
-github.com/tektoncd/triggers v0.34.0/go.mod h1:iHqwCaS2ElaWt2RuxCbrHNd5lMfRzPxihqEEygkVn1w=
+github.com/tektoncd/triggers v0.35.1-0.20260401091813-1aad8a1898ec h1:Aipi80gVmfbCW6AaxQLNcLY38586wxASO0EKbWqQhPA=
+github.com/tektoncd/triggers v0.35.1-0.20260401091813-1aad8a1898ec/go.mod h1:ivDXe8xmMbVB4F0+MiUW0avU2o/me1mRsGh4shPKaUU=
 github.com/tidwall/gjson v1.18.0 h1:FIDeeyB800efLX89e5a8Y0BNH+LOngJyGrIWxG2FKQY=
 github.com/tidwall/gjson v1.18.0/go.mod h1:/wbyibRr2FHMks5tjHJ5F8dMZh3AcwJEMf5vlfC0lxk=
 github.com/tidwall/match v1.1.1 h1:+Ho715JplO36QYgwN9PGYNhgZvoUSc9X2c80KVTi+GA=
