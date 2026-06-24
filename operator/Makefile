@@ -300,8 +300,8 @@ CONTROLLER_TOOLS_VERSION ?= v0.18.0
 #ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries
-# renovate: datasource=github-releases depName=kubernetes/kubernetes
-ENVTEST_K8S_VERSION ?= 1.33.0
+# renovate: datasource=custom.envtest depName=envtest
+ENVTEST_K8S_VERSION ?= 1.36.0
 # Pinned alongside .github/workflows/operator-lint.yaml (golangci-lint-action version-file).
 # File must be a single semver line (no comments): golangci-lint-action reads the whole file as the version.
 # Co-located with this Makefile (OPERATOR_ROOT); any env that runs this Makefile from a full tree has the file.
