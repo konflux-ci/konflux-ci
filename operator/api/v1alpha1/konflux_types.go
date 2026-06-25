@@ -89,6 +89,12 @@ type KonfluxSpec struct {
 	// The runtime configuration is copied to the KonfluxSegmentBridge CR by the operator.
 	// +optional
 	Telemetry *TelemetryConfig `json:"telemetry,omitempty"`
+
+	// ComponentMetrics controls Prometheus scrape resources for metrics-enabled components
+	// (see operator/docs/component-monitoring.md#scope). When disabled, those reconcilers
+	// do not apply ServiceMonitor, metrics-reader RBAC, or operand scrape-token resources.
+	// +optional
+	ComponentMetrics *ComponentMetricsConfig `json:"componentMetrics,omitempty"`
 }
 
 // ImageControllerConfig defines the configuration for the image-controller component.
@@ -176,6 +182,17 @@ type InternalRegistryConfig struct {
 type DefaultTenantConfig struct {
 	// Enabled controls whether the default tenant is created.
 	// Defaults to true if not specified.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// ComponentMetricsConfig controls Prometheus scrape resources for underlying services.
+type ComponentMetricsConfig struct {
+	// Enabled controls whether scrape resources are deployed for metrics-enabled components
+	// (see operator/docs/component-monitoring.md#scope). HTTPS operands on the operator
+	// scrape-token model use reconciler-managed prometheus-scrape-token; legacy interim
+	// operands use static-token HTTP scraping until migrated.
+	// Defaults to true when unset.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
 }
@@ -314,4 +331,13 @@ func (k *KonfluxSpec) IsDefaultTenantEnabled() bool {
 // Once implemented, unspecified will match the OpenShift console telemetry state.
 func (k *KonfluxSpec) IsTelemetryEnabled() bool {
 	return k.Telemetry != nil && k.Telemetry.Enabled != nil && *k.Telemetry.Enabled
+}
+
+// IsComponentMetricsEnabled returns true if component metrics scraping resources should be deployed.
+// Defaults to true when unset.
+func (k *KonfluxSpec) IsComponentMetricsEnabled() bool {
+	if k.ComponentMetrics == nil || k.ComponentMetrics.Enabled == nil {
+		return true
+	}
+	return *k.ComponentMetrics.Enabled
 }

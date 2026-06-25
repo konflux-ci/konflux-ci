@@ -1,0 +1,64 @@
+# Metrics scrape targets for cluster integration tests.
+# Each target has a Ginkgo group label: operator (Konflux operator) or component (operands).
+scraper:
+  namespace: konflux-monitoring-test
+  serviceAccount: prometheus
+
+targets:
+  - id: konflux-operator
+    group: operator
+    namespace: konflux-operator
+    service: konflux-operator-controller-manager-metrics-service
+    scheme: https
+    portName: https
+    port: 8443
+    path: /metrics
+    tlsInsecureSkipVerify: true
+    metricsReaderClusterRole: konflux-operator-metrics-reader
+    bodyMustMatchAny:
+      - workqueue_
+      - controller_runtime_
+      - go_gc_
+  - id: build-service
+    group: component
+    namespace: build-service
+    service: build-service-controller-manager-metrics-service
+    scheme: https
+    portName: https
+    port: 8443
+    path: /metrics
+    tlsInsecureSkipVerify: true
+    metricsReaderClusterRole: build-service-metrics-reader
+    scrapeTokenSecret: prometheus-scrape-token
+    bodyMustMatchAny:
+      - workqueue_
+      - controller_runtime_
+      - go_gc_
+  - id: integration-service
+    group: component
+    namespace: integration-service
+    service: integration-service-controller-manager-metrics-service
+    scheme: http
+    portName: http
+    port: 8080
+    path: /metrics
+    metricsReaderClusterRole: integration-service-metrics-reader
+    bodyMustMatchAny:
+      - workqueue_
+      - controller_runtime_
+      - go_gc_
+  - id: image-controller
+    group: component
+    namespace: image-controller
+    service: image-controller-controller-manager-metrics-service
+    scheme: https
+    portName: https
+    port: 8443
+    path: /metrics
+    tlsInsecureSkipVerify: true
+    metricsReaderClusterRole: image-controller-metrics-reader
+    scrapeTokenSecret: prometheus-scrape-token
+    bodyMustMatchAny:
+      - workqueue_
+      - controller_runtime_
+      - go_gc_

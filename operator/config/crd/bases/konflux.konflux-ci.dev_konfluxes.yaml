@@ -440,6 +440,21 @@ spec:
                       Defaults to true if not specified.
                     type: boolean
                 type: object
+              componentMetrics:
+                description: |-
+                  ComponentMetrics controls Prometheus scrape resources for metrics-enabled components
+                  (see operator/docs/component-monitoring.md#scope). When disabled, those reconcilers
+                  do not apply ServiceMonitor, metrics-reader RBAC, or operand scrape-token resources.
+                properties:
+                  enabled:
+                    description: |-
+                      Enabled controls whether scrape resources are deployed for metrics-enabled components
+                      (see operator/docs/component-monitoring.md#scope). HTTPS operands on the operator
+                      scrape-token model use reconciler-managed prometheus-scrape-token; legacy interim
+                      operands use static-token HTTP scraping until migrated.
+                      Defaults to true when unset.
+                    type: boolean
+                type: object
               defaultTenant:
                 description: |-
                   DefaultTenant configures the default tenant component.

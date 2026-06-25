@@ -1,0 +1,22 @@
+# Binds Prometheus scraper identities to konflux-operator-metrics-reader (namePrefix applied at install).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-konflux-operator-metrics-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: metrics-reader
+subjects:
+- kind: ServiceAccount
+  name: prometheus-user-workload
+  namespace: openshift-user-workload-monitoring
+- kind: ServiceAccount
+  name: prometheus-k8s
+  namespace: openshift-user-workload-monitoring
+- kind: ServiceAccount
+  name: prometheus-k8s
+  namespace: appstudio-workload-monitoring
+- kind: ServiceAccount
+  name: prometheus
+  namespace: konflux-monitoring-test

@@ -27,19 +27,24 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/utils/clock"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/common"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
+	crdhandler "github.com/konflux-ci/konflux-ci/operator/internal/controller/handler"
 	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/hashedconfigmap"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
@@ -78,39 +83,48 @@ const (
 )
 
 // BuildServiceCleanupGVKs defines which resource types should be cleaned up when they are
-// no longer part of the desired state. All resources managed by this controller are always
-// applied (SCC is platform-dependent but cluster type doesn't change at runtime),
-// so no cleanup GVKs are needed.
-var BuildServiceCleanupGVKs = []schema.GroupVersionKind{}
+// no longer part of the desired state. Metrics scrape resources may be skipped during apply
+// (componentMetrics disabled) or removed across releases while metrics stay enabled.
+var BuildServiceCleanupGVKs = append([]schema.GroupVersionKind(nil), kubernetes.ComponentMetricsOrphanCleanupGVKs...)
 
 // BuildServiceClusterScopedAllowList restricts which cluster-scoped resources can be deleted
-// during orphan cleanup. All cluster-scoped resources managed by this controller are always
-// applied (SCC is only created on OpenShift, but cluster type doesn't change at runtime),
-// so no allow list is needed.
-var BuildServiceClusterScopedAllowList tracking.ClusterScopedAllowList = nil
+// during orphan cleanup. Only metrics scrape ClusterRoles and ClusterRoleBindings are listed;
+// other cluster-scoped RBAC managed by this controller is always applied and stays tracked.
+var BuildServiceClusterScopedAllowList = tracking.ClusterScopedAllowList{
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"}: sets.New(
+		"build-service-metrics-reader",
+	),
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"}: sets.New(
+		"prometheus-build-service-metrics-reader",
+	),
+}
 
 // KonfluxBuildServiceReconciler reconciles a KonfluxBuildService object
 type KonfluxBuildServiceReconciler struct {
 	client.Client
-	Scheme      *runtime.Scheme
-	ObjectStore *manifests.ObjectStore
-	ClusterInfo *clusterinfo.Info
+	Scheme       *runtime.Scheme
+	ObjectStore  *manifests.ObjectStore
+	ClusterInfo  *clusterinfo.Info
+	TokenCreator kubernetes.TokenCreator
+	Clock        clock.Clock
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxbuildservices,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxes,verbs=get;list;watch
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxbuildservices/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxbuildservices/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=core,resources=services;secrets;serviceaccounts,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=core,resources=serviceaccounts/token,verbs=create
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,resourceNames=build-service-leader-election-role,verbs=bind;escalate
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,resourceNames=build-pipeline-config-read-only-binding;build-service-leader-election-rolebinding,verbs=bind
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=appstudio-pipelines-runner;build-service-manager-role;build-service-metrics-auth-role,verbs=bind;escalate
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=build-pipeline-runner-rolebinding;build-service-manager-rolebinding;build-service-metrics-auth-rolebinding,verbs=bind
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=appstudio-pipelines-runner;build-service-manager-role;build-service-metrics-auth-role;build-service-metrics-reader,verbs=bind;escalate
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=build-pipeline-runner-rolebinding;build-service-manager-rolebinding;build-service-metrics-auth-rolebinding;prometheus-build-service-metrics-reader,verbs=bind
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=security.openshift.io,resources=securitycontextconstraints,verbs=get;list;watch;create;patch
@@ -165,6 +179,28 @@ func (r *KonfluxBuildServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		return errHandler.HandleApplyError(ctx, err)
 	}
 
+	result := ctrl.Result{}
+	metricsEnabled, err := common.ComponentMetricsEnabled(ctx, r.Client)
+	if err != nil {
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "read component metrics setting")
+	}
+	if metricsEnabled && r.TokenCreator != nil {
+		scrapeResult, scrapeErr := common.ReconcilePrometheusScrapeToken(ctx, common.ScrapeTokenReconcilerConfig{
+			Client:           r.Client,
+			Clock:            r.Clock,
+			TokenCreator:     r.TokenCreator,
+			ClusterInfo:      r.ClusterInfo,
+			OperandNamespace: webhookConfigNamespace,
+			Apply: func(applyCtx context.Context, secret *corev1.Secret) error {
+				return tc.ApplyOwned(applyCtx, secret)
+			},
+		})
+		if scrapeErr != nil {
+			return errHandler.HandleWithReason(ctx, scrapeErr, condition.ReasonApplyFailed, "reconcile prometheus scrape token")
+		}
+		result = common.MergeRequeueAfter(result, scrapeResult)
+	}
+
 	// Cleanup orphaned resources - delete any resources with our owner label
 	// that weren't applied during this reconcile.
 	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, buildService.Name, BuildServiceCleanupGVKs,
@@ -184,7 +220,7 @@ func (r *KonfluxBuildServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	log.Info("Successfully reconciled KonfluxBuildService")
-	return ctrl.Result{}, nil
+	return result, nil
 }
 
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
@@ -193,12 +229,26 @@ func (r *KonfluxBuildServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 func (r *KonfluxBuildServiceReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxBuildService, webhookConfigMapName string) error {
 	log := logf.FromContext(ctx)
 
+	metricsEnabled, err := common.ComponentMetricsEnabled(ctx, r.Client)
+	if err != nil {
+		return fmt.Errorf("read component metrics setting: %w", err)
+	}
+
 	objects, err := r.ObjectStore.GetForComponent(manifests.BuildService)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for BuildService: %w", err)
 	}
 
 	for _, obj := range objects {
+		if !metricsEnabled && kubernetes.IsComponentMetricsScrapeResource(obj) {
+			log.V(1).Info("Skipping component metrics scrape resource",
+				"kind", tracking.GetKind(obj),
+				"name", obj.GetName(),
+				"namespace", obj.GetNamespace(),
+			)
+			continue
+		}
+
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
 			if err := applyBuildServiceDeploymentCustomizations(deployment, owner.Spec, r.ClusterInfo, webhookConfigMapName); err != nil {
@@ -369,5 +419,12 @@ func (r *KonfluxBuildServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 			Owns(&securityv1.SecurityContextConstraints{})
 	}
 
-	return controllerBuilder.Complete(r)
+	return controllerBuilder.
+		Watches(&konfluxv1alpha1.Konflux{},
+			handler.EnqueueRequestsFromMapFunc(
+				crdhandler.MapKonfluxSingletonToRequest(constant.KonfluxSingletonName, CRName),
+			),
+			builder.WithPredicates(predicate.KonfluxComponentMetricsChangedPredicate),
+		).
+		Complete(r)
 }

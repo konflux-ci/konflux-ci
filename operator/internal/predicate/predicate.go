@@ -164,3 +164,28 @@ var KonfluxUIIngressStatusChangedPredicate = predicate.Funcs{
 		return true
 	},
 }
+
+// KonfluxComponentMetricsChangedPredicate triggers when spec.componentMetrics changes on
+// the cluster Konflux singleton CR (effective enabled value, defaulting to true).
+var KonfluxComponentMetricsChangedPredicate = predicate.Funcs{
+	UpdateFunc: func(e event.UpdateEvent) bool {
+		if e.ObjectOld == nil || e.ObjectNew == nil {
+			return true
+		}
+		oldKonflux, ok1 := e.ObjectOld.(*konfluxv1alpha1.Konflux)
+		newKonflux, ok2 := e.ObjectNew.(*konfluxv1alpha1.Konflux)
+		if !ok1 || !ok2 {
+			return true
+		}
+		return oldKonflux.Spec.IsComponentMetricsEnabled() != newKonflux.Spec.IsComponentMetricsEnabled()
+	},
+	CreateFunc: func(e event.CreateEvent) bool {
+		return true
+	},
+	DeleteFunc: func(e event.DeleteEvent) bool {
+		return false
+	},
+	GenericFunc: func(e event.GenericEvent) bool {
+		return false
+	},
+}

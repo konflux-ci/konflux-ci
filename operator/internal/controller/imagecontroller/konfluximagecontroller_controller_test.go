@@ -37,7 +37,6 @@ import (
 )
 
 const (
-	imageControllerNamespace      = "image-controller"
 	metricsServiceName            = "image-controller-controller-manager-metrics-service"
 	prunerConfigMapName           = "image-controller-image-pruner-configmap-hgm7kmgb6k"
 	leaderElectionRoleName        = "image-controller-leader-election-role"

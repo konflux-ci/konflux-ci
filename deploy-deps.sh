@@ -102,6 +102,11 @@ deploy() {
     deploy_prometheus_operator_crds
     COMPLETED_STEPS+=("$CURRENT_STEP")
 
+    CURRENT_STEP="Metrics scraper identity"
+    echo "📈 Deploying Kind metrics scraper namespace and RBAC..." >&2
+    deploy_metrics_scraper_rbac
+    COMPLETED_STEPS+=("$CURRENT_STEP")
+
     CURRENT_STEP="Trust Manager"
     echo "🤝 Deploying Trust Manager..." >&2
     deploy_trust_manager
@@ -392,13 +397,22 @@ deploy_prometheus_operator_crds() {
         echo "⏭️  Skipping Prometheus Operator CRDs (ServiceMonitor CRD already present)" >&2
         return 0
     fi
-    : "${SKIP_PROMETHEUS_OPERATOR_CRDS:=true}"
+    : "${SKIP_PROMETHEUS_OPERATOR_CRDS:=false}"
     if [[ "${SKIP_PROMETHEUS_OPERATOR_CRDS}" == "true" ]]; then
-        echo "⏭️  Skipping Prometheus Operator CRDs (set SKIP_PROMETHEUS_OPERATOR_CRDS=false to install)" >&2
+        echo "⏭️  Skipping Prometheus Operator CRDs (SKIP_PROMETHEUS_OPERATOR_CRDS=true)" >&2
         return 0
     fi
     echo "📊 Installing Prometheus Operator ServiceMonitor CRD..." >&2
     kubectl apply -k "${script_path}/dependencies/prometheus-operator-crds"
+}
+
+deploy_metrics_scraper_rbac() {
+    : "${SKIP_METRICS_SCRAPER_RBAC:=false}"
+    if [[ "${SKIP_METRICS_SCRAPER_RBAC}" == "true" ]]; then
+        echo "⏭️  Skipping metrics scraper RBAC (SKIP_METRICS_SCRAPER_RBAC=true)" >&2
+        return 0
+    fi
+    kubectl apply -f "${script_path}/test/fixtures/metrics-scraper/rbac.yaml"
 }
 
 deploy_trust_manager() {
