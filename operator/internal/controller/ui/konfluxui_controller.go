@@ -778,7 +778,7 @@ func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// ConsoleLink CRD only exists on OpenShift; skip watch on non-OpenShift clusters
 	// to avoid informer startup failures when the CRD is absent.
 	if r.ClusterInfo != nil && r.ClusterInfo.IsOpenShift() {
-		b = b.Owns(&consolev1.ConsoleLink{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate))
+		b = b.Owns(&consolev1.ConsoleLink{})
 	}
 
 	return b.Complete(r)
