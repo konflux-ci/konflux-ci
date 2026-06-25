@@ -5,6 +5,8 @@
     "konflux-ci/**"
   ],
   "rebaseWhen": "conflicted",
+  "prConcurrentLimit": 50,
+  "prHourlyLimit": 20,
   "packageRules": [
     {
       "matchPackageNames": [
@@ -28,8 +30,7 @@
       "groupName": "tekton-core",
       "matchPackageNames": [
         "https://github.com/tektoncd/operator",
-        "https://github.com/tektoncd/pipeline",
-        "https://github.com/tektoncd/pipelines-as-code"
+        "https://github.com/tektoncd/pipeline"
       ],
       "description": "Group core Tekton components for coordinated updates. Note: tektoncd/results is managed by the operator and its version is determined by the operator version."
     },
@@ -52,6 +53,14 @@
       "additionalBranchPrefix": "integrations/"
     }
   ],
+  "gomod": {
+    "packageRules": [
+      {
+        "matchDepTypes": ["indirect"],
+        "enabled": false
+      }
+    ]
+  },
   "tekton": {
     "fileMatch": [".*\\.ya?ml$"],
     "includePaths": [
@@ -60,6 +69,15 @@
       "pipelines/**"
     ],
     "schedule": ["* * * * *"]
+  },
+  "customDatasources": {
+    "envtest": {
+      "defaultRegistryUrlTemplate": "https://raw.githubusercontent.com/kubernetes-sigs/controller-tools/main/envtest-releases.yaml",
+      "format": "yaml",
+      "transformTemplates": [
+        "{\"releases\": $keys(releases).{\"version\": $substring($, 1)} }"
+      ]
+    }
   },
   "customManagers": [
     {
@@ -130,6 +148,18 @@
       "versioningTemplate": "semver"
     },
     {
+      "description": "Track GitHub release download URLs in kustomization files",
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["(^|\/)kustomization\\.(yaml|yml)$"],
+      "matchStrings": [
+        "# renovate: datasource=github-releases depName=(?<depName>[^\\s]+)",
+        "- https:\\/\\/github\\.com\\/[^/]+\\/[^/]+\\/releases\\/download\\/v(?<currentValue>[^/]+)\\/"
+      ],
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v?(?<version>.*)$"
+    },
+    {
       "customType": "regex",
       "matchStringsStrategy": "combination",
       "fileMatch": ["(^|\/)kustomization\\.(yaml|yml)$"],
@@ -195,6 +225,7 @@
       "customType": "regex",
       "fileMatch": ["^operator/\\.golangci-lint-version$"],
       "matchStrings": ["^(?<currentValue>v?\\d+\\.\\d+\\.\\d+)\\s*$"],
+      "autoReplaceStringTemplate": "v{{{newValue}}}",
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "golangci/golangci-lint",
       "extractVersionTemplate": "^v?(?<version>.*)$"
@@ -301,6 +332,19 @@
       "datasourceTemplate": "helm",
       "depNameTemplate": "trust-manager",
       "extractVersionTemplate": "^v?(?<version>.*)$"
+    },
+    {
+      "description": "Track envtest Kubernetes version in operator Makefile",
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["^operator/Makefile$"],
+      "matchStrings": [
+        "# renovate: datasource=custom.envtest depName=envtest",
+        "ENVTEST_K8S_VERSION \\?= (?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "custom.envtest",
+      "depNameTemplate": "envtest",
+      "versioningTemplate": "semver"
     },
     {
       "description": "Track sigstore scaffold Helm chart version in install script",

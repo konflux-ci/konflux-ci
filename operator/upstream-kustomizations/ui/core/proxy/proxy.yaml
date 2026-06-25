@@ -149,6 +149,9 @@ spec:
             mountPath: /opt/app-root/src/static-content
           - name: segment-bridge-config
             mountPath: /opt/app-root/src/segment
+          - name: watson-config
+            mountPath: /mnt/watson-config
+            readOnly: true
           - name: caddy-data
             mountPath: /data
           - name: caddy-config
@@ -251,6 +254,10 @@ spec:
                 path: key
               - key: url
                 path: url
+        - name: watson-config
+          secret:
+            secretName: watson-config
+            optional: true
 
 ---
 apiVersion: v1

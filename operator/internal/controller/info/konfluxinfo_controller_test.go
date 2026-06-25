@@ -34,12 +34,11 @@ import (
 var _ = Describe("KonfluxInfo Controller", func() {
 	Context("When reconciling a resource", func() {
 		It("should successfully reconcile the resource", func(ctx context.Context) {
-			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxInfo{
+			infoRes := &konfluxv1alpha1.KonfluxInfo{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			})).To(Succeed())
-			DeferCleanup(func(ctx context.Context) {
-				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxInfo{ObjectMeta: metav1.ObjectMeta{Name: CRName}})
-			})
+			}
+			Expect(k8sClient.Create(ctx, infoRes)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, infoRes)
 
 			Eventually(func(g Gomega) {
 				updated := &konfluxv1alpha1.KonfluxInfo{}
@@ -117,9 +116,7 @@ var _ = Describe("KonfluxInfo Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(func(ctx context.Context) {
-				testutil.DeleteAndWait(ctx, k8sClient, cr)
-			})
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr)
 		})
 	})
 })

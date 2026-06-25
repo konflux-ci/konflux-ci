@@ -40,7 +40,7 @@ Reads keys from Secret `konflux-operator-e2e-credentials` in the Task namespace:
 
 ## Steps / images
 
-1. **fetch-kubeconfig** / **copy-shared-tools** — `quay.io/konflux-ci/task-runner:v1` (copies `kubectl`/`yq`/`jq` to `/mnt/e2e-shared/bin` and `jq`’s `.so` deps to `/mnt/e2e-shared/lib`).
+1. **fetch-kubeconfig** / **copy-shared-tools** — `quay.io/konflux-ci/task-runner` (pinned by digest in `task.yaml`; copies `kubectl`/`yq`/`jq` to `/mnt/e2e-shared/bin` and `jq`’s `.so` deps to `/mnt/e2e-shared/lib`).
 2. **run-tests** — `registry.access.redhat.com/ubi10/go-toolset`: integration + conformance (`go test`), plus `kubectl`/`curl` from shared bin and image.
 
 ## Notes

@@ -22,7 +22,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'release'
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Determine release tag
         id: release

@@ -4,7 +4,8 @@
 # Requires a ServiceAccount that can read the cluster-access Secret in this namespace.
 #
 # task-runner: clone + kubeconfig fetch + copy kubectl/yq/jq to /mnt/e2e-shared/bin (+ jq .so to /mnt/e2e-shared/lib).
-# go-toolset: port-forward, go test (integration + conformance).
+# go-toolset: port-forward (remote Kind), go test (integration + conformance).
+# Proxy tests resolve the UI URL in Go from Konflux status.uiURL (see test/go-tests/proxy_setup.go).
 #
 apiVersion: tekton.dev/v1
 kind: Task
@@ -12,8 +13,9 @@ metadata:
   name: konflux-e2e-tests
 spec:
   description: >-
-    Clone konflux-ci (git-url/revision), fetch kubeconfig, copy shared CLIs, wait for Konflux CR Ready,
-    then run deploy-test-resources, integration tests, and conformance tests.
+    Clone konflux-ci (git-url/revision), fetch kubeconfig, copy shared CLIs, run deploy-test-resources,
+    then integration tests and conformance tests. Proxy integration tests wait for Konflux Ready and
+    read status.uiURL in Go (BeforeSuite).
   volumes:
     - name: repo
       emptyDir: {}
@@ -67,7 +69,7 @@ spec:
         mountPath: /mnt/e2e-shared
   steps:
     - name: clone-repository
-      image: quay.io/konflux-ci/task-runner:v1@sha256:b9ef0479b57a494368a12a02886c650314c9ac7391c6228f21065865aab71c9e
+      image: quay.io/konflux-ci/task-runner:v2@sha256:4b01fbf98fa7155f5c21443c285f88853864ae7cc66981cf6b543fc6ba16b81b
       env:
         - name: GIT_URL
           value: $(params.git-url)
@@ -89,7 +91,7 @@ spec:
         git -C "${REPO_ROOT}" fetch --depth "${GIT_DEPTH}" origin "${GIT_REVISION}"
         git -C "${REPO_ROOT}" checkout -q FETCH_HEAD
     - name: fetch-kubeconfig
-      image: quay.io/konflux-ci/task-runner:v1@sha256:b9ef0479b57a494368a12a02886c650314c9ac7391c6228f21065865aab71c9e
+      image: quay.io/konflux-ci/task-runner:v2@sha256:4b01fbf98fa7155f5c21443c285f88853864ae7cc66981cf6b543fc6ba16b81b
       workingDir: /mnt/konflux-ci/repo
       env:
         - name: POD_NAMESPACE
@@ -102,7 +104,7 @@ spec:
         cd /mnt/konflux-ci/repo
         exec bash scripts/operator-e2e/tekton-fetch-kubeconfig.sh "$(params.cluster-access-secret)" "$(params.kubeconfig-secret-key)"
     - name: copy-shared-tools
-      image: quay.io/konflux-ci/task-runner:v1@sha256:b9ef0479b57a494368a12a02886c650314c9ac7391c6228f21065865aab71c9e
+      image: quay.io/konflux-ci/task-runner:v2@sha256:4b01fbf98fa7155f5c21443c285f88853864ae7cc66981cf6b543fc6ba16b81b
       workingDir: /mnt/konflux-ci/repo
       script: |
         #!/bin/bash
@@ -117,7 +119,7 @@ spec:
           cpu: "2"
           memory: "8Gi"
       workingDir: /mnt/konflux-ci/repo
-      image: registry.access.redhat.com/ubi10/go-toolset@sha256:d5d48915a31c7c774caf7568f7fbe3b25275e042f9f4de73d13fba39f9b2a987
+      image: registry.access.redhat.com/ubi10/go-toolset@sha256:6a8be382811b81b25ed69d9918f47c46431f682b819bcbfa46ff0b016e2bdda7
       env:
         - name: GH_ORG
           valueFrom:

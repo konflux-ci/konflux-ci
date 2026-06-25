@@ -1446,6 +1446,138 @@ spec:
                       type: string
                   type: object
                 type: array
+              retryInfo:
+                description: RetryInfo contains information about retry configuration
+                  for this ReleasePlanAdmission
+                properties:
+                  enabled:
+                    description: Enabled indicates whether retries are enabled for
+                      this RPA's pipeline
+                    type: boolean
+                  maxRetries:
+                    description: MaxRetries is the maximum number of retries if enabled
+                    type: integer
+                  mitigations:
+                    description: Mitigations defines adjustment strategies to apply
+                      on retry based on failure type
+                    properties:
+                      oomKill:
+                        description: OOMKill defines adjustment for out-of-memory
+                          failures
+                        properties:
+                          maxComputeResources:
+                            description: MaxComputeResources sets a upper limit on
+                              resources across retries.
+                            properties:
+                              claims:
+                                description: |-
+                                  Claims lists the names of resources, defined in spec.resourceClaims,
+                                  that are used by this container.
+
+                                  This field depends on the
+                                  DynamicResourceAllocation feature gate.
+
+                                  This field is immutable. It can only be set for containers.
+                                items:
+                                  description: ResourceClaim references one entry
+                                    in PodSpec.ResourceClaims.
+                                  properties:
+                                    name:
+                                      description: |-
+                                        Name must match the name of one entry in pod.spec.resourceClaims of
+                                        the Pod where this field is used. It makes that resource available
+                                        inside a container.
+                                      type: string
+                                    request:
+                                      description: |-
+                                        Request is the name chosen for a request in the referenced claim.
+                                        If empty, everything from the claim is made available, otherwise
+                                        only the result of this request.
+                                      type: string
+                                  required:
+                                  - name
+                                  type: object
+                                type: array
+                                x-kubernetes-list-map-keys:
+                                - name
+                                x-kubernetes-list-type: map
+                              limits:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                description: |-
+                                  Limits describes the maximum amount of compute resources allowed.
+                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                type: object
+                              requests:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                description: |-
+                                  Requests describes the minimum amount of compute resources required.
+                                  If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                  otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                type: object
+                            type: object
+                          multiplier:
+                            description: Multiplier is a factor used to multiply memory
+                              limits on each retry
+                            pattern: ^[0-9]+(\.[0-9]+)?$
+                            type: string
+                        required:
+                        - multiplier
+                        type: object
+                      timeout:
+                        description: Timeout defines adjustment for timeout failures.
+                        properties:
+                          pipeline:
+                            description: Pipeline defines the timeout adjustment for
+                              PipelineRun timeouts.
+                            properties:
+                              increment:
+                                description: Increment is the duration to add to the
+                                  timeout on each retry.
+                                type: string
+                              maxTimeout:
+                                description: MaxTimeout is the maximum time allowed
+                                  across retries.
+                                type: string
+                            required:
+                            - increment
+                            type: object
+                          task:
+                            description: Task defines the timeout adjustment for TaskRun
+                              timeouts.
+                            properties:
+                              increment:
+                                description: Increment is the duration to add to the
+                                  timeout on each retry.
+                                type: string
+                              maxTimeout:
+                                description: MaxTimeout is the maximum time allowed
+                                  across retries.
+                                type: string
+                            required:
+                            - increment
+                            type: object
+                        type: object
+                    type: object
+                  reason:
+                    description: |-
+                      Reason explains why retries are enabled or disabled
+                      Examples: "disabled due to tag: production", "enabled with policy", "no matching pipeline"
+                    type: string
+                required:
+                - enabled
+                - reason
+                type: object
             type: object
         type: object
     served: true
@@ -5060,7 +5192,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: quay.io/konflux-ci/release-service:d4356087b8196a962b1d1139a06189e2e9d5a500
+        image: quay.io/konflux-ci/release-service:6d9abf25ac73986731ba7dbdb1ac459af54999b0
         livenessProbe:
           httpGet:
             path: /healthz

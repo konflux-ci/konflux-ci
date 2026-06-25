@@ -169,7 +169,7 @@ func TestNewDexConfig_OpenShiftConnector(t *testing.T) {
 		config := NewDexConfig(endpoint, params)
 
 		connector := config.Connectors[0]
-		g.Expect(connector.Config.ClientID).To(gomega.Equal("system:serviceaccount:konflux-ui:dex-client"))
+		g.Expect(connector.Config.ClientID).To(gomega.Equal("$OPENSHIFT_OAUTH_CLIENT_ID"))
 		g.Expect(connector.Config.ClientSecret).To(gomega.Equal("$OPENSHIFT_OAUTH_CLIENT_SECRET"))
 	})
 

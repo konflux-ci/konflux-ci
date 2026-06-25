@@ -1,0 +1,37 @@
+name: Validate AGENTS.md file
+
+on:
+  pull_request:
+    paths:
+      - 'AGENTS.md'
+      - '.github/workflows/validate-agents-md.yaml'
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+env:
+  MAX_AGENTS_MD_LINES: 300
+
+jobs:
+  check-length:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Check AGENTS.md length
+        env:
+          MAX_AGENTS_MD_LINES: ${{ env.MAX_AGENTS_MD_LINES }}
+        run: |
+          set -euo pipefail
+          if [ ! -f AGENTS.md ]; then
+            echo "AGENTS.md does not exist. Skipping check."
+            exit 0
+          fi
+          lines=$(wc -l < AGENTS.md | xargs)
+          echo "AGENTS.md line count: ${lines}"
+          if [ "${lines}" -gt "${MAX_AGENTS_MD_LINES}" ]; then
+            echo "::error file=AGENTS.md::AGENTS.md has ${lines} lines (max ${MAX_AGENTS_MD_LINES})."
+            exit 1
+          fi

@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM registry.access.redhat.com/ubi10/go-toolset@sha256:d5d48915a31c7c774caf7568f7fbe3b25275e042f9f4de73d13fba39f9b2a987 AS builder
+FROM registry.access.redhat.com/ubi10/go-toolset@sha256:6a8be382811b81b25ed69d9918f47c46431f682b819bcbfa46ff0b016e2bdda7 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG OPERATOR_VERSION
@@ -29,7 +29,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
     -o /opt/app-root/manager ./cmd/main.go
 
 # Use UBI minimal as base image
-FROM registry.access.redhat.com/ubi10/ubi-minimal@sha256:2c20ac20ca1ecbbbd583603feabd9cc51e7e8ea5a82e5088e20a9494794b2574
+FROM registry.access.redhat.com/ubi10/ubi-minimal@sha256:5bc43c1af14ccc8bf73bb0306db13edcae1a30589569e9cdf7db5d4668b3ed24
 ARG OPERATOR_VERSION
 WORKDIR /
 

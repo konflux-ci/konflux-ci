@@ -108,6 +108,17 @@ subjects:
 ---
 apiVersion: v1
 data:
+  kite.caddy: "handle_path /api/k8s/plugins/kite/* {\n    route {\n        forward_auth
+    127.0.0.1:6000 {\n            uri /oauth2/auth\n            copy_headers X-Auth-Request-Email
+    X-Auth-Request-Groups\n        }\n\t\timpersonate\n\t\tinject_cached_vars\n        reverse_proxy
+    https://__KITE_HOSTNAME__ {\n            header_up Authorization \"Bearer {http.vars.kube_token}\"\n
+    \           import /mnt/caddy-snippets/backend-tls.conf\n        }\n    }\n}\n"
+  kubearchive.caddy: "handle_path /api/k8s/plugins/kubearchive/* {\n    route {\n
+    \       forward_auth 127.0.0.1:6000 {\n            uri /oauth2/auth\n            copy_headers
+    X-Auth-Request-Email X-Auth-Request-Groups\n        }\n\t\timpersonate\n\t\tinject_cached_vars\n
+    \       reverse_proxy https://__KUBEARCHIVE_HOSTNAME__:8081 {\n            header_up
+    Authorization \"Bearer {http.vars.kube_token}\"\n            import /mnt/caddy-snippets/backend-tls.conf\n
+    \       }\n    }\n}\n"
   tekton-results.caddy: "handle_path /api/k8s/plugins/tekton-results/* {\n    route
     {\n        forward_auth 127.0.0.1:6000 {\n            uri /oauth2/auth\n            copy_headers
     X-Auth-Request-Email X-Auth-Request-Groups\n        }\n\t\timpersonate\n\t\tinject_cached_vars\n
@@ -117,16 +128,32 @@ data:
     volume in proxy.yaml for context.\n            header_up Authorization \"Bearer
     {http.vars.kube_token}\"\n            import /mnt/caddy-snippets/backend-tls.conf\n
     \       }\n    }\n}\n"
+  watson.caddy: |
+    handle_path /api/chatbot/* {
+        route {
+            forward_auth 127.0.0.1:6000 {
+                uri /oauth2/auth
+                copy_headers X-Auth-Request-Email X-Auth-Request-Groups
+            }
+            inject_cached_vars
+            reverse_proxy https://__WATSON_HOST__ {
+                header_up Authorization "Basic {http.vars.watson_auth}"
+                header_up Host __WATSON_HOST__
+                import /mnt/caddy-snippets/watson-tls.conf
+            }
+        }
+    }
 kind: ConfigMap
 metadata:
-  name: proxy-caddy-templates-45bh4c295f
+  name: proxy-caddy-templates-46ctfh6tk7
   namespace: konflux-ui
 ---
 apiVersion: v1
 data:
   Caddyfile: "{\n\tauto_https off\n\tadmin off\n\torder inject_cached_vars before
     reverse_proxy\n\tfile_watcher {\n\t\tcache kube_token /var/run/secrets/konflux-ci.dev/serviceaccount/token\n\t\tcache
-    backend_token /var/run/secrets/konflux-ci.dev/backend/token\n\t\twatch /var/run/secrets/kubernetes.io/serviceaccount\n\t\twatch
+    backend_token /var/run/secrets/konflux-ci.dev/backend/token\n\t\tcache watson_auth
+    /mnt/watson-config/API_KEY {\n\t\t\tdefault \"\"\n\t\t}\n\t\twatch /var/run/secrets/kubernetes.io/serviceaccount\n\t\twatch
     /mnt/cluster-ca\n\t\twatch /mnt/service-ca\n\t\twatch /mnt/serving-cert\n\t}\n}\n\n#
     TODO: protect metrics with kube-rbac-proxy sidecar (https://github.com/openshift/kube-rbac-proxy)\n:2112
     {\n\tmetrics /metrics\n}\n\n:9443 {\n\ttls {\n\t\tget_certificate file {\n\t\t\tcert
@@ -174,7 +201,7 @@ data:
     {path} /index.html\n\t\tfile_server\n\t}\n}\n"
 kind: ConfigMap
 metadata:
-  name: proxy-caddyfile-8477t8hg9h
+  name: proxy-caddyfile-567h9kth9f
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -188,7 +215,7 @@ data:
     SNIPPETS_DIR=/mnt/caddy-snippets
     SERVICE_CA_PATH=/mnt/service-ca/service-ca.crt
 
-    for cmd in sed getent; do
+    for cmd in sed getent printf; do
       command -v "${cmd}" >/dev/null 2>&1 || { echo "required command not found: ${cmd}"; exit 1; }
     done
 
@@ -226,6 +253,53 @@ data:
       fi
     fi
 
+    # Process kite template
+    if [ "${KITE_ENABLED:-}" = "true" ] && [ -f "${TEMPLATES_DIR}/kite.caddy" ]; then
+      hostname="${KITE_HOSTNAME:-konflux-kite.konflux-kite.svc.cluster.local}"
+      sed "s/__KITE_HOSTNAME__/${hostname}/g" \
+        "${TEMPLATES_DIR}/kite.caddy" > "${SNIPPETS_DIR}/kite.caddy"
+      log "kite endpoint enabled (${hostname})"
+    fi
+
+    # Process kubearchive template
+    if [ "${KUBEARCHIVE_ENABLED:-}" = "true" ] && [ -f "${TEMPLATES_DIR}/kubearchive.caddy" ]; then
+      hostname="${KUBEARCHIVE_HOSTNAME:-kubearchive-api-server.kubearchive.svc.cluster.local}"
+      sed "s/__KUBEARCHIVE_HOSTNAME__/${hostname}/g" \
+        "${TEMPLATES_DIR}/kubearchive.caddy" > "${SNIPPETS_DIR}/kubearchive.caddy"
+      log "kubearchive endpoint enabled (${hostname})"
+    fi
+
+    # Process watson template.
+    # The API_KEY value is cached by file_watcher directly from the mounted Secret;
+    # the init container only generates the Caddy route and TLS snippets.
+    if [ "${WATSON_ENABLED:-}" = "true" ] && [ -f "${TEMPLATES_DIR}/watson.caddy" ]; then
+      watson_host="${WATSON_HOSTNAME:-api.us-east.assistant.watson.cloud.ibm.com}"
+      watson_default_host="api.us-east.assistant.watson.cloud.ibm.com"
+
+      sed "s/__WATSON_HOST__/${watson_host}/g" \
+        "${TEMPLATES_DIR}/watson.caddy" > "${SNIPPETS_DIR}/watson.caddy"
+
+      # Generate watson TLS transport config.
+      # - Default external host: always use system roots with SNI (never skip verification)
+      # - Overridden hostname + service CA: use service CA
+      # - Overridden hostname, no service CA: skip verification (in-cluster self-signed)
+      if [ "${watson_host}" = "${watson_default_host}" ]; then
+        printf 'transport http {\n    tls_server_name %s\n}\n' "${watson_host}" \
+          > "${SNIPPETS_DIR}/watson-tls.conf"
+        log "watson TLS: system roots with SNI (external host)"
+      elif [ -f "${SERVICE_CA_PATH}" ]; then
+        printf 'transport http {\n    tls_trust_pool file %s\n}\n' "${SERVICE_CA_PATH}" \
+          > "${SNIPPETS_DIR}/watson-tls.conf"
+        log "watson TLS: service CA (in-cluster override)"
+      else
+        printf 'transport http {\n    tls_insecure_skip_verify\n}\n' \
+          > "${SNIPPETS_DIR}/watson-tls.conf"
+        log "watson TLS: insecure (in-cluster, no service CA)"
+      fi
+
+      log "watson endpoint enabled (${watson_host})"
+    fi
+
     # Generate TLS transport config for backend services (Tekton Results, KubeArchive, etc.).
     # On OpenShift, the service-ca-operator injects the CA bundle into a ConfigMap
     # mounted at SERVICE_CA_PATH. When present, backends are verified against this CA.
@@ -244,7 +318,43 @@ data:
     log "done"
 kind: ConfigMap
 metadata:
-  name: proxy-generate-config-5d6g495t8m
+  name: proxy-generate-config-c4c49hd24b
+  namespace: konflux-ui
+---
+apiVersion: v1
+data:
+  run-dex.sh: "#!/bin/bash\n\nset -euo pipefail\n\nORIGINAL_TOKEN=/tmp/var/run/secrets/dex/serviceaccount/token\nTOKEN_PATH=${TOKEN_PATH:-/var/run/secrets/kubernetes.io/serviceaccount/token}\nWAIT_TIME=10\nHALT_TIMEOUT=100\nMAX_JITTER_TIME=10\n\n#
+    auxiliary log function\nlog() { printf \"%s: %s\\n\" \"$(date -Iseconds)\" \"$*\";
+    }\n\n# forward SIGTERM/SIGINT for graceful shutdown\n#\n# shellcheck disable=SC2329\n#
+    ShellCheck is currently bad at figuring out functions that are invoked via trap\nshutdown()
+    {\n  log \"received signal, shutting down\"\n  if [ -n \"${dex_pid:-}\" ] && [
+    -d \"/proc/${dex_pid}\" ]; then\n    kill -s TERM \"${dex_pid}\" 2>/dev/null ||
+    true\n    wait_for_halt || true\n  fi\n  exit 143\n}\n\nwait_for_halt() (\n  counter=0\n
+    \ while [ -d \"/proc/${dex_pid}\" ] && [ $(( counter++ )) -le \"${HALT_TIMEOUT}\"
+    ]; do \n    sleep 1\n  done\n\n  if [ -d \"/proc/${dex_pid}\" ]; then\n    return
+    1\n  fi\n  return 0\n)\n\nstart_with_reload() {\n  while true; do\n    # copy
+    the original token for later use\n    log \"copying the token to ${ORIGINAL_TOKEN}\"\n
+    \   mkdir -p \"$(dirname \"${ORIGINAL_TOKEN}\")\"\n    rm \"${ORIGINAL_TOKEN}\"
+    || true\n    cp \"${TOKEN_PATH}\" \"${ORIGINAL_TOKEN}\"\n\n    # run dex in a
+    subprocess\n    OPENSHIFT_OAUTH_CLIENT_SECRET=\"$(cat \"${ORIGINAL_TOKEN}\")\"
+    \\\n    OPENSHIFT_OAUTH_CLIENT_ID=\"${OPENSHIFT_OAUTH_CLIENT_ID:-system:serviceaccount:${NAMESPACE}:${POD_SERVICE_ACCOUNT}}\"
+    \\\n      /usr/local/bin/dex serve /etc/dex/cfg/config.yaml &\n    dex_pid=\"$!\"\n
+    \   log \"run Dex in background with pid ${dex_pid}\"\n\n    # wait for the token
+    to be refresh by kubelet\n    log \"waiting for the token to be refreshed\"\n
+    \   while [ \"$(cksum < \"${ORIGINAL_TOKEN}\")\" = \"$(cksum < \"${TOKEN_PATH}\")\"
+    ]; do sleep \"${WAIT_TIME}\"; done\n\n    # reduce likelihood of having all replicas
+    refreshing at the same time\n    jitter=\"$(( $(od -An -N2 -i /dev/urandom) %
+    MAX_JITTER_TIME ))\"\n    log \"sleeping ${jitter} seconds to prevent all replicas
+    to restart at the same time\"\n    sleep \"${jitter}\"\n\n    # Send SIGTERM to
+    Dex\n    log \"token refreshed, halting Dex via SIGTERM\"\n    if [ -d \"/proc/${dex_pid}\"
+    ]; then\n      kill -s TERM \"${dex_pid}\" || true\n    fi\n\n    # Wait for Dex
+    to halt\n    log \"waiting for Dex to gracefully stop\"\n    if ! wait_for_halt;
+    then\n      log \"Dex didn't stop in ${HALT_TIMEOUT} seconds, breaking\"\n      exit
+    1\n    fi\n  done\n\n  log \"the loop broke unexpectedly\"\n  exit 1\n}\n\nmain()
+    {\n  trap shutdown TERM INT\n\n  start_with_reload\n}\n\nmain\n"
+kind: ConfigMap
+metadata:
+  name: run-dex-f654f6k7th
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -307,16 +417,29 @@ spec:
     spec:
       containers:
       - command:
-        - /usr/local/bin/dex
-        - serve
-        - /etc/dex/cfg/config.yaml
+        - /usr/local/bin/run-dex.sh
         env:
+        - name: TOKEN_PATH
+          value: /var/run/secrets/konflux-ci.dev/serviceaccount/token
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_SERVICE_ACCOUNT
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.serviceAccountName
         - name: CLIENT_SECRET
           valueFrom:
             secretKeyRef:
               key: client-secret
               name: oauth2-proxy-client-secret
-        image: quay.io/konflux-ci/dex@sha256:22b30bfb5ad1ebe4e0c70be11f02ad1ee0f749fd25bf77737c9369c031d6e238
+        image: quay.io/konflux-ci/dex@sha256:dfcac2608b259969636d7c58f1d163fb2753ca515a053bb9a1e5a2f216006fcc
+        livenessProbe:
+          httpGet:
+            path: /healthz/ready
+            port: telemetry
+          initialDelaySeconds: 10
         name: dex
         ports:
         - containerPort: 9443
@@ -328,6 +451,7 @@ spec:
           httpGet:
             path: /healthz/ready
             port: telemetry
+          initialDelaySeconds: 10
         resources:
           limits:
             cpu: 50m
@@ -339,12 +463,30 @@ spec:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
         volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+          readOnly: false
+        - mountPath: /var/run/secrets/konflux-ci.dev/serviceaccount/
+          name: dex-token
+        - mountPath: /usr/local/bin/run-dex.sh
+          name: run-dex
+          subPath: run-dex.sh
         - mountPath: /etc/dex/cfg
           name: dex
         - mountPath: /etc/dex/tls
           name: tls
       serviceAccountName: dex
       volumes:
+      - emptyDir:
+          medium: Memory
+        name: tmp
+      - name: dex-token
+        projected:
+          defaultMode: 288
+          sources:
+          - serviceAccountToken:
+              expirationSeconds: 600
+              path: token
       - configMap:
           defaultMode: 420
           items:
@@ -352,6 +494,13 @@ spec:
             path: config.yaml
           name: dex
         name: dex
+      - configMap:
+          defaultMode: 493
+          items:
+          - key: run-dex.sh
+            path: run-dex.sh
+          name: run-dex-f654f6k7th
+        name: run-dex
       - name: tls
         secret:
           secretName: dex-cert
@@ -389,7 +538,7 @@ spec:
         - /etc/caddy/Caddyfile
         - --adapter
         - caddyfile
-        image: quay.io/konflux-ci/reverse-proxy@sha256:09804432b30336a81a20f165088fb4e1acbec6dab7f8796152534dbcc8804563
+        image: quay.io/konflux-ci/reverse-proxy@sha256:15656954fac84353db8f7f193bcd770c06819a8c42cf98f1a21ce3ef9e35455e
         livenessProbe:
           failureThreshold: 3
           httpGet:
@@ -455,6 +604,9 @@ spec:
           name: static-content
         - mountPath: /opt/app-root/src/segment
           name: segment-bridge-config
+        - mountPath: /mnt/watson-config
+          name: watson-config
+          readOnly: true
         - mountPath: /data
           name: caddy-data
         - mountPath: /config
@@ -470,7 +622,7 @@ spec:
             secretKeyRef:
               key: cookie-secret
               name: oauth2-proxy-cookie-secret
-        image: quay.io/konflux-ci/oauth2-proxy@sha256:1f4a37529de4f750099af18e113556bd995fe6922030c614b7d6d23eaa0bd318
+        image: quay.io/konflux-ci/oauth2-proxy@sha256:654dad022a958de3b36bb78f0546af869de237d6a04fc67424897b06de1d5e7f
         name: oauth2-proxy
         ports:
         - containerPort: 6000
@@ -492,7 +644,7 @@ spec:
         - -R
         - /opt/app-root/src/.
         - /mnt/static-content/
-        image: quay.io/konflux-ci/konflux-ui@sha256:5a0666f29d28b05d0696611b45562693cea5db9f5b5c6f109f501894e57b1c10
+        image: quay.io/konflux-ci/konflux-ui@sha256:b3d88be8b93aec0dbd013d0734e81f10df0bb84c4e7bcf211adfa3d7eda2d2ba
         name: copy-static-content
         resources:
           limits:
@@ -510,7 +662,7 @@ spec:
       - command:
         - sh
         - /var/run/scripts/konflux-ci.dev/generate-proxy-config.sh
-        image: quay.io/konflux-ci/konflux-ui@sha256:5a0666f29d28b05d0696611b45562693cea5db9f5b5c6f109f501894e57b1c10
+        image: quay.io/konflux-ci/konflux-ui@sha256:b3d88be8b93aec0dbd013d0734e81f10df0bb84c4e7bcf211adfa3d7eda2d2ba
         name: generate-proxy-config
         resources:
           limits:
@@ -548,7 +700,7 @@ spec:
           items:
           - key: generate-proxy-config.sh
             path: generate-proxy-config.sh
-          name: proxy-generate-config-5d6g495t8m
+          name: proxy-generate-config-c4c49hd24b
         name: generate-proxy-config-script
       - name: kube-api-token
         projected:
@@ -570,11 +722,11 @@ spec:
           items:
           - key: Caddyfile
             path: Caddyfile
-          name: proxy-caddyfile-8477t8hg9h
+          name: proxy-caddyfile-567h9kth9f
         name: proxy-caddyfile
       - configMap:
           defaultMode: 420
-          name: proxy-caddy-templates-45bh4c295f
+          name: proxy-caddy-templates-46ctfh6tk7
         name: caddy-templates
       - emptyDir: {}
         name: caddy-snippets
@@ -606,6 +758,10 @@ spec:
             path: url
           optional: true
           secretName: segment-bridge-config
+      - name: watson-config
+        secret:
+          optional: true
+          secretName: watson-config
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate

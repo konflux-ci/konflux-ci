@@ -8,10 +8,10 @@ resources:
 images:
   - name: ghcr.io/chmouel/gosmee
     newName: ghcr.io/chmouel/gosmee
-    newTag: v0.29.0
+    newTag: v0.31.1
   - name: quay.io/konflux-ci/smee-sidecar
     newName: quay.io/konflux-ci/smee-sidecar
-    newTag: latest@sha256:991cf6f2bbcaa44e301500fb3b5b49e44c07b8ec66f3b79cf011eb533f6e72aa
+    newTag: latest@sha256:9c0e593cea53ed14f5cd0aeb3c5f76694ea3929f349609f403bae76e40376881
 
 patches:
   - path: smee-channel-id.yaml

@@ -90,7 +90,7 @@ func NewDexConfig(endpoint *url.URL, params *DexParams) *Config {
 			Name: "OpenShift",
 			Config: &ConnectorConfig{ //nolint:gosec // env var placeholder, not a real credential
 				Issuer:       "https://kubernetes.default.svc",
-				ClientID:     "system:serviceaccount:konflux-ui:dex-client",
+				ClientID:     "$OPENSHIFT_OAUTH_CLIENT_ID",
 				ClientSecret: "$OPENSHIFT_OAUTH_CLIENT_SECRET",
 				RedirectURI:  defaultRedirectURI,
 				// Use the service account's CA certificate to verify the Kubernetes API server
