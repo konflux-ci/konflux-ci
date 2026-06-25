@@ -21,22 +21,24 @@ import (
 )
 
 const (
-	konfluxCRName               = "konflux"
-	defaultProxyTenantNamespace = "default-tenant"
-	konfluxReadyWaitTimeout     = 5 * time.Minute
-	konfluxHealthWaitTimeout    = 5 * time.Minute
-	konfluxReadyPollInterval    = 2 * time.Second
-	proxyHTTPRequestTimeout     = 30 * time.Second
+	konfluxCRName                 = "konflux"
+	defaultProxyTenantNamespace   = "default-tenant"
+	konfluxReadyWaitTimeout       = 5 * time.Minute
+	konfluxHealthWaitTimeout      = 5 * time.Minute
+	konfluxReadyPollInterval      = 2 * time.Second
+	proxyHTTPRequestTimeout       = 30 * time.Second
 	proxyAPITransientRetryTimeout = 2 * time.Minute
 )
 
 var (
-	proxyBase       *url.URL
-	proxyHome       string
-	tokenURL        string
+	proxyBase                *url.URL
+	proxyHome                string
+	tokenURL                 string
 	proxyHTTPClient          *http.Client
 	proxyWebSocketHTTPClient *http.Client
 	proxyClient              crclient.Client
+
+	proxyEndpointsCfg *konfluxv1alpha1.ProxyEndpointsSpec
 )
 
 var _ = BeforeSuite(func() {
@@ -91,7 +93,11 @@ var _ = BeforeSuite(func() {
 		}
 	}
 
-	deployEchoServers(ctx, proxyClient)
+	konflux := &konfluxv1alpha1.Konflux{}
+	Expect(proxyClient.Get(ctx, crclient.ObjectKey{Name: konfluxCRName}, konflux)).To(Succeed())
+	proxyEndpointsCfg = resolveEndpoints(konflux)
+
+	setupEndpoints(ctx, proxyClient, proxyEndpointsCfg)
 })
 
 var _ = AfterSuite(func() {
