@@ -1808,7 +1808,7 @@ spec:
         - --leader-elector-retry-period=5s
         command:
         - /manager
-        image: quay.io/konflux-ci/integration-service:8ed210dbd66dcf2aee65cdad426113619b59abb4
+        image: quay.io/konflux-ci/integration-service:1377389fc95987a412c6a4ad561d037c86813857
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1869,7 +1869,7 @@ spec:
             - --zap-log-level=debug
             - --pr-snapshots-to-keep=70
             - --non-pr-snapshots-to-keep=640
-            image: quay.io/konflux-ci/integration-service:8ed210dbd66dcf2aee65cdad426113619b59abb4
+            image: quay.io/konflux-ci/integration-service:1377389fc95987a412c6a4ad561d037c86813857
             imagePullPolicy: Always
             name: test-gc
             resources:
@@ -2012,6 +2012,26 @@ webhooks:
     - DELETE
     resources:
     - integrationtestscenarios
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: integration-service-webhook-service
+      namespace: integration-service
+      path: /validate-appstudio-redhat-com-v1beta2-nudgeconfig
+  failurePolicy: Fail
+  name: vnudgeconfig.kb.io
+  rules:
+  - apiGroups:
+    - appstudio.redhat.com
+    apiVersions:
+    - v1beta2
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - nudgeconfigs
   sideEffects: None
 - admissionReviewVersions:
   - v1
