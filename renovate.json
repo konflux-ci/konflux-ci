@@ -251,7 +251,8 @@
         "// renovate: datasource=docker depName=(?<depName>[^\\s]+)",
         "echoServerImage\\s*=\\s*\"[^@]+@(?<currentDigest>sha256:[a-f0-9]{64})\""
       ],
-      "datasourceTemplate": "docker"
+      "datasourceTemplate": "docker",
+      "currentValueTemplate": "latest"
     },
     {
       "description": "Track kube-linter version in shell scripts",
