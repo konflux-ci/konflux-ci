@@ -26,7 +26,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 )
+
+// PrometheusScrapeTokenSecretPredicate limits Secret watches to the operator-managed
+// prometheus-scrape-token used for metrics scraping.
+var PrometheusScrapeTokenSecretPredicate = predicate.NewPredicateFuncs(kubernetes.IsPrometheusScrapeTokenSecret)
 
 // generationOrMetadataChanged returns true if the update is NOT a status-only change.
 // It detects spec changes (generation bump), ownerReference changes, and

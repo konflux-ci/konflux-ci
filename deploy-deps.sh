@@ -392,9 +392,9 @@ deploy_prometheus_operator_crds() {
         echo "⏭️  Skipping Prometheus Operator CRDs (ServiceMonitor CRD already present)" >&2
         return 0
     fi
-    : "${SKIP_PROMETHEUS_OPERATOR_CRDS:=true}"
+    : "${SKIP_PROMETHEUS_OPERATOR_CRDS:=false}"
     if [[ "${SKIP_PROMETHEUS_OPERATOR_CRDS}" == "true" ]]; then
-        echo "⏭️  Skipping Prometheus Operator CRDs (set SKIP_PROMETHEUS_OPERATOR_CRDS=false to install)" >&2
+        echo "⏭️  Skipping Prometheus Operator CRDs (SKIP_PROMETHEUS_OPERATOR_CRDS=true)" >&2
         return 0
     fi
     echo "📊 Installing Prometheus Operator ServiceMonitor CRD..." >&2

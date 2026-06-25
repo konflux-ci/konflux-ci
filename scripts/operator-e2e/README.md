@@ -12,6 +12,23 @@ With `OPERATOR_INSTALL_METHOD=none`, `tekton-deploy-operator-and-wait.sh` starts
 
 For the full pipeline narrative, see **Scope** in `.tekton/pipelines/operator-e2e/README.md`.
 
+## Metrics integration tests
+
+`run-metrics-integration-tests.sh` runs `test/go-tests/metricsintegration` against a live cluster (port-forward + bearer token, Prometheus-style). HTTPS targets read the operator-managed `prometheus-scrape-token` Secret; HTTP targets mint a scraper SA token via TokenRequest.
+
+Architecture and scrape models: [operator/docs/component-monitoring.md](../../operator/docs/component-monitoring.md).
+
+| Entry point | Label filter | What runs |
+|-------------|--------------|-----------|
+| `test/e2e/run-e2e.sh` (GHA Kind) | `metrics` (default) | Operator + component targets |
+| `tekton-run-e2e-tests.sh` | `metrics && component` | Component targets from `metricsauth.DefaultCatalog()` (operator pod not running during e2e Task) |
+
+Tekton skips operator metrics because the deploy Task runs `bin/manager` out-of-cluster; the operator metrics Service has no endpoints during the e2e Task.
+
+Override with `METRICS_GINKGO_LABEL_FILTER` (see `run-metrics-integration-tests.sh`).
+
+Catalog: `test/go-tests/pkg/metricsauth.DefaultCatalog()` (`group: operator` or `component` per target; `scrapeTokenSecret` for HTTPS operands).
+
 ## Extra `go test` arguments (integration / conformance)
 
 The Tekton Task sets optional env vars from pipeline params (empty by default). Scripts **omit quotes** around those expansions on purpose: the shell must **split on spaces** so each flag becomes its own argument to `go test`. (Shellcheck rule SC2086 is disabled next to those lines because unquoted expansion is usually risky; here it is required for the same reason as forwarding `"$@"`.)
@@ -57,7 +74,7 @@ Use **one token per flag** where possible (e.g. `-ginkgo.skip=Flaky`). Values wi
 | `E2E_DEPLOY_TEST_RESOURCES` | When `true`, run `deploy-test-resources.sh` before tests (Kind Dex `proxy-dex` RBAC; off by default in `run-e2e.sh`) |
 | `KONFLUX_PROXY_AUTH` | `openshift` or `dex` (default: infer — openshift when `OPENSHIFT_PASSWORD`, `KUBEADMIN_PASSWORD_FILE`, or `SHARED_DIR/kubeadmin-password` is set and `TEST_ENVIRONMENT!=upstream`, else dex) |
 | `KONFLUX_PROXY_AUTH_METHOD` | Set by the runner: `openshift-oauth` or `dex-password-grant` |
-| `OPENSHIFT_PASSWORD` / `KUBEADMIN_PASSWORD_FILE` / `SHARED_DIR/kubeadmin-password` | Kubeadmin password for OpenShift OAuth (same sources as infra-deployments `ci-common.sh`) |
+| `OPENSHIFT_PASSWORD` / `KUBEADMIN_PASSWORD_FILE` / `SHARED_DIR/kubeadmin-password` | Kubeadmin password for OpenShift OAuth (file or env; see runner script) |
 | `KONFLUX_PROXY_ID_TOKEN` | Optional override: skip OAuth and use a pre-obtained Dex `id_token` |
 | `KONFLUX_PROXY_ID_TOKEN_USER1` / `KONFLUX_PROXY_ID_TOKEN_USER2` | Optional per-user tokens for Dex-only specs |
 | `KONFLUX_PROXY_URL` | Proxy base URL (default: `konflux/konflux` `status.uiURL`) |

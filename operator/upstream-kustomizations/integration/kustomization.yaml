@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - core
   - certmanager
+  - ./monitoring
 
 patches:
   # Prevent deployment failures during slow dependency setup

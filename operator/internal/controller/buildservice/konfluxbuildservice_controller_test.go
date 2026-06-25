@@ -58,6 +58,16 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 	// (e.g. OpenShift vs vanilla Kubernetes). Running a single manager for the whole
 	// suite while some tests also start their own would cause two managers to reconcile
 	// the same objects concurrently, leading to race conditions on status updates.
+	newBuildServiceCR := func() *konfluxv1alpha1.KonfluxBuildService {
+		return &konfluxv1alpha1.KonfluxBuildService{
+			ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			Spec: konfluxv1alpha1.NewKonfluxBuildServiceSpec(
+				konfluxv1alpha1.KonfluxBuildServiceConfigSpec{},
+				testutil.DefaultComponentMetricsConfig(),
+			),
+		}
+	}
+
 	startManagerWithClusterInfo := func(clusterInfo *clusterinfo.Info) {
 		mgrCtx, mgrCancel := context.WithCancel(testEnv.Ctx)
 		mgr := testutil.NewTestManager(testEnv)
@@ -78,13 +88,9 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("should successfully reconcile the resource", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			})).To(Succeed())
+			Expect(k8sClient.Create(ctx, newBuildServiceCR())).To(Succeed())
 			DeferCleanup(func(ctx context.Context) {
-				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxBuildService{
-					ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				})
+				testutil.DeleteAndWait(ctx, k8sClient, newBuildServiceCR())
 			})
 
 			// Wait for the Deployment rather than Ready=True: UpdateComponentStatuses
@@ -109,9 +115,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		}
 
 		BeforeEach(func() {
-			buildService = &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService = newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 		})
 
@@ -215,9 +219,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 			startManagerWithClusterInfo(nil)
 
 			By("creating a KonfluxBuildService with no pipelineConfig")
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
 
@@ -238,9 +240,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("Should override a default pipeline bundle", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
 
@@ -273,9 +273,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("Should remove a pipeline with removed: true", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
 
@@ -304,9 +302,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("Should add a custom pipeline alongside defaults", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
 
@@ -337,9 +333,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("Should preserve description when overriding a default pipeline bundle", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
 
@@ -377,7 +371,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 
 			buildService := &konfluxv1alpha1.KonfluxBuildService{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+				Spec: konfluxv1alpha1.NewKonfluxBuildServiceSpec(konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
 						RemoveDefaults:      true,
 						DefaultPipelineName: "my-only-pipeline",
@@ -385,7 +379,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 							{Name: "my-only-pipeline", Bundle: "quay.io/custom/only@sha256:abc123"},
 						},
 					},
-				},
+				}, testutil.DefaultComponentMetricsConfig()),
 			}
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
@@ -409,13 +403,13 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 
 			buildService := &konfluxv1alpha1.KonfluxBuildService{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+				Spec: konfluxv1alpha1.NewKonfluxBuildServiceSpec(konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
 						Pipelines: []konfluxv1alpha1.PipelineSpec{
 							{Name: "docker-build-oci-ta-min", Bundle: "quay.io/custom/pipeline@sha256:override123", Description: "user custom description"},
 						},
 					},
-				},
+				}, testutil.DefaultComponentMetricsConfig()),
 			}
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
@@ -434,13 +428,13 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 
 			buildService := &konfluxv1alpha1.KonfluxBuildService{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+				Spec: konfluxv1alpha1.NewKonfluxBuildServiceSpec(konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
 						Pipelines: []konfluxv1alpha1.PipelineSpec{
 							{Name: "my-custom-pipeline", Bundle: "quay.io/custom/my-pipeline@sha256:new123", Description: "brand new pipeline"},
 						},
 					},
-				},
+				}, testutil.DefaultComponentMetricsConfig()),
 			}
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
@@ -457,9 +451,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("Should auto-select first pipeline when current default is removed", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
 
@@ -496,9 +488,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("recreates Deployment when deleted", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
 
@@ -531,9 +521,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("recreates ServiceAccount when deleted", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
 
@@ -563,9 +551,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("recreates Service when deleted", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
 
@@ -595,9 +581,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("recreates ConfigMap when deleted", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
 
@@ -627,9 +611,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("recreates Role when deleted", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
 
@@ -659,9 +641,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("recreates RoleBinding when deleted", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
 
@@ -691,9 +671,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("recreates ClusterRole when deleted", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			testutil.DeferCleanupParentAndChildren(k8sClient, buildService, &rbacv1.ClusterRole{
 				ObjectMeta: metav1.ObjectMeta{Name: pipelinesRunnerClusterRoleName},
@@ -722,9 +700,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("recreates ClusterRoleBinding when deleted", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			testutil.DeferCleanupParentAndChildren(k8sClient, buildService, &rbacv1.ClusterRoleBinding{
 				ObjectMeta: metav1.ObjectMeta{Name: pipelinesRunnerClusterRoleBindingName},
@@ -763,9 +739,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 
 			startManagerWithClusterInfo(openShiftClusterInfo)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			testutil.DeferCleanupParentAndChildren(k8sClient, buildService,
 				&securityv1.SecurityContextConstraints{
@@ -799,9 +773,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("does not recreate SCC when deleted on non-OpenShift", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
 
@@ -834,9 +806,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("restores Deployment image when modified", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
 
@@ -879,9 +849,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("restores ServiceAccount labels when stripped", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
 
@@ -918,9 +886,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("restores Service labels when stripped", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
 
@@ -957,9 +923,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("restores Service spec when modified", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
 
@@ -998,9 +962,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("restores ConfigMap data when modified", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
 
@@ -1037,9 +999,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("restores Namespace labels when stripped", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
 
@@ -1073,9 +1033,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("restores Role rules when modified", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
 
@@ -1116,9 +1074,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("restores RoleBinding subjects when modified", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
 
@@ -1159,9 +1115,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("restores ClusterRole rules when modified", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			testutil.DeferCleanupParentAndChildren(k8sClient, buildService, &rbacv1.ClusterRole{
 				ObjectMeta: metav1.ObjectMeta{Name: pipelinesRunnerClusterRoleName},
@@ -1201,9 +1155,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("restores ClusterRoleBinding subjects when modified", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			testutil.DeferCleanupParentAndChildren(k8sClient, buildService, &rbacv1.ClusterRoleBinding{
 				ObjectMeta: metav1.ObjectMeta{Name: pipelinesRunnerClusterRoleBindingName},
@@ -1253,9 +1205,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 
 			startManagerWithClusterInfo(openShiftClusterInfo)
 
-			buildService := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			buildService := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
 			testutil.DeferCleanupParentAndChildren(k8sClient, buildService, &securityv1.SecurityContextConstraints{
 				ObjectMeta: metav1.ObjectMeta{Name: sccName},
@@ -1298,9 +1248,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		})
 
 		It("Should allow creation with the required name", func(ctx context.Context) {
-			bs := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			bs := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, bs)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, bs)
 		})
@@ -1308,13 +1256,13 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("Should reject a pipeline with both bundle and removed: true", func(ctx context.Context) {
 			bs := &konfluxv1alpha1.KonfluxBuildService{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+				Spec: konfluxv1alpha1.NewKonfluxBuildServiceSpec(konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
 						Pipelines: []konfluxv1alpha1.PipelineSpec{
 							{Name: "test-pipeline", Bundle: "quay.io/test/bundle:latest", Removed: true},
 						},
 					},
-				},
+				}, testutil.DefaultComponentMetricsConfig()),
 			}
 			err := k8sClient.Create(ctx, bs)
 			Expect(err).To(HaveOccurred(), "bundle + removed should be rejected")
@@ -1324,13 +1272,13 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("Should reject a pipeline without bundle and without removed", func(ctx context.Context) {
 			bs := &konfluxv1alpha1.KonfluxBuildService{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+				Spec: konfluxv1alpha1.NewKonfluxBuildServiceSpec(konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
 						Pipelines: []konfluxv1alpha1.PipelineSpec{
 							{Name: "test-pipeline"},
 						},
 					},
-				},
+				}, testutil.DefaultComponentMetricsConfig()),
 			}
 			err := k8sClient.Create(ctx, bs)
 			Expect(err).To(HaveOccurred(), "missing bundle without removed should be rejected")
@@ -1340,13 +1288,13 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("Should accept a pipeline with bundle set", func(ctx context.Context) {
 			bs := &konfluxv1alpha1.KonfluxBuildService{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+				Spec: konfluxv1alpha1.NewKonfluxBuildServiceSpec(konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
 						Pipelines: []konfluxv1alpha1.PipelineSpec{
 							{Name: "test-pipeline", Bundle: "quay.io/test/bundle:latest"},
 						},
 					},
-				},
+				}, testutil.DefaultComponentMetricsConfig()),
 			}
 			Expect(k8sClient.Create(ctx, bs)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, bs)
@@ -1355,22 +1303,20 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("Should accept a pipeline with removed: true and no bundle", func(ctx context.Context) {
 			bs := &konfluxv1alpha1.KonfluxBuildService{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+				Spec: konfluxv1alpha1.NewKonfluxBuildServiceSpec(konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
 						Pipelines: []konfluxv1alpha1.PipelineSpec{
 							{Name: "fbc-builder", Removed: true},
 						},
 					},
-				},
+				}, testutil.DefaultComponentMetricsConfig()),
 			}
 			Expect(k8sClient.Create(ctx, bs)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, bs)
 		})
 
 		It("Should reject update that adds invalid pipeline spec", func(ctx context.Context) {
-			bs := &konfluxv1alpha1.KonfluxBuildService{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			bs := newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, bs)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, bs)
 
@@ -1389,14 +1335,14 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("Should reject removeDefaults without defaultPipelineName", func(ctx context.Context) {
 			bs := &konfluxv1alpha1.KonfluxBuildService{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+				Spec: konfluxv1alpha1.NewKonfluxBuildServiceSpec(konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
 						RemoveDefaults: true,
 						Pipelines: []konfluxv1alpha1.PipelineSpec{
 							{Name: "my-pipeline", Bundle: "quay.io/test/bundle:latest"},
 						},
 					},
-				},
+				}, testutil.DefaultComponentMetricsConfig()),
 			}
 			err := k8sClient.Create(ctx, bs)
 			Expect(err).To(HaveOccurred(), "removeDefaults without defaultPipelineName should be rejected")
@@ -1406,7 +1352,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("Should reject removeDefaults without any non-removed pipelines", func(ctx context.Context) {
 			bs := &konfluxv1alpha1.KonfluxBuildService{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+				Spec: konfluxv1alpha1.NewKonfluxBuildServiceSpec(konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
 						RemoveDefaults:      true,
 						DefaultPipelineName: "some-pipeline",
@@ -1414,7 +1360,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 							{Name: "some-pipeline", Removed: true},
 						},
 					},
-				},
+				}, testutil.DefaultComponentMetricsConfig()),
 			}
 			err := k8sClient.Create(ctx, bs)
 			Expect(err).To(HaveOccurred(), "removeDefaults with only removed pipelines should be rejected")
@@ -1423,7 +1369,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("Should reject removeDefaults when defaultPipelineName does not match a pipeline", func(ctx context.Context) {
 			bs := &konfluxv1alpha1.KonfluxBuildService{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+				Spec: konfluxv1alpha1.NewKonfluxBuildServiceSpec(konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
 						RemoveDefaults:      true,
 						DefaultPipelineName: "nonexistent",
@@ -1431,7 +1377,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 							{Name: "my-pipeline", Bundle: "quay.io/test/bundle:latest"},
 						},
 					},
-				},
+				}, testutil.DefaultComponentMetricsConfig()),
 			}
 			err := k8sClient.Create(ctx, bs)
 			Expect(err).To(HaveOccurred(), "defaultPipelineName not in pipelines list should be rejected")
@@ -1441,14 +1387,14 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("Should reject defaultPipelineName referencing a removed pipeline", func(ctx context.Context) {
 			bs := &konfluxv1alpha1.KonfluxBuildService{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+				Spec: konfluxv1alpha1.NewKonfluxBuildServiceSpec(konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
 						DefaultPipelineName: "fbc-builder",
 						Pipelines: []konfluxv1alpha1.PipelineSpec{
 							{Name: "fbc-builder", Removed: true},
 						},
 					},
-				},
+				}, testutil.DefaultComponentMetricsConfig()),
 			}
 			err := k8sClient.Create(ctx, bs)
 			Expect(err).To(HaveOccurred(), "defaultPipelineName referencing removed pipeline should be rejected")
@@ -1458,7 +1404,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		It("Should accept removeDefaults with valid defaultPipelineName and pipelines", func(ctx context.Context) {
 			bs := &konfluxv1alpha1.KonfluxBuildService{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				Spec: konfluxv1alpha1.KonfluxBuildServiceSpec{
+				Spec: konfluxv1alpha1.NewKonfluxBuildServiceSpec(konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
 						RemoveDefaults:      true,
 						DefaultPipelineName: "my-pipeline",
@@ -1466,7 +1412,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 							{Name: "my-pipeline", Bundle: "quay.io/test/bundle:latest"},
 						},
 					},
-				},
+				}, testutil.DefaultComponentMetricsConfig()),
 			}
 			Expect(k8sClient.Create(ctx, bs)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, bs)

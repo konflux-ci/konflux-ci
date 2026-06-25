@@ -82,13 +82,13 @@ func findPaCWebhookURLEnvValue(envs []corev1.EnvVar) (string, bool) {
 func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 	t.Run("empty spec returns overlay", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		overlay := buildBuildControllerManagerOverlay(konfluxv1alpha1.KonfluxBuildServiceSpec{}, nil, "")
+		overlay := buildBuildControllerManagerOverlay(konfluxv1alpha1.KonfluxBuildServiceConfigSpec{}, nil, "")
 		g.Expect(overlay).NotTo(gomega.BeNil())
 	})
 
 	t.Run("manager resources are applied", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
@@ -120,7 +120,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 
 	t.Run("preserves existing container fields", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
@@ -148,7 +148,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 
 	t.Run("logEncoder=console sets zap-encoder arg", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			LogEncoder: konfluxv1alpha1.LogEncoderConsole,
 		}
 
@@ -169,7 +169,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 
 	t.Run("logEncoder=json sets zap-encoder arg", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			LogEncoder: konfluxv1alpha1.LogEncoderJSON,
 		}
 
@@ -185,7 +185,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 
 	t.Run("empty logEncoder does not add zap-encoder arg", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{}
 
 		deployment := getBuildServiceDeployment(t)
 		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
@@ -204,7 +204,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 
 	t.Run("logEncoder with buildControllerManager preserves base args and adds zap-encoder", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			LogEncoder: konfluxv1alpha1.LogEncoderConsole,
 			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
@@ -238,7 +238,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 
 	t.Run("logEncoder replaces existing base zap-encoder arg", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			LogEncoder: konfluxv1alpha1.LogEncoderConsole,
 		}
 
@@ -259,7 +259,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 
 	t.Run("pacWebhookInsecureSSL=true injects PAC_WEBHOOK_INSECURE_SSL env", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			PACWebhookInsecureSSL: boolPtr(true),
 		}
 
@@ -277,7 +277,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 
 	t.Run("pacWebhookInsecureSSL omitted does not inject PAC_WEBHOOK_INSECURE_SSL env", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{}
 
 		deployment := getBuildServiceDeployment(t)
 		overlay := buildBuildControllerManagerOverlay(spec, nil, "")
@@ -292,7 +292,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 
 	t.Run("pacWebhookInsecureSSL=false removes PAC_WEBHOOK_INSECURE_SSL env", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			PACWebhookInsecureSSL: boolPtr(false),
 		}
 
@@ -309,7 +309,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 
 	t.Run("pacWebhookInsecureSSL with logEncoder and resources", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			PACWebhookInsecureSSL: boolPtr(true),
 			LogEncoder:            konfluxv1alpha1.LogEncoderConsole,
 			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
@@ -339,7 +339,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 
 	t.Run("pacWebhookInsecureSSL=true takes precedence over manager.env", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			PACWebhookInsecureSSL: boolPtr(true),
 			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
@@ -364,7 +364,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 
 	t.Run("pacWebhookInsecureSSL=false takes precedence over manager.env", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			PACWebhookInsecureSSL: boolPtr(false),
 			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
@@ -388,7 +388,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 
 	t.Run("pacWebhookInsecureSSL omitted lets manager.env pass through", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
 					Env: []corev1.EnvVar{
@@ -414,7 +414,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 	t.Run("applies customizations to controller-manager deployment", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
@@ -437,7 +437,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 
 	t.Run("ignores unknown deployment names", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
@@ -471,7 +471,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 
 	t.Run("handles nil controller-manager spec", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			BuildControllerManager: nil,
 		}
 
@@ -486,7 +486,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 
 	t.Run("handles empty spec", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{}
 
 		deployment := getBuildServiceDeployment(t)
 		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
@@ -498,7 +498,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 
 	t.Run("applies replicas to controller-manager deployment", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Replicas: 3,
 			},
@@ -514,7 +514,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 
 	t.Run("applies default replicas when using default value", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Replicas: 1, // default value
 			},
@@ -530,7 +530,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 
 	t.Run("does not modify replicas when controller-manager spec is nil", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			BuildControllerManager: nil,
 		}
 
@@ -544,7 +544,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 
 	t.Run("applies replicas together with container resources", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Replicas: 5,
 				Manager: &konfluxv1alpha1.ContainerSpec{
@@ -614,7 +614,7 @@ func (m *mockDiscoveryClient) ServerVersion() (*version.Info, error) {
 func TestApplyBuildServiceDeploymentCustomizations_PaCWebhookURL(t *testing.T) {
 	t.Run("sets PAC_WEBHOOK_URL on non-OpenShift", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{}
 
 		deployment := getBuildServiceDeployment(t)
 		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newDefaultClusterInfo(t), "")
@@ -630,7 +630,7 @@ func TestApplyBuildServiceDeploymentCustomizations_PaCWebhookURL(t *testing.T) {
 
 	t.Run("does not set PAC_WEBHOOK_URL on OpenShift", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{}
 
 		deployment := getBuildServiceDeployment(t)
 		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newOpenShiftClusterInfo(t), "")
@@ -646,7 +646,7 @@ func TestApplyBuildServiceDeploymentCustomizations_PaCWebhookURL(t *testing.T) {
 	t.Run("CR env override takes precedence on non-OpenShift", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		customURL := testCustomPaCURL
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
 					Env: []corev1.EnvVar{
@@ -671,7 +671,7 @@ func TestApplyBuildServiceDeploymentCustomizations_PaCWebhookURL(t *testing.T) {
 	t.Run("CR env override works on OpenShift", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		customURL := testCustomPaCURL
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
 					Env: []corev1.EnvVar{
@@ -695,7 +695,7 @@ func TestApplyBuildServiceDeploymentCustomizations_PaCWebhookURL(t *testing.T) {
 
 	t.Run("nil ClusterInfo sets non-OpenShift default", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{}
 
 		deployment := getBuildServiceDeployment(t)
 		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
@@ -711,7 +711,7 @@ func TestApplyBuildServiceDeploymentCustomizations_PaCWebhookURL(t *testing.T) {
 func TestApplyBuildServiceDeploymentCustomizations_WebhookConfig(t *testing.T) {
 	t.Run("updates volume reference to hashed ConfigMap", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{}
 		configMapName := testWebhookConfigMapName
 
 		deployment := getBuildServiceDeployment(t)
@@ -730,7 +730,7 @@ func TestApplyBuildServiceDeploymentCustomizations_WebhookConfig(t *testing.T) {
 
 	t.Run("keeps placeholder name when webhook config is empty", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{}
 
 		deployment := getBuildServiceDeployment(t)
 		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
@@ -753,7 +753,7 @@ func TestApplyBuildServiceDeploymentCustomizations_WebhookConfig(t *testing.T) {
 
 	t.Run("different hashed names produce different volume references", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{}
 
 		content1 := `{"https://github.com":"https://smee.example.com/hook1"}`
 		content2 := `{"https://github.com":"https://smee.example.com/hook2"}`
@@ -787,7 +787,7 @@ func TestApplyBuildServiceDeploymentCustomizations_WebhookConfig(t *testing.T) {
 
 	t.Run("re-applying with new hashed name does not duplicate volumes", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{}
 
 		content1 := `{"https://github.com":"https://smee.example.com/hook1"}`
 		content2 := `{"https://github.com":"https://smee.example.com/hook2"}`
@@ -818,7 +818,7 @@ func TestApplyBuildServiceDeploymentCustomizations_WebhookConfig(t *testing.T) {
 
 	t.Run("webhook config works with nil spec on OpenShift", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{}
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{}
 		configMapName := testWebhookConfigMapName
 
 		deployment := getBuildServiceDeployment(t)
@@ -844,7 +844,7 @@ func TestApplyBuildServiceDeploymentCustomizations_WebhookConfig(t *testing.T) {
 
 	t.Run("does not set PAC_WEBHOOK_URL when webhookURLs configured on non-OpenShift", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			WebhookURLs: map[string]string{
 				"https://gitlab.com": "https://smee.example.com/hook",
 			},
@@ -865,7 +865,7 @@ func TestApplyBuildServiceDeploymentCustomizations_WebhookConfig(t *testing.T) {
 	t.Run("user PAC_WEBHOOK_URL override with webhookURLs on non-OpenShift", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		customURL := testCustomPaCURL
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
 					Env: []corev1.EnvVar{
@@ -916,7 +916,7 @@ func TestApplyBuildServiceDeploymentCustomizations_ResourceMerging(t *testing.T)
 			corev1.ResourceMemory: resource.MustParse("64Mi"),
 		}
 
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
@@ -950,7 +950,7 @@ func TestApplyBuildServiceDeploymentCustomizations_ResourceMerging(t *testing.T)
 			corev1.ResourceMemory: resource.MustParse("512Mi"),
 		}
 
-		spec := konfluxv1alpha1.KonfluxBuildServiceSpec{
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
 			BuildControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{

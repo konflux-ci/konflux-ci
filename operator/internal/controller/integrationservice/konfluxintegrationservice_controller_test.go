@@ -108,11 +108,11 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 
 			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxIntegrationService{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				Spec: konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+				Spec: konfluxv1alpha1.NewKonfluxIntegrationServiceSpec(konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 					PRSnapshotsToKeep:              prToKeep,
 					NonPRSnapshotsToKeep:           nonPRToKeep,
 					MinSnapshotsToKeepPerComponent: minToKeep,
-				},
+				}, nil),
 			})).To(Succeed())
 			DeferCleanup(func(ctx context.Context) {
 				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxIntegrationService{ObjectMeta: metav1.ObjectMeta{Name: CRName}})

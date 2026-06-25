@@ -1124,6 +1124,14 @@ metadata:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+  name: integration-service-metrics-reader
+  namespace: integration-service
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
   name: integration-service-snapshot-garbage-collector
   namespace: integration-service
 ---
@@ -1479,6 +1487,18 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+  name: integration-service-metrics-reader
+rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: integration-service
@@ -1724,6 +1744,21 @@ subjects:
   name: integration-service-controller-manager
   namespace: integration-service
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+  name: prometheus-integration-service-metrics-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: integration-service-metrics-reader
+subjects:
+- kind: ServiceAccount
+  name: integration-service-metrics-reader
+  namespace: integration-service
+---
 apiVersion: v1
 data:
   controller_manager_config.yaml: |
@@ -1742,6 +1777,16 @@ kind: ConfigMap
 metadata:
   name: integration-service-manager-config
   namespace: integration-service
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    kubernetes.io/service-account.name: integration-service-metrics-reader
+  name: integration-service-metrics-reader
+  namespace: integration-service
+type: kubernetes.io/service-account-token
 ---
 apiVersion: v1
 kind: Service
@@ -1915,6 +1960,26 @@ metadata:
   namespace: integration-service
 spec:
   selfSigned: {}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+  name: integration-service
+  namespace: integration-service
+spec:
+  endpoints:
+  - bearerTokenSecret:
+      key: token
+      name: integration-service-metrics-reader
+    interval: 15s
+    path: /metrics
+    port: http
+    scheme: http
+  selector:
+    matchLabels:
+      control-plane: controller-manager
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
