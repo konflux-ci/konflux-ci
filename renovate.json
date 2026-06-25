@@ -6,7 +6,7 @@
   ],
   "rebaseWhen": "conflicted",
   "prConcurrentLimit": 50,
-  "prHourlyLimit": 20,
+  "prHourlyLimit": 7,
   "packageRules": [
     {
       "matchPackageNames": [
