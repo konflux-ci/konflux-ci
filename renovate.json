@@ -249,7 +249,7 @@
       "fileMatch": ["test/go-tests/echo_server_setup\\.go$"],
       "matchStrings": [
         "// renovate: datasource=docker depName=(?<depName>[^\\s]+)",
-        "echoServerImage\\s*=\\s*\"[^@]+@(?<currentDigest>sha256:[a-f0-9]+)\""
+        "echoServerImage\\s*=\\s*\"[^@]+@(?<currentDigest>sha256:[a-f0-9]{64})\""
       ],
       "datasourceTemplate": "docker"
     },
