@@ -133,5 +133,5 @@ Detailed guides live in `skills/` — each subdirectory contains a `SKILL.md` wi
 | [go-toolchain-upgrade](skills/go-toolchain-upgrade/SKILL.md) | `go.mod`/`go.sum`, Go pins, or `go.mod requires go` CI failures |
 | [create-pr](skills/create-pr/SKILL.md) | Opening PRs, fork `/allow` behavior |
 | [debug-e2e-tests](skills/debug-e2e-tests/SKILL.md) | Investigating failed e2e / OpenShift CI runs |
-| [update-upstream-deps](skills/update-upstream-deps/SKILL.md) | Bumping pinned upstream component SHAs or modifying `upstream-kustomizations/` source files (must regenerate rendered manifests) |
+| [update-upstream-deps](skills/update-upstream-deps/SKILL.md) | Bumping upstream SHAs or editing `upstream-kustomizations/` (triggers manifest rebuild) |
 | [local-dev-setup](skills/local-dev-setup/SKILL.md) | Local Kind / dev environment |

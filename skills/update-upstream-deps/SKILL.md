@@ -70,19 +70,13 @@ In local mode: updates refs, rebuilds manifests, reports changes.
 
 ## Regenerating Manifests After Source Changes
 
-Files under `operator/upstream-kustomizations/<component>/` are **source inputs** to `kustomize build`. The rendered output lives at `operator/pkg/manifests/<component>/manifests.yaml`. After modifying **any** file in the `upstream-kustomizations/` tree (scripts, patches, `kustomization.yaml`, etc.) you **must** regenerate the corresponding rendered manifests before committing.
+Files under `operator/upstream-kustomizations/<component>/` are **source inputs** to `kustomize build`. The rendered output lives at `operator/pkg/manifests/<component>/manifests.yaml`. After modifying any file in the `upstream-kustomizations/` tree (scripts, patches, `kustomization.yaml`, etc.) you **must** regenerate the corresponding rendered manifests before committing.
 
-**Rebuild a single component:**
+**Rebuild a single component** (same command as the Manual method above):
 
 ```bash
 kustomize build operator/upstream-kustomizations/<component> \
   > operator/pkg/manifests/<component>/manifests.yaml
-```
-
-Or use the helper script:
-
-```bash
-./operator/pkg/manifests/process-component.sh <component> "$(pwd)"
 ```
 
 **Rebuild all components** (when changes span multiple components):
@@ -91,7 +85,9 @@ Or use the helper script:
 ./operator/pkg/manifests/rebuild-upstream-manifests.sh "$(pwd)"
 ```
 
-The CI check **`operator-verify-generated-files`** will fail if rendered manifests are out of sync with their source kustomizations.
+> **Note:** `process-component.sh` also runs `update-upstream-refs.sh` before building, which may overwrite manual edits to kustomization files. Use the raw `kustomize build` command above when you only need to regenerate manifests after a local edit.
+
+The CI check **`verify-manifests-in-sync`** will fail if rendered manifests are out of sync with their source kustomizations.
 
 ## Note: Pipeline Bundles
 
