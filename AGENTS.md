@@ -71,19 +71,25 @@ After changing APIs or RBAC annotations, run `make manifests generate` from `ope
 1. **Platform conformance** (`test/go-tests/tests/conformance/`) — end-to-end tests against a deployed Konflux instance, run via `test/e2e/run-e2e.sh`. Uses Ginkgo/Gomega with a shared `Framework` in `test/go-tests/pkg/framework/`.
 2. **Operator unit/integration** (`operator/`) — controller tests using controller-runtime **envtest** (no real cluster needed). **Prefer Gomega matchers** for assertions in unit and functional tests. Shared test utilities in `operator/internal/controller/testutil/`. Run via `make test` from `operator/`.
 
-**Test cleanup pattern — `DeferCleanupParentAndChildren`:**
+**Test cleanup patterns:**
 
-Controller tests that create a parent CR and verify reconciler-managed children (ClusterRoles, ClusterRoleBindings, sub-CRs, etc.) **must** use `testutil.DeferCleanupParentAndChildren` for cleanup:
+envtest has no garbage collector — deleted parent CRs do not cascade-delete their children. Two cleanup patterns handle this:
+
+- **`DeferCleanupParentAndChildren`** — for tests involving **cluster-scoped** children (ClusterRole, ClusterRoleBinding, VWC, MWC, ConsoleLink, SCC). Deletes parent first (stopping reconciles), then explicitly deletes orphaned children. **Never** register separate `DeferCleanup` calls for parent and cluster-scoped children — Ginkgo's LIFO ordering will delete children first while the reconciler is still active, causing flaky timeouts.
+- **`DeferCleanup(testutil.DeleteAndWait, ...)`** — for tests that only need to clean up the parent CR (no cluster-scoped children). Stale namespaced children are harmless: the next test's reconcile updates their ownerReferences to the new parent via `SetControllerReference` in `ApplyOwned`.
 
 ```go
+// Cluster-scoped children: use DeferCleanupParentAndChildren
 Expect(k8sClient.Create(ctx, parentCR)).To(Succeed())
 testutil.DeferCleanupParentAndChildren(k8sClient, parentCR,
     &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "child-role"}},
     &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "child-binding"}},
 )
-```
 
-Why: envtest has no garbage collector, so child resources must be cleaned manually. Ginkgo's `DeferCleanup` executes in LIFO order — registering children after the parent causes children to be deleted first, triggering the reconciler to recreate them (flaky timeout). `DeferCleanupParentAndChildren` deletes parent first (stopping reconciles), then children. The helper also re-issues deletes during polling to handle in-flight reconcile races.
+// Namespaced-only children: simple DeferCleanup is sufficient
+Expect(k8sClient.Create(ctx, parentCR)).To(Succeed())
+DeferCleanup(testutil.DeleteAndWait, k8sClient, parentCR)
+```
 
 ```bash
 # Kube-linter (before PR)
