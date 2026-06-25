@@ -135,3 +135,4 @@ Detailed guides live in `skills/` — each subdirectory contains a `SKILL.md` wi
 | [debug-e2e-tests](skills/debug-e2e-tests/SKILL.md) | Investigating failed e2e / OpenShift CI runs |
 | [update-upstream-deps](skills/update-upstream-deps/SKILL.md) | Bumping upstream SHAs or editing `upstream-kustomizations/` (triggers manifest rebuild) |
 | [local-dev-setup](skills/local-dev-setup/SKILL.md) | Local Kind / dev environment |
+| [dev-verify-loop](skills/dev-verify-loop/SKILL.md) | Iterative stop-rebuild-restart cycle for operator development |
