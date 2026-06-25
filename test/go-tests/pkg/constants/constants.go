@@ -15,11 +15,6 @@ const (
 
 	SKIP_PAC_TESTS_ENV = "SKIP_PAC_TESTS"
 
-	GITLAB_BOT_TOKEN_ENV string = "GITLAB_BOT_TOKEN" // #nosec
-	GITLAB_QE_ORG_ENV    string = "GITLAB_QE_ORG"
-	GITLAB_API_URL_ENV   string = "GITLAB_API_URL" // #nosec
-
-
 	// Custom pipeline bundle overrides
 	CUSTOM_DOCKER_BUILD_PIPELINE_BUNDLE_ENV                      string = "CUSTOM_DOCKER_BUILD_PIPELINE_BUNDLE"
 	CUSTOM_DOCKER_BUILD_OCI_TA_PIPELINE_BUNDLE_ENV               string = "CUSTOM_DOCKER_BUILD_OCI_TA_PIPELINE_BUNDLE"
@@ -35,9 +30,6 @@ const (
 	TenantLabelKey   string = "konflux-ci.dev/type"
 	TenantLabelValue string = "tenant"
 	WorkspaceLabelKey string = "appstudio.redhat.com/workspace_name"
-
-	DefaultGitLabAPIURL   = "https://gitlab.com/api/v4"
-	DefaultGitLabQEOrg    = "konflux-qe"
 
 	RegistryAuthSecretName = "redhat-appstudio-registry-pull-secret"
 	ComponentSecretName    = "comp-secret"
@@ -77,7 +69,6 @@ const (
 	DefaultKonfluxAdminRoleBindingName     = "user2-konflux-admin"
 	DefaultKonfluxCIUserName               = "user2@konflux.dev"
 
-	DefaultGilabGroupId = "85150202"
 )
 
 var (
@@ -85,14 +76,4 @@ var (
 	ComponentTriggerSimpleBuildAnnotation       = map[string]string{"build.appstudio.openshift.io/request": "trigger-simple-build"}
 	ImageControllerAnnotationRequestPublicRepo = map[string]string{"image.redhat.com/generate": `{"visibility": "public"}`}
 	IntegrationTestScenarioDefaultLabels       = map[string]string{"test.appstudio.openshift.io/optional": "false"}
-	GitLabProjectIdsMap                        = map[string]string{"hacbs-test-project-integration": "56586709", "devfile-sample-hello-world": "60038001", "build-nudge-parent": "62134305", "build-nudge-child": "62134341"}
 )
-
-func GetGitLabProjectId(repoName string) string {
-	for name, id := range GitLabProjectIdsMap {
-		if name == repoName {
-			return id
-		}
-	}
-	return ""
-}
