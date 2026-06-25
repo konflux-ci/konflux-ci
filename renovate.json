@@ -243,6 +243,17 @@
       "depNameTemplate": "curlimages/curl"
     },
     {
+      "description": "Track go-toolset image digest in echo server test setup",
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["test/go-tests/echo_server_setup\\.go$"],
+      "matchStrings": [
+        "// renovate: datasource=docker depName=(?<depName>[^\\s]+)",
+        "echoServerImage\\s*=\\s*\"[^@]+@(?<currentDigest>sha256:[a-f0-9]+)\""
+      ],
+      "datasourceTemplate": "docker"
+    },
+    {
       "description": "Track kube-linter version in shell scripts",
       "customType": "regex",
       "matchStringsStrategy": "combination",
