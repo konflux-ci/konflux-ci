@@ -182,16 +182,17 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, integrationService)
+			testutil.DeferCleanupParentAndChildren(k8sClient, integrationService,
+				&admissionregistrationv1.ValidatingWebhookConfiguration{
+					ObjectMeta: metav1.ObjectMeta{Name: validatingWebhookName},
+				},
+			)
 
 			By("waiting for initial ValidatingWebhookConfiguration creation")
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: validatingWebhookName},
 					&admissionregistrationv1.ValidatingWebhookConfiguration{})).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &admissionregistrationv1.ValidatingWebhookConfiguration{
-				ObjectMeta: metav1.ObjectMeta{Name: validatingWebhookName},
-			})
 
 			By("deleting the ValidatingWebhookConfiguration")
 			Expect(k8sClient.Delete(ctx, &admissionregistrationv1.ValidatingWebhookConfiguration{
@@ -211,16 +212,17 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, integrationService)
+			testutil.DeferCleanupParentAndChildren(k8sClient, integrationService,
+				&admissionregistrationv1.MutatingWebhookConfiguration{
+					ObjectMeta: metav1.ObjectMeta{Name: mutatingWebhookName},
+				},
+			)
 
 			By("waiting for initial MutatingWebhookConfiguration creation")
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: mutatingWebhookName},
 					&admissionregistrationv1.MutatingWebhookConfiguration{})).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &admissionregistrationv1.MutatingWebhookConfiguration{
-				ObjectMeta: metav1.ObjectMeta{Name: mutatingWebhookName},
-			})
 
 			By("deleting the MutatingWebhookConfiguration")
 			Expect(k8sClient.Delete(ctx, &admissionregistrationv1.MutatingWebhookConfiguration{
@@ -1021,7 +1023,11 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, integrationService)
+			testutil.DeferCleanupParentAndChildren(k8sClient, integrationService,
+				&admissionregistrationv1.ValidatingWebhookConfiguration{
+					ObjectMeta: metav1.ObjectMeta{Name: validatingWebhookName},
+				},
+			)
 
 			vwcNN := types.NamespacedName{Name: validatingWebhookName}
 
@@ -1031,9 +1037,6 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				g.Expect(k8sClient.Get(ctx, vwcNN, vwc)).To(Succeed())
 				g.Expect(vwc.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &admissionregistrationv1.ValidatingWebhookConfiguration{
-				ObjectMeta: metav1.ObjectMeta{Name: vwcNN.Name},
-			})
 
 			By("stripping ownership labels from the ValidatingWebhookConfiguration")
 			Eventually(func(g Gomega) {
@@ -1058,7 +1061,11 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, integrationService)
+			testutil.DeferCleanupParentAndChildren(k8sClient, integrationService,
+				&admissionregistrationv1.MutatingWebhookConfiguration{
+					ObjectMeta: metav1.ObjectMeta{Name: mutatingWebhookName},
+				},
+			)
 
 			mwcNN := types.NamespacedName{Name: mutatingWebhookName}
 
@@ -1068,9 +1075,6 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				g.Expect(k8sClient.Get(ctx, mwcNN, mwc)).To(Succeed())
 				g.Expect(mwc.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &admissionregistrationv1.MutatingWebhookConfiguration{
-				ObjectMeta: metav1.ObjectMeta{Name: mwcNN.Name},
-			})
 
 			By("stripping ownership labels from the MutatingWebhookConfiguration")
 			Eventually(func(g Gomega) {

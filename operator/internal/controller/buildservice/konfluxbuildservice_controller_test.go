@@ -767,15 +767,16 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+			testutil.DeferCleanupParentAndChildren(k8sClient, buildService,
+				&securityv1.SecurityContextConstraints{
+					ObjectMeta: metav1.ObjectMeta{Name: sccName},
+				},
+			)
 
 			By("waiting for initial SCC creation")
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: sccName}, &securityv1.SecurityContextConstraints{})).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &securityv1.SecurityContextConstraints{
-				ObjectMeta: metav1.ObjectMeta{Name: sccName},
-			})
 
 			By("deleting the SCC")
 			Expect(k8sClient.Delete(ctx, &securityv1.SecurityContextConstraints{

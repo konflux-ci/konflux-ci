@@ -101,7 +101,7 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, registry)).To(Succeed())
-			testutil.DeferCleanupParentAndChildren(k8sClient, registry)
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, registry)
 
 			deploymentNN := types.NamespacedName{
 				Name:      "registry",
@@ -134,7 +134,7 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, registry)).To(Succeed())
-			testutil.DeferCleanupParentAndChildren(k8sClient, registry)
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, registry)
 
 			cmNN := types.NamespacedName{
 				Name:      "zot-config",
@@ -164,7 +164,7 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, registry)).To(Succeed())
-			testutil.DeferCleanupParentAndChildren(k8sClient, registry)
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, registry)
 
 			svcNN := types.NamespacedName{
 				Name:      "registry-service",
@@ -194,7 +194,7 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, registry)).To(Succeed())
-			testutil.DeferCleanupParentAndChildren(k8sClient, registry)
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, registry)
 
 			secretNN := types.NamespacedName{
 				Name:      HtpasswdSecretName,
@@ -224,7 +224,7 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, registry)).To(Succeed())
-			testutil.DeferCleanupParentAndChildren(k8sClient, registry)
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, registry)
 
 			certNN := types.NamespacedName{
 				Name:      "registry-cert",
@@ -257,7 +257,7 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, registry)).To(Succeed())
-			testutil.DeferCleanupParentAndChildren(k8sClient, registry)
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, registry)
 
 			deploymentNN := types.NamespacedName{
 				Name:      "registry",
@@ -300,7 +300,7 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, registry)).To(Succeed())
-			testutil.DeferCleanupParentAndChildren(k8sClient, registry)
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, registry)
 
 			cmNN := types.NamespacedName{
 				Name:      "zot-config",
@@ -337,7 +337,7 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, registry)).To(Succeed())
-			testutil.DeferCleanupParentAndChildren(k8sClient, registry)
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, registry)
 
 			svcNN := types.NamespacedName{
 				Name:      "registry-service",
@@ -376,7 +376,7 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, registry)).To(Succeed())
-			testutil.DeferCleanupParentAndChildren(k8sClient, registry)
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, registry)
 
 			certNN := types.NamespacedName{
 				Name:      "registry-cert",
@@ -413,7 +413,7 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, registry)).To(Succeed())
-			testutil.DeferCleanupParentAndChildren(k8sClient, registry)
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, registry)
 
 			secretNN := types.NamespacedName{
 				Name:      HtpasswdSecretName,
@@ -452,7 +452,7 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, registry)).To(Succeed())
-			testutil.DeferCleanupParentAndChildren(k8sClient, registry)
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, registry)
 
 			nsNN := types.NamespacedName{
 				Name: internalRegistryNamespace,
