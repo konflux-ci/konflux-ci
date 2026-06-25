@@ -16,6 +16,12 @@ metadata:
   name: build-service-controller-manager
   namespace: build-service
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: metrics-scraper
+  namespace: build-service
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -267,6 +273,18 @@ rules:
   - create
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+  name: build-service-metrics-reader
+rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: build-pipeline-config-read-only-binding
@@ -338,6 +356,19 @@ subjects:
 - kind: ServiceAccount
   name: build-service-controller-manager
   namespace: build-service
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    konflux.konflux-ci.dev/metrics-scraper-binding: "true"
+  name: prometheus-build-service-metrics-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: build-service-metrics-reader
+subjects: []
 ---
 apiVersion: v1
 data:
@@ -470,6 +501,28 @@ spec:
           name: webhook-config
           optional: true
         name: webhook-config
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+  name: build-service
+  namespace: build-service
+spec:
+  endpoints:
+  - bearerTokenSecret:
+      key: token
+      name: prometheus-scrape-token
+    interval: 15s
+    path: /metrics
+    port: https
+    scheme: https
+    tlsConfig:
+      insecureSkipVerify: true
+  selector:
+    matchLabels:
+      control-plane: controller-manager
 ---
 allowHostDirVolumePlugin: false
 allowHostIPC: false

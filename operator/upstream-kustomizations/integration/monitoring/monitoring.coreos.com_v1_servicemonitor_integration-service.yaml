@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+  name: integration-service
+  namespace: integration-service
+spec:
+  endpoints:
+  - bearerTokenSecret:
+      key: token
+      name: integration-service-metrics-reader
+    interval: 15s
+    path: /metrics
+    port: http
+    scheme: http
+  selector:
+    matchLabels:
+      control-plane: controller-manager

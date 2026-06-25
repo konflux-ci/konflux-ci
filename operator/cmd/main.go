@@ -47,6 +47,7 @@ import (
 	securityv1 "github.com/openshift/api/security/v1"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/common"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/applicationapi"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/buildservice"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/certmanager"
@@ -63,6 +64,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/releaseservice"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/segmentbridge"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/ui"
+	"github.com/konflux-ci/konflux-ci/operator/internal/operatormetrics"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
@@ -313,6 +315,31 @@ func main() {
 	}
 	setupLog.Info("Detected cluster info", logFields...)
 
+	tokenCreator, err := kubernetes.NewClientTokenCreator(mgr.GetConfig())
+	if err != nil {
+		setupLog.Error(err, "unable to create prometheus scrape token creator")
+		os.Exit(1)
+	}
+
+	tokenRotation := common.NewTokenRotationBroadcaster()
+	buildServiceRotation := tokenRotation.Subscribe()
+	imageControllerRotation := tokenRotation.Subscribe()
+	if err := mgr.Add(tokenRotation); err != nil {
+		setupLog.Error(err, "unable to add scrape token rotation broadcaster")
+		os.Exit(1)
+	}
+
+	if metricsAddr != "0" {
+		if err := mgr.Add(&operatormetrics.ScrapeTokenRotator{
+			Client:       mgr.GetClient(),
+			TokenCreator: tokenCreator,
+			Namespace:    operatormetrics.OperatorNamespace,
+		}); err != nil {
+			setupLog.Error(err, "unable to add operator scrape token rotator")
+			os.Exit(1)
+		}
+	}
+
 	if err := (&konflux.KonfluxReconciler{
 		Client:      mgr.GetClient(),
 		Scheme:      mgr.GetScheme(),
@@ -322,10 +349,12 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&buildservice.KonfluxBuildServiceReconciler{
-		Client:      mgr.GetClient(),
-		Scheme:      mgr.GetScheme(),
-		ObjectStore: objectStore,
-		ClusterInfo: clusterInfo,
+		Client:              mgr.GetClient(),
+		Scheme:              mgr.GetScheme(),
+		ObjectStore:         objectStore,
+		ClusterInfo:         clusterInfo,
+		TokenCreator:        tokenCreator,
+		TokenRotationEvents: buildServiceRotation,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxBuildService")
 		os.Exit(1)
@@ -381,9 +410,12 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&imagecontroller.KonfluxImageControllerReconciler{
-		Client:      mgr.GetClient(),
-		Scheme:      mgr.GetScheme(),
-		ObjectStore: objectStore,
+		Client:              mgr.GetClient(),
+		Scheme:              mgr.GetScheme(),
+		ObjectStore:         objectStore,
+		ClusterInfo:         clusterInfo,
+		TokenCreator:        tokenCreator,
+		TokenRotationEvents: imageControllerRotation,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxImageController")
 		os.Exit(1)

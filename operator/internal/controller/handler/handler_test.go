@@ -120,3 +120,24 @@ func TestMapCRDToRequest_ReturnsErrorWhenStoreErrorsForUnknownComponent(t *testi
 	reqs := mapFunc(ctx, crd)
 	g.Expect(reqs).To(gomega.BeNil())
 }
+
+func TestMapKonfluxSingletonToRequest_EnqueuesSingletonSubCR(t *testing.T) {
+	g := gomega.NewWithT(t)
+	ctx := context.Background()
+
+	mapFunc := MapKonfluxSingletonToRequest("konflux", "konflux-build-service")
+
+	reqs := mapFunc(ctx, &metav1.PartialObjectMetadata{ObjectMeta: metav1.ObjectMeta{Name: "konflux"}})
+	g.Expect(reqs).To(gomega.HaveLen(1))
+	g.Expect(reqs[0].Name).To(gomega.Equal("konflux-build-service"))
+}
+
+func TestMapKonfluxSingletonToRequest_IgnoresOtherKonfluxNames(t *testing.T) {
+	g := gomega.NewWithT(t)
+	ctx := context.Background()
+
+	mapFunc := MapKonfluxSingletonToRequest("konflux", "konflux-build-service")
+
+	reqs := mapFunc(ctx, &metav1.PartialObjectMetadata{ObjectMeta: metav1.ObjectMeta{Name: "other"}})
+	g.Expect(reqs).To(gomega.BeNil())
+}

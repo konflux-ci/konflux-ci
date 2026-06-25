@@ -36,8 +36,8 @@ type QuayCABundleSpec struct {
 	Key string `json:"key"`
 }
 
-// KonfluxImageControllerSpec defines the desired state of KonfluxImageController.
-type KonfluxImageControllerSpec struct {
+// KonfluxImageControllerConfigSpec defines user-configurable image-controller settings on the Konflux CR.
+type KonfluxImageControllerConfigSpec struct {
 	// ImageControllerManager defines customizations for the controller-manager deployment.
 	// +optional
 	ImageControllerManager *ControllerManagerDeploymentSpec `json:"imageControllerManager,omitempty"`
@@ -63,6 +63,16 @@ type KonfluxImageControllerSpec struct {
 	// This is required when using a self-hosted Quay registry with a custom CA.
 	// +optional
 	QuayCABundle *QuayCABundleSpec `json:"quayCABundle,omitempty"`
+}
+
+// KonfluxImageControllerSpec defines the desired state of KonfluxImageController.
+type KonfluxImageControllerSpec struct {
+	KonfluxImageControllerConfigSpec `json:",inline"`
+
+	// ComponentMetrics controls Prometheus scrape resources for this component.
+	// Set by the Konflux reconciler from spec.componentMetrics on the Konflux CR.
+	// +optional
+	ComponentMetrics *ComponentMetricsConfig `json:"componentMetrics,omitempty"`
 }
 
 // KonfluxImageControllerStatus defines the observed state of KonfluxImageController.

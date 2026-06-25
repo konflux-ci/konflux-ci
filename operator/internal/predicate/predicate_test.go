@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 )
 
 var testOwnerRef = metav1.OwnerReference{
@@ -405,4 +406,62 @@ func TestKonfluxUIIngressStatusChangedPredicate_GenericFunc(t *testing.T) {
 
 	result := KonfluxUIIngressStatusChangedPredicate.GenericFunc(e)
 	g.Expect(result).To(gomega.BeTrue())
+}
+
+func TestIgnoreStatusUpdatesPredicate_NonUpdateFuncs(t *testing.T) {
+	g := gomega.NewWithT(t)
+	g.Expect(IgnoreStatusUpdatesPredicate.CreateFunc(event.CreateEvent{})).To(gomega.BeTrue())
+	g.Expect(IgnoreStatusUpdatesPredicate.DeleteFunc(event.DeleteEvent{})).To(gomega.BeTrue())
+	g.Expect(IgnoreStatusUpdatesPredicate.GenericFunc(event.GenericEvent{})).To(gomega.BeTrue())
+}
+
+func TestDeploymentReadinessPredicate_ReadinessChange(t *testing.T) {
+	g := gomega.NewWithT(t)
+	e := event.UpdateEvent{
+		ObjectOld: &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Generation: 1},
+			Status:     appsv1.DeploymentStatus{ReadyReplicas: 1},
+		},
+		ObjectNew: &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Generation: 1},
+			Status:     appsv1.DeploymentStatus{ReadyReplicas: 2},
+		},
+	}
+	g.Expect(DeploymentReadinessPredicate.UpdateFunc(e)).To(gomega.BeTrue())
+}
+
+func TestDeploymentReadinessPredicate_NonDeploymentObjects(t *testing.T) {
+	g := gomega.NewWithT(t)
+	e := event.UpdateEvent{
+		ObjectOld: &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Generation: 1}},
+		ObjectNew: &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Generation: 1}},
+	}
+	g.Expect(DeploymentReadinessPredicate.UpdateFunc(e)).To(gomega.BeTrue())
+}
+
+func TestDeploymentReadinessPredicate_NonUpdateFuncs(t *testing.T) {
+	g := gomega.NewWithT(t)
+	g.Expect(DeploymentReadinessPredicate.CreateFunc(event.CreateEvent{})).To(gomega.BeTrue())
+	g.Expect(DeploymentReadinessPredicate.DeleteFunc(event.DeleteEvent{})).To(gomega.BeTrue())
+	g.Expect(DeploymentReadinessPredicate.GenericFunc(event.GenericEvent{})).To(gomega.BeTrue())
+}
+
+func TestPrometheusScrapeTokenSecretPredicate(t *testing.T) {
+	g := gomega.NewWithT(t)
+
+	g.Expect(PrometheusScrapeTokenSecretPredicate.Create(event.CreateEvent{
+		Object: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "other"}},
+	})).To(gomega.BeFalse())
+	g.Expect(PrometheusScrapeTokenSecretPredicate.Create(event.CreateEvent{
+		Object: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name:      kubernetes.ScrapeTokenSecretName,
+			Namespace: "build-service",
+		}},
+	})).To(gomega.BeTrue())
+	g.Expect(PrometheusScrapeTokenSecretPredicate.Delete(event.DeleteEvent{
+		Object: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name:      kubernetes.ScrapeTokenSecretName,
+			Namespace: "build-service",
+		}},
+	})).To(gomega.BeTrue())
 }

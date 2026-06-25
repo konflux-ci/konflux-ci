@@ -71,7 +71,7 @@ func findVolume(volumes []corev1.Volume, name string) *corev1.Volume {
 func TestBuildImageControllerManagerOverlay(t *testing.T) {
 	t.Run("empty spec returns overlay", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{}
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{}
 		overlay, err := buildImageControllerManagerOverlay(spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(overlay).NotTo(gomega.BeNil())
@@ -79,7 +79,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 
 	t.Run("nil QuayCABundle and nil ImageControllerManager leaves deployment unchanged", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{}
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{}
 		overlay, err := buildImageControllerManagerOverlay(spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(overlay).NotTo(gomega.BeNil())
@@ -95,7 +95,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 
 	t.Run("manager resources are applied", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			ImageControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
@@ -128,7 +128,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 
 	t.Run("manager env vars are injected", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			ImageControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
 					Env: []corev1.EnvVar{
@@ -158,7 +158,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 
 	t.Run("preserves existing container fields when resources are set", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			ImageControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
@@ -187,7 +187,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 
 	t.Run("single replica keeps leader-elect disabled", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			ImageControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Replicas: 1,
 			},
@@ -206,7 +206,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 
 	t.Run("multiple replicas enables leader-elect", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			ImageControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Replicas: 3,
 			},
@@ -225,7 +225,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 
 	t.Run("logEncoder console adds zap-encoder arg", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			LogEncoder: konfluxv1alpha1.LogEncoderConsole,
 		}
 
@@ -242,7 +242,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 
 	t.Run("logEncoder json adds zap-encoder arg", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			LogEncoder: konfluxv1alpha1.LogEncoderJSON,
 		}
 
@@ -259,7 +259,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 
 	t.Run("empty logEncoder does not add zap-encoder arg", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{}
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{}
 
 		deployment := getImageControllerDeployment(t)
 		originalContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
@@ -279,7 +279,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 
 	t.Run("logEncoder with ImageControllerManager preserves base args", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			LogEncoder: konfluxv1alpha1.LogEncoderConsole,
 			ImageControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Replicas: 3,
@@ -308,7 +308,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 
 	t.Run("logEncoder replaces existing base zap-encoder arg", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			LogEncoder: konfluxv1alpha1.LogEncoderConsole,
 		}
 
@@ -330,7 +330,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 
 	t.Run("QuayCABundle and ImageControllerManager combined", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			QuayCABundle: &konfluxv1alpha1.QuayCABundleSpec{
 				ConfigMapName: "my-custom-ca",
 				Key:           "ca.crt",
@@ -369,7 +369,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 
 	t.Run("sets QUAY_ADDITIONAL_CA env var when QuayCABundle is configured", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			QuayCABundle: &konfluxv1alpha1.QuayCABundleSpec{
 				ConfigMapName: "quay-ca-bundle",
 				Key:           "quay-ca.crt",
@@ -392,7 +392,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 
 	t.Run("updates ConfigMap name when different from default", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			QuayCABundle: &konfluxv1alpha1.QuayCABundleSpec{
 				ConfigMapName: "my-custom-ca",
 				Key:           "ca.crt",
@@ -413,7 +413,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 
 	t.Run("preserves default ConfigMap name when matching", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			QuayCABundle: &konfluxv1alpha1.QuayCABundleSpec{
 				ConfigMapName: defaultQuayCAConfigMapName,
 				Key:           "ca.crt",
@@ -434,7 +434,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 
 	t.Run("preserves existing volumes and mounts", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			QuayCABundle: &konfluxv1alpha1.QuayCABundleSpec{
 				ConfigMapName: "quay-ca-bundle",
 				Key:           "quay-ca.crt",
@@ -469,7 +469,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 
 	t.Run("preserves existing container fields", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			QuayCABundle: &konfluxv1alpha1.QuayCABundleSpec{
 				ConfigMapName: "quay-ca-bundle",
 				Key:           "quay-ca.crt",
@@ -493,7 +493,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 
 	t.Run("rejects key with path traversal", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			QuayCABundle: &konfluxv1alpha1.QuayCABundleSpec{
 				ConfigMapName: "quay-ca-bundle",
 				Key:           "../etc/passwd",
@@ -507,7 +507,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 
 	t.Run("rejects key with absolute path", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			QuayCABundle: &konfluxv1alpha1.QuayCABundleSpec{
 				ConfigMapName: "quay-ca-bundle",
 				Key:           "/etc/passwd",
@@ -521,7 +521,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 
 	t.Run("rejects key with embedded path separator", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			QuayCABundle: &konfluxv1alpha1.QuayCABundleSpec{
 				ConfigMapName: "quay-ca-bundle",
 				Key:           "subdir/ca.crt",
@@ -537,7 +537,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 func TestApplyImageControllerDeploymentCustomizations(t *testing.T) {
 	t.Run("applies customizations to controller-manager deployment", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			QuayCABundle: &konfluxv1alpha1.QuayCABundleSpec{
 				ConfigMapName: "quay-ca-bundle",
 				Key:           "quay-ca.crt",
@@ -557,7 +557,7 @@ func TestApplyImageControllerDeploymentCustomizations(t *testing.T) {
 
 	t.Run("ignores unknown deployment names", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			QuayCABundle: &konfluxv1alpha1.QuayCABundleSpec{
 				ConfigMapName: "quay-ca-bundle",
 				Key:           "quay-ca.crt",
@@ -584,7 +584,7 @@ func TestApplyImageControllerDeploymentCustomizations(t *testing.T) {
 
 	t.Run("handles empty spec", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{}
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{}
 
 		deployment := getImageControllerDeployment(t)
 		err := applyImageControllerDeploymentCustomizations(deployment, spec)
@@ -597,7 +597,7 @@ func TestApplyImageControllerDeploymentCustomizations(t *testing.T) {
 
 	t.Run("applies replicas to controller-manager deployment", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			ImageControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Replicas: 3,
 			},
@@ -613,7 +613,7 @@ func TestApplyImageControllerDeploymentCustomizations(t *testing.T) {
 
 	t.Run("applies default replicas when using default value", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			ImageControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Replicas: 1,
 			},
@@ -629,7 +629,7 @@ func TestApplyImageControllerDeploymentCustomizations(t *testing.T) {
 
 	t.Run("does not modify replicas when ImageControllerManager is nil", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			ImageControllerManager: nil,
 		}
 
@@ -643,7 +643,7 @@ func TestApplyImageControllerDeploymentCustomizations(t *testing.T) {
 
 	t.Run("applies replicas together with container resources", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			ImageControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Replicas: 5,
 				Manager: &konfluxv1alpha1.ContainerSpec{
@@ -689,7 +689,7 @@ func getImageControllerCronJob(t *testing.T, name string) *batchv1.CronJob {
 func TestApplyImagePrunerCustomizations(t *testing.T) {
 	t.Run("resources are applied", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			ImagePruner: &konfluxv1alpha1.ContainerSpec{
 				Resources: &corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
@@ -718,7 +718,7 @@ func TestApplyImagePrunerCustomizations(t *testing.T) {
 
 	t.Run("nil spec leaves CronJob unchanged", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{}
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{}
 
 		cj := getImageControllerCronJob(t, imagePrunerCronJobName)
 		container := testutil.FindContainer(
@@ -737,7 +737,7 @@ func TestApplyImagePrunerCustomizations(t *testing.T) {
 
 	t.Run("preserves existing container fields", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			ImagePruner: &konfluxv1alpha1.ContainerSpec{
 				Resources: &corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
@@ -765,7 +765,7 @@ func TestApplyImagePrunerCustomizations(t *testing.T) {
 
 	t.Run("env vars are applied", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			ImagePruner: &konfluxv1alpha1.ContainerSpec{
 				Env: []corev1.EnvVar{
 					{Name: "PRUNE_DRY_RUN", Value: "true"},
@@ -787,7 +787,7 @@ func TestApplyImagePrunerCustomizations(t *testing.T) {
 func TestApplyNotificationResetterCustomizations(t *testing.T) {
 	t.Run("resources are applied", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			NotificationResetter: &konfluxv1alpha1.ContainerSpec{
 				Resources: &corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
@@ -817,7 +817,7 @@ func TestApplyNotificationResetterCustomizations(t *testing.T) {
 
 	t.Run("nil spec leaves CronJob unchanged", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{}
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{}
 
 		cj := getImageControllerCronJob(t, notificationResetterCronJobName)
 		container := testutil.FindContainer(
@@ -836,7 +836,7 @@ func TestApplyNotificationResetterCustomizations(t *testing.T) {
 
 	t.Run("preserves existing container fields", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			NotificationResetter: &konfluxv1alpha1.ContainerSpec{
 				Resources: &corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
@@ -864,7 +864,7 @@ func TestApplyNotificationResetterCustomizations(t *testing.T) {
 
 	t.Run("missing container returns error", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			NotificationResetter: &konfluxv1alpha1.ContainerSpec{
 				Resources: &corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
@@ -900,7 +900,7 @@ func TestApplyNotificationResetterCustomizations(t *testing.T) {
 func TestBothCronJobCustomizationsApplied(t *testing.T) {
 	t.Run("ImagePruner and NotificationResetter customized from same spec", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			ImagePruner: &konfluxv1alpha1.ContainerSpec{
 				Resources: &corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
@@ -936,7 +936,7 @@ func TestBothCronJobCustomizationsApplied(t *testing.T) {
 func TestApplyCronJobCustomizations_MissingContainer(t *testing.T) {
 	t.Run("missing container returns error", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxImageControllerSpec{
+		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 			ImagePruner: &konfluxv1alpha1.ContainerSpec{
 				Resources: &corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{

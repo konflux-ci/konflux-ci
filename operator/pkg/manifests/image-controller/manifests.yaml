@@ -420,6 +420,12 @@ metadata:
   name: image-controller-controller-manager
   namespace: image-controller
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: metrics-scraper
+  namespace: image-controller
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -622,6 +628,18 @@ rules:
   - create
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+  name: image-controller-metrics-reader
+rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   labels:
@@ -666,6 +684,19 @@ subjects:
 - kind: ServiceAccount
   name: image-controller-controller-manager
   namespace: image-controller
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    konflux.konflux-ci.dev/metrics-scraper-binding: "true"
+  name: prometheus-image-controller-metrics-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: image-controller-metrics-reader
+subjects: []
 ---
 apiVersion: v1
 data:
@@ -1431,3 +1462,25 @@ spec:
             secret:
               secretName: quaytoken
   schedule: 0 3 * * *
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+  name: image-controller
+  namespace: image-controller
+spec:
+  endpoints:
+  - bearerTokenSecret:
+      key: token
+      name: prometheus-scrape-token
+    interval: 15s
+    path: /metrics
+    port: https
+    scheme: https
+    tlsConfig:
+      insecureSkipVerify: true
+  selector:
+    matchLabels:
+      control-plane: controller-manager

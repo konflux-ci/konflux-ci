@@ -538,7 +538,7 @@ var _ = Describe("Konflux Controller", func() {
 				Spec: konfluxv1alpha1.KonfluxSpec{
 					ImageController: &konfluxv1alpha1.ImageControllerConfig{
 						Enabled: &enabled,
-						Spec: &konfluxv1alpha1.KonfluxImageControllerSpec{
+						Spec: &konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 							QuayCABundle: &konfluxv1alpha1.QuayCABundleSpec{
 								ConfigMapName: "my-ca-bundle",
 								Key:           "ca.crt",
@@ -570,7 +570,7 @@ var _ = Describe("Konflux Controller", func() {
 				Spec: konfluxv1alpha1.KonfluxSpec{
 					ImageController: &konfluxv1alpha1.ImageControllerConfig{
 						Enabled: &enabled,
-						Spec: &konfluxv1alpha1.KonfluxImageControllerSpec{
+						Spec: &konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 							QuayCABundle: &konfluxv1alpha1.QuayCABundleSpec{
 								ConfigMapName: "my-ca-bundle",
 								Key:           "ca.crt",
@@ -600,6 +600,69 @@ var _ = Describe("Konflux Controller", func() {
 				ic := &konfluxv1alpha1.KonfluxImageController{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: imagecontroller.CRName}, ic)).To(Succeed())
 				g.Expect(ic.Spec.QuayCABundle).To(BeNil())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
+	Context("ComponentMetrics propagation", func() {
+		const resourceName = "konflux"
+
+		It("should forward spec.componentMetrics to metrics-enabled operand CRs", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			disabled := false
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					ComponentMetrics: &konfluxv1alpha1.ComponentMetricsConfig{
+						Enabled: &disabled,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			Eventually(func(g Gomega) {
+				bs := &konfluxv1alpha1.KonfluxBuildService{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: buildservice.CRName}, bs)).To(Succeed())
+				g.Expect(bs.Spec.ComponentMetrics).NotTo(BeNil())
+				g.Expect(bs.Spec.ComponentMetrics.IsEnabled()).To(BeFalse())
+
+				is := &konfluxv1alpha1.KonfluxIntegrationService{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: integrationservice.CRName}, is)).To(Succeed())
+				g.Expect(is.Spec.ComponentMetrics).NotTo(BeNil())
+				g.Expect(is.Spec.ComponentMetrics.IsEnabled()).To(BeFalse())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should update operand CR componentMetrics when Konflux spec changes", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					ComponentMetrics: &konfluxv1alpha1.ComponentMetricsConfig{},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			Eventually(func(g Gomega) {
+				bs := &konfluxv1alpha1.KonfluxBuildService{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: buildservice.CRName}, bs)).To(Succeed())
+				g.Expect(bs.Spec.ComponentMetrics.IsEnabled()).To(BeTrue())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			updated := &konfluxv1alpha1.Konflux{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+			disabled := false
+			updated.Spec.ComponentMetrics.Enabled = &disabled
+			Expect(k8sClient.Update(ctx, updated)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				bs := &konfluxv1alpha1.KonfluxBuildService{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: buildservice.CRName}, bs)).To(Succeed())
+				g.Expect(bs.Spec.ComponentMetrics.IsEnabled()).To(BeFalse())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})

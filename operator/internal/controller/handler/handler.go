@@ -31,6 +31,18 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
+// MapKonfluxSingletonToRequest returns a handler that enqueues a reconcile request for
+// the named singleton sub-CR when the cluster Konflux CR changes. Non-singleton Konflux
+// objects are ignored.
+func MapKonfluxSingletonToRequest(konfluxSingletonName, subCRName string) ctrlhandler.MapFunc {
+	return func(_ context.Context, obj client.Object) []reconcile.Request {
+		if obj.GetName() != konfluxSingletonName {
+			return nil
+		}
+		return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: subCRName}}}
+	}
+}
+
 // MapCRDToRequest returns a handler that enqueues a reconcile request for the
 // given CR when a CRD managed by the component is updated or deleted. Use it
 // with Watches(..., handler.EnqueueRequestsFromMapFunc(...)) so that
