@@ -419,7 +419,7 @@ spec:
       include:
       - '@redhat'
     data:
-    - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest@sha256:00dc5ffc1d49b88d8ef7601cba2276c50e05e36fc18a18375dc7626b33e33b46
+    - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest@sha256:402762249dad326ede675b14a793ab663c34e9993c7c468f09e31b78a8d6ab51
     - github.com/redhat-appstudio/tsf-conforma-data//data?ref=1966f21842d507441a7a5e1c7de9071cf3f9ec53
     name: Default
     policy:
