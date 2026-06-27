@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/coder/websocket v1.8.15
-	github.com/codeready-toolchain/api v0.0.0-20260609071155-c8f486b1a581
+	github.com/codeready-toolchain/api v0.0.0-20260623133516-6f421bfacf3d
 	github.com/conforma/crds/api v0.1.11
 	github.com/devfile/library/v2 v2.4.0
 	github.com/docker/cli v29.6.0+incompatible
@@ -21,7 +21,7 @@ require (
 	github.com/konflux-ci/release-service v0.0.0-20260618180947-a971d3c8d10d
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/onsi/ginkgo/v2 v2.32.0
-	github.com/onsi/gomega v1.42.0
+	github.com/onsi/gomega v1.42.1
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/openshift-pipelines/pipelines-as-code v0.48.0
 	github.com/openshift/api v0.0.0-20260624175654-50c3975e874f
