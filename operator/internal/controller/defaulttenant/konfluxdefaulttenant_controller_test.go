@@ -30,9 +30,14 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/internalregistry"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const defaultTenantNamespace = "default-tenant"
+
+// otherRunnerCredSecretName is an extra Secret referenced on the integration runner SA to assert
+// removal of registry cred refs does not strip unrelated entries (envtest).
+const otherRunnerCredSecretName = "defaulttenant-envtest-other-cred"
 
 var _ = Describe("KonfluxDefaultTenant Controller", func() {
 	Context("When reconciling a resource", Ordered, func() {
@@ -135,6 +140,142 @@ var _ = Describe("KonfluxDefaultTenant Controller", func() {
 					Namespace: defaultTenantNamespace,
 				}, got)).To(Succeed())
 				g.Expect(got.Data).To(HaveKey(corev1.DockerConfigJsonKey))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			sa := &corev1.ServiceAccount{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      IntegrationRunnerServiceAccountName,
+				Namespace: defaultTenantNamespace,
+			}, sa)).To(Succeed())
+			Expect(sa.ImagePullSecrets).To(ContainElement(corev1.LocalObjectReference{Name: RegistryCredentialsSecretName}))
+			Expect(sa.Secrets).To(ContainElement(corev1.ObjectReference{Name: RegistryCredentialsSecretName}))
+		})
+
+		It("removes registry credential refs from the integration runner SA when the internal registry CR is deleted but preserves unrelated secret refs", func() {
+			registry := &konfluxv1alpha1.KonfluxInternalRegistry{
+				ObjectMeta: metav1.ObjectMeta{Name: internalregistry.CRName},
+			}
+			Expect(k8sClient.Create(ctx, registry)).To(Succeed())
+			DeferCleanup(func() {
+				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxInternalRegistry{
+					ObjectMeta: metav1.ObjectMeta{Name: internalregistry.CRName},
+				})
+			})
+
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: RegistrySourceSecretNamespace}, &corev1.Namespace{})
+			if apierrors.IsNotFound(err) {
+				Expect(k8sClient.Create(ctx, &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{Name: RegistrySourceSecretNamespace},
+				})).To(Succeed())
+			} else {
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			source := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      RegistrySourceSecretName,
+					Namespace: RegistrySourceSecretNamespace,
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+				Data: map[string][]byte{
+					corev1.DockerConfigJsonKey: []byte(`{"auths":{"registry.example":{"auth":"abc"}}}`),
+				},
+			}
+			Expect(k8sClient.Create(ctx, source)).To(Succeed())
+			DeferCleanup(func() {
+				testutil.DeleteAndWait(ctx, k8sClient, &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      RegistrySourceSecretName,
+						Namespace: RegistrySourceSecretNamespace,
+					},
+				})
+			})
+
+			Eventually(func(g Gomega) {
+				got := &corev1.Secret{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      RegistryCredentialsSecretName,
+					Namespace: defaultTenantNamespace,
+				}, got)).To(Succeed())
+				g.Expect(got.Data).To(HaveKey(corev1.DockerConfigJsonKey))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				sa := &corev1.ServiceAccount{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      IntegrationRunnerServiceAccountName,
+					Namespace: defaultTenantNamespace,
+				}, sa)).To(Succeed())
+				g.Expect(sa.ImagePullSecrets).To(ContainElement(corev1.LocalObjectReference{Name: RegistryCredentialsSecretName}))
+				g.Expect(sa.Secrets).To(ContainElement(corev1.ObjectReference{Name: RegistryCredentialsSecretName}))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			otherSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      otherRunnerCredSecretName,
+					Namespace: defaultTenantNamespace,
+				},
+				Type:       corev1.SecretTypeOpaque,
+				StringData: map[string]string{"token": "unused"},
+			}
+			Expect(k8sClient.Create(ctx, otherSecret)).To(Succeed())
+			DeferCleanup(func() {
+				testutil.DeleteAndWait(ctx, k8sClient, &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      otherRunnerCredSecretName,
+						Namespace: defaultTenantNamespace,
+					},
+				})
+			})
+
+			sa := &corev1.ServiceAccount{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      IntegrationRunnerServiceAccountName,
+				Namespace: defaultTenantNamespace,
+			}, sa)).To(Succeed())
+			saBase := sa.DeepCopy()
+			sa.ImagePullSecrets = append(append([]corev1.LocalObjectReference{}, sa.ImagePullSecrets...), corev1.LocalObjectReference{Name: otherRunnerCredSecretName})
+			sa.Secrets = append(append([]corev1.ObjectReference{}, sa.Secrets...), corev1.ObjectReference{Name: otherRunnerCredSecretName})
+			Expect(k8sClient.Patch(ctx, sa, client.MergeFrom(saBase))).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				got := &corev1.ServiceAccount{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      IntegrationRunnerServiceAccountName,
+					Namespace: defaultTenantNamespace,
+				}, got)).To(Succeed())
+				pullNames := make([]string, len(got.ImagePullSecrets))
+				for i := range got.ImagePullSecrets {
+					pullNames[i] = got.ImagePullSecrets[i].Name
+				}
+				secNames := make([]string, len(got.Secrets))
+				for i := range got.Secrets {
+					secNames[i] = got.Secrets[i].Name
+				}
+				g.Expect(pullNames).To(ContainElements(RegistryCredentialsSecretName, otherRunnerCredSecretName))
+				g.Expect(secNames).To(ContainElements(RegistryCredentialsSecretName, otherRunnerCredSecretName))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			Expect(k8sClient.Delete(ctx, registry)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				got := &corev1.ServiceAccount{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      IntegrationRunnerServiceAccountName,
+					Namespace: defaultTenantNamespace,
+				}, got)).To(Succeed())
+				pullNames := make([]string, len(got.ImagePullSecrets))
+				for i := range got.ImagePullSecrets {
+					pullNames[i] = got.ImagePullSecrets[i].Name
+				}
+				secNames := make([]string, len(got.Secrets))
+				for i := range got.Secrets {
+					secNames[i] = got.Secrets[i].Name
+				}
+				g.Expect(pullNames).NotTo(ContainElement(RegistryCredentialsSecretName))
+				g.Expect(secNames).NotTo(ContainElement(RegistryCredentialsSecretName))
+				g.Expect(pullNames).To(ContainElement(otherRunnerCredSecretName))
+				g.Expect(secNames).To(ContainElement(otherRunnerCredSecretName))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})
