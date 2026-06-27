@@ -116,6 +116,7 @@ PRs trigger the following workflows:
 
 - **Go / `go.mod` PRs:** Apply **go-toolchain-upgrade** (`skills/go-toolchain-upgrade/SKILL.md`) and follow its triage table—do not summarize the workflow from memory.
 - **`.tekton` task/pipeline edits:** `pipeline.yaml` tasks `deploy-konflux-its` and `konflux-e2e-tests-its` hardcode `taskRef.revision: main`. To verify changes, temporarily point both at the PR’s git ref, run operator E2E, then restore `main` before merge (see `.tekton/pipelines/operator-e2e/README.md`).
+- **`.tekton` task bundle updates (Conforma trust):** Task bundles referenced in `.tekton/build-pipeline.yaml` must be trusted by Conforma (the repo’s supply-chain policy engine). When reviewing PRs that update bundle references, distinguish **digest rotations** (lower risk — same version, new build) from **version bumps** (higher risk — new version may not yet be in the trusted task list). Flag version bumps and ask whether the new task version/digest has been added to `data-acceptable-bundles` (see [#6997](https://github.com/konflux-ci/konflux-ci/issues/6997)). For context on the trust model, see [#7313](https://github.com/konflux-ci/konflux-ci/issues/7313).
 - **Same-repo branches preferred**: E2E tests run automatically
 - **Fork PRs**: Require maintainer `/allow` comment to trigger tests
 - Run kube-linter before submitting
