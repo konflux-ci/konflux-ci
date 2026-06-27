@@ -41,23 +41,23 @@ data:
     -n <namespace> -u <admin-user>\n\nCreate a new Konflux tenant namespace with all
     required resources.\n\nRequired arguments:\n  -n, --namespace    Name of the tenant
     namespace to create\n  -u, --admin-user   Name of the admin user (e.g., user1@konflux.dev)\n\nExample:\n
-    \ $(basename \"$0\") -n my-tenant -u user1@konflux.dev\nEOF\n    exit 1\n}\n\n#
-    Parse arguments\nwhile [[ $# -gt 0 ]]; do\n    case $1 in\n        -n|--namespace)\n
-    \           NAMESPACE=\"$2\"\n            shift 2\n            ;;\n        -u|--admin-user)\n
-    \           ADMIN_USER=\"$2\"\n            shift 2\n            ;;\n        -h|--help)\n
-    \           usage\n            ;;\n        *)\n            echo \"Unknown option:
-    $1\"\n            usage\n            ;;\n    esac\ndone\n\n# Validate required
+    \ $(basename \"$0\") -n my-tenant -u user1@konflux.dev\nEOF\n}\n\n# Parse arguments\nwhile
+    [[ $# -gt 0 ]]; do\n    case $1 in\n        -n|--namespace)\n            NAMESPACE=\"$2\"\n
+    \           shift 2\n            ;;\n        -u|--admin-user)\n            ADMIN_USER=\"$2\"\n
+    \           shift 2\n            ;;\n        -h|--help)\n            usage\n            exit
+    0\n            ;;\n        *)\n            echo \"Unknown option: $1\" >&2\n            usage
+    >&2\n            exit 1\n            ;;\n    esac\ndone\n\n# Validate required
     arguments\nif [[ -z \"${NAMESPACE}\" ]]; then\n    echo \"Error: Namespace is
-    required\"\n    usage\nfi\n\nif [[ -z \"${ADMIN_USER}\" ]]; then\n    echo \"Error:
-    Admin user is required\"\n    usage\nfi\n\necho \"\U0001F3D7️  Creating Konflux
-    tenant namespace: ${NAMESPACE}\"\n\n# Create the namespace with tenant label\necho
-    \"\U0001F4E6 Creating namespace...\"\nkubectl apply -f - <<EOF\napiVersion: v1\nkind:
-    Namespace\nmetadata:\n  name: ${NAMESPACE}\n  labels:\n    konflux-ci.dev/type:
-    tenant\nEOF\n\n# Create the konflux-integration-runner ServiceAccount\necho \"\U0001F464
-    Creating konflux-integration-runner ServiceAccount...\"\nkubectl apply -f - <<EOF\napiVersion:
-    v1\nkind: ServiceAccount\nmetadata:\n  name: konflux-integration-runner\n  namespace:
-    ${NAMESPACE}\nEOF\n\n# Create RoleBinding for konflux-integration-runner ServiceAccount\necho
-    \"\U0001F517 Creating RoleBinding for konflux-integration-runner...\"\nkubectl
+    required\" >&2\n    usage >&2\n    exit 1\nfi\n\nif [[ -z \"${ADMIN_USER}\" ]];
+    then\n    echo \"Error: Admin user is required\" >&2\n    usage >&2\n    exit
+    1\nfi\n\necho \"\U0001F3D7️  Creating Konflux tenant namespace: ${NAMESPACE}\"\n\n#
+    Create the namespace with tenant label\necho \"\U0001F4E6 Creating namespace...\"\nkubectl
+    apply -f - <<EOF\napiVersion: v1\nkind: Namespace\nmetadata:\n  name: ${NAMESPACE}\n
+    \ labels:\n    konflux-ci.dev/type: tenant\nEOF\n\n# Create the konflux-integration-runner
+    ServiceAccount\necho \"\U0001F464 Creating konflux-integration-runner ServiceAccount...\"\nkubectl
+    apply -f - <<EOF\napiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: konflux-integration-runner\n
+    \ namespace: ${NAMESPACE}\nEOF\n\n# Create RoleBinding for konflux-integration-runner
+    ServiceAccount\necho \"\U0001F517 Creating RoleBinding for konflux-integration-runner...\"\nkubectl
     apply -f - <<EOF\napiVersion: rbac.authorization.k8s.io/v1\nkind: RoleBinding\nmetadata:\n
     \ name: konflux-integration-runner\n  namespace: ${NAMESPACE}\nroleRef:\n  apiGroup:
     rbac.authorization.k8s.io\n  kind: ClusterRole\n  name: konflux-integration-runner\nsubjects:\n-
@@ -110,19 +110,18 @@ data:
     \"$0\") -a my-app\n\n  # Specify a custom managed namespace\n  $(basename \"$0\")
     -m my-managed-ns\n\n  # Explicitly specify components\n  $(basename \"$0\") -c
     component-a -c component-b\n\n  # Full customization\n  $(basename \"$0\") -t
-    my-tenant -m my-managed -a my-app -c comp1 -c comp2\nEOF\n    exit 1\n}\n\n# Wait
-    for an ImageRepository to reach \"ready\" state\nwait_for_imagerepository() {\n
-    \   local name=\"$1\"\n    local elapsed=0\n    while [[ $elapsed -lt $WAIT_TIMEOUT
-    ]]; do\n        local state\n        state=$(kubectl get imagerepository \"${name}\"
-    -n \"${MANAGED_NS}\" \\\n            -o jsonpath='{.status.state}' 2>/dev/null
-    || true)\n        if [[ \"${state}\" == \"ready\" ]]; then\n            return
-    0\n        fi\n        sleep \"${POLL_INTERVAL}\"\n        elapsed=$((elapsed
-    + POLL_INTERVAL))\n    done\n    echo \"Error: ImageRepository '${name}' did not
-    become ready within ${WAIT_TIMEOUT}s\"\n    echo \"  Current state: $(kubectl
-    get imagerepository \"${name}\" -n \"${MANAGED_NS}\" -o jsonpath='{.status.state}'
-    2>/dev/null || echo 'unknown')\"\n    echo \"  Message: $(kubectl get imagerepository
-    \"${name}\" -n \"${MANAGED_NS}\" -o jsonpath='{.status.message}' 2>/dev/null ||
-    echo 'none')\"\n    return 1\n}\n\n# Parse arguments\nTENANT_NS=\"default-tenant\"\nMANAGED_NS=\"default-managed-tenant\"\nAPPLICATION=\"sample-component\"\nPRODUCT_VERSION=\"0.1\"\nCONFORMA_POLICY=\"default\"\nRELEASE_NAME=\"local-release\"\n#
+    my-tenant -m my-managed -a my-app -c comp1 -c comp2\nEOF\n}\n\n# Wait for an ImageRepository
+    to reach \"ready\" state\nwait_for_imagerepository() {\n    local name=\"$1\"\n
+    \   local elapsed=0\n    while [[ $elapsed -lt $WAIT_TIMEOUT ]]; do\n        local
+    state\n        state=$(kubectl get imagerepository \"${name}\" -n \"${MANAGED_NS}\"
+    \\\n            -o jsonpath='{.status.state}' 2>/dev/null || true)\n        if
+    [[ \"${state}\" == \"ready\" ]]; then\n            return 0\n        fi\n        sleep
+    \"${POLL_INTERVAL}\"\n        elapsed=$((elapsed + POLL_INTERVAL))\n    done\n
+    \   echo \"Error: ImageRepository '${name}' did not become ready within ${WAIT_TIMEOUT}s\"\n
+    \   echo \"  Current state: $(kubectl get imagerepository \"${name}\" -n \"${MANAGED_NS}\"
+    -o jsonpath='{.status.state}' 2>/dev/null || echo 'unknown')\"\n    echo \"  Message:
+    $(kubectl get imagerepository \"${name}\" -n \"${MANAGED_NS}\" -o jsonpath='{.status.message}'
+    2>/dev/null || echo 'none')\"\n    return 1\n}\n\n# Parse arguments\nTENANT_NS=\"default-tenant\"\nMANAGED_NS=\"default-managed-tenant\"\nAPPLICATION=\"sample-component\"\nPRODUCT_VERSION=\"0.1\"\nCONFORMA_POLICY=\"default\"\nRELEASE_NAME=\"local-release\"\n#
     renovate: datasource=git-refs depName=https://github.com/konflux-ci/release-service-catalog
     currentValue=development\nCATALOG_REVISION=\"f557ad5e9b93bb82abfcce3530affae142db45cd\"\nIMAGE_NAME_PREFIX=\"\"\nCOMPONENTS=()\n\nwhile
     [[ $# -gt 0 ]]; do\n    case $1 in\n        -t|--tenant-namespace)\n            TENANT_NS=\"$2\"\n
@@ -135,12 +134,12 @@ data:
     \           shift 2\n            ;;\n        -r|--release-name)\n            RELEASE_NAME=\"$2\"\n
     \           shift 2\n            ;;\n        -R|--catalog-revision)\n            CATALOG_REVISION=\"$2\"\n
     \           shift 2\n            ;;\n        -I|--image-name-prefix)\n            IMAGE_NAME_PREFIX=\"$2\"\n
-    \           shift 2\n            ;;\n        -h|--help)\n            usage\n            ;;\n
-    \       *)\n            echo \"Unknown option: $1\"\n            usage\n            ;;\n
-    \   esac\ndone\n\n# Parse PRODUCT_NAME default value based on APPLICATION value
-    (after args parsing)\nPRODUCT_NAME=${PRODUCT_NAME:-$APPLICATION}\n\n# Generate
-    a unique image name prefix to avoid credential collisions between\n# concurrent
-    CI runs that share the same Quay organization.\nif [[ -z \"${IMAGE_NAME_PREFIX}\"
+    \           shift 2\n            ;;\n        -h|--help)\n            usage\n            exit
+    0\n            ;;\n        *)\n            echo \"Unknown option: $1\" >&2\n            usage
+    >&2\n            exit 1\n            ;;\n    esac\ndone\n\n# Parse PRODUCT_NAME
+    default value based on APPLICATION value (after args parsing)\nPRODUCT_NAME=${PRODUCT_NAME:-$APPLICATION}\n\n#
+    Generate a unique image name prefix to avoid credential collisions between\n#
+    concurrent CI runs that share the same Quay organization.\nif [[ -z \"${IMAGE_NAME_PREFIX}\"
     ]]; then\n    RANDOM_SUFFIX=$(od -An -tx1 -N3 /dev/urandom | tr -d ' ')\n    IMAGE_NAME_PREFIX=\"${MANAGED_NS}-${RANDOM_SUFFIX}\"\nfi\n\n#
     OpenShift registers config.openshift.io API resources. Without -o name, kubectl
     still exits 0\n# when the group is absent (header-only table); -o name yields
