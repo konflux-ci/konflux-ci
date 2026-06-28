@@ -47,6 +47,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	configv1 "github.com/openshift/api/config/v1"
 	consolev1 "github.com/openshift/api/console/v1"
 	securityv1 "github.com/openshift/api/security/v1"
 )
@@ -103,6 +104,9 @@ func SetupTestEnv(basePath string) *TestEnv {
 	err = certmanagerv1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = configv1.Install(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
 	objectStore, err := manifests.NewObjectStore(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
@@ -111,6 +115,7 @@ func SetupTestEnv(basePath string) *TestEnv {
 		CRDDirectoryPaths: []string{
 			filepath.Join(basePath, "config", "crd", "bases"),
 			filepath.Join(basePath, "test", "crds", "cert-manager"),
+			filepath.Join(GetGoModuleDir("github.com/openshift/api"), "config", "v1", "zz_generated.crd-manifests"),
 			filepath.Join(GetGoModuleDir("github.com/openshift/api"), "console", "v1", "zz_generated.crd-manifests"),
 			filepath.Join(GetGoModuleDir("github.com/openshift/api"), "security", "v1", "zz_generated.crd-manifests"),
 		},
