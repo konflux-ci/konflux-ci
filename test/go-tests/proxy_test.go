@@ -378,19 +378,26 @@ var _ = Describe("Test Proxy endpoints", func() {
 			token, err := ExtractToken(proxyClient)
 			Expect(err).NotTo(HaveOccurred())
 
-			expectedBasic := base64.StdEncoding.EncodeToString([]byte("apikey:" + watsonTestAPIKey))
+			if epModes.Watson == modeEcho {
+				expectedBasic := base64.StdEncoding.EncodeToString([]byte("apikey:" + watsonTestAPIKey))
 
-			var lastHeaders map[string][]string
-			Eventually(func(g Gomega) {
-				lastHeaders = echoGet(watsonPath+"echo", token)
-				g.Expect(lastHeaders).To(HaveKey("Authorization"))
-				g.Expect(lastHeaders["Authorization"]).To(HaveLen(1))
-				g.Expect(lastHeaders["Authorization"][0]).To(Equal("Basic "+expectedBasic),
-					"Authorization should be Basic auth derived from watson API key")
-			}).WithTimeout(2 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
+				// The watson-config Secret is projected as a volume and cached by
+				// file_watcher. Kubernetes may take up to ~60s to project a new
+				// Secret, so we poll until the auth value is populated.
+				var lastHeaders map[string][]string
+				Eventually(func(g Gomega) {
+					lastHeaders = echoGet(watsonPath+"echo", token)
+					g.Expect(lastHeaders).To(HaveKey("Authorization"))
+					g.Expect(lastHeaders["Authorization"]).To(HaveLen(1))
+					g.Expect(lastHeaders["Authorization"][0]).To(Equal("Basic "+expectedBasic),
+						"Authorization should be Basic auth derived from watson API key")
+				}).WithTimeout(2 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 
-			Expect(lastHeaders).NotTo(HaveKey("Impersonate-User"),
-				"watson endpoint should NOT use impersonation")
+				Expect(lastHeaders).NotTo(HaveKey("Impersonate-User"),
+					"watson endpoint should NOT use impersonation")
+			} else {
+				expectEndpointRouted(watsonPath, token)
+			}
 		})
 
 		It("should reject unauthenticated requests", func() {
@@ -423,6 +430,8 @@ func expectEndpointRouted(path, token string) {
 	body, err := io.ReadAll(response.Body)
 	Expect(err).NotTo(HaveOccurred())
 
+	Expect(response.StatusCode).NotTo(Equal(http.StatusBadGateway),
+		"proxy returned 502 — backend service may be unreachable at %s", path)
 	Expect(string(body)).NotTo(HavePrefix("<!doctype html>"),
 		"expected a backend service response, got the SPA HTML fallback — proxy may not be routing to the endpoint")
 }
