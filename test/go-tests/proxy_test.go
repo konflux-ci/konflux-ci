@@ -430,8 +430,8 @@ func expectEndpointRouted(path, token string) {
 	body, err := io.ReadAll(response.Body)
 	Expect(err).NotTo(HaveOccurred())
 
-	Expect(response.StatusCode).NotTo(Equal(http.StatusBadGateway),
-		"proxy returned 502 — backend service may be unreachable at %s", path)
+	Expect(response.StatusCode).To(BeNumerically("<", 500),
+		"backend at %s returned a server error (HTTP %d)", path, response.StatusCode)
 	Expect(string(body)).NotTo(HavePrefix("<!doctype html>"),
 		"expected a backend service response, got the SPA HTML fallback — proxy may not be routing to the endpoint")
 }
