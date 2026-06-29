@@ -455,14 +455,12 @@ func (h *Controller) GetComponentConditionStatusMessages(name, namespace string)
 // Universal method to retrigger pipelineruns in kubernetes cluster
 func (h *Controller) RetriggerComponentPipelineRun(component *appservice.Component, pr *pipeline.PipelineRun) (sha string, err error) {
 	prLabels := pr.GetLabels()
-	prAnnotations := pr.GetAnnotations()
 	// In case of PipelineRun managed by PaC we are able to retrigger the pipeline only
 	// by updating the related branch
 	if prLabels["app.kubernetes.io/managed-by"] == "pipelinesascode.tekton.dev" {
 		var ok bool
-		var repoName, eventType, branchName, gitProvider string
+		var repoName, eventType, branchName string
 		pacRepoNameLabelName := "pipelinesascode.tekton.dev/url-repository"
-		gitProviderLabelName := "pipelinesascode.tekton.dev/git-provider"
 		pacEventTypeLabelName := "pipelinesascode.tekton.dev/event-type"
 		componentLabelName := "appstudio.openshift.io/component"
 		targetBranchAnnotationName := "build.appstudio.redhat.com/target_branch"
@@ -473,9 +471,6 @@ func (h *Controller) RetriggerComponentPipelineRun(component *appservice.Compone
 		if eventType, ok = prLabels[pacEventTypeLabelName]; !ok {
 			return "", fmt.Errorf(RequiredLabelNotFound, pacEventTypeLabelName)
 		}
-		// since not all build PipelineRuns contains this annotation
-		gitProvider = prAnnotations[gitProviderLabelName]
-
 		// PipelineRun is triggered from a pull request, need to update the PaC PR source branch
 		if eventType == "pull_request" || eventType == "Merge_Request" {
 			if len(prLabels[componentLabelName]) < 1 {
@@ -489,28 +484,11 @@ func (h *Controller) RetriggerComponentPipelineRun(component *appservice.Compone
 			}
 		}
 
-		if gitProvider == "gitlab" {
-			gitlabOrg := utils.GetEnv(constants.GITLAB_QE_ORG_ENV, constants.DefaultGitLabQEOrg)
-			projectID, ok := prLabels["pipelinesascode.tekton.dev/source-project-id"]
-			if !ok {
-				projectID = fmt.Sprintf("%s/%s", gitlabOrg, repoName)
-			}
-			fileInfo, err := h.GitLab.CreateFile(projectID, util.GenerateRandomString(5), "test", branchName)
-			if err != nil {
-				return "", fmt.Errorf("failed to retrigger PipelineRun %s in %s namespace: %+v", pr.GetName(), pr.GetNamespace(), err)
-			}
-			file, err := h.GitLab.GetFileMetaData(projectID, fileInfo.FilePath, fileInfo.Branch)
-			if err != nil {
-				return "", fmt.Errorf("failed to retrigger PipelineRun %s in %s namespace: %+v", pr.GetName(), pr.GetNamespace(), err)
-			}
-			sha = file.CommitID
-		} else {
-			file, err := h.GitHub.CreateFile(repoName, util.GenerateRandomString(5), "test", branchName)
-			if err != nil {
-				return "", fmt.Errorf("failed to retrigger PipelineRun %s in %s namespace: %+v", pr.GetName(), pr.GetNamespace(), err)
-			}
-			sha = file.GetSHA()
+		file, err := h.GitHub.CreateFile(repoName, util.GenerateRandomString(5), "test", branchName)
+		if err != nil {
+			return "", fmt.Errorf("failed to retrigger PipelineRun %s in %s namespace: %+v", pr.GetName(), pr.GetNamespace(), err)
 		}
+		sha = file.GetSHA()
 
 		// To retrigger simple build PipelineRun we just need to update the initial build annotation
 		// in Component CR
