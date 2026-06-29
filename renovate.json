@@ -346,6 +346,19 @@
       "extractVersionTemplate": "^v?(?<version>.*)$"
     },
     {
+      "description": "Track prometheus-operator release (export-third-party-chart-env.sh)",
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["^\\.github/scripts/export-third-party-chart-env\\.sh$"],
+      "matchStrings": [
+        "# renovate: datasource=github-releases depName=prometheus-operator/prometheus-operator versioning=semver",
+        "PROMETHEUS_OPERATOR_VERSION=\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "prometheus-operator/prometheus-operator",
+      "extractVersionTemplate": "^v?(?<version>.*)$"
+    },
+    {
       "description": "Track envtest Kubernetes version in operator Makefile",
       "customType": "regex",
       "matchStringsStrategy": "combination",
