@@ -66,7 +66,3 @@ type KonfluxDefaultTenantList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []KonfluxDefaultTenant `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&KonfluxDefaultTenant{}, &KonfluxDefaultTenantList{})
-}
