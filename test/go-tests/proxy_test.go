@@ -308,7 +308,7 @@ var _ = Describe("Test Proxy endpoints", func() {
 				// OpenShift, matching the Watson test pattern.
 				var lastHeaders map[string][]string
 				Eventually(func(g Gomega) {
-					lastHeaders = echoGet(kitePath+"echo", token)
+					lastHeaders = echoGetG(g, kitePath+"echo", token)
 					g.Expect(lastHeaders).To(HaveKey("Authorization"),
 						"echo should receive Authorization header with kube_token")
 					g.Expect(lastHeaders["Authorization"]).To(HaveLen(1))
@@ -352,7 +352,7 @@ var _ = Describe("Test Proxy endpoints", func() {
 				// OpenShift, matching the Watson test pattern.
 				var lastHeaders map[string][]string
 				Eventually(func(g Gomega) {
-					lastHeaders = echoGet(kubearchivePath+"echo", token)
+					lastHeaders = echoGetG(g, kubearchivePath+"echo", token)
 					g.Expect(lastHeaders).To(HaveKey("Authorization"),
 						"echo should receive Authorization header with kube_token")
 					g.Expect(lastHeaders["Authorization"][0]).To(HavePrefix("Bearer "))
@@ -396,7 +396,7 @@ var _ = Describe("Test Proxy endpoints", func() {
 				// Secret, so we poll until the auth value is populated.
 				var lastHeaders map[string][]string
 				Eventually(func(g Gomega) {
-					lastHeaders = echoGet(watsonPath+"echo", token)
+					lastHeaders = echoGetG(g, watsonPath+"echo", token)
 					g.Expect(lastHeaders).To(HaveKey("Authorization"))
 					g.Expect(lastHeaders["Authorization"]).To(HaveLen(1))
 					g.Expect(lastHeaders["Authorization"][0]).To(Equal("Basic "+expectedBasic),
@@ -446,22 +446,30 @@ func expectEndpointRouted(path, token string) {
 		"expected a backend service response, got the SPA HTML fallback — proxy may not be routing to the endpoint")
 }
 
-func echoGet(path, token string) map[string][]string {
+// echoGetG performs a GET against the echo server and returns the echoed
+// headers. It uses the provided Gomega instance for all assertions so that
+// callers inside an Eventually block get soft failures (retries) instead of
+// hard Ginkgo panics.
+func echoGetG(g Gomega, path, token string) map[string][]string {
 	request, err := http.NewRequest("GET", proxyURL(path), nil)
-	Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).NotTo(HaveOccurred())
 	request.Header.Set("Authorization", "Bearer "+token)
 
 	response, err := proxyHTTPClient.Do(request)
-	Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).NotTo(HaveOccurred())
 	defer response.Body.Close()
 
 	body, err := io.ReadAll(response.Body)
-	Expect(err).NotTo(HaveOccurred())
-	Expect(response.StatusCode).To(Equal(200), "echo request failed: %s", string(body))
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(response.StatusCode).To(Equal(200), "echo request failed: %s", string(body))
 
 	var echo echoResponseBody
-	Expect(json.Unmarshal(body, &echo)).To(Succeed(), "failed to parse echo response: %s", string(body))
+	g.Expect(json.Unmarshal(body, &echo)).To(Succeed(), "failed to parse echo response: %s", string(body))
 	return echo.Headers
+}
+
+func echoGet(path, token string) map[string][]string {
+	return echoGetG(Default, path, token)
 }
 
 type TokenResponse struct {
