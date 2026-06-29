@@ -304,16 +304,21 @@ var _ = Describe("Test Proxy endpoints", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			if epModes.Kite == modeEcho {
-				headers := echoGet(kitePath+"echo", token)
-				Expect(headers).To(HaveKey("Authorization"),
-					"echo should receive Authorization header with kube_token")
-				Expect(headers["Authorization"]).To(HaveLen(1))
-				Expect(headers["Authorization"][0]).To(HavePrefix("Bearer "),
-					"Authorization should be a Bearer token (kube SA token)")
-				Expect(headers).To(HaveKey("Impersonate-User"),
-					"echo should receive Impersonate-User header")
-				Expect(headers["Impersonate-User"][0]).To(Equal(expectedImpersonateUser()),
-					"Impersonate-User should match the authenticated user")
+				// Poll to tolerate late service-serving cert projection on
+				// OpenShift, matching the Watson test pattern.
+				var lastHeaders map[string][]string
+				Eventually(func(g Gomega) {
+					lastHeaders = echoGet(kitePath+"echo", token)
+					g.Expect(lastHeaders).To(HaveKey("Authorization"),
+						"echo should receive Authorization header with kube_token")
+					g.Expect(lastHeaders["Authorization"]).To(HaveLen(1))
+					g.Expect(lastHeaders["Authorization"][0]).To(HavePrefix("Bearer "),
+						"Authorization should be a Bearer token (kube SA token)")
+					g.Expect(lastHeaders).To(HaveKey("Impersonate-User"),
+						"echo should receive Impersonate-User header")
+					g.Expect(lastHeaders["Impersonate-User"][0]).To(Equal(expectedImpersonateUser()),
+						"Impersonate-User should match the authenticated user")
+				}).WithTimeout(2 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 			} else {
 				expectEndpointRouted(kitePath, token)
 			}
@@ -343,13 +348,18 @@ var _ = Describe("Test Proxy endpoints", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			if epModes.KubeArchive == modeEcho {
-				headers := echoGet(kubearchivePath+"echo", token)
-				Expect(headers).To(HaveKey("Authorization"),
-					"echo should receive Authorization header with kube_token")
-				Expect(headers["Authorization"][0]).To(HavePrefix("Bearer "))
-				Expect(headers).To(HaveKey("Impersonate-User"),
-					"echo should receive Impersonate-User header")
-				Expect(headers["Impersonate-User"][0]).To(Equal(expectedImpersonateUser()))
+				// Poll to tolerate late service-serving cert projection on
+				// OpenShift, matching the Watson test pattern.
+				var lastHeaders map[string][]string
+				Eventually(func(g Gomega) {
+					lastHeaders = echoGet(kubearchivePath+"echo", token)
+					g.Expect(lastHeaders).To(HaveKey("Authorization"),
+						"echo should receive Authorization header with kube_token")
+					g.Expect(lastHeaders["Authorization"][0]).To(HavePrefix("Bearer "))
+					g.Expect(lastHeaders).To(HaveKey("Impersonate-User"),
+						"echo should receive Impersonate-User header")
+					g.Expect(lastHeaders["Impersonate-User"][0]).To(Equal(expectedImpersonateUser()))
+				}).WithTimeout(2 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 			} else {
 				expectEndpointRouted(kubearchivePath, token)
 			}
