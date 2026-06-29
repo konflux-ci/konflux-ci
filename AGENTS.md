@@ -73,6 +73,40 @@ After changing APIs or RBAC annotations, run `make manifests generate` from `ope
 
 For test cleanup patterns (envtest garbage collection, `DeferCleanupParentAndChildren`) and `Eventually`/`Consistently` soft-assertion conventions, see the [ginkgo-testing](skills/ginkgo-testing/SKILL.md) skill.
 
+**CRD test conventions:**
+
+CRD self-healing and drift-correction tests (testing the `Watches(&CRD{}, MapCRDToRequest)` path) follow specific patterns across all controller packages:
+
+1. **Label assertions** — recreated CRDs must assert both ownership labels:
+
+   ```go
+   g.Expect(crd.Labels).To(HaveKeyWithValue(constant.KonfluxOwnerLabel, CRName))
+   g.Expect(crd.Labels).To(HaveKeyWithValue(constant.KonfluxComponentLabel, string(manifests.<Component>)))
+   ```
+
+   Assert these in **both** the initial wait ("waiting for CRD with owner labels") and the recreation verification ("verifying the CRD is recreated with correct spec and labels").
+
+2. **Cleanup** — CRD tests must use `DeferCleanupParentAndChildren` to clean up the parent CR and the CRD under test, since CRDs are cluster-scoped resources:
+
+   ```go
+   Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+   testutil.DeferCleanupParentAndChildren(k8sClient, cr,
+       &apiextensionsv1.CustomResourceDefinition{
+           ObjectMeta: metav1.ObjectMeta{Name: crdName},
+       },
+   )
+   ```
+
+   Do not use `DeferCleanup(testutil.DeleteAndWait, ...)` for CRD tests — leftover cluster-scoped CRDs from one table entry can interfere with subsequent entries or other test suites.
+
+3. **Entry descriptions** — Ginkgo `DescribeTable` entries should use `c.kind` as the description for readability:
+
+   ```go
+   Entry(c.kind, c.name, c.kind)
+   ```
+
+   Exception: when the controller manages multiple CRDs with the **same Kind** but different API groups (e.g., imagecontroller has `imagerepositories.appstudio.redhat.com` and `imagerepositories.konflux-ci.dev`, both Kind `ImageRepository`), use `c.name` (FQDN) to avoid duplicate Entry descriptions.
+
 ```bash
 # Kube-linter (before PR)
 mkdir -p .kube-linter
