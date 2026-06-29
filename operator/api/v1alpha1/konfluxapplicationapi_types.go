@@ -66,7 +66,3 @@ func (k *KonfluxApplicationAPI) GetConditions() []metav1.Condition {
 func (k *KonfluxApplicationAPI) SetConditions(conditions []metav1.Condition) {
 	k.Status.Conditions = conditions
 }
-
-func init() {
-	SchemeBuilder.Register(&KonfluxApplicationAPI{}, &KonfluxApplicationAPIList{})
-}
