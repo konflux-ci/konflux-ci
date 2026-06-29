@@ -118,7 +118,7 @@ func generateSelfSignedCert() (tls.Certificate, error) {
 		DNSNames: []string{
 			"localhost",
 			"*.konflux-kite.svc.cluster.local",
-			"*.kubearchive.svc.cluster.local",
+			"*.product-kubearchive.svc.cluster.local",
 			"*.test-echo-watson.svc.cluster.local",
 		},
 		IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},
