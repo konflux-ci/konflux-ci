@@ -27,12 +27,15 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
 const (
@@ -48,6 +51,33 @@ const (
 	managerClusterRoleName        = "integration-service-manager-role"
 	managerClusterRoleBindingName = "integration-service-manager-rolebinding"
 )
+
+type isCRDInfo struct {
+	name string
+	kind string
+}
+
+var isManagedCRDs = []isCRDInfo{
+	{"componentgroups.appstudio.redhat.com", "ComponentGroup"},
+	{"integrationtestscenarios.appstudio.redhat.com", "IntegrationTestScenario"},
+	{"nudgeconfigs.appstudio.redhat.com", "NudgeConfig"},
+}
+
+func isCRDEntries() []TableEntry {
+	entries := make([]TableEntry, len(isManagedCRDs))
+	for i, c := range isManagedCRDs {
+		entries[i] = Entry(c.kind, c.name, c.kind)
+	}
+	return entries
+}
+
+func isCRDEntriesNameOnly() []TableEntry {
+	entries := make([]TableEntry, len(isManagedCRDs))
+	for i, c := range isManagedCRDs {
+		entries[i] = Entry(c.kind, c.name)
+	}
+	return entries
+}
 
 var _ = Describe("KonfluxIntegrationService Controller", func() {
 	Context("When reconciling a resource", func() {
@@ -504,6 +534,57 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				g.Expect(crb.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
+
+		DescribeTable("recreates CRD when deleted",
+			func(ctx context.Context, crdName string, expectedKind string) {
+				integrationService := &konfluxv1alpha1.KonfluxIntegrationService{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				}
+				Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
+				DeferCleanup(testutil.DeleteAndWait, k8sClient, integrationService)
+
+				crdNN := types.NamespacedName{Name: crdName}
+
+				By("waiting for CRD with owner labels")
+				var originalUID types.UID
+				Eventually(func(g Gomega) {
+					crd := &apiextensionsv1.CustomResourceDefinition{}
+					g.Expect(k8sClient.Get(ctx, crdNN, crd)).To(Succeed())
+					g.Expect(crd.Labels).To(HaveKeyWithValue(constant.KonfluxOwnerLabel, CRName))
+					g.Expect(crd.Labels).To(HaveKeyWithValue(constant.KonfluxComponentLabel, string(manifests.Integration)))
+					originalUID = crd.UID
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("deleting the CRD and waiting for it to be gone")
+				Expect(k8sClient.Delete(ctx, &apiextensionsv1.CustomResourceDefinition{
+					ObjectMeta: metav1.ObjectMeta{Name: crdNN.Name},
+				})).To(Succeed())
+				Eventually(func(g Gomega) {
+					crd := &apiextensionsv1.CustomResourceDefinition{}
+					err := k8sClient.Get(ctx, crdNN, crd)
+					if err == nil {
+						if crd.DeletionTimestamp != nil && len(crd.Finalizers) > 0 {
+							crd.Finalizers = nil
+							g.Expect(k8sClient.Update(ctx, crd)).To(Succeed())
+						}
+						g.Expect(crd.UID).NotTo(Equal(originalUID), "old CRD still exists")
+						return
+					}
+					g.Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("verifying the CRD is recreated with correct spec and labels")
+				Eventually(func(g Gomega) {
+					crd := &apiextensionsv1.CustomResourceDefinition{}
+					g.Expect(k8sClient.Get(ctx, crdNN, crd)).To(Succeed())
+					g.Expect(crd.UID).NotTo(Equal(originalUID))
+					g.Expect(crd.Spec.Names.Kind).To(Equal(expectedKind))
+					g.Expect(crd.Labels).To(HaveKeyWithValue(constant.KonfluxOwnerLabel, CRName))
+					g.Expect(crd.Labels).To(HaveKeyWithValue(constant.KonfluxComponentLabel, string(manifests.Integration)))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			},
+			isCRDEntries(),
+		)
 	})
 
 	Context("Drift correction", func() {
@@ -1215,5 +1296,44 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				g.Expect(*mwc.Webhooks[0].ClientConfig.Service.Path).To(Equal(originalPath))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
+
+		DescribeTable("restores CRD spec when version is disabled",
+			func(ctx context.Context, crdName string) {
+				integrationService := &konfluxv1alpha1.KonfluxIntegrationService{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				}
+				Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
+				DeferCleanup(testutil.DeleteAndWait, k8sClient, integrationService)
+
+				crdNN := types.NamespacedName{Name: crdName}
+
+				By("waiting for CRD creation with served=true")
+				Eventually(func(g Gomega) {
+					crd := &apiextensionsv1.CustomResourceDefinition{}
+					g.Expect(k8sClient.Get(ctx, crdNN, crd)).To(Succeed())
+					g.Expect(crd.Spec.Versions).NotTo(BeEmpty())
+					g.Expect(crd.Spec.Versions[0].Served).To(BeTrue())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("disabling the served version")
+				var afterTamperRV string
+				Eventually(func(g Gomega) {
+					crd := &apiextensionsv1.CustomResourceDefinition{}
+					g.Expect(k8sClient.Get(ctx, crdNN, crd)).To(Succeed())
+					crd.Spec.Versions[0].Served = false
+					g.Expect(k8sClient.Update(ctx, crd)).To(Succeed())
+					afterTamperRV = crd.ResourceVersion
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("verifying SSA restores served=true")
+				Eventually(func(g Gomega) {
+					crd := &apiextensionsv1.CustomResourceDefinition{}
+					g.Expect(k8sClient.Get(ctx, crdNN, crd)).To(Succeed())
+					g.Expect(crd.ResourceVersion).NotTo(Equal(afterTamperRV), "controller has not reconciled yet")
+					g.Expect(crd.Spec.Versions[0].Served).To(BeTrue())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			},
+			isCRDEntriesNameOnly(),
+		)
 	})
 })
