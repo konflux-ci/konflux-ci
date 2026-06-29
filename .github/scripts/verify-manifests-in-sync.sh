@@ -50,13 +50,15 @@ for dir in "${REPO_ROOT}/operator/upstream-kustomizations"/*; do
 done
 
 echo "== Verifying third-party Helm outputs =="
-export CERT_MANAGER_VERSION TRUST_MANAGER_VERSION
+export CERT_MANAGER_VERSION TRUST_MANAGER_VERSION PROMETHEUS_OPERATOR_VERSION
 bash "${REPO_ROOT}/.github/scripts/update-third-party-manifests.sh" "${REPO_ROOT}"
 
 third_paths=(
   "dependencies/cert-manager/cert-manager.yaml"
   "dependencies/trust-manager/trust-manager.yaml"
   "operator/test/crds/cert-manager/cert-manager.crds.yaml"
+  "operator/test/crds/prometheus/servicemonitors.monitoring.coreos.com.yaml"
+  "dependencies/prometheus-operator-crds/servicemonitors.monitoring.coreos.com.yaml"
 )
 if ! git diff --exit-code -- "${third_paths[@]}" 2>/dev/null; then
   echo "❌ Third-party manifest drift (regenerate with update-third-party-manifests.sh and commit)." >&2

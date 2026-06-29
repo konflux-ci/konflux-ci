@@ -261,6 +261,8 @@ jobs:
 
           # Smee webhook forwarding for E2E tests only (one channel per matrix row)
           SMEE_CHANNEL: ${{ matrix.test_scope == 'integration+e2e' && secrets[matrix.smee_channel] || '' }}
+
+          SKIP_PROMETHEUS_OPERATOR_CRDS: "false"
         run: ./scripts/deploy-local.sh
 
       - name: Show version information
