@@ -91,6 +91,26 @@ Expect(k8sClient.Create(ctx, parentCR)).To(Succeed())
 DeferCleanup(testutil.DeleteAndWait, k8sClient, parentCR)
 ```
 
+**Eventually / Consistently and soft assertions:**
+
+Inside `Eventually` or `Consistently` callbacks, **never** use global `Expect()` — it triggers a hard Ginkgo panic that aborts the callback immediately, preventing `Eventually` from retrying. Instead, use the `func(g Gomega)` callback signature and call `g.Expect()` for soft failures that let `Eventually` retry on the next poll.
+
+Any helper function called inside an `Eventually` block must accept a `Gomega` parameter and use `g.Expect()` internally. See `echoGetG` in `test/go-tests/proxy_test.go` for a real example.
+
+```go
+// ✗ Wrong — global Expect() panics on failure, Eventually cannot retry
+Eventually(func() {
+    resp := echoGet(url)
+    Expect(resp.StatusCode).To(Equal(200))
+}).Should(Succeed())
+
+// ✓ Correct — g.Expect() signals failure softly, Eventually retries
+Eventually(func(g Gomega) {
+    resp := echoGetG(g, url)
+    g.Expect(resp.StatusCode).To(Equal(200))
+}).Should(Succeed())
+```
+
 ```bash
 # Kube-linter (before PR)
 mkdir -p .kube-linter
