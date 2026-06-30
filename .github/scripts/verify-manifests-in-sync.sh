@@ -49,6 +49,19 @@ for dir in "${REPO_ROOT}/operator/upstream-kustomizations"/*; do
   rm -f "${tmp}"
 done
 
+echo "== Verifying upstream-derived envtest CRDs =="
+ec_crd_path="operator/test/crds/enterprise-contract/enterprisecontractpolicies.appstudio.redhat.com.yaml"
+mkdir -p "$(dirname "${ec_crd_path}")"
+yq 'select(.kind == "CustomResourceDefinition")' \
+  operator/pkg/manifests/enterprise-contract/manifests.yaml > "${ec_crd_path}"
+if ! git diff --exit-code -- "${ec_crd_path}" 2>/dev/null; then
+  echo "❌ Upstream-derived envtest CRD drift (run rebuild-upstream-manifests.sh and commit)." >&2
+  git --no-pager diff -- "${ec_crd_path}" >&2 || true
+  fail=true
+else
+  echo "  OK upstream-derived envtest CRDs"
+fi
+
 echo "== Verifying third-party Helm outputs =="
 export CERT_MANAGER_VERSION TRUST_MANAGER_VERSION PROMETHEUS_OPERATOR_VERSION
 bash "${REPO_ROOT}/.github/scripts/update-third-party-manifests.sh" "${REPO_ROOT}"
