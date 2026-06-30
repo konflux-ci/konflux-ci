@@ -3,6 +3,7 @@ operator/pkg/manifests/**
 dependencies/**
 operator/test/crds/cert-manager/**
 operator/test/crds/prometheus/**
+operator/test/crds/enterprise-contract/**
 .github/workflows/verify-manifests-in-sync.yaml
 .github/path-filters/verify-manifests-in-sync.txt
 .github/scripts/verify-manifests-in-sync.sh
