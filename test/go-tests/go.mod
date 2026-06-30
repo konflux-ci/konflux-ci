@@ -76,7 +76,7 @@ replace (
 	k8s.io/mount-utils => k8s.io/mount-utils v0.36.0
 	k8s.io/pod-security-admission => k8s.io/pod-security-admission v0.36.0
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.36.0
-	k8s.io/streaming => k8s.io/streaming v0.36.0
+	k8s.io/streaming => k8s.io/streaming v0.36.2
 	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.24.1
 	vbom.ml/util => github.com/fvbommel/util v0.0.3
 )
