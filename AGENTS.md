@@ -71,45 +71,7 @@ After changing APIs or RBAC annotations, run `make manifests generate` from `ope
 1. **Platform conformance** (`test/go-tests/tests/conformance/`) — end-to-end tests against a deployed Konflux instance, run via `test/e2e/run-e2e.sh`. Uses Ginkgo/Gomega with a shared `Framework` in `test/go-tests/pkg/framework/`.
 2. **Operator unit/integration** (`operator/`) — controller tests using controller-runtime **envtest** (no real cluster needed). **Prefer Gomega matchers** for assertions in unit and functional tests. Shared test utilities in `operator/internal/controller/testutil/`. Run via `make test` from `operator/`.
 
-**Test cleanup patterns:**
-
-envtest has no garbage collector — deleted parent CRs do not cascade-delete their children. Two cleanup patterns handle this:
-
-- **`DeferCleanupParentAndChildren`** — for tests involving **cluster-scoped** children (ClusterRole, ClusterRoleBinding, VWC, MWC, ConsoleLink, SCC). Deletes parent first (stopping reconciles), then explicitly deletes orphaned children. **Never** register separate `DeferCleanup` calls for parent and cluster-scoped children — Ginkgo's LIFO ordering will delete children first while the reconciler is still active, causing flaky timeouts.
-- **`DeferCleanup(testutil.DeleteAndWait, ...)`** — for tests that only need to clean up the parent CR (no cluster-scoped children). Stale namespaced children are harmless: the next test's reconcile updates their ownerReferences to the new parent via `SetControllerReference` in `ApplyOwned`.
-
-```go
-// Cluster-scoped children: use DeferCleanupParentAndChildren
-Expect(k8sClient.Create(ctx, parentCR)).To(Succeed())
-testutil.DeferCleanupParentAndChildren(k8sClient, parentCR,
-    &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "child-role"}},
-    &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "child-binding"}},
-)
-
-// Namespaced-only children: simple DeferCleanup is sufficient
-Expect(k8sClient.Create(ctx, parentCR)).To(Succeed())
-DeferCleanup(testutil.DeleteAndWait, k8sClient, parentCR)
-```
-
-**Eventually / Consistently and soft assertions:**
-
-Inside `Eventually` or `Consistently` callbacks, **never** use global `Expect()` — it triggers a hard Ginkgo panic that aborts the callback immediately, preventing `Eventually` from retrying. Instead, use the `func(g Gomega)` callback signature and call `g.Expect()` for soft failures that let `Eventually` retry on the next poll.
-
-Any helper function called inside an `Eventually` block must accept a `Gomega` parameter and use `g.Expect()` internally. See `echoGetG` in `test/go-tests/proxy_test.go` for a real example.
-
-```go
-// ✗ Wrong — global Expect() panics on failure, Eventually cannot retry
-Eventually(func() {
-    resp := echoGet(url)
-    Expect(resp.StatusCode).To(Equal(200))
-}).Should(Succeed())
-
-// ✓ Correct — g.Expect() signals failure softly, Eventually retries
-Eventually(func(g Gomega) {
-    resp := echoGetG(g, url)
-    g.Expect(resp.StatusCode).To(Equal(200))
-}).Should(Succeed())
-```
+For test cleanup patterns (envtest garbage collection, `DeferCleanupParentAndChildren`) and `Eventually`/`Consistently` soft-assertion conventions, see the [ginkgo-testing](skills/ginkgo-testing/SKILL.md) skill.
 
 ```bash
 # Kube-linter (before PR)
@@ -156,6 +118,7 @@ Detailed guides live in `skills/` — each subdirectory contains a `SKILL.md` wi
 
 | Skill | Use when |
 |-------|----------|
+| [ginkgo-testing](skills/ginkgo-testing/SKILL.md) | Writing or reviewing Ginkgo tests — cleanup patterns, soft assertions |
 | [go-toolchain-upgrade](skills/go-toolchain-upgrade/SKILL.md) | `go.mod`/`go.sum`, Go pins, or `go.mod requires go` CI failures |
 | [create-pr](skills/create-pr/SKILL.md) | Opening PRs, fork `/allow` behavior |
 | [debug-e2e-tests](skills/debug-e2e-tests/SKILL.md) | Investigating failed e2e / OpenShift CI runs |
