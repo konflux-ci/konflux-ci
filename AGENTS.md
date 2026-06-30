@@ -78,7 +78,7 @@ For test cleanup patterns (envtest garbage collection, `DeferCleanupParentAndChi
 CRD self-healing and drift-correction tests (`Watches(&CRD{}, MapCRDToRequest)` path) follow these patterns:
 
 1. **Label assertions** — assert both `KonfluxOwnerLabel` and `KonfluxComponentLabel` on recreated CRDs, in both the initial wait and recreation verification steps.
-2. **Cleanup** — use `DeferCleanupParentAndChildren` for CRD tests (CRDs are cluster-scoped; see cleanup patterns above).
+2. **Cleanup** — use `DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)` for CRD-only tests. Each table entry tests a different CRD name, so there is no LIFO risk. Use `DeferCleanupParentAndChildren` only when the controller also creates other cluster-scoped children (ClusterRole, ClusterRoleBinding, VWC, MWC, etc.).
 3. **Entry descriptions** — use `c.kind` in `DescribeTable` entries for readability. Exception: use `c.name` (FQDN) when the controller has multiple CRDs with the same Kind (e.g., imagecontroller).
 
 ```bash
