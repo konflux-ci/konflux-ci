@@ -39,7 +39,15 @@ done
 # in .github/scripts/update-third-party-manifests.sh.
 EC_CRD_DIR="${WORKSPACE_ROOT}/operator/test/crds/enterprise-contract"
 mkdir -p "${EC_CRD_DIR}"
-yq 'select(.kind == "CustomResourceDefinition")' \
+yq 'select(.kind == "CustomResourceDefinition" and .metadata.name == "enterprisecontractpolicies.appstudio.redhat.com")' \
   "${WORKSPACE_ROOT}/operator/pkg/manifests/enterprise-contract/manifests.yaml" \
   > "${EC_CRD_DIR}/enterprisecontractpolicies.appstudio.redhat.com.yaml"
 echo "Extracted enterprise-contract CRDs for envtest"
+
+# Release has multiple CRDs; only extract the one needed by envtest (Owns() watch target).
+RELEASE_CRD_DIR="${WORKSPACE_ROOT}/operator/test/crds/release"
+mkdir -p "${RELEASE_CRD_DIR}"
+yq 'select(.kind == "CustomResourceDefinition" and .metadata.name == "releaseserviceconfigs.appstudio.redhat.com")' \
+  "${WORKSPACE_ROOT}/operator/pkg/manifests/release/manifests.yaml" \
+  > "${RELEASE_CRD_DIR}/releaseserviceconfigs.appstudio.redhat.com.yaml"
+echo "Extracted release CRDs for envtest"
