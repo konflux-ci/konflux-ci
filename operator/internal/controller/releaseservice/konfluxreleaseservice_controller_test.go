@@ -29,12 +29,14 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -50,7 +52,27 @@ const (
 	selfsignedIssuerName          = "selfsigned-issuer"
 	validatingWebhookName         = "release-service-validating-webhook-configuration"
 	mutatingWebhookName           = "release-service-mutating-webhook-configuration"
+	releaseServiceConfigName      = "release-service-config"
 )
+
+func newReleaseServiceConfig() *unstructured.Unstructured {
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(releaseServiceConfigGVK)
+	obj.SetName(releaseServiceConfigName)
+	obj.SetNamespace(releaseServiceNamespace)
+	return obj
+}
+
+// rsClusterScopedChildren returns all cluster-scoped resources that the reconciler creates.
+// envtest has no garbage collector, so these must be explicitly cleaned up after each test.
+func rsClusterScopedChildren() []client.Object {
+	return []client.Object{
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: managerClusterRoleName}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: managerClusterRoleBindingName}},
+		&admissionregistrationv1.ValidatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: validatingWebhookName}},
+		&admissionregistrationv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: mutatingWebhookName}},
+	}
+}
 
 type rsCRDInfo struct {
 	name string
@@ -463,6 +485,36 @@ var _ = Describe("KonfluxReleaseService Controller", func() {
 				mwc := &admissionregistrationv1.MutatingWebhookConfiguration{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: mutatingWebhookName}, mwc)).To(Succeed())
 				g.Expect(mwc.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("recreates ReleaseServiceConfig when deleted", func(ctx context.Context) {
+			cr := &konfluxv1alpha1.KonfluxReleaseService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, rsClusterScopedChildren()...)
+
+			rscNN := types.NamespacedName{
+				Name:      releaseServiceConfigName,
+				Namespace: releaseServiceNamespace,
+			}
+
+			By("waiting for initial ReleaseServiceConfig creation")
+			Eventually(func(g Gomega) {
+				rsc := newReleaseServiceConfig()
+				g.Expect(k8sClient.Get(ctx, rscNN, rsc)).To(Succeed())
+				g.Expect(rsc.GetLabels()).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("deleting the ReleaseServiceConfig")
+			Expect(k8sClient.Delete(ctx, newReleaseServiceConfig())).To(Succeed())
+
+			By("verifying the ReleaseServiceConfig is recreated with ownership labels")
+			Eventually(func(g Gomega) {
+				rsc := newReleaseServiceConfig()
+				g.Expect(k8sClient.Get(ctx, rscNN, rsc)).To(Succeed())
+				g.Expect(rsc.GetLabels()).To(HaveKey(constant.KonfluxOwnerLabel))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
@@ -1182,6 +1234,48 @@ var _ = Describe("KonfluxReleaseService Controller", func() {
 				g.Expect(mwc.Webhooks).NotTo(BeEmpty())
 				g.Expect(mwc.Webhooks[0].ClientConfig.Service).NotTo(BeNil())
 				g.Expect(*mwc.Webhooks[0].ClientConfig.Service.Path).To(Equal(originalPath))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores ReleaseServiceConfig spec when modified", func(ctx context.Context) {
+			cr := &konfluxv1alpha1.KonfluxReleaseService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, rsClusterScopedChildren()...)
+
+			rscNN := types.NamespacedName{
+				Name:      releaseServiceConfigName,
+				Namespace: releaseServiceNamespace,
+			}
+
+			By("waiting for initial ReleaseServiceConfig creation")
+			var originalDebug interface{}
+			Eventually(func(g Gomega) {
+				rsc := newReleaseServiceConfig()
+				g.Expect(k8sClient.Get(ctx, rscNN, rsc)).To(Succeed())
+				spec, ok := rsc.Object["spec"].(map[string]interface{})
+				g.Expect(ok).To(BeTrue())
+				originalDebug = spec["debug"]
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the ReleaseServiceConfig spec")
+			Eventually(func(g Gomega) {
+				rsc := newReleaseServiceConfig()
+				g.Expect(k8sClient.Get(ctx, rscNN, rsc)).To(Succeed())
+				spec := rsc.Object["spec"].(map[string]interface{})
+				spec["debug"] = true
+				spec["tampered"] = "injected-field"
+				g.Expect(k8sClient.Update(ctx, rsc)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the ReleaseServiceConfig spec is restored")
+			Eventually(func(g Gomega) {
+				rsc := newReleaseServiceConfig()
+				g.Expect(k8sClient.Get(ctx, rscNN, rsc)).To(Succeed())
+				spec := rsc.Object["spec"].(map[string]interface{})
+				g.Expect(spec["debug"]).To(Equal(originalDebug))
+				g.Expect(spec).NotTo(HaveKey("tampered"))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 

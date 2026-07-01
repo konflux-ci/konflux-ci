@@ -64,6 +64,9 @@ const (
 	releaseServiceConfigGroup = "appstudio.redhat.com"
 )
 
+// releaseServiceConfigGVK is the GVK for ReleaseServiceConfig resources.
+var releaseServiceConfigGVK = schema.GroupVersionKind{Group: releaseServiceConfigGroup, Version: "v1alpha1", Kind: releaseServiceConfigKind}
+
 // ReleaseServiceCleanupGVKs defines which resource types should be cleaned up when they are
 // no longer part of the desired state. All resources managed by this controller are always
 // applied, so no cleanup GVKs are needed (they're always tracked and never become orphans).
@@ -261,6 +264,9 @@ func (r *KonfluxReleaseServiceReconciler) SetupWithManager(mgr ctrl.Manager) err
 	if err != nil {
 		return err
 	}
+	rsc := &unstructured.Unstructured{}
+	rsc.SetGroupVersionKind(releaseServiceConfigGVK)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&konfluxv1alpha1.KonfluxReleaseService{}).
 		Named("konfluxreleaseservice").
@@ -279,10 +285,7 @@ func (r *KonfluxReleaseServiceReconciler) SetupWithManager(mgr ctrl.Manager) err
 		Owns(&certmanagerv1.Issuer{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&admissionregistrationv1.MutatingWebhookConfiguration{}).
 		Owns(&admissionregistrationv1.ValidatingWebhookConfiguration{}).
-		// TODO(KFLUXVNGD-892): Add Owns() watch for ReleaseServiceConfig (unstructured)
-		// so that out-of-band deletion/mutation triggers reconcile and re-apply.
-		// Requires adding the upstream CRD to test/crds/ with a sync mechanism.
-		//
+		Owns(rsc, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		// Watch CRDs so that out-of-band deletion triggers reconcile and re-apply.
 		Watches(&apiextensionsv1.CustomResourceDefinition{},
 			handler.EnqueueRequestsFromMapFunc(crdMapFunc)).

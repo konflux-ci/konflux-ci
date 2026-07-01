@@ -481,6 +481,15 @@ func main() {
 	}
 }
 
+// ownsWatchCRDs maps each component to the specific CRD names required by its
+// controller's Owns() watches. Only these CRDs are pre-installed — other CRDs
+// from the same component are applied during normal reconciliation and do not
+// need to exist at startup.
+var ownsWatchCRDs = map[manifests.Component][]string{
+	manifests.EnterpriseContract: {"enterprisecontractpolicies.appstudio.redhat.com"},
+	manifests.Release:            {"releaseserviceconfigs.appstudio.redhat.com"},
+}
+
 // preInstallCRDs applies CRDs from embedded manifests before the manager starts.
 //
 // Why this is needed (and why Watches(CRD) + reconcile is insufficient):
@@ -492,21 +501,23 @@ func main() {
 // present. This function solves the ordering problem by ensuring CRDs exist before any
 // controller sets up watches, using a direct client (bypassing the not-yet-started cache).
 // The controller then takes over full ownership of the CRD during its first reconcile via SSA.
-//
-// The components list below is intentionally limited to those whose controllers use Owns()
-// on CRs of CRDs they install. Components that only Watches(CRD) do not need pre-install.
 func preInstallCRDs(ctx context.Context, c client.Client, store *manifests.ObjectStore) error {
-	components := []manifests.Component{
-		manifests.EnterpriseContract,
-	}
-	for _, comp := range components {
+	for comp, crdNames := range ownsWatchCRDs {
 		objects, err := store.GetForComponent(comp)
 		if err != nil {
 			return fmt.Errorf("getting objects for %s: %w", comp, err)
 		}
+		wanted := make(map[string]bool, len(crdNames))
+		for _, name := range crdNames {
+			wanted[name] = true
+		}
+		installed := make(map[string]bool, len(crdNames))
 		for _, obj := range objects {
 			crd, ok := obj.(*apiextensionsv1.CustomResourceDefinition)
 			if !ok {
+				continue
+			}
+			if !wanted[crd.Name] {
 				continue
 			}
 			if err := c.Patch(ctx, crd, kubernetes.SSAPatch,
@@ -515,11 +526,17 @@ func preInstallCRDs(ctx context.Context, c client.Client, store *manifests.Objec
 			); err != nil {
 				return fmt.Errorf("pre-installing CRD %s: %w", crd.Name, err)
 			}
+			installed[crd.Name] = true
 			setupLog.Info("Pre-installed CRD",
 				"name", crd.Name,
 				"resourceVersion", crd.ResourceVersion,
 				"versions", len(crd.Spec.Versions),
 			)
+		}
+		for _, name := range crdNames {
+			if !installed[name] {
+				return fmt.Errorf("CRD %s not found in %s manifests", name, comp)
+			}
 		}
 	}
 	return nil

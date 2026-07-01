@@ -40,7 +40,7 @@ Requires: `gh` CLI authenticated, `kustomize`
 ./operator/pkg/manifests/process-component.sh build-service "$(pwd)"
 ```
 
-In local mode: updates refs, rebuilds manifests, reports changes.
+In local mode: updates refs, rebuilds manifests, extracts envtest CRDs, reports changes.
 
 ### All Components
 

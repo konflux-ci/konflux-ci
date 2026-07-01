@@ -46,7 +46,7 @@ The script finds the `go run ... ./cmd/main.go` process by its command line, kil
 bash operator/pkg/manifests/rebuild-upstream-manifests.sh .
 ```
 
-This runs `kustomize build` for each component and writes the result to `operator/pkg/manifests/<component>/manifests.yaml`. These YAML files are embedded into the operator binary via `//go:embed`, so the rebuild must happen before `make run` for changes to take effect.
+This runs `kustomize build` for each component and writes the result to `operator/pkg/manifests/<component>/manifests.yaml`, then extracts upstream-derived CRDs needed by envtest into `operator/test/crds/`. These YAML files are embedded into the operator binary via `//go:embed`, so the rebuild must happen before `make run` for changes to take effect.
 
 **Run `make manifests generate`** from `operator/` when ANY of these changed:
 

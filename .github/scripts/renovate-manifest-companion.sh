@@ -127,10 +127,9 @@ bash "${REPO_ROOT}/.github/scripts/update-third-party-manifests.sh" "${REPO_ROOT
 
 git add \
   operator/pkg/manifests \
+  operator/test/crds \
   dependencies/cert-manager/cert-manager.yaml \
   dependencies/trust-manager/trust-manager.yaml \
-  operator/test/crds/cert-manager/cert-manager.crds.yaml \
-  operator/test/crds/prometheus/servicemonitors.monitoring.coreos.com.yaml \
   dependencies/prometheus-operator-crds/servicemonitors.monitoring.coreos.com.yaml
 
 if git diff --cached --quiet; then

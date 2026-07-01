@@ -83,16 +83,37 @@ else
     exit 1
 fi
 set -e
+
+# Extract upstream-derived envtest CRDs for components that use Owns() watches.
+# Must stay in sync with rebuild-upstream-manifests.sh extraction logic.
+case "${COMPONENT}" in
+    enterprise-contract)
+        mkdir -p "${WORKSPACE_ROOT}/operator/test/crds/enterprise-contract"
+        yq 'select(.kind == "CustomResourceDefinition" and .metadata.name == "enterprisecontractpolicies.appstudio.redhat.com")' \
+            "${output_subdir}/manifests.yaml" \
+            > "${WORKSPACE_ROOT}/operator/test/crds/enterprise-contract/enterprisecontractpolicies.appstudio.redhat.com.yaml"
+        echo "  Extracted enterprise-contract envtest CRD"
+        ;;
+    release)
+        mkdir -p "${WORKSPACE_ROOT}/operator/test/crds/release"
+        yq 'select(.kind == "CustomResourceDefinition" and .metadata.name == "releaseserviceconfigs.appstudio.redhat.com")' \
+            "${output_subdir}/manifests.yaml" \
+            > "${WORKSPACE_ROOT}/operator/test/crds/release/releaseserviceconfigs.appstudio.redhat.com.yaml"
+        echo "  Extracted release envtest CRD"
+        ;;
+esac
+
 cd "${WORKSPACE_ROOT}"
 
 # Step 3: Check for changes specific to this component
 echo "Step 3: Checking for changes..."
 component_changes=false
 
-# Check for changes in component-specific files
+# Check for changes in component-specific files (includes derived envtest CRDs)
 if git diff --quiet --exit-code \
         "operator/upstream-kustomizations/${COMPONENT}/" \
-        "operator/pkg/manifests/${COMPONENT}/" 2>/dev/null; then
+        "operator/pkg/manifests/${COMPONENT}/" \
+        "operator/test/crds/${COMPONENT}/" 2>/dev/null; then
     echo "  No changes detected for ${COMPONENT}"
 else
     echo "  Changes detected for ${COMPONENT}"
@@ -137,8 +158,9 @@ else
     git checkout -b "${BRANCH_NAME}" main
 fi
 
-# Add only component-specific changes
+# Add only component-specific changes (includes derived envtest CRDs if present)
 git add "operator/upstream-kustomizations/${COMPONENT}/" "operator/pkg/manifests/${COMPONENT}/" || true
+git add "operator/test/crds/${COMPONENT}/" 2>/dev/null || true
 
 # Check if there are actually changes to commit
 if git diff --cached --quiet; then
