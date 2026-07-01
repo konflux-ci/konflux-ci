@@ -54,9 +54,16 @@ ec_crd_path="operator/test/crds/enterprise-contract/enterprisecontractpolicies.a
 mkdir -p "$(dirname "${ec_crd_path}")"
 yq 'select(.kind == "CustomResourceDefinition")' \
   operator/pkg/manifests/enterprise-contract/manifests.yaml > "${ec_crd_path}"
-if ! git diff --exit-code -- "${ec_crd_path}" 2>/dev/null; then
+# Release has multiple CRDs; only extract the one needed by envtest (Owns() watch target).
+release_crd_path="operator/test/crds/release/releaseserviceconfigs.appstudio.redhat.com.yaml"
+mkdir -p "$(dirname "${release_crd_path}")"
+yq 'select(.kind == "CustomResourceDefinition" and .metadata.name == "releaseserviceconfigs.appstudio.redhat.com")' \
+  operator/pkg/manifests/release/manifests.yaml > "${release_crd_path}"
+
+envtest_crd_paths=("${ec_crd_path}" "${release_crd_path}")
+if ! git diff --exit-code -- "${envtest_crd_paths[@]}" 2>/dev/null; then
   echo "❌ Upstream-derived envtest CRD drift (run rebuild-upstream-manifests.sh and commit)." >&2
-  git --no-pager diff -- "${ec_crd_path}" >&2 || true
+  git --no-pager diff -- "${envtest_crd_paths[@]}" >&2 || true
   fail=true
 else
   echo "  OK upstream-derived envtest CRDs"

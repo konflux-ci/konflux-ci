@@ -123,7 +123,10 @@ Those files must match `kustomize build` for the same pins; CI enforces that via
 Helm-rendered **cert-manager** and **trust-manager** manifests under
 `dependencies/` (and extracted envtest CRDs) must match the chart versions in
 `.github/scripts/export-third-party-chart-env.sh`, which MintMaker/Renovate
-updates alongside the scheduled update workflow.
+updates alongside the scheduled update workflow. Upstream-derived envtest CRDs
+(e.g., enterprise-contract, release) are extracted from
+`operator/pkg/manifests/` by `rebuild-upstream-manifests.sh` into
+`operator/test/crds/`; CI also verifies these stay in sync.
 
 When **MintMaker** or **Renovate** opens a PR that only bumps digests or chart
 versions, a **companion PR** may be opened automatically
