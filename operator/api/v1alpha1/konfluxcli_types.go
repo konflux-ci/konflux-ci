@@ -64,7 +64,3 @@ func (k *KonfluxCLI) GetConditions() []metav1.Condition {
 func (k *KonfluxCLI) SetConditions(conditions []metav1.Condition) {
 	k.Status.Conditions = conditions
 }
-
-func init() {
-	SchemeBuilder.Register(&KonfluxCLI{}, &KonfluxCLIList{})
-}

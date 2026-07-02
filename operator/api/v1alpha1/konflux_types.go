@@ -315,7 +315,3 @@ func (k *KonfluxSpec) IsDefaultTenantEnabled() bool {
 func (k *KonfluxSpec) IsTelemetryEnabled() bool {
 	return k.Telemetry != nil && k.Telemetry.Enabled != nil && *k.Telemetry.Enabled
 }
-
-func init() {
-	SchemeBuilder.Register(&Konflux{}, &KonfluxList{})
-}

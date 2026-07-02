@@ -1,8 +1,10 @@
-# Reference: E2E Debug Skill
+# Reference: E2E Debug Skill (GitHub Actions)
+
+For OpenShift CI (Prow) artifact structure, see [prow-reference.md](prow-reference.md).
 
 ## Log Directory Structure
 
-After downloading artifacts from a failed run, the `logs/` directory contains:
+After downloading artifacts from a failed GitHub Actions run, the `logs/` directory contains:
 
 ```
 logs/

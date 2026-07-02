@@ -124,7 +124,3 @@ func (k *KonfluxIntegrationService) GetConditions() []metav1.Condition {
 func (k *KonfluxIntegrationService) SetConditions(conditions []metav1.Condition) {
 	k.Status.Conditions = conditions
 }
-
-func init() {
-	SchemeBuilder.Register(&KonfluxIntegrationService{}, &KonfluxIntegrationServiceList{})
-}

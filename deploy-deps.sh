@@ -97,6 +97,11 @@ deploy() {
     deploy_cert_manager
     COMPLETED_STEPS+=("$CURRENT_STEP")
 
+    CURRENT_STEP="Prometheus Operator CRDs"
+    echo "📊 Deploying Prometheus Operator CRDs..." >&2
+    deploy_prometheus_operator_crds
+    COMPLETED_STEPS+=("$CURRENT_STEP")
+
     CURRENT_STEP="Trust Manager"
     echo "🤝 Deploying Trust Manager..." >&2
     deploy_trust_manager
@@ -380,6 +385,20 @@ deploy_upstream_certmanager() {
     sleep 5
     retry "kubectl wait --for=condition=Available --timeout=120s deployment -l app.kubernetes.io/instance=cert-manager -n cert-manager" \
           "Cert manager did not become available within the allocated time"
+}
+
+deploy_prometheus_operator_crds() {
+    if kubectl get crd servicemonitors.monitoring.coreos.com &>/dev/null; then
+        echo "⏭️  Skipping Prometheus Operator CRDs (ServiceMonitor CRD already present)" >&2
+        return 0
+    fi
+    : "${SKIP_PROMETHEUS_OPERATOR_CRDS:=true}"
+    if [[ "${SKIP_PROMETHEUS_OPERATOR_CRDS}" == "true" ]]; then
+        echo "⏭️  Skipping Prometheus Operator CRDs (set SKIP_PROMETHEUS_OPERATOR_CRDS=false to install)" >&2
+        return 0
+    fi
+    echo "📊 Installing Prometheus Operator ServiceMonitor CRD..." >&2
+    kubectl apply -k "${script_path}/dependencies/prometheus-operator-crds"
 }
 
 deploy_trust_manager() {

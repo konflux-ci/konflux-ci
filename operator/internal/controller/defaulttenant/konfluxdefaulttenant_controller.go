@@ -252,12 +252,9 @@ func (r *KonfluxDefaultTenantReconciler) SetupWithManager(mgr ctrl.Manager) erro
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.mapSourceSecretToDefaultTenant),
 			builder.WithPredicates(
-				crpredicate.And(
-					predicate.IgnoreStatusUpdatesPredicate,
-					crpredicate.NewPredicateFuncs(func(o client.Object) bool {
-						return o.GetNamespace() == RegistrySourceSecretNamespace && o.GetName() == RegistrySourceSecretName
-					}),
-				),
+				crpredicate.NewPredicateFuncs(func(o client.Object) bool {
+					return o.GetNamespace() == RegistrySourceSecretNamespace && o.GetName() == RegistrySourceSecretName
+				}),
 			)).
 		Complete(r)
 }

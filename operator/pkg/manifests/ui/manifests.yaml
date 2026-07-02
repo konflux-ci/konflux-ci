@@ -263,7 +263,7 @@ data:
 
     # Process kubearchive template
     if [ "${KUBEARCHIVE_ENABLED:-}" = "true" ] && [ -f "${TEMPLATES_DIR}/kubearchive.caddy" ]; then
-      hostname="${KUBEARCHIVE_HOSTNAME:-kubearchive-api-server.kubearchive.svc.cluster.local}"
+      hostname="${KUBEARCHIVE_HOSTNAME:-kubearchive-api-server.product-kubearchive.svc.cluster.local}"
       sed "s/__KUBEARCHIVE_HOSTNAME__/${hostname}/g" \
         "${TEMPLATES_DIR}/kubearchive.caddy" > "${SNIPPETS_DIR}/kubearchive.caddy"
       log "kubearchive endpoint enabled (${hostname})"
@@ -318,7 +318,7 @@ data:
     log "done"
 kind: ConfigMap
 metadata:
-  name: proxy-generate-config-c4c49hd24b
+  name: proxy-generate-config-thtfcb7h98
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -434,7 +434,7 @@ spec:
             secretKeyRef:
               key: client-secret
               name: oauth2-proxy-client-secret
-        image: quay.io/konflux-ci/dex@sha256:dfcac2608b259969636d7c58f1d163fb2753ca515a053bb9a1e5a2f216006fcc
+        image: quay.io/konflux-ci/dex@sha256:d065a38902a0103383be31ea96329846b5e44693da349b1192297e087af3db44
         livenessProbe:
           httpGet:
             path: /healthz/ready
@@ -538,7 +538,7 @@ spec:
         - /etc/caddy/Caddyfile
         - --adapter
         - caddyfile
-        image: quay.io/konflux-ci/reverse-proxy@sha256:15656954fac84353db8f7f193bcd770c06819a8c42cf98f1a21ce3ef9e35455e
+        image: quay.io/konflux-ci/reverse-proxy@sha256:ecaabf6d6a5bbb0c4cadf50909277fba156c592283e562aa6130dd2fe260c660
         livenessProbe:
           failureThreshold: 3
           httpGet:
@@ -622,7 +622,7 @@ spec:
             secretKeyRef:
               key: cookie-secret
               name: oauth2-proxy-cookie-secret
-        image: quay.io/konflux-ci/oauth2-proxy@sha256:48aa053244d2a9f476dc533c27fbea90210da4306dac19134c3850a293975cb5
+        image: quay.io/konflux-ci/oauth2-proxy@sha256:fcc1d7a49b86e6aa1891ac173325f0c1c06b7c71c58dd5ed72fe688b2c251e18
         name: oauth2-proxy
         ports:
         - containerPort: 6000
@@ -644,7 +644,7 @@ spec:
         - -R
         - /opt/app-root/src/.
         - /mnt/static-content/
-        image: quay.io/konflux-ci/konflux-ui@sha256:c4bceef53470dbbd735d6140108f974a7cf79715048318fa1243b232aa65158b
+        image: quay.io/konflux-ci/konflux-ui@sha256:5730bfed253a4e7b33226c05195166f0adde81020df7bfbb7edd42376bf818ad
         name: copy-static-content
         resources:
           limits:
@@ -662,7 +662,7 @@ spec:
       - command:
         - sh
         - /var/run/scripts/konflux-ci.dev/generate-proxy-config.sh
-        image: quay.io/konflux-ci/konflux-ui@sha256:c4bceef53470dbbd735d6140108f974a7cf79715048318fa1243b232aa65158b
+        image: quay.io/konflux-ci/konflux-ui@sha256:5730bfed253a4e7b33226c05195166f0adde81020df7bfbb7edd42376bf818ad
         name: generate-proxy-config
         resources:
           limits:
@@ -700,7 +700,7 @@ spec:
           items:
           - key: generate-proxy-config.sh
             path: generate-proxy-config.sh
-          name: proxy-generate-config-c4c49hd24b
+          name: proxy-generate-config-thtfcb7h98
         name: generate-proxy-config-script
       - name: kube-api-token
         projected:

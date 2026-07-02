@@ -291,23 +291,37 @@ var _ = Describe("Test Proxy endpoints", func() {
 	})
 
 	Describe("Test Kite endpoint", func() {
-		const kitePath = "/api/k8s/plugins/kite/echo"
+		kitePath := kiteEndpoint.BasePath
+
+		BeforeEach(func() {
+			if epModes.Kite == modeSkip {
+				Skip("Kite endpoint not enabled in Konflux CR")
+			}
+		})
 
 		It("should proxy authenticated requests with impersonation headers", func() {
 			token, err := ExtractToken(proxyClient)
 			Expect(err).NotTo(HaveOccurred())
 
-			headers := echoGet(kitePath, token)
-			Expect(headers).To(HaveKey("Authorization"),
-				"echo should receive Authorization header with kube_token")
-			Expect(headers["Authorization"]).To(HaveLen(1))
-			Expect(headers["Authorization"][0]).To(HavePrefix("Bearer "),
-				"Authorization should be a Bearer token (kube SA token)")
-
-			Expect(headers).To(HaveKey("Impersonate-User"),
-				"echo should receive Impersonate-User header")
-			Expect(headers["Impersonate-User"][0]).To(Equal(expectedImpersonateUser()),
-				"Impersonate-User should match the authenticated user")
+			if epModes.Kite == modeEcho {
+				// Poll to tolerate late service-serving cert projection on
+				// OpenShift, matching the Watson test pattern.
+				var lastHeaders map[string][]string
+				Eventually(func(g Gomega) {
+					lastHeaders = echoGetG(g, kitePath+"echo", token)
+					g.Expect(lastHeaders).To(HaveKey("Authorization"),
+						"echo should receive Authorization header with kube_token")
+					g.Expect(lastHeaders["Authorization"]).To(HaveLen(1))
+					g.Expect(lastHeaders["Authorization"][0]).To(HavePrefix("Bearer "),
+						"Authorization should be a Bearer token (kube SA token)")
+					g.Expect(lastHeaders).To(HaveKey("Impersonate-User"),
+						"echo should receive Impersonate-User header")
+					g.Expect(lastHeaders["Impersonate-User"][0]).To(Equal(expectedImpersonateUser()),
+						"Impersonate-User should match the authenticated user")
+				}).WithTimeout(2 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
+			} else {
+				expectEndpointRouted(kitePath, token)
+			}
 		})
 
 		It("should reject unauthenticated requests", func() {
@@ -321,20 +335,34 @@ var _ = Describe("Test Proxy endpoints", func() {
 	})
 
 	Describe("Test KubeArchive endpoint", func() {
-		const kubearchivePath = "/api/k8s/plugins/kubearchive/echo"
+		kubearchivePath := kubearchiveEndpoint.BasePath
+
+		BeforeEach(func() {
+			if epModes.KubeArchive == modeSkip {
+				Skip("KubeArchive endpoint not enabled in Konflux CR")
+			}
+		})
 
 		It("should proxy authenticated requests with impersonation headers", func() {
 			token, err := ExtractToken(proxyClient)
 			Expect(err).NotTo(HaveOccurred())
 
-			headers := echoGet(kubearchivePath, token)
-			Expect(headers).To(HaveKey("Authorization"),
-				"echo should receive Authorization header with kube_token")
-			Expect(headers["Authorization"][0]).To(HavePrefix("Bearer "))
-
-			Expect(headers).To(HaveKey("Impersonate-User"),
-				"echo should receive Impersonate-User header")
-			Expect(headers["Impersonate-User"][0]).To(Equal(expectedImpersonateUser()))
+			if epModes.KubeArchive == modeEcho {
+				// Poll to tolerate late service-serving cert projection on
+				// OpenShift, matching the Watson test pattern.
+				var lastHeaders map[string][]string
+				Eventually(func(g Gomega) {
+					lastHeaders = echoGetG(g, kubearchivePath+"echo", token)
+					g.Expect(lastHeaders).To(HaveKey("Authorization"),
+						"echo should receive Authorization header with kube_token")
+					g.Expect(lastHeaders["Authorization"][0]).To(HavePrefix("Bearer "))
+					g.Expect(lastHeaders).To(HaveKey("Impersonate-User"),
+						"echo should receive Impersonate-User header")
+					g.Expect(lastHeaders["Impersonate-User"][0]).To(Equal(expectedImpersonateUser()))
+				}).WithTimeout(2 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
+			} else {
+				expectEndpointRouted(kubearchivePath, token)
+			}
 		})
 
 		It("should reject unauthenticated requests", func() {
@@ -348,28 +376,38 @@ var _ = Describe("Test Proxy endpoints", func() {
 	})
 
 	Describe("Test Watson chatbot endpoint", func() {
-		const watsonPath = "/api/chatbot/echo"
+		watsonPath := watsonEndpoint.BasePath
+
+		BeforeEach(func() {
+			if epModes.Watson == modeSkip {
+				Skip("Watson endpoint not enabled in Konflux CR")
+			}
+		})
 
 		It("should proxy authenticated requests with Basic auth header", func() {
 			token, err := ExtractToken(proxyClient)
 			Expect(err).NotTo(HaveOccurred())
 
-			expectedBasic := base64.StdEncoding.EncodeToString([]byte("apikey:" + watsonTestAPIKey))
+			if epModes.Watson == modeEcho {
+				expectedBasic := base64.StdEncoding.EncodeToString([]byte("apikey:" + watsonTestAPIKey))
 
-			// The watson-config Secret is projected as a volume and cached by
-			// file_watcher. Kubernetes may take up to ~60s to project a new
-			// Secret, so we poll until the auth value is populated.
-			var lastHeaders map[string][]string
-			Eventually(func(g Gomega) {
-				lastHeaders = echoGet(watsonPath, token)
-				g.Expect(lastHeaders).To(HaveKey("Authorization"))
-				g.Expect(lastHeaders["Authorization"]).To(HaveLen(1))
-				g.Expect(lastHeaders["Authorization"][0]).To(Equal("Basic "+expectedBasic),
-					"Authorization should be Basic auth derived from watson API key")
-			}).WithTimeout(2*time.Minute).WithPolling(5*time.Second).Should(Succeed())
+				// The watson-config Secret is projected as a volume and cached by
+				// file_watcher. Kubernetes may take up to ~60s to project a new
+				// Secret, so we poll until the auth value is populated.
+				var lastHeaders map[string][]string
+				Eventually(func(g Gomega) {
+					lastHeaders = echoGetG(g, watsonPath+"echo", token)
+					g.Expect(lastHeaders).To(HaveKey("Authorization"))
+					g.Expect(lastHeaders["Authorization"]).To(HaveLen(1))
+					g.Expect(lastHeaders["Authorization"][0]).To(Equal("Basic "+expectedBasic),
+						"Authorization should be Basic auth derived from watson API key")
+				}).WithTimeout(2 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 
-			Expect(lastHeaders).NotTo(HaveKey("Impersonate-User"),
-				"watson endpoint should NOT use impersonation")
+				Expect(lastHeaders).NotTo(HaveKey("Impersonate-User"),
+					"watson endpoint should NOT use impersonation")
+			} else {
+				expectEndpointRouted(watsonPath, token)
+			}
 		})
 
 		It("should reject unauthenticated requests", func() {
@@ -389,9 +427,8 @@ type echoResponseBody struct {
 	Headers map[string][]string `json:"headers"`
 }
 
-// echoGet sends an authenticated GET to the proxy and parses the echo server JSON response.
-// Returns the headers map from the echo response.
-func echoGet(path, token string) map[string][]string {
+func expectEndpointRouted(path, token string) {
+	GinkgoHelper()
 	request, err := http.NewRequest("GET", proxyURL(path), nil)
 	Expect(err).NotTo(HaveOccurred())
 	request.Header.Set("Authorization", "Bearer "+token)
@@ -402,11 +439,37 @@ func echoGet(path, token string) map[string][]string {
 
 	body, err := io.ReadAll(response.Body)
 	Expect(err).NotTo(HaveOccurred())
-	Expect(response.StatusCode).To(Equal(200), "echo request failed: %s", string(body))
+
+	Expect(response.StatusCode).To(BeNumerically("<", 500),
+		"backend at %s returned a server error (HTTP %d)", path, response.StatusCode)
+	Expect(string(body)).NotTo(HavePrefix("<!doctype html>"),
+		"expected a backend service response, got the SPA HTML fallback — proxy may not be routing to the endpoint")
+}
+
+// echoGetG performs a GET against the echo server and returns the echoed
+// headers. It uses the provided Gomega instance for all assertions so that
+// callers inside an Eventually block get soft failures (retries) instead of
+// hard Ginkgo panics.
+func echoGetG(g Gomega, path, token string) map[string][]string {
+	request, err := http.NewRequest("GET", proxyURL(path), nil)
+	g.Expect(err).NotTo(HaveOccurred())
+	request.Header.Set("Authorization", "Bearer "+token)
+
+	response, err := proxyHTTPClient.Do(request)
+	g.Expect(err).NotTo(HaveOccurred())
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(response.StatusCode).To(Equal(200), "echo request failed: %s", string(body))
 
 	var echo echoResponseBody
-	Expect(json.Unmarshal(body, &echo)).To(Succeed(), "failed to parse echo response: %s", string(body))
+	g.Expect(json.Unmarshal(body, &echo)).To(Succeed(), "failed to parse echo response: %s", string(body))
 	return echo.Headers
+}
+
+func echoGet(path, token string) map[string][]string {
+	return echoGetG(Default, path, token)
 }
 
 type TokenResponse struct {

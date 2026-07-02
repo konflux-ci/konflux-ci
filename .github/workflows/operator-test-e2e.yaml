@@ -148,6 +148,20 @@ jobs:
     runs-on: ${{ matrix.runner }}
     needs: [check-prerequisites, check-changes]
     if: needs.check-changes.outputs.operator == 'true'
+    # Cancel superseded test jobs per PR/arch to reduce shared smee contention (#6551).
+    # Job-level (not workflow-level) so report-operator-e2e-status can finalize /allow
+    # Checks API runs when a superseded run's test job is cancelled.
+    # Group key (first match wins): pull_request.number, client_payload.pr_number,
+    # ref (merge queue), run_id; matrix.arch keeps AMD64/ARM64 from cancelling each other.
+    concurrency:
+      group: >-
+        operator-e2e-${{
+          github.event.pull_request.number
+          || github.event.client_payload.pr_number
+          || github.ref
+          || github.run_id
+        }}-${{ matrix.arch }}
+      cancel-in-progress: true
     strategy:
       fail-fast: false
       matrix:
@@ -261,6 +275,8 @@ jobs:
 
           # Smee webhook forwarding for E2E tests only (one channel per matrix row)
           SMEE_CHANNEL: ${{ matrix.test_scope == 'integration+e2e' && secrets[matrix.smee_channel] || '' }}
+
+          SKIP_PROMETHEUS_OPERATOR_CRDS: "false"
         run: ./scripts/deploy-local.sh
 
       - name: Show version information

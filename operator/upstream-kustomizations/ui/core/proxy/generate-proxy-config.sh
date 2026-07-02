@@ -54,7 +54,7 @@ fi
 
 # Process kubearchive template
 if [ "${KUBEARCHIVE_ENABLED:-}" = "true" ] && [ -f "${TEMPLATES_DIR}/kubearchive.caddy" ]; then
-  hostname="${KUBEARCHIVE_HOSTNAME:-kubearchive-api-server.kubearchive.svc.cluster.local}"
+  hostname="${KUBEARCHIVE_HOSTNAME:-kubearchive-api-server.product-kubearchive.svc.cluster.local}"
   sed "s/__KUBEARCHIVE_HOSTNAME__/${hostname}/g" \
     "${TEMPLATES_DIR}/kubearchive.caddy" > "${SNIPPETS_DIR}/kubearchive.caddy"
   log "kubearchive endpoint enabled (${hostname})"

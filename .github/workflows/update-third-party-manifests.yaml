@@ -41,6 +41,7 @@ jobs:
           eval "$(bash "${GITHUB_WORKSPACE}/.github/scripts/export-third-party-chart-env.sh")"
           echo "CERT_MANAGER_VERSION=${CERT_MANAGER_VERSION}" >> "${GITHUB_ENV}"
           echo "TRUST_MANAGER_VERSION=${TRUST_MANAGER_VERSION}" >> "${GITHUB_ENV}"
+          echo "PROMETHEUS_OPERATOR_VERSION=${PROMETHEUS_OPERATOR_VERSION}" >> "${GITHUB_ENV}"
 
       - name: Generate third-party manifests
         run: .github/scripts/update-third-party-manifests.sh

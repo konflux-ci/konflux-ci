@@ -293,7 +293,3 @@ func (k *KonfluxUI) ResolveDexEndpoint(defaultEndpoint *url.URL) *url.URL {
 		Host:   host,
 	}
 }
-
-func init() {
-	SchemeBuilder.Register(&KonfluxUI{}, &KonfluxUIList{})
-}

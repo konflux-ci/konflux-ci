@@ -500,7 +500,3 @@ func (s *KonfluxInfoSpec) GetClusterConfigData() ClusterConfigData {
 	}
 	return *s.ClusterConfig.Data
 }
-
-func init() {
-	SchemeBuilder.Register(&KonfluxInfo{}, &KonfluxInfoList{})
-}

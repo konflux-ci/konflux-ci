@@ -8,15 +8,15 @@ data:
     default-pipeline-name: docker-build-oci-ta-min
     pipelines:
     - name: fbc-builder
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-fbc-builder@sha256:e85232110243168a19afe241947984cb8d639907f6f60581934e00b84a35b3c6
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-fbc-builder@sha256:d39b588bc656c0f9b517fe3199603d2b8bea2dcb33167d4ddb717b03ea4b8565
     - name: docker-build
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build@sha256:1ffdc863e797602874f78155f71292c662fcaab2db4045df33b5734804039d36
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build@sha256:f113cee3ec8555b1f8d2e1bea82e564983c85adabd99324bef262f18e3f3936a
     - name: docker-build-oci-ta
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta@sha256:91fbade67abcc2fc69c20123d4015c51fe76ae42dfdec1a05b39fb19f29701f5
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta@sha256:53f8f231f67c5952fcd7f5431821ab19e71c12919c4cc94626536a55eb0a869c
     - name: tekton-bundle-builder
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder@sha256:9999635c07e1e150f38dbbccff89cd3d40ff5e83e3e0a19d5201d67fa8661796
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder@sha256:291007fbe047cd0744d92d4f1632db2ce9a8da46d72b9d531403aa1b3b8d2492
     - name: tekton-bundle-builder-oci-ta
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder-oci-ta@sha256:f9bb4b6f4643b3f2a37d5d7df8c63146db6ac3ce70c0472d1fb7670c93d5250a
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder-oci-ta@sha256:c6afe6628e4c14349bee71fc24567d9d2164b945feacb443fc63e346ae3d50c4
     - name: docker-build-oci-ta-min
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta-min@sha256:5dd65b4520bba8321bb96612cdf36e7be3658bcdc7caef292235c23650affa8a
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta-min@sha256:477965f7dcbae653d3206620390114c4599651de3b20b959bb073c82e523db55
       description: minimal version of the docker-build-oci-ta pipeline, which requires less compute resources. In addition, it doesn't contain tasks which require user provided secrets.

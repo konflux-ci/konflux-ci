@@ -139,7 +139,3 @@ func (k *KonfluxSegmentBridge) GetConditions() []metav1.Condition {
 func (k *KonfluxSegmentBridge) SetConditions(conditions []metav1.Condition) {
 	k.Status.Conditions = conditions
 }
-
-func init() {
-	SchemeBuilder.Register(&KonfluxSegmentBridge{}, &KonfluxSegmentBridgeList{})
-}

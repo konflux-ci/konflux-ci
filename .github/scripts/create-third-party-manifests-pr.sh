@@ -11,10 +11,11 @@ set -euo pipefail
 #   REPO_ROOT - Repository root (default: GITHUB_WORKSPACE or git rev-parse --show-toplevel)
 #
 # Environment:
-#   GH_TOKEN               - Used for push and gh pr (workflow provides this)
-#   CERT_MANAGER_VERSION   - Required. For commit/PR message.
-#   TRUST_MANAGER_VERSION  - Required. For commit/PR message.
-#   DRY_RUN                - If set, do not push or create PR (useful for local testing)
+#   GH_TOKEN                    - Used for push and gh pr (workflow provides this)
+#   CERT_MANAGER_VERSION        - Pin from export-third-party-chart-env.sh (for messages)
+#   TRUST_MANAGER_VERSION       - Pin from export-third-party-chart-env.sh (for messages)
+#   PROMETHEUS_OPERATOR_VERSION - Pin from export-third-party-chart-env.sh (for messages)
+#   DRY_RUN                     - If set, do not push or create PR (useful for local testing)
 #
 # In GitHub Actions: creates branch update-third-party-manifests, commits, pushes, creates/updates PR.
 # Locally (GITHUB_ACTIONS != true): skips git config; with DRY_RUN skips push and PR.
@@ -22,7 +23,16 @@ set -euo pipefail
 REPO_ROOT="${1:-${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel)}}"
 CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:?CERT_MANAGER_VERSION is required}"
 TRUST_MANAGER_VERSION="${TRUST_MANAGER_VERSION:?TRUST_MANAGER_VERSION is required}"
+PROMETHEUS_OPERATOR_VERSION="${PROMETHEUS_OPERATOR_VERSION:?PROMETHEUS_OPERATOR_VERSION is required}"
 BRANCH_NAME="update-third-party-manifests"
+
+readonly -a THIRD_PARTY_PATHS=(
+  dependencies/cert-manager/cert-manager.yaml
+  dependencies/trust-manager/trust-manager.yaml
+  operator/test/crds/cert-manager/cert-manager.crds.yaml
+  operator/test/crds/prometheus/servicemonitors.monitoring.coreos.com.yaml
+  dependencies/prometheus-operator-crds/servicemonitors.monitoring.coreos.com.yaml
+)
 
 cd "$REPO_ROOT"
 
@@ -38,10 +48,52 @@ fi
 git checkout main
 git fetch origin main
 
-if git diff --quiet -- dependencies/ operator/test/crds/; then
+changed_paths=()
+for path in "${THIRD_PARTY_PATHS[@]}"; do
+  if ! git diff --quiet -- "$path"; then
+    changed_paths+=("$path")
+  fi
+done
+
+if [ "${#changed_paths[@]}" -eq 0 ]; then
   echo "No changes to third-party manifests or envtest CRDs."
   exit 0
 fi
+
+cert_manager_changed=false
+trust_manager_changed=false
+prometheus_changed=false
+for path in "${changed_paths[@]}"; do
+  case "$path" in
+    dependencies/cert-manager/*|operator/test/crds/cert-manager/*)
+      cert_manager_changed=true
+      ;;
+    dependencies/trust-manager/*)
+      trust_manager_changed=true
+      ;;
+    *prometheus*)
+      prometheus_changed=true
+      ;;
+  esac
+done
+
+commit_bullets=()
+pr_versions=()
+if [ "$cert_manager_changed" = true ]; then
+  commit_bullets+=("- cert-manager: ${CERT_MANAGER_VERSION} (Helm)")
+  pr_versions+=("- **cert-manager:** ${CERT_MANAGER_VERSION}")
+fi
+if [ "$trust_manager_changed" = true ]; then
+  commit_bullets+=("- trust-manager: ${TRUST_MANAGER_VERSION} (Helm)")
+  pr_versions+=("- **trust-manager:** ${TRUST_MANAGER_VERSION}")
+fi
+if [ "$prometheus_changed" = true ]; then
+  commit_bullets+=("- prometheus-operator ServiceMonitor CRD: ${PROMETHEUS_OPERATOR_VERSION}")
+  pr_versions+=("- **prometheus-operator ServiceMonitor CRD:** ${PROMETHEUS_OPERATOR_VERSION}")
+fi
+
+commit_body="$(printf '%s\n' "${commit_bullets[@]}")"
+pr_version_block="$(printf '%s\n' "${pr_versions[@]}")"
 
 # Delete local branch if it exists
 if git show-ref --verify --quiet refs/heads/"${BRANCH_NAME}"; then
@@ -58,12 +110,13 @@ else
   git checkout -b "${BRANCH_NAME}" main
 fi
 
-git add dependencies/cert-manager/cert-manager.yaml dependencies/trust-manager/trust-manager.yaml operator/test/crds/cert-manager/cert-manager.crds.yaml
-git commit -m "chore(deps): update cert-manager and trust-manager manifests
+git add "${changed_paths[@]}"
+git commit -m "$(cat <<EOF
+chore(deps): update third-party manifests
 
-- cert-manager: ${CERT_MANAGER_VERSION} (Helm)
-- trust-manager: ${TRUST_MANAGER_VERSION} (Helm)
-- envtest CRDs: extracted from cert-manager Helm output"
+${commit_body}
+EOF
+)"
 
 if [ -n "${DRY_RUN:-}" ]; then
   echo "DRY_RUN: would push branch and create/update PR"
@@ -79,22 +132,16 @@ if ! git push origin "${BRANCH_NAME}" --force 2>&1; then
 fi
 
 # Create or update PR
-PR_TITLE="chore(deps): update cert-manager and trust-manager manifests"
-PR_BODY="## Third-Party Manifests Update
+PR_TITLE="chore(deps): update third-party manifests"
+PR_BODY="$(cat <<EOF
+## Third-Party Manifests Update
 
-This PR updates Helm-rendered manifests for cert-manager and trust-manager under \`dependencies/\`.
-
-### Versions
-- **cert-manager:** ${CERT_MANAGER_VERSION}
-- **trust-manager:** ${TRUST_MANAGER_VERSION}
-
-### What changed?
-- \`dependencies/cert-manager/cert-manager.yaml\` – generated with \`helm template\` (OCI chart)
-- \`dependencies/trust-manager/trust-manager.yaml\` – generated with \`helm template\` (Jetstack repo)
-- \`operator/test/crds/cert-manager/cert-manager.crds.yaml\` – CRDs extracted from cert-manager output for envtest
+${pr_version_block}
 
 ---
-*This PR was automatically created by the [Update Third-Party Manifests workflow](.github/workflows/update-third-party-manifests.yaml)*"
+*This PR was automatically created by the [Update Third-Party Manifests workflow](.github/workflows/update-third-party-manifests.yaml)*
+EOF
+)"
 
 EXISTING_PR=$(gh pr view "${BRANCH_NAME}" \
   --json number,state \
