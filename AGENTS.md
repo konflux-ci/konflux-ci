@@ -120,6 +120,26 @@ PRs trigger the following workflows:
 - APIs defined in `operator/api/v1alpha1` — many `Konflux*` kinds (Konflux, BuildService, IntegrationService, ReleaseService, UI, RBAC, etc.)
 - Per-service reconcilers in `operator/internal/controller/<subservice>/`
 
+## Updating OCI Image Digests
+
+When updating pipeline bundle or data image digests (e.g., in
+`build-pipeline-config.yaml` or enterprise-contract policy files):
+
+1. **Always verify the digest against the OCI registry.** Use
+   `skopeo inspect --no-tags docker://<image>:<tag> | jq .Digest`
+   or `crane digest <image>:<tag>`. Do NOT copy digests from other
+   PRs or issues without verification — they may be stale.
+2. **After updating files in `upstream-kustomizations/`,** regenerate
+   rendered manifests (see the
+   [update-upstream-deps](skills/update-upstream-deps/SKILL.md)
+   skill for commands).
+3. **For Conforma trust violations** (e.g.,
+   `tasks.required_untrusted_task_found`): check whether the root
+   cause is an upstream issue in `build-definitions` before creating
+   an in-repo workaround. The `data-acceptable-bundles` image is
+   generated upstream — if the upstream process is broken, wait for
+   the fix rather than pinning a stale digest.
+
 ## Skills
 
 Detailed guides live in `skills/` — each subdirectory contains a `SKILL.md` with instructions.
