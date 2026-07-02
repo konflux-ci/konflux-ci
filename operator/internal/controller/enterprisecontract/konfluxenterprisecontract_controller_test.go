@@ -18,6 +18,7 @@ package enterprisecontract
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -256,6 +257,68 @@ var _ = Describe("KonfluxEnterpriseContract Controller", Ordered, func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
+		It("recreates EnterpriseContractPolicy when deleted (skipPolicies=false)", func(ctx context.Context) {
+			ec := &konfluxv1alpha1.KonfluxEnterpriseContract{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxEnterpriseContractSpec{
+					SkipPolicies: false,
+				},
+			}
+			Expect(k8sClient.Create(ctx, ec)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, ec, ecClusterScopedChildren()...)
+
+			ecpNN := types.NamespacedName{Name: "default", Namespace: ecNamespace}
+
+			By("waiting for initial EnterpriseContractPolicy creation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, ecpNN, newDefaultECPolicy())).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("deleting the EnterpriseContractPolicy")
+			Expect(k8sClient.Delete(ctx, newDefaultECPolicy())).To(Succeed())
+
+			By("verifying the EnterpriseContractPolicy is recreated with ownership labels")
+			Eventually(func(g Gomega) {
+				ecp := newDefaultECPolicy()
+				g.Expect(k8sClient.Get(ctx, ecpNN, ecp)).To(Succeed())
+				g.Expect(ecp.GetLabels()).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("does not recreate EnterpriseContractPolicy when deleted with skipPolicies=true", func(ctx context.Context) {
+			By("creating CR with skipPolicies=false so the policy is deployed")
+			ec := &konfluxv1alpha1.KonfluxEnterpriseContract{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, ec)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, ec, ecClusterScopedChildren()...)
+
+			ecpNN := types.NamespacedName{Name: "default", Namespace: ecNamespace}
+
+			By("waiting for initial EnterpriseContractPolicy creation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, ecpNN, newDefaultECPolicy())).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("switching to skipPolicies=true")
+			updated := &konfluxv1alpha1.KonfluxEnterpriseContract{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
+			updated.Spec.SkipPolicies = true
+			Expect(k8sClient.Update(ctx, updated)).To(Succeed())
+
+			By("waiting for the EnterpriseContractPolicy to be removed via orphan cleanup")
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, ecpNN, newDefaultECPolicy())
+				g.Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the EnterpriseContractPolicy stays deleted after Owns() reconcile settles")
+			Consistently(func(g Gomega) {
+				err := k8sClient.Get(ctx, ecpNN, newDefaultECPolicy())
+				g.Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
+			}).WithTimeout(5 * time.Second).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
 		It("recreates RoleBinding when deleted", func(ctx context.Context) {
 			ec := &konfluxv1alpha1.KonfluxEnterpriseContract{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
@@ -403,6 +466,55 @@ var _ = Describe("KonfluxEnterpriseContract Controller", Ordered, func() {
 				cm := &corev1.ConfigMap{}
 				g.Expect(k8sClient.Get(ctx, cmNN, cm)).To(Succeed())
 				g.Expect(cm.Data).To(HaveKeyWithValue(originalKey, originalValue))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores EnterpriseContractPolicy spec when modified (skipPolicies=false)", func(ctx context.Context) {
+			ec := &konfluxv1alpha1.KonfluxEnterpriseContract{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxEnterpriseContractSpec{
+					SkipPolicies: false,
+				},
+			}
+			Expect(k8sClient.Create(ctx, ec)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, ec, ecClusterScopedChildren()...)
+
+			ecpNN := types.NamespacedName{Name: "default", Namespace: ecNamespace}
+
+			By("waiting for initial EnterpriseContractPolicy creation")
+			var originalSources []interface{}
+			Eventually(func(g Gomega) {
+				ecp := newDefaultECPolicy()
+				g.Expect(k8sClient.Get(ctx, ecpNN, ecp)).To(Succeed())
+				spec, ok := ecp.Object["spec"].(map[string]interface{})
+				g.Expect(ok).To(BeTrue())
+				sources, ok := spec["sources"].([]interface{})
+				g.Expect(ok).To(BeTrue())
+				g.Expect(sources).NotTo(BeEmpty())
+				originalSources = sources
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the EnterpriseContractPolicy spec")
+			Eventually(func(g Gomega) {
+				ecp := newDefaultECPolicy()
+				g.Expect(k8sClient.Get(ctx, ecpNN, ecp)).To(Succeed())
+				spec := ecp.Object["spec"].(map[string]interface{})
+				spec["sources"] = []interface{}{
+					map[string]interface{}{
+						"name":   "tampered",
+						"policy": []interface{}{"oci::https://tampered.example.com"},
+					},
+				}
+				g.Expect(k8sClient.Update(ctx, ecp)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the EnterpriseContractPolicy spec is restored")
+			Eventually(func(g Gomega) {
+				ecp := newDefaultECPolicy()
+				g.Expect(k8sClient.Get(ctx, ecpNN, ecp)).To(Succeed())
+				spec := ecp.Object["spec"].(map[string]interface{})
+				sources := spec["sources"].([]interface{})
+				g.Expect(sources).To(Equal(originalSources))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 

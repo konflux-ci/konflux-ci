@@ -23,6 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -168,6 +169,9 @@ func (r *KonfluxEnterpriseContractReconciler) SetupWithManager(mgr ctrl.Manager)
 	if err != nil {
 		return err
 	}
+	ecPolicy := &unstructured.Unstructured{}
+	ecPolicy.SetGroupVersionKind(ecPolicyGVK)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&konfluxv1alpha1.KonfluxEnterpriseContract{}).
 		Named("konfluxenterprisecontract").
@@ -175,6 +179,8 @@ func (r *KonfluxEnterpriseContractReconciler) SetupWithManager(mgr ctrl.Manager)
 		Owns(&corev1.ConfigMap{}).
 		Owns(&rbacv1.ClusterRole{}).
 		Owns(&rbacv1.RoleBinding{}).
+		// Self-healing: external deletion or spec mutation of the ECP triggers re-reconcile and SSA restore.
+		Owns(ecPolicy, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		// Watch CRDs so that out-of-band deletion triggers reconcile and re-apply.
 		Watches(&apiextensionsv1.CustomResourceDefinition{},
 			handler.EnqueueRequestsFromMapFunc(crdMapFunc)).
