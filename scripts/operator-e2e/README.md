@@ -12,6 +12,23 @@ With `OPERATOR_INSTALL_METHOD=none`, `tekton-deploy-operator-and-wait.sh` starts
 
 For the full pipeline narrative, see **Scope** in `.tekton/pipelines/operator-e2e/README.md`.
 
+## Metrics integration tests
+
+`run-metrics-integration-tests.sh` runs `test/go-tests/metricsintegration` against a live cluster (port-forward + bearer token, Prometheus-style). For `build-service` and `image-controller`, tests read the operator-managed `prometheus-scrape-token` Secret; other targets mint a scraper SA token via TokenRequest.
+
+Architecture and scrape models: [operator/docs/component-monitoring.md](../../operator/docs/component-monitoring.md).
+
+| Entry point | Label filter | What runs |
+|-------------|--------------|-----------|
+| `test/e2e/run-e2e.sh` (GHA Kind) | `metrics` (default) | Operator + component targets |
+| `tekton-run-e2e-tests.sh` | `metrics && component` | build-service, integration-service, image-controller (operator pod not running during e2e Task) |
+
+Tekton skips operator metrics because the deploy Task runs `bin/manager` out-of-cluster; the operator metrics Service has no endpoints during the e2e Task.
+
+Override with `METRICS_GINKGO_LABEL_FILTER` (see `run-metrics-integration-tests.sh`).
+
+Catalog: `test/fixtures/metrics-targets.yaml` (`group: operator` or `component` per target; `scrapeTokenSecret` for HTTPS operands). Scraper RBAC: `test/fixtures/metrics-scraper/rbac.yaml`.
+
 ## Extra `go test` arguments (integration / conformance)
 
 The Tekton Task sets optional env vars from pipeline params (empty by default). Scripts **omit quotes** around those expansions on purpose: the shell must **split on spaces** so each flag becomes its own argument to `go test`. (Shellcheck rule SC2086 is disabled next to those lines because unquoted expansion is usually risky; here it is required for the same reason as forwarding `"$@"`.)

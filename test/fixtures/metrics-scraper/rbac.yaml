@@ -1,0 +1,64 @@
+# Prometheus-style scraper RBAC for metrics integration tests.
+# One ClusterRoleBinding per target metricsReaderClusterRole in metrics-targets.yaml.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: konflux-monitoring-test
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: konflux-monitoring-test
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: konflux-metrics-test-prometheus-operator-metrics-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: konflux-operator-metrics-reader
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: konflux-monitoring-test
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: konflux-metrics-test-prometheus-build-service-metrics-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: build-service-metrics-reader
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: konflux-monitoring-test
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: konflux-metrics-test-prometheus-integration-service-metrics-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: integration-service-metrics-reader
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: konflux-monitoring-test
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: konflux-metrics-test-prometheus-image-controller-metrics-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: image-controller-metrics-reader
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: konflux-monitoring-test

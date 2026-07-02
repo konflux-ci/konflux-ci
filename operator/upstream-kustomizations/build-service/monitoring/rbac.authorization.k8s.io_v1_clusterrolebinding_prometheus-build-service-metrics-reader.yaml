@@ -10,5 +10,17 @@ roleRef:
   name: build-service-metrics-reader
 subjects:
 - kind: ServiceAccount
-  name: metrics-reader
-  namespace: build-service
+  name: prometheus-user-workload
+  namespace: openshift-user-workload-monitoring
+- kind: ServiceAccount
+  name: prometheus-k8s
+  namespace: openshift-user-workload-monitoring
+- kind: ServiceAccount
+  name: prometheus-k8s
+  namespace: appstudio-workload-monitoring
+- kind: ServiceAccount
+  name: prometheus
+  namespace: monitoring
+- kind: ServiceAccount
+  name: prometheus
+  namespace: konflux-monitoring-test

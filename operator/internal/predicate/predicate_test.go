@@ -406,3 +406,109 @@ func TestKonfluxUIIngressStatusChangedPredicate_GenericFunc(t *testing.T) {
 	result := KonfluxUIIngressStatusChangedPredicate.GenericFunc(e)
 	g.Expect(result).To(gomega.BeTrue())
 }
+
+func boolPtr(b bool) *bool { return &b }
+
+func TestIgnoreStatusUpdatesPredicate_NonUpdateFuncs(t *testing.T) {
+	g := gomega.NewWithT(t)
+	g.Expect(IgnoreStatusUpdatesPredicate.CreateFunc(event.CreateEvent{})).To(gomega.BeTrue())
+	g.Expect(IgnoreStatusUpdatesPredicate.DeleteFunc(event.DeleteEvent{})).To(gomega.BeTrue())
+	g.Expect(IgnoreStatusUpdatesPredicate.GenericFunc(event.GenericEvent{})).To(gomega.BeTrue())
+}
+
+func TestDeploymentReadinessPredicate_ReadinessChange(t *testing.T) {
+	g := gomega.NewWithT(t)
+	e := event.UpdateEvent{
+		ObjectOld: &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Generation: 1},
+			Status:     appsv1.DeploymentStatus{ReadyReplicas: 1},
+		},
+		ObjectNew: &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Generation: 1},
+			Status:     appsv1.DeploymentStatus{ReadyReplicas: 2},
+		},
+	}
+	g.Expect(DeploymentReadinessPredicate.UpdateFunc(e)).To(gomega.BeTrue())
+}
+
+func TestDeploymentReadinessPredicate_NonDeploymentObjects(t *testing.T) {
+	g := gomega.NewWithT(t)
+	e := event.UpdateEvent{
+		ObjectOld: &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Generation: 1}},
+		ObjectNew: &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Generation: 1}},
+	}
+	g.Expect(DeploymentReadinessPredicate.UpdateFunc(e)).To(gomega.BeTrue())
+}
+
+func TestDeploymentReadinessPredicate_NonUpdateFuncs(t *testing.T) {
+	g := gomega.NewWithT(t)
+	g.Expect(DeploymentReadinessPredicate.CreateFunc(event.CreateEvent{})).To(gomega.BeTrue())
+	g.Expect(DeploymentReadinessPredicate.DeleteFunc(event.DeleteEvent{})).To(gomega.BeTrue())
+	g.Expect(DeploymentReadinessPredicate.GenericFunc(event.GenericEvent{})).To(gomega.BeTrue())
+}
+
+func TestKonfluxComponentMetricsChangedPredicate_UpdateFunc(t *testing.T) {
+	tests := []struct {
+		name     string
+		old      *konfluxv1alpha1.KonfluxSpec
+		new      *konfluxv1alpha1.KonfluxSpec
+		expected bool
+	}{
+		{
+			name:     "enabled true to false",
+			old:      &konfluxv1alpha1.KonfluxSpec{ComponentMetrics: &konfluxv1alpha1.ComponentMetricsConfig{Enabled: boolPtr(true)}},
+			new:      &konfluxv1alpha1.KonfluxSpec{ComponentMetrics: &konfluxv1alpha1.ComponentMetricsConfig{Enabled: boolPtr(false)}},
+			expected: true,
+		},
+		{
+			name:     "unset defaults true to false",
+			old:      &konfluxv1alpha1.KonfluxSpec{},
+			new:      &konfluxv1alpha1.KonfluxSpec{ComponentMetrics: &konfluxv1alpha1.ComponentMetricsConfig{Enabled: boolPtr(false)}},
+			expected: true,
+		},
+		{
+			name:     "false to unset defaults true",
+			old:      &konfluxv1alpha1.KonfluxSpec{ComponentMetrics: &konfluxv1alpha1.ComponentMetricsConfig{Enabled: boolPtr(false)}},
+			new:      &konfluxv1alpha1.KonfluxSpec{},
+			expected: true,
+		},
+		{
+			name:     "unrelated spec change",
+			old:      &konfluxv1alpha1.KonfluxSpec{ComponentMetrics: &konfluxv1alpha1.ComponentMetricsConfig{Enabled: boolPtr(true)}},
+			new:      &konfluxv1alpha1.KonfluxSpec{ComponentMetrics: &konfluxv1alpha1.ComponentMetricsConfig{Enabled: boolPtr(true)}},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+			e := event.UpdateEvent{
+				ObjectOld: &konfluxv1alpha1.Konflux{Spec: *tt.old},
+				ObjectNew: &konfluxv1alpha1.Konflux{Spec: *tt.new},
+			}
+			g.Expect(KonfluxComponentMetricsChangedPredicate.UpdateFunc(e)).To(gomega.Equal(tt.expected))
+		})
+	}
+}
+
+func TestKonfluxComponentMetricsChangedPredicate_NilObjects(t *testing.T) {
+	g := gomega.NewWithT(t)
+	g.Expect(KonfluxComponentMetricsChangedPredicate.UpdateFunc(event.UpdateEvent{})).To(gomega.BeTrue())
+}
+
+func TestKonfluxComponentMetricsChangedPredicate_WrongType(t *testing.T) {
+	g := gomega.NewWithT(t)
+	e := event.UpdateEvent{
+		ObjectOld: &corev1.ConfigMap{},
+		ObjectNew: &corev1.ConfigMap{},
+	}
+	g.Expect(KonfluxComponentMetricsChangedPredicate.UpdateFunc(e)).To(gomega.BeTrue())
+}
+
+func TestKonfluxComponentMetricsChangedPredicate_NonUpdateFuncs(t *testing.T) {
+	g := gomega.NewWithT(t)
+	g.Expect(KonfluxComponentMetricsChangedPredicate.CreateFunc(event.CreateEvent{})).To(gomega.BeTrue())
+	g.Expect(KonfluxComponentMetricsChangedPredicate.DeleteFunc(event.DeleteEvent{})).To(gomega.BeFalse())
+	g.Expect(KonfluxComponentMetricsChangedPredicate.GenericFunc(event.GenericEvent{})).To(gomega.BeFalse())
+}

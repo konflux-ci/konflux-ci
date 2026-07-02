@@ -62,7 +62,9 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/releaseservice"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/segmentbridge"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/ui"
+	"github.com/konflux-ci/konflux-ci/operator/internal/operatormetrics"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/segment"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/version"
@@ -299,6 +301,24 @@ func main() {
 	}
 	setupLog.Info("Detected cluster info", logFields...)
 
+	tokenCreator, err := kubernetes.NewClientTokenCreator(mgr.GetConfig())
+	if err != nil {
+		setupLog.Error(err, "unable to create prometheus scrape token creator")
+		os.Exit(1)
+	}
+
+	if metricsAddr != "0" {
+		if err := mgr.Add(&operatormetrics.ScrapeTokenRotator{
+			Client:       mgr.GetClient(),
+			TokenCreator: tokenCreator,
+			ClusterInfo:  clusterInfo,
+			Namespace:    operatormetrics.OperatorNamespace,
+		}); err != nil {
+			setupLog.Error(err, "unable to add operator scrape token rotator")
+			os.Exit(1)
+		}
+	}
+
 	if err := (&konflux.KonfluxReconciler{
 		Client:      mgr.GetClient(),
 		Scheme:      mgr.GetScheme(),
@@ -308,10 +328,11 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&buildservice.KonfluxBuildServiceReconciler{
-		Client:      mgr.GetClient(),
-		Scheme:      mgr.GetScheme(),
-		ObjectStore: objectStore,
-		ClusterInfo: clusterInfo,
+		Client:       mgr.GetClient(),
+		Scheme:       mgr.GetScheme(),
+		ObjectStore:  objectStore,
+		ClusterInfo:  clusterInfo,
+		TokenCreator: tokenCreator,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxBuildService")
 		os.Exit(1)
@@ -367,9 +388,11 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&imagecontroller.KonfluxImageControllerReconciler{
-		Client:      mgr.GetClient(),
-		Scheme:      mgr.GetScheme(),
-		ObjectStore: objectStore,
+		Client:       mgr.GetClient(),
+		Scheme:       mgr.GetScheme(),
+		ObjectStore:  objectStore,
+		ClusterInfo:  clusterInfo,
+		TokenCreator: tokenCreator,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxImageController")
 		os.Exit(1)

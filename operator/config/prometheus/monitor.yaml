@@ -13,7 +13,9 @@ spec:
     - path: /metrics
       port: https # Ensure this is the name of the port that exposes HTTPS metrics
       scheme: https
-      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      bearerTokenSecret:
+        key: token
+        name: prometheus-scrape-token
       tlsConfig:
         # TODO(user): The option insecureSkipVerify: true is not recommended for production since it disables
         # certificate verification, exposing the system to potential man-in-the-middle attacks.

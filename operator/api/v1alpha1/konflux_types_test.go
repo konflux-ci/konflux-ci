@@ -62,3 +62,22 @@ func TestKonflux_ReadyConditionMessage(t *testing.T) {
 	g.Expect(k.ReadyConditionMessage()).
 		To(gomega.Equal("konflux Ready=False reason=ComponentsNotReady message=waiting for ui"))
 }
+
+func TestKonfluxSpec_IsComponentMetricsEnabled(t *testing.T) {
+	g := gomega.NewWithT(t)
+
+	g.Expect((&KonfluxSpec{}).IsComponentMetricsEnabled()).To(gomega.BeTrue())
+
+	unset := &KonfluxSpec{ComponentMetrics: &ComponentMetricsConfig{}}
+	g.Expect(unset.IsComponentMetricsEnabled()).To(gomega.BeTrue())
+
+	disabled := false
+	g.Expect((&KonfluxSpec{
+		ComponentMetrics: &ComponentMetricsConfig{Enabled: &disabled},
+	}).IsComponentMetricsEnabled()).To(gomega.BeFalse())
+
+	enabled := true
+	g.Expect((&KonfluxSpec{
+		ComponentMetrics: &ComponentMetricsConfig{Enabled: &enabled},
+	}).IsComponentMetricsEnabled()).To(gomega.BeTrue())
+}

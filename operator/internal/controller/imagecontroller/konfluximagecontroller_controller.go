@@ -28,6 +28,8 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/utils/clock"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -35,11 +37,14 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/common"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	crdhandler "github.com/konflux-ci/konflux-ci/operator/internal/controller/handler"
 	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
@@ -64,40 +69,54 @@ const (
 	imagePrunerContainerName          = "image-pruner"
 	notificationResetterCronJobName   = "image-controller-notification-resetter-cronjob"
 	notificationResetterContainerName = "notification-resetter"
+
+	imageControllerNamespace = "image-controller"
 )
 
 // ImageControllerCleanupGVKs defines which resource types should be cleaned up when they are
-// no longer part of the desired state. All resources managed by this controller are always
-// applied, so no cleanup GVKs are needed (they're always tracked and never become orphans).
-var ImageControllerCleanupGVKs = []schema.GroupVersionKind{}
+// no longer part of the desired state. Metrics scrape resources may be skipped during apply
+// (componentMetrics disabled) or removed across releases while metrics stay enabled.
+var ImageControllerCleanupGVKs = append([]schema.GroupVersionKind(nil), kubernetes.ComponentMetricsOrphanCleanupGVKs...)
 
 // ImageControllerClusterScopedAllowList restricts which cluster-scoped resources can be deleted
-// during orphan cleanup. All cluster-scoped resources managed by this controller are always
-// applied, so no allow list is needed (they're always tracked and never become orphans).
-var ImageControllerClusterScopedAllowList tracking.ClusterScopedAllowList = nil
+// during orphan cleanup. Only metrics scrape ClusterRoles and ClusterRoleBindings are listed;
+// other cluster-scoped RBAC managed by this controller is always applied and stays tracked.
+var ImageControllerClusterScopedAllowList = tracking.ClusterScopedAllowList{
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"}: sets.New(
+		"image-controller-metrics-reader",
+	),
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"}: sets.New(
+		"prometheus-image-controller-metrics-reader",
+	),
+}
 
 // KonfluxImageControllerReconciler reconciles a KonfluxImageController object
 type KonfluxImageControllerReconciler struct {
 	client.Client
-	Scheme      *runtime.Scheme
-	ObjectStore *manifests.ObjectStore
+	Scheme       *runtime.Scheme
+	ObjectStore  *manifests.ObjectStore
+	ClusterInfo  *clusterinfo.Info
+	TokenCreator kubernetes.TokenCreator
+	Clock        clock.Clock
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluximagecontrollers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxes,verbs=get;list;watch
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluximagecontrollers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluximagecontrollers/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=core,resources=services;secrets;serviceaccounts,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=core,resources=serviceaccounts/token,verbs=create
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,resourceNames=image-controller-leader-election-role,verbs=bind;escalate
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,resourceNames=image-controller-leader-election-rolebinding,verbs=bind
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=image-controller-imagerepository-editor-role;image-controller-imagerepository-viewer-role;image-controller-manager-role;image-controller-metrics-auth-role,verbs=bind;escalate
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=image-controller-manager-rolebinding;image-controller-metrics-auth-rolebinding,verbs=bind
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=image-controller-imagerepository-editor-role;image-controller-imagerepository-viewer-role;image-controller-manager-role;image-controller-metrics-auth-role;image-controller-metrics-reader,verbs=bind;escalate
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=image-controller-manager-rolebinding;image-controller-metrics-auth-rolebinding;prometheus-image-controller-metrics-reader,verbs=bind
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;patch
-// +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;patch
+// +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -133,6 +152,28 @@ func (r *KonfluxImageControllerReconciler) Reconcile(ctx context.Context, req ct
 		return errHandler.HandleApplyError(ctx, err)
 	}
 
+	result := ctrl.Result{}
+	metricsEnabled, err := common.ComponentMetricsEnabled(ctx, r.Client)
+	if err != nil {
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "read component metrics setting")
+	}
+	if metricsEnabled && r.TokenCreator != nil {
+		scrapeResult, scrapeErr := common.ReconcilePrometheusScrapeToken(ctx, common.ScrapeTokenReconcilerConfig{
+			Client:           r.Client,
+			Clock:            r.Clock,
+			TokenCreator:     r.TokenCreator,
+			ClusterInfo:      r.ClusterInfo,
+			OperandNamespace: imageControllerNamespace,
+			Apply: func(applyCtx context.Context, secret *corev1.Secret) error {
+				return tc.ApplyOwned(applyCtx, secret)
+			},
+		})
+		if scrapeErr != nil {
+			return errHandler.HandleWithReason(ctx, scrapeErr, condition.ReasonApplyFailed, "reconcile prometheus scrape token")
+		}
+		result = common.MergeRequeueAfter(result, scrapeResult)
+	}
+
 	// Cleanup orphaned resources
 	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, imageController.Name, ImageControllerCleanupGVKs,
 		tracking.WithClusterScopedAllowList(ImageControllerClusterScopedAllowList)); err != nil {
@@ -151,18 +192,34 @@ func (r *KonfluxImageControllerReconciler) Reconcile(ctx context.Context, req ct
 	}
 
 	log.Info("Successfully reconciled KonfluxImageController")
-	return ctrl.Result{}, nil
+	return result, nil
 }
 
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
 func (r *KonfluxImageControllerReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxImageController) error {
+	log := logf.FromContext(ctx)
+
+	metricsEnabled, err := common.ComponentMetricsEnabled(ctx, r.Client)
+	if err != nil {
+		return fmt.Errorf("read component metrics setting: %w", err)
+	}
+
 	objects, err := r.ObjectStore.GetForComponent(manifests.ImageController)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for ImageController: %w", err)
 	}
 
 	for _, obj := range objects {
+		if !metricsEnabled && kubernetes.IsComponentMetricsScrapeResource(obj) {
+			log.V(1).Info("Skipping component metrics scrape resource",
+				"kind", tracking.GetKind(obj),
+				"name", obj.GetName(),
+				"namespace", obj.GetNamespace(),
+			)
+			continue
+		}
+
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
 			if err := applyImageControllerDeploymentCustomizations(deployment, owner.Spec); err != nil {
 				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
@@ -293,5 +350,10 @@ func (r *KonfluxImageControllerReconciler) SetupWithManager(mgr ctrl.Manager) er
 		// Watch CRDs so that out-of-band deletion triggers reconcile and re-apply.
 		Watches(&apiextensionsv1.CustomResourceDefinition{},
 			handler.EnqueueRequestsFromMapFunc(crdMapFunc)).
+		Watches(&konfluxv1alpha1.Konflux{},
+			handler.EnqueueRequestsFromMapFunc(
+				crdhandler.MapKonfluxSingletonToRequest(constant.KonfluxSingletonName, CRName),
+			),
+			builder.WithPredicates(predicate.KonfluxComponentMetricsChangedPredicate)).
 		Complete(r)
 }

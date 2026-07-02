@@ -22,6 +22,8 @@ const (
 	KonfluxOwnerLabel = "konflux.konflux-ci.dev/owner"
 	// KonfluxComponentLabel is the label used to identify which component a resource belongs to.
 	KonfluxComponentLabel = "konflux.konflux-ci.dev/component"
+	// KonfluxSingletonName is the required name of the cluster Konflux CR.
+	KonfluxSingletonName = "konflux"
 	// ConditionTypeReady is the condition type for overall readiness
 	ConditionTypeReady = "Ready"
 	// ConditionTypeCertManagerAvailable is the condition type for cert-manager availability
