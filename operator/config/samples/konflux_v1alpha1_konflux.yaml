@@ -179,3 +179,7 @@ spec:
   #     # segmentAPIURL is the base URL without "/batch". The operator appends "/batch".
   #     # Defaults to "https://api.segment.io/v1" if not specified.
   #     # segmentAPIURL: "https://console.redhat.com/connections/api/v1"
+  #
+  #     # tektonLimit: max PipelineRun records fetched per CronJob run.
+  #     # Defaults to 1000 (~4.7h coverage at avg production throughput).
+  #     # tektonLimit: 2000
