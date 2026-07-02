@@ -2648,6 +2648,12 @@ spec:
                           When not specified, a default key baked into the operator build is used,
                           routing telemetry data to the Konflux dev team's Segment project.
                         type: string
+                      tektonLimit:
+                        description: |-
+                          TektonLimit sets the maximum number of PipelineRun records fetched per CronJob run.
+                          Defaults to 1000 (covers ~4.7h at avg production throughput of ~214 PipelineRuns/hour).
+                        minimum: 1
+                        type: integer
                     type: object
                 type: object
               ui:

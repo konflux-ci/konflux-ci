@@ -122,6 +122,7 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 					g.Expect(string(data["SEGMENT_WRITE_KEY"])).To(BeEmpty(), "write key should be empty")
 					g.Expect(string(data["SEGMENT_BATCH_API"])).To(Equal(
 						konfluxv1alpha1.DefaultSegmentAPIURL + "/batch"))
+					g.Expect(string(data["TEKTON_LIMIT"])).To(Equal("1000"))
 				})
 			})
 
@@ -164,6 +165,20 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 					g.Expect(string(data["SEGMENT_WRITE_KEY"])).To(Equal("test-write-key"))
 					g.Expect(string(data["SEGMENT_BATCH_API"])).To(Equal("https://console.redhat.com/connections/api/v1/batch"))
 					g.Expect(string(data["TEKTON_RESULTS_API_ADDR"])).To(Equal(tektonResultsAPIAddrK8s))
+				})
+			})
+
+			It("should use custom TektonLimit when set on the CR", func(ctx context.Context) {
+				createCR(ctx)
+
+				resource := &konfluxv1alpha1.KonfluxSegmentBridge{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, resource)).To(Succeed())
+				limit := 2000
+				resource.Spec.TektonLimit = &limit
+				Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+
+				waitForSecret(ctx, func(g Gomega, data map[string][]byte) {
+					g.Expect(string(data["TEKTON_LIMIT"])).To(Equal("2000"))
 				})
 			})
 

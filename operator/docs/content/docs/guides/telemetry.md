@@ -68,6 +68,39 @@ spec:
 See the [sample Konflux CR]({{< relref "../examples#konflux-configuration" >}})
 for the full configuration reference.
 
+### Tuning TEKTON_LIMIT
+
+The `segment-bridge` CronJob queries Tekton Results for PipelineRuns that have
+already been pruned from the cluster, using a 4-hour lookback window for
+resilience. `TEKTON_LIMIT` caps how many records are fetched per run. The
+operator defaults to **1000** (upstream `segment-bridge` default is 100),
+sized to cover the observed average production throughput of ~214
+PipelineRuns/hour (~856 records across the 4-hour window).
+
+**Quota usage:** each PipelineRun emits at least 4 KPI events, and the
+4-hour lookback means each event can be sent up to 4 times before Segment's
+server-side deduplication discards the repeats — up to **~16 Segment API
+calls per PipelineRun**. Every call counts against the Segment API quota,
+including duplicates that get deduplicated downstream, so raising
+`tektonLimit` (or enabling telemetry on more clusters) directly increases
+quota consumption.
+
+If your cluster has higher PipelineRun throughput, size `tektonLimit` using:
+
+```
+tektonLimit >= PipelineRuns_per_hour * 4
+```
+
+Override via `spec.telemetry.spec.tektonLimit`:
+
+```yaml
+spec:
+  telemetry:
+    enabled: true
+    spec:
+      tektonLimit: 2000
+```
+
 ## What data is collected
 
 The segment-bridge CronJob reads data from the cluster and from
