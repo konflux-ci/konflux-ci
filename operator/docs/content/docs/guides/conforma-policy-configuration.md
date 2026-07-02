@@ -180,8 +180,7 @@ spec:
       policy:
         - oci::quay.io/conforma/release-policy:latest
       data:
-        - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest
-        - github.com/release-engineering/rhtap-ec-policy//data
+        - github.com/redhat-appstudio/tsf-conforma-data//data
       config:
         include:
           - "@slsa3"
@@ -194,6 +193,13 @@ Apply it to the cluster:
 ```bash
 kubectl apply -f policy.yaml
 ```
+
+**Trusted task rules** — the data source above includes trusted task rules that
+determine which Tekton tasks are trusted based on OCI registry patterns. If you
+need to customize trust rules (e.g. trust tasks from your own registry), you can
+add a `ruleData` section to your source with `trusted_task_rules`. See
+[ADR 0053](https://github.com/konflux-ci/architecture/blob/main/ADR/0053-trusted-task-model.md)
+for details on the trust model.
 
 **Integration tests** — reference it as `<your-namespace>/my-custom-policy` in the
 `POLICY_CONFIGURATION` parameter of your `IntegrationTestScenario`.
