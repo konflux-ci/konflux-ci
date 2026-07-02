@@ -187,18 +187,6 @@
         "operator/upstream-kustomizations/enterprise-contract/policies/.*\\.yaml$"
       ],
       "matchStrings": [
-        "- oci::(?<depName>quay\\.io/konflux-ci/tekton-catalog/data-acceptable-bundles):latest@(?<currentDigest>sha256:[a-f0-9]{64})"
-      ],
-      "autoReplaceStringTemplate": "- oci::{{depName}}:latest@{{newDigest}}",
-      "datasourceTemplate": "docker",
-      "currentValueTemplate": "latest"
-    },
-    {
-      "customType": "regex",
-      "fileMatch": [
-        "operator/upstream-kustomizations/enterprise-contract/policies/.*\\.yaml$"
-      ],
-      "matchStrings": [
         "- github\\.com/redhat-appstudio/tsf-conforma-data//data\\?ref=(?<currentDigest>[a-f0-9]{40})"
       ],
       "depNameTemplate": "https://github.com/redhat-appstudio/tsf-conforma-data",
