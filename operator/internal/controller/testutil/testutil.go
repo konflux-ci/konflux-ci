@@ -116,6 +116,8 @@ func SetupTestEnv(basePath string) *TestEnv {
 			filepath.Join(basePath, "config", "crd", "bases"),
 			filepath.Join(basePath, "test", "crds", "cert-manager"),
 			filepath.Join(basePath, "test", "crds", "prometheus"),
+			filepath.Join(basePath, "test", "crds", "enterprise-contract"),
+			filepath.Join(basePath, "test", "crds", "release"),
 			filepath.Join(GetGoModuleDir("github.com/openshift/api"), "config", "v1", "zz_generated.crd-manifests"),
 			filepath.Join(GetGoModuleDir("github.com/openshift/api"), "console", "v1", "zz_generated.crd-manifests"),
 			filepath.Join(GetGoModuleDir("github.com/openshift/api"), "security", "v1", "zz_generated.crd-manifests"),

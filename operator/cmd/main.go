@@ -34,6 +34,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
@@ -63,6 +64,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/segmentbridge"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/ui"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/segment"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/version"
@@ -273,6 +275,18 @@ func main() {
 		setupLog.Error(err, "unable to parse embedded manifests")
 		os.Exit(1)
 	}
+	// Pre-install CRDs managed by controllers that also watch CRs of those CRDs.
+	// The CRD must exist before mgr.Start() so the Owns() informer can sync.
+	directClient, err := client.New(cfg, client.Options{Scheme: scheme})
+	if err != nil {
+		setupLog.Error(err, "unable to create client for CRD pre-install")
+		os.Exit(1)
+	}
+	if err := preInstallCRDs(context.Background(), directClient, objectStore); err != nil {
+		setupLog.Error(err, "unable to pre-install CRDs")
+		os.Exit(1)
+	}
+
 	// Detect cluster information (platform, version, capabilities)
 	clusterInfo, err := clusterinfo.Detect(cfg)
 	if err != nil {
@@ -465,4 +479,65 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+// ownsWatchCRDs maps each component to the specific CRD names required by its
+// controller's Owns() watches. Only these CRDs are pre-installed — other CRDs
+// from the same component are applied during normal reconciliation and do not
+// need to exist at startup.
+var ownsWatchCRDs = map[manifests.Component][]string{
+	manifests.EnterpriseContract: {"enterprisecontractpolicies.appstudio.redhat.com"},
+	manifests.Release:            {"releaseserviceconfigs.appstudio.redhat.com"},
+}
+
+// preInstallCRDs applies CRDs from embedded manifests before the manager starts.
+//
+// Why this is needed (and why Watches(CRD) + reconcile is insufficient):
+// Controllers that use Owns() to watch CRs of upstream CRDs (e.g., EnterpriseContractPolicy)
+// require the CRD to be registered in the API server at manager startup time. Without it,
+// controller-runtime cannot create the informer for the owned GVK, and mgr.Start() blocks
+// indefinitely waiting for the cache to sync. The existing Watches(CRD) pattern only handles
+// *re-applying* a CRD after out-of-band deletion — it cannot bootstrap a CRD that was never
+// present. This function solves the ordering problem by ensuring CRDs exist before any
+// controller sets up watches, using a direct client (bypassing the not-yet-started cache).
+// The controller then takes over full ownership of the CRD during its first reconcile via SSA.
+func preInstallCRDs(ctx context.Context, c client.Client, store *manifests.ObjectStore) error {
+	for comp, crdNames := range ownsWatchCRDs {
+		objects, err := store.GetForComponent(comp)
+		if err != nil {
+			return fmt.Errorf("getting objects for %s: %w", comp, err)
+		}
+		wanted := make(map[string]bool, len(crdNames))
+		for _, name := range crdNames {
+			wanted[name] = true
+		}
+		installed := make(map[string]bool, len(crdNames))
+		for _, obj := range objects {
+			crd, ok := obj.(*apiextensionsv1.CustomResourceDefinition)
+			if !ok {
+				continue
+			}
+			if !wanted[crd.Name] {
+				continue
+			}
+			if err := c.Patch(ctx, crd, kubernetes.SSAPatch,
+				client.FieldOwner("konflux-operator-bootstrap"),
+				client.ForceOwnership,
+			); err != nil {
+				return fmt.Errorf("pre-installing CRD %s: %w", crd.Name, err)
+			}
+			installed[crd.Name] = true
+			setupLog.Info("Pre-installed CRD",
+				"name", crd.Name,
+				"resourceVersion", crd.ResourceVersion,
+				"versions", len(crd.Spec.Versions),
+			)
+		}
+		for _, name := range crdNames {
+			if !installed[name] {
+				return fmt.Errorf("CRD %s not found in %s manifests", name, comp)
+			}
+		}
+	}
+	return nil
 }
