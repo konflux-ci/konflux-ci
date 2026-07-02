@@ -180,8 +180,12 @@ spec:
       policy:
         - oci::quay.io/conforma/release-policy:latest
       data:
-        - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest
         - github.com/release-engineering/rhtap-ec-policy//data
+      ruleData:
+        trusted_task_rules:
+          allow:
+            tekton-catalog-tasks:
+              - pattern: oci://quay.io/konflux-ci/tekton-catalog/*
       config:
         include:
           - "@slsa3"
