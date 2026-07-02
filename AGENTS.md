@@ -120,6 +120,15 @@ PRs trigger the following workflows:
 - APIs defined in `operator/api/v1alpha1` — many `Konflux*` kinds (Konflux, BuildService, IntegrationService, ReleaseService, UI, RBAC, etc.)
 - Per-service reconcilers in `operator/internal/controller/<subservice>/`
 
+## Common Issue Patterns: Conforma/Trust Violations
+
+When pipeline bundle upgrades fail Conforma verification (e.g., `tasks.required_untrusted_task_found`):
+- This usually means the `data-acceptable-bundles` image does not yet include the new task version
+- `data-acceptable-bundles` is generated upstream in `build-definitions` — check if the upstream generation process has a known issue before creating an in-repo workaround
+- If the upstream process is working correctly, the acceptable-bundles image will eventually include the new task automatically
+- Only create a combined pipeline+acceptable-bundles update PR if you can verify both digests are correct and current from the registry
+- Related issues: #6584, #6997
+
 ## Skills
 
 Detailed guides live in `skills/` — each subdirectory contains a `SKILL.md` with instructions.
