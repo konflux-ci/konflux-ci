@@ -10,7 +10,7 @@ set -euo pipefail
 # renovate: datasource=helm depName=jetstack/cert-manager versioning=semver
 CERT_MANAGER_CHART_VERSION="1.20.3"
 # renovate: datasource=helm depName=jetstack/trust-manager versioning=semver
-TRUST_MANAGER_CHART_VERSION="0.23.0"
+TRUST_MANAGER_CHART_VERSION="0.24.0"
 # renovate: datasource=github-releases depName=prometheus-operator/prometheus-operator versioning=semver
 PROMETHEUS_OPERATOR_VERSION="0.92.1"
 
