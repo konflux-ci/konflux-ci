@@ -71,7 +71,7 @@ After changing APIs or RBAC annotations, run `make manifests generate` from `ope
 1. **Platform conformance** (`test/go-tests/tests/conformance/`) — end-to-end tests against a deployed Konflux instance, run via `test/e2e/run-e2e.sh`. Uses Ginkgo/Gomega with a shared `Framework` in `test/go-tests/pkg/framework/`.
 2. **Operator unit/integration** (`operator/`) — controller tests using controller-runtime **envtest** (no real cluster needed). **Prefer Gomega matchers** for assertions in unit and functional tests. Shared test utilities in `operator/internal/controller/testutil/`. Run via `make test` from `operator/`.
 
-For test cleanup patterns (envtest garbage collection, `DeferCleanupParentAndChildren`) and `Eventually`/`Consistently` soft-assertion conventions, see the [ginkgo-testing](skills/ginkgo-testing/SKILL.md) skill.
+For test cleanup patterns (envtest garbage collection, `DeferCleanupParentAndChildren`), `Eventually`/`Consistently` soft-assertion conventions, and K8s API error assertion idioms (`apierrors.IsNotFound()` instead of string matching), see the [ginkgo-testing](skills/ginkgo-testing/SKILL.md) skill.
 
 **CRD test conventions:**
 
