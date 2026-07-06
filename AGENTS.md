@@ -112,6 +112,29 @@ PRs trigger the following workflows:
 - Update TOC if markdown structure changed
 - Run `make manifests generate` if API or RBAC annotations changed
 
+## Repo-Specific Labels
+
+Some labels in this repository have precise automation-driven semantics.
+Agents must not apply them unless stated otherwise below.
+
+- **`deps-only`** — Applied exclusively by the companion manifest workflow
+  (`renovate-manifest-companion.sh`) to Renovate PRs that change
+  `operator/upstream-kustomizations/` or
+  `.github/scripts/export-third-party-chart-env.sh`. Signals that the PR
+  should not be merged directly because a companion PR with regenerated
+  operator manifests is needed. **Agents must never apply this label.**
+  Changes to `test/go-tests/go.mod` or `operator/docs/go.mod` do not
+  trigger companion PRs and must not receive this label.
+- **`superseded-by-companion`** — Applied alongside `deps-only` by the
+  companion script when a companion PR has been successfully created.
+  Prefer merging the companion PR. **Agents must never apply this label.**
+- **`pending-upstream-image`** — Applied by the companion workflow when
+  upstream container images are not yet available in their registries.
+  Removed automatically on the next successful companion run.
+  **Agents must never apply this label.**
+- **`ready-for-merge`** — Should not coexist with `deps-only`,
+  `superseded-by-companion`, or `pending-upstream-image`.
+
 ## Architecture Notes
 
 - Upstream components pinned via `?ref=SHA` + matching `newTag: SHA`
