@@ -129,9 +129,12 @@ var _ = Describe("Konflux Controller", func() {
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: defaulttenant.CRName}, &konfluxv1alpha1.KonfluxDefaultTenant{})).To(Succeed())
 
 				// Verify optional sub-CRs are NOT created (disabled by default in empty spec).
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: imagecontroller.CRName}, &konfluxv1alpha1.KonfluxImageController{})).To(MatchError(ContainSubstring("not found")))
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: internalregistry.CRName}, &konfluxv1alpha1.KonfluxInternalRegistry{})).To(MatchError(ContainSubstring("not found")))
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: segmentbridge.CRName}, &konfluxv1alpha1.KonfluxSegmentBridge{})).To(MatchError(ContainSubstring("not found")))
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: imagecontroller.CRName}, &konfluxv1alpha1.KonfluxImageController{})
+				g.Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
+				err = k8sClient.Get(ctx, types.NamespacedName{Name: internalregistry.CRName}, &konfluxv1alpha1.KonfluxInternalRegistry{})
+				g.Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
+				err = k8sClient.Get(ctx, types.NamespacedName{Name: segmentbridge.CRName}, &konfluxv1alpha1.KonfluxSegmentBridge{})
+				g.Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})
