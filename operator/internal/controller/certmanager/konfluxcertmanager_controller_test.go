@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -171,10 +172,10 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 				Eventually(waitForReady).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 				By("verifying no ClusterIssuers were created")
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: bootstrapIssuerName}, newClusterIssuer(bootstrapIssuerName))).
-					To(MatchError(ContainSubstring("not found")))
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: issuerName}, newClusterIssuer(issuerName))).
-					To(MatchError(ContainSubstring("not found")))
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: bootstrapIssuerName}, newClusterIssuer(bootstrapIssuerName))
+				Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
+				err = k8sClient.Get(ctx, types.NamespacedName{Name: issuerName}, newClusterIssuer(issuerName))
+				Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
 			})
 		})
 

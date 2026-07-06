@@ -133,8 +133,8 @@ var _ = Describe("KonfluxEnterpriseContract Controller", Ordered, func() {
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "ec-defaults", Namespace: "enterprise-contract-service"}, &corev1.ConfigMap{})).To(Succeed())
 
 			By("verifying the EnterpriseContractPolicy was NOT created")
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "default", Namespace: "enterprise-contract-service"}, newDefaultECPolicy())).
-				To(MatchError(ContainSubstring("not found")))
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: "default", Namespace: "enterprise-contract-service"}, newDefaultECPolicy())
+			Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
 		})
 	})
 
@@ -160,8 +160,8 @@ var _ = Describe("KonfluxEnterpriseContract Controller", Ordered, func() {
 
 			By("verifying the EnterpriseContractPolicy is removed via orphan cleanup")
 			Eventually(func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "default", Namespace: "enterprise-contract-service"}, newDefaultECPolicy())).
-					To(MatchError(ContainSubstring("not found")))
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: "default", Namespace: "enterprise-contract-service"}, newDefaultECPolicy())
+				g.Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			By("verifying non-policy resources are still present")
@@ -186,8 +186,8 @@ var _ = Describe("KonfluxEnterpriseContract Controller", Ordered, func() {
 			Eventually(waitForReady(ctx)).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			By("verifying the EnterpriseContractPolicy was NOT created")
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "default", Namespace: "enterprise-contract-service"}, newDefaultECPolicy())).
-				To(MatchError(ContainSubstring("not found")))
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: "default", Namespace: "enterprise-contract-service"}, newDefaultECPolicy())
+			Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
 
 			By("updating CR to set skipPolicies=false")
 			updated := &konfluxv1alpha1.KonfluxEnterpriseContract{}
