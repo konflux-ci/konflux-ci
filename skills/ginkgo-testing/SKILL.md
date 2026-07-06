@@ -44,3 +44,20 @@ Eventually(func(g Gomega) {
     g.Expect(resp.StatusCode).To(Equal(200))
 }).Should(Succeed())
 ```
+
+## Kubernetes API error assertions
+
+When asserting that a resource does not exist, use `apierrors.IsNotFound()` — never match error strings:
+
+```go
+// ✗ Wrong — brittle, breaks across K8s versions
+g.Expect(k8sClient.Get(ctx, nn, obj)).To(MatchError(ContainSubstring("not found")))
+
+// ✓ Correct — uses typed status code
+err := k8sClient.Get(ctx, nn, obj)
+g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
+```
+
+Import via `apierrors "k8s.io/apimachinery/pkg/api/errors"` (some files import the package without an alias and call `errors.IsNotFound()` — both work, but `apierrors` avoids confusion with the standard `errors` package).
+
+The same principle applies to other typed API error checks — prefer `apierrors.IsAlreadyExists()`, `apierrors.IsConflict()`, etc. over string matching.
