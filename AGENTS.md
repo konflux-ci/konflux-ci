@@ -128,6 +128,10 @@ Agents must not apply them unless stated otherwise below.
 - **`superseded-by-companion`** — Applied alongside `deps-only` by the
   companion script when a companion PR has been successfully created.
   Prefer merging the companion PR. **Agents must never apply this label.**
+  When reviewing a PR that already carries this label, agents should
+  withhold approval and instead note in their review that the PR is
+  superseded by the companion PR — the companion should be reviewed and
+  merged instead.
 - **`pending-upstream-image`** — Applied by the companion workflow when
   upstream container images are not yet available in their registries.
   Removed automatically on the next successful companion run.
