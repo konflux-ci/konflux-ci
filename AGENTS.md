@@ -123,6 +123,9 @@ Agents must not apply them unless stated otherwise below.
   `.github/scripts/export-third-party-chart-env.sh`. Signals that the PR
   should not be merged directly because a companion PR with regenerated
   operator manifests is needed. **Agents must never apply this label.**
+  When reviewing a PR that carries this label, agents should withhold
+  approval and note that the PR requires a companion PR with regenerated
+  operator manifests before it can be merged.
   Changes to `test/go-tests/go.mod` or `operator/docs/go.mod` do not
   trigger companion PRs and must not receive this label.
 - **`superseded-by-companion`** — Applied alongside `deps-only` by the
