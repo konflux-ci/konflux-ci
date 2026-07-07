@@ -19,6 +19,11 @@ nodes:
     apiServer:
       extraArgs:
         service-account-issuer: https://kubernetes.default.svc
+    etcd:
+      local:
+        extraArgs:
+          heartbeat-interval: "500"
+          election-timeout: "5000"
   extraPortMappings:
   - containerPort: 30010
     hostPort: 8888
