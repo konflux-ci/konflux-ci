@@ -128,6 +128,18 @@ Agents must not apply them unless stated otherwise below.
   operator manifests before it can be merged.
   Changes to `test/go-tests/go.mod` or `operator/docs/go.mod` do not
   trigger companion PRs and must not receive this label.
+  When reviewing Renovate PRs that modify
+  `operator/upstream-kustomizations/`, check existing PR comments for
+  the companion workflow result before commenting on companion status.
+  The companion bot posts comments with distinctive HTML markers:
+  `<!-- konflux-manifest-companion-noop:PRNUM -->` when no manifest
+  changes are needed, and `<!-- konflux-manifest-companion:PRNUM -->`
+  when a companion PR has been created. If a companion noop comment is
+  present, note that no companion PR is needed — do not claim a
+  companion PR will be generated. If no companion comment exists yet,
+  use hedged language (e.g., "a companion PR may be needed"). If the
+  `deps-only` label is present, follow the withhold-approval guidance
+  above.
 - **`superseded-by-companion`** — Applied alongside `deps-only` by the
   companion script when a companion PR has been successfully created.
   Prefer merging the companion PR. **Agents must never apply this label.**
