@@ -30,6 +30,7 @@ They run against an upstream Konflux instance deployed via scripts in the [konfl
    1. The PipelineRun completes successfully
    1. The integration test PipelineRun is created and completes successfully
    1. The release pipeline succeeds and the release is marked as successful
+   1. A build retrigger is validated (PipelineRun is triggered via annotation, spec/labels are verified, without waiting for completion)
 
 ### How to run
 
