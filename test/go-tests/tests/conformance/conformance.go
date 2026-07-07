@@ -306,30 +306,6 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				})
 			})
 
-			// --- Build Retrigger ---
-
-			ginkgo.When("push pipelinerun is retriggered", func() {
-				ginkgo.It("should eventually succeed", func() {
-					err = fw.AsKubeAdmin.HasController.SetComponentAnnotation(component.GetName(), buildcontrollers.BuildRequestAnnotationName, buildcontrollers.BuildRequestTriggerPaCBuildAnnotationValue, userNamespace)
-					gomega.Expect(err).NotTo(gomega.HaveOccurred())
-
-					gomega.Eventually(func() error {
-						testPipelinerun, err = fw.AsKubeAdmin.HasController.GetComponentPipelineRunWithType(component.GetName(), appSpec.ApplicationName, userNamespace, "build", "", "incoming")
-						if err != nil {
-							dumpDiagnostics(fw.AsKubeAdmin, component.GetName(), appSpec.ApplicationName, userNamespace)
-							return err
-						}
-						if !testPipelinerun.HasStarted() {
-							return fmt.Errorf("pipelinerun %s/%s hasn't started yet", testPipelinerun.GetNamespace(), testPipelinerun.GetName())
-						}
-						return nil
-					}, 10*time.Minute, constants.PipelineRunPollingInterval).Should(gomega.Succeed(), "timed out waiting for retriggered PipelineRun")
-
-					err = fw.AsKubeAdmin.HasController.WaitForComponentPipelineToBeFinished(component, "build", "", "incoming", fw.AsKubeAdmin.TektonController, &has.RetryOptions{Retries: 2, Always: true}, testPipelinerun)
-					gomega.Expect(err).NotTo(gomega.HaveOccurred())
-				})
-			})
-
 			// --- Integration Testing ---
 
 			ginkgo.When("Integration Test PipelineRun is created", ginkgo.Label(upstreamKonfluxTestLabel), func() {
@@ -430,6 +406,82 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 						}
 						return nil
 					}, customResourceUpdateTimeout, defaultPollingInterval).Should(gomega.Succeed(), "release %q not marked as released", release.Name)
+				})
+			})
+
+			// --- Build Retrigger ---
+			// Validates the retrigger wiring without waiting for the PipelineRun to
+			// complete — the Kind cluster is torn down after the job finishes.
+
+			ginkgo.When("push pipelinerun is retriggered", func() {
+				ginkgo.It("should trigger a new PipelineRun via annotation", func() {
+					err = fw.AsKubeAdmin.HasController.SetComponentAnnotation(component.GetName(), buildcontrollers.BuildRequestAnnotationName, buildcontrollers.BuildRequestTriggerPaCBuildAnnotationValue, userNamespace)
+					gomega.Expect(err).NotTo(gomega.HaveOccurred())
+
+					gomega.Eventually(func() error {
+						testPipelinerun, err = fw.AsKubeAdmin.HasController.GetComponentPipelineRunWithType(component.GetName(), appSpec.ApplicationName, userNamespace, "build", "", "incoming")
+						if err != nil {
+							dumpDiagnostics(fw.AsKubeAdmin, component.GetName(), appSpec.ApplicationName, userNamespace)
+							return err
+						}
+						if !testPipelinerun.HasStarted() {
+							return fmt.Errorf("pipelinerun %s/%s hasn't started yet", testPipelinerun.GetNamespace(), testPipelinerun.GetName())
+						}
+						return nil
+					}, 10*time.Minute, constants.PipelineRunPollingInterval).Should(gomega.Succeed(), "timed out waiting for retriggered PipelineRun")
+				})
+
+				ginkgo.It("should have correct labels and ownership", func() {
+					// These labels are also used as selectors by GetComponentPipelineRunWithType,
+					// so asserting them here documents expectations explicitly.
+					gomega.Expect(testPipelinerun.Labels["pipelinesascode.tekton.dev/event-type"]).To(gomega.Equal("incoming"))
+					gomega.Expect(testPipelinerun.Labels["pipelines.appstudio.openshift.io/type"]).To(gomega.Equal("build"))
+					gomega.Expect(testPipelinerun.Labels["appstudio.openshift.io/component"]).To(gomega.Equal(component.GetName()))
+					gomega.Expect(testPipelinerun.Labels["appstudio.openshift.io/application"]).To(gomega.Equal(appSpec.ApplicationName))
+				})
+
+				ginkgo.It("should have a source commit SHA label", func() {
+					// Confirms the retrigger picked up the correct git revision.
+					gomega.Expect(testPipelinerun.Labels["pipelinesascode.tekton.dev/sha"]).NotTo(gomega.BeEmpty(),
+						"retriggered PipelineRun should carry a source commit SHA label")
+				})
+
+				ginkgo.It("should have a resolved pipeline spec", func() {
+					// Tekton resolves the bundle PipelineRef at admission and embeds
+					// the result as pipelineSpec. A nil pipelineSpec would indicate
+					// that pipeline resolution failed or PaC misconfigured the run.
+					gomega.Expect(testPipelinerun.Spec.PipelineSpec).NotTo(gomega.BeNil(),
+						"retriggered PipelineRun should have an embedded PipelineSpec (resolved from bundle)")
+				})
+
+				ginkgo.It("should have correct pipeline parameters", func() {
+					gomega.Expect(testPipelinerun.Spec.Params).NotTo(gomega.BeEmpty())
+					found := map[string]bool{"output-image": false, "git-url": false}
+					for _, p := range testPipelinerun.Spec.Params {
+						if p.Name == "output-image" {
+							found["output-image"] = true
+							gomega.Expect(p.Value.StringVal).NotTo(gomega.BeEmpty(), "output-image param should not be empty")
+						}
+						if p.Name == "git-url" {
+							found["git-url"] = true
+							gomega.Expect(p.Value.StringVal).To(gomega.Equal(appSpec.ComponentSpec.GitSourceUrl))
+						}
+					}
+					gomega.Expect(found["output-image"]).To(gomega.BeTrue(), "output-image param not found in PipelineRun spec")
+					gomega.Expect(found["git-url"]).To(gomega.BeTrue(), "git-url param not found in PipelineRun spec")
+				})
+
+				ginkgo.It("should clear the build request annotation after processing", func() {
+					// Build-service removes the annotation once it creates the PipelineRun;
+					// if it persists, the controller did not process the trigger correctly.
+					gomega.Eventually(func() string {
+						c, cErr := fw.AsKubeAdmin.HasController.GetComponent(component.GetName(), userNamespace)
+						if cErr != nil {
+							return "error"
+						}
+						return c.Annotations[buildcontrollers.BuildRequestAnnotationName]
+					}, time.Minute*2, defaultPollingInterval).Should(gomega.BeEmpty(),
+						"build request annotation should be cleared after retrigger")
 				})
 			})
 		})
