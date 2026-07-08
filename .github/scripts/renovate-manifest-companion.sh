@@ -348,6 +348,9 @@ Manifest companion PR (regenerated \`operator/pkg/manifests\` and third-party He
     --add-label "deps-only,superseded-by-companion"; then
     echo "::warning::Failed to add labels to source PR #${SOURCE_PR}. Check token permissions (pull-requests: write) and that the labels exist in the repository." >&2
   fi
+
+  # Remove ready-for-merge if present — it must not coexist with deps-only/superseded-by-companion (AGENTS.md)
+  gh pr edit "${SOURCE_PR}" --repo "${GITHUB_REPOSITORY}" --remove-label "ready-for-merge" 2>/dev/null || true
 fi
 
 # Request GitHub auto-merge on the companion PR so it merges (or enters the
