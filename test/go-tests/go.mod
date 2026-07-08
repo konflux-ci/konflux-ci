@@ -219,6 +219,6 @@ require (
 
 replace github.com/expr-lang/expr => github.com/expr-lang/expr v1.17.8
 
-replace github.com/go-chi/chi/v5 => github.com/go-chi/chi/v5 v5.3.0
+replace github.com/go-chi/chi/v5 => github.com/go-chi/chi/v5 v5.3.1
 
-replace github.com/go-chi/chi => github.com/go-chi/chi/v5 v5.3.0
+replace github.com/go-chi/chi => github.com/go-chi/chi/v5 v5.3.1
