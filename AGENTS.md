@@ -150,6 +150,13 @@ Agents must not apply them unless stated otherwise below.
 - APIs defined in `operator/api/v1alpha1` — many `Konflux*` kinds (Konflux, BuildService, IntegrationService, ReleaseService, UI, RBAC, etc.)
 - Per-service reconcilers in `operator/internal/controller/<subservice>/`
 
+**Controller-runtime patterns (operator code):**
+
+- **Top-down config flow** — The `Konflux` CR reconciler forwards configuration to sub-CRs (`KonfluxBuildService`, `KonfluxImageController`, `KonfluxIntegrationService`) via their spec fields. Sub-CR reconcilers must read their own spec — never reach back to the parent `Konflux` CR. This prevents circular dependencies and keeps each reconciler independently testable.
+- **Periodic work via channel sources** — Use `source.Channel` with a Runnable ticker/broadcaster for periodic maintenance (e.g., `TokenRotationBroadcaster`), not `RequeueAfter`. `RequeueAfter` is for convergence (retry until desired state is reached); channel sources are for scheduling (fire at a fixed interval regardless of state).
+- **Runnable lifecycle cleanup** — Any `Start()` method or `Runnable` that creates channels, tickers, or goroutines must clean them up when the context is cancelled. Close subscriber channels and stop tickers (via `defer`) before returning.
+- **Interface minimality** — Reconciler structs should depend on the narrowest type needed. If a reconciler only consumes events from a broadcaster, accept a `<-chan event.TypedGenericEvent[client.Object]`, not the broadcaster itself. Wire via `Subscribe()` in `main.go`.
+
 ## Skills
 
 Detailed guides live in `skills/` — each subdirectory contains a `SKILL.md` with instructions.
