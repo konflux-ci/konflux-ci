@@ -97,6 +97,7 @@ jobs:
             test/e2e/**
             test/go-tests/**
             kind-config.yaml
+            generate-err-logs.sh
             .github/workflows/operator-test-e2e.yaml
 
   # Lightweight jobs that create status checks when tests are skipped
