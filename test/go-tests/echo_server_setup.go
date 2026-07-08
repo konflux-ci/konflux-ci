@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"strconv"
 
 	"path/filepath"
 	"runtime"
@@ -14,6 +15,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
@@ -27,9 +29,9 @@ const (
 	// renovate: datasource=docker depName=registry.access.redhat.com/ubi10/go-toolset
 	echoServerImage = "registry.access.redhat.com/ubi10/go-toolset@sha256:120c56d15943f96f84c7d415432fc82a9212ea58f6cbebf516587fb854d8631a"
 
-	echoConfigMapName  = "echo-server-src"
-	echoDeployTimeout  = 120 * time.Second
-	echoDeployInterval = 2 * time.Second
+	echoConfigMapName         = "echo-server-src"
+	defaultEchoDeployTimeout  = 300 * time.Second
+	echoDeployInterval        = 2 * time.Second
 
 	watsonTestAPIKey    = "test-api-key"
 	watsonSecretName    = "watson-config"
@@ -116,6 +118,19 @@ var watsonEndpoint = echoInstance{
 
 var echoInstances = []*echoInstance{&kiteEndpoint, &kubearchiveEndpoint, &watsonEndpoint}
 
+// getEchoDeployTimeout returns the timeout for waiting on echo-server
+// deployments to become ready. If the ECHO_DEPLOY_TIMEOUT environment
+// variable is set to a positive integer (seconds), that value is used;
+// otherwise the default (300s) applies.
+func getEchoDeployTimeout() time.Duration {
+	if v := os.Getenv("ECHO_DEPLOY_TIMEOUT"); v != "" {
+		if sec, err := strconv.Atoi(v); err == nil && sec > 0 {
+			return time.Duration(sec) * time.Second
+		}
+	}
+	return defaultEchoDeployTimeout
+}
+
 func readEchoServerSource() string {
 	_, thisFile, _, ok := runtime.Caller(0)
 	Expect(ok).To(BeTrue(), "failed to resolve caller path")
@@ -201,13 +216,19 @@ func setupEndpoints(ctx context.Context, cl crclient.Client, ep *konfluxv1alpha1
 								ContainerPort: inst.ContainerPort,
 								Protocol:      corev1.ProtocolTCP,
 							}},
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("200m"),
+									corev1.ResourceMemory: resource.MustParse("256Mi"),
+								},
+							},
 							ReadinessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
 									TCPSocket: &corev1.TCPSocketAction{
 										Port: intstr.FromInt32(inst.ContainerPort),
 									},
 								},
-								InitialDelaySeconds: 15,
+								InitialDelaySeconds: 60,
 								PeriodSeconds:       5,
 							},
 							VolumeMounts: []corev1.VolumeMount{
@@ -298,7 +319,7 @@ func setupEndpoints(ctx context.Context, cl crclient.Client, ep *konfluxv1alpha1
 			}, deploy)).To(Succeed())
 			g.Expect(deploy.Status.AvailableReplicas).To(BeNumerically(">=", 1),
 				"echo server %s/%s not ready", inst.Namespace, inst.DeploymentName)
-		}).WithTimeout(echoDeployTimeout).WithPolling(echoDeployInterval).Should(Succeed())
+		}).WithTimeout(getEchoDeployTimeout()).WithPolling(echoDeployInterval).Should(Succeed())
 	}
 }
 
