@@ -128,6 +128,18 @@ Agents must not apply them unless stated otherwise below.
   operator manifests before it can be merged.
   Changes to `test/go-tests/go.mod` or `operator/docs/go.mod` do not
   trigger companion PRs and must not receive this label.
+
+**Identifying companion-eligible PRs before labels are applied:**
+The companion workflow and agent dispatch trigger simultaneously. Labels
+may not be applied when the review agent runs. To handle this, agents
+should also check: if the PR author is `renovate[bot]` or
+`red-hat-konflux[bot]` AND the PR only changes files under
+`operator/upstream-kustomizations/` or
+`.github/scripts/export-third-party-chart-env.sh`, treat the PR as
+companion-eligible — withhold approval and note that a companion PR
+will handle manifest regeneration, even if `deps-only` /
+`superseded-by-companion` labels are not yet present.
+
 - **`superseded-by-companion`** — Applied alongside `deps-only` by the
   companion script when a companion PR has been successfully created.
   Prefer merging the companion PR. **Agents must never apply this label.**
