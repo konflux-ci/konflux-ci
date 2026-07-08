@@ -419,8 +419,14 @@ spec:
       include:
       - '@redhat'
     data:
-    - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest@sha256:636498f91b863b1aa4a5dbae20f94f478a3a464685f2d5ab013d63244a592852
     - github.com/redhat-appstudio/tsf-conforma-data//data?ref=1966f21842d507441a7a5e1c7de9071cf3f9ec53
     name: Default
     policy:
     - oci::quay.io/conforma/release-policy:latest@sha256:022895696367db98418832617409ebc2baa4c25c2a6d0126964dd438741c38ec
+    ruleData:
+      trusted_task_rules:
+        allow:
+          konflux-defaults:
+          - pattern: oci://quay.io/konflux-ci/tekton-catalog/*
+          - pattern: oci://quay.io/konflux-ci/integration-service-catalog/*
+      trusted_task_rules_enabled: true
