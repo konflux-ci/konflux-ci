@@ -538,7 +538,7 @@ spec:
         - /etc/caddy/Caddyfile
         - --adapter
         - caddyfile
-        image: quay.io/konflux-ci/reverse-proxy@sha256:c3df1ada200564722a306861dad7b925a786c76983c5bb7c1010f4e76cfa8735
+        image: quay.io/konflux-ci/reverse-proxy@sha256:9f5cafce9d0203b125cc1011419e422533711f2ff87bc45d456d21dcae505f61
         livenessProbe:
           failureThreshold: 3
           httpGet:
