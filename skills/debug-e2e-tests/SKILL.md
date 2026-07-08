@@ -317,6 +317,7 @@ Check the pinned commit SHA in the kustomization to identify which upstream vers
 
 Resource exhaustion, network issues, Kind cluster instability.
 - Check `system-resources.log` and `cluster-resources.log`
+- **etcd timeouts** — `etcdserver: request timed out` or `etcdserver: leader changed` indicate etcd leader re-elections caused by CPU starvation on resource-constrained runners (e.g., 4-vCPU GitHub Actions). High load averages in `system-resources.log` confirm CPU saturation. Fix: tune etcd settings in `kind-config.yaml` (heartbeat interval, election timeout)
 - If the test passed on one arch but failed on another, likely infra-related
 - If the failure is intermittent across runs, likely flaky
 
