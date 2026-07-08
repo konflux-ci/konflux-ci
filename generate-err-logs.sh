@@ -250,6 +250,16 @@ generate_logs() {
         done
     done
 
+    # Control plane pod logs from kube-system (targeted: etcd and kube-apiserver only)
+    for component in etcd kube-apiserver; do
+        local matching_pod
+        matching_pod=$(kubectl get pods -n kube-system -o name 2>/dev/null | grep "$component" | head -1)
+        if [ -n "$matching_pod" ]; then
+            podname="${matching_pod//pod\//}"
+            kubectl logs -n kube-system "$matching_pod" --tail=500 > "$artifacts_dir/pods/kube-system_${podname}.log" 2>&1 || true
+        fi
+    done
+
     echo "Artifact collection complete: $(find "$artifacts_dir" -type f | wc -l) files" >&2
 }
 

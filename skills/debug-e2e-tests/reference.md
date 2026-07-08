@@ -34,7 +34,9 @@ logs/
 │       ├── integration-service_<pod>.log
 │       ├── release-service_<pod>.log
 │       ├── application-service_<pod>.log
-│       └── pipelines-as-code_<pod>.log
+│       ├── pipelines-as-code_<pod>.log
+│       ├── kube-system_etcd-<node>.log           # etcd logs (--tail=500)
+│       └── kube-system_kube-apiserver-<node>.log  # kube-apiserver logs (--tail=500)
 ├── system-resources.log          # Host: memory, CPU, disk, load, top processes
 ├── cluster-resources.log         # Nodes describe, pending pods, all pod status
 ├── container-resources.log       # Docker/containerd stats
@@ -127,5 +129,5 @@ gh api "repos/konflux-ci/<service>/commits?sha=main&per_page=10" \
 | Reconcile error loop in operator | Controller bug or bad CR spec | `operator-logs.log` |
 | PipelineRun stuck `Running` | Tekton task issue or missing resources | `pipelineruns.json`, `taskruns.json` |
 | Different result amd64 vs arm64 | Architecture-specific bug or resource limits | Compare both artifact sets |
-| `etcdserver: request timed out` or `etcdserver: leader changed` | etcd overwhelmed by CPU starvation or excessive watcher load on Kind cluster | `system-resources.log` (load average), `cluster-resources.log` (node conditions) |
+| `etcdserver: request timed out` or `etcdserver: leader changed` | etcd overwhelmed by CPU starvation or excessive watcher load on Kind cluster | `pods/kube-system_etcd-*.log` (etcd logs), `system-resources.log` (load average), `cluster-resources.log` (node conditions) |
 
