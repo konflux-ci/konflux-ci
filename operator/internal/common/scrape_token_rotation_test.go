@@ -52,9 +52,9 @@ func TestTokenRotationBroadcaster_FiresEventsOnInterval(t *testing.T) {
 	cancel()
 	g.Eventually(done).WithTimeout(time.Second).Should(gomega.BeClosed())
 
-	// Drain any buffered events before asserting channel closure.
-	// The 10ms ticker may fire between the first event read and shutdown,
-	// leaving an extra event in the buffer.
+	// Drain any buffered events from ticks between the first read and shutdown.
+	// Closure is asserted implicitly: the loop exits only when the channel is closed (ok=false).
+	// If Start() did not close subscribers, this would block and the test would hang.
 	for _, ch := range []chan event.TypedGenericEvent[client.Object]{ch1, ch2} {
 		for ok := true; ok; {
 			_, ok = <-ch
