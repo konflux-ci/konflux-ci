@@ -1,8 +1,5 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "gitIgnoredAuthors": [
-    "278716306+fullsend-ai-coder[bot]@users.noreply.github.com"
-  ],
   "ignorePaths": [
     "operator/pkg/manifests/**",
     "konflux-ci/**"
