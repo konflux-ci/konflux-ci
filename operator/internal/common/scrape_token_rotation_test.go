@@ -52,10 +52,14 @@ func TestTokenRotationBroadcaster_FiresEventsOnInterval(t *testing.T) {
 	cancel()
 	g.Eventually(done).WithTimeout(time.Second).Should(gomega.BeClosed())
 
-	_, ok := <-ch1
-	g.Expect(ok).To(gomega.BeFalse())
-	_, ok = <-ch2
-	g.Expect(ok).To(gomega.BeFalse())
+	// Drain any buffered events before asserting channel closure.
+	// The 10ms ticker may fire between the first event read and shutdown,
+	// leaving an extra event in the buffer.
+	for _, ch := range []chan event.TypedGenericEvent[client.Object]{ch1, ch2} {
+		for ok := true; ok; {
+			_, ok = <-ch
+		}
+	}
 }
 
 func TestTokenRotationBroadcaster_NeedLeaderElection(t *testing.T) {
