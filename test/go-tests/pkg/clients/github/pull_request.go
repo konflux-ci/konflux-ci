@@ -16,7 +16,13 @@ import (
 const (
 	// mergeInProgressPollTimeout is how long to poll for merge completion
 	// after receiving a 405 "Merge already in progress" response.
-	mergeInProgressPollTimeout = 2 * time.Minute
+	// This must be shorter than the caller's timeout (mergePRTimeout = 1 min
+	// in conformance tests) so that Eventually can observe the timeout.
+	mergeInProgressPollTimeout = 45 * time.Second
+
+	// maxConsecutivePollErrors is the number of consecutive GetPullRequest
+	// failures inside waitForMerge before giving up early.
+	maxConsecutivePollErrors = 3
 )
 
 func (c *Client) GetPullRequest(repository string, id int) (*github.PullRequest, error) {
@@ -92,46 +98,70 @@ func (c *Client) MergePullRequest(repository string, prNumber int) (*github.Pull
 
 // isMergeInProgress returns true when GitHub responds with HTTP 405 and a
 // message indicating that a merge is already being processed.
+// It matches specifically on "merge already in progress" to avoid false
+// positives from other 405 responses (e.g., "already been merged",
+// "Base branch was modified").
 func isMergeInProgress(err error) bool {
 	var ghErr *github.ErrorResponse
 	if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == 405 {
-		return strings.Contains(strings.ToLower(ghErr.Message), "merge") ||
-			strings.Contains(strings.ToLower(ghErr.Message), "already in progress")
+		return strings.Contains(strings.ToLower(ghErr.Message), "merge already in progress")
 	}
 	return false
 }
 
 // isPRAlreadyMerged returns true when GitHub responds with HTTP 405 and a
 // message indicating that the pull request has already been merged.
+// Only matches the explicit "already been merged" wording; generic
+// "not mergeable" responses (conflicts, failing checks) are excluded.
 func isPRAlreadyMerged(err error) bool {
 	var ghErr *github.ErrorResponse
-	if errors.As(err, &ghErr) && ghErr.Response != nil {
-		msg := strings.ToLower(ghErr.Message)
-		return strings.Contains(msg, "already been merged") ||
-			strings.Contains(msg, "pull request is not mergeable")
+	if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == 405 {
+		return strings.Contains(strings.ToLower(ghErr.Message), "already been merged")
 	}
 	return false
 }
 
 // waitForMerge polls the PR until it transitions to merged state or times out.
+// It fails fast on consecutive API errors and when the PR is closed without
+// being merged.
 func (c *Client) waitForMerge(repository string, prNumber int) (*github.PullRequestMergeResult, error) {
 	var pr *github.PullRequest
+	var lastErr error
+	consecutiveErrors := 0
+
 	err := utils.WaitUntilWithInterval(func() (bool, error) {
 		var getErr error
 		pr, getErr = c.GetPullRequest(repository, prNumber)
 		if getErr != nil {
-			fmt.Printf("[github] error polling PR #%d merge state: %v\n", prNumber, getErr)
+			consecutiveErrors++
+			lastErr = getErr
+			fmt.Printf("[github] error polling PR #%d merge state (%d/%d): %v\n",
+				prNumber, consecutiveErrors, maxConsecutivePollErrors, getErr)
+			if consecutiveErrors >= maxConsecutivePollErrors {
+				return false, fmt.Errorf("giving up after %d consecutive errors polling PR #%d in %s: %v",
+					maxConsecutivePollErrors, prNumber, repository, getErr)
+			}
 			return false, nil
 		}
+		consecutiveErrors = 0
+		lastErr = nil
+
 		if pr.GetMerged() {
 			return true, nil
+		}
+		if pr.GetState() == "closed" {
+			return false, fmt.Errorf("PR #%d in %s was closed without being merged", prNumber, repository)
 		}
 		fmt.Printf("[github] PR #%d in %s: merge still in progress (state=%s, merged=%v)\n",
 			prNumber, repository, pr.GetState(), pr.GetMerged())
 		return false, nil
 	}, 5*time.Second, mergeInProgressPollTimeout)
 	if err != nil {
-		return nil, fmt.Errorf("timed out waiting for PR #%d in %s to be merged after 405 response: %v", prNumber, repository, err)
+		if lastErr != nil {
+			return nil, fmt.Errorf("waiting for PR #%d in %s to be merged after 405 response: %v (last API error: %v)",
+				prNumber, repository, err, lastErr)
+		}
+		return nil, fmt.Errorf("waiting for PR #%d in %s to be merged after 405 response: %v", prNumber, repository, err)
 	}
 
 	merged := true
