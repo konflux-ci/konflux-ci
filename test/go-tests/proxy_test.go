@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -417,6 +418,63 @@ var _ = Describe("Test Proxy endpoints", func() {
 			Expect(err).NotTo(HaveOccurred())
 			defer response.Body.Close()
 			Expect(response.StatusCode).To(Equal(401))
+		})
+	})
+
+	Describe("Test runtime-config.js", func() {
+		It("should serve runtime-config.js as static content", func() {
+			request, err := http.NewRequest("GET", proxyURL("/runtime-config.js"), nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			response, err := proxyHTTPClient.Do(request)
+			Expect(err).NotTo(HaveOccurred())
+			defer response.Body.Close()
+
+			body, err := io.ReadAll(response.Body)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(response.StatusCode).To(Equal(200),
+				"runtime-config.js should be served as static content")
+
+			content := string(body)
+			Expect(content).To(ContainSubstring("window.KONFLUX_RUNTIME"),
+				"runtime-config.js should define window.KONFLUX_RUNTIME")
+		})
+
+		It("should reflect runtime config values from the Konflux CR", func() {
+			ctx := context.Background()
+			konflux := &konfluxv1alpha1.Konflux{}
+			Expect(proxyClient.Get(ctx, crclient.ObjectKey{Name: konfluxCRName}, konflux)).To(Succeed())
+
+			var runtimeConfig *konfluxv1alpha1.RuntimeConfigSpec
+			if konflux.Spec.KonfluxUI != nil && konflux.Spec.KonfluxUI.Spec != nil {
+				runtimeConfig = konflux.Spec.KonfluxUI.Spec.RuntimeConfig
+			}
+
+			request, err := http.NewRequest("GET", proxyURL("/runtime-config.js"), nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			response, err := proxyHTTPClient.Do(request)
+			Expect(err).NotTo(HaveOccurred())
+			defer response.Body.Close()
+
+			body, err := io.ReadAll(response.Body)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(response.StatusCode).To(Equal(200))
+
+			content := string(body)
+
+			if runtimeConfig == nil {
+				By("runtimeConfig is nil — expecting only the empty initializer")
+				Expect(content).To(ContainSubstring("window.KONFLUX_RUNTIME = window.KONFLUX_RUNTIME || {};"))
+				return
+			}
+
+			for key, value := range runtimeConfig.All {
+				propName := strings.TrimPrefix(key, "RUNTIME_")
+				Expect(content).To(ContainSubstring(
+					fmt.Sprintf(`window.KONFLUX_RUNTIME["%s"] = "%s";`, propName, value)),
+					"runtime-config.js should contain property %s=%s from the CR", propName, value)
+			}
 		})
 	})
 })

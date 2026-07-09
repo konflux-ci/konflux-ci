@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
+	"k8s.io/utils/ptr"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
@@ -101,7 +102,7 @@ func assertNoConflictingEnvVars(g *gomega.WithT, container *corev1.Container) {
 func TestBuildProxyOverlay(t *testing.T) {
 	t.Run("nil spec returns overlay with oauth2-proxy config", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		overlay, err := buildProxyOverlay(nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(nil, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(overlay).NotTo(gomega.BeNil())
 
@@ -118,7 +119,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 	t.Run("empty spec returns overlay with oauth2-proxy config", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := &konfluxv1alpha1.ProxyDeploymentSpec{}
-		overlay, err := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(overlay).NotTo(gomega.BeNil())
 
@@ -134,7 +135,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 
 	t.Run("adds CA bundle volume and mount", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		overlay, err := buildProxyOverlay(nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(nil, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(overlay).NotTo(gomega.BeNil())
 
@@ -194,7 +195,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay, err := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -221,7 +222,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay, err := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -255,7 +256,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay, err := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -289,7 +290,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		g.Expect(rpContainer).NotTo(gomega.BeNil(), "reverse-proxy container must exist in proxy deployment")
 		originalImage := rpContainer.Image
 
-		overlay, err := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -1260,7 +1261,7 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay, err := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -1291,7 +1292,7 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay, err := buildProxyOverlay(spec, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -1299,6 +1300,140 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		initContainer := testutil.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
 		g.Expect(initContainer).NotTo(gomega.BeNil())
 		envMap := envToMap(initContainer.Env)
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("KITE_ENABLED", "true"))
+	})
+}
+
+func TestAppendRuntimeConfigOverlays(t *testing.T) {
+	t.Run("nil runtimeConfig returns unchanged slice", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		initOpts := appendRuntimeConfigOverlays(nil, nil)
+		g.Expect(initOpts).To(gomega.BeNil())
+	})
+
+	t.Run("empty runtimeConfig returns unchanged slice", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		initOpts := appendRuntimeConfigOverlays(&konfluxv1alpha1.RuntimeConfigSpec{}, nil)
+		g.Expect(initOpts).To(gomega.BeEmpty())
+	})
+
+	t.Run("chatBot enabled sets RUNTIME_CHAT_BOT_ENABLED", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		rc := &konfluxv1alpha1.RuntimeConfigSpec{
+			ChatBot: &konfluxv1alpha1.ChatBotConfig{
+				Enabled: ptr.To(false),
+			},
+		}
+		initOpts := appendRuntimeConfigOverlays(rc, nil)
+		c := applyContainerOpts(initOpts)
+		envMap := envToMap(c.Env)
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_CHAT_BOT_ENABLED", "false"))
+	})
+
+	t.Run("monitoring with all fields sets all RUNTIME_MONITORING_* env vars", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		rc := &konfluxv1alpha1.RuntimeConfigSpec{
+			Monitoring: &konfluxv1alpha1.MonitoringConfig{
+				Enabled:          ptr.To(true),
+				DSN:              "https://example@sentry.io/123",
+				Environment:      "staging",
+				Cluster:          "stone-stage-p01",
+				SampleRateErrors: "1.0",
+			},
+		}
+		initOpts := appendRuntimeConfigOverlays(rc, nil)
+		c := applyContainerOpts(initOpts)
+		envMap := envToMap(c.Env)
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_MONITORING_ENABLED", "true"))
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_MONITORING_DSN", "https://example@sentry.io/123"))
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_MONITORING_ENVIRONMENT", "staging"))
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_MONITORING_CLUSTER", "stone-stage-p01"))
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_MONITORING_SAMPLE_RATE_ERRORS", "1.0"))
+	})
+
+	t.Run("partial monitoring config only sets provided fields", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		rc := &konfluxv1alpha1.RuntimeConfigSpec{
+			Monitoring: &konfluxv1alpha1.MonitoringConfig{
+				Enabled: ptr.To(true),
+				DSN:     "https://dsn@sentry.io/1",
+			},
+		}
+		initOpts := appendRuntimeConfigOverlays(rc, nil)
+		c := applyContainerOpts(initOpts)
+		envMap := envToMap(c.Env)
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_MONITORING_ENABLED", "true"))
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_MONITORING_DSN", "https://dsn@sentry.io/1"))
+		g.Expect(envMap).NotTo(gomega.HaveKey("RUNTIME_MONITORING_ENVIRONMENT"))
+		g.Expect(envMap).NotTo(gomega.HaveKey("RUNTIME_MONITORING_CLUSTER"))
+		g.Expect(envMap).NotTo(gomega.HaveKey("RUNTIME_MONITORING_SAMPLE_RATE_ERRORS"))
+	})
+
+	t.Run("full config sets all env vars", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		rc := &konfluxv1alpha1.RuntimeConfigSpec{
+			ChatBot: &konfluxv1alpha1.ChatBotConfig{Enabled: ptr.To(true)},
+			Monitoring: &konfluxv1alpha1.MonitoringConfig{
+				Enabled:          ptr.To(true),
+				DSN:              "https://dsn@sentry.io/1",
+				Environment:      "production",
+				Cluster:          "prod-01",
+				SampleRateErrors: "0.5",
+			},
+		}
+		initOpts := appendRuntimeConfigOverlays(rc, nil)
+		c := applyContainerOpts(initOpts)
+		envMap := envToMap(c.Env)
+		g.Expect(envMap).To(gomega.HaveLen(6))
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_CHAT_BOT_ENABLED", "true"))
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_MONITORING_ENABLED", "true"))
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_MONITORING_DSN", "https://dsn@sentry.io/1"))
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_MONITORING_ENVIRONMENT", "production"))
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_MONITORING_CLUSTER", "prod-01"))
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_MONITORING_SAMPLE_RATE_ERRORS", "0.5"))
+	})
+
+	t.Run("runtime config env vars applied to deployment init container", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		rc := &konfluxv1alpha1.RuntimeConfigSpec{
+			ChatBot:    &konfluxv1alpha1.ChatBotConfig{Enabled: ptr.To(false)},
+			Monitoring: &konfluxv1alpha1.MonitoringConfig{Enabled: ptr.To(true)},
+		}
+
+		deployment := getUIDeployment(t, proxyDeploymentName)
+		overlay, err := buildProxyOverlay(nil, rc, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		err = overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		initContainer := testutil.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
+		g.Expect(initContainer).NotTo(gomega.BeNil())
+		envMap := envToMap(initContainer.Env)
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_CHAT_BOT_ENABLED", "false"))
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_MONITORING_ENABLED", "true"))
+	})
+
+	t.Run("runtime config combined with endpoint overlays", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		rc := &konfluxv1alpha1.RuntimeConfigSpec{
+			ChatBot: &konfluxv1alpha1.ChatBotConfig{Enabled: ptr.To(true)},
+		}
+		spec := &konfluxv1alpha1.ProxyDeploymentSpec{
+			Endpoints: &konfluxv1alpha1.ProxyEndpointsSpec{
+				Kite: &konfluxv1alpha1.EndpointSpec{Enabled: true},
+			},
+		}
+
+		deployment := getUIDeployment(t, proxyDeploymentName)
+		overlay, err := buildProxyOverlay(spec, rc, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		err = overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		initContainer := testutil.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
+		g.Expect(initContainer).NotTo(gomega.BeNil())
+		envMap := envToMap(initContainer.Env)
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_CHAT_BOT_ENABLED", "true"))
 		g.Expect(envMap).To(gomega.HaveKeyWithValue("KITE_ENABLED", "true"))
 	})
 }
