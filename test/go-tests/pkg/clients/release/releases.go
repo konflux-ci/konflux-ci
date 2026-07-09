@@ -323,9 +323,11 @@ func (r *Controller) WaitForReleasePipelineToBeFinishedWithRetry(
 				failedLogs, _ := tekton.GetFailedPipelineRunLogs(r.KubeRest(), r.KubeInterface(), pr)
 				if strings.TrimSpace(failedLogs) == "" {
 					cond := pr.GetStatusCondition().GetCondition(apis.ConditionSucceeded)
-					failedLogs = cond.GetReason()
-					if msg := cond.GetMessage(); msg != "" {
-						failedLogs = failedLogs + ": " + msg
+					if cond != nil {
+						failedLogs = cond.GetReason()
+						if msg := cond.GetMessage(); msg != "" {
+							failedLogs = failedLogs + ": " + msg
+						}
 					}
 				}
 				return false, fmt.Errorf("%s", failedLogs)
