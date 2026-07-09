@@ -134,6 +134,16 @@ func (c *ClientTokenCreator) CreateScraperToken(
 // ScrapeTokenApplyFunc persists the scrape token Secret (for example via tracking.Client.ApplyOwned).
 type ScrapeTokenApplyFunc func(ctx context.Context, secret *corev1.Secret) error
 
+// EnsureScrapeTokenResult carries scrape-token state from EnsurePrometheusScrapeToken
+// without re-reading the informer cache after the write.
+type EnsureScrapeTokenResult struct {
+	RequeueAfter    time.Duration
+	TokenUpdated    bool
+	SecretExisted   bool
+	Token           []byte
+	ResourceVersion string
+}
+
 // EnsureScrapeTokenInput configures EnsurePrometheusScrapeToken.
 type EnsureScrapeTokenInput struct {
 	Client           client.Reader
@@ -197,29 +207,33 @@ const OperatorScrapeTokenFieldManager = "konflux-operator-scrape-token"
 // ApplyScrapeTokenSecret persists a scrape token Secret without an owner reference.
 func ApplyScrapeTokenSecret(ctx context.Context, c client.Client, secret *corev1.Secret) error {
 	prepared := prepareSecretForApply(secret)
-	return c.Patch(
+	if err := c.Patch(
 		ctx,
 		prepared,
 		SSAPatch,
 		client.FieldOwner(OperatorScrapeTokenFieldManager),
 		client.ForceOwnership,
-	)
+	); err != nil {
+		return err
+	}
+	copySecretWriteMetadata(secret, prepared)
+	return nil
 }
 
 // EnsurePrometheusScrapeToken creates or refreshes the operand scrape token Secret.
-// It returns a suggested requeue interval for token rotation.
-func EnsurePrometheusScrapeToken(ctx context.Context, in EnsureScrapeTokenInput) (time.Duration, error) {
+// The result reflects the write path directly so callers do not re-read a stale cache.
+func EnsurePrometheusScrapeToken(ctx context.Context, in EnsureScrapeTokenInput) (EnsureScrapeTokenResult, error) {
 	if in.Apply == nil {
-		return 0, fmt.Errorf("scrape token apply func is required")
+		return EnsureScrapeTokenResult{}, fmt.Errorf("scrape token apply func is required")
 	}
 	if in.TokenCreator == nil {
-		return 0, fmt.Errorf("token creator is required")
+		return EnsureScrapeTokenResult{}, fmt.Errorf("token creator is required")
 	}
 	if in.OperandNamespace == "" {
-		return 0, fmt.Errorf("operand namespace is required")
+		return EnsureScrapeTokenResult{}, fmt.Errorf("operand namespace is required")
 	}
 	if in.Scraper.Namespace == "" || in.Scraper.Name == "" {
-		return 0, fmt.Errorf("scraper service account is required")
+		return EnsureScrapeTokenResult{}, fmt.Errorf("scraper service account is required")
 	}
 	clk := in.Clock
 	if clk == nil {
@@ -237,19 +251,22 @@ func EnsurePrometheusScrapeToken(ctx context.Context, in EnsureScrapeTokenInput)
 		Namespace: in.OperandNamespace,
 	}, existing)
 	if client.IgnoreNotFound(err) != nil {
-		return 0, fmt.Errorf("get scrape token secret: %w", err)
+		return EnsureScrapeTokenResult{}, fmt.Errorf("get scrape token secret: %w", err)
 	}
-	if err == nil && !ScrapeTokenNeedsRefresh(existing, now, ttl) {
+	secretExisted := err == nil
+	if secretExisted && !ScrapeTokenNeedsRefresh(existing, now, ttl) {
 		if applyErr := in.Apply(ctx, prepareSecretForApply(existing)); applyErr != nil {
-			return 0, fmt.Errorf("track scrape token secret: %w", applyErr)
+			return EnsureScrapeTokenResult{}, fmt.Errorf("track scrape token secret: %w", applyErr)
 		}
-		return ScrapeTokenRequeueAfter(existing, now, ttl), nil
+		return scrapeTokenResultFromSecret(existing, secretExisted, false, now, ttl)
 	}
 
 	scraper := in.Scraper
 	token, expiresAt, err := in.TokenCreator.CreateScraperToken(ctx, scraper, ttl)
 	if err != nil {
-		return 0, fmt.Errorf("create scraper token for %s/%s: %w", scraper.Namespace, scraper.Name, err)
+		return EnsureScrapeTokenResult{}, fmt.Errorf(
+			"create scraper token for %s/%s: %w", scraper.Namespace, scraper.Name, err,
+		)
 	}
 
 	secret := &corev1.Secret{
@@ -270,9 +287,46 @@ func EnsurePrometheusScrapeToken(ctx context.Context, in EnsureScrapeTokenInput)
 		},
 	}
 	if err := in.Apply(ctx, secret); err != nil {
-		return 0, fmt.Errorf("apply scrape token secret: %w", err)
+		return EnsureScrapeTokenResult{}, fmt.Errorf("apply scrape token secret: %w", err)
 	}
-	return ScrapeTokenRequeueAfter(secret, now, ttl), nil
+	return scrapeTokenResultFromSecret(secret, secretExisted, true, now, ttl)
+}
+
+func scrapeTokenResultFromSecret(
+	secret *corev1.Secret,
+	secretExisted, tokenUpdated bool,
+	now time.Time,
+	ttl time.Duration,
+) (EnsureScrapeTokenResult, error) {
+	token := secret.Data[ScrapeTokenSecretKey]
+	if len(token) == 0 {
+		return EnsureScrapeTokenResult{}, fmt.Errorf(
+			"scrape token secret %s/%s has empty %q after ensure",
+			secret.Namespace, ScrapeTokenSecretName, ScrapeTokenSecretKey,
+		)
+	}
+	return EnsureScrapeTokenResult{
+		RequeueAfter:    ScrapeTokenRequeueAfter(secret, now, ttl),
+		TokenUpdated:    tokenUpdated,
+		SecretExisted:   secretExisted,
+		Token:           append([]byte(nil), token...),
+		ResourceVersion: secret.ResourceVersion,
+	}, nil
+}
+
+func copySecretWriteMetadata(dst, src *corev1.Secret) {
+	if src == nil || dst == nil {
+		return
+	}
+	if src.ResourceVersion != "" {
+		dst.ResourceVersion = src.ResourceVersion
+	}
+	if src.UID != "" {
+		dst.UID = src.UID
+	}
+	if !src.CreationTimestamp.IsZero() {
+		dst.CreationTimestamp = src.CreationTimestamp
+	}
 }
 
 // IsPrometheusScrapeTokenSecret reports whether obj is the operator-managed scrape token Secret.

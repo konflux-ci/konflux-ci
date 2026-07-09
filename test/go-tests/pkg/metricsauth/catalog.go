@@ -30,6 +30,9 @@ type Target struct {
 	MetricsReaderClusterRole string
 	ScrapeTokenSecret        string
 	BodyMustMatchAny         []string
+	// UWMUpCheck includes the target in OpenShift UWM up==1 specs outside the
+	// scrape-token contract suite (legacy interim HTTP operands).
+	UWMUpCheck bool
 }
 
 func (c *Catalog) validate() error {

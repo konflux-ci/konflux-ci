@@ -133,6 +133,75 @@ Timing constants and trade-offs: `DefaultScrapeTokenTTL`,
 
 Example manifests: `operator/upstream-kustomizations/<component>/monitoring/`.
 
+### ServiceMonitor apply ordering (OpenShift UWM)
+
+On clusters where prometheus-operator evaluates ServiceMonitors at apply time, a
+ServiceMonitor that references `bearerTokenSecret: prometheus-scrape-token` before the
+Secret exists can be rejected (`InvalidConfiguration: secret not found`) and may not
+recover when the Secret appears later.
+
+Operand reconcilers on the operator scrape-token model address this in two layers:
+
+1. **Deferred apply** — when `componentMetrics` is enabled, the operand ServiceMonitor
+   is skipped in `applyManifests` and applied only from
+   `ReconcilePrometheusScrapeToken` after the scrape token Secret is readable. The SM is
+   re-applied on every reconcile (idempotent SSA) so tracking-client orphan cleanup
+   retains ownership.
+2. **Resync nudges** — after apply, `ResyncOperandServiceMonitor` patches SM annotations
+   so prometheus-operator re-evaluates the SM when:
+   - the token is minted (`token-minted`) or refreshed (`token-refreshed`)
+   - a settle requeue fires (~15s, `settle-retry`)
+   - the secret resource version drifts (`secret-sync`, blocked while settle is pending)
+
+Annotations (on the operand ServiceMonitor):
+
+| Annotation | Purpose |
+|------------|---------|
+| `konflux.konflux-ci.dev/metrics-scrape-resync` | RFC3339 timestamp of last nudge |
+| `konflux.konflux-ci.dev/metrics-scrape-resync-reason` | `token-minted`, `token-refreshed`, `settle-retry`, or `secret-sync` |
+| `konflux.konflux-ci.dev/metrics-scrape-resync-secret-rv` | Last seen `prometheus-scrape-token` resourceVersion |
+| `konflux.konflux-ci.dev/metrics-scrape-resync-settle` | `pending` while waiting for settle requeue |
+
+Implementation: `operator/internal/common/scrape_token.go`,
+`operator/pkg/kubernetes/servicemonitor_resync.go`, wired from build-service and
+image-controller reconcilers.
+
+`EnsurePrometheusScrapeToken` returns `EnsureScrapeTokenResult` (token bytes,
+`SecretExisted`, post-write `ResourceVersion`) from the write path. Operand
+reconciliation uses that result for resync decisions instead of re-reading the Secret
+or ServiceMonitor from the informer cache immediately after apply, when the cache may
+not have caught up yet.
+
+Operator logs (verbosity 1 unless noted):
+
+- `metrics scrape deferred ServiceMonitor apply` — first SM create at Info;
+  steady-state re-apply at V(1)
+- `metrics scrape resync` — Info, one line per annotation patch
+- `metrics scrape resync secret-sync deferred` — Info when settle blocks secret-sync
+
+### OpenShift UWM integration tests
+
+On OpenShift optional e2e (`konflux-e2e-v420-optional`, `konflux-e2e-v420-arm64-optional`),
+`scripts/operator-e2e/openshift/enable-uwm.sh` enables user-workload monitoring, then
+`run-metrics-openshift-tests.sh` runs `test/go-tests/metricsopenshift/`.
+
+The suite verifies:
+
+- UWM Prometheus is ready in `openshift-user-workload-monitoring`
+- Operand scrape contract (ServiceMonitor spec, resync annotations, token Secret) for
+  scrape-token targets (`konflux-operator`, `build-service`, `image-controller`)
+- `up==1` in UWM Prometheus for scrape-token targets (`metrics-uwm`) and legacy interim
+  HTTP operands with `UWMUpCheck` (`integration-service`, `konflux-ui-proxy`; label
+  `metrics-uwm-up-only`, no scrape-token contract)
+
+Before specs, tests emit `[UWM resync]` lines with `resync_reason`, secret/SM resource
+versions, `uwm_active_targets`, and `sm_after_secret` (SM `creationTimestamp` after
+scrape token). Use `sm_after_secret=true` and `uwm_active_targets=1` as pass fingerprints;
+`resync_reason` alone is not a reliable flake indicator.
+
+On failure, `[UWM debug]` dumps SM/secret metadata, prometheus-operator log tail, and
+peer target comparison. See `test/go-tests/pkg/metricsopenshift/`.
+
 ### Operator self-metrics
 
 The Konflux operator manager uses the same **operator scrape token** model in
@@ -265,3 +334,6 @@ Paths: `operator/upstream-kustomizations/<component>/`, matching controller unde
 | Operator self-metrics | `internal/operatormetrics/` (`scrape_token_rotator.go`, `scrape_wiring.go`) |
 | Embedded manifests | `operator/pkg/manifests/<component>/manifests.yaml` |
 | Cluster integration tests | `test/go-tests/metricsintegration/` + `test/go-tests/pkg/metricsauth.DefaultCatalog()` (via `scripts/operator-e2e/run-metrics-integration-tests.sh`, hooked in `test/e2e/run-e2e.sh`) |
+| OpenShift UWM tests | `test/go-tests/metricsopenshift/` + `test/go-tests/pkg/metricsopenshift/` (via `scripts/operator-e2e/openshift/run-metrics-openshift-tests.sh`, optional OCP e2e in `test/e2e/run-e2e.sh`) |
+| ServiceMonitor resync | `operator/pkg/kubernetes/servicemonitor_resync.go` |
+| Deferred SM apply | `operator/internal/common/scrape_token.go`, `operand_servicemonitor.go` |

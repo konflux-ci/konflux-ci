@@ -182,18 +182,38 @@ func (r *KonfluxBuildServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		return errHandler.HandleApplyError(ctx, err)
 	}
 
+	scrapeResult := reconcile.Result{}
 	if buildService.Spec.ComponentMetrics.IsEnabled() && r.TokenCreator != nil {
+		// Deferred ServiceMonitor apply: mint scrape token, apply SM after token, resync nudges.
 		scraper := kubernetes.OperandMetricsScraperSA(webhookConfigNamespace)
-		if scrapeErr := common.ReconcilePrometheusScrapeToken(ctx, common.ScrapeTokenReconcilerConfig{
-			Client:           r.Client,
-			Clock:            r.Clock,
-			TokenCreator:     r.TokenCreator,
-			Scraper:          scraper,
-			OperandNamespace: webhookConfigNamespace,
+		var scrapeErr error
+		scrapeResult, scrapeErr = common.ReconcilePrometheusScrapeToken(ctx, common.ScrapeTokenReconcilerConfig{
+			Client:             r.Client,
+			Clock:              r.Clock,
+			TokenCreator:       r.TokenCreator,
+			Scraper:            scraper,
+			OperandNamespace:   webhookConfigNamespace,
+			ServiceMonitorName: "build-service",
 			Apply: func(applyCtx context.Context, secret *corev1.Secret) error {
 				return tc.ApplyOwned(applyCtx, secret)
 			},
-		}); scrapeErr != nil {
+			ApplyServiceMonitor: func(applyCtx context.Context) error {
+				objects, storeErr := r.ObjectStore.GetForComponent(manifests.BuildService)
+				if storeErr != nil {
+					return fmt.Errorf("get manifests for ServiceMonitor apply: %w", storeErr)
+				}
+				sm, ok := common.OperandServiceMonitorFromObjects(objects, webhookConfigNamespace, "build-service")
+				if !ok {
+					return fmt.Errorf("operand ServiceMonitor %s/%s not found in embedded manifests",
+						webhookConfigNamespace, "build-service")
+				}
+				if err := common.ApplyMetricsScraperBindingSubjects(webhookConfigNamespace, sm); err != nil {
+					return fmt.Errorf("apply metrics scraper binding subjects for ServiceMonitor: %w", err)
+				}
+				return tc.ApplyOwned(applyCtx, sm)
+			},
+		})
+		if scrapeErr != nil {
 			return errHandler.HandleWithReason(ctx, scrapeErr, condition.ReasonApplyFailed, "reconcile prometheus scrape token")
 		}
 	}
@@ -217,7 +237,7 @@ func (r *KonfluxBuildServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	log.Info("Successfully reconciled KonfluxBuildService")
-	return ctrl.Result{}, nil
+	return scrapeResult, nil
 }
 
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
@@ -227,6 +247,7 @@ func (r *KonfluxBuildServiceReconciler) applyManifests(ctx context.Context, tc *
 	log := logf.FromContext(ctx)
 
 	metricsEnabled := owner.Spec.ComponentMetrics.IsEnabled()
+	deferServiceMonitor := metricsEnabled && r.TokenCreator != nil
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.BuildService)
 	if err != nil {
@@ -234,6 +255,16 @@ func (r *KonfluxBuildServiceReconciler) applyManifests(ctx context.Context, tc *
 	}
 
 	for _, obj := range objects {
+		// Deferred ServiceMonitor apply: skip operand SM until ReconcilePrometheusScrapeToken
+		// applies it after prometheus-scrape-token is readable.
+		if deferServiceMonitor && kubernetes.IsComponentMetricsServiceMonitor(obj) {
+			log.V(1).Info("Deferring operand ServiceMonitor apply until scrape token is ready",
+				"kind", tracking.GetKind(obj),
+				"name", obj.GetName(),
+				"namespace", obj.GetNamespace(),
+			)
+			continue
+		}
 		if !metricsEnabled && kubernetes.IsComponentMetricsScrapeResource(obj) {
 			log.V(1).Info("Skipping component metrics scrape resource",
 				"kind", tracking.GetKind(obj),

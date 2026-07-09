@@ -36,6 +36,18 @@ var ComponentMetricsOrphanCleanupGVKs = []schema.GroupVersionKind{
 	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"},
 }
 
+// IsComponentMetricsServiceMonitor reports whether obj is the operand ServiceMonitor
+// from upstream-kustomizations/*/monitoring/. Operand reconcilers skip this object in
+// applyManifests when componentMetrics is enabled (deferred ServiceMonitor apply); it is
+// applied later from ReconcilePrometheusScrapeToken after prometheus-scrape-token is readable.
+func IsComponentMetricsServiceMonitor(obj client.Object) bool {
+	if obj == nil {
+		return false
+	}
+	gvk := objectGroupVersionKind(obj)
+	return gvk.Group == "monitoring.coreos.com" && gvk.Kind == "ServiceMonitor"
+}
+
 // IsComponentMetricsScrapeResource reports whether obj is part of the component metrics
 // scrape contract under upstream-kustomizations/*/monitoring/ (ServiceMonitor,
 // metrics-reader ClusterRole, prometheus-* ClusterRoleBinding). Legacy dedicated

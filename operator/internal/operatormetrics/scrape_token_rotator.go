@@ -112,7 +112,7 @@ func (r *ScrapeTokenRotator) reconcile(ctx context.Context, namespace string) (t
 		return 0, err
 	}
 
-	return kubernetes.EnsurePrometheusScrapeToken(ctx, kubernetes.EnsureScrapeTokenInput{
+	requeue, err := kubernetes.EnsurePrometheusScrapeToken(ctx, kubernetes.EnsureScrapeTokenInput{
 		Client:           r.Client,
 		Clock:            clk,
 		TokenCreator:     r.TokenCreator,
@@ -122,6 +122,7 @@ func (r *ScrapeTokenRotator) reconcile(ctx context.Context, namespace string) (t
 			return kubernetes.ApplyScrapeTokenSecret(applyCtx, r.Client, secret)
 		},
 	})
+	return requeue.RequeueAfter, err
 }
 
 func (r *ScrapeTokenRotator) rotationInterval() time.Duration {

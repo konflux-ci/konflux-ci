@@ -23,6 +23,9 @@ func TestDefaultCatalog_TargetGroups(t *testing.T) {
 	assert.Equal(t, TargetGroupComponent, byID["integration-service"].LabelGroup())
 	assert.Equal(t, TargetGroupComponent, byID["image-controller"].LabelGroup())
 	assert.Equal(t, TargetGroupComponent, byID["konflux-ui-proxy"].LabelGroup())
+	assert.True(t, byID["integration-service"].UWMUpCheck)
+	assert.True(t, byID["konflux-ui-proxy"].UWMUpCheck)
+	assert.Empty(t, byID["konflux-ui-proxy"].ScrapeTokenSecret)
 }
 
 func TestNewCatalog_InvalidGroup(t *testing.T) {
