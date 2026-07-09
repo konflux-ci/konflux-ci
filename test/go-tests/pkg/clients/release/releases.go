@@ -11,6 +11,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/logs"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/utils/tekton"
 	releaseApi "github.com/konflux-ci/release-service/api/v1alpha1"
+	releaseMetadata "github.com/konflux-ci/release-service/metadata"
 	ginkgo "github.com/onsi/ginkgo/v2"
 	pipeline "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -375,6 +376,18 @@ func (r *Controller) WaitForReleasePipelineToBeFinishedWithRetry(
 		}
 		if createErr := r.KubeRest().Create(context.Background(), newRelease); createErr != nil {
 			return fmt.Errorf("recreate Release for snapshot %q: %w", snapshotName, createErr)
+		}
+
+		// If the original Release was automated, patch Status.Automated on the
+		// retry so the release-service validateAuthor check does not reject it.
+		// Integration-service sets both the label and Status.Automated on the
+		// initial Release; the retry helper must replicate the status side.
+		if newRelease.Labels[releaseMetadata.AutomatedLabel] == "true" {
+			patch := client.MergeFrom(newRelease.DeepCopy())
+			newRelease.SetAutomated()
+			if patchErr := r.KubeRest().Status().Patch(context.Background(), newRelease, patch); patchErr != nil {
+				return fmt.Errorf("patch Status.Automated on retry Release %s/%s: %w", tenantNS, retryName, patchErr)
+			}
 		}
 
 		current = newRelease
