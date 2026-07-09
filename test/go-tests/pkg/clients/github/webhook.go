@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/go-github/v44/github"
+	"github.com/google/go-github/v89/github"
 )
 
 type Webhook struct {
@@ -22,10 +22,10 @@ func (c *Client) ListRepoWebhooks(ctx context.Context, repository string) ([]*gi
 func (c *Client) CreateWebhook(repository, url string) (int64, error) {
 	newWebhook := &github.Hook{
 		Events: []string{"push"},
-		Config: map[string]interface{}{
-			"content_type": "json",
-			"insecure_ssl": 0,
-			"url":          url,
+		Config: &github.HookConfig{
+			ContentType: github.String("json"),
+			InsecureSSL: github.String("0"),
+			URL:         github.String(url),
 		},
 	}
 

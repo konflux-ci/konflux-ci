@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	gogithub "github.com/google/go-github/v44/github"
+	gogithub "github.com/google/go-github/v89/github"
 )
 
 func TestIsMergeInProgress(t *testing.T) {
@@ -166,8 +166,11 @@ func TestIsPRAlreadyMerged(t *testing.T) {
 func newTestClient(t *testing.T, handler http.Handler) (*Client, *httptest.Server) {
 	t.Helper()
 	server := httptest.NewServer(handler)
-	ghClient := gogithub.NewClient(nil)
-	ghClient.BaseURL, _ = ghClient.BaseURL.Parse(server.URL + "/")
+	baseURL := server.URL + "/"
+	ghClient, err := gogithub.NewClient(gogithub.WithURLs(&baseURL, &baseURL))
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
 	return &Client{client: ghClient, organization: "test-org", pollInterval: 10 * time.Millisecond}, server
 }
 

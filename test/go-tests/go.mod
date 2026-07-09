@@ -10,7 +10,7 @@ require (
 	github.com/docker/cli v29.6.1+incompatible
 	github.com/gofri/go-github-ratelimit/v2 v2.0.2
 	github.com/google/go-containerregistry v0.21.7
-	github.com/google/go-github/v44 v44.1.0
+	github.com/google/go-github/v89 v89.0.0
 	github.com/h2non/gock v1.2.0
 	github.com/konflux-ci/application-api v0.0.0-20260603073049-dd8c9b1a64c2
 	github.com/konflux-ci/build-service v0.0.0-20240611083846-2dee6cfe6fe4
