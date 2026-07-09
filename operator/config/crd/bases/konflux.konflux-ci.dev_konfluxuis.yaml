@@ -1011,6 +1011,47 @@ spec:
                         type: object
                     type: object
                 type: object
+              runtimeConfig:
+                description: |-
+                  RuntimeConfig defines frontend runtime configuration for the Konflux UI.
+                  These settings are injected as window.KONFLUX_RUNTIME properties in the SPA.
+                properties:
+                  chatBot:
+                    description: ChatBot configures the AI chatbot feature in the
+                      UI.
+                    properties:
+                      enabled:
+                        description: Enabled controls whether the chatbot UI is visible
+                          to users.
+                        type: boolean
+                    type: object
+                  monitoring:
+                    description: Monitoring configures error monitoring (e.g. Sentry)
+                      for the UI frontend.
+                    properties:
+                      cluster:
+                        description: Cluster identifies the cluster name for error
+                          reports.
+                        type: string
+                      dsn:
+                        description: DSN is the data source name (e.g. Sentry DSN)
+                          for error reporting.
+                        type: string
+                      enabled:
+                        description: Enabled controls whether error monitoring is
+                          active.
+                        type: boolean
+                      environment:
+                        description: Environment identifies the deployment environment
+                          (e.g. "staging", "production").
+                        type: string
+                      sampleRateErrors:
+                        description: SampleRateErrors controls the error event sample
+                          rate (0.0 to 1.0).
+                        pattern: ^(0(\.\d+)?|1(\.0+)?)$
+                        type: string
+                    type: object
+                type: object
             type: object
           status:
             description: KonfluxUIStatus defines the observed state of KonfluxUI

@@ -2069,6 +2069,86 @@ var _ = Describe("KonfluxUI Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})
+
+	Context("RuntimeConfig reconciliation via Reconcile", Serial, func() {
+		BeforeEach(func() {
+			startManager(noDefaultSegmentKey, nil)
+		})
+
+		It("Should set RUNTIME_* env vars on generate-proxy-config init container", func(ctx context.Context) {
+			ui := &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxUISpec{
+					RuntimeConfig: &konfluxv1alpha1.RuntimeConfigSpec{
+						ChatBot: &konfluxv1alpha1.ChatBotConfig{
+							Enabled: ptr.To(false),
+						},
+						Monitoring: &konfluxv1alpha1.MonitoringConfig{
+							Enabled:     ptr.To(true),
+							DSN:         "https://example@sentry.io/123",
+							Environment: "staging",
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: proxyDeploymentName, Namespace: uiNamespace,
+				}, dep)).To(Succeed())
+
+				var initContainer *corev1.Container
+				for i := range dep.Spec.Template.Spec.InitContainers {
+					if dep.Spec.Template.Spec.InitContainers[i].Name == generateProxyConfigContainerName {
+						initContainer = &dep.Spec.Template.Spec.InitContainers[i]
+						break
+					}
+				}
+				g.Expect(initContainer).NotTo(BeNil())
+
+				envMap := make(map[string]string, len(initContainer.Env))
+				for _, e := range initContainer.Env {
+					envMap[e.Name] = e.Value
+				}
+				g.Expect(envMap).To(HaveKeyWithValue("RUNTIME_CHAT_BOT_ENABLED", "false"))
+				g.Expect(envMap).To(HaveKeyWithValue("RUNTIME_MONITORING_ENABLED", "true"))
+				g.Expect(envMap).To(HaveKeyWithValue("RUNTIME_MONITORING_DSN", "https://example@sentry.io/123"))
+				g.Expect(envMap).To(HaveKeyWithValue("RUNTIME_MONITORING_ENVIRONMENT", "staging"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("Should not set RUNTIME_* env vars when runtimeConfig is nil", func(ctx context.Context) {
+			ui := &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec:       konfluxv1alpha1.KonfluxUISpec{},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: proxyDeploymentName, Namespace: uiNamespace,
+				}, dep)).To(Succeed())
+
+				var initContainer *corev1.Container
+				for i := range dep.Spec.Template.Spec.InitContainers {
+					if dep.Spec.Template.Spec.InitContainers[i].Name == generateProxyConfigContainerName {
+						initContainer = &dep.Spec.Template.Spec.InitContainers[i]
+						break
+					}
+				}
+				g.Expect(initContainer).NotTo(BeNil())
+
+				for _, e := range initContainer.Env {
+					g.Expect(e.Name).NotTo(HavePrefix("RUNTIME_"))
+				}
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
 })
 
 // mockDiscoveryClient implements clusterinfo.DiscoveryClient for testing.

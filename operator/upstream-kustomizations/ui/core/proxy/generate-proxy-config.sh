@@ -106,4 +106,16 @@ else
   log "no service CA found, backend TLS verification disabled"
 fi
 
+STATIC_DIR=/opt/app-root/src/static-content
+out="${STATIC_DIR}/runtime-config.js"
+printf 'window.KONFLUX_RUNTIME = window.KONFLUX_RUNTIME || {};\n' > "$out"
+env | grep '^RUNTIME_' | sort | while IFS= read -r var; do
+  name="${var%%=*}"
+  name="${name#RUNTIME_}"
+  value="${var#*=}"
+  esc=$(printf '%s' "$value" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e "s/$(printf '\r')/\\\\r/g")
+  printf 'window.KONFLUX_RUNTIME["%s"] = "%s";\n' "$name" "$esc" >> "$out"
+done
+log "runtime-config.js generated"
+
 log "done"

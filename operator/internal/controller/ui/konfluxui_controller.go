@@ -345,7 +345,7 @@ func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv
 		// OpenShift SCCs inject a numeric UID automatically so this is only
 		// needed on non-OpenShift (e.g. Kind).
 		needsRunAsUser := clusterInfo == nil || !clusterInfo.IsOpenShift()
-		proxyOverlay, err := buildProxyOverlay(ui.Spec.Proxy, segmentSecretName, needsRunAsUser, oauth2ProxyOpts...)
+		proxyOverlay, err := buildProxyOverlay(ui.Spec.Proxy, ui.Spec.RuntimeConfig, segmentSecretName, needsRunAsUser, oauth2ProxyOpts...)
 		if err != nil {
 			return err
 		}
@@ -405,10 +405,11 @@ func applyUIServiceAccountCustomizations(serviceAccount *corev1.ServiceAccount, 
 }
 
 // buildProxyOverlay builds the pod overlay for the proxy deployment.
+// runtimeConfig sets RUNTIME_* env vars on the generate-proxy-config init container.
 // segmentSecretName is the content-hashed Secret name (empty if segment is not configured).
 // needsRunAsUser injects runAsUser on the reverse-proxy container for non-OpenShift clusters.
 // oauth2ProxyOpts are applied to the oauth2-proxy container before user-provided overrides.
-func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, segmentSecretName string, needsRunAsUser bool, oauth2ProxyOpts ...customization.ContainerOption) (*customization.PodOverlay, error) {
+func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, runtimeConfig *konfluxv1alpha1.RuntimeConfigSpec, segmentSecretName string, needsRunAsUser bool, oauth2ProxyOpts ...customization.ContainerOption) (*customization.PodOverlay, error) {
 	// Create CA bundle volume that will be mounted in oauth2-proxy container.
 	// The Secret is created by cert-manager from the oauth2-proxy-cert Certificate resource
 	// (see operator/upstream-kustomizations/ui/dex/dex.yaml).
@@ -454,7 +455,16 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, segmentSecretN
 		reverseProxyOpts = append(reverseProxyOpts, customization.WithRunAsUser(1001))
 	}
 
+	// Build init container options for runtime config and optional proxy endpoints.
+	var initContainerOpts []customization.ContainerOption
+	initContainerOpts = appendRuntimeConfigOverlays(runtimeConfig, initContainerOpts)
+
 	if spec == nil {
+		if len(initContainerOpts) > 0 {
+			podOpts = append(podOpts, customization.WithContainerOpts(
+				generateProxyConfigContainerName, customization.DeploymentContext{}, initContainerOpts...,
+			))
+		}
 		podOpts = append(podOpts,
 			customization.WithContainerBuilder(reverseProxyContainerName, reverseProxyOpts...)(
 				customization.DeploymentContext{},
@@ -466,8 +476,6 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, segmentSecretN
 		return customization.NewPodOverlay(podOpts...), nil
 	}
 
-	// Build init container options for optional proxy endpoints.
-	var initContainerOpts []customization.ContainerOption
 	var endpointErr error
 	initContainerOpts, podOpts, endpointErr = appendEndpointOverlays(spec.Endpoints, initContainerOpts, podOpts)
 	if endpointErr != nil {
@@ -536,6 +544,24 @@ func appendEndpointOverlays(
 	}
 
 	return initOpts, podOpts, nil
+}
+
+// appendRuntimeConfigOverlays adds RUNTIME_* env vars to the generate-proxy-config
+// init container for each configured runtime config field. The env vars are read
+// by generate-proxy-config.sh to produce runtime-config.js.
+func appendRuntimeConfigOverlays(
+	runtimeConfig *konfluxv1alpha1.RuntimeConfigSpec,
+	initOpts []customization.ContainerOption,
+) []customization.ContainerOption {
+	if runtimeConfig == nil {
+		return initOpts
+	}
+	for key, value := range runtimeConfig.All {
+		initOpts = append(initOpts, customization.WithEnv(corev1.EnvVar{
+			Name: key, Value: value,
+		}))
+	}
+	return initOpts
 }
 
 // buildOAuth2ProxyOptions builds the container options for oauth2-proxy configuration.
