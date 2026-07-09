@@ -30,7 +30,7 @@ Other components (cli, ui, registry, namespace-lister, etc.) have local-only con
 
 `.github/workflows/update-upstream-manifests.yaml` runs weekly on Mondays at 02:00 UTC; use `workflow_dispatch` for an on-demand run.
 
-Renovate also proposes ref/tag bumps via `renovate.json`.
+Renovate also proposes ref/tag bumps via `renovate.json`. MintMaker/Renovate pin-only PRs may spawn a manifest companion PR — see [companion-pr-review](../companion-pr-review/SKILL.md) for review/skip rules (agents); see `CONTRIBUTING.md` for maintainer merge guidance.
 
 ### Single Component (local)
 
