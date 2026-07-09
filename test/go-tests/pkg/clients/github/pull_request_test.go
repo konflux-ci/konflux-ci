@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -67,6 +68,22 @@ func TestIsMergeInProgress(t *testing.T) {
 			},
 			wantResult: false,
 		},
+		{
+			name: "405 Base branch was modified is not merge in progress",
+			err: &gogithub.ErrorResponse{
+				Response: &http.Response{StatusCode: 405},
+				Message:  "Base branch was modified. Review and try the merge again.",
+			},
+			wantResult: false,
+		},
+		{
+			name: "405 already been merged is not merge in progress",
+			err: &gogithub.ErrorResponse{
+				Response: &http.Response{StatusCode: 405},
+				Message:  "Pull Request has already been merged",
+			},
+			wantResult: false,
+		},
 	}
 
 	for _, tc := range tests {
@@ -101,18 +118,26 @@ func TestIsPRAlreadyMerged(t *testing.T) {
 			wantResult: true,
 		},
 		{
-			name: "pull request is not mergeable",
+			name: "pull request is not mergeable is not already merged",
 			err: &gogithub.ErrorResponse{
 				Response: &http.Response{StatusCode: 405},
 				Message:  "Pull Request is not mergeable",
 			},
-			wantResult: true,
+			wantResult: false,
 		},
 		{
 			name: "merge in progress is not already merged",
 			err: &gogithub.ErrorResponse{
 				Response: &http.Response{StatusCode: 405},
 				Message:  "Merge already in progress",
+			},
+			wantResult: false,
+		},
+		{
+			name: "non-405 status code with already merged message",
+			err: &gogithub.ErrorResponse{
+				Response: &http.Response{StatusCode: 500},
+				Message:  "Pull Request has already been merged",
 			},
 			wantResult: false,
 		},
@@ -281,5 +306,149 @@ func TestMergePullRequest_409StillReturnsError(t *testing.T) {
 	}
 	if atomic.LoadInt32(&updateBranchCalled) != 1 {
 		t.Errorf("expected UpdatePullRequestBranch to be called once, got %d", updateBranchCalled)
+	}
+}
+
+func TestMergePullRequest_405MergeInProgressPollsMultipleTimes(t *testing.T) {
+	// Simulate: Merge returns 405, then GetPullRequest returns open (not yet
+	// merged) on the first two poll attempts, and merged on the third.
+	var pollCount int32
+	mergeSHA := "poll-sha"
+	merged := true
+	notMerged := false
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/test-org/test-repo/pulls/70/merge", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"message": "Merge already in progress",
+		})
+	})
+	mux.HandleFunc("/repos/test-org/test-repo/pulls/70", func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&pollCount, 1)
+		pr := &gogithub.PullRequest{
+			Number: gogithub.Int(70),
+		}
+		if n >= 3 {
+			pr.State = gogithub.String("closed")
+			pr.Merged = &merged
+			pr.MergeCommitSHA = &mergeSHA
+		} else {
+			pr.State = gogithub.String("open")
+			pr.Merged = &notMerged
+		}
+		_ = json.NewEncoder(w).Encode(pr)
+	})
+
+	client, server := newTestClient(t, mux)
+	defer server.Close()
+
+	result, err := client.MergePullRequest("test-repo", 70)
+	if err != nil {
+		t.Fatalf("MergePullRequest returned error: %v", err)
+	}
+	if result.GetSHA() != mergeSHA {
+		t.Errorf("SHA = %q, want %q", result.GetSHA(), mergeSHA)
+	}
+	if got := atomic.LoadInt32(&pollCount); got < 3 {
+		t.Errorf("expected at least 3 poll calls, got %d", got)
+	}
+}
+
+func TestMergePullRequest_405NotMergeableReturnsError(t *testing.T) {
+	// A 405 "Pull Request is not mergeable" on an open, unmerged PR must
+	// not be treated as already-merged. It should fall through to the
+	// generic error path.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/test-org/test-repo/pulls/80/merge", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"message": "Pull Request is not mergeable",
+		})
+	})
+
+	client, server := newTestClient(t, mux)
+	defer server.Close()
+
+	_, err := client.MergePullRequest("test-repo", 80)
+	if err == nil {
+		t.Fatal("expected error for 'not mergeable' 405 response, got nil")
+	}
+}
+
+func TestWaitForMerge_ClosedWithoutMerge(t *testing.T) {
+	// If the PR becomes closed but not merged, waitForMerge should return
+	// an error immediately rather than polling until timeout.
+	notMerged := false
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/test-org/test-repo/pulls/60", func(w http.ResponseWriter, r *http.Request) {
+		pr := &gogithub.PullRequest{
+			Number: gogithub.Int(60),
+			State:  gogithub.String("closed"),
+			Merged: &notMerged,
+		}
+		_ = json.NewEncoder(w).Encode(pr)
+	})
+
+	client, server := newTestClient(t, mux)
+	defer server.Close()
+
+	_, err := client.waitForMerge("test-repo", 60)
+	if err == nil {
+		t.Fatal("expected error when PR is closed without merge, got nil")
+	}
+	if !strings.Contains(err.Error(), "closed without being merged") {
+		t.Errorf("error should mention closed without merge, got: %v", err)
+	}
+}
+
+func TestWaitForMerge_ConsecutiveAPIErrors(t *testing.T) {
+	// If GetPullRequest fails maxConsecutivePollErrors times in a row,
+	// waitForMerge should fail fast instead of polling until timeout.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/test-org/test-repo/pulls/61", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"message": "Internal Server Error",
+		})
+	})
+
+	client, server := newTestClient(t, mux)
+	defer server.Close()
+
+	_, err := client.waitForMerge("test-repo", 61)
+	if err == nil {
+		t.Fatal("expected error after consecutive API failures, got nil")
+	}
+	if !strings.Contains(err.Error(), "consecutive errors") {
+		t.Errorf("error should mention consecutive errors, got: %v", err)
+	}
+}
+
+func TestGetMergeResultFromPR_NotMerged(t *testing.T) {
+	// getMergeResultFromPR should return an error when the PR is not
+	// actually merged (e.g., still open or closed without merge).
+	notMerged := false
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/test-org/test-repo/pulls/62", func(w http.ResponseWriter, r *http.Request) {
+		pr := &gogithub.PullRequest{
+			Number: gogithub.Int(62),
+			State:  gogithub.String("open"),
+			Merged: &notMerged,
+		}
+		_ = json.NewEncoder(w).Encode(pr)
+	})
+
+	client, server := newTestClient(t, mux)
+	defer server.Close()
+
+	_, err := client.getMergeResultFromPR("test-repo", 62)
+	if err == nil {
+		t.Fatal("expected error when PR is not merged, got nil")
+	}
+	if !strings.Contains(err.Error(), "GetMerged() is false") {
+		t.Errorf("error should mention GetMerged() is false, got: %v", err)
 	}
 }
