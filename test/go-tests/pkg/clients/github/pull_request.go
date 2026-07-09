@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -10,6 +11,12 @@ import (
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/constants"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/utils"
 	ginkgo "github.com/onsi/ginkgo/v2"
+)
+
+const (
+	// mergeInProgressPollTimeout is how long to poll for merge completion
+	// after receiving a 405 "Merge already in progress" response.
+	mergeInProgressPollTimeout = 2 * time.Minute
 )
 
 func (c *Client) GetPullRequest(repository string, id int) (*github.PullRequest, error) {
@@ -59,6 +66,16 @@ func (c *Client) ListPullRequestCommentsSince(repository string, prNumber int, s
 func (c *Client) MergePullRequest(repository string, prNumber int) (*github.PullRequestMergeResult, error) {
 	mergeResult, _, err := c.client.PullRequests.Merge(context.Background(), c.organization, repository, prNumber, "", &github.PullRequestOptions{})
 	if err != nil {
+		// Check if the PR is already merged (fast path) or the merge is in progress (poll)
+		if isPRAlreadyMerged(err) {
+			fmt.Printf("[github] PR #%d in %s: already merged, fetching merge result\n", prNumber, repository)
+			return c.getMergeResultFromPR(repository, prNumber)
+		}
+		if isMergeInProgress(err) {
+			fmt.Printf("[github] PR #%d in %s: merge already in progress, polling for completion\n", prNumber, repository)
+			return c.waitForMerge(repository, prNumber)
+		}
+
 		mergeErr := fmt.Errorf("error when merging pull request number %d for the repo %s: %v", prNumber, repository, err)
 		// If the head branch is out of date (409), trigger a branch update so the next retry can succeed
 		if strings.Contains(err.Error(), "409") {
@@ -71,6 +88,75 @@ func (c *Client) MergePullRequest(repository string, prNumber int) (*github.Pull
 	}
 
 	return mergeResult, nil
+}
+
+// isMergeInProgress returns true when GitHub responds with HTTP 405 and a
+// message indicating that a merge is already being processed.
+func isMergeInProgress(err error) bool {
+	var ghErr *github.ErrorResponse
+	if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == 405 {
+		return strings.Contains(strings.ToLower(ghErr.Message), "merge") ||
+			strings.Contains(strings.ToLower(ghErr.Message), "already in progress")
+	}
+	return false
+}
+
+// isPRAlreadyMerged returns true when GitHub responds with HTTP 405 and a
+// message indicating that the pull request has already been merged.
+func isPRAlreadyMerged(err error) bool {
+	var ghErr *github.ErrorResponse
+	if errors.As(err, &ghErr) && ghErr.Response != nil {
+		msg := strings.ToLower(ghErr.Message)
+		return strings.Contains(msg, "already been merged") ||
+			strings.Contains(msg, "pull request is not mergeable")
+	}
+	return false
+}
+
+// waitForMerge polls the PR until it transitions to merged state or times out.
+func (c *Client) waitForMerge(repository string, prNumber int) (*github.PullRequestMergeResult, error) {
+	var pr *github.PullRequest
+	err := utils.WaitUntilWithInterval(func() (bool, error) {
+		var getErr error
+		pr, getErr = c.GetPullRequest(repository, prNumber)
+		if getErr != nil {
+			fmt.Printf("[github] error polling PR #%d merge state: %v\n", prNumber, getErr)
+			return false, nil
+		}
+		if pr.GetMerged() {
+			return true, nil
+		}
+		fmt.Printf("[github] PR #%d in %s: merge still in progress (state=%s, merged=%v)\n",
+			prNumber, repository, pr.GetState(), pr.GetMerged())
+		return false, nil
+	}, 5*time.Second, mergeInProgressPollTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("timed out waiting for PR #%d in %s to be merged after 405 response: %v", prNumber, repository, err)
+	}
+
+	merged := true
+	return &github.PullRequestMergeResult{
+		SHA:    pr.MergeCommitSHA,
+		Merged: &merged,
+	}, nil
+}
+
+// getMergeResultFromPR fetches the PR and returns a synthetic merge result
+// when the PR is already in merged state.
+func (c *Client) getMergeResultFromPR(repository string, prNumber int) (*github.PullRequestMergeResult, error) {
+	pr, err := c.GetPullRequest(repository, prNumber)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching PR #%d in %s after already-merged response: %v", prNumber, repository, err)
+	}
+	if !pr.GetMerged() {
+		return nil, fmt.Errorf("PR #%d in %s reported as already merged but GetMerged() is false (state=%s)", prNumber, repository, pr.GetState())
+	}
+
+	merged := true
+	return &github.PullRequestMergeResult{
+		SHA:    pr.MergeCommitSHA,
+		Merged: &merged,
+	}, nil
 }
 
 // UpdatePullRequestBranch updates the PR branch with the latest changes from the base branch.
