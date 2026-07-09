@@ -110,6 +110,10 @@ SKIP_DEX=true \
 SKIP_SMEE="${SKIP_SMEE}" \
 "${REPO_ROOT}/deploy-deps.sh"
 
+echo ""
+echo "=== Enabling user-workload monitoring ==="
+bash "${REPO_ROOT}/scripts/operator-e2e/openshift/enable-uwm.sh"
+
 # Step 2: Install CRDs from the checked-out branch
 echo ""
 echo "=== Step 2/6: Installing Operator CRDs ==="

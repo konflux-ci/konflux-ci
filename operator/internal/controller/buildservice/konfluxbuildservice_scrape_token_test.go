@@ -142,6 +142,7 @@ var _ = Describe("Prometheus scrape token", func() {
 				g.Expect(secretRef["key"]).To(Equal(kubernetes.ScrapeTokenSecretKey))
 				_, hasFile := ep["bearerTokenFile"]
 				g.Expect(hasFile).To(BeFalse())
+				g.Expect(sm.GetAnnotations()).To(HaveKey(kubernetes.ServiceMonitorResyncAnnotation))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 

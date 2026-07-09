@@ -62,6 +62,7 @@ func DefaultCatalog() (*Catalog, error) {
 					Port:                     8080,
 					Path:                     "/metrics",
 					MetricsReaderClusterRole: "integration-service-metrics-reader",
+					UWMUpCheck:               true,
 					BodyMustMatchAny:         prometheusBodyMatchers,
 				},
 				{
@@ -88,6 +89,7 @@ func DefaultCatalog() (*Catalog, error) {
 					Port:                     2112,
 					Path:                     "/metrics",
 					MetricsReaderClusterRole: "konflux-ui-proxy-metrics-reader",
+					UWMUpCheck:               true,
 					BodyMustMatchAny:         []string{"caddy_"},
 				},
 			},

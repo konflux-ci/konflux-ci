@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Deploy demo-user fixtures (opt-in), run proxy integration tests, then E2E conformance tests.
+# Deploy demo-user fixtures (opt-in), run proxy integration tests, metrics tests, then E2E conformance.
 # Set E2E_DEPLOY_TEST_RESOURCES=true to run deploy-test-resources.sh (required for Kind Dex proxy-dex tests).
 # Extra arguments are forwarded to the conformance "go test" only, e.g.:
 #   ./test/e2e/run-e2e.sh -ginkgo.focus="build" -ginkgo.junit-report=report.xml
@@ -35,6 +35,16 @@ case "${E2E_DEPLOY_TEST_RESOURCES:-}" in
 esac
 
 bash "${REPO_ROOT}/scripts/operator-e2e/run-proxy-integration-tests.sh" "${REPO_ROOT}"
+
+# OpenShift UWM metrics (skipped on Kind — no openshift-user-workload-monitoring namespace).
+if kubectl get namespace openshift-user-workload-monitoring &>/dev/null; then
+    if [[ -z "${UWM_SKIP_CANARY:-}" ]] && ! kubectl get namespace dummy-service &>/dev/null; then
+        export UWM_SKIP_CANARY=true
+    fi
+    bash "${REPO_ROOT}/scripts/operator-e2e/openshift/run-metrics-openshift-tests.sh" "${REPO_ROOT}"
+else
+    echo "Skipping OpenShift UWM metrics tests (openshift-user-workload-monitoring namespace not found)" >&2
+fi
 
 bash "${REPO_ROOT}/scripts/operator-e2e/run-metrics-integration-tests.sh" "${REPO_ROOT}"
 

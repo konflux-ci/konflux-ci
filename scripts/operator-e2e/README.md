@@ -29,6 +29,32 @@ Override with `METRICS_GINKGO_LABEL_FILTER` (see `run-metrics-integration-tests.
 
 Catalog: `test/go-tests/pkg/metricsauth.DefaultCatalog()` (`group: operator` or `component` per target; `scrapeTokenSecret` for HTTPS operands).
 
+## OpenShift UWM metrics tests
+
+`openshift/run-metrics-openshift-tests.sh` runs `test/go-tests/metricsopenshift` against **user-workload Prometheus** (not port-forward direct scrape). Proves ServiceMonitors are picked up by UWM (`up{namespace,service}==1`) plus HTTPS scrape contract (ServiceMonitor, `prometheus-scrape-token`, metrics-reader CRB). UWM readiness (enable flag, Prometheus pods, optional canary) runs in the suite `BeforeSuite` (`pkg/metricsopenshift/wait.go`).
+
+| Entry point | UWM enable | Canary wait | Tests |
+|-------------|------------|-------------|-------|
+| `deploy-konflux-on-ocp.sh` (Prow install) | `openshift/enable-uwm.sh` after `deploy-deps.sh` | — | — |
+| `test/e2e/run-e2e.sh` (Prow e2e, infra overlay) | (install / preview) | `dummy-service` when that namespace exists | `run-metrics-openshift-tests.sh` |
+| Tekton / Kind | — | — | **not invoked** |
+
+Label filter: `METRICS_OPENSHIFT_GINKGO_LABEL_FILTER` (default `openshift`). Sub-labels: `metrics-contract`, `metrics-uwm`.
+
+Override canary: `UWM_CANARY_QUERY` or `UWM_SKIP_CANARY=true` (see `pkg/metricsopenshift/wait.go`).
+
+On UWM target failure, the suite logs to the CI build log (no live cluster login required):
+
+| Env | Default | Effect |
+|-----|---------|--------|
+| `UWM_DEBUG_LOG_INTERVAL` | `60` | Seconds between progress logs while waiting for `up==1`; `0` logs first poll and label/value changes only |
+| `UWM_DEBUG_DIRECT_SCRAPE` | off | When `true`, failure snapshot also port-forwards the operand metrics Service and logs HTTP status |
+| `UWM_DEBUG_OPERATOR_LOG_LINES` | `500` | Tail lines from user-workload `prometheus-operator` pod; filtered to failed namespace and ServiceMonitor messages |
+
+Every run (pass or fail) emits `[UWM resync]` lines after UWM readiness: for `build-service` and `image-controller`, logs ServiceMonitor `resync_at` (`konflux.konflux-ci.dev/metrics-scrape-resync`), scrape-token presence, and UWM `active_targets` / strict `up` at that moment. The metrics-contract specs also require `resync_at` to be set on those operands.
+
+Failure snapshot includes strict/broad `up` queries, a **peer comparison** row per UWM target (active + dropped target counts + `up` for operator/build-service/image-controller), active/dropped target details for the failed namespace, namespace monitoring labels, ServiceMonitor vs metrics Service selector match, ServiceMonitor/secret metadata (creation time, resourceVersion, labels) for all peers, endpoints/pods for the failed target, filtered **prometheus-operator** log tail from `openshift-user-workload-monitoring`, and optional direct scrape.
+
 ## Extra `go test` arguments (integration / conformance)
 
 The Tekton Task sets optional env vars from pipeline params (empty by default). Scripts **omit quotes** around those expansions on purpose: the shell must **split on spaces** so each flag becomes its own argument to `go test`. (Shellcheck rule SC2086 is disabled next to those lines because unquoted expansion is usually risky; here it is required for the same reason as forwarding `"$@"`.)
@@ -64,6 +90,9 @@ Use **one token per flag** where possible (e.g. `-ginkgo.skip=Flaky`). Values wi
 | `tekton-deploy-operator-and-wait.sh` | **Tekton (go-toolset):** `make install`/build, `bin/manager`, apply CR, wait Ready. |
 | `tekton-run-e2e-tests.sh` | **Tekton:** `deploy-test-resources.sh` (`SKIP_SAMPLE_COMPONENTS=true`), optional `kubectl port-forward` + `KONFLUX_PROXY_URL` for remote Kind, integration + conformance `go test`. Proxy tests wait for Konflux Ready and read `status.uiURL` in Go (`BeforeSuite` in `test/go-tests/proxy_setup.go`). Optional env: `KONFLUX_PROXY_URL`, `E2E_INTEGRATION_GO_TEST_EXTRA_ARGS`, `E2E_CONFORMANCE_GO_TEST_EXTRA_ARGS`. |
 | `run-proxy-integration-tests.sh` | Select proxy auth mode and run `go test` in `test/go-tests`. OpenShift OAuth runs in test `BeforeSuite`. Called from `test/e2e/run-e2e.sh`. |
+| `run-metrics-integration-tests.sh` | Runs `test/go-tests/metricsintegration` (port-forward + bearer token scrape). |
+| `openshift/enable-uwm.sh` | **OpenShift CI only:** idempotent `enableUserWorkload: true` via `cluster-monitoring-config`. |
+| `openshift/run-metrics-openshift-tests.sh` | **OpenShift CI only:** `go test ./metricsopenshift` (UWM readiness in BeforeSuite, ServiceMonitor contract + UWM `up`). |
 
 ## Proxy integration tests
 

@@ -35,7 +35,7 @@ func TestApplyMetricsScraperBindingSubjects(t *testing.T) {
 			},
 		},
 	}
-	if err := ApplyMetricsScraperBindingSubjects("build-service", crb); err != nil {
+	if err := ApplyMetricsScraperBindingSubjects(testBuildServiceNamespace, crb); err != nil {
 		t.Fatalf("apply structured CRB: %v", err)
 	}
 	if len(crb.Subjects) != 1 {
@@ -44,7 +44,7 @@ func TestApplyMetricsScraperBindingSubjects(t *testing.T) {
 	if crb.Subjects[0].Name != kubernetes.MetricsScraperServiceAccountName {
 		t.Fatalf("unexpected subject name %q", crb.Subjects[0].Name)
 	}
-	if crb.Subjects[0].Namespace != "build-service" {
+	if crb.Subjects[0].Namespace != testBuildServiceNamespace {
 		t.Fatalf("unexpected subject namespace %q", crb.Subjects[0].Namespace)
 	}
 
@@ -55,7 +55,7 @@ func TestApplyMetricsScraperBindingSubjects(t *testing.T) {
 	u.SetAnnotations(map[string]string{
 		kubernetes.MetricsScraperBindingAnnotation: "true",
 	})
-	if err := ApplyMetricsScraperBindingSubjects("image-controller", u); err != nil {
+	if err := ApplyMetricsScraperBindingSubjects(testImageControllerNamespace, u); err != nil {
 		t.Fatalf("apply unstructured CRB: %v", err)
 	}
 	subjects, found, err := unstructured.NestedSlice(u.Object, "subjects")

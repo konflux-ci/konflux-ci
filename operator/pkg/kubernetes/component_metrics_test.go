@@ -28,6 +28,25 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+func TestIsComponentMetricsServiceMonitor(t *testing.T) {
+	g := NewWithT(t)
+
+	g.Expect(IsComponentMetricsServiceMonitor(&unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "monitoring.coreos.com/v1",
+			"kind":       "ServiceMonitor",
+			"metadata": map[string]interface{}{
+				"name":      "build-service",
+				"namespace": "build-service",
+			},
+		},
+	})).To(BeTrue())
+	g.Expect(IsComponentMetricsServiceMonitor(&rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{Name: "build-service-metrics-reader"},
+	})).To(BeFalse())
+	g.Expect(IsComponentMetricsServiceMonitor(nil)).To(BeFalse())
+}
+
 func TestIsComponentMetricsScrapeResource(t *testing.T) {
 	g := NewWithT(t)
 

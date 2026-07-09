@@ -131,9 +131,15 @@ func TestEnsurePrometheusScrapeTokenCreatesAndRefreshes(t *testing.T) {
 		TTL: time.Hour,
 	}
 
-	requeue, err := EnsurePrometheusScrapeToken(ctx, in)
+	result, err := EnsurePrometheusScrapeToken(ctx, in)
 	if err != nil {
 		t.Fatalf("ensure: %v", err)
+	}
+	if !result.TokenUpdated {
+		t.Fatal("expected tokenUpdated on first mint")
+	}
+	if result.SecretExisted {
+		t.Fatal("expected SecretExisted false on first mint")
 	}
 	if fake.calls != 1 {
 		t.Fatalf("expected one token mint, got %d", fake.calls)
@@ -141,30 +147,43 @@ func TestEnsurePrometheusScrapeTokenCreatesAndRefreshes(t *testing.T) {
 	if len(applied) != 1 || string(applied[0].Data[ScrapeTokenSecretKey]) != "first" {
 		t.Fatalf("unexpected applied secret: %#v", applied)
 	}
-	if requeue != 30*time.Minute {
-		t.Fatalf("unexpected requeue: %s", requeue)
+	if result.RequeueAfter != 30*time.Minute {
+		t.Fatalf("unexpected requeue: %s", result.RequeueAfter)
 	}
 
 	// Second call with fresh secret in reader should not mint again.
+	applied[0].ResourceVersion = "1"
 	in.Client = &fakeSecretReader{secret: applied[0]}
-	requeue, err = EnsurePrometheusScrapeToken(ctx, in)
+	result, err = EnsurePrometheusScrapeToken(ctx, in)
 	if err != nil {
 		t.Fatalf("ensure second: %v", err)
+	}
+	if result.TokenUpdated {
+		t.Fatal("expected tokenUpdated false for fresh secret")
+	}
+	if !result.SecretExisted {
+		t.Fatal("expected SecretExisted true for fresh secret")
+	}
+	if result.ResourceVersion != "1" {
+		t.Fatalf("resourceVersion: got %q want %q", result.ResourceVersion, "1")
 	}
 	if fake.calls != 1 {
 		t.Fatalf("expected no additional mint, got %d calls", fake.calls)
 	}
-	if requeue != 30*time.Minute {
-		t.Fatalf("unexpected second requeue: %s", requeue)
+	if result.RequeueAfter != 30*time.Minute {
+		t.Fatalf("unexpected second requeue: %s", result.RequeueAfter)
 	}
 
 	// Advance clock past refresh threshold and expect a new token.
 	clk.SetTime(clk.Now().Add(40 * time.Minute))
 	fake.token = "second"
 	fake.expiresAt = clk.Now().Add(time.Hour)
-	requeue, err = EnsurePrometheusScrapeToken(ctx, in)
+	result, err = EnsurePrometheusScrapeToken(ctx, in)
 	if err != nil {
 		t.Fatalf("ensure refresh: %v", err)
+	}
+	if !result.TokenUpdated {
+		t.Fatal("expected tokenUpdated on refresh")
 	}
 	if fake.calls != 2 {
 		t.Fatalf("expected refresh mint, got %d calls", fake.calls)
@@ -172,8 +191,8 @@ func TestEnsurePrometheusScrapeTokenCreatesAndRefreshes(t *testing.T) {
 	if string(applied[len(applied)-1].Data[ScrapeTokenSecretKey]) != "second" {
 		t.Fatalf("expected refreshed token")
 	}
-	if requeue != 30*time.Minute {
-		t.Fatalf("unexpected refresh requeue: %s", requeue)
+	if result.RequeueAfter != 30*time.Minute {
+		t.Fatalf("unexpected refresh requeue: %s", result.RequeueAfter)
 	}
 }
 
@@ -516,4 +535,33 @@ func (b *brokenSecretReader) Get(context.Context, types.NamespacedName, client.O
 
 func (b *brokenSecretReader) List(context.Context, client.ObjectList, ...client.ListOption) error {
 	return b.err
+}
+
+func TestPrepareSecretForApplySetsTypeMeta(t *testing.T) {
+	t.Parallel()
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: ScrapeTokenSecretName, Namespace: "build-service"},
+		Data:       map[string][]byte{ScrapeTokenSecretKey: []byte("tok")},
+	}
+	prepared := prepareSecretForApply(secret)
+	if prepared.APIVersion != "v1" || prepared.Kind != "Secret" {
+		t.Fatalf("type meta: got APIVersion=%q Kind=%q", prepared.APIVersion, prepared.Kind)
+	}
+	if prepared.ResourceVersion != "" {
+		t.Fatal("expected resourceVersion to be cleared")
+	}
+}
+
+func TestGetPrometheusScrapeToken_EmptyData(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: ScrapeTokenSecretName, Namespace: "build-service"},
+		Data:       map[string][]byte{},
+	}
+	c := ctrlfake.NewClientBuilder().WithObjects(secret).Build()
+	_, err := GetPrometheusScrapeToken(ctx, c, "build-service")
+	if err == nil {
+		t.Fatal("expected error for empty token data")
+	}
 }

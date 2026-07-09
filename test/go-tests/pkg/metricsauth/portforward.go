@@ -19,17 +19,7 @@ type portForwardHandle struct {
 	readyCh chan struct{}
 }
 
-func startServicePortForward(ctx context.Context, cfg *rest.Config, svc ServiceRef) (*portForwardHandle, int, error) {
-	clientset, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	podName, err := readyPodFromService(ctx, clientset, svc.Namespace, svc.Name, svc.Port)
-	if err != nil {
-		return nil, 0, err
-	}
-
+func startPodPortForward(ctx context.Context, cfg *rest.Config, namespace, podName string, remotePort int32) (*portForwardHandle, int, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, 0, err
@@ -42,7 +32,7 @@ func startServicePortForward(ctx context.Context, cfg *rest.Config, svc ServiceR
 		return nil, 0, err
 	}
 
-	path := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/portforward", svc.Namespace, podName)
+	path := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/portforward", namespace, podName)
 	serverURL, err := url.Parse(cfg.Host)
 	if err != nil {
 		return nil, 0, err
@@ -53,7 +43,7 @@ func startServicePortForward(ctx context.Context, cfg *rest.Config, svc ServiceR
 	stopCh := make(chan struct{})
 	readyCh := make(chan struct{})
 
-	forwarder, err := portforward.New(dialer, []string{fmt.Sprintf("%d:%d", localPort, svc.Port)}, stopCh, readyCh, nil, nil)
+	forwarder, err := portforward.New(dialer, []string{fmt.Sprintf("%d:%d", localPort, remotePort)}, stopCh, readyCh, nil, nil)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -68,8 +58,41 @@ func startServicePortForward(ctx context.Context, cfg *rest.Config, svc ServiceR
 	case <-readyCh:
 	case <-waitCtx.Done():
 		close(stopCh)
-		return nil, 0, fmt.Errorf("port-forward to %s/%s pod %s not ready: %w", svc.Namespace, svc.Name, podName, waitCtx.Err())
+		return nil, 0, fmt.Errorf("port-forward to %s pod %s not ready: %w", namespace, podName, waitCtx.Err())
 	}
 
 	return &portForwardHandle{stopCh: stopCh, readyCh: readyCh}, localPort, nil
+}
+
+// startServicePortForward resolves a ready pod behind svc and port-forwards to it.
+// Errors from startPodPortForward are wrapped with the service namespace/name for diagnostics.
+func startServicePortForward(ctx context.Context, cfg *rest.Config, svc ServiceRef) (*portForwardHandle, int, error) {
+	clientset, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	podName, err := readyPodFromService(ctx, clientset, svc.Namespace, svc.Name, svc.Port)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	pf, port, err := startPodPortForward(ctx, cfg, svc.Namespace, podName, svc.Port)
+	if err != nil {
+		return nil, 0, fmt.Errorf("service %s/%s: %w", svc.Namespace, svc.Name, err)
+	}
+	return pf, port, nil
+}
+
+// StartPodPortForward listens on 127.0.0.1:0 and forwards to a pod port.
+func StartPodPortForward(ctx context.Context, cfg *rest.Config, namespace, podName string, remotePort int32) (*PortForwarder, error) {
+	pf, localPort, err := startPodPortForward(ctx, cfg, namespace, podName, remotePort)
+	if err != nil {
+		return nil, err
+	}
+	return &PortForwarder{
+		stopCh:    pf.stopCh,
+		readyCh:   pf.readyCh,
+		localPort: localPort,
+	}, nil
 }
