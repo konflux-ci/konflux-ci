@@ -1,11 +1,13 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: integration-service-prometheus-role-binding
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+  name: prometheus-integration-service-metrics-reader
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: integration-service-prometheus-viewer-role
+  name: integration-service-metrics-reader
 subjects:
 - kind: ServiceAccount
   name: integration-service-metrics-reader

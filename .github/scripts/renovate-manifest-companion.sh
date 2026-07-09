@@ -122,14 +122,15 @@ git checkout -B "${BRANCH}"
 
 bash "${REPO_ROOT}/operator/pkg/manifests/rebuild-upstream-manifests.sh" "${REPO_ROOT}"
 
-export CERT_MANAGER_VERSION TRUST_MANAGER_VERSION
+export CERT_MANAGER_VERSION TRUST_MANAGER_VERSION PROMETHEUS_OPERATOR_VERSION
 bash "${REPO_ROOT}/.github/scripts/update-third-party-manifests.sh" "${REPO_ROOT}"
 
 git add \
   operator/pkg/manifests \
+  operator/test/crds \
   dependencies/cert-manager/cert-manager.yaml \
   dependencies/trust-manager/trust-manager.yaml \
-  operator/test/crds/cert-manager/cert-manager.crds.yaml
+  dependencies/prometheus-operator-crds/servicemonitors.monitoring.coreos.com.yaml
 
 if git diff --cached --quiet; then
   echo "No manifest changes to commit; companion branch matches generators."
@@ -283,7 +284,7 @@ cat >"${BODY_FILE}" <<EOF
 This branch is **[${BRANCH}](https://github.com/${GITHUB_REPOSITORY}/tree/${BRANCH})** — it starts from the head of [PR #${SOURCE_PR}](${RENOVATE_PR_URL}) and adds regenerated:
 
 - \`operator/pkg/manifests/*/manifests.yaml\` (from \`kustomize build\` on \`operator/upstream-kustomizations/*\`)
-- Third-party Helm outputs under \`dependencies/\` and envtest CRDs under \`operator/test/crds/cert-manager/\`
+- Regenerated third-party manifests under \`dependencies/\` and envtest CRDs under \`operator/test/crds/\`
 
 **Merge this PR to \`main\`, not #${SOURCE_PR}**, so \`main\` always carries matching pins and rendered manifests.
 

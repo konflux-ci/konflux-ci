@@ -20,8 +20,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// KonfluxIntegrationServiceSpec defines the desired state of KonfluxIntegrationService
-type KonfluxIntegrationServiceSpec struct {
+// KonfluxIntegrationServiceConfigSpec defines user-configurable integration-service settings on the Konflux CR.
+type KonfluxIntegrationServiceConfigSpec struct {
 	// IntegrationControllerManager defines customizations for the controller-manager deployment.
 	// +optional
 	IntegrationControllerManager *ControllerManagerDeploymentSpec `json:"integrationControllerManager,omitempty"`
@@ -84,6 +84,16 @@ type KonfluxIntegrationServiceSpec struct {
 	MinSnapshotsToKeepPerComponent string `json:"minSnapshotsToKeepPerComponent,omitempty"`
 }
 
+// KonfluxIntegrationServiceSpec defines the desired state of KonfluxIntegrationService.
+type KonfluxIntegrationServiceSpec struct {
+	KonfluxIntegrationServiceConfigSpec `json:",inline"`
+
+	// ComponentMetrics controls Prometheus scrape resources for this component.
+	// Set by the Konflux reconciler from spec.componentMetrics on the Konflux CR.
+	// +optional
+	ComponentMetrics *ComponentMetricsConfig `json:"componentMetrics,omitempty"`
+}
+
 // KonfluxIntegrationServiceStatus defines the observed state of KonfluxIntegrationService
 type KonfluxIntegrationServiceStatus struct {
 	// Conditions represent the latest available observations of the KonfluxIntegrationService state
@@ -123,8 +133,4 @@ func (k *KonfluxIntegrationService) GetConditions() []metav1.Condition {
 // SetConditions sets the conditions on the KonfluxIntegrationService status.
 func (k *KonfluxIntegrationService) SetConditions(conditions []metav1.Condition) {
 	k.Status.Conditions = conditions
-}
-
-func init() {
-	SchemeBuilder.Register(&KonfluxIntegrationService{}, &KonfluxIntegrationServiceList{})
 }

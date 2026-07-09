@@ -1173,7 +1173,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+			testutil.DeferCleanupParentAndChildren(k8sClient, ui, &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: dexClusterRoleName}})
 
 			crNN := types.NamespacedName{Name: dexClusterRoleName}
 
@@ -1181,9 +1181,6 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, crNN, &rbacv1.ClusterRole{})).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRole{
-				ObjectMeta: metav1.ObjectMeta{Name: crNN.Name},
-			})
 
 			By("deleting the ClusterRole")
 			Expect(k8sClient.Delete(ctx, &rbacv1.ClusterRole{
@@ -1203,7 +1200,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+			testutil.DeferCleanupParentAndChildren(k8sClient, ui, &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: dexClusterRoleBindingName}})
 
 			crbNN := types.NamespacedName{Name: dexClusterRoleBindingName}
 
@@ -1211,9 +1208,6 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, crbNN, &rbacv1.ClusterRoleBinding{})).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRoleBinding{
-				ObjectMeta: metav1.ObjectMeta{Name: crbNN.Name},
-			})
 
 			By("deleting the ClusterRoleBinding")
 			Expect(k8sClient.Delete(ctx, &rbacv1.ClusterRoleBinding{
@@ -1427,6 +1421,42 @@ var _ = Describe("KonfluxUI Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
+		It("restores Service spec when modified", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			svcNN := types.NamespacedName{Name: proxyServiceName, Namespace: uiNamespace}
+
+			By("waiting for initial Service creation")
+			var originalTargetPort string
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				g.Expect(svc.Spec.Ports).NotTo(BeEmpty())
+				originalTargetPort = svc.Spec.Ports[0].TargetPort.StrVal
+				g.Expect(originalTargetPort).NotTo(BeEmpty())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the Service target port")
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				svc.Spec.Ports[0].TargetPort.StrVal = "tampered"
+				g.Expect(k8sClient.Update(ctx, svc)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the Service target port is restored")
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				g.Expect(svc.Spec.Ports).NotTo(BeEmpty())
+				g.Expect(svc.Spec.Ports[0].TargetPort.StrVal).To(Equal(originalTargetPort))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
 		It("restores Namespace labels when stripped", func(ctx context.Context) {
 			startManager(noDefaultSegmentKey, nil)
 
@@ -1466,7 +1496,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+			testutil.DeferCleanupParentAndChildren(k8sClient, ui, &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: dexClusterRoleName}})
 
 			crNN := types.NamespacedName{Name: dexClusterRoleName}
 
@@ -1478,9 +1508,6 @@ var _ = Describe("KonfluxUI Controller", func() {
 				g.Expect(cr.Rules).NotTo(BeEmpty())
 				originalRules = cr.Rules
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRole{
-				ObjectMeta: metav1.ObjectMeta{Name: crNN.Name},
-			})
 
 			By("modifying the ClusterRole rules")
 			Eventually(func(g Gomega) {
@@ -1507,7 +1534,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+			testutil.DeferCleanupParentAndChildren(k8sClient, ui, &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: dexClusterRoleBindingName}})
 
 			crbNN := types.NamespacedName{Name: dexClusterRoleBindingName}
 
@@ -1519,9 +1546,6 @@ var _ = Describe("KonfluxUI Controller", func() {
 				g.Expect(crb.Subjects).NotTo(BeEmpty())
 				originalSubjects = crb.Subjects
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRoleBinding{
-				ObjectMeta: metav1.ObjectMeta{Name: crbNN.Name},
-			})
 
 			By("modifying the ClusterRoleBinding subjects")
 			Eventually(func(g Gomega) {
@@ -1677,6 +1701,144 @@ var _ = Describe("KonfluxUI Controller", func() {
 				issuer := &certmanagerv1.Issuer{}
 				g.Expect(k8sClient.Get(ctx, issuerNN, issuer)).To(Succeed())
 				g.Expect(issuer.Spec.CA.SecretName).To(Equal(originalSecretName))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores dex Deployment image when modified", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			deploymentNN := types.NamespacedName{Name: dexDeploymentName, Namespace: uiNamespace}
+
+			By("waiting for initial dex Deployment creation")
+			var originalImage string
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
+				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, dexContainerName)
+				g.Expect(container).NotTo(BeNil())
+				originalImage = container.Image
+				g.Expect(originalImage).NotTo(BeEmpty())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the dex Deployment image")
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
+				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, dexContainerName)
+				g.Expect(container).NotTo(BeNil())
+				container.Image = "tampered-image:latest"
+				g.Expect(k8sClient.Update(ctx, dep)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the dex Deployment image is restored")
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
+				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, dexContainerName)
+				g.Expect(container).NotTo(BeNil())
+				g.Expect(container.Image).To(Equal(originalImage))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores Ingress spec when modified", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxUISpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled: ptr.To(true),
+						Host:    "drift-test.example.com",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, ui,
+				&networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{
+					Name: ingress.IngressName, Namespace: uiNamespace,
+				}},
+			)
+
+			ingressNN := types.NamespacedName{Name: ingress.IngressName, Namespace: uiNamespace}
+
+			By("waiting for initial Ingress creation")
+			Eventually(func(g Gomega) {
+				ing := &networkingv1.Ingress{}
+				g.Expect(k8sClient.Get(ctx, ingressNN, ing)).To(Succeed())
+				g.Expect(ing.Spec.Rules).NotTo(BeEmpty())
+				g.Expect(ing.Spec.Rules[0].Host).To(Equal("drift-test.example.com"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the Ingress host")
+			Eventually(func(g Gomega) {
+				ing := &networkingv1.Ingress{}
+				g.Expect(k8sClient.Get(ctx, ingressNN, ing)).To(Succeed())
+				ing.Spec.Rules[0].Host = "tampered.example.com"
+				g.Expect(k8sClient.Update(ctx, ing)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the Ingress host is restored")
+			Eventually(func(g Gomega) {
+				ing := &networkingv1.Ingress{}
+				g.Expect(k8sClient.Get(ctx, ingressNN, ing)).To(Succeed())
+				g.Expect(ing.Spec.Rules).NotTo(BeEmpty())
+				g.Expect(ing.Spec.Rules[0].Host).To(Equal("drift-test.example.com"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores ConsoleLink spec when modified", func(ctx context.Context) {
+			openShiftClusterInfo, err := clusterinfo.DetectWithClient(&mockDiscoveryClient{
+				resources: map[string]*metav1.APIResourceList{
+					"config.openshift.io/v1": {
+						APIResources: []metav1.APIResource{{Kind: "ClusterVersion"}},
+					},
+				},
+				serverVersion: &version.Info{GitVersion: "v1.29.0"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			startManager(noDefaultSegmentKey, openShiftClusterInfo)
+
+			ui := &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxUISpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled: ptr.To(true),
+						Host:    "consolelink-drift.example.com",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, ui,
+				&consolev1.ConsoleLink{ObjectMeta: metav1.ObjectMeta{Name: consolelink.ConsoleLinkName}},
+			)
+
+			consoleLinkNN := types.NamespacedName{Name: consolelink.ConsoleLinkName}
+
+			By("waiting for initial ConsoleLink creation")
+			Eventually(func(g Gomega) {
+				cl := &consolev1.ConsoleLink{}
+				g.Expect(k8sClient.Get(ctx, consoleLinkNN, cl)).To(Succeed())
+				g.Expect(cl.Spec.Href).To(Equal("https://consolelink-drift.example.com"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the ConsoleLink href")
+			Eventually(func(g Gomega) {
+				cl := &consolev1.ConsoleLink{}
+				g.Expect(k8sClient.Get(ctx, consoleLinkNN, cl)).To(Succeed())
+				cl.Spec.Href = "https://tampered.example.com"
+				g.Expect(k8sClient.Update(ctx, cl)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the ConsoleLink href is restored")
+			Eventually(func(g Gomega) {
+				cl := &consolev1.ConsoleLink{}
+				g.Expect(k8sClient.Get(ctx, consoleLinkNN, cl)).To(Succeed())
+				g.Expect(cl.Spec.Href).To(Equal("https://consolelink-drift.example.com"))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})

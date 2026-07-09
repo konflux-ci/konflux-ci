@@ -70,7 +70,3 @@ func (k *KonfluxInternalRegistry) GetConditions() []metav1.Condition {
 func (k *KonfluxInternalRegistry) SetConditions(conditions []metav1.Condition) {
 	k.Status.Conditions = conditions
 }
-
-func init() {
-	SchemeBuilder.Register(&KonfluxInternalRegistry{}, &KonfluxInternalRegistryList{})
-}

@@ -57,7 +57,8 @@ spec:
                   The runtime configuration is copied to the KonfluxBuildService CR by the operator.
                 properties:
                   spec:
-                    description: Spec configures the build-service component.
+                    description: Spec configures the build-service component (excludes
+                      componentMetrics; see spec.componentMetrics).
                     properties:
                       buildControllerManager:
                         description: BuildControllerManager defines customizations
@@ -440,6 +441,21 @@ spec:
                       Defaults to true if not specified.
                     type: boolean
                 type: object
+              componentMetrics:
+                description: |-
+                  ComponentMetrics controls Prometheus scrape resources for metrics-enabled components
+                  (see operator/docs/component-monitoring.md#scope). When disabled, those reconcilers
+                  do not apply ServiceMonitor, metrics-reader RBAC, or operand scrape-token resources.
+                properties:
+                  enabled:
+                    description: |-
+                      Enabled controls whether scrape resources are deployed for metrics-enabled components
+                      (see operator/docs/component-monitoring.md#scope). HTTPS operands on the operator
+                      scrape-token model use reconciler-managed prometheus-scrape-token; legacy interim
+                      operands use static-token HTTP scraping until migrated.
+                      Defaults to true when unset.
+                    type: boolean
+                type: object
               defaultTenant:
                 description: |-
                   DefaultTenant configures the default tenant component.
@@ -475,7 +491,8 @@ spec:
                       If false or unset, the component CR will not be created.
                     type: boolean
                   spec:
-                    description: Spec configures the image-controller component.
+                    description: Spec configures the image-controller component (excludes
+                      componentMetrics; see spec.componentMetrics).
                     properties:
                       imageControllerManager:
                         description: ImageControllerManager defines customizations
@@ -1528,7 +1545,8 @@ spec:
                   The runtime configuration is copied to the KonfluxIntegrationService CR by the operator.
                 properties:
                   spec:
-                    description: Spec configures the integration-service component.
+                    description: Spec configures the integration-service component
+                      (excludes componentMetrics; see spec.componentMetrics).
                     properties:
                       finallyTimeout:
                         description: |-
@@ -2648,6 +2666,12 @@ spec:
                           When not specified, a default key baked into the operator build is used,
                           routing telemetry data to the Konflux dev team's Segment project.
                         type: string
+                      tektonLimit:
+                        description: |-
+                          TektonLimit sets the maximum number of PipelineRun records fetched per CronJob run.
+                          Defaults to 1000 (covers ~4.7h at avg production throughput of ~214 PipelineRuns/hour).
+                        minimum: 1
+                        type: integer
                     type: object
                 type: object
               ui:
@@ -3126,6 +3150,69 @@ spec:
                       proxy:
                         description: Proxy defines customizations for the proxy deployment.
                         properties:
+                          endpoints:
+                            description: |-
+                              Endpoints configures optional backend services that the proxy routes to.
+                              Each endpoint can be independently enabled and customized.
+                            properties:
+                              kite:
+                                description: |-
+                                  Kite enables the Kite plugin endpoint.
+                                  When enabled, requests to /api/k8s/plugins/kite/ are proxied to the Kite backend.
+                                properties:
+                                  enabled:
+                                    description: Enabled controls whether this endpoint
+                                      is active.
+                                    type: boolean
+                                  hostname:
+                                    description: Hostname overrides the default backend
+                                      service address.
+                                    type: string
+                                required:
+                                - enabled
+                                type: object
+                              kubearchive:
+                                description: |-
+                                  KubeArchive enables the KubeArchive plugin endpoint.
+                                  When enabled, requests to /api/k8s/plugins/kubearchive/ are proxied to the KubeArchive backend.
+                                properties:
+                                  enabled:
+                                    description: Enabled controls whether this endpoint
+                                      is active.
+                                    type: boolean
+                                  hostname:
+                                    description: Hostname overrides the default backend
+                                      service address.
+                                    type: string
+                                required:
+                                - enabled
+                                type: object
+                              watson:
+                                description: |-
+                                  Watson enables the Watson chatbot endpoint.
+                                  When enabled, requests to /api/chatbot/ are proxied to the IBM Watson Assistant API.
+                                properties:
+                                  enabled:
+                                    description: Enabled controls whether the Watson
+                                      chatbot endpoint is active.
+                                    type: boolean
+                                  hostname:
+                                    description: |-
+                                      Hostname overrides the Watson API host.
+                                      Defaults to api.us-east.assistant.watson.cloud.ibm.com.
+                                    type: string
+                                  secretName:
+                                    default: watson-api-key
+                                    description: |-
+                                      SecretName is the name of the Secret containing the Watson API key.
+                                      The Secret must have a key named API_KEY with the pre-encoded Basic auth
+                                      value (e.g. base64("apikey:<your-api-key>")).
+                                    minLength: 1
+                                    type: string
+                                required:
+                                - enabled
+                                type: object
+                            type: object
                           oauth2Proxy:
                             description: OAuth2Proxy defines customizations for the
                               oauth2-proxy container.

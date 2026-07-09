@@ -27,12 +27,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/version"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/applicationapi"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/buildservice"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/certmanager"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/cli"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/defaulttenant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/enterprisecontract"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/imagecontroller"
@@ -49,6 +51,29 @@ import (
 )
 
 var _ = Describe("Konflux Controller", func() {
+	// allSubCRs returns every sub-CR the Konflux reconciler can create (unconditional + conditional).
+	// envtest has no GC, so these must be cleaned explicitly after each test.
+	// Conditional sub-CRs that were not created are safe to list: DeleteAndWait is a no-op when absent.
+	allSubCRs := func() []client.Object {
+		return []client.Object{
+			&konfluxv1alpha1.KonfluxApplicationAPI{ObjectMeta: metav1.ObjectMeta{Name: applicationapi.CRName}},
+			&konfluxv1alpha1.KonfluxBuildService{ObjectMeta: metav1.ObjectMeta{Name: buildservice.CRName}},
+			&konfluxv1alpha1.KonfluxIntegrationService{ObjectMeta: metav1.ObjectMeta{Name: integrationservice.CRName}},
+			&konfluxv1alpha1.KonfluxReleaseService{ObjectMeta: metav1.ObjectMeta{Name: releaseservice.CRName}},
+			&konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: uictrl.CRName}},
+			&konfluxv1alpha1.KonfluxRBAC{ObjectMeta: metav1.ObjectMeta{Name: rbac.CRName}},
+			&konfluxv1alpha1.KonfluxInfo{ObjectMeta: metav1.ObjectMeta{Name: info.CRName}},
+			&konfluxv1alpha1.KonfluxNamespaceLister{ObjectMeta: metav1.ObjectMeta{Name: namespacelister.CRName}},
+			&konfluxv1alpha1.KonfluxEnterpriseContract{ObjectMeta: metav1.ObjectMeta{Name: enterprisecontract.CRName}},
+			&konfluxv1alpha1.KonfluxCertManager{ObjectMeta: metav1.ObjectMeta{Name: certmanager.CRName}},
+			&konfluxv1alpha1.KonfluxDefaultTenant{ObjectMeta: metav1.ObjectMeta{Name: defaulttenant.CRName}},
+			&konfluxv1alpha1.KonfluxCLI{ObjectMeta: metav1.ObjectMeta{Name: cli.CRName}},
+			&konfluxv1alpha1.KonfluxInternalRegistry{ObjectMeta: metav1.ObjectMeta{Name: internalregistry.CRName}},
+			&konfluxv1alpha1.KonfluxSegmentBridge{ObjectMeta: metav1.ObjectMeta{Name: segmentbridge.CRName}},
+			&konfluxv1alpha1.KonfluxImageController{ObjectMeta: metav1.ObjectMeta{Name: imagecontroller.CRName}},
+		}
+	}
+
 	// startManager creates a per-test manager with the given ClusterInfo
 	// and registers a DeferCleanup to cancel it after the test.
 	// A per-test manager is required because each test wires the reconciler with a different
@@ -75,7 +100,7 @@ var _ = Describe("Konflux Controller", func() {
 
 			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
 			// The Ready condition is written only after the reconciler completes all apply/get/status steps
 			// without an early error return. Its presence (regardless of True/False) is therefore a reliable
@@ -104,9 +129,12 @@ var _ = Describe("Konflux Controller", func() {
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: defaulttenant.CRName}, &konfluxv1alpha1.KonfluxDefaultTenant{})).To(Succeed())
 
 				// Verify optional sub-CRs are NOT created (disabled by default in empty spec).
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: imagecontroller.CRName}, &konfluxv1alpha1.KonfluxImageController{})).To(MatchError(ContainSubstring("not found")))
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: internalregistry.CRName}, &konfluxv1alpha1.KonfluxInternalRegistry{})).To(MatchError(ContainSubstring("not found")))
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: segmentbridge.CRName}, &konfluxv1alpha1.KonfluxSegmentBridge{})).To(MatchError(ContainSubstring("not found")))
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: imagecontroller.CRName}, &konfluxv1alpha1.KonfluxImageController{})
+				g.Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
+				err = k8sClient.Get(ctx, types.NamespacedName{Name: internalregistry.CRName}, &konfluxv1alpha1.KonfluxInternalRegistry{})
+				g.Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
+				err = k8sClient.Get(ctx, types.NamespacedName{Name: segmentbridge.CRName}, &konfluxv1alpha1.KonfluxSegmentBridge{})
+				g.Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})
@@ -120,7 +148,7 @@ var _ = Describe("Konflux Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: requiredKonfluxName},
 			}
 			Expect(k8sClient.Create(ctx, konflux)).To(Succeed(), "Creation with required name should be allowed")
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, konflux)
+			testutil.DeferCleanupParentAndChildren(k8sClient, konflux)
 
 			By("verifying the instance was created")
 			created := &konfluxv1alpha1.Konflux{}
@@ -144,7 +172,7 @@ var _ = Describe("Konflux Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: requiredKonfluxName},
 			}
 			Expect(k8sClient.Create(ctx, konflux)).To(Succeed(), "Failed to create Konflux instance")
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, konflux)
+			testutil.DeferCleanupParentAndChildren(k8sClient, konflux)
 
 			By("updating the instance")
 			updated := &konfluxv1alpha1.Konflux{}
@@ -166,7 +194,7 @@ var _ = Describe("Konflux Controller", func() {
 			By("creating Konflux CR without internalRegistry config")
 			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: resourceName}}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
 			By("waiting for reconcile to complete")
 			Eventually(func(g Gomega) {
@@ -193,7 +221,7 @@ var _ = Describe("Konflux Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
 			By("waiting for reconcile to complete")
 			Eventually(func(g Gomega) {
@@ -220,9 +248,7 @@ var _ = Describe("Konflux Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
-			DeferCleanup(testutil.DeleteAndWait, k8sClient,
-				&konfluxv1alpha1.KonfluxInternalRegistry{ObjectMeta: metav1.ObjectMeta{Name: internalregistry.CRName}})
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
 			By("verifying InternalRegistry CR was created")
 			registry := &konfluxv1alpha1.KonfluxInternalRegistry{}
@@ -244,7 +270,7 @@ var _ = Describe("Konflux Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
 			By("waiting for InternalRegistry CR to be created")
 			Eventually(func(g Gomega) {
@@ -277,9 +303,7 @@ var _ = Describe("Konflux Controller", func() {
 			By("creating Konflux CR without defaultTenant config")
 			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: resourceName}}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
-			DeferCleanup(testutil.DeleteAndWait, k8sClient,
-				&konfluxv1alpha1.KonfluxDefaultTenant{ObjectMeta: metav1.ObjectMeta{Name: defaulttenant.CRName}})
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
 			By("verifying DefaultTenant CR was created (enabled by default)")
 			tenant := &konfluxv1alpha1.KonfluxDefaultTenant{}
@@ -301,9 +325,7 @@ var _ = Describe("Konflux Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
-			DeferCleanup(testutil.DeleteAndWait, k8sClient,
-				&konfluxv1alpha1.KonfluxDefaultTenant{ObjectMeta: metav1.ObjectMeta{Name: defaulttenant.CRName}})
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
 			By("verifying DefaultTenant CR was created")
 			Eventually(func(g Gomega) {
@@ -324,7 +346,7 @@ var _ = Describe("Konflux Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
 			By("waiting for reconcile to complete")
 			Eventually(func(g Gomega) {
@@ -351,7 +373,7 @@ var _ = Describe("Konflux Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
 			By("waiting for DefaultTenant CR to be created")
 			Eventually(func(g Gomega) {
@@ -384,7 +406,7 @@ var _ = Describe("Konflux Controller", func() {
 			By("creating Konflux CR without telemetry config")
 			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: resourceName}}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
 			By("waiting for reconcile to complete")
 			Eventually(func(g Gomega) {
@@ -411,7 +433,7 @@ var _ = Describe("Konflux Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
 			By("waiting for reconcile to complete")
 			Eventually(func(g Gomega) {
@@ -438,9 +460,7 @@ var _ = Describe("Konflux Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
-			DeferCleanup(testutil.DeleteAndWait, k8sClient,
-				&konfluxv1alpha1.KonfluxSegmentBridge{ObjectMeta: metav1.ObjectMeta{Name: segmentbridge.CRName}})
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
 			By("verifying SegmentBridge CR was created")
 			sb := &konfluxv1alpha1.KonfluxSegmentBridge{}
@@ -462,7 +482,7 @@ var _ = Describe("Konflux Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
 			By("waiting for SegmentBridge CR to be created")
 			Eventually(func(g Gomega) {
@@ -501,9 +521,7 @@ var _ = Describe("Konflux Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
-			DeferCleanup(testutil.DeleteAndWait, k8sClient,
-				&konfluxv1alpha1.KonfluxImageController{ObjectMeta: metav1.ObjectMeta{Name: imagecontroller.CRName}})
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
 			By("verifying ImageController CR was created with empty spec")
 			ic := &konfluxv1alpha1.KonfluxImageController{}
@@ -523,7 +541,7 @@ var _ = Describe("Konflux Controller", func() {
 				Spec: konfluxv1alpha1.KonfluxSpec{
 					ImageController: &konfluxv1alpha1.ImageControllerConfig{
 						Enabled: &enabled,
-						Spec: &konfluxv1alpha1.KonfluxImageControllerSpec{
+						Spec: &konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 							QuayCABundle: &konfluxv1alpha1.QuayCABundleSpec{
 								ConfigMapName: "my-ca-bundle",
 								Key:           "ca.crt",
@@ -533,9 +551,7 @@ var _ = Describe("Konflux Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
-			DeferCleanup(testutil.DeleteAndWait, k8sClient,
-				&konfluxv1alpha1.KonfluxImageController{ObjectMeta: metav1.ObjectMeta{Name: imagecontroller.CRName}})
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
 			By("verifying ImageController CR has the quayCABundle spec")
 			ic := &konfluxv1alpha1.KonfluxImageController{}
@@ -557,7 +573,7 @@ var _ = Describe("Konflux Controller", func() {
 				Spec: konfluxv1alpha1.KonfluxSpec{
 					ImageController: &konfluxv1alpha1.ImageControllerConfig{
 						Enabled: &enabled,
-						Spec: &konfluxv1alpha1.KonfluxImageControllerSpec{
+						Spec: &konfluxv1alpha1.KonfluxImageControllerConfigSpec{
 							QuayCABundle: &konfluxv1alpha1.QuayCABundleSpec{
 								ConfigMapName: "my-ca-bundle",
 								Key:           "ca.crt",
@@ -567,9 +583,7 @@ var _ = Describe("Konflux Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
-			DeferCleanup(testutil.DeleteAndWait, k8sClient,
-				&konfluxv1alpha1.KonfluxImageController{ObjectMeta: metav1.ObjectMeta{Name: imagecontroller.CRName}})
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
 			By("waiting for ImageController CR to be created with quayCABundle")
 			Eventually(func(g Gomega) {
@@ -593,6 +607,69 @@ var _ = Describe("Konflux Controller", func() {
 		})
 	})
 
+	Context("ComponentMetrics propagation", func() {
+		const resourceName = "konflux"
+
+		It("should forward spec.componentMetrics to metrics-enabled operand CRs", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			disabled := false
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					ComponentMetrics: &konfluxv1alpha1.ComponentMetricsConfig{
+						Enabled: &disabled,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			Eventually(func(g Gomega) {
+				bs := &konfluxv1alpha1.KonfluxBuildService{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: buildservice.CRName}, bs)).To(Succeed())
+				g.Expect(bs.Spec.ComponentMetrics).NotTo(BeNil())
+				g.Expect(bs.Spec.ComponentMetrics.IsEnabled()).To(BeFalse())
+
+				is := &konfluxv1alpha1.KonfluxIntegrationService{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: integrationservice.CRName}, is)).To(Succeed())
+				g.Expect(is.Spec.ComponentMetrics).NotTo(BeNil())
+				g.Expect(is.Spec.ComponentMetrics.IsEnabled()).To(BeFalse())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should update operand CR componentMetrics when Konflux spec changes", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					ComponentMetrics: &konfluxv1alpha1.ComponentMetricsConfig{},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			Eventually(func(g Gomega) {
+				bs := &konfluxv1alpha1.KonfluxBuildService{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: buildservice.CRName}, bs)).To(Succeed())
+				g.Expect(bs.Spec.ComponentMetrics.IsEnabled()).To(BeTrue())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			updated := &konfluxv1alpha1.Konflux{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+			disabled := false
+			updated.Spec.ComponentMetrics.Enabled = &disabled
+			Expect(k8sClient.Update(ctx, updated)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				bs := &konfluxv1alpha1.KonfluxBuildService{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: buildservice.CRName}, bs)).To(Succeed())
+				g.Expect(bs.Spec.ComponentMetrics.IsEnabled()).To(BeFalse())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
 	Context("EnterpriseContract spec propagation", func() {
 		const resourceName = "konflux"
 
@@ -604,9 +681,7 @@ var _ = Describe("Konflux Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
-			DeferCleanup(testutil.DeleteAndWait, k8sClient,
-				&konfluxv1alpha1.KonfluxEnterpriseContract{ObjectMeta: metav1.ObjectMeta{Name: enterprisecontract.CRName}})
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
 			By("verifying EnterpriseContract CR was created with skipPolicies=false")
 			ec := &konfluxv1alpha1.KonfluxEnterpriseContract{}
@@ -629,9 +704,7 @@ var _ = Describe("Konflux Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
-			DeferCleanup(testutil.DeleteAndWait, k8sClient,
-				&konfluxv1alpha1.KonfluxEnterpriseContract{ObjectMeta: metav1.ObjectMeta{Name: enterprisecontract.CRName}})
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
 			By("verifying EnterpriseContract CR has skipPolicies=true")
 			ec := &konfluxv1alpha1.KonfluxEnterpriseContract{}
@@ -654,9 +727,7 @@ var _ = Describe("Konflux Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
-			DeferCleanup(testutil.DeleteAndWait, k8sClient,
-				&konfluxv1alpha1.KonfluxEnterpriseContract{ObjectMeta: metav1.ObjectMeta{Name: enterprisecontract.CRName}})
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
 			By("waiting for EnterpriseContract CR to be created with skipPolicies=true")
 			Eventually(func(g Gomega) {
@@ -688,14 +759,14 @@ var _ = Describe("Konflux Controller", func() {
 				Spec:       konfluxv1alpha1.KonfluxEnterpriseContractSpec{SkipPolicies: true},
 			}
 			Expect(k8sClient.Create(ctx, preExisting)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, preExisting)
+			testutil.DeferCleanupParentAndChildren(k8sClient, preExisting)
 
 			By("creating Konflux CR without enterpriseContract config (defaults to skipPolicies=false)")
 			cr := &konfluxv1alpha1.Konflux{
 				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
 			By("verifying the Konflux controller resets skipPolicies to false via SSA")
 			Eventually(func(g Gomega) {

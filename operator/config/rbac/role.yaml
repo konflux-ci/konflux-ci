@@ -54,6 +54,12 @@ rules:
   - patch
   - watch
 - apiGroups:
+  - ""
+  resources:
+  - serviceaccounts/token
+  verbs:
+  - create
+- apiGroups:
   - admissionregistration.k8s.io
   resources:
   - mutatingwebhookconfigurations
@@ -282,6 +288,16 @@ rules:
   - patch
   - watch
 - apiGroups:
+  - monitoring.coreos.com
+  resourceNames:
+  - controller-manager-metrics-monitor
+  resources:
+  - servicemonitors
+  verbs:
+  - create
+  - get
+  - patch
+- apiGroups:
   - networking.k8s.io
   resources:
   - ingresses
@@ -321,6 +337,7 @@ rules:
   - build-pipeline-runner-rolebinding
   - build-service-manager-rolebinding
   - build-service-metrics-auth-rolebinding
+  - prometheus-build-service-metrics-reader
   resources:
   - clusterrolebindings
   verbs:
@@ -340,6 +357,7 @@ rules:
   resourceNames:
   - image-controller-manager-rolebinding
   - image-controller-metrics-auth-rolebinding
+  - prometheus-image-controller-metrics-reader
   resources:
   - clusterrolebindings
   verbs:
@@ -351,10 +369,22 @@ rules:
   - integration-service-metrics-auth-rolebinding
   - integration-service-snapshot-garbage-collector
   - integration-service-tekton-role-binding
+  - prometheus-integration-service-metrics-reader
   resources:
   - clusterrolebindings
   verbs:
   - bind
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - konflux-operator-prometheus-konflux-operator-metrics-reader
+  resources:
+  - clusterrolebindings
+  verbs:
+  - bind
+  - create
+  - get
+  - patch
 - apiGroups:
   - rbac.authorization.k8s.io
   resourceNames:
@@ -407,6 +437,7 @@ rules:
   - appstudio-pipelines-runner
   - build-service-manager-role
   - build-service-metrics-auth-role
+  - build-service-metrics-reader
   resources:
   - clusterroles
   verbs:
@@ -440,6 +471,7 @@ rules:
   - image-controller-imagerepository-viewer-role
   - image-controller-manager-role
   - image-controller-metrics-auth-role
+  - image-controller-metrics-reader
   resources:
   - clusterroles
   verbs:
@@ -453,6 +485,7 @@ rules:
   - integration-service-integrationtestscenario-viewer-role
   - integration-service-manager-role
   - integration-service-metrics-auth-role
+  - integration-service-metrics-reader
   - integration-service-snapshot-garbage-collector
   - integration-service-tekton-editor-role
   - konflux-integration-runner
@@ -477,6 +510,15 @@ rules:
   - clusterroles
   verbs:
   - bind
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - konflux-operator-metrics-reader
+  resources:
+  - clusterroles
+  verbs:
+  - bind
+  - escalate
 - apiGroups:
   - rbac.authorization.k8s.io
   resourceNames:

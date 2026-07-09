@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -44,6 +45,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/ui"
 	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
@@ -79,14 +81,21 @@ const (
 )
 
 // IntegrationServiceCleanupGVKs defines which resource types should be cleaned up when they are
-// no longer part of the desired state. All resources managed by this controller are always
-// applied, so no cleanup GVKs are needed (they're always tracked and never become orphans).
-var IntegrationServiceCleanupGVKs = []schema.GroupVersionKind{}
+// no longer part of the desired state. Metrics scrape resources may be skipped during apply
+// (componentMetrics disabled) or removed across releases while metrics stay enabled.
+var IntegrationServiceCleanupGVKs = append([]schema.GroupVersionKind(nil), kubernetes.ComponentMetricsOrphanCleanupGVKs...)
 
 // IntegrationServiceClusterScopedAllowList restricts which cluster-scoped resources can be deleted
-// during orphan cleanup. All cluster-scoped resources managed by this controller are always
-// applied, so no allow list is needed (they're always tracked and never become orphans).
-var IntegrationServiceClusterScopedAllowList tracking.ClusterScopedAllowList = nil
+// during orphan cleanup. Only metrics scrape ClusterRoles and ClusterRoleBindings are listed;
+// other cluster-scoped RBAC managed by this controller is always applied and stays tracked.
+var IntegrationServiceClusterScopedAllowList = tracking.ClusterScopedAllowList{
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"}: sets.New(
+		"integration-service-metrics-reader",
+	),
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"}: sets.New(
+		"prometheus-integration-service-metrics-reader",
+	),
+}
 
 // KonfluxIntegrationServiceReconciler reconciles a KonfluxIntegrationService object
 type KonfluxIntegrationServiceReconciler struct {
@@ -107,10 +116,10 @@ type KonfluxIntegrationServiceReconciler struct {
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,resourceNames=integration-service-leader-election-role,verbs=bind;escalate
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,resourceNames=integration-service-leader-election-rolebinding,verbs=bind
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=integration-service-integrationtestscenario-admin-role;integration-service-integrationtestscenario-editor-role;integration-service-integrationtestscenario-viewer-role;integration-service-manager-role;integration-service-metrics-auth-role;integration-service-snapshot-garbage-collector;integration-service-tekton-editor-role;konflux-integration-runner,verbs=bind;escalate
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=integration-service-manager-rolebinding;integration-service-metrics-auth-rolebinding;integration-service-snapshot-garbage-collector;integration-service-tekton-role-binding,verbs=bind
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=integration-service-integrationtestscenario-admin-role;integration-service-integrationtestscenario-editor-role;integration-service-integrationtestscenario-viewer-role;integration-service-manager-role;integration-service-metrics-auth-role;integration-service-metrics-reader;integration-service-snapshot-garbage-collector;integration-service-tekton-editor-role;konflux-integration-runner,verbs=bind;escalate
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=integration-service-manager-rolebinding;integration-service-metrics-auth-rolebinding;integration-service-snapshot-garbage-collector;integration-service-tekton-role-binding;prometheus-integration-service-metrics-reader,verbs=bind
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;patch
-// +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;patch
+// +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates;issuers,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=mutatingwebhookconfigurations;validatingwebhookconfigurations,verbs=get;list;watch;create;patch
@@ -183,22 +192,35 @@ func (r *KonfluxIntegrationServiceReconciler) Reconcile(ctx context.Context, req
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
 func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxIntegrationService, consoleURL string) error {
+	log := logf.FromContext(ctx)
+
+	metricsEnabled := owner.Spec.ComponentMetrics.IsEnabled()
+
 	objects, err := r.ObjectStore.GetForComponent(manifests.Integration)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for Integration: %w", err)
 	}
 
 	for _, obj := range objects {
+		if !metricsEnabled && kubernetes.IsComponentMetricsScrapeResource(obj) {
+			log.V(1).Info("Skipping component metrics scrape resource",
+				"kind", tracking.GetKind(obj),
+				"name", obj.GetName(),
+				"namespace", obj.GetNamespace(),
+			)
+			continue
+		}
+
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
-			if err := applyIntegrationServiceDeploymentCustomizations(deployment, owner.Spec, consoleURL); err != nil {
+			if err := applyIntegrationServiceDeploymentCustomizations(deployment, owner.Spec.KonfluxIntegrationServiceConfigSpec, consoleURL); err != nil {
 				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
 			}
 		}
 
 		// Apply customizations for the snapshot GC CronJob
 		if cronJob, ok := obj.(*batchv1.CronJob); ok && cronJob.Name == snapshotGCCronJobName {
-			if err := applySnapshotGCCustomizations(cronJob, owner.Spec); err != nil {
+			if err := applySnapshotGCCustomizations(cronJob, owner.Spec.KonfluxIntegrationServiceConfigSpec); err != nil {
 				return fmt.Errorf("failed to apply customizations to CronJob %s: %w", cronJob.Name, err)
 			}
 		}
@@ -213,7 +235,7 @@ func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context
 }
 
 // applyIntegrationServiceDeploymentCustomizations applies user-defined customizations to IntegrationService deployments.
-func applyIntegrationServiceDeploymentCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxIntegrationServiceSpec, consoleURL string) error {
+func applyIntegrationServiceDeploymentCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec, consoleURL string) error {
 	switch deployment.Name {
 	case controllerManagerDeploymentName:
 		if spec.IntegrationControllerManager != nil {
@@ -230,7 +252,7 @@ func applyIntegrationServiceDeploymentCustomizations(deployment *appsv1.Deployme
 // Typed timeout fields (PipelineTimeout, TasksTimeout, FinallyTimeout) are applied last and
 // take precedence over any env entry with the same name in integrationControllerManager.manager.env.
 // When not set in the CRD, the upstream integration-service defaults apply.
-func buildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploymentSpec, consoleURL string, integrationSpec konfluxv1alpha1.KonfluxIntegrationServiceSpec) *customization.PodOverlay {
+func buildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploymentSpec, consoleURL string, integrationSpec konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec) *customization.PodOverlay {
 	consoleURLTemplate := ""
 	if consoleURL != "" {
 		consoleURLTemplate = fmt.Sprintf("%s/ns/{{ .Namespace }}/pipelinerun/{{ .PipelineRunName }}",
@@ -261,7 +283,7 @@ func buildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploy
 // The ContainerSpec (resources, env) is applied first via ApplyCronJobContainerSpec, which
 // validates the container exists. Typed retention fields are validated separately and applied
 // last, taking precedence over any same-named entry in snapshotGarbageCollector.env.
-func applySnapshotGCCustomizations(cj *batchv1.CronJob, integrationSpec konfluxv1alpha1.KonfluxIntegrationServiceSpec) error {
+func applySnapshotGCCustomizations(cj *batchv1.CronJob, integrationSpec konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec) error {
 	if err := customization.ApplyCronJobContainerSpec(cj, snapshotGCContainerName, integrationSpec.SnapshotGarbageCollector); err != nil {
 		return err
 	}
@@ -312,7 +334,7 @@ func (r *KonfluxIntegrationServiceReconciler) SetupWithManager(mgr ctrl.Manager)
 		// Deployments: watch spec changes AND readiness status changes
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(predicate.DeploymentReadinessPredicate)).
 		Owns(&batchv1.CronJob{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
-		Owns(&corev1.Service{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
+		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).

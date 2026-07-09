@@ -1,17 +1,18 @@
 ---
 name: debug-e2e-tests
-description: Debug failed Konflux e2e test runs by downloading logs and artifacts from GitHub Actions, analyzing test failures, and suggesting fixes. Use when the user asks to debug, investigate, or fix a failing e2e test, CI failure, or flaky test.
+description: Debug failed Konflux e2e test runs by downloading logs and artifacts from GitHub Actions or OpenShift CI (Prow), analyzing test failures, and suggesting fixes. Use when the user asks to debug, investigate, or fix a failing e2e test, CI failure, or flaky test.
 ---
 
 # Debug E2E Tests
 
-Debug failed e2e test runs from GitHub Actions. Downloads test logs and cluster artifacts, identifies root causes, and suggests fixes to this repo or upstream dependencies.
+Debug failed e2e test runs from **GitHub Actions** or **OpenShift CI (Prow)**. Downloads test logs and cluster artifacts, identifies root causes, and suggests fixes to this repo or upstream dependencies.
 
 **When this skill is activated, tell the user:** "Using the **debug-e2e-tests** skill to investigate this failure." Then show the checklist from the Workflow section below so the user can track progress.
 
 ## Prerequisites
 
 - `gh` CLI authenticated with access to `konflux-ci/konflux-ci`
+- `curl` available (for Prow artifact downloads)
 - `tar` and `unzip` available (standard on Linux/macOS)
 
 ## Workflow
@@ -19,7 +20,7 @@ Debug failed e2e test runs from GitHub Actions. Downloads test logs and cluster 
 Copy this checklist and track progress:
 
 ```
-- [ ] Step 1: Identify the failed run
+- [ ] Step 1: Identify the CI system and failed run
 - [ ] Step 2: Download artifacts
 - [ ] Step 3: Analyze test output (JUnit + Ginkgo logs)
 - [ ] Step 4: Analyze cluster logs
@@ -27,7 +28,19 @@ Copy this checklist and track progress:
 - [ ] Step 6: Determine root cause and suggest fix
 ```
 
-### Step 1: Identify the Failed Run
+### Step 1: Identify the CI System and Failed Run
+
+First, determine which CI system the failure is from:
+
+| Signal | CI System |
+|--------|-----------|
+| User provides a GitHub Actions run ID or PR number | **GitHub Actions** |
+| URL contains `prow.ci.openshift.org` | **OpenShift CI (Prow)** |
+| URL contains `gcsweb-ci.apps.ci` | **OpenShift CI (Prow)** |
+| Job name starts with `pull-ci-` or `periodic-ci-` | **OpenShift CI (Prow)** |
+| User mentions "Prow", "OpenShift CI", or "OCP e2e" | **OpenShift CI (Prow)** |
+
+#### GitHub Actions
 
 If the user provides a PR number, run ID, or branch name, use that. Otherwise, find recent failures:
 
@@ -55,12 +68,30 @@ The e2e workflow has these jobs:
 - **Run Operator E2E Tests (AMD64)** — main e2e on amd64
 - **Run Operator E2E Tests (ARM64)** — main e2e on arm64
 
+#### OpenShift CI (Prow)
+
+The user will typically provide a Prow URL like:
+```
+https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/konflux-ci_konflux-ci/<PR>/<job-name>/<build-id>
+```
+
+Key Prow jobs for this repo:
+- `pull-ci-konflux-ci-konflux-ci-main-konflux-e2e-v420-optional` — PR presubmit (OCP 4.20)
+- `periodic-ci-konflux-ci-konflux-ci-main-ocp420-konflux-e2e-v420` — periodic x86_64
+- `periodic-ci-konflux-ci-konflux-ci-main-ocp420-arm64-konflux-e2e-v420-arm64` — periodic ARM64
+
+You can view recent Prow job runs at:
+- [x86_64 periodic](https://prow.ci.openshift.org/?job=periodic-ci-konflux-ci-konflux-ci-main-ocp420-konflux-e2e-v420)
+- [ARM64 periodic](https://prow.ci.openshift.org/?job=periodic-ci-konflux-ci-konflux-ci-main-ocp420-arm64-konflux-e2e-v420-arm64)
+
 ### Step 2: Download Artifacts
+
+#### GitHub Actions
 
 Use the helper script to download and extract artifacts:
 
 ```bash
-bash .cursor/skills/debug-e2e-tests/scripts/download-logs.sh <run-id> [arch]
+bash skills/debug-e2e-tests/scripts/download-logs.sh <run-id> [arch]
 ```
 
 - `arch` defaults to `amd64`. Use `arm64` if that's the failing job.
@@ -88,6 +119,24 @@ gh api "repos/konflux-ci/konflux-ci/actions/runs/<run-id>/jobs" \
 gh api "repos/konflux-ci/konflux-ci/actions/jobs/<job-id>/logs" > "$WORKDIR/job.log"
 ```
 
+#### OpenShift CI (Prow)
+
+Use the Prow download script:
+
+```bash
+bash skills/debug-e2e-tests/scripts/download-prow-logs.sh <prow-url>
+```
+
+The script accepts:
+- A full Prow UI URL: `https://prow.ci.openshift.org/view/gs/...`
+- A GCS path: `gs://test-platform-results/pr-logs/...`
+- A gcsweb URL: `https://gcsweb-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/...`
+
+Artifacts are extracted to `/tmp/prow-debug-<build-id>/`. See
+[prow-reference.md](prow-reference.md) for the full artifact directory layout,
+step descriptions, gather file listing, and gcsweb URL patterns for fetching
+additional files.
+
 ### Step 3: Analyze Test Output
 
 #### 3a. JUnit Report
@@ -95,24 +144,34 @@ gh api "repos/konflux-ci/konflux-ci/actions/jobs/<job-id>/logs" > "$WORKDIR/job.
 Check the JUnit XML first for a quick summary of which tests failed:
 
 ```bash
-# The JUnit file is at:
-# logs/junit/junit-conformance-amd64.xml  (or arm64)
+# GitHub Actions:
+#   logs/junit/junit-conformance-amd64.xml  (or arm64)
+#
+# Prow:
+#   junit/junit.xml
+#   (also: artifacts/junit_operator.xml for step-level pass/fail)
 ```
 
 Look for `<testcase>` elements with `<failure>` children. Extract test names and failure messages.
 
 #### 3b. Ginkgo Output
 
-The raw job log (`job.log`) or stdout contains full Ginkgo output. Search for:
+The test execution log contains full Ginkgo output. Search for:
 
 - `[FAILED]` — Ginkgo failure markers
 - `FAIL!` — Go test failure
 - `Timed out` or `context deadline exceeded` — timeout failures
 - `Expected` / `to equal` / `to succeed` — Gomega assertion failures
 
+Where to find it:
+- **GitHub Actions:** `job.log` (raw job log)
+- **Prow:** `steps/konflux-ci-e2e-tests/build-log.txt`
+
 The test suite is `Konflux Conformance` under `test/go-tests/tests/conformance/`. Cross-reference the failing test name with the source files there to understand what the test was doing.
 
 ### Step 4: Analyze Cluster Logs
+
+#### GitHub Actions artifacts
 
 The `logs/` directory (from `generate-err-logs.sh`) contains the cluster state at test failure time. Read files in this priority order:
 
@@ -138,6 +197,18 @@ For deeper analysis, check structured artifacts under `logs/artifacts/`:
 
 For details on log structure, see [reference.md](reference.md).
 
+#### Prow artifacts
+
+For Prow jobs, cluster state is collected by the `redhat-appstudio-gather` step.
+Start with `artifacts/junit_operator.xml` to see which multi-stage test steps
+passed/failed — if the install step failed, the test never ran. Then check
+step logs under `steps/<step-name>/build-log.txt` and gathered resources under
+`gather/`.
+
+See [prow-reference.md](prow-reference.md) for the complete artifact layout,
+step descriptions, gather file listing, failure pattern table, and a mapping
+of Prow artifacts to their GitHub Actions equivalents.
+
 #### 4a. "No PipelineRun found" failures — PaC webhook chain
 
 When the failure is **"no pipelinerun found for component …"**, read
@@ -150,6 +221,8 @@ This step is not always needed. Use it when the logs from Steps 3–4 suggest a 
 
 #### 5a. Get the head commit and base branch from the run
 
+**GitHub Actions:**
+
 ```bash
 # Show the head SHA, branch, and associated PR for the run
 gh run view <run-id> --repo konflux-ci/konflux-ci --json headSha,headBranch \
@@ -159,6 +232,22 @@ gh run view <run-id> --repo konflux-ci/konflux-ci --json headSha,headBranch \
 gh pr list --repo konflux-ci/konflux-ci --head <branch> --json number,baseRefName \
   --jq '.[0] | "PR #\(.number) → base: \(.baseRefName)"'
 ```
+
+**Prow:**
+
+The commit info is in `started.json` and `prowjob.json` (downloaded in Step 2):
+
+```bash
+# From started.json — shows the PR refs
+cat /tmp/prow-debug-<build-id>/started.json | python3 -m json.tool
+
+# From prowjob.json — contains full refs spec
+cat /tmp/prow-debug-<build-id>/prowjob.json | \
+  python3 -c "import json,sys; d=json.load(sys.stdin); r=d['spec'].get('refs') or d['spec']['extra_refs'][0]; print(f\"org: {r['org']}\nrepo: {r['repo']}\nbase: {r['base_ref']}\nSHA: {r['base_sha']}\nPR pulls: {r.get('pulls', [])}\")"
+```
+
+For presubmit (PR) jobs, the `pulls` array contains the PR number and head SHA.
+For periodic jobs, `base_sha` is the commit tested from the base branch.
 
 #### 5b. Check out and inspect the diff
 
@@ -228,6 +317,7 @@ Check the pinned commit SHA in the kustomization to identify which upstream vers
 
 Resource exhaustion, network issues, Kind cluster instability.
 - Check `system-resources.log` and `cluster-resources.log`
+- **etcd timeouts** — `etcdserver: request timed out` or `etcdserver: leader changed` indicate etcd leader re-elections caused by CPU starvation on resource-constrained runners (e.g., 4-vCPU GitHub Actions). High load averages in `system-resources.log` confirm CPU saturation
 - If the test passed on one arch but failed on another, likely infra-related
 - If the failure is intermittent across runs, likely flaky
 

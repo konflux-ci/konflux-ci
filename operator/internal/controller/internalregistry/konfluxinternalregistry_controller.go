@@ -194,10 +194,10 @@ func (r *KonfluxInternalRegistryReconciler) SetupWithManager(mgr ctrl.Manager) e
 		For(&konfluxv1alpha1.KonfluxInternalRegistry{}).
 		Named("konfluxinternalregistry").
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(predicate.DeploymentReadinessPredicate)).
-		Owns(&corev1.Service{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
+		Owns(&corev1.Service{}).
 		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&corev1.ConfigMap{}).
-		Owns(&corev1.Secret{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
+		Owns(&corev1.Secret{}).
 		Owns(&certmanagerv1.Certificate{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		// NOTE: trust-manager Bundle (trust.cert-manager.io/v1alpha1) is not owned here
 		// because trust-manager's Go module pulls controller-runtime/k8s.io versions

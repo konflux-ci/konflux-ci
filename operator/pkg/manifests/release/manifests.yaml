@@ -3923,8 +3923,8 @@ spec:
                 description: ManagedPipelineAttempts contains information about each
                   attempt of the release managed pipeline processing
                 items:
-                  description: ManagedPipelineAttempt defines the observed state of
-                    a managed pipeline processing attempt
+                  description: PipelineAttempt defines the observed state of a pipeline
+                    processing attempt
                   properties:
                     completionTime:
                       description: CompletionTime is the time when the managed pipeline
@@ -5192,7 +5192,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: quay.io/konflux-ci/release-service:a971d3c8d10d07257d4afc70e342a09e85a3a33e
+        image: quay.io/konflux-ci/release-service:e2ea734989e61089a1738821c66f11fab829cb0f
         livenessProbe:
           httpGet:
             path: /healthz

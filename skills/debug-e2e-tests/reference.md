@@ -1,8 +1,10 @@
-# Reference: E2E Debug Skill
+# Reference: E2E Debug Skill (GitHub Actions)
+
+For OpenShift CI (Prow) artifact structure, see [prow-reference.md](prow-reference.md).
 
 ## Log Directory Structure
 
-After downloading artifacts from a failed run, the `logs/` directory contains:
+After downloading artifacts from a failed GitHub Actions run, the `logs/` directory contains:
 
 ```
 logs/
@@ -125,4 +127,5 @@ gh api "repos/konflux-ci/<service>/commits?sha=main&per_page=10" \
 | Reconcile error loop in operator | Controller bug or bad CR spec | `operator-logs.log` |
 | PipelineRun stuck `Running` | Tekton task issue or missing resources | `pipelineruns.json`, `taskruns.json` |
 | Different result amd64 vs arm64 | Architecture-specific bug or resource limits | Compare both artifact sets |
+| `etcdserver: request timed out` or `etcdserver: leader changed` | etcd overwhelmed by CPU starvation or excessive watcher load on Kind cluster | `system-resources.log` (load average), `cluster-resources.log` (node conditions) |
 

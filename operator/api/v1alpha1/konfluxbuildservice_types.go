@@ -23,8 +23,8 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// KonfluxBuildServiceSpec defines the desired state of KonfluxBuildService
-type KonfluxBuildServiceSpec struct {
+// KonfluxBuildServiceConfigSpec defines user-configurable build-service settings on the Konflux CR.
+type KonfluxBuildServiceConfigSpec struct {
 	// BuildControllerManager defines customizations for the controller-manager deployment.
 	// +optional
 	BuildControllerManager *ControllerManagerDeploymentSpec `json:"buildControllerManager,omitempty"`
@@ -74,6 +74,16 @@ type KonfluxBuildServiceSpec struct {
 	//
 	// +optional
 	PipelineConfig *PipelineConfigSpec `json:"pipelineConfig,omitempty"`
+}
+
+// KonfluxBuildServiceSpec defines the desired state of KonfluxBuildService.
+type KonfluxBuildServiceSpec struct {
+	KonfluxBuildServiceConfigSpec `json:",inline"`
+
+	// ComponentMetrics controls Prometheus scrape resources for this component.
+	// Set by the Konflux reconciler from spec.componentMetrics on the Konflux CR.
+	// +optional
+	ComponentMetrics *ComponentMetricsConfig `json:"componentMetrics,omitempty"`
 }
 
 // PipelineConfigSpec defines how the operator should build the build-pipeline-config ConfigMap.
@@ -183,8 +193,4 @@ func (k *KonfluxBuildService) GetConditions() []metav1.Condition {
 // SetConditions sets the conditions on the KonfluxBuildService status.
 func (k *KonfluxBuildService) SetConditions(conditions []metav1.Condition) {
 	k.Status.Conditions = conditions
-}
-
-func init() {
-	SchemeBuilder.Register(&KonfluxBuildService{}, &KonfluxBuildServiceList{})
 }

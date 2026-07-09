@@ -72,7 +72,3 @@ func (k *KonfluxEnterpriseContract) GetConditions() []metav1.Condition {
 func (k *KonfluxEnterpriseContract) SetConditions(conditions []metav1.Condition) {
 	k.Status.Conditions = conditions
 }
-
-func init() {
-	SchemeBuilder.Register(&KonfluxEnterpriseContract{}, &KonfluxEnterpriseContractList{})
-}

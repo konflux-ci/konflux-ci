@@ -93,7 +93,3 @@ func (k *KonfluxNamespaceLister) GetConditions() []metav1.Condition {
 func (k *KonfluxNamespaceLister) SetConditions(conditions []metav1.Condition) {
 	k.Status.Conditions = conditions
 }
-
-func init() {
-	SchemeBuilder.Register(&KonfluxNamespaceLister{}, &KonfluxNamespaceListerList{})
-}

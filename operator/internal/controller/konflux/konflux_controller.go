@@ -29,6 +29,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/common"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/applicationapi"
@@ -465,8 +466,9 @@ func (r *KonfluxReconciler) applyKonfluxBuildService(ctx context.Context, tc *tr
 
 	var spec konfluxv1alpha1.KonfluxBuildServiceSpec
 	if owner.Spec.KonfluxBuildService != nil && owner.Spec.KonfluxBuildService.Spec != nil {
-		spec = *owner.Spec.KonfluxBuildService.Spec
+		spec.KonfluxBuildServiceConfigSpec = *owner.Spec.KonfluxBuildService.Spec
 	}
+	spec.ComponentMetrics = common.ForwardedComponentMetrics(owner)
 
 	// Ensure PipelineConfig is always present in the SSA payload so the
 	// controller claims ownership. Combined with the atomic marker on
@@ -496,8 +498,9 @@ func (r *KonfluxReconciler) applyKonfluxIntegrationService(ctx context.Context, 
 
 	var spec konfluxv1alpha1.KonfluxIntegrationServiceSpec
 	if owner.Spec.KonfluxIntegrationService != nil && owner.Spec.KonfluxIntegrationService.Spec != nil {
-		spec = *owner.Spec.KonfluxIntegrationService.Spec
+		spec.KonfluxIntegrationServiceConfigSpec = *owner.Spec.KonfluxIntegrationService.Spec
 	}
+	spec.ComponentMetrics = common.ForwardedComponentMetrics(owner)
 
 	integrationService := &konfluxv1alpha1.KonfluxIntegrationService{
 		TypeMeta: metav1.TypeMeta{
@@ -681,8 +684,9 @@ func (r *KonfluxReconciler) applyKonfluxImageController(ctx context.Context, tc 
 
 	var spec konfluxv1alpha1.KonfluxImageControllerSpec
 	if owner.Spec.ImageController != nil && owner.Spec.ImageController.Spec != nil {
-		spec = *owner.Spec.ImageController.Spec
+		spec.KonfluxImageControllerConfigSpec = *owner.Spec.ImageController.Spec
 	}
+	spec.ComponentMetrics = common.ForwardedComponentMetrics(owner)
 
 	imageController := &konfluxv1alpha1.KonfluxImageController{
 		TypeMeta: metav1.TypeMeta{

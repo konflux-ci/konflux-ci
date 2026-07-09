@@ -81,7 +81,3 @@ func (k *KonfluxCertManagerSpec) ShouldCreateClusterIssuer() bool {
 	}
 	return *k.CreateClusterIssuer
 }
-
-func init() {
-	SchemeBuilder.Register(&KonfluxCertManager{}, &KonfluxCertManagerList{})
-}

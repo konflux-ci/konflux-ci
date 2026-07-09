@@ -9,7 +9,7 @@ spec:
   endpoints:
   - bearerTokenSecret:
       key: token
-      name: metrics-reader
+      name: prometheus-scrape-token
     interval: 15s
     path: /metrics
     port: https

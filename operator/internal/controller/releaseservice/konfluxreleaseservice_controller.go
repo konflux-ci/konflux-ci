@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -61,6 +63,9 @@ const (
 	releaseServiceConfigKind  = "ReleaseServiceConfig"
 	releaseServiceConfigGroup = "appstudio.redhat.com"
 )
+
+// releaseServiceConfigGVK is the GVK for ReleaseServiceConfig resources.
+var releaseServiceConfigGVK = schema.GroupVersionKind{Group: releaseServiceConfigGroup, Version: "v1alpha1", Kind: releaseServiceConfigKind}
 
 // ReleaseServiceCleanupGVKs defines which resource types should be cleaned up when they are
 // no longer part of the desired state. All resources managed by this controller are always
@@ -259,23 +264,28 @@ func (r *KonfluxReleaseServiceReconciler) SetupWithManager(mgr ctrl.Manager) err
 	if err != nil {
 		return err
 	}
+	rsc := &unstructured.Unstructured{}
+	rsc.SetGroupVersionKind(releaseServiceConfigGVK)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&konfluxv1alpha1.KonfluxReleaseService{}).
 		Named("konfluxreleaseservice").
 		// Use predicates to filter out unnecessary updates and prevent reconcile loops
 		// Deployments: watch spec changes AND readiness status changes
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(predicate.DeploymentReadinessPredicate)).
-		Owns(&corev1.Service{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
+		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).
 		Owns(&rbacv1.ClusterRole{}).
 		Owns(&rbacv1.ClusterRoleBinding{}).
-		// TODO(KFLUXVNGD-892): Add Owns() watch for ReleaseServiceConfig (unstructured)
-		// so that out-of-band deletion/mutation triggers reconcile and re-apply.
-		// Requires adding the upstream CRD to test/crds/ with a sync mechanism.
-		//
+		Owns(&corev1.ServiceAccount{}).
+		Owns(&certmanagerv1.Certificate{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
+		Owns(&certmanagerv1.Issuer{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
+		Owns(&admissionregistrationv1.MutatingWebhookConfiguration{}).
+		Owns(&admissionregistrationv1.ValidatingWebhookConfiguration{}).
+		Owns(rsc, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		// Watch CRDs so that out-of-band deletion triggers reconcile and re-apply.
 		Watches(&apiextensionsv1.CustomResourceDefinition{},
 			handler.EnqueueRequestsFromMapFunc(crdMapFunc)).

@@ -40,8 +40,22 @@ spec:
           spec:
             default: {}
             description: KonfluxIntegrationServiceSpec defines the desired state of
-              KonfluxIntegrationService
+              KonfluxIntegrationService.
             properties:
+              componentMetrics:
+                description: |-
+                  ComponentMetrics controls Prometheus scrape resources for this component.
+                  Set by the Konflux reconciler from spec.componentMetrics on the Konflux CR.
+                properties:
+                  enabled:
+                    description: |-
+                      Enabled controls whether scrape resources are deployed for metrics-enabled components
+                      (see operator/docs/component-monitoring.md#scope). HTTPS operands on the operator
+                      scrape-token model use reconciler-managed prometheus-scrape-token; legacy interim
+                      operands use static-token HTTP scraping until migrated.
+                      Defaults to true when unset.
+                    type: boolean
+                type: object
               finallyTimeout:
                 description: |-
                   FinallyTimeout is the timeout for finally tasks (e.g. "2h", "30m").

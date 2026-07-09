@@ -6,7 +6,7 @@
   ],
   "rebaseWhen": "conflicted",
   "prConcurrentLimit": 50,
-  "prHourlyLimit": 20,
+  "prHourlyLimit": 7,
   "packageRules": [
     {
       "matchPackageNames": [
@@ -53,6 +53,14 @@
       "additionalBranchPrefix": "integrations/"
     }
   ],
+  "gomod": {
+    "packageRules": [
+      {
+        "matchDepTypes": ["indirect"],
+        "enabled": false
+      }
+    ]
+  },
   "tekton": {
     "fileMatch": [".*\\.ya?ml$"],
     "includePaths": [
@@ -61,6 +69,15 @@
       "pipelines/**"
     ],
     "schedule": ["* * * * *"]
+  },
+  "customDatasources": {
+    "envtest": {
+      "defaultRegistryUrlTemplate": "https://raw.githubusercontent.com/kubernetes-sigs/controller-tools/main/envtest-releases.yaml",
+      "format": "yaml",
+      "transformTemplates": [
+        "{\"releases\": $keys(releases).{\"version\": $substring($, 1)} }"
+      ]
+    }
   },
   "customManagers": [
     {
@@ -226,6 +243,18 @@
       "depNameTemplate": "curlimages/curl"
     },
     {
+      "description": "Track go-toolset image digest in echo server test setup",
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["test/go-tests/echo_server_setup\\.go$"],
+      "matchStrings": [
+        "// renovate: datasource=docker depName=(?<depName>[^\\s]+)",
+        "echoServerImage\\s*=\\s*\"[^@]+@(?<currentDigest>sha256:[a-f0-9]{64})\""
+      ],
+      "datasourceTemplate": "docker",
+      "currentValueTemplate": "latest"
+    },
+    {
       "description": "Track kube-linter version in shell scripts",
       "customType": "regex",
       "matchStringsStrategy": "combination",
@@ -315,6 +344,32 @@
       "datasourceTemplate": "helm",
       "depNameTemplate": "trust-manager",
       "extractVersionTemplate": "^v?(?<version>.*)$"
+    },
+    {
+      "description": "Track prometheus-operator release (export-third-party-chart-env.sh)",
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["^\\.github/scripts/export-third-party-chart-env\\.sh$"],
+      "matchStrings": [
+        "# renovate: datasource=github-releases depName=prometheus-operator/prometheus-operator versioning=semver",
+        "PROMETHEUS_OPERATOR_VERSION=\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "prometheus-operator/prometheus-operator",
+      "extractVersionTemplate": "^v?(?<version>.*)$"
+    },
+    {
+      "description": "Track envtest Kubernetes version in operator Makefile",
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["^operator/Makefile$"],
+      "matchStrings": [
+        "# renovate: datasource=custom.envtest depName=envtest",
+        "ENVTEST_K8S_VERSION \\?= (?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "custom.envtest",
+      "depNameTemplate": "envtest",
+      "versioningTemplate": "semver"
     },
     {
       "description": "Track sigstore scaffold Helm chart version in install script",

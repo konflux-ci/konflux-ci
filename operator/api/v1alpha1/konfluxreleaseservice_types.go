@@ -90,7 +90,3 @@ func (k *KonfluxReleaseService) GetConditions() []metav1.Condition {
 func (k *KonfluxReleaseService) SetConditions(conditions []metav1.Condition) {
 	k.Status.Conditions = conditions
 }
-
-func init() {
-	SchemeBuilder.Register(&KonfluxReleaseService{}, &KonfluxReleaseServiceList{})
-}

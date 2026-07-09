@@ -27,6 +27,10 @@ const (
 	// DefaultSegmentAPIURL is the default Segment HTTP API base URL (without /batch).
 	// The operator appends "/batch" to produce the full SEGMENT_BATCH_API value.
 	DefaultSegmentAPIURL = "https://api.segment.io/v1"
+
+	// DefaultTektonLimit is the number of PipelineRun records fetched per CronJob run.
+	// Sized to cover ~4.7h at average production throughput (~214 PipelineRuns/hour).
+	DefaultTektonLimit = 1000
 )
 
 // KonfluxSegmentBridgeSpec defines the desired state of KonfluxSegmentBridge.
@@ -45,6 +49,12 @@ type KonfluxSegmentBridgeSpec struct {
 	// +optional
 	// +kubebuilder:validation:Pattern=`^https://[^?#]+$`
 	SegmentAPIURL string `json:"segmentAPIURL,omitempty"`
+
+	// TektonLimit sets the maximum number of PipelineRun records fetched per CronJob run.
+	// Defaults to 1000 (covers ~4.7h at avg production throughput of ~214 PipelineRuns/hour).
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	TektonLimit *int `json:"tektonLimit,omitempty"`
 }
 
 // GetSegmentKey returns the configured Segment write key, or empty string if unset.
@@ -64,6 +74,14 @@ func (s *KonfluxSegmentBridgeSpec) GetSegmentAPIURL() string {
 		baseURL = s.SegmentAPIURL
 	}
 	return sanitizeSegmentHost(baseURL)
+}
+
+// GetTektonLimit returns the configured tektonLimit value, or DefaultTektonLimit if unset.
+func (s *KonfluxSegmentBridgeSpec) GetTektonLimit() int {
+	if s != nil && s.TektonLimit != nil {
+		return *s.TektonLimit
+	}
+	return DefaultTektonLimit
 }
 
 // sanitizeSegmentHost parses the URL and strips trailing slashes and an
@@ -120,8 +138,4 @@ func (k *KonfluxSegmentBridge) GetConditions() []metav1.Condition {
 // SetConditions sets the conditions on the KonfluxSegmentBridge status.
 func (k *KonfluxSegmentBridge) SetConditions(conditions []metav1.Condition) {
 	k.Status.Conditions = conditions
-}
-
-func init() {
-	SchemeBuilder.Register(&KonfluxSegmentBridge{}, &KonfluxSegmentBridgeList{})
 }

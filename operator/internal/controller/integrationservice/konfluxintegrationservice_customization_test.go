@@ -77,14 +77,14 @@ func getIntegrationServiceDeployment(t *testing.T) *appsv1.Deployment {
 func TestBuildControllerManagerOverlay(t *testing.T) {
 	t.Run("nil spec returns empty overlay", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		overlay := buildControllerManagerOverlay(nil, "", konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
+		overlay := buildControllerManagerOverlay(nil, "", konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})
 		g.Expect(overlay).NotTo(gomega.BeNil())
 	})
 
 	t.Run("empty spec returns overlay without customizations", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{}
-		overlay := buildControllerManagerOverlay(spec, "", konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
+		overlay := buildControllerManagerOverlay(spec, "", konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})
 		g.Expect(overlay).NotTo(gomega.BeNil())
 	})
 
@@ -106,7 +106,7 @@ func TestBuildControllerManagerOverlay(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		overlay := buildControllerManagerOverlay(spec, "", konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
+		overlay := buildControllerManagerOverlay(spec, "", konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -135,7 +135,7 @@ func TestBuildControllerManagerOverlay(t *testing.T) {
 		g.Expect(managerContainer).NotTo(gomega.BeNil(), "manager container must exist in controller-manager deployment")
 		originalImage := managerContainer.Image
 
-		overlay := buildControllerManagerOverlay(spec, "", konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
+		overlay := buildControllerManagerOverlay(spec, "", konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -148,7 +148,7 @@ func TestBuildControllerManagerOverlay(t *testing.T) {
 func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 	t.Run("applies customizations to controller-manager deployment", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			IntegrationControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
@@ -171,7 +171,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 
 	t.Run("ignores unknown deployment names", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			IntegrationControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
@@ -205,7 +205,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 
 	t.Run("handles nil controller-manager spec", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			IntegrationControllerManager: nil,
 		}
 
@@ -220,7 +220,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 
 	t.Run("handles empty spec", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{}
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{}
 
 		deployment := getIntegrationServiceDeployment(t)
 		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
@@ -232,7 +232,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 
 	t.Run("applies replicas to controller-manager deployment", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			IntegrationControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Replicas: 3,
 			},
@@ -248,7 +248,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 
 	t.Run("applies default replicas when using default value", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			IntegrationControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Replicas: 1, // default value
 			},
@@ -264,7 +264,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 
 	t.Run("does not modify replicas when controller-manager spec is nil", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			IntegrationControllerManager: nil,
 		}
 
@@ -278,7 +278,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 
 	t.Run("applies replicas together with container resources", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			IntegrationControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Replicas: 5,
 				Manager: &konfluxv1alpha1.ContainerSpec{
@@ -319,7 +319,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations_ResourceMerging(t *test
 			corev1.ResourceMemory: resource.MustParse("64Mi"),
 		}
 
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			IntegrationControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
@@ -353,7 +353,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations_ResourceMerging(t *test
 			corev1.ResourceMemory: resource.MustParse("512Mi"),
 		}
 
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			IntegrationControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
@@ -392,7 +392,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{}
 
 		deployment := getIntegrationServiceDeployment(t)
-		overlay := buildControllerManagerOverlay(spec, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
+		overlay := buildControllerManagerOverlay(spec, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -408,7 +408,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		g := gomega.NewWithT(t)
 
 		deployment := getIntegrationServiceDeployment(t)
-		overlay := buildControllerManagerOverlay(nil, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
+		overlay := buildControllerManagerOverlay(nil, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -425,7 +425,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{}
 
 		deployment := getIntegrationServiceDeployment(t)
-		overlay := buildControllerManagerOverlay(spec, "", konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
+		overlay := buildControllerManagerOverlay(spec, "", konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -451,7 +451,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		overlay := buildControllerManagerOverlay(spec, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
+		overlay := buildControllerManagerOverlay(spec, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -480,7 +480,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		overlay := buildControllerManagerOverlay(spec, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
+		overlay := buildControllerManagerOverlay(spec, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -511,7 +511,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		overlay := buildControllerManagerOverlay(spec, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
+		overlay := buildControllerManagerOverlay(spec, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -541,7 +541,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		overlay := buildControllerManagerOverlay(spec, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
+		overlay := buildControllerManagerOverlay(spec, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -566,7 +566,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 
 		// First, apply with old console URL
 		deployment := getIntegrationServiceDeployment(t)
-		overlay := buildControllerManagerOverlay(spec, oldConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
+		overlay := buildControllerManagerOverlay(spec, oldConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -579,7 +579,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		g.Expect(envVar.Value).To(gomega.Equal(oldConsoleURLTemplate))
 
 		// Now apply with new console URL (simulating KonfluxUI ingress URL change)
-		overlay = buildControllerManagerOverlay(spec, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceSpec{})
+		overlay = buildControllerManagerOverlay(spec, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -596,7 +596,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 func TestBuildControllerManagerOverlay_PipelineTimeouts(t *testing.T) {
 	t.Run("typed timeout fields are injected as env vars", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		integrationSpec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		integrationSpec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			PipelineTimeout: "6h",
 			TasksTimeout:    "4h",
 			FinallyTimeout:  "2h",
@@ -619,7 +619,7 @@ func TestBuildControllerManagerOverlay_PipelineTimeouts(t *testing.T) {
 
 	t.Run("typed CRD field overrides explicit manager.env entry", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		integrationSpec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		integrationSpec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			PipelineTimeout: "6h",
 			TasksTimeout:    "4h",
 			FinallyTimeout:  "2h",
@@ -651,7 +651,7 @@ func TestBuildControllerManagerOverlay_PipelineTimeouts(t *testing.T) {
 
 	t.Run("empty timeout fields do not inject env vars", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		integrationSpec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{}
+		integrationSpec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{}
 		deployment := getIntegrationServiceDeployment(t)
 		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "")).To(gomega.Succeed())
 
@@ -664,7 +664,7 @@ func TestBuildControllerManagerOverlay_PipelineTimeouts(t *testing.T) {
 
 	t.Run("manager.env values pass through when CRD timeout fields are not set", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		integrationSpec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		integrationSpec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			// PipelineTimeout, TasksTimeout, FinallyTimeout intentionally omitted
 			IntegrationControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
 				Manager: &konfluxv1alpha1.ContainerSpec{
@@ -694,7 +694,7 @@ func TestBuildControllerManagerOverlay_PipelineTimeouts(t *testing.T) {
 
 	t.Run("typed field wins for its var, manager.env pass-through for unset ones", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		integrationSpec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		integrationSpec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			PipelineTimeout: "6h", // typed field — should take precedence
 			// TasksTimeout and FinallyTimeout intentionally omitted — manager.env should pass through
 			IntegrationControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
@@ -750,7 +750,7 @@ func TestApplySnapshotGCCustomizations_ContainerNotFound(t *testing.T) {
 	t.Run("returns error when ContainerSpec is set but container is not found", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		cj := makeEmptyCronJob(snapshotGCCronJobName)
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			SnapshotGarbageCollector: &konfluxv1alpha1.ContainerSpec{
 				Resources: &corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
@@ -763,7 +763,7 @@ func TestApplySnapshotGCCustomizations_ContainerNotFound(t *testing.T) {
 	t.Run("returns error when typed fields are set but container is missing", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		cj := makeEmptyCronJob(snapshotGCCronJobName)
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			PRSnapshotsToKeep: "10",
 		}
 		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.MatchError(gomega.ContainSubstring(snapshotGCContainerName)))
@@ -772,7 +772,7 @@ func TestApplySnapshotGCCustomizations_ContainerNotFound(t *testing.T) {
 	t.Run("returns error when nonPRSnapshotsToKeep is set but container is missing", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		cj := makeEmptyCronJob(snapshotGCCronJobName)
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			NonPRSnapshotsToKeep: "100",
 		}
 		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.MatchError(gomega.ContainSubstring(snapshotGCContainerName)))
@@ -781,7 +781,7 @@ func TestApplySnapshotGCCustomizations_ContainerNotFound(t *testing.T) {
 	t.Run("returns error when minSnapshotsToKeepPerComponent is set but container is missing", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		cj := makeEmptyCronJob(snapshotGCCronJobName)
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			MinSnapshotsToKeepPerComponent: "4",
 		}
 		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.MatchError(gomega.ContainSubstring(snapshotGCContainerName)))
@@ -790,7 +790,7 @@ func TestApplySnapshotGCCustomizations_ContainerNotFound(t *testing.T) {
 	t.Run("returns error when ContainerSpec env-only is set but container is missing", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		cj := makeEmptyCronJob(snapshotGCCronJobName)
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			SnapshotGarbageCollector: &konfluxv1alpha1.ContainerSpec{
 				Env: []corev1.EnvVar{{Name: "CUSTOM", Value: "val"}},
 			},
@@ -801,7 +801,7 @@ func TestApplySnapshotGCCustomizations_ContainerNotFound(t *testing.T) {
 	t.Run("returns error when both ContainerSpec and typed fields are set but container is missing", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		cj := makeEmptyCronJob(snapshotGCCronJobName)
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			PRSnapshotsToKeep: "10",
 			SnapshotGarbageCollector: &konfluxv1alpha1.ContainerSpec{
 				Resources: &corev1.ResourceRequirements{
@@ -815,7 +815,7 @@ func TestApplySnapshotGCCustomizations_ContainerNotFound(t *testing.T) {
 	t.Run("returns nil when no customizations are set and container is not found", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		cj := makeEmptyCronJob(snapshotGCCronJobName)
-		g.Expect(applySnapshotGCCustomizations(cj, konfluxv1alpha1.KonfluxIntegrationServiceSpec{})).To(gomega.Succeed())
+		g.Expect(applySnapshotGCCustomizations(cj, konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})).To(gomega.Succeed())
 	})
 }
 
@@ -823,7 +823,7 @@ func TestApplySnapshotGCCustomizations(t *testing.T) {
 	t.Run("injects env vars from ContainerSpec", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		cj := getIntegrationSnapshotGCCronJob(t)
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			SnapshotGarbageCollector: &konfluxv1alpha1.ContainerSpec{
 				Env: []corev1.EnvVar{
 					{Name: envPRSnapshotsToKeep, Value: "10"},
@@ -849,7 +849,7 @@ func TestApplySnapshotGCCustomizations(t *testing.T) {
 	t.Run("nil ContainerSpec leaves GC container unchanged", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		cj := getIntegrationSnapshotGCCronJob(t)
-		g.Expect(applySnapshotGCCustomizations(cj, konfluxv1alpha1.KonfluxIntegrationServiceSpec{})).To(gomega.Succeed())
+		g.Expect(applySnapshotGCCustomizations(cj, konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})).To(gomega.Succeed())
 		gc := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 		g.Expect(gc).NotTo(gomega.BeNil())
 		g.Expect(findEnvVar(gc.Env, envPRSnapshotsToKeep)).To(gomega.BeNil())
@@ -858,7 +858,7 @@ func TestApplySnapshotGCCustomizations(t *testing.T) {
 	t.Run("resources from ContainerSpec are applied to GC container", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		cj := getIntegrationSnapshotGCCronJob(t)
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			SnapshotGarbageCollector: &konfluxv1alpha1.ContainerSpec{
 				Resources: &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
@@ -889,7 +889,7 @@ func TestApplySnapshotGCCustomizations(t *testing.T) {
 		origLimitsCPU := gcBefore.Resources.Limits.Cpu().String()
 		origLimitsMem := gcBefore.Resources.Limits.Memory().String()
 
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			SnapshotGarbageCollector: &konfluxv1alpha1.ContainerSpec{
 				Resources: &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
@@ -916,7 +916,7 @@ func TestApplySnapshotGCCustomizations(t *testing.T) {
 		g.Expect(gcBefore).NotTo(gomega.BeNil())
 		origLimitsCPU := gcBefore.Resources.Limits.Cpu().String()
 
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			PRSnapshotsToKeep: "25",
 		}
 		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.Succeed())
@@ -932,7 +932,7 @@ func TestApplySnapshotGCCustomizations(t *testing.T) {
 	t.Run("resources and typed fields applied together", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		cj := getIntegrationSnapshotGCCronJob(t)
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			PRSnapshotsToKeep:    "30",
 			NonPRSnapshotsToKeep: "200",
 			SnapshotGarbageCollector: &konfluxv1alpha1.ContainerSpec{
@@ -965,7 +965,7 @@ func TestApplySnapshotGCCustomizations(t *testing.T) {
 		g.Expect(gcBefore).NotTo(gomega.BeNil())
 		origLimitsCPU := gcBefore.Resources.Limits.Cpu().String()
 
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			SnapshotGarbageCollector: &konfluxv1alpha1.ContainerSpec{
 				Env: []corev1.EnvVar{
 					{Name: "CUSTOM_FLAG", Value: "enabled"},
@@ -990,7 +990,7 @@ func TestApplySnapshotGCCustomizations_TypedFields(t *testing.T) {
 		prToKeep := "10"
 		nonPRToKeep := "20"
 		minToKeep := "5"
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			PRSnapshotsToKeep:              prToKeep,
 			NonPRSnapshotsToKeep:           nonPRToKeep,
 			MinSnapshotsToKeepPerComponent: minToKeep,
@@ -1016,7 +1016,7 @@ func TestApplySnapshotGCCustomizations_TypedFields(t *testing.T) {
 		prToKeep := "10"
 		nonPRToKeep := "20"
 		minToKeep := "5"
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			PRSnapshotsToKeep:              prToKeep,
 			NonPRSnapshotsToKeep:           nonPRToKeep,
 			MinSnapshotsToKeepPerComponent: minToKeep,
@@ -1046,7 +1046,7 @@ func TestApplySnapshotGCCustomizations_TypedFields(t *testing.T) {
 	t.Run("nil typed fields do not inject env vars", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		cj := getIntegrationSnapshotGCCronJob(t)
-		g.Expect(applySnapshotGCCustomizations(cj, konfluxv1alpha1.KonfluxIntegrationServiceSpec{})).To(gomega.Succeed())
+		g.Expect(applySnapshotGCCustomizations(cj, konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})).To(gomega.Succeed())
 
 		gc := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 		g.Expect(gc).NotTo(gomega.BeNil())
@@ -1061,7 +1061,7 @@ func TestApplySnapshotGCCustomizations_TypedFields(t *testing.T) {
 		prToKeep := "0"
 		nonPRToKeep := "0"
 		minToKeep := "0"
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			PRSnapshotsToKeep:              prToKeep,
 			NonPRSnapshotsToKeep:           nonPRToKeep,
 			MinSnapshotsToKeepPerComponent: minToKeep,
@@ -1084,7 +1084,7 @@ func TestApplySnapshotGCCustomizations_TypedFields(t *testing.T) {
 	t.Run("ContainerSpec resources and typed fields are applied together", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		cj := getIntegrationSnapshotGCCronJob(t)
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			PRSnapshotsToKeep: "15",
 			SnapshotGarbageCollector: &konfluxv1alpha1.ContainerSpec{
 				Resources: &corev1.ResourceRequirements{
@@ -1113,7 +1113,7 @@ func TestApplySnapshotGCCustomizations_TypedFields(t *testing.T) {
 		prToKeep := "70"
 		nonPRToKeep := "640"
 		minToKeep := "1"
-		spec := konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 			SnapshotGarbageCollector: &konfluxv1alpha1.ContainerSpec{
 				Env: []corev1.EnvVar{
 					{Name: envPRSnapshotsToKeep, Value: prToKeep},

@@ -16,6 +16,12 @@ metadata:
   name: build-service-controller-manager
   namespace: build-service
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: metrics-scraper
+  namespace: build-service
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -267,6 +273,18 @@ rules:
   - create
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+  name: build-service-metrics-reader
+rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: build-pipeline-config-read-only-binding
@@ -339,23 +357,36 @@ subjects:
   name: build-service-controller-manager
   namespace: build-service
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    konflux.konflux-ci.dev/metrics-scraper-binding: "true"
+  name: prometheus-build-service-metrics-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: build-service-metrics-reader
+subjects: []
+---
 apiVersion: v1
 data:
   config.yaml: |
     default-pipeline-name: docker-build-oci-ta-min
     pipelines:
     - name: fbc-builder
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-fbc-builder@sha256:77c1be518faa9b2feab51225936d903fa1c0f6f640646aac880158f5fd43062d
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-fbc-builder@sha256:d1c8bdaab0a9a25da4e9ddfca0802c0aa8fe3f168a88ada91bc5f6861417215e
     - name: docker-build
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build@sha256:27616b4e08d241e8553b6f9d53c321dcb73ccdbfa9c6c9a3c576a5a8e0514bea
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build@sha256:d7c9a24d06505cca41c5ef57a19a0f0b45596d37e710b0c4bda0d5605705c9c9
     - name: docker-build-oci-ta
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta@sha256:2158c8721fb40e9b74a2b8c93b7c3d78c736418d43b427a2a0149dc290ab03f8
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta@sha256:cd847e1de0d3530fe2dec69b629652614ec9a86eb5a0886a58362868a91d7694
     - name: tekton-bundle-builder
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder@sha256:9999635c07e1e150f38dbbccff89cd3d40ff5e83e3e0a19d5201d67fa8661796
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder@sha256:7deb56e1f49f8f8afbcfe6f604f80ad579487fb3148a1f4012cddbb08156e3eb
     - name: tekton-bundle-builder-oci-ta
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder-oci-ta@sha256:f9bb4b6f4643b3f2a37d5d7df8c63146db6ac3ce70c0472d1fb7670c93d5250a
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-tekton-bundle-builder-oci-ta@sha256:0fdb02abf8e2a8335a190eecee6d17196a07e9e52e5e371c5f27007555e8c25d
     - name: docker-build-oci-ta-min
-      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta-min@sha256:5dd65b4520bba8321bb96612cdf36e7be3658bcdc7caef292235c23650affa8a
+      bundle: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-oci-ta-min@sha256:c6d5b57c9576abec545c0973c9c6562906f8075cd187635a26b2a965f154affb
       description: minimal version of the docker-build-oci-ta pipeline, which requires less compute resources. In addition, it doesn't contain tasks which require user provided secrets.
 kind: ConfigMap
 metadata:
@@ -413,7 +444,7 @@ spec:
         - -webhook-config-path=/mnt/webhook-config.json
         command:
         - /manager
-        image: quay.io/konflux-ci/build-service:2d761643b30f58b78c5d017a769a8027f7982433
+        image: quay.io/konflux-ci/build-service:40d2c83256e3cfe0905f827fbc47f20bc38b1bfc
         livenessProbe:
           httpGet:
             path: /healthz
@@ -470,6 +501,28 @@ spec:
           name: webhook-config
           optional: true
         name: webhook-config
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+  name: build-service
+  namespace: build-service
+spec:
+  endpoints:
+  - bearerTokenSecret:
+      key: token
+      name: prometheus-scrape-token
+    interval: 15s
+    path: /metrics
+    port: https
+    scheme: https
+    tlsConfig:
+      insecureSkipVerify: true
+  selector:
+    matchLabels:
+      control-plane: controller-manager
 ---
 allowHostDirVolumePlugin: false
 allowHostIPC: false

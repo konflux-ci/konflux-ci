@@ -29,9 +29,11 @@ import (
 
 // MockDiscoveryClient implements clusterinfo.DiscoveryClient and allows changing
 // the reported server version during a test (e.g. to simulate a cluster upgrade).
+// Set resources to simulate OpenShift API discovery (nil defaults to NotFound for all).
 type MockDiscoveryClient struct {
 	lock          sync.Mutex
 	serverVersion *version.Info
+	resources     map[string]*metav1.APIResourceList
 }
 
 // ServerVersion returns the currently set version. Safe for concurrent use.
@@ -49,9 +51,14 @@ func (m *MockDiscoveryClient) SetVersion(v string) {
 	m.serverVersion = &version.Info{GitVersion: v}
 }
 
-// ServerResourcesForGroupVersion returns NotFound for config.openshift.io/v1 so
-// clusterinfo.DetectWithClient treats the cluster as non-OpenShift and succeeds.
+// ServerResourcesForGroupVersion returns the configured resources for the group version,
+// or NotFound if not configured. Set resources map to simulate OpenShift API presence.
 func (m *MockDiscoveryClient) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
+	if m.resources != nil {
+		if r, ok := m.resources[groupVersion]; ok {
+			return r, nil
+		}
+	}
 	return nil, apierrors.NewNotFound(schema.GroupResource{Group: groupVersion}, "")
 }
 

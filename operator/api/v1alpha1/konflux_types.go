@@ -89,6 +89,12 @@ type KonfluxSpec struct {
 	// The runtime configuration is copied to the KonfluxSegmentBridge CR by the operator.
 	// +optional
 	Telemetry *TelemetryConfig `json:"telemetry,omitempty"`
+
+	// ComponentMetrics controls Prometheus scrape resources for metrics-enabled components
+	// (see operator/docs/component-monitoring.md#scope). When disabled, those reconcilers
+	// do not apply ServiceMonitor, metrics-reader RBAC, or operand scrape-token resources.
+	// +optional
+	ComponentMetrics *ComponentMetricsConfig `json:"componentMetrics,omitempty"`
 }
 
 // ImageControllerConfig defines the configuration for the image-controller component.
@@ -100,9 +106,9 @@ type ImageControllerConfig struct {
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
 
-	// Spec configures the image-controller component.
+	// Spec configures the image-controller component (excludes componentMetrics; see spec.componentMetrics).
 	// +optional
-	Spec *KonfluxImageControllerSpec `json:"spec,omitempty"`
+	Spec *KonfluxImageControllerConfigSpec `json:"spec,omitempty"`
 }
 
 // KonfluxUIConfig defines the configuration for the UI component.
@@ -116,9 +122,9 @@ type KonfluxUIConfig struct {
 // IntegrationServiceConfig defines the configuration for the integration-service component.
 // The Spec field is the runtime configuration passed to the component.
 type IntegrationServiceConfig struct {
-	// Spec configures the integration-service component.
+	// Spec configures the integration-service component (excludes componentMetrics; see spec.componentMetrics).
 	// +optional
-	Spec *KonfluxIntegrationServiceSpec `json:"spec,omitempty"`
+	Spec *KonfluxIntegrationServiceConfigSpec `json:"spec,omitempty"`
 }
 
 // ReleaseServiceConfig defines the configuration for the release-service component.
@@ -132,9 +138,9 @@ type ReleaseServiceConfig struct {
 // BuildServiceConfig defines the configuration for the build-service component.
 // The Spec field is the runtime configuration passed to the component.
 type BuildServiceConfig struct {
-	// Spec configures the build-service component.
+	// Spec configures the build-service component (excludes componentMetrics; see spec.componentMetrics).
 	// +optional
-	Spec *KonfluxBuildServiceSpec `json:"spec,omitempty"`
+	Spec *KonfluxBuildServiceConfigSpec `json:"spec,omitempty"`
 }
 
 // NamespaceListerConfig defines the configuration for the namespace-lister component.
@@ -178,6 +184,26 @@ type DefaultTenantConfig struct {
 	// Defaults to true if not specified.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// ComponentMetricsConfig controls Prometheus scrape resources for underlying services.
+type ComponentMetricsConfig struct {
+	// Enabled controls whether scrape resources are deployed for metrics-enabled components
+	// (see operator/docs/component-monitoring.md#scope). HTTPS operands on the operator
+	// scrape-token model use reconciler-managed prometheus-scrape-token; legacy interim
+	// operands use static-token HTTP scraping until migrated.
+	// Defaults to true when unset.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// IsEnabled reports whether component metrics scraping resources should be deployed.
+// Defaults to true when c is nil or Enabled is unset.
+func (c *ComponentMetricsConfig) IsEnabled() bool {
+	if c == nil || c.Enabled == nil {
+		return true
+	}
+	return *c.Enabled
 }
 
 // TelemetryConfig defines the user-facing telemetry configuration.
@@ -316,6 +342,8 @@ func (k *KonfluxSpec) IsTelemetryEnabled() bool {
 	return k.Telemetry != nil && k.Telemetry.Enabled != nil && *k.Telemetry.Enabled
 }
 
-func init() {
-	SchemeBuilder.Register(&Konflux{}, &KonfluxList{})
+// IsComponentMetricsEnabled returns true if component metrics scraping resources should be deployed.
+// Defaults to true when unset.
+func (k *KonfluxSpec) IsComponentMetricsEnabled() bool {
+	return k.ComponentMetrics.IsEnabled()
 }

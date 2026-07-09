@@ -84,7 +84,7 @@ PRODUCT_VERSION="0.1"
 CONFORMA_POLICY="default"
 RELEASE_NAME="local-release"
 # renovate: datasource=git-refs depName=https://github.com/konflux-ci/release-service-catalog currentValue=development
-CATALOG_REVISION="104859a061fa65efc11f760020c8a63db7966ca5"
+CATALOG_REVISION="5de60b8a73d6e85ab7611f2d91ebc7e7fd5c1546"
 IMAGE_NAME_PREFIX=""
 COMPONENTS=()
 
@@ -201,7 +201,10 @@ EOF
 # Step 2: On OpenShift, create a ConfigMap to inject the cluster-wide trusted CA bundle
 if [[ "${IS_OPENSHIFT}" == "true" ]]; then
     echo "🔒 OpenShift detected — creating trusted-ca ConfigMap in '${MANAGED_NS}'..."
-    kubectl apply -f - <<EOF
+    # Use server-side apply with --force-conflicts because this ConfigMap is also
+    # managed by a Kyverno policy in some environments. Plain apply would fail with
+    # resource version conflicts when both managers update the resource concurrently.
+    kubectl apply --server-side --force-conflicts -f - <<EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:

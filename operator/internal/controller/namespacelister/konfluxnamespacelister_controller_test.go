@@ -270,7 +270,9 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, namespaceLister)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, namespaceLister)
+			testutil.DeferCleanupParentAndChildren(k8sClient, namespaceLister,
+				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: authorizerClusterRoleName}},
+			)
 
 			crNN := types.NamespacedName{Name: authorizerClusterRoleName}
 
@@ -278,9 +280,6 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, crNN, &rbacv1.ClusterRole{})).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRole{
-				ObjectMeta: metav1.ObjectMeta{Name: crNN.Name},
-			})
 
 			By("deleting the ClusterRole")
 			Expect(k8sClient.Delete(ctx, &rbacv1.ClusterRole{
@@ -300,7 +299,9 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, namespaceLister)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, namespaceLister)
+			testutil.DeferCleanupParentAndChildren(k8sClient, namespaceLister,
+				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: authorizerClusterRoleName}},
+			)
 
 			crbNN := types.NamespacedName{Name: authorizerClusterRoleName}
 
@@ -308,9 +309,6 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, crbNN, &rbacv1.ClusterRoleBinding{})).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRoleBinding{
-				ObjectMeta: metav1.ObjectMeta{Name: crbNN.Name},
-			})
 
 			By("deleting the ClusterRoleBinding")
 			Expect(k8sClient.Delete(ctx, &rbacv1.ClusterRoleBinding{
@@ -444,6 +442,45 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
+		It("restores Service spec when modified", func(ctx context.Context) {
+			namespaceLister := &konfluxv1alpha1.KonfluxNamespaceLister{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, namespaceLister)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, namespaceLister)
+
+			svcNN := types.NamespacedName{
+				Name:      namespaceListerNamespace,
+				Namespace: namespaceListerNamespace,
+			}
+
+			By("waiting for initial Service creation")
+			var originalTargetPort int32
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				g.Expect(svc.Spec.Ports).NotTo(BeEmpty())
+				originalTargetPort = svc.Spec.Ports[0].TargetPort.IntVal
+				g.Expect(originalTargetPort).NotTo(BeZero())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the Service target port")
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				svc.Spec.Ports[0].TargetPort.IntVal = 9999
+				g.Expect(k8sClient.Update(ctx, svc)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the Service target port is restored")
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				g.Expect(svc.Spec.Ports).NotTo(BeEmpty())
+				g.Expect(svc.Spec.Ports[0].TargetPort.IntVal).To(Equal(originalTargetPort))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
 		It("restores Namespace labels when stripped", func(ctx context.Context) {
 			namespaceLister := &konfluxv1alpha1.KonfluxNamespaceLister{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
@@ -483,7 +520,9 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, namespaceLister)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, namespaceLister)
+			testutil.DeferCleanupParentAndChildren(k8sClient, namespaceLister,
+				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: authorizerClusterRoleName}},
+			)
 
 			crNN := types.NamespacedName{Name: authorizerClusterRoleName}
 
@@ -495,9 +534,6 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 				g.Expect(cr.Rules).NotTo(BeEmpty())
 				originalRules = cr.Rules
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRole{
-				ObjectMeta: metav1.ObjectMeta{Name: crNN.Name},
-			})
 
 			By("modifying the ClusterRole rules")
 			Eventually(func(g Gomega) {
@@ -524,7 +560,9 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, namespaceLister)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, namespaceLister)
+			testutil.DeferCleanupParentAndChildren(k8sClient, namespaceLister,
+				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: authorizerClusterRoleName}},
+			)
 
 			crbNN := types.NamespacedName{Name: authorizerClusterRoleName}
 
@@ -536,9 +574,6 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 				g.Expect(crb.Subjects).NotTo(BeEmpty())
 				originalSubjects = crb.Subjects
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRoleBinding{
-				ObjectMeta: metav1.ObjectMeta{Name: crbNN.Name},
-			})
 
 			By("modifying the ClusterRoleBinding subjects")
 			Eventually(func(g Gomega) {
@@ -631,6 +666,111 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 				g.Expect(k8sClient.Get(ctx, certNN, cert)).To(Succeed())
 				g.Expect(cert.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
 				g.Expect(cert.Labels).To(HaveKey(constant.KonfluxComponentLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores ingress NetworkPolicy spec when modified", func(ctx context.Context) {
+			namespaceLister := &konfluxv1alpha1.KonfluxNamespaceLister{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, namespaceLister)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, namespaceLister)
+
+			npNN := types.NamespacedName{
+				Name:      networkPolicyAllowFromKonfluxUIName,
+				Namespace: namespaceListerNamespace,
+			}
+
+			By("waiting for initial ingress NetworkPolicy creation")
+			Eventually(func(g Gomega) {
+				np := &networkingv1.NetworkPolicy{}
+				g.Expect(k8sClient.Get(ctx, npNN, np)).To(Succeed())
+				g.Expect(np.Spec.Ingress).NotTo(BeEmpty())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the NetworkPolicy ingress rules")
+			Eventually(func(g Gomega) {
+				np := &networkingv1.NetworkPolicy{}
+				g.Expect(k8sClient.Get(ctx, npNN, np)).To(Succeed())
+				np.Spec.Ingress = []networkingv1.NetworkPolicyIngressRule{}
+				g.Expect(k8sClient.Update(ctx, np)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the NetworkPolicy ingress rules are restored")
+			Eventually(func(g Gomega) {
+				np := &networkingv1.NetworkPolicy{}
+				g.Expect(k8sClient.Get(ctx, npNN, np)).To(Succeed())
+				g.Expect(np.Spec.Ingress).NotTo(BeEmpty())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores egress NetworkPolicy spec when modified", func(ctx context.Context) {
+			namespaceLister := &konfluxv1alpha1.KonfluxNamespaceLister{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, namespaceLister)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, namespaceLister)
+
+			npNN := types.NamespacedName{
+				Name:      networkPolicyAllowToAPIServerName,
+				Namespace: namespaceListerNamespace,
+			}
+
+			By("waiting for initial egress NetworkPolicy creation")
+			Eventually(func(g Gomega) {
+				np := &networkingv1.NetworkPolicy{}
+				g.Expect(k8sClient.Get(ctx, npNN, np)).To(Succeed())
+				g.Expect(np.Spec.Egress).NotTo(BeEmpty())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the NetworkPolicy egress rules")
+			Eventually(func(g Gomega) {
+				np := &networkingv1.NetworkPolicy{}
+				g.Expect(k8sClient.Get(ctx, npNN, np)).To(Succeed())
+				np.Spec.Egress = []networkingv1.NetworkPolicyEgressRule{}
+				g.Expect(k8sClient.Update(ctx, np)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the NetworkPolicy egress rules are restored")
+			Eventually(func(g Gomega) {
+				np := &networkingv1.NetworkPolicy{}
+				g.Expect(k8sClient.Get(ctx, npNN, np)).To(Succeed())
+				g.Expect(np.Spec.Egress).NotTo(BeEmpty())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores Certificate spec when modified", func(ctx context.Context) {
+			namespaceLister := &konfluxv1alpha1.KonfluxNamespaceLister{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, namespaceLister)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, namespaceLister)
+
+			certNN := types.NamespacedName{
+				Name:      namespaceListerNamespace,
+				Namespace: namespaceListerNamespace,
+			}
+
+			By("waiting for initial Certificate creation")
+			Eventually(func(g Gomega) {
+				cert := &certmanagerv1.Certificate{}
+				g.Expect(k8sClient.Get(ctx, certNN, cert)).To(Succeed())
+				g.Expect(cert.Spec.DNSNames).NotTo(BeEmpty())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the Certificate DNS names")
+			Eventually(func(g Gomega) {
+				cert := &certmanagerv1.Certificate{}
+				g.Expect(k8sClient.Get(ctx, certNN, cert)).To(Succeed())
+				cert.Spec.DNSNames = []string{"tampered.example.com"}
+				g.Expect(k8sClient.Update(ctx, cert)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the Certificate DNS names are restored")
+			Eventually(func(g Gomega) {
+				cert := &certmanagerv1.Certificate{}
+				g.Expect(k8sClient.Get(ctx, certNN, cert)).To(Succeed())
+				g.Expect(cert.Spec.DNSNames).To(ContainElement(namespaceListerNamespace + "." + namespaceListerNamespace + ".svc"))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})

@@ -1124,6 +1124,14 @@ metadata:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+  name: integration-service-metrics-reader
+  namespace: integration-service
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
   name: integration-service-snapshot-garbage-collector
   namespace: integration-service
 ---
@@ -1317,9 +1325,18 @@ rules:
   resources:
   - secrets
   verbs:
+  - create
   - get
   - list
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - create
+  - get
+  - update
 - apiGroups:
   - appstudio.redhat.com
   resources:
@@ -1393,6 +1410,13 @@ rules:
   - list
   - watch
 - apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  verbs:
+  - create
+  - get
+- apiGroups:
   - resolution.tekton.dev
   resources:
   - resolutionrequests
@@ -1459,6 +1483,18 @@ rules:
   - subjectaccessreviews
   verbs:
   - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+  name: integration-service-metrics-reader
+rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -1708,6 +1744,21 @@ subjects:
   name: integration-service-controller-manager
   namespace: integration-service
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+  name: prometheus-integration-service-metrics-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: integration-service-metrics-reader
+subjects:
+- kind: ServiceAccount
+  name: integration-service-metrics-reader
+  namespace: integration-service
+---
 apiVersion: v1
 data:
   controller_manager_config.yaml: |
@@ -1726,6 +1777,16 @@ kind: ConfigMap
 metadata:
   name: integration-service-manager-config
   namespace: integration-service
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    kubernetes.io/service-account.name: integration-service-metrics-reader
+  name: integration-service-metrics-reader
+  namespace: integration-service
+type: kubernetes.io/service-account-token
 ---
 apiVersion: v1
 kind: Service
@@ -1792,7 +1853,7 @@ spec:
         - --leader-elector-retry-period=5s
         command:
         - /manager
-        image: quay.io/konflux-ci/integration-service:5b4f7e50f41726448c67710484e7e63541ad3fc0
+        image: quay.io/konflux-ci/integration-service:84b3f45d9af1ae3e2f8fe66422f43995c2c08af9
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1853,7 +1914,7 @@ spec:
             - --zap-log-level=debug
             - --pr-snapshots-to-keep=70
             - --non-pr-snapshots-to-keep=640
-            image: quay.io/konflux-ci/integration-service:5b4f7e50f41726448c67710484e7e63541ad3fc0
+            image: quay.io/konflux-ci/integration-service:84b3f45d9af1ae3e2f8fe66422f43995c2c08af9
             imagePullPolicy: Always
             name: test-gc
             resources:
@@ -1899,6 +1960,26 @@ metadata:
   namespace: integration-service
 spec:
   selfSigned: {}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+  name: integration-service
+  namespace: integration-service
+spec:
+  endpoints:
+  - bearerTokenSecret:
+      key: token
+      name: integration-service-metrics-reader
+    interval: 15s
+    path: /metrics
+    port: http
+    scheme: http
+  selector:
+    matchLabels:
+      control-plane: controller-manager
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
@@ -1996,6 +2077,26 @@ webhooks:
     - DELETE
     resources:
     - integrationtestscenarios
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: integration-service-webhook-service
+      namespace: integration-service
+      path: /validate-appstudio-redhat-com-v1beta2-nudgeconfig
+  failurePolicy: Fail
+  name: vnudgeconfig.kb.io
+  rules:
+  - apiGroups:
+    - appstudio.redhat.com
+    apiVersions:
+    - v1beta2
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - nudgeconfigs
   sideEffects: None
 - admissionReviewVersions:
   - v1

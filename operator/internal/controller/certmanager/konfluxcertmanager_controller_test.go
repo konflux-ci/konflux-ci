@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -42,6 +43,7 @@ const (
 	bootstrapIssuerName  = "konflux-bootstrap-issuer"
 	issuerName           = "konflux-issuer"
 	certificateName      = "konflux-ca"
+	caSecretName         = "konflux-ca-secret"
 )
 
 // clusterIssuerGVK is the GVK for cert-manager ClusterIssuer resources.
@@ -116,22 +118,23 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 			g.Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
 		}
 
-		// Clean up after each spec. DeleteAndWait is a no-op when the object is already absent,
-		// so all deletions are safe to run unconditionally.
-		// ClusterIssuers are cleaned up explicitly because envtest has no GC controller, so
-		// OwnerReferences do not trigger cascading deletion.
-		AfterEach(func(ctx context.Context) {
-			testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxCertManager{ObjectMeta: metav1.ObjectMeta{Name: CRName}})
-			testutil.DeleteAndWait(ctx, k8sClient, newClusterIssuer(bootstrapIssuerName))
-			testutil.DeleteAndWait(ctx, k8sClient, newClusterIssuer(issuerName))
-			testutil.DeleteAndWait(ctx, k8sClient, newCertificate(certificateName, certManagerNamespace))
-		})
+		// certManagerChildren lists all cluster-scoped/namespaced children that envtest's
+		// missing GC won't cascade-delete when the parent CR is removed.
+		certManagerChildren := func() []client.Object {
+			return []client.Object{
+				newClusterIssuer(bootstrapIssuerName),
+				newClusterIssuer(issuerName),
+				newCertificate(certificateName, certManagerNamespace),
+			}
+		}
 
 		Context("with createClusterIssuer unset (defaults to enabled)", func() {
 			It("should successfully reconcile the resource and create ClusterIssuers", func(ctx context.Context) {
-				Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxCertManager{
+				cm := &konfluxv1alpha1.KonfluxCertManager{
 					ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				})).To(Succeed())
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
 				Eventually(waitForReady).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 				By("verifying ClusterIssuers were created")
@@ -143,10 +146,12 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 		Context("with createClusterIssuer explicitly enabled", func() {
 			It("should successfully reconcile the resource and create ClusterIssuers", func(ctx context.Context) {
 				enabled := true
-				Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxCertManager{
+				cm := &konfluxv1alpha1.KonfluxCertManager{
 					ObjectMeta: metav1.ObjectMeta{Name: CRName},
 					Spec:       konfluxv1alpha1.KonfluxCertManagerSpec{CreateClusterIssuer: &enabled},
-				})).To(Succeed())
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
 				Eventually(waitForReady).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 				By("verifying ClusterIssuers were created")
@@ -158,25 +163,29 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 		Context("with createClusterIssuer disabled", func() {
 			It("should successfully reconcile the resource and not create ClusterIssuers", func(ctx context.Context) {
 				disabled := false
-				Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxCertManager{
+				cm := &konfluxv1alpha1.KonfluxCertManager{
 					ObjectMeta: metav1.ObjectMeta{Name: CRName},
 					Spec:       konfluxv1alpha1.KonfluxCertManagerSpec{CreateClusterIssuer: &disabled},
-				})).To(Succeed())
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
 				Eventually(waitForReady).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 				By("verifying no ClusterIssuers were created")
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: bootstrapIssuerName}, newClusterIssuer(bootstrapIssuerName))).
-					To(MatchError(ContainSubstring("not found")))
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: issuerName}, newClusterIssuer(issuerName))).
-					To(MatchError(ContainSubstring("not found")))
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: bootstrapIssuerName}, newClusterIssuer(bootstrapIssuerName))
+				Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
+				err = k8sClient.Get(ctx, types.NamespacedName{Name: issuerName}, newClusterIssuer(issuerName))
+				Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
 			})
 		})
 
 		Context("Self-healing", func() {
 			It("recreates ClusterIssuer when deleted", func(ctx context.Context) {
-				Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxCertManager{
+				cm := &konfluxv1alpha1.KonfluxCertManager{
 					ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				})).To(Succeed())
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
 
 				By("waiting for initial ClusterIssuer creation")
 				Eventually(func(g Gomega) {
@@ -196,9 +205,11 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 			})
 
 			It("recreates Certificate when deleted", func(ctx context.Context) {
-				Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxCertManager{
+				cm := &konfluxv1alpha1.KonfluxCertManager{
 					ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				})).To(Succeed())
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
 
 				certNN := types.NamespacedName{
 					Name:      certificateName,
@@ -226,9 +237,11 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 
 		Context("Drift correction", func() {
 			It("restores ClusterIssuer labels when stripped", func(ctx context.Context) {
-				Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxCertManager{
+				cm := &konfluxv1alpha1.KonfluxCertManager{
 					ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				})).To(Succeed())
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
 
 				By("waiting for initial ClusterIssuer creation with ownership labels")
 				Eventually(func(g Gomega) {
@@ -260,9 +273,11 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 			})
 
 			It("restores Certificate labels when stripped", func(ctx context.Context) {
-				Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxCertManager{
+				cm := &konfluxv1alpha1.KonfluxCertManager{
 					ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				})).To(Succeed())
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
 
 				certNN := types.NamespacedName{
 					Name:      certificateName,
@@ -295,6 +310,108 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 					labels, _, _ := unstructured.NestedStringMap(obj.Object, "metadata", "labels")
 					g.Expect(labels).To(HaveKey(constant.KonfluxOwnerLabel))
 					g.Expect(labels).To(HaveKey(constant.KonfluxComponentLabel))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			})
+
+			It("restores ClusterIssuer spec when modified", func(ctx context.Context) {
+				cm := &konfluxv1alpha1.KonfluxCertManager{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
+
+				By("waiting for initial ClusterIssuer creation")
+				Eventually(func(g Gomega) {
+					obj := newClusterIssuer(issuerName)
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: issuerName}, obj)).To(Succeed())
+					secretName, _, _ := unstructured.NestedString(obj.Object, "spec", "ca", "secretName")
+					g.Expect(secretName).To(Equal(caSecretName))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("modifying the ClusterIssuer CA secret name")
+				Eventually(func(g Gomega) {
+					obj := newClusterIssuer(issuerName)
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: issuerName}, obj)).To(Succeed())
+					g.Expect(unstructured.SetNestedField(obj.Object, "tampered-secret", "spec", "ca", "secretName")).To(Succeed())
+					g.Expect(k8sClient.Update(ctx, obj)).To(Succeed())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("verifying the ClusterIssuer CA secret name is restored")
+				Eventually(func(g Gomega) {
+					obj := newClusterIssuer(issuerName)
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: issuerName}, obj)).To(Succeed())
+					secretName, _, _ := unstructured.NestedString(obj.Object, "spec", "ca", "secretName")
+					g.Expect(secretName).To(Equal(caSecretName))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			})
+
+			It("restores bootstrap ClusterIssuer spec when modified", func(ctx context.Context) {
+				cm := &konfluxv1alpha1.KonfluxCertManager{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
+
+				By("waiting for initial bootstrap ClusterIssuer creation")
+				Eventually(func(g Gomega) {
+					obj := newClusterIssuer(bootstrapIssuerName)
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: bootstrapIssuerName}, obj)).To(Succeed())
+					_, found, _ := unstructured.NestedMap(obj.Object, "spec", "selfSigned")
+					g.Expect(found).To(BeTrue())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("replacing selfSigned with a CA spec")
+				Eventually(func(g Gomega) {
+					obj := newClusterIssuer(bootstrapIssuerName)
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: bootstrapIssuerName}, obj)).To(Succeed())
+					unstructured.RemoveNestedField(obj.Object, "spec", "selfSigned")
+					g.Expect(unstructured.SetNestedField(obj.Object, "fake-secret", "spec", "ca", "secretName")).To(Succeed())
+					g.Expect(k8sClient.Update(ctx, obj)).To(Succeed())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("verifying the bootstrap ClusterIssuer selfSigned spec is restored")
+				Eventually(func(g Gomega) {
+					obj := newClusterIssuer(bootstrapIssuerName)
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: bootstrapIssuerName}, obj)).To(Succeed())
+					_, found, _ := unstructured.NestedMap(obj.Object, "spec", "selfSigned")
+					g.Expect(found).To(BeTrue())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			})
+
+			It("restores Certificate spec when modified", func(ctx context.Context) {
+				cm := &konfluxv1alpha1.KonfluxCertManager{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
+
+				certNN := types.NamespacedName{
+					Name:      certificateName,
+					Namespace: certManagerNamespace,
+				}
+
+				By("waiting for initial Certificate creation")
+				Eventually(func(g Gomega) {
+					obj := newCertificate(certNN.Name, certNN.Namespace)
+					g.Expect(k8sClient.Get(ctx, certNN, obj)).To(Succeed())
+					issuer, _, _ := unstructured.NestedString(obj.Object, "spec", "issuerRef", "name")
+					g.Expect(issuer).To(Equal(bootstrapIssuerName))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("modifying the Certificate issuerRef name")
+				Eventually(func(g Gomega) {
+					obj := newCertificate(certNN.Name, certNN.Namespace)
+					g.Expect(k8sClient.Get(ctx, certNN, obj)).To(Succeed())
+					g.Expect(unstructured.SetNestedField(obj.Object, "tampered-issuer", "spec", "issuerRef", "name")).To(Succeed())
+					g.Expect(k8sClient.Update(ctx, obj)).To(Succeed())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("verifying the Certificate issuerRef name is restored")
+				Eventually(func(g Gomega) {
+					obj := newCertificate(certNN.Name, certNN.Namespace)
+					g.Expect(k8sClient.Get(ctx, certNN, obj)).To(Succeed())
+					issuer, _, _ := unstructured.NestedString(obj.Object, "spec", "issuerRef", "name")
+					g.Expect(issuer).To(Equal(bootstrapIssuerName))
 				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 			})
 		})

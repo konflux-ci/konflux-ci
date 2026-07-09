@@ -32,7 +32,7 @@ Reads keys from Secret `konflux-operator-e2e-credentials` in the Task namespace 
 
 ## Steps / images
 
-1. **fetch-kubeconfig** / **copy-shared-tools** — `quay.io/konflux-ci/task-runner:v1` (pinned by digest in `task.yaml`).
+1. **fetch-kubeconfig** / **copy-shared-tools** — `quay.io/konflux-ci/task-runner` (pinned by digest in `task.yaml`).
 2. **deploy-prep** — `registry.access.redhat.com/ubi10/go-toolset` (pinned by digest): optional overrides via `go run ./cmd/overrides`, then `deploy-local.sh` with `OPERATOR_INSTALL_METHOD=none` (needs credentials below).
 3. **deploy-operator-and-wait** — `registry.access.redhat.com/ubi10/go-toolset` (pinned by digest): uses `kubectl`/`yq`/`jq` from `/mnt/e2e-shared/bin` and **`LD_LIBRARY_PATH=/mnt/e2e-shared/lib`** for `jq`, then `make` + out-of-cluster `bin/manager`, CR apply, Ready wait.
 

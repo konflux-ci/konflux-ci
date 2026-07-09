@@ -79,9 +79,10 @@ const (
 	serviceAccountName = "dex"
 
 	// Container names
-	reverseProxyContainerName = "reverse-proxy"
-	oauth2ProxyContainerName  = "oauth2-proxy"
-	dexContainerName          = "dex"
+	reverseProxyContainerName        = "reverse-proxy"
+	oauth2ProxyContainerName         = "oauth2-proxy"
+	dexContainerName                 = "dex"
+	generateProxyConfigContainerName = "generate-proxy-config"
 
 	// Dex ConfigMap constants
 	dexConfigMapBaseName   = "dex"
@@ -98,6 +99,9 @@ const (
 	segmentSecretVolume   = "segment-bridge-config"
 	segmentKeyWriteKey    = "key"
 	segmentKeyAPIURL      = "url"
+
+	// Watson endpoint constants
+	watsonConfigVolumeName = "watson-config"
 )
 
 // UICleanupGVKs defines which resource types should be cleaned up when they are
@@ -341,7 +345,11 @@ func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv
 		// OpenShift SCCs inject a numeric UID automatically so this is only
 		// needed on non-OpenShift (e.g. Kind).
 		needsRunAsUser := clusterInfo == nil || !clusterInfo.IsOpenShift()
-		if err := buildProxyOverlay(ui.Spec.Proxy, segmentSecretName, needsRunAsUser, oauth2ProxyOpts...).ApplyToDeployment(deployment); err != nil {
+		proxyOverlay, err := buildProxyOverlay(ui.Spec.Proxy, segmentSecretName, needsRunAsUser, oauth2ProxyOpts...)
+		if err != nil {
+			return err
+		}
+		if err := proxyOverlay.ApplyToDeployment(deployment); err != nil {
 			return err
 		}
 	case dexDeploymentName:
@@ -400,7 +408,7 @@ func applyUIServiceAccountCustomizations(serviceAccount *corev1.ServiceAccount, 
 // segmentSecretName is the content-hashed Secret name (empty if segment is not configured).
 // needsRunAsUser injects runAsUser on the reverse-proxy container for non-OpenShift clusters.
 // oauth2ProxyOpts are applied to the oauth2-proxy container before user-provided overrides.
-func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, segmentSecretName string, needsRunAsUser bool, oauth2ProxyOpts ...customization.ContainerOption) *customization.PodOverlay {
+func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, segmentSecretName string, needsRunAsUser bool, oauth2ProxyOpts ...customization.ContainerOption) (*customization.PodOverlay, error) {
 	// Create CA bundle volume that will be mounted in oauth2-proxy container.
 	// The Secret is created by cert-manager from the oauth2-proxy-cert Certificate resource
 	// (see operator/upstream-kustomizations/ui/dex/dex.yaml).
@@ -455,12 +463,26 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, segmentSecretN
 				customization.DeploymentContext{},
 			),
 		)
-		return customization.NewPodOverlay(podOpts...)
+		return customization.NewPodOverlay(podOpts...), nil
+	}
+
+	// Build init container options for optional proxy endpoints.
+	var initContainerOpts []customization.ContainerOption
+	var endpointErr error
+	initContainerOpts, podOpts, endpointErr = appendEndpointOverlays(spec.Endpoints, initContainerOpts, podOpts)
+	if endpointErr != nil {
+		return nil, endpointErr
 	}
 
 	// Append user overrides after system options
 	reverseProxyOpts = append(reverseProxyOpts, customization.FromContainerSpec(spec.ReverseProxy))
 	oauth2ProxyOpts = append(oauth2ProxyOpts, customization.FromContainerSpec(spec.OAuth2Proxy))
+
+	if len(initContainerOpts) > 0 {
+		podOpts = append(podOpts, customization.WithContainerOpts(
+			generateProxyConfigContainerName, customization.DeploymentContext{}, initContainerOpts...,
+		))
+	}
 
 	podOpts = append(podOpts,
 		customization.WithContainerBuilder(
@@ -472,7 +494,48 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, segmentSecretN
 			oauth2ProxyOpts...,
 		)(customization.DeploymentContext{Replicas: spec.Replicas}),
 	)
-	return customization.NewPodOverlay(podOpts...)
+	return customization.NewPodOverlay(podOpts...), nil
+}
+
+// appendEndpointOverlays adds init container env vars and pod volumes for each
+// enabled optional proxy endpoint. Returns the updated slices.
+func appendEndpointOverlays(
+	endpoints *konfluxv1alpha1.ProxyEndpointsSpec,
+	initOpts []customization.ContainerOption,
+	podOpts []customization.PodOverlayOption,
+) ([]customization.ContainerOption, []customization.PodOverlayOption, error) {
+	if endpoints == nil {
+		return initOpts, podOpts, nil
+	}
+
+	if endpoints.Kite != nil && endpoints.Kite.Enabled {
+		initOpts = append(initOpts,
+			customization.WithEnv(corev1.EnvVar{Name: "KITE_ENABLED", Value: "true"}),
+			customization.WithOptionalEnvOverride("KITE_HOSTNAME", endpoints.Kite.Hostname),
+		)
+	}
+
+	if endpoints.KubeArchive != nil && endpoints.KubeArchive.Enabled {
+		initOpts = append(initOpts,
+			customization.WithEnv(corev1.EnvVar{Name: "KUBEARCHIVE_ENABLED", Value: "true"}),
+			customization.WithOptionalEnvOverride("KUBEARCHIVE_HOSTNAME", endpoints.KubeArchive.Hostname),
+		)
+	}
+
+	if endpoints.Watson != nil && endpoints.Watson.Enabled {
+		if endpoints.Watson.SecretName == "" {
+			return nil, nil, fmt.Errorf("watson endpoint is enabled but secretName is not set")
+		}
+		initOpts = append(initOpts,
+			customization.WithEnv(corev1.EnvVar{Name: "WATSON_ENABLED", Value: "true"}),
+			customization.WithOptionalEnvOverride("WATSON_HOSTNAME", endpoints.Watson.Hostname),
+		)
+		podOpts = append(podOpts, customization.WithSecretVolumeUpdate(
+			watsonConfigVolumeName, endpoints.Watson.SecretName,
+		))
+	}
+
+	return initOpts, podOpts, nil
 }
 
 // buildOAuth2ProxyOptions builds the container options for oauth2-proxy configuration.
@@ -697,7 +760,7 @@ func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// Use predicates to filter out unnecessary updates and prevent reconcile loops
 		// Deployments: watch spec changes AND readiness status changes
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(predicate.DeploymentReadinessPredicate)).
-		Owns(&corev1.Service{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
+		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.ServiceAccount{}).
@@ -715,7 +778,7 @@ func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// ConsoleLink CRD only exists on OpenShift; skip watch on non-OpenShift clusters
 	// to avoid informer startup failures when the CRD is absent.
 	if r.ClusterInfo != nil && r.ClusterInfo.IsOpenShift() {
-		b = b.Owns(&consolev1.ConsoleLink{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate))
+		b = b.Owns(&consolev1.ConsoleLink{})
 	}
 
 	return b.Complete(r)

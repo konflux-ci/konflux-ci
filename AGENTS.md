@@ -62,6 +62,7 @@ After changing APIs or RBAC annotations, run `make manifests generate` from `ope
 - Go: Standard formatting, Ginkgo for tests, Gomega for assertions/matchers (all test types: unit, functional, e2e)
 - Kustomizations: Pin exact SHAs, not branches
 - Markdown: Update TOC with `npx markdown-toc -i` if structure changes
+- Upstream/downstream: `konflux-ci/konflux-ci` is an upstream repo. Do not reference downstream consumers (e.g., `infra-deployments`) by name in code or comments. Use generic phrasing like "in some environments" or "by external policies" instead.
 
 ## Testing
 
@@ -69,6 +70,16 @@ After changing APIs or RBAC annotations, run `make manifests generate` from `ope
 
 1. **Platform conformance** (`test/go-tests/tests/conformance/`) — end-to-end tests against a deployed Konflux instance, run via `test/e2e/run-e2e.sh`. Uses Ginkgo/Gomega with a shared `Framework` in `test/go-tests/pkg/framework/`.
 2. **Operator unit/integration** (`operator/`) — controller tests using controller-runtime **envtest** (no real cluster needed). **Prefer Gomega matchers** for assertions in unit and functional tests. Shared test utilities in `operator/internal/controller/testutil/`. Run via `make test` from `operator/`.
+
+For test cleanup patterns (envtest garbage collection, `DeferCleanupParentAndChildren`), `Eventually`/`Consistently` soft-assertion conventions, and K8s API error assertion idioms (`apierrors.IsNotFound()` instead of string matching), see the [ginkgo-testing](skills/ginkgo-testing/SKILL.md) skill.
+
+**CRD test conventions:**
+
+CRD self-healing and drift-correction tests (`Watches(&CRD{}, MapCRDToRequest)` path) follow these patterns:
+
+1. **Label assertions** — assert both `KonfluxOwnerLabel` and `KonfluxComponentLabel` on recreated CRDs, in both the initial wait and recreation verification steps.
+2. **Cleanup** — use `DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)` for CRD-only tests. Each table entry tests a different CRD name, so there is no LIFO risk. Use `DeferCleanupParentAndChildren` only when the controller also creates other cluster-scoped children (ClusterRole, ClusterRoleBinding, VWC, MWC, etc.).
+3. **Entry descriptions** — use `c.kind` in `DescribeTable` entries for readability. Exception: use `c.name` (FQDN) when the controller has multiple CRDs with the same Kind (e.g., imagecontroller).
 
 ```bash
 # Kube-linter (before PR)
@@ -101,6 +112,36 @@ PRs trigger the following workflows:
 - Update TOC if markdown structure changed
 - Run `make manifests generate` if API or RBAC annotations changed
 
+## Repo-Specific Labels
+
+Some labels in this repository have precise automation-driven semantics.
+Agents must not apply them unless stated otherwise below.
+
+- **`deps-only`** — Applied exclusively by the companion manifest workflow
+  (`renovate-manifest-companion.sh`) to Renovate PRs that change
+  `operator/upstream-kustomizations/` or
+  `.github/scripts/export-third-party-chart-env.sh`. Signals that the PR
+  should not be merged directly because a companion PR with regenerated
+  operator manifests is needed. **Agents must never apply this label.**
+  When reviewing a PR that carries this label, agents should withhold
+  approval and note that the PR requires a companion PR with regenerated
+  operator manifests before it can be merged.
+  Changes to `test/go-tests/go.mod` or `operator/docs/go.mod` do not
+  trigger companion PRs and must not receive this label.
+- **`superseded-by-companion`** — Applied alongside `deps-only` by the
+  companion script when a companion PR has been successfully created.
+  Prefer merging the companion PR. **Agents must never apply this label.**
+  When reviewing a PR that already carries this label, agents should
+  withhold approval and instead note in their review that the PR is
+  superseded by the companion PR — the companion should be reviewed and
+  merged instead.
+- **`pending-upstream-image`** — Applied by the companion workflow when
+  upstream container images are not yet available in their registries.
+  Removed automatically on the next successful companion run.
+  **Agents must never apply this label.**
+- **`ready-for-merge`** — Should not coexist with `deps-only`,
+  `superseded-by-companion`, or `pending-upstream-image`.
+
 ## Architecture Notes
 
 - Upstream components pinned via `?ref=SHA` + matching `newTag: SHA`
@@ -109,14 +150,23 @@ PRs trigger the following workflows:
 - APIs defined in `operator/api/v1alpha1` — many `Konflux*` kinds (Konflux, BuildService, IntegrationService, ReleaseService, UI, RBAC, etc.)
 - Per-service reconcilers in `operator/internal/controller/<subservice>/`
 
+**Controller-runtime patterns (operator code):**
+
+- **Top-down config flow** — The `Konflux` CR reconciler forwards configuration to sub-CRs (`KonfluxBuildService`, `KonfluxImageController`, `KonfluxIntegrationService`) via their spec fields. Sub-CR reconcilers must read their own spec — never reach back to the parent `Konflux` CR. This prevents circular dependencies and keeps each reconciler independently testable.
+- **Periodic work via channel sources** — Use `source.Channel` with a Runnable ticker/broadcaster for periodic maintenance (e.g., `TokenRotationBroadcaster`), not `RequeueAfter`. `RequeueAfter` is for convergence (retry until desired state is reached); channel sources are for scheduling (fire at a fixed interval regardless of state).
+- **Runnable lifecycle cleanup** — Any `Start()` method or `Runnable` that creates channels, tickers, or goroutines must clean them up when the context is cancelled. Close subscriber channels and stop tickers (via `defer`) before returning.
+- **Interface minimality** — Reconciler structs should depend on the narrowest type needed. If a reconciler only consumes events from a broadcaster, accept a `<-chan event.TypedGenericEvent[client.Object]`, not the broadcaster itself. Wire via `Subscribe()` in `main.go`.
+
 ## Skills
 
 Detailed guides live in `skills/` — each subdirectory contains a `SKILL.md` with instructions.
 
 | Skill | Use when |
 |-------|----------|
+| [ginkgo-testing](skills/ginkgo-testing/SKILL.md) | Writing or reviewing Ginkgo tests — cleanup patterns, soft assertions |
 | [go-toolchain-upgrade](skills/go-toolchain-upgrade/SKILL.md) | `go.mod`/`go.sum`, Go pins, or `go.mod requires go` CI failures |
 | [create-pr](skills/create-pr/SKILL.md) | Opening PRs, fork `/allow` behavior |
 | [debug-e2e-tests](skills/debug-e2e-tests/SKILL.md) | Investigating failed e2e / OpenShift CI runs |
-| [update-upstream-deps](skills/update-upstream-deps/SKILL.md) | Bumping pinned upstream component SHAs |
+| [update-upstream-deps](skills/update-upstream-deps/SKILL.md) | Bumping upstream SHAs or editing `upstream-kustomizations/` (triggers manifest rebuild) |
 | [local-dev-setup](skills/local-dev-setup/SKILL.md) | Local Kind / dev environment |
+| [dev-verify-loop](skills/dev-verify-loop/SKILL.md) | Iterative stop-rebuild-restart cycle for operator development |

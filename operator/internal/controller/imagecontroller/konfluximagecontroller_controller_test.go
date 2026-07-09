@@ -25,16 +25,18 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
 const (
-	imageControllerNamespace      = "image-controller"
 	metricsServiceName            = "image-controller-controller-manager-metrics-service"
 	prunerConfigMapName           = "image-controller-image-pruner-configmap-hgm7kmgb6k"
 	leaderElectionRoleName        = "image-controller-leader-election-role"
@@ -43,12 +45,69 @@ const (
 	managerClusterRoleBindingName = "image-controller-manager-rolebinding"
 )
 
+type icCRDInfo struct {
+	name string
+	kind string
+}
+
+var icManagedCRDs = []icCRDInfo{
+	{"imagerepositories.appstudio.redhat.com", "ImageRepository"},
+	{"imagerepositories.konflux-ci.dev", "ImageRepository"},
+}
+
+func icCRDEntries() []TableEntry {
+	entries := make([]TableEntry, len(icManagedCRDs))
+	for i, c := range icManagedCRDs {
+		entries[i] = Entry(c.name, c.name, c.kind)
+	}
+	return entries
+}
+
+func icCRDEntriesNameOnly() []TableEntry {
+	entries := make([]TableEntry, len(icManagedCRDs))
+	for i, c := range icManagedCRDs {
+		entries[i] = Entry(c.name, c.name)
+	}
+	return entries
+}
+
+func newImageControllerCR() *konfluxv1alpha1.KonfluxImageController {
+	return &konfluxv1alpha1.KonfluxImageController{
+		ObjectMeta: metav1.ObjectMeta{Name: CRName},
+		Spec: konfluxv1alpha1.NewKonfluxImageControllerSpec(
+			konfluxv1alpha1.KonfluxImageControllerConfigSpec{},
+			testutil.DefaultComponentMetricsConfig(),
+		),
+	}
+}
+
 var _ = Describe("KonfluxImageController Controller", func() {
+	// startManager starts a per-test manager and registers a DeferCleanup to stop it
+	// when the It block finishes. A per-test manager is used (rather than a shared
+	// suite-level manager) so tests that wire the reconciler with custom dependencies
+	// (e.g. TokenCreator in scrape-token tests) do not race with a background reconciler.
+	startManager := func() {
+		mgrCtx, mgrCancel := context.WithCancel(testEnv.Ctx)
+		mgr := testutil.NewTestManager(testEnv)
+		Expect((&KonfluxImageControllerReconciler{
+			Client:      mgr.GetClient(),
+			Scheme:      mgr.GetScheme(),
+			ObjectStore: objectStore,
+		}).SetupWithManager(mgr)).To(Succeed())
+		waitForStop := testutil.StartManagerWithContext(mgrCtx, mgr)
+		DeferCleanup(func() {
+			mgrCancel()
+			waitForStop()
+		})
+	}
+
+	BeforeEach(func() {
+		startManager()
+	})
+
 	Context("When reconciling a resource", func() {
 		It("should successfully reconcile the resource", func(ctx context.Context) {
-			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			})).To(Succeed())
+			Expect(k8sClient.Create(ctx, newImageControllerCR())).To(Succeed())
 			DeferCleanup(func(ctx context.Context) {
 				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxImageController{ObjectMeta: metav1.ObjectMeta{Name: CRName}})
 			})
@@ -68,9 +127,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 
 	Context("Self-healing", func() {
 		It("recreates Deployment when deleted", func(ctx context.Context) {
-			imageController := &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			imageController := newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
 
@@ -101,9 +158,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 		})
 
 		It("recreates ServiceAccount when deleted", func(ctx context.Context) {
-			imageController := &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			imageController := newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
 
@@ -132,9 +187,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 		})
 
 		It("recreates CronJob when deleted", func(ctx context.Context) {
-			imageController := &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			imageController := newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
 
@@ -162,9 +215,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 		})
 
 		It("recreates Service when deleted", func(ctx context.Context) {
-			imageController := &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			imageController := newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
 
@@ -192,9 +243,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 		})
 
 		It("recreates ConfigMap when deleted", func(ctx context.Context) {
-			imageController := &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			imageController := newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
 
@@ -222,9 +271,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 		})
 
 		It("recreates Role when deleted", func(ctx context.Context) {
-			imageController := &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			imageController := newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
 
@@ -252,9 +299,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 		})
 
 		It("recreates RoleBinding when deleted", func(ctx context.Context) {
-			imageController := &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			imageController := newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
 
@@ -282,11 +327,9 @@ var _ = Describe("KonfluxImageController Controller", func() {
 		})
 
 		It("recreates ClusterRole when deleted", func(ctx context.Context) {
-			imageController := &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			imageController := newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
+			testutil.DeferCleanupParentAndChildren(k8sClient, imageController, &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: managerClusterRoleName}})
 
 			crNN := types.NamespacedName{Name: managerClusterRoleName}
 
@@ -294,9 +337,6 @@ var _ = Describe("KonfluxImageController Controller", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, crNN, &rbacv1.ClusterRole{})).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRole{
-				ObjectMeta: metav1.ObjectMeta{Name: crNN.Name},
-			})
 
 			By("deleting the ClusterRole")
 			Expect(k8sClient.Delete(ctx, &rbacv1.ClusterRole{
@@ -312,11 +352,9 @@ var _ = Describe("KonfluxImageController Controller", func() {
 		})
 
 		It("recreates ClusterRoleBinding when deleted", func(ctx context.Context) {
-			imageController := &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			imageController := newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
+			testutil.DeferCleanupParentAndChildren(k8sClient, imageController, &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: managerClusterRoleBindingName}})
 
 			crbNN := types.NamespacedName{Name: managerClusterRoleBindingName}
 
@@ -324,9 +362,6 @@ var _ = Describe("KonfluxImageController Controller", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, crbNN, &rbacv1.ClusterRoleBinding{})).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRoleBinding{
-				ObjectMeta: metav1.ObjectMeta{Name: crbNN.Name},
-			})
 
 			By("deleting the ClusterRoleBinding")
 			Expect(k8sClient.Delete(ctx, &rbacv1.ClusterRoleBinding{
@@ -340,13 +375,60 @@ var _ = Describe("KonfluxImageController Controller", func() {
 				g.Expect(crb.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
+
+		DescribeTable("recreates CRD when deleted",
+			func(ctx context.Context, crdName string, expectedKind string) {
+				imageController := newImageControllerCR()
+				Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
+				DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
+
+				crdNN := types.NamespacedName{Name: crdName}
+
+				By("waiting for CRD with owner labels")
+				var originalUID types.UID
+				Eventually(func(g Gomega) {
+					crd := &apiextensionsv1.CustomResourceDefinition{}
+					g.Expect(k8sClient.Get(ctx, crdNN, crd)).To(Succeed())
+					g.Expect(crd.Labels).To(HaveKeyWithValue(constant.KonfluxOwnerLabel, CRName))
+					g.Expect(crd.Labels).To(HaveKeyWithValue(constant.KonfluxComponentLabel, string(manifests.ImageController)))
+					originalUID = crd.UID
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("deleting the CRD and waiting for it to be gone")
+				Expect(k8sClient.Delete(ctx, &apiextensionsv1.CustomResourceDefinition{
+					ObjectMeta: metav1.ObjectMeta{Name: crdNN.Name},
+				})).To(Succeed())
+				Eventually(func(g Gomega) {
+					crd := &apiextensionsv1.CustomResourceDefinition{}
+					err := k8sClient.Get(ctx, crdNN, crd)
+					if err == nil {
+						if crd.DeletionTimestamp != nil && len(crd.Finalizers) > 0 {
+							crd.Finalizers = nil
+							g.Expect(k8sClient.Update(ctx, crd)).To(Succeed())
+						}
+						g.Expect(crd.UID).NotTo(Equal(originalUID), "old CRD still exists")
+						return
+					}
+					g.Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("verifying the CRD is recreated with correct spec and labels")
+				Eventually(func(g Gomega) {
+					crd := &apiextensionsv1.CustomResourceDefinition{}
+					g.Expect(k8sClient.Get(ctx, crdNN, crd)).To(Succeed())
+					g.Expect(crd.UID).NotTo(Equal(originalUID))
+					g.Expect(crd.Spec.Names.Kind).To(Equal(expectedKind))
+					g.Expect(crd.Labels).To(HaveKeyWithValue(constant.KonfluxOwnerLabel, CRName))
+					g.Expect(crd.Labels).To(HaveKeyWithValue(constant.KonfluxComponentLabel, string(manifests.ImageController)))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			},
+			icCRDEntries(),
+		)
 	})
 
 	Context("Drift correction", func() {
 		It("restores Deployment image when modified", func(ctx context.Context) {
-			imageController := &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			imageController := newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
 
@@ -387,9 +469,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 		})
 
 		It("restores ServiceAccount labels when stripped", func(ctx context.Context) {
-			imageController := &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			imageController := newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
 
@@ -424,9 +504,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 		})
 
 		It("restores CronJob image when modified", func(ctx context.Context) {
-			imageController := &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			imageController := newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
 
@@ -467,9 +545,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 		})
 
 		It("restores Service labels when stripped", func(ctx context.Context) {
-			imageController := &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			imageController := newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
 
@@ -503,10 +579,45 @@ var _ = Describe("KonfluxImageController Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
-		It("restores ConfigMap data when modified", func(ctx context.Context) {
-			imageController := &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+		It("restores Service spec when modified", func(ctx context.Context) {
+			imageController := newImageControllerCR()
+			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
+
+			svcNN := types.NamespacedName{
+				Name:      metricsServiceName,
+				Namespace: imageControllerNamespace,
 			}
+
+			By("waiting for initial Service creation")
+			var originalTargetPort int32
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				g.Expect(svc.Spec.Ports).NotTo(BeEmpty())
+				originalTargetPort = svc.Spec.Ports[0].TargetPort.IntVal
+				g.Expect(originalTargetPort).NotTo(BeZero())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the Service target port")
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				svc.Spec.Ports[0].TargetPort.IntVal = 9999
+				g.Expect(k8sClient.Update(ctx, svc)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the Service target port is restored")
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				g.Expect(svc.Spec.Ports).NotTo(BeEmpty())
+				g.Expect(svc.Spec.Ports[0].TargetPort.IntVal).To(Equal(originalTargetPort))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores ConfigMap data when modified", func(ctx context.Context) {
+			imageController := newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
 
@@ -546,9 +657,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 		})
 
 		It("restores Namespace labels when stripped", func(ctx context.Context) {
-			imageController := &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			imageController := newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
 
@@ -580,9 +689,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 		})
 
 		It("restores Role rules when modified", func(ctx context.Context) {
-			imageController := &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			imageController := newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
 
@@ -621,9 +728,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 		})
 
 		It("restores RoleBinding subjects when modified", func(ctx context.Context) {
-			imageController := &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			imageController := newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
 
@@ -662,11 +767,9 @@ var _ = Describe("KonfluxImageController Controller", func() {
 		})
 
 		It("restores ClusterRole rules when modified", func(ctx context.Context) {
-			imageController := &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			imageController := newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
+			testutil.DeferCleanupParentAndChildren(k8sClient, imageController, &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: managerClusterRoleName}})
 
 			crNN := types.NamespacedName{Name: managerClusterRoleName}
 
@@ -678,9 +781,6 @@ var _ = Describe("KonfluxImageController Controller", func() {
 				g.Expect(cr.Rules).NotTo(BeEmpty())
 				originalRules = cr.Rules
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRole{
-				ObjectMeta: metav1.ObjectMeta{Name: crNN.Name},
-			})
 
 			By("modifying the ClusterRole rules")
 			Eventually(func(g Gomega) {
@@ -703,11 +803,9 @@ var _ = Describe("KonfluxImageController Controller", func() {
 		})
 
 		It("restores ClusterRoleBinding subjects when modified", func(ctx context.Context) {
-			imageController := &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			imageController := newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
+			testutil.DeferCleanupParentAndChildren(k8sClient, imageController, &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: managerClusterRoleBindingName}})
 
 			crbNN := types.NamespacedName{Name: managerClusterRoleBindingName}
 
@@ -719,9 +817,6 @@ var _ = Describe("KonfluxImageController Controller", func() {
 				g.Expect(crb.Subjects).NotTo(BeEmpty())
 				originalSubjects = crb.Subjects
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRoleBinding{
-				ObjectMeta: metav1.ObjectMeta{Name: crbNN.Name},
-			})
 
 			By("modifying the ClusterRoleBinding subjects")
 			Eventually(func(g Gomega) {
@@ -742,6 +837,43 @@ var _ = Describe("KonfluxImageController Controller", func() {
 				g.Expect(crb.Subjects).To(Equal(originalSubjects))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
+
+		DescribeTable("restores CRD spec when version is disabled",
+			func(ctx context.Context, crdName string) {
+				imageController := newImageControllerCR()
+				Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
+				DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
+
+				crdNN := types.NamespacedName{Name: crdName}
+
+				By("waiting for CRD creation with served=true")
+				Eventually(func(g Gomega) {
+					crd := &apiextensionsv1.CustomResourceDefinition{}
+					g.Expect(k8sClient.Get(ctx, crdNN, crd)).To(Succeed())
+					g.Expect(crd.Spec.Versions).NotTo(BeEmpty())
+					g.Expect(crd.Spec.Versions[0].Served).To(BeTrue())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("disabling the served version")
+				var afterTamperRV string
+				Eventually(func(g Gomega) {
+					crd := &apiextensionsv1.CustomResourceDefinition{}
+					g.Expect(k8sClient.Get(ctx, crdNN, crd)).To(Succeed())
+					crd.Spec.Versions[0].Served = false
+					g.Expect(k8sClient.Update(ctx, crd)).To(Succeed())
+					afterTamperRV = crd.ResourceVersion
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("verifying SSA restores served=true")
+				Eventually(func(g Gomega) {
+					crd := &apiextensionsv1.CustomResourceDefinition{}
+					g.Expect(k8sClient.Get(ctx, crdNN, crd)).To(Succeed())
+					g.Expect(crd.ResourceVersion).NotTo(Equal(afterTamperRV), "controller has not reconciled yet")
+					g.Expect(crd.Spec.Versions[0].Served).To(BeTrue())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			},
+			icCRDEntriesNameOnly(),
+		)
 	})
 
 	Context("Quay CA Bundle", func() {
@@ -758,9 +890,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 		}
 
 		BeforeEach(func() {
-			imageController = &konfluxv1alpha1.KonfluxImageController{
-				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-			}
+			imageController = newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
 
 			// Same reasoning as BeforeAll above: wait for Deployment existence, not Ready=True.

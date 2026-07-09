@@ -30,7 +30,7 @@ jobs:
           exit 1
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Check companion PR prerequisites
         env:
@@ -62,7 +62,7 @@ jobs:
       - name: Create check run (comment-triggered)
         if: github.event_name == 'repository_dispatch'
         id: create-check
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const head_sha = '${{ steps.set-ref.outputs.ref }}';
@@ -83,7 +83,7 @@ jobs:
             core.setOutput('check_run_id', e2e.id);
             core.setOutput('check_run_id_arm64', arm64.id);
       - name: Checkout PR branch
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ steps.set-ref.outputs.ref }}
           fetch-depth: 0
@@ -96,6 +96,7 @@ jobs:
             dependencies/**
             test/e2e/**
             test/go-tests/**
+            kind-config.yaml
             .github/workflows/operator-test-e2e.yaml
 
   # Lightweight jobs that create status checks when tests are skipped
@@ -148,6 +149,20 @@ jobs:
     runs-on: ${{ matrix.runner }}
     needs: [check-prerequisites, check-changes]
     if: needs.check-changes.outputs.operator == 'true'
+    # Cancel superseded test jobs per PR/arch to reduce shared smee contention (#6551).
+    # Job-level (not workflow-level) so report-operator-e2e-status can finalize /allow
+    # Checks API runs when a superseded run's test job is cancelled.
+    # Group key (first match wins): pull_request.number, client_payload.pr_number,
+    # ref (merge queue), run_id; matrix.arch keeps AMD64/ARM64 from cancelling each other.
+    concurrency:
+      group: >-
+        operator-e2e-${{
+          github.event.pull_request.number
+          || github.event.client_payload.pr_number
+          || github.ref
+          || github.run_id
+        }}-${{ matrix.arch }}
+      cancel-in-progress: true
     strategy:
       fail-fast: false
       matrix:
@@ -207,7 +222,7 @@ jobs:
           docker-images: false
 
       - name: Clone the code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ steps.set-ref.outputs.ref }}
 
@@ -261,6 +276,8 @@ jobs:
 
           # Smee webhook forwarding for E2E tests only (one channel per matrix row)
           SMEE_CHANNEL: ${{ matrix.test_scope == 'integration+e2e' && secrets[matrix.smee_channel] || '' }}
+
+          SKIP_PROMETHEUS_OPERATOR_CRDS: "false"
         run: ./scripts/deploy-local.sh
 
       - name: Show version information
@@ -333,7 +350,7 @@ jobs:
       checks: write
     steps:
       - name: Update check runs
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const checkRunId = parseInt(process.env.CHECK_RUN_ID);

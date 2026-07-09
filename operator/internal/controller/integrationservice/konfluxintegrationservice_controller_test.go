@@ -27,12 +27,15 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
 const (
@@ -48,6 +51,33 @@ const (
 	managerClusterRoleName        = "integration-service-manager-role"
 	managerClusterRoleBindingName = "integration-service-manager-rolebinding"
 )
+
+type isCRDInfo struct {
+	name string
+	kind string
+}
+
+var isManagedCRDs = []isCRDInfo{
+	{"componentgroups.appstudio.redhat.com", "ComponentGroup"},
+	{"integrationtestscenarios.appstudio.redhat.com", "IntegrationTestScenario"},
+	{"nudgeconfigs.appstudio.redhat.com", "NudgeConfig"},
+}
+
+func isCRDEntries() []TableEntry {
+	entries := make([]TableEntry, len(isManagedCRDs))
+	for i, c := range isManagedCRDs {
+		entries[i] = Entry(c.kind, c.name, c.kind)
+	}
+	return entries
+}
+
+func isCRDEntriesNameOnly() []TableEntry {
+	entries := make([]TableEntry, len(isManagedCRDs))
+	for i, c := range isManagedCRDs {
+		entries[i] = Entry(c.kind, c.name)
+	}
+	return entries
+}
 
 var _ = Describe("KonfluxIntegrationService Controller", func() {
 	Context("When reconciling a resource", func() {
@@ -78,11 +108,11 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 
 			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxIntegrationService{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				Spec: konfluxv1alpha1.KonfluxIntegrationServiceSpec{
+				Spec: konfluxv1alpha1.NewKonfluxIntegrationServiceSpec(konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
 					PRSnapshotsToKeep:              prToKeep,
 					NonPRSnapshotsToKeep:           nonPRToKeep,
 					MinSnapshotsToKeepPerComponent: minToKeep,
-				},
+				}, nil),
 			})).To(Succeed())
 			DeferCleanup(func(ctx context.Context) {
 				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxIntegrationService{ObjectMeta: metav1.ObjectMeta{Name: CRName}})
@@ -182,16 +212,17 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, integrationService)
+			testutil.DeferCleanupParentAndChildren(k8sClient, integrationService,
+				&admissionregistrationv1.ValidatingWebhookConfiguration{
+					ObjectMeta: metav1.ObjectMeta{Name: validatingWebhookName},
+				},
+			)
 
 			By("waiting for initial ValidatingWebhookConfiguration creation")
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: validatingWebhookName},
 					&admissionregistrationv1.ValidatingWebhookConfiguration{})).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &admissionregistrationv1.ValidatingWebhookConfiguration{
-				ObjectMeta: metav1.ObjectMeta{Name: validatingWebhookName},
-			})
 
 			By("deleting the ValidatingWebhookConfiguration")
 			Expect(k8sClient.Delete(ctx, &admissionregistrationv1.ValidatingWebhookConfiguration{
@@ -211,16 +242,17 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, integrationService)
+			testutil.DeferCleanupParentAndChildren(k8sClient, integrationService,
+				&admissionregistrationv1.MutatingWebhookConfiguration{
+					ObjectMeta: metav1.ObjectMeta{Name: mutatingWebhookName},
+				},
+			)
 
 			By("waiting for initial MutatingWebhookConfiguration creation")
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: mutatingWebhookName},
 					&admissionregistrationv1.MutatingWebhookConfiguration{})).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &admissionregistrationv1.MutatingWebhookConfiguration{
-				ObjectMeta: metav1.ObjectMeta{Name: mutatingWebhookName},
-			})
 
 			By("deleting the MutatingWebhookConfiguration")
 			Expect(k8sClient.Delete(ctx, &admissionregistrationv1.MutatingWebhookConfiguration{
@@ -450,7 +482,9 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, integrationService)
+			testutil.DeferCleanupParentAndChildren(k8sClient, integrationService, &rbacv1.ClusterRole{
+				ObjectMeta: metav1.ObjectMeta{Name: managerClusterRoleName},
+			})
 
 			crNN := types.NamespacedName{Name: managerClusterRoleName}
 
@@ -458,9 +492,6 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, crNN, &rbacv1.ClusterRole{})).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRole{
-				ObjectMeta: metav1.ObjectMeta{Name: crNN.Name},
-			})
 
 			By("deleting the ClusterRole")
 			Expect(k8sClient.Delete(ctx, &rbacv1.ClusterRole{
@@ -480,7 +511,9 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, integrationService)
+			testutil.DeferCleanupParentAndChildren(k8sClient, integrationService, &rbacv1.ClusterRoleBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: managerClusterRoleBindingName},
+			})
 
 			crbNN := types.NamespacedName{Name: managerClusterRoleBindingName}
 
@@ -488,9 +521,6 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, crbNN, &rbacv1.ClusterRoleBinding{})).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRoleBinding{
-				ObjectMeta: metav1.ObjectMeta{Name: crbNN.Name},
-			})
 
 			By("deleting the ClusterRoleBinding")
 			Expect(k8sClient.Delete(ctx, &rbacv1.ClusterRoleBinding{
@@ -504,6 +534,57 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				g.Expect(crb.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
+
+		DescribeTable("recreates CRD when deleted",
+			func(ctx context.Context, crdName string, expectedKind string) {
+				integrationService := &konfluxv1alpha1.KonfluxIntegrationService{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				}
+				Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
+				DeferCleanup(testutil.DeleteAndWait, k8sClient, integrationService)
+
+				crdNN := types.NamespacedName{Name: crdName}
+
+				By("waiting for CRD with owner labels")
+				var originalUID types.UID
+				Eventually(func(g Gomega) {
+					crd := &apiextensionsv1.CustomResourceDefinition{}
+					g.Expect(k8sClient.Get(ctx, crdNN, crd)).To(Succeed())
+					g.Expect(crd.Labels).To(HaveKeyWithValue(constant.KonfluxOwnerLabel, CRName))
+					g.Expect(crd.Labels).To(HaveKeyWithValue(constant.KonfluxComponentLabel, string(manifests.Integration)))
+					originalUID = crd.UID
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("deleting the CRD and waiting for it to be gone")
+				Expect(k8sClient.Delete(ctx, &apiextensionsv1.CustomResourceDefinition{
+					ObjectMeta: metav1.ObjectMeta{Name: crdNN.Name},
+				})).To(Succeed())
+				Eventually(func(g Gomega) {
+					crd := &apiextensionsv1.CustomResourceDefinition{}
+					err := k8sClient.Get(ctx, crdNN, crd)
+					if err == nil {
+						if crd.DeletionTimestamp != nil && len(crd.Finalizers) > 0 {
+							crd.Finalizers = nil
+							g.Expect(k8sClient.Update(ctx, crd)).To(Succeed())
+						}
+						g.Expect(crd.UID).NotTo(Equal(originalUID), "old CRD still exists")
+						return
+					}
+					g.Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("verifying the CRD is recreated with correct spec and labels")
+				Eventually(func(g Gomega) {
+					crd := &apiextensionsv1.CustomResourceDefinition{}
+					g.Expect(k8sClient.Get(ctx, crdNN, crd)).To(Succeed())
+					g.Expect(crd.UID).NotTo(Equal(originalUID))
+					g.Expect(crd.Spec.Names.Kind).To(Equal(expectedKind))
+					g.Expect(crd.Labels).To(HaveKeyWithValue(constant.KonfluxOwnerLabel, CRName))
+					g.Expect(crd.Labels).To(HaveKeyWithValue(constant.KonfluxComponentLabel, string(manifests.Integration)))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			},
+			isCRDEntries(),
+		)
 	})
 
 	Context("Drift correction", func() {
@@ -664,6 +745,45 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
 				g.Expect(svc.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
 				g.Expect(svc.Labels).To(HaveKey(constant.KonfluxComponentLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores Service spec when modified", func(ctx context.Context) {
+			integrationService := &konfluxv1alpha1.KonfluxIntegrationService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, integrationService)
+
+			svcNN := types.NamespacedName{
+				Name:      metricsServiceName,
+				Namespace: integrationServiceNamespace,
+			}
+
+			By("waiting for initial Service creation")
+			var originalTargetPort int32
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				g.Expect(svc.Spec.Ports).NotTo(BeEmpty())
+				originalTargetPort = svc.Spec.Ports[0].TargetPort.IntVal
+				g.Expect(originalTargetPort).NotTo(BeZero())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the Service target port")
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				svc.Spec.Ports[0].TargetPort.IntVal = 9999
+				g.Expect(k8sClient.Update(ctx, svc)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the Service target port is restored")
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, svcNN, svc)).To(Succeed())
+				g.Expect(svc.Spec.Ports).NotTo(BeEmpty())
+				g.Expect(svc.Spec.Ports[0].TargetPort.IntVal).To(Equal(originalTargetPort))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
@@ -830,7 +950,9 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, integrationService)
+			testutil.DeferCleanupParentAndChildren(k8sClient, integrationService, &rbacv1.ClusterRole{
+				ObjectMeta: metav1.ObjectMeta{Name: managerClusterRoleName},
+			})
 
 			crNN := types.NamespacedName{Name: managerClusterRoleName}
 
@@ -842,9 +964,6 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				g.Expect(cr.Rules).NotTo(BeEmpty())
 				originalRules = cr.Rules
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRole{
-				ObjectMeta: metav1.ObjectMeta{Name: crNN.Name},
-			})
 
 			By("modifying the ClusterRole rules")
 			Eventually(func(g Gomega) {
@@ -871,7 +990,9 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, integrationService)
+			testutil.DeferCleanupParentAndChildren(k8sClient, integrationService, &rbacv1.ClusterRoleBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: managerClusterRoleBindingName},
+			})
 
 			crbNN := types.NamespacedName{Name: managerClusterRoleBindingName}
 
@@ -883,9 +1004,6 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				g.Expect(crb.Subjects).NotTo(BeEmpty())
 				originalSubjects = crb.Subjects
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &rbacv1.ClusterRoleBinding{
-				ObjectMeta: metav1.ObjectMeta{Name: crbNN.Name},
-			})
 
 			By("modifying the ClusterRoleBinding subjects")
 			Eventually(func(g Gomega) {
@@ -986,7 +1104,11 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, integrationService)
+			testutil.DeferCleanupParentAndChildren(k8sClient, integrationService,
+				&admissionregistrationv1.ValidatingWebhookConfiguration{
+					ObjectMeta: metav1.ObjectMeta{Name: validatingWebhookName},
+				},
+			)
 
 			vwcNN := types.NamespacedName{Name: validatingWebhookName}
 
@@ -996,9 +1118,6 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				g.Expect(k8sClient.Get(ctx, vwcNN, vwc)).To(Succeed())
 				g.Expect(vwc.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &admissionregistrationv1.ValidatingWebhookConfiguration{
-				ObjectMeta: metav1.ObjectMeta{Name: vwcNN.Name},
-			})
 
 			By("stripping ownership labels from the ValidatingWebhookConfiguration")
 			Eventually(func(g Gomega) {
@@ -1023,7 +1142,11 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 			}
 			Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, integrationService)
+			testutil.DeferCleanupParentAndChildren(k8sClient, integrationService,
+				&admissionregistrationv1.MutatingWebhookConfiguration{
+					ObjectMeta: metav1.ObjectMeta{Name: mutatingWebhookName},
+				},
+			)
 
 			mwcNN := types.NamespacedName{Name: mutatingWebhookName}
 
@@ -1033,9 +1156,6 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				g.Expect(k8sClient.Get(ctx, mwcNN, mwc)).To(Succeed())
 				g.Expect(mwc.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			DeferCleanup(testutil.DeleteAndWait, k8sClient, &admissionregistrationv1.MutatingWebhookConfiguration{
-				ObjectMeta: metav1.ObjectMeta{Name: mwcNN.Name},
-			})
 
 			By("stripping ownership labels from the MutatingWebhookConfiguration")
 			Eventually(func(g Gomega) {
@@ -1054,5 +1174,166 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				g.Expect(mwc.Labels).To(HaveKey(constant.KonfluxComponentLabel))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
+
+		It("restores Issuer spec when modified", func(ctx context.Context) {
+			integrationService := &konfluxv1alpha1.KonfluxIntegrationService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, integrationService)
+
+			issuerNN := types.NamespacedName{
+				Name:      selfsignedIssuerName,
+				Namespace: integrationServiceNamespace,
+			}
+
+			By("waiting for initial Issuer creation with self-signed config")
+			Eventually(func(g Gomega) {
+				issuer := &certmanagerv1.Issuer{}
+				g.Expect(k8sClient.Get(ctx, issuerNN, issuer)).To(Succeed())
+				g.Expect(issuer.Spec.SelfSigned).NotTo(BeNil())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("replacing selfSigned with a CA spec")
+			Eventually(func(g Gomega) {
+				issuer := &certmanagerv1.Issuer{}
+				g.Expect(k8sClient.Get(ctx, issuerNN, issuer)).To(Succeed())
+				issuer.Spec.SelfSigned = nil
+				issuer.Spec.CA = &certmanagerv1.CAIssuer{SecretName: "tampered-secret"}
+				g.Expect(k8sClient.Update(ctx, issuer)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the Issuer selfSigned spec is restored")
+			Eventually(func(g Gomega) {
+				issuer := &certmanagerv1.Issuer{}
+				g.Expect(k8sClient.Get(ctx, issuerNN, issuer)).To(Succeed())
+				g.Expect(issuer.Spec.SelfSigned).NotTo(BeNil())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores ValidatingWebhookConfiguration spec when modified", func(ctx context.Context) {
+			integrationService := &konfluxv1alpha1.KonfluxIntegrationService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, integrationService,
+				&admissionregistrationv1.ValidatingWebhookConfiguration{
+					ObjectMeta: metav1.ObjectMeta{Name: validatingWebhookName},
+				},
+			)
+
+			vwcNN := types.NamespacedName{Name: validatingWebhookName}
+
+			By("waiting for initial ValidatingWebhookConfiguration creation")
+			var originalPath string
+			Eventually(func(g Gomega) {
+				vwc := &admissionregistrationv1.ValidatingWebhookConfiguration{}
+				g.Expect(k8sClient.Get(ctx, vwcNN, vwc)).To(Succeed())
+				g.Expect(vwc.Webhooks).NotTo(BeEmpty())
+				g.Expect(vwc.Webhooks[0].ClientConfig.Service).NotTo(BeNil())
+				originalPath = *vwc.Webhooks[0].ClientConfig.Service.Path
+				g.Expect(originalPath).NotTo(BeEmpty())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the webhook path")
+			Eventually(func(g Gomega) {
+				vwc := &admissionregistrationv1.ValidatingWebhookConfiguration{}
+				g.Expect(k8sClient.Get(ctx, vwcNN, vwc)).To(Succeed())
+				tampered := "/tampered-path"
+				vwc.Webhooks[0].ClientConfig.Service.Path = &tampered
+				g.Expect(k8sClient.Update(ctx, vwc)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the webhook path is restored")
+			Eventually(func(g Gomega) {
+				vwc := &admissionregistrationv1.ValidatingWebhookConfiguration{}
+				g.Expect(k8sClient.Get(ctx, vwcNN, vwc)).To(Succeed())
+				g.Expect(vwc.Webhooks).NotTo(BeEmpty())
+				g.Expect(vwc.Webhooks[0].ClientConfig.Service).NotTo(BeNil())
+				g.Expect(*vwc.Webhooks[0].ClientConfig.Service.Path).To(Equal(originalPath))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("restores MutatingWebhookConfiguration spec when modified", func(ctx context.Context) {
+			integrationService := &konfluxv1alpha1.KonfluxIntegrationService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, integrationService,
+				&admissionregistrationv1.MutatingWebhookConfiguration{
+					ObjectMeta: metav1.ObjectMeta{Name: mutatingWebhookName},
+				},
+			)
+
+			mwcNN := types.NamespacedName{Name: mutatingWebhookName}
+
+			By("waiting for initial MutatingWebhookConfiguration creation")
+			var originalPath string
+			Eventually(func(g Gomega) {
+				mwc := &admissionregistrationv1.MutatingWebhookConfiguration{}
+				g.Expect(k8sClient.Get(ctx, mwcNN, mwc)).To(Succeed())
+				g.Expect(mwc.Webhooks).NotTo(BeEmpty())
+				g.Expect(mwc.Webhooks[0].ClientConfig.Service).NotTo(BeNil())
+				originalPath = *mwc.Webhooks[0].ClientConfig.Service.Path
+				g.Expect(originalPath).NotTo(BeEmpty())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("modifying the webhook path")
+			Eventually(func(g Gomega) {
+				mwc := &admissionregistrationv1.MutatingWebhookConfiguration{}
+				g.Expect(k8sClient.Get(ctx, mwcNN, mwc)).To(Succeed())
+				tampered := "/tampered-path"
+				mwc.Webhooks[0].ClientConfig.Service.Path = &tampered
+				g.Expect(k8sClient.Update(ctx, mwc)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the webhook path is restored")
+			Eventually(func(g Gomega) {
+				mwc := &admissionregistrationv1.MutatingWebhookConfiguration{}
+				g.Expect(k8sClient.Get(ctx, mwcNN, mwc)).To(Succeed())
+				g.Expect(mwc.Webhooks).NotTo(BeEmpty())
+				g.Expect(mwc.Webhooks[0].ClientConfig.Service).NotTo(BeNil())
+				g.Expect(*mwc.Webhooks[0].ClientConfig.Service.Path).To(Equal(originalPath))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		DescribeTable("restores CRD spec when version is disabled",
+			func(ctx context.Context, crdName string) {
+				integrationService := &konfluxv1alpha1.KonfluxIntegrationService{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				}
+				Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
+				DeferCleanup(testutil.DeleteAndWait, k8sClient, integrationService)
+
+				crdNN := types.NamespacedName{Name: crdName}
+
+				By("waiting for CRD creation with served=true")
+				Eventually(func(g Gomega) {
+					crd := &apiextensionsv1.CustomResourceDefinition{}
+					g.Expect(k8sClient.Get(ctx, crdNN, crd)).To(Succeed())
+					g.Expect(crd.Spec.Versions).NotTo(BeEmpty())
+					g.Expect(crd.Spec.Versions[0].Served).To(BeTrue())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("disabling the served version")
+				var afterTamperRV string
+				Eventually(func(g Gomega) {
+					crd := &apiextensionsv1.CustomResourceDefinition{}
+					g.Expect(k8sClient.Get(ctx, crdNN, crd)).To(Succeed())
+					crd.Spec.Versions[0].Served = false
+					g.Expect(k8sClient.Update(ctx, crd)).To(Succeed())
+					afterTamperRV = crd.ResourceVersion
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("verifying SSA restores served=true")
+				Eventually(func(g Gomega) {
+					crd := &apiextensionsv1.CustomResourceDefinition{}
+					g.Expect(k8sClient.Get(ctx, crdNN, crd)).To(Succeed())
+					g.Expect(crd.ResourceVersion).NotTo(Equal(afterTamperRV), "controller has not reconciled yet")
+					g.Expect(crd.Spec.Versions[0].Served).To(BeTrue())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			},
+			isCRDEntriesNameOnly(),
+		)
 	})
 })

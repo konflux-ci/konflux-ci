@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -191,6 +192,7 @@ func (r *KonfluxSegmentBridgeReconciler) reconcileSegmentBridgeSecret(ctx contex
 		"TEKTON_RESULTS_API_ADDR": r.tektonResultsAPIAddr(),
 		"SEGMENT_WRITE_KEY":       segmentKey,
 		"SEGMENT_BATCH_API":       batchURL,
+		"TEKTON_LIMIT":            strconv.Itoa(spec.GetTektonLimit()),
 	}
 
 	secret := &corev1.Secret{

@@ -63,7 +63,6 @@ The script performs all of the following automatically:
 |-----------|---------|
 | OpenShift Pipelines | Installed via OLM (Red Hat's productized Tekton) |
 | cert-manager | Installed via the Red Hat cert-manager OLM operator |
-| trust-manager | Deployed into the `cert-manager` namespace |
 | Kyverno | Policy engine for namespace and RBAC automation |
 | Pipelines-as-Code | GitHub-triggered pipeline automation |
 | Tekton Chains RBAC | RBAC for supply-chain signing using OpenShift namespaces |
@@ -72,6 +71,7 @@ The following components are not deployed by `deploy-deps.sh` in this configurat
 
 | Skipped | Reason |
 |---------|--------|
+| trust-manager | Not needed — OpenShift has native CA bundle injection via `config.openshift.io/inject-trusted-cabundle` |
 | Dex | Managed by the Konflux Operator as part of the Konflux CR reconciliation |
 | Internal OCI registry | OpenShift has its own integrated registry |
 | Smee webhook proxy | Not needed when the cluster is internet-reachable |
