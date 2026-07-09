@@ -1,0 +1,50 @@
+# Konflux integration test: runs the built container image as a Kubernetes Job and asserts
+# its logs contain the expected output from entrypoint.sh.
+# Keep this pipeline's assertion in sync with entrypoint.sh.
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: testrepo-integration-test
+spec:
+  params:
+    - name: SNAPSHOT
+      type: string
+      description: |
+        For simplicity, we expect a single component inside our snapshot
+          {
+            "components": [
+              {
+                "containerImage": "quay.io/example/repo:latest"
+              }
+            ]
+          }
+  tasks:
+    - name: test-hello-world
+      params:
+        - name: SNAPSHOT
+          value: "$(params.SNAPSHOT)"
+      taskSpec:
+        params:
+          - name: SNAPSHOT
+            type: string
+        steps:
+          - name: test-output
+            image: quay.io/ongres/kubectl@sha256:4be5050c456a4751fe3d70086c0387d65e8973a176fe965de4eaeeb8643b2e0a
+            env:
+              - name: SNAPSHOT
+                value: "$(params.SNAPSHOT)"
+              - name: NAMESPACE
+                value: "$(context.pipelineRun.namespace)"
+            script: |
+              #!/usr/bin/bash
+              set -euxo pipefail
+
+              IMAGE=$(echo "$SNAPSHOT" | jq -r '.components[0].containerImage')
+              echo "Extracted image: $IMAGE"
+              kubectl delete job --ignore-not-found test-hello -n $NAMESPACE
+              kubectl delete pods --ignore-not-found -l job-name=test-hello -n $NAMESPACE
+              kubectl create job test-hello -n $NAMESPACE --image=$IMAGE
+              kubectl wait --for=condition=complete job/test-hello --timeout=180s
+              LOGS=$(kubectl logs -l job-name=test-hello -n $NAMESPACE)
+              kubectl delete job --ignore-not-found test-hello -n $NAMESPACE
+              echo $LOGS | grep "hello world"

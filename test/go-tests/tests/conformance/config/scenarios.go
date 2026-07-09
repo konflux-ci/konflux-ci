@@ -20,9 +20,9 @@ var UpstreamAppSpecs = []ApplicationSpec{
 			DockerFilePath:             "Dockerfile",
 			BuildPipelineType:          constants.DockerBuildOciTAMin,
 			IntegrationTestScenario: IntegrationTestScenarioSpec{
-				GitURL:      fmt.Sprintf("https://github.com/%s/%s", utils.GetEnv(constants.GITHUB_E2E_ORGANIZATION_ENV, "redhat-appstudio-qe"), "testrepo"),
-				GitRevision: "47517b7ad6a09ada952f3de7eb8da729ffbf3d6d",
-				TestPath:    "integration-tests/testrepo-integration.yaml",
+				GitURL:      "https://github.com/konflux-ci/konflux-ci",
+				GitRevision: "main",
+				TestPath:    "test/resources/integration-tests/testrepo-integration.yaml",
 			},
 		},
 	},
