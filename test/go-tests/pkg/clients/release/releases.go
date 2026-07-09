@@ -291,6 +291,15 @@ func (r *Controller) WaitForReleasePipelineToBeFinishedWithRetry(
 
 	attempts := 1
 	current := release
+	baseName := release.Name
+
+	// Always update releaseToUpdate on exit so callers reference the
+	// latest Release for diagnostics, even on the error path.
+	defer func() {
+		if releaseToUpdate != nil {
+			*releaseToUpdate = current
+		}
+	}()
 
 	for {
 		err := wait.PollUntilContextTimeout(
@@ -311,14 +320,18 @@ func (r *Controller) WaitForReleasePipelineToBeFinishedWithRetry(
 					return true, nil
 				}
 				failedLogs, _ := tekton.GetFailedPipelineRunLogs(r.KubeRest(), r.KubeInterface(), pr)
+				if strings.TrimSpace(failedLogs) == "" {
+					cond := pr.GetStatusCondition().GetCondition(apis.ConditionSucceeded)
+					failedLogs = cond.GetReason()
+					if msg := cond.GetMessage(); msg != "" {
+						failedLogs = failedLogs + ": " + msg
+					}
+				}
 				return false, fmt.Errorf("%s", failedLogs)
 			},
 		)
 
 		if err == nil {
-			if releaseToUpdate != nil {
-				*releaseToUpdate = current
-			}
 			return nil
 		}
 
@@ -333,22 +346,34 @@ func (r *Controller) WaitForReleasePipelineToBeFinishedWithRetry(
 			attempts, retryOpts.Retries, current.Namespace, current.Name, err,
 		)
 
-		oldName := current.Name
 		snapshotName := current.Spec.Snapshot
 		releasePlan := current.Spec.ReleasePlan
 		tenantNS := current.Namespace
+		labels := current.Labels
 
-		if delErr := r.DeleteRelease(oldName, tenantNS); delErr != nil {
-			return fmt.Errorf("delete failed Release %s/%s: %w", tenantNS, oldName, delErr)
+		if delErr := r.DeleteRelease(current.Name, tenantNS); delErr != nil {
+			return fmt.Errorf("delete failed Release %s/%s: %w", tenantNS, current.Name, delErr)
 		}
 
-		retryName := fmt.Sprintf("%s-r%d", oldName, attempts)
-		if len(retryName) > 63 {
-			retryName = retryName[:63]
+		suffix := fmt.Sprintf("-r%d", attempts)
+		base := baseName
+		if maxBase := 63 - len(suffix); len(base) > maxBase {
+			base = strings.TrimRight(base[:maxBase], "-")
 		}
+		retryName := base + suffix
 
-		newRelease, createErr := r.CreateRelease(retryName, tenantNS, snapshotName, releasePlan)
-		if createErr != nil {
+		newRelease := &releaseApi.Release{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      retryName,
+				Namespace: tenantNS,
+				Labels:    labels,
+			},
+			Spec: releaseApi.ReleaseSpec{
+				Snapshot:    snapshotName,
+				ReleasePlan: releasePlan,
+			},
+		}
+		if createErr := r.KubeRest().Create(context.Background(), newRelease); createErr != nil {
 			return fmt.Errorf("recreate Release for snapshot %q: %w", snapshotName, createErr)
 		}
 
