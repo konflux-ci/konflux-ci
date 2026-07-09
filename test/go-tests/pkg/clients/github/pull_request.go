@@ -20,6 +20,11 @@ const (
 	// in conformance tests) so that Eventually can observe the timeout.
 	mergeInProgressPollTimeout = 45 * time.Second
 
+	// defaultPollInterval is the default interval between GetPullRequest
+	// calls when polling for merge completion. Override Client.pollInterval
+	// for faster tests.
+	defaultPollInterval = 5 * time.Second
+
 	// maxConsecutivePollErrors is the number of consecutive GetPullRequest
 	// failures inside waitForMerge before giving up early.
 	maxConsecutivePollErrors = 3
@@ -129,6 +134,15 @@ func (c *Client) waitForMerge(repository string, prNumber int) (*github.PullRequ
 	var lastErr error
 	consecutiveErrors := 0
 
+	interval := c.pollInterval
+	if interval == 0 {
+		interval = defaultPollInterval
+	}
+	timeout := c.pollTimeout
+	if timeout == 0 {
+		timeout = mergeInProgressPollTimeout
+	}
+
 	err := utils.WaitUntilWithInterval(func() (bool, error) {
 		var getErr error
 		pr, getErr = c.GetPullRequest(repository, prNumber)
@@ -155,7 +169,7 @@ func (c *Client) waitForMerge(repository string, prNumber int) (*github.PullRequ
 		fmt.Printf("[github] PR #%d in %s: merge still in progress (state=%s, merged=%v)\n",
 			prNumber, repository, pr.GetState(), pr.GetMerged())
 		return false, nil
-	}, 5*time.Second, mergeInProgressPollTimeout)
+	}, interval, timeout)
 	if err != nil {
 		if lastErr != nil {
 			return nil, fmt.Errorf("waiting for PR #%d in %s to be merged after 405 response: %v (last API error: %v)",
@@ -166,7 +180,7 @@ func (c *Client) waitForMerge(repository string, prNumber int) (*github.PullRequ
 
 	merged := true
 	return &github.PullRequestMergeResult{
-		SHA:    pr.MergeCommitSHA,
+		SHA:    github.String(pr.GetMergeCommitSHA()),
 		Merged: &merged,
 	}, nil
 }
@@ -184,7 +198,7 @@ func (c *Client) getMergeResultFromPR(repository string, prNumber int) (*github.
 
 	merged := true
 	return &github.PullRequestMergeResult{
-		SHA:    pr.MergeCommitSHA,
+		SHA:    github.String(pr.GetMergeCommitSHA()),
 		Merged: &merged,
 	}, nil
 }

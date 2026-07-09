@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	gogithub "github.com/google/go-github/v44/github"
 )
@@ -159,12 +160,15 @@ func TestIsPRAlreadyMerged(t *testing.T) {
 }
 
 // newTestClient creates a Client backed by a httptest.Server for API mocking.
+// It sets a 10ms poll interval so tests exercising waitForMerge complete quickly.
+// pollTimeout is left at zero (uses the package default) unless the caller
+// overrides it for timeout-path tests.
 func newTestClient(t *testing.T, handler http.Handler) (*Client, *httptest.Server) {
 	t.Helper()
 	server := httptest.NewServer(handler)
 	ghClient := gogithub.NewClient(nil)
 	ghClient.BaseURL, _ = ghClient.BaseURL.Parse(server.URL + "/")
-	return &Client{client: ghClient, organization: "test-org"}, server
+	return &Client{client: ghClient, organization: "test-org", pollInterval: 10 * time.Millisecond}, server
 }
 
 func TestMergePullRequest_405ThenMerged(t *testing.T) {
@@ -450,5 +454,48 @@ func TestGetMergeResultFromPR_NotMerged(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "GetMerged() is false") {
 		t.Errorf("error should mention GetMerged() is false, got: %v", err)
+	}
+}
+
+func TestWaitForMerge_Timeout(t *testing.T) {
+	// Exercises the timeout path: GetPullRequest always returns open/not-merged,
+	// so waitForMerge should time out. Uses configurable pollInterval (10ms)
+	// and pollTimeout (100ms) to keep the test fast.
+	notMerged := false
+	var pollCount int32
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/test-org/test-repo/pulls/63", func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&pollCount, 1)
+		pr := &gogithub.PullRequest{
+			Number: gogithub.Int(63),
+			State:  gogithub.String("open"),
+			Merged: &notMerged,
+		}
+		_ = json.NewEncoder(w).Encode(pr)
+	})
+
+	client, server := newTestClient(t, mux)
+	defer server.Close()
+
+	// Override poll timeout to a small value so the test completes quickly.
+	client.pollTimeout = 100 * time.Millisecond
+
+	start := time.Now()
+	_, err := client.waitForMerge("test-repo", 63)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected timeout error when PR never becomes merged, got nil")
+	}
+	if !strings.Contains(err.Error(), "waiting for PR #63") {
+		t.Errorf("error should mention waiting for PR, got: %v", err)
+	}
+	if got := atomic.LoadInt32(&pollCount); got < 2 {
+		t.Errorf("expected at least 2 poll attempts before timeout, got %d", got)
+	}
+	// With 10ms interval and 100ms timeout, should finish well under 1s.
+	if elapsed > 5*time.Second {
+		t.Errorf("test took %v, expected to complete within 5s", elapsed)
 	}
 }

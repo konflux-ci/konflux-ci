@@ -18,6 +18,16 @@ const (
 type Client struct {
 	client       *github.Client
 	organization string
+
+	// pollInterval is the interval between GetPullRequest calls when
+	// polling for merge completion after a 405 response.
+	// Zero means use defaultPollInterval (5s).
+	pollInterval time.Duration
+
+	// pollTimeout is how long to poll for merge completion after a 405
+	// "Merge already in progress" response.
+	// Zero means use mergeInProgressPollTimeout (45s).
+	pollTimeout time.Duration
 }
 
 func NewClient(token, organization string) (*Client, error) {
