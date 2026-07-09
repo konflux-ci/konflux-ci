@@ -105,6 +105,7 @@ PRs trigger the following workflows:
 ## PR Guidelines
 
 - **Go / `go.mod` PRs:** Apply **go-toolchain-upgrade** (`skills/go-toolchain-upgrade/SKILL.md`) and follow its triage table—do not summarize the workflow from memory.
+- **MintMaker/Renovate parent or companion PRs:** Apply **companion-pr-review** (`skills/companion-pr-review/SKILL.md`) — skip review on companion-eligible parents; review companions lightly.
 - **`.tekton` task/pipeline edits:** `pipeline.yaml` tasks `deploy-konflux-its` and `konflux-e2e-tests-its` hardcode `taskRef.revision: main`. To verify changes, temporarily point both at the PR’s git ref, run operator E2E, then restore `main` before merge (see `.tekton/pipelines/operator-e2e/README.md`).
 - **Same-repo branches preferred**: E2E tests run automatically
 - **Fork PRs**: Require maintainer `/allow` comment to trigger tests
@@ -114,33 +115,11 @@ PRs trigger the following workflows:
 
 ## Repo-Specific Labels
 
-Some labels in this repository have precise automation-driven semantics.
-Agents must not apply them unless stated otherwise below.
-
-- **`deps-only`** — Applied exclusively by the companion manifest workflow
-  (`renovate-manifest-companion.sh`) to Renovate PRs that change
-  `operator/upstream-kustomizations/` or
-  `.github/scripts/export-third-party-chart-env.sh`. Signals that the PR
-  should not be merged directly because a companion PR with regenerated
-  operator manifests is needed. **Agents must never apply this label.**
-  When reviewing a PR that carries this label, agents should withhold
-  approval and note that the PR requires a companion PR with regenerated
-  operator manifests before it can be merged.
-  Changes to `test/go-tests/go.mod` or `operator/docs/go.mod` do not
-  trigger companion PRs and must not receive this label.
-- **`superseded-by-companion`** — Applied alongside `deps-only` by the
-  companion script when a companion PR has been successfully created.
-  Prefer merging the companion PR. **Agents must never apply this label.**
-  When reviewing a PR that already carries this label, agents should
-  withhold approval and instead note in their review that the PR is
-  superseded by the companion PR — the companion should be reviewed and
-  merged instead.
-- **`pending-upstream-image`** — Applied by the companion workflow when
-  upstream container images are not yet available in their registries.
-  Removed automatically on the next successful companion run.
-  **Agents must never apply this label.**
-- **`ready-for-merge`** — Should not coexist with `deps-only`,
-  `superseded-by-companion`, or `pending-upstream-image`.
+Several labels are set by automation or review agents with precise semantics.
+Agents must not apply companion workflow labels (`deps-only`,
+`superseded-by-companion`, `pending-upstream-image`). For who sets each label,
+skip/review rules, pre-label heuristics, and `ready-for-merge` behavior, apply
+**companion-pr-review** (`skills/companion-pr-review/SKILL.md`).
 
 ## Architecture Notes
 
@@ -168,5 +147,6 @@ Detailed guides live in `skills/` — each subdirectory contains a `SKILL.md` wi
 | [create-pr](skills/create-pr/SKILL.md) | Opening PRs, fork `/allow` behavior |
 | [debug-e2e-tests](skills/debug-e2e-tests/SKILL.md) | Investigating failed e2e / OpenShift CI runs |
 | [update-upstream-deps](skills/update-upstream-deps/SKILL.md) | Bumping upstream SHAs or editing `upstream-kustomizations/` (triggers manifest rebuild) |
+| [companion-pr-review](skills/companion-pr-review/SKILL.md) | MintMaker/Renovate parent or companion PRs — what to skip vs review lightly |
 | [local-dev-setup](skills/local-dev-setup/SKILL.md) | Local Kind / dev environment |
 | [dev-verify-loop](skills/dev-verify-loop/SKILL.md) | Iterative stop-rebuild-restart cycle for operator development |
