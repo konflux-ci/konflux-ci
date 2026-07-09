@@ -23,7 +23,7 @@ cross-repo checklists. Escalate only when minimum Go or CI **images** must chang
 | `deploy-konflux-on-ocp.sh`, `test/e2e/run-e2e.sh`, workflow Go pins | Significant | → **Significant** |
 | PR states new language/stdlib minimum | Significant | → **Significant** |
 | Unclear large dep bump | Check | If `go` unchanged and CI green → **Routine** |
-| `go` directive changes (any level, including patch) and PR is bot-authored | Check | Verify CI builder and `e2e-test-runner` images support the new Go version; flag if unclear |
+| `go` directive changes (any level, including patch) and PR is bot-authored | Check | Verify CI builder and `e2e-test-runner` images support the new Go version. If confirmed → **Routine** (use patch-bump variant below); if unsupported or unclear → **Significant** |
 
 Compare `^go ` in `operator/go.mod`, `test/go-tests/go.mod`, `operator/docs/go.mod`.
 Patch within same minor (1.26.0→1.26.1) = **Routine** unless other signals apply.
@@ -33,12 +33,15 @@ Patch within same minor (1.26.0→1.26.1) = **Routine** unless other signals app
 ```markdown
 **Go toolchain (routine):** Dependency-only update; minimum Go unchanged. No
 openshift/release or infra-deployments image changes expected. In-repo CI suffices.
+```
 
-<!-- If go directive changed even at patch level, add: -->
-**Note:** The `go` directive moved from X.Y.Z to X.Y.W. Verify that CI builder
-images and `e2e-test-runner` support Go X.Y.W — patch versions may lag in
-OpenShift CI golang images. Human review is recommended to assess potential
-downstream test impacts.
+When the `go` directive changed at patch level and CI images are confirmed
+(see Check row in triage table), use this variant instead:
+
+```markdown
+**Go toolchain (routine):** Dependency update; Go patch version bumped
+(X.Y.Z → X.Y.W). CI builder and `e2e-test-runner` images confirmed to
+support Go X.Y.W. In-repo CI suffices.
 ```
 
 Do not request **Go toolchain impact**, parallel PRs, or local `make test`/`make lint`.
