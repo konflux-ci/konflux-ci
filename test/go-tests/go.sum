@@ -227,8 +227,8 @@ github.com/konflux-ci/application-api v0.0.0-20260603073049-dd8c9b1a64c2 h1:ldBi
 github.com/konflux-ci/application-api v0.0.0-20260603073049-dd8c9b1a64c2/go.mod h1:948Z+a1IbfRT0RtoHzWWSN9YEucSbMJTHaMhz7dVICc=
 github.com/konflux-ci/build-service v0.0.0-20240611083846-2dee6cfe6fe4 h1:oZpPHgpAUI9OyvirRJ+0r0QFuiP8Par/CFZIwlr/6Ps=
 github.com/konflux-ci/build-service v0.0.0-20240611083846-2dee6cfe6fe4/go.mod h1:KgSj+voT2lpIu54zzUkHEXCMdnMGmf+Z9cQh+wTQ6ns=
-github.com/konflux-ci/image-controller v0.0.0-20260630090021-17b36a2806d5 h1:/WObrpURMLZTyBMBW09pcHIKApgT9h//tDSc0gMgwoE=
-github.com/konflux-ci/image-controller v0.0.0-20260630090021-17b36a2806d5/go.mod h1:0KOAru0FoyWld0DJNVwHVRDuHCTydaIlvYSMWd/FPvs=
+github.com/konflux-ci/image-controller v0.0.0-20260707130333-455617736338 h1:owr8D1zBSeMtc/5HZkwTmBpDTRJC3k2bbXI3R25Uk0g=
+github.com/konflux-ci/image-controller v0.0.0-20260707130333-455617736338/go.mod h1:0KOAru0FoyWld0DJNVwHVRDuHCTydaIlvYSMWd/FPvs=
 github.com/konflux-ci/integration-service v0.0.0-20260630105459-3e5f7eb3051c h1:IeZaViFGRO+t8vNu7TkPXbJoYTvwkTSJj9Si2JraqtQ=
 github.com/konflux-ci/integration-service v0.0.0-20260630105459-3e5f7eb3051c/go.mod h1:qIBReR+IOIHBKAV2pDzjlQWwqOGBfgW8cE1U5F08KUw=
 github.com/konflux-ci/operator-toolkit v0.0.0-20260312101100-d4e398191a68 h1:iGsPIR8Jjo9z0OAgLcrw7uKT/xWqWg/j+D1tr10snkM=
