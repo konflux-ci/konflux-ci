@@ -46,6 +46,8 @@ Skip review and retro when **both**:
 
 Apply this **even before** `deps-only` / `superseded-by-companion` labels land.
 Do not run full review, do not approve, do not add `ready-for-merge`.
+Do not add `requires-manual-review` — the parent is not a merge target and
+does not need human escalation.
 
 **Exception:** once a noop marker appears, follow the **Parent (noop)** row in
 the table above instead.
@@ -122,4 +124,5 @@ When a closed/merged PR is a companion-eligible parent:
 - Do not flag "PR closed without merge" as waste
 - Do not flag "open parent after companion merged" as actionable
 - Do not propose closing parents via new workflows
+- Do not flag `requires-manual-review` label on superseded parents as actionable — if present, it was applied in error by the review agent before this guidance was added
 - Do flag: review agent ran on parent after `superseded-by-companion` was applied
