@@ -94,7 +94,7 @@ spec:
             - secretRef:
                 name: segment-bridge-config
                 optional: true
-            image: quay.io/konflux-ci/segment-bridge:330d743d5671c96934c5a34b0e846afb3fd10882
+            image: quay.io/konflux-ci/segment-bridge:45d73f374f2ff226f08106143ea8fa9ed9219af3
             imagePullPolicy: IfNotPresent
             name: segment-bridge
             resources:
