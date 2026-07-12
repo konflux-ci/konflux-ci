@@ -5,6 +5,7 @@ resources:
   - core
   - certmanager
   - dex
+  - monitoring
 
 patches:
   # Prevent deployment failures during slow dependency setup
