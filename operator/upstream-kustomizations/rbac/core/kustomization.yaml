@@ -11,6 +11,7 @@ resources:
 - konflux-releaser-bot-actions.yaml
 - konflux-self-access-reviewer.yaml
 - konflux-viewer-user-actions-core.yaml
+- konflux-kueue-visibility.yaml
 # Deprecated
 # These ClusterRoles will be removed eventually
 - konflux-admin-user-actions-extra.yaml
