@@ -47,6 +47,20 @@ spec:
     default-service-account: default
     options:
       disabled: false
+      configMaps:
+        config-defaults:
+          data:
+            default-imagepullbackoff-timeout: "15m"
+        bundleresolver-config:
+          data:
+            fetch-timeout: "2m"
+            backoff-steps: "30"
+            backoff-cap: "30s"
+        git-resolver-config:
+          data:
+            fetch-timeout: "2m"
+            backoff-steps: "4"
+            backoff-cap: "30s"
       deployments:
         tekton-pipelines-remote-resolvers:
           spec:
