@@ -106,6 +106,7 @@ PRs trigger the following workflows:
 
 - **Go / `go.mod` PRs:** Apply **go-toolchain-upgrade** (`skills/go-toolchain-upgrade/SKILL.md`) and follow its triage table—do not summarize the workflow from memory.
 - **MintMaker/Renovate parent or companion PRs:** Apply **companion-pr-review** (`skills/companion-pr-review/SKILL.md`) — skip review on companion-eligible parents; review companions lightly.
+- **`dependencies/` version bumps with kustomize patches:** When a Renovate PR bumps a version in `dependencies/*/kustomization.yaml` and the file contains `op: remove` or `op: replace` patches with absolute JSON Pointer paths, verify patch compatibility with the new upstream version. `verify-manifests-in-sync` CI does not cover `dependencies/` — incompatibilities surface only at deploy time. See the "Reviewing `dependencies/` kustomization patches" section of **companion-pr-review** (`skills/companion-pr-review/SKILL.md`).
 - **`.tekton` task/pipeline edits:** `pipeline.yaml` tasks `deploy-konflux-its` and `konflux-e2e-tests-its` hardcode `taskRef.revision: main`. To verify changes, temporarily point both at the PR’s git ref, run operator E2E, then restore `main` before merge (see `.tekton/pipelines/operator-e2e/README.md`).
 - **Same-repo branches preferred**: E2E tests run automatically
 - **Fork PRs**: Require maintainer `/allow` comment to trigger tests

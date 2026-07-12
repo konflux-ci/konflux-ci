@@ -58,6 +58,35 @@ the table above instead.
 - Non-allowlist paths
 - Human-authored PRs touching upstream kustomizations
 
+### Reviewing `dependencies/` kustomization patches on version bumps
+
+Several dependencies under `dependencies/` use kustomize overlays with JSON
+Patch operations (`op: remove`, `op: replace`, `op: add`) that target absolute
+JSON Pointer paths in upstream manifests (e.g.,
+`/spec/template/spec/initContainers/0/securityContext/runAsUser`). These
+patches assume specific upstream manifest structure — container ordering,
+field presence, and resource naming. If an upstream version restructures its
+manifests, the patches silently break at deploy time with a kustomize error.
+
+**`verify-manifests-in-sync` CI does not cover `dependencies/` changes.** That
+check only validates `operator/pkg/manifests/` content. Structural
+incompatibilities in `dependencies/` patches surface only at cluster deploy
+time, so extra review scrutiny is warranted on major or minor version bumps.
+
+When a Renovate PR bumps a version in `dependencies/*/kustomization.yaml` (or
+`.yml`) and the file contains JSON Patch operations, check:
+
+1. **Patch compatibility** — verify that every `op: remove` and `op: replace`
+   path still exists in the new upstream manifest. Absolute paths like
+   `/spec/template/spec/containers/0/...` are fragile if upstream reorders
+   containers, removes security context fields, or renames resources.
+2. **Stale version comments** — flag inline comments that reference the old
+   version (e.g., `# upstream 1.18.1 sets runAsUser/runAsGroup 65534`).
+   Update or remove them so they reflect the new version.
+3. **Patch type risk** — `op: remove` and `op: replace` fail hard if the
+   target path is absent; `op: add` is safer (creates the path if missing).
+   Weight review effort toward `remove`/`replace` patches.
+
 ## Check companion workflow state before commenting
 
 Before asserting that a companion PR will be created, check existing PR
