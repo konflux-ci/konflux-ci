@@ -52,6 +52,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/hashedconfigmap"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/hashedsecret"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/ingress"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/oauth2proxy"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/segment"
@@ -107,7 +108,7 @@ const (
 // UICleanupGVKs defines which resource types should be cleaned up when they are
 // no longer part of the desired state. Only optional/conditional resources are listed here.
 // Always-applied resources don't need cleanup (they're always tracked and never become orphans).
-var UICleanupGVKs = []schema.GroupVersionKind{
+var UICleanupGVKs = append([]schema.GroupVersionKind{
 	// Ingress is optional - only created when spec.ingress.enabled is true
 	{Group: "networking.k8s.io", Version: "v1", Kind: "Ingress"},
 	// ConsoleLink is optional - only created on OpenShift when ingress is enabled
@@ -116,7 +117,7 @@ var UICleanupGVKs = []schema.GroupVersionKind{
 	{Group: "", Version: "v1", Kind: "ServiceAccount"},
 	// Secret is optional - only created for OpenShift OAuth when configureLoginWithOpenShift is true
 	{Group: "", Version: "v1", Kind: "Secret"},
-}
+}, kubernetes.ComponentMetricsOrphanCleanupGVKs...)
 
 // UIClusterScopedAllowList restricts which cluster-scoped resources can be deleted
 // during orphan cleanup. This is a security measure to prevent attackers from
@@ -127,6 +128,14 @@ var UIClusterScopedAllowList = tracking.ClusterScopedAllowList{
 	// ConsoleLink is only created on OpenShift when ingress is enabled
 	{Group: "console.openshift.io", Version: "v1", Kind: "ConsoleLink"}: sets.New(
 		"konflux",
+	),
+	// Metrics-reader ClusterRole is only applied when componentMetrics is enabled
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"}: sets.New(
+		"konflux-ui-proxy-metrics-reader",
+	),
+	// Metrics-reader ClusterRoleBinding is only applied when componentMetrics is enabled
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"}: sets.New(
+		"prometheus-konflux-ui-proxy-metrics-reader",
 	),
 }
 
@@ -297,15 +306,28 @@ func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, tc *tra
 // segmentSecretName is the name of the content-hashed Segment Secret (empty if not configured).
 // endpoint is the base URL used to configure oauth2-proxy.
 func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, dexConfigMapName, segmentSecretName string, endpoint *url.URL) error {
+	log := logf.FromContext(ctx)
+
 	objects, err := r.ObjectStore.GetForComponent(manifests.UI)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for UI: %w", err)
 	}
 
+	metricsEnabled := ui.Spec.ComponentMetrics.IsEnabled()
+
 	// Resolve whether OpenShift login should be enabled
 	openShiftLoginEnabled := isOpenShiftLoginEnabled(ui, r.ClusterInfo)
 
 	for _, obj := range objects {
+		if !metricsEnabled && kubernetes.IsComponentMetricsScrapeResource(obj) {
+			log.V(1).Info("Skipping component metrics scrape resource",
+				"kind", tracking.GetKind(obj),
+				"name", obj.GetName(),
+				"namespace", obj.GetNamespace(),
+			)
+			continue
+		}
+
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
 			if err := applyUIDeploymentCustomizations(deployment, ui, r.ClusterInfo, dexConfigMapName, segmentSecretName, endpoint); err != nil {

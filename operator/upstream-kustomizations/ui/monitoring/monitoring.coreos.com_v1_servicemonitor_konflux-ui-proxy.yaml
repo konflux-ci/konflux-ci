@@ -1,8 +1,6 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
   name: konflux-ui-proxy
   namespace: konflux-ui
 spec:

@@ -236,6 +236,11 @@ type KonfluxUISpec struct {
 	// These settings are injected as window.KONFLUX_RUNTIME properties in the SPA.
 	// +optional
 	RuntimeConfig *RuntimeConfigSpec `json:"runtimeConfig,omitempty"`
+
+	// ComponentMetrics controls Prometheus scrape resources for this component.
+	// Set by the Konflux reconciler from spec.componentMetrics on the Konflux CR.
+	// +optional
+	ComponentMetrics *ComponentMetricsConfig `json:"componentMetrics,omitempty"`
 }
 
 // IngressStatus defines the observed state of the Ingress configuration.

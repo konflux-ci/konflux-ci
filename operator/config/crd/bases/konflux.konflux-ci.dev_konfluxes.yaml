@@ -2682,6 +2682,20 @@ spec:
                   spec:
                     description: Spec configures the UI component.
                     properties:
+                      componentMetrics:
+                        description: |-
+                          ComponentMetrics controls Prometheus scrape resources for this component.
+                          Set by the Konflux reconciler from spec.componentMetrics on the Konflux CR.
+                        properties:
+                          enabled:
+                            description: |-
+                              Enabled controls whether scrape resources are deployed for metrics-enabled components
+                              (see operator/docs/component-monitoring.md#scope). HTTPS operands on the operator
+                              scrape-token model use reconciler-managed prometheus-scrape-token; legacy interim
+                              operands use static-token HTTP scraping until migrated.
+                              Defaults to true when unset.
+                            type: boolean
+                        type: object
                       dex:
                         description: Dex defines customizations for the dex deployment.
                         properties:
