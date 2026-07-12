@@ -1,0 +1,14 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../tekton-config
+patches:
+  - target:
+      group: operator.tekton.dev
+      version: v1alpha1
+      kind: TektonConfig
+      name: config
+    patch: |
+      - op: remove
+        path: /spec/targetNamespace

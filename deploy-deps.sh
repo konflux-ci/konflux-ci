@@ -275,8 +275,10 @@ deploy_openshift_pipelines() {
           "Tekton webhook did not become available within the allocated time"
 
     echo "  ⚙️  Configuring Tekton..." >&2
-    retry "kubectl apply -k ${script_path}/dependencies/tekton-config" \
+    retry "kubectl apply -k ${script_path}/dependencies/tekton-config-ocp" \
           "The Tekton Config resource was not updated within the allocated time"
+    retry "kubectl wait --for=condition=Ready tektonconfig/config --timeout=120s" \
+          "TektonConfig did not reconcile after update within the allocated time"
 
     # Apply Tekton Chains RBAC for OpenShift Pipelines (uses openshift-pipelines namespace)
     echo "  🔐 Setting up Tekton Chains RBAC..." >&2
