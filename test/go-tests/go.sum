@@ -38,8 +38,8 @@ github.com/cloudflare/circl v1.6.4 h1:pOXuDTCEYyzydgUpQ0CQz3LsinKjiSk6nNP5Lt5K64
 github.com/cloudflare/circl v1.6.4/go.mod h1:YxarevkLlbaHuWsxG6vmYNWBEsSp4pnp7j+4VljMavY=
 github.com/coder/websocket v1.8.15 h1:6B2JPeOGlpff2Uz6vOEH1Vzpi0iUz20A+lPVhPHtNUA=
 github.com/coder/websocket v1.8.15/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
-github.com/codeready-toolchain/api v0.0.0-20260706073459-12617fcf7072 h1:IwTDl3etIPEgiK+3LnJsk66ajQj6k3ynjdiWh+HvQzg=
-github.com/codeready-toolchain/api v0.0.0-20260706073459-12617fcf7072/go.mod h1:PMg6kNHuCGNlu3MOdrCisqGkBpvzB0qS1+E6nrXxPAc=
+github.com/codeready-toolchain/api v0.0.0-20260709092545-4fb0bb97aa86 h1:vTLDBF3NAbz9S5fkgUiPB1AiZVWNLTb+1ds9xSgMax4=
+github.com/codeready-toolchain/api v0.0.0-20260709092545-4fb0bb97aa86/go.mod h1:PMg6kNHuCGNlu3MOdrCisqGkBpvzB0qS1+E6nrXxPAc=
 github.com/conforma/crds/api v0.1.11 h1:52Lb8J2uVEzLgTaUU4YABw+4r2GIO4es1vV9YkrEjZs=
 github.com/conforma/crds/api v0.1.11/go.mod h1:vaUCN54r99HME4555KRKOUPGJxBNAlX1agZ4jlGI2YA=
 github.com/coreos/go-semver v0.3.1 h1:yi21YpKnrx1gt5R+la8n5WgS0kCrsPp33dmEyHReZr4=
