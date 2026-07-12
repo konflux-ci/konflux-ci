@@ -54,13 +54,13 @@ spec:
         bundleresolver-config:
           data:
             fetch-timeout: "2m"
-            backoff-steps: "30"
-            backoff-cap: "30s"
+            backoff-duration: "15s"
+            backoff-factor: "2.0"
+            backoff-steps: "10"
+            backoff-cap: "15m"
         git-resolver-config:
           data:
             fetch-timeout: "2m"
-            backoff-steps: "4"
-            backoff-cap: "30s"
       deployments:
         tekton-pipelines-remote-resolvers:
           spec:
