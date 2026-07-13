@@ -113,6 +113,10 @@ PRs trigger the following workflows:
 - Update TOC if markdown structure changed
 - Run `make manifests generate` if API or RBAC annotations changed
 
+## Issue Triage
+
+- **E2E test failure issues:** Apply **debug-e2e-tests** (`skills/debug-e2e-tests/SKILL.md`) when triaging issues about failed e2e tests — download CI artifacts, analyze test and cluster logs, classify the root cause. Detect by: title contains "e2e" or "E2E", labels include `ci` or `workflow-failure`, body contains Prow URLs (`prow.ci.openshift.org`) or GitHub Actions run URLs (`github.com/konflux-ci/konflux-ci/actions/runs/`).
+
 ## Repo-Specific Labels
 
 Several labels are set by automation or review agents with precise semantics.
@@ -145,7 +149,7 @@ Detailed guides live in `skills/` — each subdirectory contains a `SKILL.md` wi
 | [ginkgo-testing](skills/ginkgo-testing/SKILL.md) | Writing or reviewing Ginkgo tests — cleanup patterns, soft assertions |
 | [go-toolchain-upgrade](skills/go-toolchain-upgrade/SKILL.md) | `go.mod`/`go.sum`, Go pins, or `go.mod requires go` CI failures |
 | [create-pr](skills/create-pr/SKILL.md) | Opening PRs, fork `/allow` behavior |
-| [debug-e2e-tests](skills/debug-e2e-tests/SKILL.md) | Investigating failed e2e / OpenShift CI runs |
+| [debug-e2e-tests](skills/debug-e2e-tests/SKILL.md) | Triaging or investigating failed e2e / OpenShift CI runs |
 | [update-upstream-deps](skills/update-upstream-deps/SKILL.md) | Bumping upstream SHAs or editing `upstream-kustomizations/` (triggers manifest rebuild) |
 | [companion-pr-review](skills/companion-pr-review/SKILL.md) | MintMaker/Renovate parent or companion PRs — what to skip vs review lightly |
 | [local-dev-setup](skills/local-dev-setup/SKILL.md) | Local Kind / dev environment |
