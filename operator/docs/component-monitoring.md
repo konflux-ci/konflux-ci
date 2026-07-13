@@ -33,7 +33,7 @@ spec:
 
 - **`enabled`:** treated as **true** when unset. The Konflux reconciler forwards this
   value to metrics-enabled operand CRs (`KonfluxBuildService`, `KonfluxImageController`,
-  `KonfluxIntegrationService`, etc.).
+  `KonfluxIntegrationService`, `KonfluxUI`, etc.).
 - **Scraper identity:** not configurable on the CR. For HTTPS operands on the operator
   scrape-token model, the operator creates a `metrics-scraper` ServiceAccount in each
   operand namespace, binds it in the metrics-reader ClusterRoleBinding, and mints
@@ -165,6 +165,12 @@ Applies to metrics-enabled components still on the **legacy interim** model (see
 
 Example: a legacy interim ServiceMonitor uses `scheme: http`, `port: http`, and
 `bearerTokenSecret` → `<component>-metrics-reader` (static legacy Secret).
+
+**Components on legacy interim today:**
+
+- **konflux-ui-proxy** — Caddy reverse-proxy, HTTP `:2112` on port `metrics`,
+  `konflux-ui-proxy-metrics-reader` ClusterRole, gated by `KonfluxUISpec.componentMetrics`
+  in the UI reconciler. No bearer token (plain HTTP scrape).
 
 **Why legacy interim remains:** Those controllers do not expose HTTPS authenticated metrics
 yet; Prometheus can scrape without waiting for upstream `--metrics-secure` and cert-manager.
