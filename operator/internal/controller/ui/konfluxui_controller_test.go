@@ -31,6 +31,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/version"
@@ -2147,6 +2148,94 @@ var _ = Describe("KonfluxUI Controller", func() {
 					g.Expect(e.Name).NotTo(HavePrefix("RUNTIME_"))
 				}
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
+	Context("Component metrics gating via Reconcile", Serial, func() {
+		serviceMonitorGVK := schema.GroupVersionKind{
+			Group:   "monitoring.coreos.com",
+			Version: "v1",
+			Kind:    "ServiceMonitor",
+		}
+		serviceMonitorNN := types.NamespacedName{
+			Name:      "konflux-ui-proxy",
+			Namespace: uiNamespace,
+		}
+		metricsReaderCRName := "konflux-ui-proxy-metrics-reader"
+
+		getServiceMonitor := func(ctx context.Context) (*unstructured.Unstructured, error) {
+			sm := &unstructured.Unstructured{}
+			sm.SetGroupVersionKind(serviceMonitorGVK)
+			err := k8sClient.Get(ctx, serviceMonitorNN, sm)
+			return sm, err
+		}
+
+		cleanupMetricsResources := func(ctx context.Context) {
+			sm := &unstructured.Unstructured{}
+			sm.SetGroupVersionKind(serviceMonitorGVK)
+			sm.SetName(serviceMonitorNN.Name)
+			sm.SetNamespace(serviceMonitorNN.Namespace)
+			_ = client.IgnoreNotFound(k8sClient.Delete(ctx, sm))
+
+			_ = client.IgnoreNotFound(k8sClient.Delete(ctx, &rbacv1.ClusterRole{
+				ObjectMeta: metav1.ObjectMeta{Name: metricsReaderCRName},
+			}))
+		}
+
+		It("applies ServiceMonitor and metrics-reader ClusterRole when ComponentMetrics is nil (default enabled)", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec:       konfluxv1alpha1.KonfluxUISpec{},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				testutil.DeleteAndWait(ctx, k8sClient, ui)
+				cleanupMetricsResources(ctx)
+			})
+
+			Eventually(func(g Gomega) {
+				_, err := getServiceMonitor(ctx)
+				g.Expect(err).NotTo(HaveOccurred())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				cr := &rbacv1.ClusterRole{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: metricsReaderCRName}, cr)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("skips ServiceMonitor and metrics-reader ClusterRole when ComponentMetrics.Enabled is false", func(ctx context.Context) {
+			cleanupMetricsResources(ctx)
+
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxUISpec{
+					ComponentMetrics: &konfluxv1alpha1.ComponentMetricsConfig{
+						Enabled: ptr.To(false),
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				testutil.DeleteAndWait(ctx, k8sClient, ui)
+			})
+
+			waitForReconcile(ctx)
+
+			Consistently(func(g Gomega) {
+				_, err := getServiceMonitor(ctx)
+				g.Expect(errors.IsNotFound(err)).To(BeTrue())
+			}).WithTimeout(3 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
+
+			Consistently(func(g Gomega) {
+				cr := &rbacv1.ClusterRole{}
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: metricsReaderCRName}, cr)
+				g.Expect(errors.IsNotFound(err)).To(BeTrue())
+			}).WithTimeout(3 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
 		})
 	})
 })
