@@ -291,8 +291,7 @@ tables and migration guide above for architectural context.
    resources using `kubernetes.IsComponentMetricsScrapeResource` — when
    `spec.ComponentMetrics.IsEnabled()` is false, skip apply and delete
    existing scrape objects. For HTTPS operands on the operator scrape-token
-   model, also wire `IsComponentMetricsServiceMonitor` for deferred
-   ServiceMonitor apply, `TokenCreator` for scrape-token minting, and
+   model, also wire `TokenCreator` for scrape-token minting and
    `ReconcilePrometheusScrapeToken` for token rotation (see
    [Shipped today](#shipped-today-operator-scrape-token) and
    `operator/pkg/kubernetes/scrape_token.go`)
