@@ -116,8 +116,10 @@ components on the **operator scrape token** model (see [Scope](#scope)).
 | Authorization | `<component>-metrics-reader` ClusterRole; CRB subjects bind the operator-owned `metrics-scraper` ServiceAccount in the operand namespace |
 | Legacy SA/Secret | Removed from `monitoring/` overlays for these components |
 
-Implementation: `operator/pkg/kubernetes/scrape_token.go`, wired from operand reconcilers
-when `spec.componentMetrics` is enabled.
+Implementation: `operator/internal/common/scrape_token.go` (high-level
+`ReconcilePrometheusScrapeToken`) and `operator/pkg/kubernetes/scrape_token.go`
+(lower-level token helpers), wired from operand reconcilers when
+`spec.componentMetrics` is enabled.
 
 Operand controllers use two complementary mechanisms:
 
@@ -263,7 +265,10 @@ Paths: `operator/upstream-kustomizations/<component>/`, matching controller unde
 When adding Prometheus metrics scraping for a new operator component, complete every
 item below. Steps follow the established pattern across build-service,
 image-controller, integration-service, and UI. Cross-reference the scrape model
-tables and migration guide above for architectural context.
+tables and migration guide above for architectural context. For overlay and manifest
+steps (creating `monitoring/` kustomization, rebuilding embedded manifests via
+`process-component.sh`), see
+[Migrate a component](#migrate-a-component-legacy-interim--unified).
 
 **API and code generation:**
 
@@ -294,7 +299,7 @@ tables and migration guide above for architectural context.
    model, also wire `TokenCreator` for scrape-token minting and
    `ReconcilePrometheusScrapeToken` for token rotation (see
    [Shipped today](#shipped-today-operator-scrape-token) and
-   `operator/pkg/kubernetes/scrape_token.go`)
+   `operator/internal/common/scrape_token.go`)
 
 **RBAC:**
 
