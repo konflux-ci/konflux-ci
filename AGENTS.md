@@ -140,10 +140,7 @@ skip/review rules, pre-label heuristics, and `ready-for-merge` behavior, apply
 - **Periodic work via channel sources** — Use `source.Channel` with a Runnable ticker/broadcaster for periodic maintenance (e.g., `TokenRotationBroadcaster`), not `RequeueAfter`. `RequeueAfter` is for convergence (retry until desired state is reached); channel sources are for scheduling (fire at a fixed interval regardless of state).
 - **Runnable lifecycle cleanup** — Any `Start()` method or `Runnable` that creates channels, tickers, or goroutines must clean them up when the context is cancelled. Close subscriber channels and stop tickers (via `defer`) before returning.
 - **Interface minimality** — Reconciler structs should depend on the narrowest type needed. If a reconciler only consumes events from a broadcaster, accept a `<-chan event.TypedGenericEvent[client.Object]`, not the broadcaster itself. Wire via `Subscribe()` in `main.go`.
-
-### Component monitoring onboarding
-
-See the controller wiring checklist in [`operator/docs/component-monitoring.md`](operator/docs/component-monitoring.md#controller-wiring-checklist).
+- **Component monitoring** — see the controller wiring checklist in [`operator/docs/component-monitoring.md`](operator/docs/component-monitoring.md#controller-wiring-checklist).
 
 ## Skills
 
