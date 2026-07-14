@@ -31,6 +31,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/version"
@@ -2067,6 +2068,174 @@ var _ = Describe("KonfluxUI Controller", func() {
 				g.Expect(secrets[0].OwnerReferences[0].Name).To(Equal(CRName))
 				g.Expect(secrets[0].OwnerReferences[0].Kind).To(Equal("KonfluxUI"))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
+	Context("RuntimeConfig reconciliation via Reconcile", Serial, func() {
+		BeforeEach(func() {
+			startManager(noDefaultSegmentKey, nil)
+		})
+
+		It("Should set RUNTIME_* env vars on generate-proxy-config init container", func(ctx context.Context) {
+			ui := &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxUISpec{
+					RuntimeConfig: &konfluxv1alpha1.RuntimeConfigSpec{
+						ChatBot: &konfluxv1alpha1.ChatBotConfig{
+							Enabled: ptr.To(false),
+						},
+						Monitoring: &konfluxv1alpha1.MonitoringConfig{
+							Enabled:     ptr.To(true),
+							DSN:         "https://example@sentry.io/123",
+							Environment: "staging",
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: proxyDeploymentName, Namespace: uiNamespace,
+				}, dep)).To(Succeed())
+
+				var initContainer *corev1.Container
+				for i := range dep.Spec.Template.Spec.InitContainers {
+					if dep.Spec.Template.Spec.InitContainers[i].Name == generateProxyConfigContainerName {
+						initContainer = &dep.Spec.Template.Spec.InitContainers[i]
+						break
+					}
+				}
+				g.Expect(initContainer).NotTo(BeNil())
+
+				envMap := make(map[string]string, len(initContainer.Env))
+				for _, e := range initContainer.Env {
+					envMap[e.Name] = e.Value
+				}
+				g.Expect(envMap).To(HaveKeyWithValue("RUNTIME_CHAT_BOT_ENABLED", "false"))
+				g.Expect(envMap).To(HaveKeyWithValue("RUNTIME_MONITORING_ENABLED", "true"))
+				g.Expect(envMap).To(HaveKeyWithValue("RUNTIME_MONITORING_DSN", "https://example@sentry.io/123"))
+				g.Expect(envMap).To(HaveKeyWithValue("RUNTIME_MONITORING_ENVIRONMENT", "staging"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("Should not set RUNTIME_* env vars when runtimeConfig is nil", func(ctx context.Context) {
+			ui := &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec:       konfluxv1alpha1.KonfluxUISpec{},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: proxyDeploymentName, Namespace: uiNamespace,
+				}, dep)).To(Succeed())
+
+				var initContainer *corev1.Container
+				for i := range dep.Spec.Template.Spec.InitContainers {
+					if dep.Spec.Template.Spec.InitContainers[i].Name == generateProxyConfigContainerName {
+						initContainer = &dep.Spec.Template.Spec.InitContainers[i]
+						break
+					}
+				}
+				g.Expect(initContainer).NotTo(BeNil())
+
+				for _, e := range initContainer.Env {
+					g.Expect(e.Name).NotTo(HavePrefix("RUNTIME_"))
+				}
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
+	Context("Component metrics gating via Reconcile", Serial, func() {
+		serviceMonitorGVK := schema.GroupVersionKind{
+			Group:   "monitoring.coreos.com",
+			Version: "v1",
+			Kind:    "ServiceMonitor",
+		}
+		serviceMonitorNN := types.NamespacedName{
+			Name:      "konflux-ui-proxy",
+			Namespace: uiNamespace,
+		}
+		metricsReaderCRName := "konflux-ui-proxy-metrics-reader"
+
+		getServiceMonitor := func(ctx context.Context) (*unstructured.Unstructured, error) {
+			sm := &unstructured.Unstructured{}
+			sm.SetGroupVersionKind(serviceMonitorGVK)
+			err := k8sClient.Get(ctx, serviceMonitorNN, sm)
+			return sm, err
+		}
+
+		cleanupMetricsResources := func(ctx context.Context) {
+			sm := &unstructured.Unstructured{}
+			sm.SetGroupVersionKind(serviceMonitorGVK)
+			sm.SetName(serviceMonitorNN.Name)
+			sm.SetNamespace(serviceMonitorNN.Namespace)
+			_ = client.IgnoreNotFound(k8sClient.Delete(ctx, sm))
+
+			_ = client.IgnoreNotFound(k8sClient.Delete(ctx, &rbacv1.ClusterRole{
+				ObjectMeta: metav1.ObjectMeta{Name: metricsReaderCRName},
+			}))
+		}
+
+		It("applies ServiceMonitor and metrics-reader ClusterRole when ComponentMetrics is nil (default enabled)", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec:       konfluxv1alpha1.KonfluxUISpec{},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				testutil.DeleteAndWait(ctx, k8sClient, ui)
+				cleanupMetricsResources(ctx)
+			})
+
+			Eventually(func(g Gomega) {
+				_, err := getServiceMonitor(ctx)
+				g.Expect(err).NotTo(HaveOccurred())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				cr := &rbacv1.ClusterRole{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: metricsReaderCRName}, cr)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("skips ServiceMonitor and metrics-reader ClusterRole when ComponentMetrics.Enabled is false", func(ctx context.Context) {
+			cleanupMetricsResources(ctx)
+
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxUISpec{
+					ComponentMetrics: &konfluxv1alpha1.ComponentMetricsConfig{
+						Enabled: ptr.To(false),
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				testutil.DeleteAndWait(ctx, k8sClient, ui)
+			})
+
+			waitForReconcile(ctx)
+
+			Consistently(func(g Gomega) {
+				_, err := getServiceMonitor(ctx)
+				g.Expect(errors.IsNotFound(err)).To(BeTrue())
+			}).WithTimeout(3 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
+
+			Consistently(func(g Gomega) {
+				cr := &rbacv1.ClusterRole{}
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: metricsReaderCRName}, cr)
+				g.Expect(errors.IsNotFound(err)).To(BeTrue())
+			}).WithTimeout(3 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
 		})
 	})
 })

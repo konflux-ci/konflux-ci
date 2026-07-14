@@ -1,0 +1,14 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: konflux-ui-proxy
+  namespace: konflux-ui
+spec:
+  endpoints:
+  - interval: 15s
+    path: /metrics
+    port: metrics
+    scheme: http
+  selector:
+    matchLabels:
+      app: proxy

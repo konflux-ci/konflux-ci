@@ -351,16 +351,15 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 
 			ginkgo.When("Release PipelineRun is triggered", ginkgo.Label(upstreamKonfluxTestLabel), func() {
 				ginkgo.It("should eventually succeed", func() {
-					gomega.Eventually(func() error {
-						pr, getErr := fw.AsKubeAdmin.ReleaseController.GetPipelineRunInNamespace(managedNamespace, release.Name, release.Namespace)
-						if getErr != nil {
-							return getErr
-						}
-						if tekton.HasPipelineRunFailed(pr) {
-							for _, c := range pr.Status.Conditions {
-								klog.Errorf("release PipelineRun %s/%s condition: type=%s reason=%s message=%s",
-									pr.GetNamespace(), pr.GetName(), c.Type, c.Reason, c.Message)
-							}
+					waitErr := fw.AsKubeAdmin.ReleaseController.WaitForReleasePipelineToBeFinishedWithRetry(
+						release,
+						managedNamespace,
+						&has.RetryOptions{Retries: 2},
+						&release,
+					)
+					if waitErr != nil {
+						// Log rich diagnostics before failing the assertion.
+						if pr, getErr := fw.AsKubeAdmin.ReleaseController.GetPipelineRunInNamespace(managedNamespace, release.Name, release.Namespace); getErr == nil {
 							var failedLogs string
 							if logs, logErr := tekton.GetFailedPipelineRunLogs(
 								fw.AsKubeAdmin.ReleaseController.KubeRest(),
@@ -383,14 +382,9 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 							} else if ecErr != nil {
 								klog.Errorf("release PipelineRun %s/%s could not get verify-conforma logs: %v", pr.GetNamespace(), pr.GetName(), ecErr)
 							}
-							gomega.Expect(tekton.HasPipelineRunFailed(pr)).NotTo(gomega.BeTrue(), "PipelineRun %s/%s failed", pr.GetNamespace(), pr.GetName())
 						}
-						if !pr.IsDone() {
-							return fmt.Errorf("release pipelinerun %s/%s has not finished yet", pr.GetNamespace(), pr.GetName())
-						}
-						gomega.Expect(tekton.HasPipelineRunSucceeded(pr)).To(gomega.BeTrue(), "PipelineRun %s/%s did not succeed", pr.GetNamespace(), pr.GetName())
-						return nil
-					}, releasePipelineTimeout, constants.PipelineRunPollingInterval).Should(gomega.Succeed(), "release PipelineRun did not complete successfully")
+					}
+					gomega.Expect(waitErr).NotTo(gomega.HaveOccurred(), "release PipelineRun did not complete successfully")
 				})
 			})
 

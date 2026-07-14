@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	"fmt"
 	"net/url"
+	"strconv"
 
 	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -139,6 +140,85 @@ type DexDeploymentSpec struct {
 	Config *dex.DexParams `json:"config,omitempty"`
 }
 
+// RuntimeConfigSpec defines frontend runtime configuration for the Konflux UI.
+// Each field maps to a window.KONFLUX_RUNTIME property injected into the SPA
+// via runtime-config.js. The All() iterator provides the canonical mapping
+// from typed fields to environment variable names.
+type RuntimeConfigSpec struct {
+	// ChatBot configures the AI chatbot feature in the UI.
+	// +optional
+	ChatBot *ChatBotConfig `json:"chatBot,omitempty"`
+	// Monitoring configures error monitoring (e.g. Sentry) for the UI frontend.
+	// +optional
+	Monitoring *MonitoringConfig `json:"monitoring,omitempty"`
+}
+
+// ChatBotConfig configures the AI chatbot feature in the UI.
+type ChatBotConfig struct {
+	// Enabled controls whether the chatbot UI is visible to users.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// MonitoringConfig configures error monitoring (e.g. Sentry) for the UI frontend.
+type MonitoringConfig struct {
+	// Enabled controls whether error monitoring is active.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+	// DSN is the data source name (e.g. Sentry DSN) for error reporting.
+	// +optional
+	DSN string `json:"dsn,omitempty"`
+	// Environment identifies the deployment environment (e.g. "staging", "production").
+	// +optional
+	Environment string `json:"environment,omitempty"`
+	// Cluster identifies the cluster name for error reports.
+	// +optional
+	Cluster string `json:"cluster,omitempty"`
+	// SampleRateErrors controls the error event sample rate (0.0 to 1.0).
+	// +optional
+	// +kubebuilder:validation:Pattern=`^(0(\.\d+)?|1(\.0+)?)$`
+	SampleRateErrors string `json:"sampleRateErrors,omitempty"`
+}
+
+// All iterates over all set runtime config entries, yielding the environment
+// variable name and its string value. Only fields with non-nil/non-empty values
+// are yielded. This is the single source of truth for the field-to-env-var mapping.
+func (r *RuntimeConfigSpec) All(yield func(key, value string) bool) {
+	if r.ChatBot != nil && r.ChatBot.Enabled != nil {
+		if !yield("RUNTIME_CHAT_BOT_ENABLED", strconv.FormatBool(*r.ChatBot.Enabled)) {
+			return
+		}
+	}
+	if r.Monitoring != nil {
+		m := r.Monitoring
+		if m.Enabled != nil {
+			if !yield("RUNTIME_MONITORING_ENABLED", strconv.FormatBool(*m.Enabled)) {
+				return
+			}
+		}
+		if m.DSN != "" {
+			if !yield("RUNTIME_MONITORING_DSN", m.DSN) {
+				return
+			}
+		}
+		if m.Environment != "" {
+			if !yield("RUNTIME_MONITORING_ENVIRONMENT", m.Environment) {
+				return
+			}
+		}
+		if m.Cluster != "" {
+			if !yield("RUNTIME_MONITORING_CLUSTER", m.Cluster) {
+				return
+			}
+		}
+		if m.SampleRateErrors != "" {
+			if !yield("RUNTIME_MONITORING_SAMPLE_RATE_ERRORS", m.SampleRateErrors) {
+				return
+			}
+		}
+	}
+}
+
 // KonfluxUISpec defines the desired state of KonfluxUI
 type KonfluxUISpec struct {
 	// Ingress defines the ingress configuration for KonfluxUI.
@@ -152,6 +232,15 @@ type KonfluxUISpec struct {
 	// Dex defines customizations for the dex deployment.
 	// +optional
 	Dex *DexDeploymentSpec `json:"dex,omitempty"`
+	// RuntimeConfig defines frontend runtime configuration for the Konflux UI.
+	// These settings are injected as window.KONFLUX_RUNTIME properties in the SPA.
+	// +optional
+	RuntimeConfig *RuntimeConfigSpec `json:"runtimeConfig,omitempty"`
+
+	// ComponentMetrics controls Prometheus scrape resources for this component.
+	// Set by the Konflux reconciler from spec.componentMetrics on the Konflux CR.
+	// +optional
+	ComponentMetrics *ComponentMetricsConfig `json:"componentMetrics,omitempty"`
 }
 
 // IngressStatus defines the observed state of the Ingress configuration.

@@ -40,6 +40,20 @@ spec:
             default: {}
             description: KonfluxUISpec defines the desired state of KonfluxUI
             properties:
+              componentMetrics:
+                description: |-
+                  ComponentMetrics controls Prometheus scrape resources for this component.
+                  Set by the Konflux reconciler from spec.componentMetrics on the Konflux CR.
+                properties:
+                  enabled:
+                    description: |-
+                      Enabled controls whether scrape resources are deployed for metrics-enabled components
+                      (see operator/docs/component-monitoring.md#scope). HTTPS operands on the operator
+                      scrape-token model use reconciler-managed prometheus-scrape-token; legacy interim
+                      operands use static-token HTTP scraping until migrated.
+                      Defaults to true when unset.
+                    type: boolean
+                type: object
               dex:
                 description: Dex defines customizations for the dex deployment.
                 properties:
@@ -1009,6 +1023,47 @@ spec:
                               More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                             type: object
                         type: object
+                    type: object
+                type: object
+              runtimeConfig:
+                description: |-
+                  RuntimeConfig defines frontend runtime configuration for the Konflux UI.
+                  These settings are injected as window.KONFLUX_RUNTIME properties in the SPA.
+                properties:
+                  chatBot:
+                    description: ChatBot configures the AI chatbot feature in the
+                      UI.
+                    properties:
+                      enabled:
+                        description: Enabled controls whether the chatbot UI is visible
+                          to users.
+                        type: boolean
+                    type: object
+                  monitoring:
+                    description: Monitoring configures error monitoring (e.g. Sentry)
+                      for the UI frontend.
+                    properties:
+                      cluster:
+                        description: Cluster identifies the cluster name for error
+                          reports.
+                        type: string
+                      dsn:
+                        description: DSN is the data source name (e.g. Sentry DSN)
+                          for error reporting.
+                        type: string
+                      enabled:
+                        description: Enabled controls whether error monitoring is
+                          active.
+                        type: boolean
+                      environment:
+                        description: Environment identifies the deployment environment
+                          (e.g. "staging", "production").
+                        type: string
+                      sampleRateErrors:
+                        description: SampleRateErrors controls the error event sample
+                          rate (0.0 to 1.0).
+                        pattern: ^(0(\.\d+)?|1(\.0+)?)$
+                        type: string
                     type: object
                 type: object
             type: object

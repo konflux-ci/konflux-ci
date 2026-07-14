@@ -55,7 +55,7 @@ request changes if **Go toolchain impact** is missing.
 
 | Mistake | Fix |
 |---------|-----|
-| Block every `go.mod` PR for openshift/release | Triage; deps-only = routine |
+| Block every `go.mod` PR for openshift/release | Triage; dependency-only changes = routine |
 | `GOTOOLCHAIN=auto` on RHEL Prow builders | Bump `build_root` image; `local` wins |
 | Match golang tag to cluster variant (`ocp420` → 4.21 golang) | Builder stream ≠ cluster version; see reference |
 | Fix only konflux-ci when `test/go-tests` `go` rose | Rebuild `redhat-appstudio/ci:e2e-test-runner` |

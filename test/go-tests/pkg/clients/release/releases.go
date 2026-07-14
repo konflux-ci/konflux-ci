@@ -6,14 +6,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/clients/has"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/constants"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/logs"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/utils/tekton"
 	releaseApi "github.com/konflux-ci/release-service/api/v1alpha1"
+	releaseMetadata "github.com/konflux-ci/release-service/metadata"
 	ginkgo "github.com/onsi/ginkgo/v2"
 	pipeline "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbac "k8s.io/api/rbac/v1"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -228,3 +231,170 @@ func (r *Controller) WaitForReleasePipelineToBeFinished(release *releaseApi.Rele
 		return false, nil
 	})
 }
+
+// DeleteRelease deletes a Release CR from the given namespace.
+func (r *Controller) DeleteRelease(name, namespace string) error {
+	release := &releaseApi.Release{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+	}
+	err := r.KubeRest().Delete(context.Background(), release)
+	if err != nil && !k8sErrors.IsNotFound(err) {
+		return fmt.Errorf("delete Release %s/%s: %w", namespace, name, err)
+	}
+	return nil
+}
+
+// pipelineRunHasTransientFailure checks whether a failed PipelineRun failed due
+// to a transient image-pull error (TaskRunImagePullFailed or truncated pull).
+// It inspects both child TaskRun conditions and the PipelineRun-level condition.
+func pipelineRunHasTransientFailure(pr *pipeline.PipelineRun, c client.Client) bool {
+	for _, chr := range pr.Status.ChildReferences {
+		taskRun := &pipeline.TaskRun{}
+		key := types.NamespacedName{Namespace: pr.Namespace, Name: chr.Name}
+		if err := c.Get(context.Background(), key, taskRun); err != nil {
+			continue
+		}
+		for _, cond := range taskRun.Status.Conditions {
+			if cond.Reason == "TaskRunImagePullFailed" {
+				return true
+			}
+		}
+	}
+	// PipelineRun-level reason is often just "Failed"; fall back to message.
+	cond := pr.GetStatusCondition().GetCondition(apis.ConditionSucceeded)
+	if cond == nil {
+		return false
+	}
+	return cond.Reason == "TaskRunImagePullFailed" ||
+		strings.Contains(cond.Message, "TaskRunImagePullFailed") ||
+		strings.Contains(cond.Message, "unexpected EOF")
+}
+
+// WaitForReleasePipelineToBeFinishedWithRetry waits for the managed release
+// PipelineRun to succeed. On transient image-pull failures it deletes the failed
+// Release and creates a new one for the same snapshot/ReleasePlan, mirroring the
+// build-pipeline retry logic in has.WaitForComponentPipelineToBeFinished.
+//
+// releaseToUpdate, when non-nil, is set to the (possibly new) Release CR so that
+// downstream assertions use the correct Release name.
+func (r *Controller) WaitForReleasePipelineToBeFinishedWithRetry(
+	release *releaseApi.Release,
+	managedNamespace string,
+	retryOpts *has.RetryOptions,
+	releaseToUpdate **releaseApi.Release,
+) error {
+	if retryOpts == nil {
+		retryOpts = &has.RetryOptions{Retries: 2}
+	}
+
+	attempts := 1
+	current := release
+	baseName := release.Name
+
+	// Always update releaseToUpdate on exit so callers reference the
+	// latest Release for diagnostics, even on the error path.
+	defer func() {
+		if releaseToUpdate != nil {
+			*releaseToUpdate = current
+		}
+	}()
+
+	for {
+		err := wait.PollUntilContextTimeout(
+			context.Background(),
+			constants.PipelineRunPollingInterval,
+			releasePipelineTimeout,
+			true,
+			func(ctx context.Context) (bool, error) {
+				pr, getErr := r.GetPipelineRunInNamespace(managedNamespace, current.Name, current.Namespace)
+				if getErr != nil {
+					ginkgo.GinkgoWriter.Printf("waiting for release PipelineRun for %s/%s\n", current.Namespace, current.Name)
+					return false, nil
+				}
+				if !pr.IsDone() {
+					return false, nil
+				}
+				if tekton.HasPipelineRunSucceeded(pr) {
+					return true, nil
+				}
+				failedLogs, _ := tekton.GetFailedPipelineRunLogs(r.KubeRest(), r.KubeInterface(), pr)
+				if strings.TrimSpace(failedLogs) == "" {
+					cond := pr.GetStatusCondition().GetCondition(apis.ConditionSucceeded)
+					if cond != nil {
+						failedLogs = cond.GetReason()
+						if msg := cond.GetMessage(); msg != "" {
+							failedLogs = failedLogs + ": " + msg
+						}
+					}
+				}
+				return false, fmt.Errorf("%s", failedLogs)
+			},
+		)
+
+		if err == nil {
+			return nil
+		}
+
+		pr, _ := r.GetPipelineRunInNamespace(managedNamespace, current.Name, current.Namespace)
+		transient := pr != nil && pipelineRunHasTransientFailure(pr, r.KubeRest())
+		if attempts > retryOpts.Retries || (!retryOpts.Always && !transient) {
+			return err
+		}
+
+		ginkgo.GinkgoWriter.Printf(
+			"attempt %d/%d: release %s/%s failed with transient error, recreating Release: %v\n",
+			attempts, retryOpts.Retries, current.Namespace, current.Name, err,
+		)
+
+		snapshotName := current.Spec.Snapshot
+		releasePlan := current.Spec.ReleasePlan
+		tenantNS := current.Namespace
+		labels := current.Labels
+
+		if delErr := r.DeleteRelease(current.Name, tenantNS); delErr != nil {
+			return fmt.Errorf("delete failed Release %s/%s: %w", tenantNS, current.Name, delErr)
+		}
+
+		suffix := fmt.Sprintf("-r%d", attempts)
+		base := baseName
+		if maxBase := 63 - len(suffix); len(base) > maxBase {
+			base = strings.TrimRight(base[:maxBase], "-")
+		}
+		retryName := base + suffix
+
+		newRelease := &releaseApi.Release{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      retryName,
+				Namespace: tenantNS,
+				Labels:    labels,
+			},
+			Spec: releaseApi.ReleaseSpec{
+				Snapshot:    snapshotName,
+				ReleasePlan: releasePlan,
+			},
+		}
+		if createErr := r.KubeRest().Create(context.Background(), newRelease); createErr != nil {
+			return fmt.Errorf("recreate Release for snapshot %q: %w", snapshotName, createErr)
+		}
+
+		// If the original Release was automated, patch Status.Automated on the
+		// retry so the release-service validateAuthor check does not reject it.
+		// Integration-service sets both the label and Status.Automated on the
+		// initial Release; the retry helper must replicate the status side.
+		if newRelease.Labels[releaseMetadata.AutomatedLabel] == "true" {
+			patch := client.MergeFrom(newRelease.DeepCopy())
+			newRelease.SetAutomated()
+			if patchErr := r.KubeRest().Status().Patch(context.Background(), newRelease, patch); patchErr != nil {
+				return fmt.Errorf("patch Status.Automated on retry Release %s/%s: %w", tenantNS, retryName, patchErr)
+			}
+		}
+
+		current = newRelease
+		attempts++
+	}
+}
+
+const releasePipelineTimeout = 15 * time.Minute

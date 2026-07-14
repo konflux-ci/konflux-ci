@@ -35,6 +35,15 @@ spec:
             limits:
               cpu: 30m
               memory: 128Mi
+      # runtimeConfig:
+      #   chatBot:
+      #     enabled: false
+      #   monitoring:
+      #     enabled: true
+      #     dsn: "https://example@sentry.io/123456"
+      #     environment: "staging"
+      #     cluster: "my-cluster"
+      #     sampleRateErrors: "1.0"
       dex:
         config:
           enablePasswordDB: true

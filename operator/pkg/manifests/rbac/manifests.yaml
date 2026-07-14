@@ -340,6 +340,23 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
+    rbac.konflux-ci.dev/aggregate-to-admin: "true"
+    rbac.konflux-ci.dev/aggregate-to-contributor: "true"
+    rbac.konflux-ci.dev/aggregate-to-maintainer: "true"
+    rbac.konflux-ci.dev/aggregate-to-viewer: "true"
+  name: konflux-kueue-visibility
+rules:
+- apiGroups:
+  - visibility.kueue.x-k8s.io
+  resources:
+  - localqueues/pendingworkloads
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
     rbac.konflux-ci.dev/aggregate-to-maintainer: "true"
   name: konflux-maintainer-user-actions-core
 rules:

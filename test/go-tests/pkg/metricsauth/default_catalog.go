@@ -78,6 +78,18 @@ func DefaultCatalog() (*Catalog, error) {
 					ScrapeTokenSecret:        kubernetes.ScrapeTokenSecretName,
 					BodyMustMatchAny:         prometheusBodyMatchers,
 				},
+				{
+					ID:                       "konflux-ui-proxy",
+					Group:                    TargetGroupComponent,
+					Namespace:                "konflux-ui",
+					Service:                  "proxy",
+					Scheme:                   "http",
+					PortName:                 "metrics",
+					Port:                     2112,
+					Path:                     "/metrics",
+					MetricsReaderClusterRole: "konflux-ui-proxy-metrics-reader",
+					BodyMustMatchAny:         []string{"caddy_"},
+				},
 			},
 		}
 		defaultCatalogErr = catalog.validate()

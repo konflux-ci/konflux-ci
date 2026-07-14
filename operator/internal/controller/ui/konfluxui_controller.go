@@ -52,6 +52,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/hashedconfigmap"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/hashedsecret"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/ingress"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/oauth2proxy"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/segment"
@@ -107,7 +108,7 @@ const (
 // UICleanupGVKs defines which resource types should be cleaned up when they are
 // no longer part of the desired state. Only optional/conditional resources are listed here.
 // Always-applied resources don't need cleanup (they're always tracked and never become orphans).
-var UICleanupGVKs = []schema.GroupVersionKind{
+var UICleanupGVKs = append([]schema.GroupVersionKind{
 	// Ingress is optional - only created when spec.ingress.enabled is true
 	{Group: "networking.k8s.io", Version: "v1", Kind: "Ingress"},
 	// ConsoleLink is optional - only created on OpenShift when ingress is enabled
@@ -116,7 +117,7 @@ var UICleanupGVKs = []schema.GroupVersionKind{
 	{Group: "", Version: "v1", Kind: "ServiceAccount"},
 	// Secret is optional - only created for OpenShift OAuth when configureLoginWithOpenShift is true
 	{Group: "", Version: "v1", Kind: "Secret"},
-}
+}, kubernetes.ComponentMetricsOrphanCleanupGVKs...)
 
 // UIClusterScopedAllowList restricts which cluster-scoped resources can be deleted
 // during orphan cleanup. This is a security measure to prevent attackers from
@@ -127,6 +128,14 @@ var UIClusterScopedAllowList = tracking.ClusterScopedAllowList{
 	// ConsoleLink is only created on OpenShift when ingress is enabled
 	{Group: "console.openshift.io", Version: "v1", Kind: "ConsoleLink"}: sets.New(
 		"konflux",
+	),
+	// Metrics-reader ClusterRole is only applied when componentMetrics is enabled
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"}: sets.New(
+		"konflux-ui-proxy-metrics-reader",
+	),
+	// Metrics-reader ClusterRoleBinding is only applied when componentMetrics is enabled
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"}: sets.New(
+		"prometheus-konflux-ui-proxy-metrics-reader",
 	),
 }
 
@@ -150,12 +159,12 @@ type KonfluxUIReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=get;list;watch;create;patch;delete
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=dex;konflux-proxy;konflux-proxy-namespace-lister,verbs=bind;escalate
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=dex;konflux-proxy;konflux-proxy-namespace-lister;konflux-ui-proxy-metrics-reader,verbs=bind;escalate
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=dex;konflux-proxy;konflux-proxy-namespace-lister,verbs=bind
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;patch
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=console.openshift.io,resources=consolelinks,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;patch
+// +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates;issuers,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=config.openshift.io,resources=ingresses,verbs=get
 // +kubebuilder:rbac:groups=dex.coreos.com,resources=*,verbs=*
@@ -297,15 +306,28 @@ func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, tc *tra
 // segmentSecretName is the name of the content-hashed Segment Secret (empty if not configured).
 // endpoint is the base URL used to configure oauth2-proxy.
 func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, dexConfigMapName, segmentSecretName string, endpoint *url.URL) error {
+	log := logf.FromContext(ctx)
+
 	objects, err := r.ObjectStore.GetForComponent(manifests.UI)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for UI: %w", err)
 	}
 
+	metricsEnabled := ui.Spec.ComponentMetrics.IsEnabled()
+
 	// Resolve whether OpenShift login should be enabled
 	openShiftLoginEnabled := isOpenShiftLoginEnabled(ui, r.ClusterInfo)
 
 	for _, obj := range objects {
+		if !metricsEnabled && kubernetes.IsComponentMetricsScrapeResource(obj) {
+			log.V(1).Info("Skipping component metrics scrape resource",
+				"kind", tracking.GetKind(obj),
+				"name", obj.GetName(),
+				"namespace", obj.GetNamespace(),
+			)
+			continue
+		}
+
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
 			if err := applyUIDeploymentCustomizations(deployment, ui, r.ClusterInfo, dexConfigMapName, segmentSecretName, endpoint); err != nil {
@@ -345,7 +367,7 @@ func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv
 		// OpenShift SCCs inject a numeric UID automatically so this is only
 		// needed on non-OpenShift (e.g. Kind).
 		needsRunAsUser := clusterInfo == nil || !clusterInfo.IsOpenShift()
-		proxyOverlay, err := buildProxyOverlay(ui.Spec.Proxy, segmentSecretName, needsRunAsUser, oauth2ProxyOpts...)
+		proxyOverlay, err := buildProxyOverlay(ui.Spec.Proxy, ui.Spec.RuntimeConfig, segmentSecretName, needsRunAsUser, oauth2ProxyOpts...)
 		if err != nil {
 			return err
 		}
@@ -405,10 +427,11 @@ func applyUIServiceAccountCustomizations(serviceAccount *corev1.ServiceAccount, 
 }
 
 // buildProxyOverlay builds the pod overlay for the proxy deployment.
+// runtimeConfig sets RUNTIME_* env vars on the generate-proxy-config init container.
 // segmentSecretName is the content-hashed Secret name (empty if segment is not configured).
 // needsRunAsUser injects runAsUser on the reverse-proxy container for non-OpenShift clusters.
 // oauth2ProxyOpts are applied to the oauth2-proxy container before user-provided overrides.
-func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, segmentSecretName string, needsRunAsUser bool, oauth2ProxyOpts ...customization.ContainerOption) (*customization.PodOverlay, error) {
+func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, runtimeConfig *konfluxv1alpha1.RuntimeConfigSpec, segmentSecretName string, needsRunAsUser bool, oauth2ProxyOpts ...customization.ContainerOption) (*customization.PodOverlay, error) {
 	// Create CA bundle volume that will be mounted in oauth2-proxy container.
 	// The Secret is created by cert-manager from the oauth2-proxy-cert Certificate resource
 	// (see operator/upstream-kustomizations/ui/dex/dex.yaml).
@@ -454,7 +477,16 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, segmentSecretN
 		reverseProxyOpts = append(reverseProxyOpts, customization.WithRunAsUser(1001))
 	}
 
+	// Build init container options for runtime config and optional proxy endpoints.
+	var initContainerOpts []customization.ContainerOption
+	initContainerOpts = appendRuntimeConfigOverlays(runtimeConfig, initContainerOpts)
+
 	if spec == nil {
+		if len(initContainerOpts) > 0 {
+			podOpts = append(podOpts, customization.WithContainerOpts(
+				generateProxyConfigContainerName, customization.DeploymentContext{}, initContainerOpts...,
+			))
+		}
 		podOpts = append(podOpts,
 			customization.WithContainerBuilder(reverseProxyContainerName, reverseProxyOpts...)(
 				customization.DeploymentContext{},
@@ -466,8 +498,6 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, segmentSecretN
 		return customization.NewPodOverlay(podOpts...), nil
 	}
 
-	// Build init container options for optional proxy endpoints.
-	var initContainerOpts []customization.ContainerOption
 	var endpointErr error
 	initContainerOpts, podOpts, endpointErr = appendEndpointOverlays(spec.Endpoints, initContainerOpts, podOpts)
 	if endpointErr != nil {
@@ -536,6 +566,24 @@ func appendEndpointOverlays(
 	}
 
 	return initOpts, podOpts, nil
+}
+
+// appendRuntimeConfigOverlays adds RUNTIME_* env vars to the generate-proxy-config
+// init container for each configured runtime config field. The env vars are read
+// by generate-proxy-config.sh to produce runtime-config.js.
+func appendRuntimeConfigOverlays(
+	runtimeConfig *konfluxv1alpha1.RuntimeConfigSpec,
+	initOpts []customization.ContainerOption,
+) []customization.ContainerOption {
+	if runtimeConfig == nil {
+		return initOpts
+	}
+	for key, value := range runtimeConfig.All {
+		initOpts = append(initOpts, customization.WithEnv(corev1.EnvVar{
+			Name: key, Value: value,
+		}))
+	}
+	return initOpts
 }
 
 // buildOAuth2ProxyOptions builds the container options for oauth2-proxy configuration.

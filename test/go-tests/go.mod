@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/coder/websocket v1.8.15
-	github.com/codeready-toolchain/api v0.0.0-20260623133516-6f421bfacf3d
+	github.com/codeready-toolchain/api v0.0.0-20260709092545-4fb0bb97aa86
 	github.com/conforma/crds/api v0.1.11
 	github.com/devfile/library/v2 v2.4.0
 	github.com/docker/cli v29.6.1+incompatible
@@ -14,8 +14,8 @@ require (
 	github.com/h2non/gock v1.2.0
 	github.com/konflux-ci/application-api v0.0.0-20260603073049-dd8c9b1a64c2
 	github.com/konflux-ci/build-service v0.0.0-20240611083846-2dee6cfe6fe4
-	github.com/konflux-ci/image-controller v0.0.0-20260630090021-17b36a2806d5
-	github.com/konflux-ci/integration-service v0.0.0-20260630105459-3e5f7eb3051c
+	github.com/konflux-ci/image-controller v0.0.0-20260707130333-455617736338
+	github.com/konflux-ci/integration-service v0.0.0-20260710102619-c30c34eba024
 	github.com/konflux-ci/konflux-ci/operator v0.0.0
 	github.com/konflux-ci/operator-toolkit v0.0.0-20260312101100-d4e398191a68
 	github.com/konflux-ci/release-service v0.0.0-20260702132032-13a2f0156858
@@ -37,9 +37,9 @@ require (
 	k8s.io/apimachinery v0.36.2
 	k8s.io/client-go v11.0.0+incompatible
 	k8s.io/klog/v2 v2.140.0
-	k8s.io/utils v0.0.0-20260626114624-be93311217bd
+	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3
 	knative.dev/pkg v0.0.0-20260622140654-39ebae2ee2dc
-	oras.land/oras-go/v2 v2.6.1
+	oras.land/oras-go/v2 v2.6.2
 	sigs.k8s.io/controller-runtime v0.24.1
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -192,7 +192,7 @@ require (
 	golang.org/x/exp v0.0.0-20260611194520-c48552f49976 // indirect
 	golang.org/x/mod v0.37.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/sync v0.21.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/term v0.44.0 // indirect
 	golang.org/x/text v0.38.0 // indirect

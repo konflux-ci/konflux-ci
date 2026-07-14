@@ -68,6 +68,8 @@ spec:
         - name: service-ca
           mountPath: /mnt/service-ca
           readOnly: true
+        - name: static-content
+          mountPath: /opt/app-root/src/static-content
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true

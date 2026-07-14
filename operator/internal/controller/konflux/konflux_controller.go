@@ -548,6 +548,7 @@ func (r *KonfluxReconciler) applyKonfluxUI(ctx context.Context, tc *tracking.Cli
 	if owner.Spec.KonfluxUI != nil && owner.Spec.KonfluxUI.Spec != nil {
 		spec = *owner.Spec.KonfluxUI.Spec
 	}
+	spec.ComponentMetrics = common.ForwardedComponentMetrics(owner)
 
 	ui := &konfluxv1alpha1.KonfluxUI{
 		TypeMeta: metav1.TypeMeta{

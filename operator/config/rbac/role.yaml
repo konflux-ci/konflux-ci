@@ -449,6 +449,7 @@ rules:
   - dex
   - konflux-proxy
   - konflux-proxy-namespace-lister
+  - konflux-ui-proxy-metrics-reader
   resources:
   - clusterroles
   verbs:

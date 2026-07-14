@@ -2,7 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
 # renovate: datasource=git-refs depName=https://github.com/kyverno/kyverno versioning=semver
-- https://github.com/kyverno/kyverno/releases/download/v1.18.1/install.yaml
+- https://github.com/kyverno/kyverno/releases/download/v1.18.2/install.yaml
 - kyverno-rbac.yaml
 
 patches:
@@ -54,7 +54,7 @@ patches:
     kind: Deployment
     name: kyverno-background-controller
     namespace: kyverno
-# OpenShift restricted-v2: upstream 1.18.1 sets runAsUser/runAsGroup 65534, which is outside the
+# OpenShift restricted-v2: upstream Kyverno sets runAsUser/runAsGroup 65534 by default, which is outside the
 # namespace UID range. Remove so SCC (OCP) or the image default (Kind) can assign a non-root UID.
 - patch: |-
     - op: remove

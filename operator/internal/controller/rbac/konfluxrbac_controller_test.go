@@ -40,6 +40,7 @@ const (
 	builderBotClusterRole       = "konflux-builder-bot-actions"
 	contributorCoreClusterRole  = "konflux-contributor-user-actions-core"
 	contributorExtraClusterRole = "konflux-contributor-user-actions-extra"
+	kueueVisibilityClusterRole  = "konflux-kueue-visibility"
 	maintainerCoreClusterRole   = "konflux-maintainer-user-actions-core"
 	maintainerExtraClusterRole  = "konflux-maintainer-user-actions-extra"
 	releaserBotClusterRole      = "konflux-releaser-bot-actions"
@@ -58,6 +59,7 @@ func rbacClusterScopedChildren() []client.Object {
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: builderBotClusterRole}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: contributorCoreClusterRole}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: contributorExtraClusterRole}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: kueueVisibilityClusterRole}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: maintainerCoreClusterRole}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: maintainerExtraClusterRole}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: releaserBotClusterRole}},
@@ -121,6 +123,7 @@ var _ = Describe("KonfluxRBAC Controller", func() {
 				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 			},
 			Entry("admin-user-actions-core", adminCoreClusterRole),
+			Entry("kueue-visibility", kueueVisibilityClusterRole),
 			Entry("releaser-bot-actions", releaserBotClusterRole),
 			Entry("self-access-reviewer", selfAccessClusterRole),
 		)
@@ -166,6 +169,7 @@ var _ = Describe("KonfluxRBAC Controller", func() {
 				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 			},
 			Entry("admin-user-actions-core", adminCoreClusterRole),
+			Entry("kueue-visibility", kueueVisibilityClusterRole),
 			Entry("releaser-bot-actions", releaserBotClusterRole),
 			Entry("self-access-reviewer", selfAccessClusterRole),
 		)

@@ -20,6 +20,17 @@ spec:
       nginx.ingress.kubernetes.io/proxy-body-size: "10m"
     tlsSecretName: "konflux-ui-tls"
 
+  # Frontend runtime configuration (injected as window.KONFLUX_RUNTIME properties)
+  runtimeConfig:
+    chatBot:
+      enabled: false
+    monitoring:
+      enabled: true
+      dsn: "https://example@sentry.io/123456"
+      environment: "staging"
+      cluster: "stone-stage-p01"
+      sampleRateErrors: "1.0"
+
   # Proxy deployment configuration
   proxy:
     replicas: 3
