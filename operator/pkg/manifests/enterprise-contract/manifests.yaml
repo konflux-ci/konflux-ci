@@ -423,4 +423,4 @@ spec:
     - github.com/redhat-appstudio/tsf-conforma-data//data?ref=1966f21842d507441a7a5e1c7de9071cf3f9ec53
     name: Default
     policy:
-    - oci::quay.io/conforma/release-policy:latest@sha256:4b56dc3d04f3dd372b1db1b38fa02ef8bad0799f354de0c011ac5eba106e0541
+    - oci::quay.io/conforma/release-policy:latest@sha256:2a851b5d56259ba46391f72bc4e75ed5475510dce5ae47d054b72baf1e908d26
