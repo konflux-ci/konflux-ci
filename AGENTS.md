@@ -141,6 +141,42 @@ skip/review rules, pre-label heuristics, and `ready-for-merge` behavior, apply
 - **Runnable lifecycle cleanup** — Any `Start()` method or `Runnable` that creates channels, tickers, or goroutines must clean them up when the context is cancelled. Close subscriber channels and stop tickers (via `defer`) before returning.
 - **Interface minimality** — Reconciler structs should depend on the narrowest type needed. If a reconciler only consumes events from a broadcaster, accept a `<-chan event.TypedGenericEvent[client.Object]`, not the broadcaster itself. Wire via `Subscribe()` in `main.go`.
 
+### Component monitoring onboarding
+
+When adding Prometheus metrics scraping for a new operator component, complete every item below. All steps are required — they follow the established pattern across build-service, image-controller, integration-service, and UI. See `operator/docs/component-monitoring.md` for architectural context and scrape model details.
+
+**API and code generation:**
+
+1. Add `ComponentMetrics *ComponentMetricsConfig` field (with JSON tag `componentMetrics,omitempty`) to the component's spec type in `operator/api/v1alpha1/`
+2. Add a `NewKonflux<Component>Spec` constructor in `operator/api/v1alpha1/operand_specs.go` (or extend the existing one) that accepts `*ComponentMetricsConfig` and wires it into the spec
+3. Run `make manifests generate` from `operator/` to regenerate deepcopy and CRD schemas
+
+**Konflux reconciler (top-down config flow):**
+
+4. In the Konflux reconciler (`operator/internal/controller/konflux/konflux_controller.go`), forward `componentMetrics` from the parent Konflux CR to the sub-CR spec using `common.ForwardedComponentMetrics(owner)`
+
+**Component reconciler (gating logic):**
+
+5. In the component reconciler, add conditional skip logic for monitoring resources using `kubernetes.IsComponentMetricsScrapeResource` — when `spec.ComponentMetrics.IsEnabled()` is false, skip apply and delete existing scrape objects
+
+**RBAC:**
+
+6. Add the new `<component>-metrics-reader` ClusterRole to the `bind;escalate` kubebuilder RBAC annotation on the component controller
+7. Add a ServiceMonitor RBAC marker with all required verbs: `get;list;watch;create;patch` — omitting `create` will prevent the controller from creating ServiceMonitors
+
+**Orphan cleanup:**
+
+8. Extend orphan cleanup GVKs with `kubernetes.ComponentMetricsOrphanCleanupGVKs` and add ClusterRole/ClusterRoleBinding names to the cluster-scoped resource allowlist in the component reconciler
+
+**Tests:**
+
+9. Add unit tests for both gating paths: `ComponentMetrics: nil` (enabled by default) and `ComponentMetrics: &ComponentMetricsConfig{Enabled: ptr.To(false)}` (disabled, scrape resources skipped/deleted). Follow [ginkgo-testing](skills/ginkgo-testing/SKILL.md) conventions.
+10. Register the new scrape target in the metrics integration test catalog (`test/go-tests/pkg/metricsauth/default_catalog.go`)
+
+**Documentation:**
+
+11. Update `operator/docs/component-monitoring.md` to list the new component under the appropriate scrape model
+
 ## Skills
 
 Detailed guides live in `skills/` — each subdirectory contains a `SKILL.md` with instructions.
