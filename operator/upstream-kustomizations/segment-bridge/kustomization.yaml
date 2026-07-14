@@ -1,8 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-- https://github.com/konflux-ci/segment-bridge/config/base?ref=cc66d3c5369e2a038773ab6c1042737b999c2370
+- https://github.com/konflux-ci/segment-bridge/config/base?ref=eb5fa0da38b4198b5b06eae556946ab83aba1f51
 images:
 - name: quay.io/konflux-ci/segment-bridge
   newName: quay.io/konflux-ci/segment-bridge
-  newTag: cc66d3c5369e2a038773ab6c1042737b999c2370
+  newTag: eb5fa0da38b4198b5b06eae556946ab83aba1f51
