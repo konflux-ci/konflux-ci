@@ -1,11 +1,13 @@
 package config
 
 import (
-	"fmt"
-
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/constants"
-	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/utils"
 )
+
+// testrepoURL is the canonical URL for the test repository. It must always
+// point to konflux-ci/testrepo so that the pinned SHA resolves against the
+// correct fork (where pipeline timeout fixes are applied).
+const testrepoURL = "https://github.com/konflux-ci/testrepo"
 
 var UpstreamAppSpecs = []ApplicationSpec{
 	{
@@ -14,13 +16,13 @@ var UpstreamAppSpecs = []ApplicationSpec{
 		Skip:            false,
 		ComponentSpec: ComponentSpec{
 			Name:                       "konflux-ci-upstream",
-			GitSourceUrl:               fmt.Sprintf("https://github.com/%s/%s", utils.GetEnv(constants.GITHUB_E2E_ORGANIZATION_ENV, "redhat-appstudio-qe"), "testrepo"),
+			GitSourceUrl:               testrepoURL,
 			GitSourceRevision:          "878eb2976b97946f577a8dbb0cc391d5370efbbb",
 			GitSourceDefaultBranchName: "main",
 			DockerFilePath:             "Dockerfile",
 			BuildPipelineType:          constants.DockerBuildOciTAMin,
 			IntegrationTestScenario: IntegrationTestScenarioSpec{
-				GitURL:      fmt.Sprintf("https://github.com/%s/%s", utils.GetEnv(constants.GITHUB_E2E_ORGANIZATION_ENV, "redhat-appstudio-qe"), "testrepo"),
+				GitURL:      testrepoURL,
 				GitRevision: "878eb2976b97946f577a8dbb0cc391d5370efbbb",
 				TestPath:    "integration-tests/testrepo-integration.yaml",
 			},
