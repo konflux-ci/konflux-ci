@@ -60,6 +60,7 @@ After changing APIs or RBAC annotations, run `make manifests generate` from `ope
 
 - Shell: `set -euo pipefail`, quote variables. Scripts that run on the user's host (deployment scripts, CLI helpers, and scripts stored in ConfigMaps that users fetch and run locally) must be compatible with both Linux and macOS — avoid GNU-only flags, prefer POSIX-compatible constructs, and test with both GNU and BSD coreutils (e.g. `sed`, `date`, `readlink`)
 - Go: Standard formatting, Ginkgo for tests, Gomega for assertions/matchers (all test types: unit, functional, e2e)
+- Go (test client code in `test/go-tests/`): Always use nil-safe `Get*()` getters on `go-github` types (e.g., `pr.GetHead().GetRepo().GetCloneURL()`, `pr.GetHead().GetRef()`) instead of directly dereferencing pointer fields (`*pr.Head.Repo.CloneURL`, `*pr.Head.Ref`), which can panic on nil.
 - Kustomizations: Pin exact SHAs, not branches
 - Markdown: Update TOC with `npx markdown-toc -i` if structure changes
 - Upstream/downstream: `konflux-ci/konflux-ci` is an upstream repo. Do not reference downstream consumers (e.g., `infra-deployments`) by name in code or comments. Use generic phrasing like "in some environments" or "by external policies" instead.
