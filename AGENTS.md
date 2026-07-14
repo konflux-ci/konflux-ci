@@ -73,6 +73,10 @@ After changing APIs or RBAC annotations, run `make manifests generate` from `ope
 
 For test cleanup patterns (envtest garbage collection, `DeferCleanupParentAndChildren`), `Eventually`/`Consistently` soft-assertion conventions, and K8s API error assertion idioms (`apierrors.IsNotFound()` instead of string matching), see the [ginkgo-testing](skills/ginkgo-testing/SKILL.md) skill.
 
+**Polling/retry testability (`test/go-tests/`):**
+
+When adding polling or retry logic to test clients, make intervals and timeouts configurable on the client struct (with sensible production defaults and zero-means-default semantics). Unit tests should override these to millisecond-scale values so they complete quickly. Always include a test that exercises the timeout/exhaustion path.
+
 **CRD test conventions:**
 
 CRD self-healing and drift-correction tests (`Watches(&CRD{}, MapCRDToRequest)` path) follow these patterns:
