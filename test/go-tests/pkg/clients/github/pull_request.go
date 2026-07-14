@@ -238,7 +238,7 @@ func (c *Client) GetPRDetails(ghRepo string, prID int) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	return *pullRequest.Head.Repo.CloneURL, *pullRequest.Head.Ref, nil
+	return pullRequest.GetHead().GetRepo().GetCloneURL(), pullRequest.GetHead().GetRef(), nil
 }
 
 // GetCheckRunConclusion fetches a specific CheckRun within a given repo
