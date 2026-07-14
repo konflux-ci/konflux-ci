@@ -16,6 +16,14 @@ on:
       - .github/workflows/check-markdown-links.yaml
   merge_group:
     types: [checks_requested]
+    paths:
+      - README.md
+      - CONTRIBUTING.md
+      - RELEASE.md
+      - operator/README.md
+      - operator/docs/content/**
+      - .lychee.toml
+      - .github/workflows/check-markdown-links.yaml
   schedule:
     - cron: '0 6 * * 1'
   workflow_dispatch:

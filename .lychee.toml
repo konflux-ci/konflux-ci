@@ -3,6 +3,8 @@
 include_mail = false
 exclude = [
   '\{\{[<%]',
+  '\}\}',
+  '(?i)^%7b%7b%3c%20relref',  # URL-encoded Hugo shortcode {{< relref
   '^https?://localhost\b',
   '^https?://127\.',
   '^https?://10\.',
