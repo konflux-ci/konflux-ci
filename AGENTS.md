@@ -107,7 +107,7 @@ PRs trigger the following workflows:
 - **Go / `go.mod` PRs:** Apply **go-toolchain-upgrade** (`skills/go-toolchain-upgrade/SKILL.md`) and follow its triage table—do not summarize the workflow from memory.
 - **MintMaker/Renovate parent or companion PRs:** Apply **companion-pr-review** (`skills/companion-pr-review/SKILL.md`) — skip review on companion-eligible parents; review companions lightly.
 - **`.tekton` task/pipeline edits:** `pipeline.yaml` tasks `deploy-konflux-its` and `konflux-e2e-tests-its` hardcode `taskRef.revision: main`. To verify changes, temporarily point both at the PR’s git ref, run operator E2E, then restore `main` before merge (see `.tekton/pipelines/operator-e2e/README.md`).
-- **`integrations/` changes:** Scripts in `integrations/` deploy platform infrastructure (sigstore signing stack, quay image controller). E2E tests do not exercise these scripts, so CI coverage does not validate changes here. When reviewing version bumps or script changes, recommend manual verification on a local cluster before merge.
+- **`integrations/` changes:** Scripts in `integrations/` deploy platform infrastructure (sigstore signing stack, quay integration for image-controller). E2E tests do not exercise these scripts, so CI coverage does not validate changes here. When reviewing version bumps or script changes, recommend manual verification on a local cluster before merge.
 - **Same-repo branches preferred**: E2E tests run automatically
 - **Fork PRs**: Require maintainer `/allow` comment to trigger tests
 - Run kube-linter before submitting
