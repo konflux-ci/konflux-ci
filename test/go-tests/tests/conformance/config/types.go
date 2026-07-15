@@ -34,8 +34,6 @@ type ComponentSpec struct {
 	// Relative path inside the repository containing the component
 	GitSourceContext string `yaml:"gitSourceContext,omitempty"`
 
-	GitSourceDefaultBranchName string `yaml:"gitSourceDefaultBranchName,omitempty"`
-
 	// Relative path of the docker file in the repository
 	DockerFilePath string `yaml:"dockerFilePath,omitempty"`
 

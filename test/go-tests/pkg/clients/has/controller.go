@@ -16,7 +16,7 @@ type Controller struct {
 
 func NewController(k *kube.CustomClient) (*Controller, error) {
 	gh, err := github.NewClient(utils.GetEnv(constants.GITHUB_TOKEN_ENV, ""),
-		utils.GetEnv(constants.GITHUB_E2E_ORGANIZATION_ENV, "redhat-appstudio-qe"))
+		utils.GetEnv(constants.GITHUB_E2E_ORGANIZATION_ENV, constants.DefaultGitHubE2EOrganization))
 	if err != nil {
 		return nil, err
 	}

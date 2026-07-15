@@ -18,37 +18,31 @@ func (c *Client) DeleteRef(ctx context.Context, repository, branchName string) e
 	return nil
 }
 
-// CreateRef creates a new ref (GitHub branch) in a specified GitHub repository,
-// that will be based on the commit specified with sha. If sha is not specified
-// the latest commit from base branch will be used.
-func (c *Client) CreateRef(repository, baseBranchName, sha, newBranchName string) error {
+// CreateBranchAtSHA creates a new branch pointing at the given commit.
+func (c *Client) CreateBranchAtSHA(repository, sha, newBranchName string) error {
+	if sha == "" {
+		return fmt.Errorf("sha is required to create branch '%s' in repo '%s'", newBranchName, repository)
+	}
 	ctx := context.Background()
-	ref, _, err := c.client.Git.GetRef(ctx, c.organization, repository, fmt.Sprintf(HEADS, baseBranchName))
-	if err != nil {
-		return fmt.Errorf("error when getting the base branch name '%s' for the repo '%s': %+v", baseBranchName, repository, err)
-	}
-
-	commitSHA := ref.GetObject().GetSHA()
-	if sha != "" {
-		commitSHA = sha
-	}
-
 	newRef := github.CreateRef{
 		Ref: fmt.Sprintf(HEADS, newBranchName),
-		SHA: commitSHA,
+		SHA: sha,
 	}
-
-	_, _, err = c.client.Git.CreateRef(ctx, c.organization, repository, newRef)
+	_, _, err := c.client.Git.CreateRef(ctx, c.organization, repository, newRef)
 	if err != nil {
-		return fmt.Errorf("error when creating a new branch '%s' for the repo '%s': %+v", newBranchName, repository, err)
+		return fmt.Errorf("error when creating branch '%s' at %s for repo '%s': %+v", newBranchName, sha, repository, err)
 	}
-	err = utils.WaitUntilWithInterval(func() (done bool, err error) {
-		exist, err := c.ExistsRef(repository, newBranchName)
+	return c.waitForRef(repository, newBranchName)
+}
+
+func (c *Client) waitForRef(repository, branchName string) error {
+	err := utils.WaitUntilWithInterval(func() (done bool, err error) {
+		exist, err := c.ExistsRef(repository, branchName)
 		if err != nil {
 			return false, err
 		}
-		if exist && err == nil {
-			return exist, err
+		if exist {
+			return true, nil
 		}
 		return false, nil
 	}, 2*time.Second, 2*time.Minute) //Wait for the branch to actually exist
@@ -72,18 +66,4 @@ func (c *Client) ExistsRef(repository, branchName string) (bool, error) {
 
 func (c *Client) UpdateGithubOrg(githubOrg string) {
 	c.organization = githubOrg
-}
-
-// EnsureBranchExists checks if a branch exists in the repository and creates one from
-// fallback branch if not.
-func (c *Client) EnsureBranchExists(repository, branchName, fallbackBranch string) error {
-	exists, err := c.ExistsRef(repository, branchName)
-	if err != nil {
-		return fmt.Errorf("error checking if branch '%s' exists: %w", branchName, err)
-	}
-	if exists {
-		return nil
-	}
-	// Branch doesn't exist, create it from fallback branch
-	return c.CreateRef(repository, fallbackBranch, "", branchName)
 }
