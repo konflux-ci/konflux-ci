@@ -141,6 +141,7 @@ skip/review rules, pre-label heuristics, and `ready-for-merge` behavior, apply
 - **Runnable lifecycle cleanup** — Any `Start()` method or `Runnable` that creates channels, tickers, or goroutines must clean them up when the context is cancelled. Close subscriber channels and stop tickers (via `defer`) before returning.
 - **Interface minimality** — Reconciler structs should depend on the narrowest type needed. If a reconciler only consumes events from a broadcaster, accept a `<-chan event.TypedGenericEvent[client.Object]`, not the broadcaster itself. Wire via `Subscribe()` in `main.go`.
 - **Component monitoring** — see the controller wiring checklist in [`operator/docs/component-monitoring.md`](operator/docs/component-monitoring.md#controller-wiring-checklist).
+- **Informer cache staleness** — After writing to the API server, do not immediately read the same object via cached `client.Get` — the informer cache may not have caught up. Use write-path return values or carry state forward in reconcile result structs.
 
 ## Skills
 
