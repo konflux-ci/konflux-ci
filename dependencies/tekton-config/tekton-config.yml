@@ -6,6 +6,17 @@ metadata:
 spec:
   profile: basic
   targetNamespace: tekton-pipelines
+  platforms:
+    kubernetes:
+      pipelinesAsCode:
+        enable: true
+        settings:
+          application-name: Local Konflux
+          custom-console-name: Local Konflux
+          custom-console-url: 'https://localhost:9443'
+          custom-console-url-namespace: 'https://localhost:9443/ns/{{ namespace }}'
+          custom-console-url-pr-details: 'https://localhost:9443/ns/{{ namespace }}/pipelinerun/{{ pr }}'
+          custom-console-url-pr-tasklog: 'https://localhost:9443/ns/{{ namespace }}/pipelinerun/{{ pr }}/logs/{{ task }}'
   pruner:
     resources:
     - pipelinerun

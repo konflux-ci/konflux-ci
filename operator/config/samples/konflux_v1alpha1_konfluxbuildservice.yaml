@@ -44,7 +44,7 @@ spec:
           memory: 512Mi
       env:
         - name: PAC_WEBHOOK_URL
-          value: "http://pipelines-as-code-controller.pipelines-as-code.svc.cluster.local:8180"
+          value: "http://pipelines-as-code-controller.tekton-pipelines.svc.cluster.local:8080"
         - name: EXAMPLE_CUSTOM_CONFIG
           valueFrom:
             configMapKeyRef:

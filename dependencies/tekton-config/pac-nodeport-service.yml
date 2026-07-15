@@ -1,0 +1,21 @@
+---
+# NodePort service for external access to the PAC controller.
+# Required for GitLab webhook delivery in e2e tests (GitLab cannot use
+# smee — it needs a publicly reachable endpoint).
+apiVersion: v1
+kind: Service
+metadata:
+  name: pipelines-as-code-controller-nodeport
+  namespace: tekton-pipelines
+  annotations:
+    ignore-check.kube-linter.io/dangling-service: "PAC pods are created at runtime by the Tekton operator"
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/part-of: pipelines-as-code
+  ports:
+    - port: 8180
+      targetPort: 8080
+      nodePort: 30012
+      protocol: TCP

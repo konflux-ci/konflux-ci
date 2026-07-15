@@ -28,8 +28,9 @@ main() {
     fi
 
     "${script_path}/../../deploy-image-controller.sh" "$quay_token" "$quay_org"
-    for ns in pipelines-as-code build-service integration-service; do
-        kubectl -n $ns create secret generic pipelines-as-code-secret \
+    for ns in tekton-pipelines build-service integration-service; do
+        kubectl get namespace "$ns" &>/dev/null || kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
+        kubectl -n "$ns" create secret generic pipelines-as-code-secret \
         --from-literal github-private-key="$app_private_key" \
         --from-literal github-application-id="$app_id" \
         --from-literal webhook.secret="$app_webhook_secret"; done

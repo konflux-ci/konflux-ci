@@ -66,14 +66,20 @@ const (
 	// Container names
 	buildManagerContainerName = "manager"
 
-	// PAC_WEBHOOK_URL is used by the build-service both for triggering pipelines
-	// (internal PaC endpoint) and as the default webhook URL for git repositories.
-	// It is only set on non-OpenShift when no webhookURLs are configured, so that
-	// Kind works out of the box. When webhookURLs are configured, PAC_WEBHOOK_URL
-	// is left unset to avoid overriding the webhook config.
+	// PAC_WEBHOOK_URL is the fallback webhook URL registered on git repositories
+	// when no entry in the webhook config JSON matches. It is only set on
+	// non-OpenShift when no webhookURLs are configured, so that Kind works out
+	// of the box. When webhookURLs are configured, PAC_WEBHOOK_URL is left unset
+	// to avoid registering an internal service URL on unmatched repositories.
 	// On OpenShift, the build-service auto-discovers the PaC Route.
 	pacWebhookURLEnvName      = "PAC_WEBHOOK_URL"
-	pacWebhookURLNonOpenShift = "http://pipelines-as-code-controller.pipelines-as-code.svc.cluster.local:8180"
+	pacWebhookURLNonOpenShift = "http://pipelines-as-code-controller.tekton-pipelines.svc.cluster.local:8080"
+
+	// PAC_NAMESPACE tells build-service where to find the PaC controller Service
+	// for the incoming-event retrigger path. On non-OpenShift (Kind), the Tekton
+	// operator deploys PAC into tekton-pipelines.
+	pacNamespaceEnvName      = "PAC_NAMESPACE"
+	pacNamespaceNonOpenShift = "tekton-pipelines"
 
 	// Webhook config constants for the optional per-provider webhook URL mapping.
 	// The volume, mount, and arg are baked into the manifest with optional: true.
@@ -342,9 +348,19 @@ func buildBuildControllerManagerOverlay(spec konfluxv1alpha1.KonfluxBuildService
 	var containerOpts []customization.ContainerOption
 	var podOpts []customization.PodOverlayOption
 
+	// On non-OpenShift, tell build-service where to find the PaC Service for
+	// the incoming-event retrigger path.
+	if clusterInfo == nil || !clusterInfo.IsOpenShift() {
+		containerOpts = append(containerOpts, customization.WithEnv(corev1.EnvVar{
+			Name:  pacNamespaceEnvName,
+			Value: pacNamespaceNonOpenShift,
+		}))
+	}
+
 	// On non-OpenShift without webhookURLs, set PAC_WEBHOOK_URL so Kind works
 	// without extra configuration. When webhookURLs are configured, leave it
-	// unset so the webhook config JSON takes precedence.
+	// unset — otherwise unmatched repos would get this internal URL registered
+	// as their webhook endpoint.
 	if len(spec.WebhookURLs) == 0 && (clusterInfo == nil || !clusterInfo.IsOpenShift()) {
 		containerOpts = append(containerOpts, customization.WithEnv(corev1.EnvVar{
 			Name:  pacWebhookURLEnvName,

@@ -294,11 +294,11 @@ deploy_upstream_tekton() {
     retry "kubectl apply -k ${script_path}/dependencies/tekton-config" \
           "The Tekton Config resource was not updated within the allocated time"
 
-    echo "  🔄 Setting up Pipeline As Code..." >&2
-    kubectl apply -k "${script_path}/dependencies/pipelines-as-code"
-
-    # Wait for the operator to reconcile after applying the configs
-    kubectl wait --for=condition=Ready tektonconfig/config --timeout=60s
+    # Wait for the operator to reconcile after applying the configs.
+    # PAC is deployed by the Tekton operator via TektonConfig pipelinesAsCode.enable: true;
+    # on a cold image cache the new pods may take longer than 60s to start.
+    retry "kubectl wait --for=condition=Ready tektonconfig/config --timeout=120s" \
+          "TektonConfig did not become ready after config update"
 
     echo "  🔐 Setting up Tekton Chains RBAC..." >&2
     kubectl apply -k "${script_path}/dependencies/tekton-chains-rbac"

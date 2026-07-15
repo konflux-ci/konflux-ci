@@ -78,7 +78,7 @@ ensure_namespace() {
 create_github_integration_secrets() {
     echo "=== Creating GitHub integration secrets ==="
 
-    local pac_ns="pipelines-as-code"
+    local pac_ns="tekton-pipelines"
     if [ "${USE_OPENSHIFT_PIPELINES:-false}" = "true" ]; then
         pac_ns="openshift-pipelines"
     fi

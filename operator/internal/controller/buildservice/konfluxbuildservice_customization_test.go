@@ -708,6 +708,39 @@ func TestApplyBuildServiceDeploymentCustomizations_PaCWebhookURL(t *testing.T) {
 	})
 }
 
+func TestApplyBuildServiceDeploymentCustomizations_PaCNamespace(t *testing.T) {
+	t.Run("sets PAC_NAMESPACE on non-OpenShift", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{}
+
+		deployment := getBuildServiceDeployment(t)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newDefaultClusterInfo(t), "")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		val, found := findEnvValue(managerContainer.Env, pacNamespaceEnvName)
+		g.Expect(found).To(gomega.BeTrue(), "PAC_NAMESPACE should be set on non-OpenShift")
+		g.Expect(val).To(gomega.Equal(pacNamespaceNonOpenShift))
+	})
+
+	t.Run("does not set PAC_NAMESPACE on OpenShift", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{}
+
+		deployment := getBuildServiceDeployment(t)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newOpenShiftClusterInfo(t), "")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		_, found := findEnvValue(managerContainer.Env, pacNamespaceEnvName)
+		g.Expect(found).To(gomega.BeFalse(), "PAC_NAMESPACE should NOT be set on OpenShift")
+	})
+}
+
 func TestApplyBuildServiceDeploymentCustomizations_WebhookConfig(t *testing.T) {
 	t.Run("updates volume reference to hashed ConfigMap", func(t *testing.T) {
 		g := gomega.NewWithT(t)

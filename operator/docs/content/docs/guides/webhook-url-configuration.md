@@ -96,29 +96,37 @@ falls back to its built-in behavior (Route discovery on OpenShift, or the
 
 ## Platform behavior
 
-The `PAC_WEBHOOK_URL` environment variable is used by the build-service both for
-triggering pipelines (internal PaC endpoint) and as the default webhook URL for
-git repositories. Because it takes precedence over the webhook config JSON, the
-operator is careful about when it sets this variable:
+The build-service uses two environment variables for PaC communication:
 
-| Platform | `webhookURLs` configured? | `PAC_WEBHOOK_URL` |
-|----------|--------------------------|-------------------|
-| OpenShift | No | Not set — build-service auto-discovers the PaC Route |
-| OpenShift | Yes | Not set — webhook config JSON controls webhook URLs |
-| Non-OpenShift (Kind) | No | Set to `pipelines-as-code:8180` — Kind works out of the box |
-| Non-OpenShift (Kind) | Yes | **Not set** — webhook config JSON takes precedence |
+- **`PAC_WEBHOOK_URL`** — A fallback webhook URL used when no entry in the
+  webhook config JSON matches the repository. The operator only sets it when
+  no `webhookURLs` are configured — otherwise unmatched repositories would get
+  an internal cluster URL registered as their webhook endpoint.
+- **`PAC_NAMESPACE`** — Tells build-service where to find the PaC controller
+  Service for **in-cluster retrigger** operations (the `/incoming` endpoint).
+  The retrigger path goes directly to the PaC controller inside the cluster
+  rather than through the external webhook chain.
 
-When `webhookURLs` are configured, `PAC_WEBHOOK_URL` is left unset so the
-webhook config JSON controls which URLs are configured on git repositories.
+| Platform | `webhookURLs` configured? | `PAC_WEBHOOK_URL` | `PAC_NAMESPACE` |
+|----------|--------------------------|-------------------|-----------------|
+| OpenShift | No | Not set — build-service auto-discovers the PaC Route | Not set — defaults to `openshift-pipelines` |
+| OpenShift | Yes | Not set — webhook config JSON controls webhook URLs | Not set — defaults to `openshift-pipelines` |
+| Non-OpenShift | No | Set to `http://pipelines-as-code-controller.tekton-pipelines.svc.cluster.local:8080` | Set to `tekton-pipelines` |
+| Non-OpenShift | Yes | **Not set** — unmatched repos would get an internal URL | Set to `tekton-pipelines` |
+
+When `webhookURLs` are configured, `PAC_WEBHOOK_URL` is left unset so that
+repositories not matching any prefix fall through to Route discovery (OpenShift)
+rather than getting an internal service URL registered as their webhook.
+`PAC_NAMESPACE` is always set on non-OpenShift regardless of `webhookURLs`,
+because retrigger always uses in-cluster communication.
 
 User-specified values via the CR always take precedence over operator defaults.
 
-## Advanced: overriding PAC_WEBHOOK_URL
+## Advanced: overriding PAC_WEBHOOK_URL or PAC_NAMESPACE
 
-If you need to explicitly set `PAC_WEBHOOK_URL` (e.g., for internal PaC
-communication on a non-OpenShift cluster where the default service URL is
-not correct), you can override it through the generic environment variable
-mechanism:
+If you need to explicitly set these variables (e.g., PaC is deployed in a
+non-standard namespace), you can override them through the generic environment
+variable mechanism:
 
 ```yaml
 spec:
@@ -129,10 +137,12 @@ spec:
           env:
             - name: PAC_WEBHOOK_URL
               value: "http://custom-pac-endpoint:8080"
+            - name: PAC_NAMESPACE
+              value: "my-custom-pac-namespace"
 ```
 
-Note that setting `PAC_WEBHOOK_URL` will override the webhook config JSON for
-any repositories not matched by a specific prefix in `webhookURLs`.
+Note that `PAC_WEBHOOK_URL` acts as a fallback — it is used for any repository
+that does not match a prefix in the webhook config JSON.
 
 ## Disabling TLS verification for webhooks
 
