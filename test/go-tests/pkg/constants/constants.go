@@ -7,6 +7,7 @@ type BuildPipelineType string
 const (
 	GITHUB_TOKEN_ENV            string = "GITHUB_TOKEN"            // #nosec
 	GITHUB_E2E_ORGANIZATION_ENV string = "MY_GITHUB_ORG"           // #nosec
+	DefaultGitHubE2EOrganization string = "konflux-ci"
 	QUAY_E2E_ORGANIZATION_ENV   string = "QUAY_E2E_ORGANIZATION"   // #nosec
 
 	TEKTON_CHAINS_NS string = "openshift-pipelines" // #nosec

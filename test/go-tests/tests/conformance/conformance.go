@@ -135,7 +135,7 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 			ginkgo.It("creates new branch for the build", ginkgo.Label(devEnvTestLabel, upstreamKonfluxTestLabel), func() {
 				componentNewBaseBranch = fmt.Sprintf("base-%s", util.GenerateRandomString(6))
 				gitRevision = componentNewBaseBranch
-				err = fw.AsKubeAdmin.CommonController.GitHub.CreateRef(componentRepositoryName, appSpec.ComponentSpec.GitSourceDefaultBranchName, appSpec.ComponentSpec.GitSourceRevision, componentNewBaseBranch)
+				err = fw.AsKubeAdmin.CommonController.GitHub.CreateBranchAtSHA(componentRepositoryName, appSpec.ComponentSpec.GitSourceRevision, componentNewBaseBranch)
 				gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			})
 
