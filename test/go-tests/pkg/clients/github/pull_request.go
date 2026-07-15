@@ -238,7 +238,12 @@ func (c *Client) GetPRDetails(ghRepo string, prID int) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	return pullRequest.GetHead().GetRepo().GetCloneURL(), pullRequest.GetHead().GetRef(), nil
+	cloneURL := pullRequest.GetHead().GetRepo().GetCloneURL()
+	ref := pullRequest.GetHead().GetRef()
+	if cloneURL == "" || ref == "" {
+		return "", "", fmt.Errorf("incomplete PR head metadata for %s#%d: cloneURL=%q, ref=%q", ghRepo, prID, cloneURL, ref)
+	}
+	return cloneURL, ref, nil
 }
 
 // GetCheckRunConclusion fetches a specific CheckRun within a given repo
