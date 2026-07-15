@@ -248,7 +248,14 @@ func (r *Controller) DeleteRelease(name, namespace string) error {
 }
 
 // pipelineRunHasTransientFailure checks whether a failed PipelineRun failed due
-// to a transient image-pull error (TaskRunImagePullFailed or truncated pull).
+// to a transient error that is worth retrying. Transient failures include:
+//   - TaskRunImagePullFailed — image-pull flakes (child TaskRun or PipelineRun condition)
+//   - CouldntGetPipeline — pipeline-level resolver timeout (e.g. git resolver
+//     exceeding Tekton's global resolution timeout)
+//   - CouldntGetTask — task-level resolver timeout
+//   - "unexpected EOF" or "resolution took longer than global timeout" in the
+//     condition message
+//
 // It inspects both child TaskRun conditions and the PipelineRun-level condition.
 func pipelineRunHasTransientFailure(pr *pipeline.PipelineRun, c client.Client) bool {
 	for _, chr := range pr.Status.ChildReferences {
@@ -263,18 +270,25 @@ func pipelineRunHasTransientFailure(pr *pipeline.PipelineRun, c client.Client) b
 			}
 		}
 	}
-	// PipelineRun-level reason is often just "Failed"; fall back to message.
+	// PipelineRun-level reason covers both direct task/pipeline failures
+	// and resolver timeouts. Fall back to message for truncated or
+	// generic reasons.
 	cond := pr.GetStatusCondition().GetCondition(apis.ConditionSucceeded)
 	if cond == nil {
 		return false
 	}
-	return cond.Reason == "TaskRunImagePullFailed" ||
+	reason := cond.Reason
+	return reason == "TaskRunImagePullFailed" ||
+		reason == "CouldntGetPipeline" ||
+		reason == "CouldntGetTask" ||
 		strings.Contains(cond.Message, "TaskRunImagePullFailed") ||
-		strings.Contains(cond.Message, "unexpected EOF")
+		strings.Contains(cond.Message, "unexpected EOF") ||
+		strings.Contains(cond.Message, "resolution took longer than global timeout")
 }
 
 // WaitForReleasePipelineToBeFinishedWithRetry waits for the managed release
-// PipelineRun to succeed. On transient image-pull failures it deletes the failed
+// PipelineRun to succeed. On transient failures (image-pull flakes, resolver
+// timeouts such as CouldntGetPipeline/CouldntGetTask) it deletes the failed
 // Release and creates a new one for the same snapshot/ReleasePlan, mirroring the
 // build-pipeline retry logic in has.WaitForComponentPipelineToBeFinished.
 //
