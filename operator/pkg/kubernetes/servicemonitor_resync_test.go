@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	testclock "k8s.io/utils/clock/testing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,7 +43,7 @@ func TestResyncOperandServiceMonitorSetsAnnotation(t *testing.T) {
 	sm.SetNamespace("build-service")
 	sm.SetName("build-service")
 
-	c := fake.NewClientBuilder().WithObjects(sm).Build()
+	c := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).WithObjects(sm).Build()
 	clk := testclock.NewFakeClock(now)
 	err := ResyncOperandServiceMonitor(ctx, c, "build-service", "build-service", ServiceMonitorResyncOptions{
 		Force:                 true,
@@ -88,7 +89,7 @@ func TestResyncOperandServiceMonitorSkipsWhenAnnotated(t *testing.T) {
 		ServiceMonitorResyncAnnotation: "2026-07-12T07:00:00Z",
 	})
 
-	c := fake.NewClientBuilder().WithObjects(sm).Build()
+	c := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).WithObjects(sm).Build()
 	clk := testclock.NewFakeClock(now)
 	err := ResyncOperandServiceMonitor(ctx, c, "build-service", "build-service", ServiceMonitorResyncOptions{
 		Clock: clk,
@@ -121,7 +122,7 @@ func TestResyncOperandServiceMonitorForceWhenAnnotated(t *testing.T) {
 		ServiceMonitorResyncSettleAnnotation: serviceMonitorResyncSettlePending,
 	})
 
-	c := fake.NewClientBuilder().WithObjects(sm).Build()
+	c := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).WithObjects(sm).Build()
 	clk := testclock.NewFakeClock(now)
 	err := ResyncOperandServiceMonitor(ctx, c, "build-service", "build-service", ServiceMonitorResyncOptions{
 		Force:              true,
@@ -150,7 +151,7 @@ func TestResyncOperandServiceMonitorForceWhenAnnotated(t *testing.T) {
 func TestResyncOperandServiceMonitor_Validation(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := fake.NewClientBuilder().Build()
+	c := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).Build()
 
 	err := ResyncOperandServiceMonitor(ctx, c, "", "build-service", ServiceMonitorResyncOptions{Force: true})
 	if err == nil {
@@ -165,7 +166,7 @@ func TestResyncOperandServiceMonitor_Validation(t *testing.T) {
 func TestResyncOperandServiceMonitor_NotFound(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := fake.NewClientBuilder().Build()
+	c := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).Build()
 	err := ResyncOperandServiceMonitor(ctx, c, "build-service", "build-service", ServiceMonitorResyncOptions{
 		Force: true,
 	})
@@ -182,7 +183,7 @@ func TestResyncOperandServiceMonitor_DefaultClock(t *testing.T) {
 	sm.SetNamespace("build-service")
 	sm.SetName("build-service")
 
-	c := fake.NewClientBuilder().WithObjects(sm).Build()
+	c := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).WithObjects(sm).Build()
 	err := ResyncOperandServiceMonitor(ctx, c, "build-service", "build-service", ServiceMonitorResyncOptions{
 		Force:  true,
 		Reason: ServiceMonitorResyncReasonSecretSync,
@@ -205,7 +206,7 @@ func TestResyncOperandServiceMonitor_MarkSettleWhenAnnotated(t *testing.T) {
 		ServiceMonitorResyncAnnotation: "2026-07-12T07:00:00Z",
 	})
 
-	c := fake.NewClientBuilder().WithObjects(sm).Build()
+	c := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).WithObjects(sm).Build()
 	err := ResyncOperandServiceMonitor(ctx, c, "build-service", "build-service", ServiceMonitorResyncOptions{
 		MarkSettlePending: true,
 		Clock:             testclock.NewFakeClock(now),
