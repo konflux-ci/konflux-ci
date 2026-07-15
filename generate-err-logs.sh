@@ -243,7 +243,7 @@ generate_logs() {
     kubectl get repositories.pipelinesascode.tekton.dev --all-namespaces -o json > "$artifacts_dir/repositories.json" || true
 
     # Pod logs from key namespaces (system services + test namespaces)
-    for ns in build-service integration-service release-service application-service pipelines-as-code openshift-pipelines konflux-ui default-tenant default-managed-tenant; do
+    for ns in build-service integration-service release-service application-service tekton-pipelines openshift-pipelines konflux-ui default-tenant default-managed-tenant; do
         for pod in $(kubectl get pods -n "$ns" -o name 2>/dev/null); do
             podname="${pod//pod\//}"
             kubectl logs -n "$ns" "$pod" --all-containers --ignore-errors > "$artifacts_dir/pods/${ns}_${podname}.log" 2>&1 || true

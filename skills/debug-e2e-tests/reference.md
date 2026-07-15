@@ -34,7 +34,7 @@ logs/
 │       ├── integration-service_<pod>.log
 │       ├── release-service_<pod>.log
 │       ├── application-service_<pod>.log
-│       ├── pipelines-as-code_<pod>.log
+│       ├── tekton-pipelines_pipelines-as-code-<pod>.log
 │       ├── kube-system_etcd-<node>.log           # etcd logs (--tail=500)
 │       └── kube-system_kube-apiserver-<node>.log  # kube-apiserver logs (--tail=500)
 ├── system-resources.log          # Host: memory, CPU, disk, load, top processes

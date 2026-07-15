@@ -62,7 +62,7 @@ The same GitHub App secret must be created in three namespaces so that all Konfl
 components can interact with GitHub:
 
 ```bash
-for ns in pipelines-as-code build-service integration-service; do
+for ns in tekton-pipelines build-service integration-service; do
   kubectl -n "${ns}" create secret generic pipelines-as-code-secret \
     --from-file=github-private-key=/path/to/github-app.pem \
     --from-literal=github-application-id="<your-app-id>" \

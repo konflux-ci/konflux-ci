@@ -88,7 +88,7 @@ kubectl get configmap -n konflux-ui dex -o yaml
 Verify secrets exist in the correct namespaces:
 
 ```bash
-kubectl get secrets -n pipelines-as-code
+kubectl get secrets -n tekton-pipelines
 kubectl get secrets -n build-service
 kubectl get secrets -n integration-service
 ```
@@ -171,8 +171,8 @@ It may take a few minutes for the UI to become available again.
    `Repository` resource:
 
    ```bash
-   kubectl get pods -n pipelines-as-code
-   kubectl logs -n pipelines-as-code pipelines-as-code-controller-<pod-id>
+   kubectl get pods -n tekton-pipelines -l app.kubernetes.io/part-of=pipelines-as-code
+   kubectl logs -n tekton-pipelines -l app.kubernetes.io/component=controller,app.kubernetes.io/part-of=pipelines-as-code
    ```
 
    If the logs mention a `Repository` resource cannot be found, compare the URL in the
@@ -193,7 +193,7 @@ It may take a few minutes for the UI to become available again.
    [GitHub secrets setup]({{< relref "guides/github-secrets" >}}):
 
    ```bash
-   kubectl delete secret pipelines-as-code-secret -n pipelines-as-code
+   kubectl delete secret pipelines-as-code-secret -n tekton-pipelines
    ```
 
 6. Once the above checks pass, post `/retest` as a comment on your PR and observe

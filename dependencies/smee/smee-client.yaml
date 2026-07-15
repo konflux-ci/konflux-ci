@@ -64,7 +64,7 @@ spec:
               mountPath: /shared
           env:
           - name: DOWNSTREAM_SERVICE_URL
-            value: "http://pipelines-as-code-controller.pipelines-as-code:8180"
+            value: "http://pipelines-as-code-controller.tekton-pipelines:8080"
           - name: SMEE_CHANNEL_URL
             value: "<smee-channel>"
           - name: INSECURE_SKIP_VERIFY

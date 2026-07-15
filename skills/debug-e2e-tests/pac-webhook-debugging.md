@@ -8,7 +8,7 @@ PipelineRun (not the `pull_request` event).
 ## Webhook chain
 
 ```
-GitHub App webhook → smee.io channel → gosmee client → smee sidecar (:8080) → PaC controller (:8180)
+GitHub App webhook → smee.io channel → gosmee client → smee sidecar (:8080) → PaC controller (:8080)
 ```
 
 ## Check each link
@@ -51,7 +51,7 @@ timestamps with the build-service log.
 
 ### 3. PaC controller logs
 
-File: `artifacts/pods/pipelines-as-code_*.log`
+File: `artifacts/pods/tekton-pipelines_pipelines-as-code-*.log`
 
 These show whether PaC matched the event to a Repository, read `.tekton/`
 from the commit, and attempted to create a PipelineRun. Look for:

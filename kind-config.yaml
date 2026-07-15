@@ -32,7 +32,7 @@ nodes:
   - containerPort: 30011
     hostPort: 9443
     protocol: TCP
-    # PaC
+    # PaC (for GitLab webhook delivery in e2e tests)
   - containerPort: 30012
     hostPort: 8180
     protocol: TCP
