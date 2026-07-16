@@ -55,6 +55,13 @@ type KonfluxSegmentBridgeSpec struct {
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	TektonLimit *int `json:"tektonLimit,omitempty"`
+
+	// CronJob defines customizations (resources, env vars) for the segment-bridge CronJob
+	// container. Env vars are applied as overrides on top of the container's existing env,
+	// and do not replace the envFrom Secret reference that supplies SEGMENT_WRITE_KEY,
+	// SEGMENT_BATCH_API, TEKTON_RESULTS_API_ADDR, and TEKTON_LIMIT. When not set, the upstream defaults apply.
+	// +optional
+	CronJob *ContainerSpec `json:"cronJob,omitempty"`
 }
 
 // GetSegmentKey returns the configured Segment write key, or empty string if unset.

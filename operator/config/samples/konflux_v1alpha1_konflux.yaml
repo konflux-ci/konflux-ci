@@ -196,3 +196,19 @@ spec:
   #     # tektonLimit: max PipelineRun records fetched per CronJob run.
   #     # Defaults to 1000 (~4.7h coverage at avg production throughput).
   #     # tektonLimit: 2000
+  #
+  #     # cronJob customizes the segment-bridge CronJob container's resources and env.
+  #     # Env vars are applied as overrides on top of the container's existing env and
+  #     # do not replace the envFrom Secret providing SEGMENT_WRITE_KEY, SEGMENT_BATCH_API,
+  #     # TEKTON_RESULTS_API_ADDR, and TEKTON_LIMIT.
+  #     # cronJob:
+  #     #   resources:
+  #     #     limits:
+  #     #       cpu: 500m
+  #     #       memory: 512Mi
+  #     #     requests:
+  #     #       cpu: 100m
+  #     #       memory: 128Mi
+  #     #   env:
+  #     #     - name: HTTP_PROXY
+  #     #       value: "http://proxy.example.com:3128"

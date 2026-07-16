@@ -18,6 +18,7 @@ package segmentbridge
 
 import (
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -25,6 +26,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -35,6 +38,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -61,6 +65,16 @@ func (m *mockDiscoveryClient) ServerVersion() (*version.Info, error) {
 
 var _ clusterinfo.DiscoveryClient = (*mockDiscoveryClient)(nil)
 
+// failingManifestSource is a manifestSource that always fails to load manifests,
+// used to exercise the Reconcile error-handling branch for applyManifests failures.
+type failingManifestSource struct{ err error }
+
+func (f *failingManifestSource) GetForComponent(_ manifests.Component) ([]client.Object, error) {
+	return nil, f.err
+}
+
+var _ manifestSource = (*failingManifestSource)(nil)
+
 var _ = Describe("KonfluxSegmentBridge Controller", func() {
 	// startManager creates a per-test manager with the given reconciler configuration
 	// and registers a DeferCleanup to cancel it after the test.
@@ -75,6 +89,24 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 			ObjectStore:          objectStore,
 			GetDefaultSegmentKey: getDefaultSegmentKey,
 			ClusterInfo:          clusterInfo,
+		}).SetupWithManager(mgr)).To(Succeed())
+		mgrCtx, cancel := context.WithCancel(testEnv.Ctx)
+		waitForStop := testutil.StartManagerWithContext(mgrCtx, mgr)
+		DeferCleanup(func() {
+			cancel()
+			waitForStop()
+		})
+	}
+
+	// startManagerWithObjectStore is a variant of startManager for tests that need to
+	// inject a manifestSource other than the shared objectStore (e.g. a failing one),
+	// so the ApplyFailed error-handling branch of Reconcile can be exercised.
+	startManagerWithObjectStore := func(store manifestSource) {
+		mgr := testutil.NewTestManager(testEnv)
+		Expect((&KonfluxSegmentBridgeReconciler{
+			Client:      mgr.GetClient(),
+			Scheme:      mgr.GetScheme(),
+			ObjectStore: store,
 		}).SetupWithManager(mgr)).To(Succeed())
 		mgrCtx, cancel := context.WithCancel(testEnv.Ctx)
 		waitForStop := testutil.StartManagerWithContext(mgrCtx, mgr)
@@ -197,6 +229,46 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 				})
 			})
 
+			It("should apply CronJob resource overrides from spec.CronJob", func(ctx context.Context) {
+				segmentRes := &konfluxv1alpha1.KonfluxSegmentBridge{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+					Spec: konfluxv1alpha1.KonfluxSegmentBridgeSpec{
+						CronJob: &konfluxv1alpha1.ContainerSpec{
+							Resources: &corev1.ResourceRequirements{
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("500m"),
+									corev1.ResourceMemory: resource.MustParse("512Mi"),
+								},
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("100m"),
+									corev1.ResourceMemory: resource.MustParse("128Mi"),
+								},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, segmentRes)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, segmentRes, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      segmentBridgeSecretName,
+					Namespace: segmentBridgeNamespace,
+				}})
+
+				cjNN := types.NamespacedName{
+					Name:      childResourceName,
+					Namespace: segmentBridgeNamespace,
+				}
+				Eventually(func(g Gomega) {
+					cj := &batchv1.CronJob{}
+					g.Expect(k8sClient.Get(ctx, cjNN, cj)).To(Succeed())
+					container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, childResourceName)
+					g.Expect(container).NotTo(BeNil())
+					g.Expect(container.Resources.Limits.Cpu().String()).To(Equal("500m"))
+					g.Expect(container.Resources.Limits.Memory().String()).To(Equal("512Mi"))
+					g.Expect(container.Resources.Requests.Cpu().String()).To(Equal("100m"))
+					g.Expect(container.Resources.Requests.Memory().String()).To(Equal("128Mi"))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			})
+
 			It("should use default URL when only segmentKey is set", func(ctx context.Context) {
 				createCR(ctx)
 
@@ -270,6 +342,29 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 					g.Expect(string(data["TEKTON_RESULTS_API_ADDR"])).To(Equal(tektonResultsAPIAddrOpenShift))
 				})
 			})
+		})
+	})
+
+	Context("when applying manifests fails", func() {
+		BeforeEach(func() {
+			startManagerWithObjectStore(&failingManifestSource{err: fmt.Errorf("simulated manifest load failure")})
+		})
+
+		It("should set the Ready condition to False with reason ApplyFailed", func(ctx context.Context) {
+			segmentRes := &konfluxv1alpha1.KonfluxSegmentBridge{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, segmentRes)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, segmentRes)
+
+			Eventually(func(g Gomega) {
+				cr := &konfluxv1alpha1.KonfluxSegmentBridge{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, cr)).To(Succeed())
+				cond := apimeta.FindStatusCondition(cr.GetConditions(), condition.TypeReady)
+				g.Expect(cond).NotTo(BeNil())
+				g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+				g.Expect(cond.Reason).To(Equal(condition.ReasonApplyFailed))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})
 

@@ -101,6 +101,44 @@ spec:
       tektonLimit: 2000
 ```
 
+### Customizing the CronJob container
+
+You can override the resource requests/limits and add environment variables
+on the `segment-bridge` CronJob container via `spec.telemetry.spec.cronJob`,
+following the same `ContainerSpec` pattern used by other operator-managed
+components:
+
+```yaml
+spec:
+  telemetry:
+    enabled: true
+    spec:
+      cronJob:
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        env:
+          - name: HTTP_PROXY
+            value: "http://proxy.example.com:3128"
+```
+
+`env` entries are applied as pod-level overrides on top of the container's
+existing environment — they do **not** replace the `envFrom` reference to the
+`segment-bridge-config` Secret, which continues to supply `SEGMENT_WRITE_KEY`,
+`SEGMENT_BATCH_API`, `TEKTON_RESULTS_API_ADDR`, and `TEKTON_LIMIT`.
+
+{{% alert color="warning" %}}
+An `env` entry whose `name` matches one of `SEGMENT_WRITE_KEY`,
+`SEGMENT_BATCH_API`, `TEKTON_RESULTS_API_ADDR`, or `TEKTON_LIMIT` will take
+precedence over the Secret-sourced value, per standard Kubernetes container
+env-vs-envFrom precedence rules. Avoid reusing these names unless you intend
+to override the corresponding Secret value.
+{{% /alert %}}
+
 ## What data is collected
 
 The segment-bridge CronJob reads data from the cluster and from
