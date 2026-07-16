@@ -16,7 +16,7 @@ images:
 - digest: sha256:28a0608bf2ebd1d790b72d55316b7806ed727d2d9d564ea4734a000f491abb27
   name: quay.io/konflux-ci/konflux-ui
   newName: quay.io/konflux-ci/konflux-ui
-- digest: sha256:46b03037abb22398c5c315efb0eec361c831df76514490a29e089e3ac5c6e064
+- digest: sha256:aff6b0a2c986d0705de258c2d14a51a3aa6a40a5ee09e2d01e7fea83d176f270
   name: quay.io/konflux-ci/oauth2-proxy
   newName: quay.io/konflux-ci/oauth2-proxy
 - digest: sha256:1131cd361cf72e6a4350b039018c0317a012ff0291af36a6944ddfda7570df69
