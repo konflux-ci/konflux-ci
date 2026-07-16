@@ -525,6 +525,7 @@ func (r *KonfluxReconciler) applyKonfluxReleaseService(ctx context.Context, tc *
 	if owner.Spec.KonfluxReleaseService != nil && owner.Spec.KonfluxReleaseService.Spec != nil {
 		spec = *owner.Spec.KonfluxReleaseService.Spec
 	}
+	spec.ComponentMetrics = common.ForwardedComponentMetrics(owner)
 
 	releaseService := &konfluxv1alpha1.KonfluxReleaseService{
 		TypeMeta: metav1.TypeMeta{

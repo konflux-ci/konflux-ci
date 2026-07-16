@@ -193,8 +193,8 @@ The suite verifies:
 - Operand scrape contract (ServiceMonitor spec, resync annotations, token Secret) for
   scrape-token targets (`konflux-operator`, `build-service`, `image-controller`)
 - `up==1` in UWM Prometheus for scrape-token targets (`metrics-uwm`) and legacy interim
-  HTTP operands with `UWMUpCheck` (`integration-service`, `konflux-ui-proxy`; label
-  `metrics-uwm-up-only`, no scrape-token contract)
+  HTTP operands with `UWMUpCheck` (`integration-service`, `release-service`,
+  `konflux-ui-proxy`; label `metrics-uwm-up-only`, no scrape-token contract)
 
 Before specs, tests emit `[UWM resync]` lines with `resync_reason`, secret/SM resource
 versions, `uwm_active_targets`, and `sm_after_secret` (SM `creationTimestamp` after
@@ -239,6 +239,10 @@ Example: a legacy interim ServiceMonitor uses `scheme: http`, `port: http`, and
 
 **Components on legacy interim today:**
 
+- **integration-service** — HTTP `:8080`, static `integration-service-metrics-reader`
+  SA token, gated by `KonfluxIntegrationServiceSpec.componentMetrics`
+- **release-service** — HTTP `:8080`, static `release-service-metrics-reader` SA token,
+  gated by `KonfluxReleaseServiceSpec.componentMetrics`
 - **konflux-ui-proxy** — Caddy reverse-proxy, HTTP `:2112` on port `metrics`,
   `konflux-ui-proxy-metrics-reader` ClusterRole, gated by `KonfluxUISpec.componentMetrics`
   in the UI reconciler. No bearer token (plain HTTP scrape).

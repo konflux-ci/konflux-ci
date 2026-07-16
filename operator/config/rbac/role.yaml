@@ -396,6 +396,7 @@ rules:
 - apiGroups:
   - rbac.authorization.k8s.io
   resourceNames:
+  - prometheus-release-service-metrics-reader
   - release-service-application-role-binding
   - release-service-component-role-binding
   - release-service-environment-role-binding
@@ -538,6 +539,7 @@ rules:
   - release-service-environment-viewer-role
   - release-service-manager-role
   - release-service-metrics-auth-role
+  - release-service-metrics-reader
   - release-service-release-editor-role
   - release-service-release-viewer-role
   - release-service-releaseplan-editor-role

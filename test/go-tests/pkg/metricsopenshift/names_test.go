@@ -35,9 +35,9 @@ func TestUWMUpOnlyTargets(t *testing.T) {
 	assert.NoError(t, err)
 
 	targets := UWMUpOnlyTargets(catalog)
-	assert.Len(t, targets, 2)
-	ids := []string{targets[0].ID, targets[1].ID}
-	assert.ElementsMatch(t, []string{"integration-service", "konflux-ui-proxy"}, ids)
+	assert.Len(t, targets, 3)
+	ids := []string{targets[0].ID, targets[1].ID, targets[2].ID}
+	assert.ElementsMatch(t, []string{"integration-service", "release-service", "konflux-ui-proxy"}, ids)
 	for _, target := range targets {
 		assert.Empty(t, target.ScrapeTokenSecret)
 	}

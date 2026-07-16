@@ -4400,6 +4400,12 @@ metadata:
   name: release-service-controller-manager
   namespace: release-service
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: release-service-metrics-reader
+  namespace: release-service
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -4644,6 +4650,16 @@ rules:
   - subjectaccessreviews
   verbs:
   - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: release-service-metrics-reader
+rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -4963,6 +4979,19 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
+  name: prometheus-release-service-metrics-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: release-service-metrics-reader
+subjects:
+- kind: ServiceAccount
+  name: release-service-metrics-reader
+  namespace: release-service
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
   name: release-service-application-role-binding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -5133,6 +5162,15 @@ metadata:
   namespace: release-service
 ---
 apiVersion: v1
+kind: Secret
+metadata:
+  annotations:
+    kubernetes.io/service-account.name: release-service-metrics-reader
+  name: release-service-metrics-reader
+  namespace: release-service
+type: kubernetes.io/service-account-token
+---
+apiVersion: v1
 kind: Service
 metadata:
   labels:
@@ -5296,6 +5334,24 @@ metadata:
   namespace: release-service
 spec:
   selfSigned: {}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: release-service
+  namespace: release-service
+spec:
+  endpoints:
+  - bearerTokenSecret:
+      key: token
+      name: release-service-metrics-reader
+    interval: 15s
+    path: /metrics
+    port: http
+    scheme: http
+  selector:
+    matchLabels:
+      control-plane: controller-manager
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration

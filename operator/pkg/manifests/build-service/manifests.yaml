@@ -275,8 +275,6 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
   name: build-service-metrics-reader
 rules:
 - nonResourceURLs:
@@ -361,7 +359,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
     konflux.konflux-ci.dev/metrics-scraper-binding: "true"
   name: prometheus-build-service-metrics-reader
 roleRef:
@@ -505,8 +502,6 @@ spec:
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
   name: build-service
   namespace: build-service
 spec:
