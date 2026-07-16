@@ -102,7 +102,7 @@ func ReconcilePrometheusScrapeToken(ctx context.Context, cfg ScrapeTokenReconcil
 		return reconcile.Result{}, err
 	}
 	if cfg.ServiceMonitorName == "" {
-		return reconcile.Result{}, nil
+		return reconcile.Result{RequeueAfter: tokenResult.RequeueAfter}, nil
 	}
 
 	smKey := client.ObjectKey{Namespace: cfg.OperandNamespace, Name: cfg.ServiceMonitorName}
@@ -175,7 +175,7 @@ func ReconcilePrometheusScrapeToken(ctx context.Context, cfg ScrapeTokenReconcil
 	if tokenResult.TokenUpdated {
 		return reconcile.Result{RequeueAfter: kubernetes.DefaultServiceMonitorResyncSettleDelay}, nil
 	}
-	return reconcile.Result{}, nil
+	return reconcile.Result{RequeueAfter: tokenResult.RequeueAfter}, nil
 }
 
 // applyDeferredOperandServiceMonitor invokes ApplyServiceMonitor after the scrape token is

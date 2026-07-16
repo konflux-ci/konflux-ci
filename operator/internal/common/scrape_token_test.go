@@ -199,8 +199,8 @@ func TestReconcilePrometheusScrapeToken_MintsAndSettles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("settle reconcile: %v", err)
 	}
-	if settleResult.RequeueAfter != 0 {
-		t.Fatalf("expected no requeue on settle pass")
+	if settleResult.RequeueAfter != 30*time.Minute {
+		t.Fatalf("expected 30m requeue on settle pass, got %v", settleResult.RequeueAfter)
 	}
 
 	if err := c.Get(ctx, types.NamespacedName{Namespace: testBuildServiceNamespace, Name: testBuildServiceNamespace}, updated); err != nil {
@@ -393,7 +393,7 @@ func TestReconcilePrometheusScrapeToken_ReappliesServiceMonitorWhenPresent(t *te
 
 	c := fake.NewClientBuilder().WithObjects(sm, secret).Build()
 	applyCalls := 0
-	_, err := ReconcilePrometheusScrapeToken(ctx, ScrapeTokenReconcilerConfig{
+	result, err := ReconcilePrometheusScrapeToken(ctx, ScrapeTokenReconcilerConfig{
 		Client:             c,
 		Clock:              testclock.NewFakeClock(now),
 		TokenCreator:       &fakeTokenCreator{},
@@ -411,6 +411,9 @@ func TestReconcilePrometheusScrapeToken_ReappliesServiceMonitorWhenPresent(t *te
 	}
 	if applyCalls != 1 {
 		t.Fatalf("ApplyServiceMonitor calls: got %d want 1", applyCalls)
+	}
+	if result.RequeueAfter != 15*time.Minute {
+		t.Fatalf("expected 15m requeue on fresh token with SM, got %v", result.RequeueAfter)
 	}
 }
 
@@ -441,8 +444,8 @@ func TestReconcilePrometheusScrapeToken_NoServiceMonitorName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reconcile without SM name: %v", err)
 	}
-	if result.RequeueAfter != 0 {
-		t.Fatalf("expected no requeue when ServiceMonitorName is empty")
+	if result.RequeueAfter != 30*time.Minute {
+		t.Fatalf("expected 30m requeue when ServiceMonitorName is empty, got %v", result.RequeueAfter)
 	}
 }
 
@@ -701,5 +704,79 @@ func TestReconcilePrometheusScrapeToken_SucceedsWhenSecretCacheLagsAfterMint(t *
 			updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation],
 			kubernetes.ServiceMonitorResyncReasonTokenMinted,
 		)
+	}
+}
+
+func TestReconcilePrometheusScrapeToken_RequeueAfterOnFreshToken(t *testing.T) {
+	ctx := context.Background()
+	clk := testclock.NewFakeClock(time.Date(2026, 7, 12, 8, 0, 0, 0, time.UTC))
+	creator := &fakeTokenCreator{
+		token:     "operand-token",
+		expiresAt: clk.Now().Add(time.Hour),
+	}
+
+	c := fake.NewClientBuilder().Build()
+	cfg := ScrapeTokenReconcilerConfig{
+		Client:           c,
+		Clock:            clk,
+		TokenCreator:     creator,
+		Scraper:          kubernetes.OperandMetricsScraperSA(testBuildServiceNamespace),
+		OperandNamespace: testBuildServiceNamespace,
+		Apply: func(applyCtx context.Context, secret *corev1.Secret) error {
+			key := types.NamespacedName{Name: secret.Name, Namespace: secret.Namespace}
+			existing := &corev1.Secret{}
+			if err := c.Get(applyCtx, key, existing); apierrors.IsNotFound(err) {
+				return c.Create(applyCtx, secret)
+			} else if err != nil {
+				return err
+			}
+			secret.SetResourceVersion(existing.ResourceVersion)
+			return c.Update(applyCtx, secret)
+		},
+	}
+
+	// First call mints the token. RequeueAfter = 30m (half of 1h TTL).
+	result, err := ReconcilePrometheusScrapeToken(ctx, cfg)
+	if err != nil {
+		t.Fatalf("mint: %v", err)
+	}
+	if result.RequeueAfter != 30*time.Minute {
+		t.Fatalf("mint requeue: got %v want 30m", result.RequeueAfter)
+	}
+
+	// Advance 10m. Token is still fresh; no-op path should still return
+	// RequeueAfter ≈ 20m (time until refresh_at).
+	clk.SetTime(clk.Now().Add(10 * time.Minute))
+	result, err = ReconcilePrometheusScrapeToken(ctx, cfg)
+	if err != nil {
+		t.Fatalf("fresh: %v", err)
+	}
+	if result.RequeueAfter != 20*time.Minute {
+		t.Fatalf("fresh requeue: got %v want 20m", result.RequeueAfter)
+	}
+
+	// Advance to 1m before refresh_at. RequeueAfter should be floored
+	// to DefaultScrapeTokenMinRequeue (1m).
+	clk.SetTime(clk.Now().Add(19 * time.Minute))
+	result, err = ReconcilePrometheusScrapeToken(ctx, cfg)
+	if err != nil {
+		t.Fatalf("near-threshold: %v", err)
+	}
+	if result.RequeueAfter != kubernetes.DefaultScrapeTokenMinRequeue {
+		t.Fatalf("near-threshold requeue: got %v want %v",
+			result.RequeueAfter, kubernetes.DefaultScrapeTokenMinRequeue)
+	}
+
+	// Advance to exactly refresh_at. With the <= boundary fix, the token
+	// should be refreshed now.
+	clk.SetTime(clk.Now().Add(time.Minute))
+	creator.token = "refreshed-token"
+	creator.expiresAt = clk.Now().Add(time.Hour)
+	result, err = ReconcilePrometheusScrapeToken(ctx, cfg)
+	if err != nil {
+		t.Fatalf("boundary refresh: %v", err)
+	}
+	if result.RequeueAfter != 30*time.Minute {
+		t.Fatalf("boundary refresh requeue: got %v want 30m", result.RequeueAfter)
 	}
 }

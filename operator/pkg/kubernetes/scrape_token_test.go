@@ -258,6 +258,18 @@ func TestScrapeTokenNeedsRefresh_EdgeCases(t *testing.T) {
 	if !ScrapeTokenNeedsRefresh(expired, now, ttl) {
 		t.Fatal("expired token should need refresh")
 	}
+	// Boundary: remaining exactly equals the refresh threshold (50% of TTL = 30m).
+	boundary := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: map[string]string{
+				scrapeTokenExpiresAtAnnotation: now.Add(30 * time.Minute).UTC().Format(time.RFC3339),
+			},
+		},
+		Data: map[string][]byte{ScrapeTokenSecretKey: []byte("tok")},
+	}
+	if !ScrapeTokenNeedsRefresh(boundary, now, ttl) {
+		t.Fatal("token at exactly the refresh threshold should need refresh")
+	}
 }
 
 func TestScrapeTokenRequeueAfter_MissingExpiry(t *testing.T) {
