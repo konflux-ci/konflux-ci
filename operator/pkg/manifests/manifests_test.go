@@ -4,10 +4,17 @@ import (
 	"strings"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	. "github.com/onsi/gomega"
 )
 
 func TestAllComponents(t *testing.T) {
@@ -143,4 +150,63 @@ func TestGetCRDNamesForComponent(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetByGVK(t *testing.T) {
+	t.Parallel()
+
+	deploymentGVK := appsv1.SchemeGroupVersion.WithKind("Deployment")
+	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "controller-manager"}}
+	deployment.SetGroupVersionKind(deploymentGVK)
+	otherDeployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "webhook"}}
+	otherDeployment.SetGroupVersionKind(deploymentGVK)
+	service := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "controller-manager"}}
+	service.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Service"))
+	oldDeployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "old-controller-manager"}}
+	oldDeployment.SetGroupVersionKind(schema.GroupVersionKind{Group: "apps", Version: "v1beta1", Kind: "Deployment"})
+
+	store := &ObjectStore{objects: map[Component][]client.Object{
+		BuildService: {deployment, service, oldDeployment, otherDeployment},
+	}}
+
+	t.Run("returns only exact GVK matches", func(t *testing.T) {
+		g := NewWithT(t)
+
+		objects, err := store.GetByGVK(BuildService, deploymentGVK)
+
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(objects).To(HaveLen(2))
+		g.Expect(objects[0].GetName()).To(Equal("controller-manager"))
+		g.Expect(objects[1].GetName()).To(Equal("webhook"))
+	})
+
+	t.Run("returns an empty result when there are no matches", func(t *testing.T) {
+		g := NewWithT(t)
+
+		objects, err := store.GetByGVK(BuildService, corev1.SchemeGroupVersion.WithKind("ConfigMap"))
+
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(objects).To(BeEmpty())
+	})
+
+	t.Run("returns an error for an unknown component", func(t *testing.T) {
+		g := NewWithT(t)
+
+		objects, err := store.GetByGVK(Component("unknown"), deploymentGVK)
+
+		g.Expect(err).To(MatchError("unknown component: unknown"))
+		g.Expect(objects).To(BeNil())
+	})
+
+	t.Run("returns deep copies", func(t *testing.T) {
+		g := NewWithT(t)
+		objects, err := store.GetByGVK(BuildService, deploymentGVK)
+		g.Expect(err).NotTo(HaveOccurred())
+
+		objects[0].SetName("mutated")
+		objectsAgain, err := store.GetByGVK(BuildService, deploymentGVK)
+
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(objectsAgain[0].GetName()).To(Equal("controller-manager"))
+	})
 }

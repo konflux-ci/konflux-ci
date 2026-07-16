@@ -204,11 +204,12 @@ func (r *KonfluxBuildServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 				return tc.ApplyOwned(applyCtx, secret)
 			},
 			ApplyServiceMonitor: func(applyCtx context.Context) error {
-				objects, storeErr := r.ObjectStore.GetForComponent(manifests.BuildService)
+				sm, ok, storeErr := common.OperandServiceMonitorFromStore(
+					r.ObjectStore, manifests.BuildService, webhookConfigNamespace, "build-service",
+				)
 				if storeErr != nil {
 					return fmt.Errorf("get manifests for ServiceMonitor apply: %w", storeErr)
 				}
-				sm, ok := common.OperandServiceMonitorFromObjects(objects, webhookConfigNamespace, "build-service")
 				if !ok {
 					return fmt.Errorf("operand ServiceMonitor %s/%s not found in embedded manifests",
 						webhookConfigNamespace, "build-service")

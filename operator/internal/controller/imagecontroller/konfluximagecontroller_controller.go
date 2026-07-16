@@ -172,11 +172,12 @@ func (r *KonfluxImageControllerReconciler) Reconcile(ctx context.Context, req ct
 				return tc.ApplyOwned(applyCtx, secret)
 			},
 			ApplyServiceMonitor: func(applyCtx context.Context) error {
-				objects, storeErr := r.ObjectStore.GetForComponent(manifests.ImageController)
+				sm, ok, storeErr := common.OperandServiceMonitorFromStore(
+					r.ObjectStore, manifests.ImageController, imageControllerNamespace, "image-controller",
+				)
 				if storeErr != nil {
 					return fmt.Errorf("get manifests for ServiceMonitor apply: %w", storeErr)
 				}
-				sm, ok := common.OperandServiceMonitorFromObjects(objects, imageControllerNamespace, "image-controller")
 				if !ok {
 					return fmt.Errorf("operand ServiceMonitor %s/%s not found in embedded manifests",
 						imageControllerNamespace, "image-controller")
