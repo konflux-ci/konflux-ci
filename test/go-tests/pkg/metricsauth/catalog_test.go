@@ -11,7 +11,7 @@ import (
 func TestDefaultCatalog_TargetGroups(t *testing.T) {
 	catalog, err := DefaultCatalog()
 	require.NoError(t, err)
-	require.Len(t, catalog.Targets, 5)
+	require.Len(t, catalog.Targets, 6)
 
 	byID := map[string]Target{}
 	for _, target := range catalog.Targets {
@@ -21,9 +21,11 @@ func TestDefaultCatalog_TargetGroups(t *testing.T) {
 	assert.Equal(t, TargetGroupOperator, byID["konflux-operator"].LabelGroup())
 	assert.Equal(t, TargetGroupComponent, byID["build-service"].LabelGroup())
 	assert.Equal(t, TargetGroupComponent, byID["integration-service"].LabelGroup())
+	assert.Equal(t, TargetGroupComponent, byID["release-service"].LabelGroup())
 	assert.Equal(t, TargetGroupComponent, byID["image-controller"].LabelGroup())
 	assert.Equal(t, TargetGroupComponent, byID["konflux-ui-proxy"].LabelGroup())
 	assert.True(t, byID["integration-service"].UWMUpCheck)
+	assert.True(t, byID["release-service"].UWMUpCheck)
 	assert.True(t, byID["konflux-ui-proxy"].UWMUpCheck)
 	assert.Empty(t, byID["konflux-ui-proxy"].ScrapeTokenSecret)
 }

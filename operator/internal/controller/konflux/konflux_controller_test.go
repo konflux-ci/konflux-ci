@@ -635,6 +635,11 @@ var _ = Describe("Konflux Controller", func() {
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: integrationservice.CRName}, is)).To(Succeed())
 				g.Expect(is.Spec.ComponentMetrics).NotTo(BeNil())
 				g.Expect(is.Spec.ComponentMetrics.IsEnabled()).To(BeFalse())
+
+				rs := &konfluxv1alpha1.KonfluxReleaseService{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: releaseservice.CRName}, rs)).To(Succeed())
+				g.Expect(rs.Spec.ComponentMetrics).NotTo(BeNil())
+				g.Expect(rs.Spec.ComponentMetrics.IsEnabled()).To(BeFalse())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 

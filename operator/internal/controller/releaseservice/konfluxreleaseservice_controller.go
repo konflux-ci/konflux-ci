@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,6 +42,7 @@ import (
 	crdhandler "github.com/konflux-ci/konflux-ci/operator/internal/controller/handler"
 	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
@@ -68,14 +70,21 @@ const (
 var releaseServiceConfigGVK = schema.GroupVersionKind{Group: releaseServiceConfigGroup, Version: "v1alpha1", Kind: releaseServiceConfigKind}
 
 // ReleaseServiceCleanupGVKs defines which resource types should be cleaned up when they are
-// no longer part of the desired state. All resources managed by this controller are always
-// applied, so no cleanup GVKs are needed (they're always tracked and never become orphans).
-var ReleaseServiceCleanupGVKs = []schema.GroupVersionKind{}
+// no longer part of the desired state. Metrics scrape resources may be skipped during apply
+// (componentMetrics disabled) or removed across releases while metrics stay enabled.
+var ReleaseServiceCleanupGVKs = append([]schema.GroupVersionKind(nil), kubernetes.ComponentMetricsOrphanCleanupGVKs...)
 
 // ReleaseServiceClusterScopedAllowList restricts which cluster-scoped resources can be deleted
-// during orphan cleanup. All cluster-scoped resources managed by this controller are always
-// applied, so no allow list is needed (they're always tracked and never become orphans).
-var ReleaseServiceClusterScopedAllowList tracking.ClusterScopedAllowList = nil
+// during orphan cleanup. Only metrics scrape ClusterRoles and ClusterRoleBindings are listed;
+// other cluster-scoped RBAC managed by this controller is always applied and stays tracked.
+var ReleaseServiceClusterScopedAllowList = tracking.ClusterScopedAllowList{
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"}: sets.New(
+		"release-service-metrics-reader",
+	),
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"}: sets.New(
+		"prometheus-release-service-metrics-reader",
+	),
+}
 
 // KonfluxReleaseServiceReconciler reconciles a KonfluxReleaseService object
 type KonfluxReleaseServiceReconciler struct {
@@ -94,10 +103,10 @@ type KonfluxReleaseServiceReconciler struct {
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,resourceNames=release-service-leader-election-role,verbs=bind;escalate
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,resourceNames=release-service-leader-election-rolebinding;releaseserviceconfigs-rolebinding,verbs=bind
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=release-pipeline-resource-role;release-service-application-role;release-service-component-role;release-service-environment-viewer-role;release-service-manager-role;release-service-metrics-auth-role;release-service-release-editor-role;release-service-release-viewer-role;release-service-releaseplan-editor-role;release-service-releaseplan-viewer-role;release-service-releaseplanadmission-editor-role;release-service-releaseplanadmission-viewer-role;release-service-snapshot-editor-role;release-service-snapshot-viewer-role;release-service-snapshotenvironmentbinding-editor-role;release-service-tekton-role;releaseserviceconfig-role,verbs=bind;escalate
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=release-service-application-role-binding;release-service-component-role-binding;release-service-environment-role-binding;release-service-manager-rolebinding;release-service-metrics-auth-rolebinding;release-service-release-role-binding;release-service-releaseplan-role-binding;release-service-releaseplanadmission-role-binding;release-service-snapshot-role-binding;release-service-snapshotenvironmentbinding-role-binding;release-service-tekton-role-binding,verbs=bind
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=release-pipeline-resource-role;release-service-application-role;release-service-component-role;release-service-environment-viewer-role;release-service-manager-role;release-service-metrics-auth-role;release-service-metrics-reader;release-service-release-editor-role;release-service-release-viewer-role;release-service-releaseplan-editor-role;release-service-releaseplan-viewer-role;release-service-releaseplanadmission-editor-role;release-service-releaseplanadmission-viewer-role;release-service-snapshot-editor-role;release-service-snapshot-viewer-role;release-service-snapshotenvironmentbinding-editor-role;release-service-tekton-role;releaseserviceconfig-role,verbs=bind;escalate
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=prometheus-release-service-metrics-reader;release-service-application-role-binding;release-service-component-role-binding;release-service-environment-role-binding;release-service-manager-rolebinding;release-service-metrics-auth-rolebinding;release-service-release-role-binding;release-service-releaseplan-role-binding;release-service-releaseplanadmission-role-binding;release-service-snapshot-role-binding;release-service-snapshotenvironmentbinding-role-binding;release-service-tekton-role-binding,verbs=bind
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;patch
-// +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;patch
+// +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates;issuers,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=appstudio.redhat.com,resources=releaseserviceconfigs,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;patch
@@ -160,12 +169,25 @@ func (r *KonfluxReleaseServiceReconciler) Reconcile(ctx context.Context, req ctr
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
 func (r *KonfluxReleaseServiceReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxReleaseService) error {
+	log := logf.FromContext(ctx)
+
+	metricsEnabled := owner.Spec.ComponentMetrics.IsEnabled()
+
 	objects, err := r.ObjectStore.GetForComponent(manifests.Release)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for Release: %w", err)
 	}
 
 	for _, obj := range objects {
+		if !metricsEnabled && kubernetes.IsComponentMetricsScrapeResource(obj) {
+			log.V(1).Info("Skipping component metrics scrape resource",
+				"kind", tracking.GetKind(obj),
+				"name", obj.GetName(),
+				"namespace", obj.GetNamespace(),
+			)
+			continue
+		}
+
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
 			if err := applyReleaseServiceDeploymentCustomizations(deployment, owner.Spec); err != nil {

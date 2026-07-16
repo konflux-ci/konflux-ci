@@ -1125,8 +1125,6 @@ metadata:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
   name: integration-service-metrics-reader
   namespace: integration-service
 ---
@@ -1494,8 +1492,6 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
   name: integration-service-metrics-reader
 rules:
 - nonResourceURLs:
@@ -1754,8 +1750,6 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
   name: prometheus-integration-service-metrics-reader
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -1789,7 +1783,6 @@ apiVersion: v1
 kind: Secret
 metadata:
   annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
     kubernetes.io/service-account.name: integration-service-metrics-reader
   name: integration-service-metrics-reader
   namespace: integration-service
@@ -1971,8 +1964,6 @@ spec:
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
   name: integration-service
   namespace: integration-service
 spec:

@@ -1,19 +1,17 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: build-service
-  namespace: build-service
+  name: release-service
+  namespace: release-service
 spec:
   endpoints:
   - bearerTokenSecret:
       key: token
-      name: prometheus-scrape-token
+      name: release-service-metrics-reader
     interval: 15s
     path: /metrics
-    port: https
-    scheme: https
-    tlsConfig:
-      insecureSkipVerify: true
+    port: http
+    scheme: http
   selector:
     matchLabels:
       control-plane: controller-manager
