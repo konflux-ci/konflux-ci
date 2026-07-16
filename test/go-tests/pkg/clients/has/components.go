@@ -190,12 +190,13 @@ type RetryOptions struct {
 
 	// If is set to true the PipelineRun will be retriggered always in case if pipelinerun fail for any reason. Time to time in RHTAP CI
 	// we see that there are a lot of components which fail with QPS in build-container which cannot be controlled.
-	// By default is false will retrigger a pipelineRun only when meet CouldntGetTask or TaskRunImagePullFailed conditions
+	// By default is false will retrigger a pipelineRun only when meet CouldntGetTask, CouldntGetPipeline, or TaskRunImagePullFailed conditions
 	Always bool
 }
 
 // WaitForComponentPipelineToBeFinished waits for a given component PipelineRun to be finished
-// In case of hitting issues like `TaskRunImagePullFailed` or `CouldntGetTask` it will re-trigger the PLR.
+// In case of hitting issues like `TaskRunImagePullFailed`, `CouldntGetTask`, or `CouldntGetPipeline`
+// (e.g. pipeline-level resolver timeout) it will re-trigger the PLR.
 // Due to re-trigger mechanism this function can invalidate the related PLR object which might be used later in the test
 // (by deleting the original PLR and creating a new one in case the PLR fails on one of the attempts).
 // For that case this function gives an option to pass in a pointer to a related PLR object (`prToUpdate`) which will be updated (with a valid PLR object) before the end of this function
@@ -265,9 +266,12 @@ func (h *Controller) WaitForComponentPipelineToBeFinished(component *appservice.
 				return fmt.Errorf("PipelineRun cannot be created for the Component %s/%s", component.GetNamespace(), component.GetName())
 			}
 			ginkgo.GinkgoWriter.Printf("attempt %d/%d: PipelineRun %q failed: %+v", attempts, r.Retries+1, pr.GetName(), err)
-			// CouldntGetTask: Retry the PipelineRun only in case we hit the known issue https://issues.redhat.com/browse/SRVKP-2749
-			// TaskRunImagePullFailed: Retry in case of https://issues.redhat.com/browse/RHTAPBUGS-985 and https://github.com/tektoncd/pipeline/issues/7184
-			if attempts == r.Retries+1 || (!r.Always && pr.GetStatusCondition().GetCondition(apis.ConditionSucceeded).GetReason() != "CouldntGetTask" && pr.GetStatusCondition().GetCondition(apis.ConditionSucceeded).GetReason() != "TaskRunImagePullFailed") {
+			// Retry on transient failures: CouldntGetTask (SRVKP-2749),
+			// CouldntGetPipeline (pipeline-level resolver timeout),
+			// TaskRunImagePullFailed (RHTAPBUGS-985, tektoncd/pipeline#7184),
+			// or "resolution took longer than global timeout" in the message.
+			cond := pr.GetStatusCondition().GetCondition(apis.ConditionSucceeded)
+			if attempts == r.Retries+1 || (!r.Always && !buildPipelineRunIsTransient(cond.GetReason(), cond.GetMessage())) {
 				return err
 			}
 			if err = t.RemoveFinalizerFromPipelineRun(pr, constants.E2ETestFinalizerName); err != nil {
@@ -670,4 +674,19 @@ func (h *Controller) UpdateComponent(component *appservice.Component) error {
 		return err
 	}
 	return nil
+}
+
+// buildPipelineRunIsTransient checks whether a build PipelineRun failure
+// reason indicates a transient error worth retrying. Transient failures:
+//   - CouldntGetTask — task-level resolver timeout (SRVKP-2749)
+//   - CouldntGetPipeline — pipeline-level resolver timeout (e.g. git
+//     resolver exceeding Tekton's global resolution timeout)
+//   - TaskRunImagePullFailed — image-pull flakes (RHTAPBUGS-985)
+//   - "resolution took longer than global timeout" in the condition
+//     message — fallback when Tekton uses a generic reason
+func buildPipelineRunIsTransient(reason, message string) bool {
+	return reason == "CouldntGetTask" ||
+		reason == "CouldntGetPipeline" ||
+		reason == "TaskRunImagePullFailed" ||
+		strings.Contains(message, "resolution took longer than global timeout")
 }
