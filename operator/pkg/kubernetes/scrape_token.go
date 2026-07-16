@@ -168,7 +168,7 @@ func ScrapeTokenNeedsRefresh(secret *corev1.Secret, now time.Time, ttl time.Dura
 	if remaining <= 0 {
 		return true
 	}
-	return remaining < time.Duration(float64(ttl)*DefaultScrapeTokenRefreshRemaining)
+	return remaining <= time.Duration(float64(ttl)*DefaultScrapeTokenRefreshRemaining)
 }
 
 // ScrapeTokenExpiry parses the expiry annotation on a scrape token Secret.
