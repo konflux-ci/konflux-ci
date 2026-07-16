@@ -21,6 +21,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -467,6 +468,39 @@ var _ = Describe("Konflux Controller", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: segmentbridge.CRName}, sb)).To(Succeed())
 				g.Expect(sb.Name).To(Equal(segmentbridge.CRName))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should pass through telemetry.spec.cronJob to the child SegmentBridge CR", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			By("creating Konflux CR with telemetry.spec.cronJob overrides")
+			enabled := true
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					Telemetry: &konfluxv1alpha1.TelemetryConfig{
+						Enabled: &enabled,
+						Spec: &konfluxv1alpha1.KonfluxSegmentBridgeSpec{
+							CronJob: &konfluxv1alpha1.ContainerSpec{
+								Env: []corev1.EnvVar{
+									{Name: "HTTP_PROXY", Value: "http://proxy.example.com:3128"},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			By("verifying the child SegmentBridge CR carries the cronJob override")
+			sb := &konfluxv1alpha1.KonfluxSegmentBridge{}
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: segmentbridge.CRName}, sb)).To(Succeed())
+				g.Expect(sb.Spec.CronJob).NotTo(BeNil())
+				g.Expect(sb.Spec.CronJob.Env).To(ContainElement(
+					corev1.EnvVar{Name: "HTTP_PROXY", Value: "http://proxy.example.com:3128"}))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
