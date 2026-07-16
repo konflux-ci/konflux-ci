@@ -25,6 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -195,6 +196,46 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 				waitForSecret(ctx, func(g Gomega, data map[string][]byte) {
 					g.Expect(string(data["TEKTON_LIMIT"])).To(Equal("2000"))
 				})
+			})
+
+			It("should apply CronJob resource overrides from spec.CronJob", func(ctx context.Context) {
+				segmentRes := &konfluxv1alpha1.KonfluxSegmentBridge{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+					Spec: konfluxv1alpha1.KonfluxSegmentBridgeSpec{
+						CronJob: &konfluxv1alpha1.ContainerSpec{
+							Resources: &corev1.ResourceRequirements{
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("500m"),
+									corev1.ResourceMemory: resource.MustParse("512Mi"),
+								},
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("100m"),
+									corev1.ResourceMemory: resource.MustParse("128Mi"),
+								},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, segmentRes)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, segmentRes, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      segmentBridgeSecretName,
+					Namespace: segmentBridgeNamespace,
+				}})
+
+				cjNN := types.NamespacedName{
+					Name:      childResourceName,
+					Namespace: segmentBridgeNamespace,
+				}
+				Eventually(func(g Gomega) {
+					cj := &batchv1.CronJob{}
+					g.Expect(k8sClient.Get(ctx, cjNN, cj)).To(Succeed())
+					container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, childResourceName)
+					g.Expect(container).NotTo(BeNil())
+					g.Expect(container.Resources.Limits.Cpu().String()).To(Equal("500m"))
+					g.Expect(container.Resources.Limits.Memory().String()).To(Equal("512Mi"))
+					g.Expect(container.Resources.Requests.Cpu().String()).To(Equal("100m"))
+					g.Expect(container.Resources.Requests.Memory().String()).To(Equal("128Mi"))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 			})
 
 			It("should use default URL when only segmentKey is set", func(ctx context.Context) {

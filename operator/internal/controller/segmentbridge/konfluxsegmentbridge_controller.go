@@ -38,6 +38,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/segment"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
@@ -53,6 +54,11 @@ const (
 
 	segmentBridgeNamespace  = "segment-bridge"
 	segmentBridgeSecretName = "segment-bridge-config"
+
+	// cronJobName is the name of the segment-bridge CronJob resource.
+	cronJobName = "segment-bridge"
+	// cronJobContainerName is the name of the segment-bridge container within the CronJob.
+	cronJobContainerName = "segment-bridge"
 
 	// tektonResultsAPIAddrK8s is the in-cluster gRPC address of the Tekton Results
 	// API on vanilla Kubernetes (targetNamespace=tekton-pipelines).
@@ -115,7 +121,7 @@ func (r *KonfluxSegmentBridgeReconciler) Reconcile(ctx context.Context, req ctrl
 		FieldManager:      FieldManager,
 	})
 
-	if err := r.applyManifests(ctx, tc); err != nil {
+	if err := r.applyManifests(ctx, tc, segmentBridge.Spec); err != nil {
 		return errHandler.HandleApplyError(ctx, err)
 	}
 
@@ -142,19 +148,35 @@ func (r *KonfluxSegmentBridgeReconciler) Reconcile(ctx context.Context, req ctrl
 }
 
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
-func (r *KonfluxSegmentBridgeReconciler) applyManifests(ctx context.Context, tc *tracking.Client) error {
+func (r *KonfluxSegmentBridgeReconciler) applyManifests(ctx context.Context, tc *tracking.Client, spec konfluxv1alpha1.KonfluxSegmentBridgeSpec) error {
 	objects, err := r.ObjectStore.GetForComponent(manifests.SegmentBridge)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for SegmentBridge: %w", err)
 	}
 
 	for _, obj := range objects {
+		if cronJob, ok := obj.(*batchv1.CronJob); ok && cronJob.Name == cronJobName {
+			if err := applySegmentBridgeCronJobCustomizations(cronJob, spec); err != nil {
+				return fmt.Errorf("failed to apply customizations to CronJob %s: %w", cronJob.Name, err)
+			}
+		}
+
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
 				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), manifests.SegmentBridge, err)
 		}
 	}
 	return nil
+}
+
+// applySegmentBridgeCronJobCustomizations applies user-defined resource and env overrides
+// to the segment-bridge CronJob container. Env overrides are appended on top of the
+// container's existing env and do not affect the envFrom Secret reference that supplies
+// SEGMENT_WRITE_KEY, SEGMENT_BATCH_API, TEKTON_RESULTS_API_ADDR, and TEKTON_LIMIT. An env
+// override that happens to reuse one of those names takes precedence over the Secret-sourced value, per
+// standard Kubernetes container env-vs-envFrom precedence rules.
+func applySegmentBridgeCronJobCustomizations(cj *batchv1.CronJob, spec konfluxv1alpha1.KonfluxSegmentBridgeSpec) error {
+	return customization.ApplyCronJobContainerSpec(cj, cronJobContainerName, spec.CronJob)
 }
 
 // tektonResultsAPIAddr returns the in-cluster gRPC address of the Tekton Results API.
