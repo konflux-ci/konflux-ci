@@ -151,13 +151,6 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - events
-  verbs:
-  - create
-  - patch
-- apiGroups:
-  - ""
-  resources:
   - namespaces
   - services
   verbs:
@@ -175,6 +168,14 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - ""
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
 - apiGroups:
   - apiextensions.k8s.io
   resources:
@@ -441,7 +442,7 @@ spec:
         - -webhook-config-path=/mnt/webhook-config.json
         command:
         - /manager
-        image: quay.io/konflux-ci/build-service:40d2c83256e3cfe0905f827fbc47f20bc38b1bfc
+        image: quay.io/konflux-ci/build-service:cb91f61222fea1451e23e53a69c833dd600b6cde
         livenessProbe:
           httpGet:
             path: /healthz
