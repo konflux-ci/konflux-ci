@@ -38,7 +38,7 @@ spec:
             type: object
           spec:
             default: {}
-            description: KonfluxUISpec defines the desired state of KonfluxUI
+            description: KonfluxUISpec defines the desired state of KonfluxUI.
             properties:
               componentMetrics:
                 description: |-

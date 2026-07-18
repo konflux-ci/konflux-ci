@@ -140,3 +140,15 @@ func TestRuntimeConfigSpec_All(t *testing.T) {
 		g.Expect(count).To(gomega.Equal(2))
 	})
 }
+
+func TestKonfluxUIConfigSpec_Accessors(t *testing.T) {
+	t.Parallel()
+	g := gomega.NewWithT(t)
+
+	cfg := &KonfluxUIConfigSpec{}
+
+	g.Expect(cfg.GetIngress()).To(gomega.Equal(IngressSpec{}))
+	g.Expect(cfg.GetNodePortService()).To(gomega.BeNil())
+	g.Expect(cfg.GetProxy()).To(gomega.Equal(ProxyDeploymentSpec{Replicas: 1}))
+	g.Expect(cfg.GetDex()).To(gomega.Equal(DexDeploymentSpec{Replicas: 1}))
+}

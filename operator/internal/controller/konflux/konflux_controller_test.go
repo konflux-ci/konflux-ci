@@ -643,6 +643,35 @@ var _ = Describe("Konflux Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
+		It("should copy parent release and ui config specs onto operand CRs", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					KonfluxReleaseService: &konfluxv1alpha1.ReleaseServiceConfig{
+						Spec: &konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+							Debug: true,
+						},
+					},
+					KonfluxUI: &konfluxv1alpha1.KonfluxUIConfig{
+						Spec: &konfluxv1alpha1.KonfluxUIConfigSpec{},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			Eventually(func(g Gomega) {
+				rs := &konfluxv1alpha1.KonfluxReleaseService{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: releaseservice.CRName}, rs)).To(Succeed())
+				g.Expect(rs.Spec.Debug).To(BeTrue())
+
+				ui := &konfluxv1alpha1.KonfluxUI{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: uictrl.CRName}, ui)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
 		It("should update operand CR componentMetrics when Konflux spec changes", func(ctx context.Context) {
 			startManager(createTestClusterInfo())
 

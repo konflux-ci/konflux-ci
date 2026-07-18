@@ -615,9 +615,11 @@ var _ = Describe("KonfluxUI Controller", func() {
 			ui := &konfluxv1alpha1.KonfluxUI{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 				Spec: konfluxv1alpha1.KonfluxUISpec{
-					Ingress: &konfluxv1alpha1.IngressSpec{
-						Enabled: ptr.To(true),
-						Host:    "openshift-test.example.com",
+					KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+						Ingress: &konfluxv1alpha1.IngressSpec{
+							Enabled: ptr.To(true),
+							Host:    "openshift-test.example.com",
+						},
 					},
 				},
 			}
@@ -930,9 +932,11 @@ var _ = Describe("KonfluxUI Controller", func() {
 			ui := &konfluxv1alpha1.KonfluxUI{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 				Spec: konfluxv1alpha1.KonfluxUISpec{
-					Ingress: &konfluxv1alpha1.IngressSpec{
-						Enabled: ptr.To(true),
-						Host:    "consolelink-test.example.com",
+					KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+						Ingress: &konfluxv1alpha1.IngressSpec{
+							Enabled: ptr.To(true),
+							Host:    "consolelink-test.example.com",
+						},
 					},
 				},
 			}
@@ -1751,9 +1755,11 @@ var _ = Describe("KonfluxUI Controller", func() {
 			ui := &konfluxv1alpha1.KonfluxUI{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 				Spec: konfluxv1alpha1.KonfluxUISpec{
-					Ingress: &konfluxv1alpha1.IngressSpec{
-						Enabled: ptr.To(true),
-						Host:    "drift-test.example.com",
+					KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+						Ingress: &konfluxv1alpha1.IngressSpec{
+							Enabled: ptr.To(true),
+							Host:    "drift-test.example.com",
+						},
 					},
 				},
 			}
@@ -1807,9 +1813,11 @@ var _ = Describe("KonfluxUI Controller", func() {
 			ui := &konfluxv1alpha1.KonfluxUI{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 				Spec: konfluxv1alpha1.KonfluxUISpec{
-					Ingress: &konfluxv1alpha1.IngressSpec{
-						Enabled: ptr.To(true),
-						Host:    "consolelink-drift.example.com",
+					KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+						Ingress: &konfluxv1alpha1.IngressSpec{
+							Enabled: ptr.To(true),
+							Host:    "consolelink-drift.example.com",
+						},
 					},
 				},
 			}
@@ -2080,14 +2088,16 @@ var _ = Describe("KonfluxUI Controller", func() {
 			ui := &konfluxv1alpha1.KonfluxUI{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 				Spec: konfluxv1alpha1.KonfluxUISpec{
-					RuntimeConfig: &konfluxv1alpha1.RuntimeConfigSpec{
-						ChatBot: &konfluxv1alpha1.ChatBotConfig{
-							Enabled: ptr.To(false),
-						},
-						Monitoring: &konfluxv1alpha1.MonitoringConfig{
-							Enabled:     ptr.To(true),
-							DSN:         "https://example@sentry.io/123",
-							Environment: "staging",
+					KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+						RuntimeConfig: &konfluxv1alpha1.RuntimeConfigSpec{
+							ChatBot: &konfluxv1alpha1.ChatBotConfig{
+								Enabled: ptr.To(false),
+							},
+							Monitoring: &konfluxv1alpha1.MonitoringConfig{
+								Enabled:     ptr.To(true),
+								DSN:         "https://example@sentry.io/123",
+								Environment: "staging",
+							},
 						},
 					},
 				},

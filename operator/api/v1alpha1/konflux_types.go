@@ -114,9 +114,9 @@ type ImageControllerConfig struct {
 // KonfluxUIConfig defines the configuration for the UI component.
 // The Spec field is the runtime configuration passed to the component.
 type KonfluxUIConfig struct {
-	// Spec configures the UI component.
+	// Spec configures the UI component (excludes componentMetrics; see spec.componentMetrics).
 	// +optional
-	Spec *KonfluxUISpec `json:"spec,omitempty"`
+	Spec *KonfluxUIConfigSpec `json:"spec,omitempty"`
 }
 
 // IntegrationServiceConfig defines the configuration for the integration-service component.
@@ -130,9 +130,9 @@ type IntegrationServiceConfig struct {
 // ReleaseServiceConfig defines the configuration for the release-service component.
 // The Spec field is the runtime configuration passed to the component.
 type ReleaseServiceConfig struct {
-	// Spec configures the release-service component.
+	// Spec configures the release-service component (excludes componentMetrics; see spec.componentMetrics).
 	// +optional
-	Spec *KonfluxReleaseServiceSpec `json:"spec,omitempty"`
+	Spec *KonfluxReleaseServiceConfigSpec `json:"spec,omitempty"`
 }
 
 // BuildServiceConfig defines the configuration for the build-service component.
