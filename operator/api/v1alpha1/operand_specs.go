@@ -39,3 +39,19 @@ func NewKonfluxIntegrationServiceSpec(cfg KonfluxIntegrationServiceConfigSpec, m
 		ComponentMetrics:                    metrics,
 	}
 }
+
+// NewKonfluxReleaseServiceSpec builds a KonfluxReleaseService spec from user config and forwarded metrics.
+func NewKonfluxReleaseServiceSpec(cfg KonfluxReleaseServiceConfigSpec, metrics *ComponentMetricsConfig) KonfluxReleaseServiceSpec {
+	return KonfluxReleaseServiceSpec{
+		KonfluxReleaseServiceConfigSpec: cfg,
+		ComponentMetrics:                metrics,
+	}
+}
+
+// NewKonfluxUISpec builds a KonfluxUI spec from user config and forwarded metrics.
+func NewKonfluxUISpec(cfg KonfluxUIConfigSpec, metrics *ComponentMetricsConfig) KonfluxUISpec {
+	return KonfluxUISpec{
+		KonfluxUIConfigSpec: cfg,
+		ComponentMetrics:    metrics,
+	}
+}

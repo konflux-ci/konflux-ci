@@ -23,8 +23,8 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// KonfluxReleaseServiceSpec defines the desired state of KonfluxReleaseService
-type KonfluxReleaseServiceSpec struct {
+// KonfluxReleaseServiceConfigSpec defines user-configurable release-service settings on the Konflux CR.
+type KonfluxReleaseServiceConfigSpec struct {
 	// Debug enables debug mode in the ReleaseServiceConfig.
 	// When true, the release-service operates in debug mode.
 	// +optional
@@ -38,6 +38,11 @@ type KonfluxReleaseServiceSpec struct {
 	// ReleaseControllerManager defines customizations for the controller-manager deployment.
 	// +optional
 	ReleaseControllerManager *ControllerManagerDeploymentSpec `json:"releaseControllerManager,omitempty"`
+}
+
+// KonfluxReleaseServiceSpec defines the desired state of KonfluxReleaseService.
+type KonfluxReleaseServiceSpec struct {
+	KonfluxReleaseServiceConfigSpec `json:",inline"`
 
 	// ComponentMetrics controls Prometheus scrape resources for this component.
 	// Set by the Konflux reconciler from spec.componentMetrics on the Konflux CR.

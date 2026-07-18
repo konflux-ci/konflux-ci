@@ -219,8 +219,8 @@ func (r *RuntimeConfigSpec) All(yield func(key, value string) bool) {
 	}
 }
 
-// KonfluxUISpec defines the desired state of KonfluxUI
-type KonfluxUISpec struct {
+// KonfluxUIConfigSpec defines user-configurable UI settings on the Konflux CR.
+type KonfluxUIConfigSpec struct {
 	// Ingress defines the ingress configuration for KonfluxUI.
 	// This affects the proxy, oauth2-proxy, and dex components.
 	// +optional
@@ -236,6 +236,11 @@ type KonfluxUISpec struct {
 	// These settings are injected as window.KONFLUX_RUNTIME properties in the SPA.
 	// +optional
 	RuntimeConfig *RuntimeConfigSpec `json:"runtimeConfig,omitempty"`
+}
+
+// KonfluxUISpec defines the desired state of KonfluxUI.
+type KonfluxUISpec struct {
+	KonfluxUIConfigSpec `json:",inline"`
 
 	// ComponentMetrics controls Prometheus scrape resources for this component.
 	// Set by the Konflux reconciler from spec.componentMetrics on the Konflux CR.
@@ -307,7 +312,7 @@ func (k *KonfluxUI) SetConditions(conditions []metav1.Condition) {
 // -----------------------------------------------------------------------------
 
 // GetIngress returns the IngressSpec with safe defaults if nil.
-func (s *KonfluxUISpec) GetIngress() IngressSpec {
+func (s *KonfluxUIConfigSpec) GetIngress() IngressSpec {
 	if s.Ingress == nil {
 		return IngressSpec{}
 	}
@@ -315,7 +320,7 @@ func (s *KonfluxUISpec) GetIngress() IngressSpec {
 }
 
 // GetNodePortService returns the NodePortServiceSpec if configured, nil otherwise.
-func (s *KonfluxUISpec) GetNodePortService() *NodePortServiceSpec {
+func (s *KonfluxUIConfigSpec) GetNodePortService() *NodePortServiceSpec {
 	if s.Ingress == nil {
 		return nil
 	}
@@ -323,7 +328,7 @@ func (s *KonfluxUISpec) GetNodePortService() *NodePortServiceSpec {
 }
 
 // GetProxy returns the ProxyDeploymentSpec with safe defaults if nil.
-func (s *KonfluxUISpec) GetProxy() ProxyDeploymentSpec {
+func (s *KonfluxUIConfigSpec) GetProxy() ProxyDeploymentSpec {
 	if s.Proxy == nil {
 		return ProxyDeploymentSpec{Replicas: 1}
 	}
@@ -331,7 +336,7 @@ func (s *KonfluxUISpec) GetProxy() ProxyDeploymentSpec {
 }
 
 // GetDex returns the DexDeploymentSpec with safe defaults if nil.
-func (s *KonfluxUISpec) GetDex() DexDeploymentSpec {
+func (s *KonfluxUIConfigSpec) GetDex() DexDeploymentSpec {
 	if s.Dex == nil {
 		return DexDeploymentSpec{Replicas: 1}
 	}

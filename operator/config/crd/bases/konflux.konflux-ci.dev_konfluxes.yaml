@@ -2359,22 +2359,9 @@ spec:
                   The runtime configuration is copied to the KonfluxReleaseService CR by the operator.
                 properties:
                   spec:
-                    description: Spec configures the release-service component.
+                    description: Spec configures the release-service component (excludes
+                      componentMetrics; see spec.componentMetrics).
                     properties:
-                      componentMetrics:
-                        description: |-
-                          ComponentMetrics controls Prometheus scrape resources for this component.
-                          Set by the Konflux reconciler from spec.componentMetrics on the Konflux CR.
-                        properties:
-                          enabled:
-                            description: |-
-                              Enabled controls whether scrape resources are deployed for metrics-enabled components
-                              (see operator/docs/component-monitoring.md#scope). HTTPS operands on the operator
-                              scrape-token model use reconciler-managed prometheus-scrape-token; legacy interim
-                              operands use static-token HTTP scraping until migrated.
-                              Defaults to true when unset.
-                            type: boolean
-                        type: object
                       debug:
                         description: |-
                           Debug enables debug mode in the ReleaseServiceConfig.
@@ -2694,22 +2681,9 @@ spec:
                   The runtime configuration is copied to the KonfluxUI CR by the operator.
                 properties:
                   spec:
-                    description: Spec configures the UI component.
+                    description: Spec configures the UI component (excludes componentMetrics;
+                      see spec.componentMetrics).
                     properties:
-                      componentMetrics:
-                        description: |-
-                          ComponentMetrics controls Prometheus scrape resources for this component.
-                          Set by the Konflux reconciler from spec.componentMetrics on the Konflux CR.
-                        properties:
-                          enabled:
-                            description: |-
-                              Enabled controls whether scrape resources are deployed for metrics-enabled components
-                              (see operator/docs/component-monitoring.md#scope). HTTPS operands on the operator
-                              scrape-token model use reconciler-managed prometheus-scrape-token; legacy interim
-                              operands use static-token HTTP scraping until migrated.
-                              Defaults to true when unset.
-                            type: boolean
-                        type: object
                       dex:
                         description: Dex defines customizations for the dex deployment.
                         properties:
