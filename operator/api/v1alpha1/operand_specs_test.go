@@ -65,3 +65,35 @@ func TestNewKonfluxIntegrationServiceSpec(t *testing.T) {
 	g.Expect(spec.PipelineTimeout).To(gomega.Equal("1h"))
 	g.Expect(spec.ComponentMetrics).To(gomega.BeNil())
 }
+
+func TestNewKonfluxReleaseServiceSpec(t *testing.T) {
+	t.Parallel()
+	g := gomega.NewWithT(t)
+
+	cfg := KonfluxReleaseServiceConfigSpec{
+		Debug: true,
+	}
+	metrics := &ComponentMetricsConfig{Enabled: ptr.To(false)}
+
+	spec := NewKonfluxReleaseServiceSpec(cfg, metrics)
+	g.Expect(spec.Debug).To(gomega.BeTrue())
+	g.Expect(spec.ComponentMetrics).To(gomega.Equal(metrics))
+	g.Expect(spec.KonfluxReleaseServiceConfigSpec).To(gomega.Equal(cfg))
+}
+
+func TestNewKonfluxUISpec(t *testing.T) {
+	t.Parallel()
+	g := gomega.NewWithT(t)
+
+	cfg := KonfluxUIConfigSpec{
+		Ingress: &IngressSpec{
+			Host: "test.example.com",
+		},
+	}
+
+	spec := NewKonfluxUISpec(cfg, nil)
+	g.Expect(spec.Ingress).NotTo(gomega.BeNil())
+	g.Expect(spec.Ingress.Host).To(gomega.Equal("test.example.com"))
+	g.Expect(spec.ComponentMetrics).To(gomega.BeNil())
+	g.Expect(spec.KonfluxUIConfigSpec).To(gomega.Equal(cfg))
+}

@@ -126,11 +126,13 @@ func TestApplyReleaseServiceDeploymentCustomizations(t *testing.T) {
 	t.Run("applies customizations to controller-manager deployment", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
-			ReleaseControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
-				Manager: &konfluxv1alpha1.ContainerSpec{
-					Resources: &corev1.ResourceRequirements{
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU: resource.MustParse("1"),
+			KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+				ReleaseControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+					Manager: &konfluxv1alpha1.ContainerSpec{
+						Resources: &corev1.ResourceRequirements{
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU: resource.MustParse("1"),
+							},
 						},
 					},
 				},
@@ -149,11 +151,13 @@ func TestApplyReleaseServiceDeploymentCustomizations(t *testing.T) {
 	t.Run("ignores unknown deployment names", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
-			ReleaseControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
-				Manager: &konfluxv1alpha1.ContainerSpec{
-					Resources: &corev1.ResourceRequirements{
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU: resource.MustParse("1"),
+			KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+				ReleaseControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+					Manager: &konfluxv1alpha1.ContainerSpec{
+						Resources: &corev1.ResourceRequirements{
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU: resource.MustParse("1"),
+							},
 						},
 					},
 				},
@@ -182,9 +186,7 @@ func TestApplyReleaseServiceDeploymentCustomizations(t *testing.T) {
 
 	t.Run("handles nil controller-manager spec", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
-			ReleaseControllerManager: nil,
-		}
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{}
 
 		deployment := getReleaseServiceDeployment(t)
 		err := applyReleaseServiceDeploymentCustomizations(deployment, spec)
@@ -210,8 +212,10 @@ func TestApplyReleaseServiceDeploymentCustomizations(t *testing.T) {
 	t.Run("applies replicas to controller-manager deployment", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
-			ReleaseControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
-				Replicas: 3,
+			KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+				ReleaseControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+					Replicas: 3,
+				},
 			},
 		}
 
@@ -226,8 +230,10 @@ func TestApplyReleaseServiceDeploymentCustomizations(t *testing.T) {
 	t.Run("applies default replicas when using default value", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
-			ReleaseControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
-				Replicas: 1, // default value
+			KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+				ReleaseControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+					Replicas: 1, // default value
+				},
 			},
 		}
 
@@ -241,9 +247,7 @@ func TestApplyReleaseServiceDeploymentCustomizations(t *testing.T) {
 
 	t.Run("does not modify replicas when controller-manager spec is nil", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
-			ReleaseControllerManager: nil,
-		}
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{}
 
 		deployment := getReleaseServiceDeployment(t)
 		originalReplicas := deployment.Spec.Replicas
@@ -256,12 +260,14 @@ func TestApplyReleaseServiceDeploymentCustomizations(t *testing.T) {
 	t.Run("applies replicas together with container resources", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
-			ReleaseControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
-				Replicas: 5,
-				Manager: &konfluxv1alpha1.ContainerSpec{
-					Resources: &corev1.ResourceRequirements{
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU: resource.MustParse("2"),
+			KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+				ReleaseControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+					Replicas: 5,
+					Manager: &konfluxv1alpha1.ContainerSpec{
+						Resources: &corev1.ResourceRequirements{
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU: resource.MustParse("2"),
+							},
 						},
 					},
 				},
@@ -343,7 +349,9 @@ func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
 		g := gomega.NewWithT(t)
 		rsc := getReleaseServiceConfig(t)
 		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
-			Debug: true,
+			KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+				Debug: true,
+			},
 		}
 
 		err := applyReleaseServiceConfigCustomizations(rsc, spec)
@@ -357,9 +365,7 @@ func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
 	t.Run("sets debug to false when spec.Debug is false", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		rsc := getReleaseServiceConfig(t)
-		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
-			Debug: false,
-		}
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{}
 
 		err := applyReleaseServiceConfigCustomizations(rsc, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -373,16 +379,18 @@ func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
 		g := gomega.NewWithT(t)
 		rsc := getReleaseServiceConfig(t)
 		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
-			EmptyDirOverrides: []konfluxv1alpha1.EmptyDirOverride{
-				{
-					URL:        ".*",
-					Revision:   ".*",
-					PathInRepo: "pipelines/managed/fbc-release/fbc-release.yaml",
-				},
-				{
-					URL:        "https://github.com/example/repo",
-					Revision:   "main",
-					PathInRepo: "pipelines/test.yaml",
+			KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+				EmptyDirOverrides: []konfluxv1alpha1.EmptyDirOverride{
+					{
+						URL:        ".*",
+						Revision:   ".*",
+						PathInRepo: "pipelines/managed/fbc-release/fbc-release.yaml",
+					},
+					{
+						URL:        "https://github.com/example/repo",
+						Revision:   "main",
+						PathInRepo: "pipelines/test.yaml",
+					},
 				},
 			},
 		}
@@ -418,9 +426,7 @@ func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
 			},
 		}
 
-		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
-			EmptyDirOverrides: nil,
-		}
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{}
 
 		err := applyReleaseServiceConfigCustomizations(rsc, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -435,12 +441,14 @@ func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
 		g := gomega.NewWithT(t)
 		rsc := getReleaseServiceConfig(t)
 		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
-			Debug: true,
-			EmptyDirOverrides: []konfluxv1alpha1.EmptyDirOverride{
-				{
-					URL:        ".*",
-					Revision:   ".*",
-					PathInRepo: "pipelines/managed/rh-advisories/rh-advisories.yaml",
+			KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+				Debug: true,
+				EmptyDirOverrides: []konfluxv1alpha1.EmptyDirOverride{
+					{
+						URL:        ".*",
+						Revision:   ".*",
+						PathInRepo: "pipelines/managed/rh-advisories/rh-advisories.yaml",
+					},
 				},
 			},
 		}
@@ -483,9 +491,11 @@ func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
 			},
 		}
 		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
-			Debug: true,
-			EmptyDirOverrides: []konfluxv1alpha1.EmptyDirOverride{
-				{URL: ".*", Revision: ".*", PathInRepo: "test.yaml"},
+			KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+				Debug: true,
+				EmptyDirOverrides: []konfluxv1alpha1.EmptyDirOverride{
+					{URL: ".*", Revision: ".*", PathInRepo: "test.yaml"},
+				},
 			},
 		}
 
@@ -505,7 +515,11 @@ func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
 		deployment := &appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{Name: "test"},
 		}
-		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{Debug: true}
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
+			KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+				Debug: true,
+			},
+		}
 
 		// Should not panic
 		err := applyReleaseServiceConfigCustomizations(deployment, spec)
@@ -528,11 +542,13 @@ func TestApplyReleaseServiceDeploymentCustomizations_ResourceMerging(t *testing.
 		}
 
 		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
-			ReleaseControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
-				Manager: &konfluxv1alpha1.ContainerSpec{
-					Resources: &corev1.ResourceRequirements{
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU: resource.MustParse("500m"),
+			KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+				ReleaseControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+					Manager: &konfluxv1alpha1.ContainerSpec{
+						Resources: &corev1.ResourceRequirements{
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU: resource.MustParse("500m"),
+							},
 						},
 					},
 				},
@@ -562,11 +578,13 @@ func TestApplyReleaseServiceDeploymentCustomizations_ResourceMerging(t *testing.
 		}
 
 		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
-			ReleaseControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
-				Manager: &konfluxv1alpha1.ContainerSpec{
-					Resources: &corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU: resource.MustParse("100m"),
+			KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+				ReleaseControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+					Manager: &konfluxv1alpha1.ContainerSpec{
+						Resources: &corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU: resource.MustParse("100m"),
+							},
 						},
 					},
 				},

@@ -523,7 +523,7 @@ func (r *KonfluxReconciler) applyKonfluxReleaseService(ctx context.Context, tc *
 
 	var spec konfluxv1alpha1.KonfluxReleaseServiceSpec
 	if owner.Spec.KonfluxReleaseService != nil && owner.Spec.KonfluxReleaseService.Spec != nil {
-		spec = *owner.Spec.KonfluxReleaseService.Spec
+		spec.KonfluxReleaseServiceConfigSpec = *owner.Spec.KonfluxReleaseService.Spec
 	}
 	spec.ComponentMetrics = common.ForwardedComponentMetrics(owner)
 
@@ -547,7 +547,7 @@ func (r *KonfluxReconciler) applyKonfluxUI(ctx context.Context, tc *tracking.Cli
 	log := logf.FromContext(ctx)
 	var spec konfluxv1alpha1.KonfluxUISpec
 	if owner.Spec.KonfluxUI != nil && owner.Spec.KonfluxUI.Spec != nil {
-		spec = *owner.Spec.KonfluxUI.Spec
+		spec.KonfluxUIConfigSpec = *owner.Spec.KonfluxUI.Spec
 	}
 	spec.ComponentMetrics = common.ForwardedComponentMetrics(owner)
 

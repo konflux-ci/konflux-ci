@@ -253,13 +253,15 @@ func TestBuildForUI(t *testing.T) {
 				Name: "konflux-ui",
 			},
 			Spec: konfluxv1alpha1.KonfluxUISpec{
-				Ingress: &konfluxv1alpha1.IngressSpec{
-					Enabled:          ptr.To(true),
-					IngressClassName: &ingressClassName,
-					Annotations: map[string]string{
-						"nginx.ingress.kubernetes.io/proxy-body-size": "100m",
+				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled:          ptr.To(true),
+						IngressClassName: &ingressClassName,
+						Annotations: map[string]string{
+							"nginx.ingress.kubernetes.io/proxy-body-size": "100m",
+						},
+						TLSSecretName: "ui-tls-cert",
 					},
-					TLSSecretName: "ui-tls-cert",
 				},
 			},
 		}
@@ -282,9 +284,11 @@ func TestBuildForUI(t *testing.T) {
 				Name: "konflux-ui",
 			},
 			Spec: konfluxv1alpha1.KonfluxUISpec{
-				Ingress: &konfluxv1alpha1.IngressSpec{
-					Enabled: ptr.To(true),
-					Host:    "explicit.host.com",
+				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled: ptr.To(true),
+						Host:    "explicit.host.com",
+					},
 				},
 			},
 		}
@@ -358,9 +362,7 @@ func TestDetermineEndpointURL(t *testing.T) {
 		g := gomega.NewWithT(t)
 
 		ui := &konfluxv1alpha1.KonfluxUI{
-			Spec: konfluxv1alpha1.KonfluxUISpec{
-				Ingress: nil,
-			},
+			Spec: konfluxv1alpha1.KonfluxUISpec{},
 		}
 
 		endpoint, err := DetermineEndpointURL(
@@ -377,8 +379,10 @@ func TestDetermineEndpointURL(t *testing.T) {
 
 		ui := &konfluxv1alpha1.KonfluxUI{
 			Spec: konfluxv1alpha1.KonfluxUISpec{
-				Ingress: &konfluxv1alpha1.IngressSpec{
-					Enabled: ptr.To(false),
+				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled: ptr.To(false),
+					},
 				},
 			},
 		}
@@ -396,9 +400,11 @@ func TestDetermineEndpointURL(t *testing.T) {
 
 		ui := &konfluxv1alpha1.KonfluxUI{
 			Spec: konfluxv1alpha1.KonfluxUISpec{
-				Ingress: &konfluxv1alpha1.IngressSpec{
-					Enabled: ptr.To(false),
-					Host:    "my-custom-host.example.com",
+				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled: ptr.To(false),
+						Host:    "my-custom-host.example.com",
+					},
 				},
 			},
 		}
@@ -419,9 +425,11 @@ func TestDetermineEndpointURL(t *testing.T) {
 
 		ui := &konfluxv1alpha1.KonfluxUI{
 			Spec: konfluxv1alpha1.KonfluxUISpec{
-				Ingress: &konfluxv1alpha1.IngressSpec{
-					Enabled: ptr.To(true),
-					Host:    "my-custom-host.example.com",
+				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled: ptr.To(true),
+						Host:    "my-custom-host.example.com",
+					},
 				},
 			},
 		}
@@ -440,9 +448,11 @@ func TestDetermineEndpointURL(t *testing.T) {
 
 		ui := &konfluxv1alpha1.KonfluxUI{
 			Spec: konfluxv1alpha1.KonfluxUISpec{
-				Ingress: &konfluxv1alpha1.IngressSpec{
-					Enabled: ptr.To(true),
-					Host:    "my-custom-host.example.com",
+				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled: ptr.To(true),
+						Host:    "my-custom-host.example.com",
+					},
 				},
 			},
 		}
@@ -464,8 +474,10 @@ func TestDetermineEndpointURL(t *testing.T) {
 
 		ui := &konfluxv1alpha1.KonfluxUI{
 			Spec: konfluxv1alpha1.KonfluxUISpec{
-				Ingress: &konfluxv1alpha1.IngressSpec{
-					Enabled: ptr.To(true),
+				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled: ptr.To(true),
+					},
 				},
 			},
 		}
@@ -496,8 +508,10 @@ func TestDetermineEndpointURL(t *testing.T) {
 
 		ui := &konfluxv1alpha1.KonfluxUI{
 			Spec: konfluxv1alpha1.KonfluxUISpec{
-				Ingress: &konfluxv1alpha1.IngressSpec{
-					Enabled: ptr.To(true),
+				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled: ptr.To(true),
+					},
 				},
 			},
 		}
@@ -516,8 +530,10 @@ func TestDetermineEndpointURL(t *testing.T) {
 
 		ui := &konfluxv1alpha1.KonfluxUI{
 			Spec: konfluxv1alpha1.KonfluxUISpec{
-				Ingress: &konfluxv1alpha1.IngressSpec{
-					Enabled: ptr.To(true),
+				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled: ptr.To(true),
+					},
 				},
 			},
 		}
@@ -537,8 +553,10 @@ func TestDetermineEndpointURL(t *testing.T) {
 
 		ui := &konfluxv1alpha1.KonfluxUI{
 			Spec: konfluxv1alpha1.KonfluxUISpec{
-				Ingress: &konfluxv1alpha1.IngressSpec{
-					Enabled: ptr.To(true),
+				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled: ptr.To(true),
+					},
 				},
 			},
 		}
@@ -563,8 +581,10 @@ func TestDetermineEndpointURL(t *testing.T) {
 
 		ui := &konfluxv1alpha1.KonfluxUI{
 			Spec: konfluxv1alpha1.KonfluxUISpec{
-				Ingress: &konfluxv1alpha1.IngressSpec{
-					Enabled: ptr.To(true),
+				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled: ptr.To(true),
+					},
 				},
 			},
 		}

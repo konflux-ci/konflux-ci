@@ -219,8 +219,8 @@ func (r *RuntimeConfigSpec) All(yield func(key, value string) bool) {
 	}
 }
 
-// KonfluxUISpec defines the desired state of KonfluxUI
-type KonfluxUISpec struct {
+// KonfluxUIConfigSpec defines user-configurable UI settings on the Konflux CR.
+type KonfluxUIConfigSpec struct {
 	// Ingress defines the ingress configuration for KonfluxUI.
 	// This affects the proxy, oauth2-proxy, and dex components.
 	// +optional
@@ -236,6 +236,11 @@ type KonfluxUISpec struct {
 	// These settings are injected as window.KONFLUX_RUNTIME properties in the SPA.
 	// +optional
 	RuntimeConfig *RuntimeConfigSpec `json:"runtimeConfig,omitempty"`
+}
+
+// KonfluxUISpec defines the desired state of KonfluxUI.
+type KonfluxUISpec struct {
+	KonfluxUIConfigSpec `json:",inline"`
 
 	// ComponentMetrics controls Prometheus scrape resources for this component.
 	// Set by the Konflux reconciler from spec.componentMetrics on the Konflux CR.
