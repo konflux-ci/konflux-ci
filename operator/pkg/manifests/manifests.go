@@ -185,11 +185,12 @@ func (s *ObjectStore) GetForComponent(component Component) ([]client.Object, err
 	return deepCopyObjects(objects), nil
 }
 
-// GetByGVK returns deep copies of objects for a component that match the given GVK.
-func (s *ObjectStore) GetByGVK(component Component, gvk schema.GroupVersionKind) ([]client.Object, error) {
-	objects, err := s.GetForComponent(component)
-	if err != nil {
-		return nil, err
+// objectsByGVK returns references to stored objects whose GVK exactly matches gvk.
+// Callers must treat the returned objects as read-only.
+func (s *ObjectStore) objectsByGVK(component Component, gvk schema.GroupVersionKind) ([]client.Object, error) {
+	objects, ok := s.objects[component]
+	if !ok {
+		return nil, fmt.Errorf("unknown component: %s", component)
 	}
 
 	var result []client.Object
@@ -201,11 +202,24 @@ func (s *ObjectStore) GetByGVK(component Component, gvk schema.GroupVersionKind)
 	return result, nil
 }
 
+// GetByGVK returns deep copies of objects for a component whose GVK exactly matches gvk.
+// Objects stored by ObjectStore retain the GVK parsed from their embedded manifests.
+func (s *ObjectStore) GetByGVK(component Component, gvk schema.GroupVersionKind) ([]client.Object, error) {
+	objects, err := s.objectsByGVK(component, gvk)
+	if err != nil {
+		return nil, err
+	}
+	if objects == nil {
+		return nil, nil
+	}
+	return deepCopyObjects(objects), nil
+}
+
 // GetCRDNamesForComponent returns the names of CustomResourceDefinitions
 // that are part of the component's manifests. Used to watch CRDs and enqueue
 // the component's CR when a managed CRD is deleted out of band.
 func (s *ObjectStore) GetCRDNamesForComponent(component Component) ([]string, error) {
-	objects, err := s.GetByGVK(component, apiextensionsv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"))
+	objects, err := s.objectsByGVK(component, apiextensionsv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"))
 	if err != nil {
 		return nil, err
 	}
