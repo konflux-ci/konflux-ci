@@ -388,7 +388,7 @@ subjects:
 ---
 apiVersion: v1
 data:
-  verify_ec_task_bundle: quay.io/conforma/tekton-task:latest@sha256:f62a46bd1c4abb2ee983a157c840d93bb6abe744841f51f6ff967ecbb36f1385
+  verify_ec_task_bundle: quay.io/conforma/tekton-task:latest@sha256:9a209385324f1d95c7306ab4c8d997f06c36d1ef0e0009fd2b94ff451be8f777
   verify_ec_task_git_pathInRepo: tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml
   verify_ec_task_git_revision: c81ad1ed4f3368c9bff4a0bb79fa5f12498d3c98
   verify_ec_task_git_url: https://github.com/conforma/cli.git
