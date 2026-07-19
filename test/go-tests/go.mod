@@ -24,9 +24,9 @@ require (
 	github.com/onsi/gomega v1.42.1
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/openshift-pipelines/pipelines-as-code v0.48.0
-	github.com/openshift/api v0.0.0-20260624175654-50c3975e874f
-	github.com/openshift/client-go v0.0.0-20260622130833-df412d4d283e
-	github.com/openshift/library-go v0.0.0-20260703081820-c6cd1a243d2d
+	github.com/openshift/api v0.0.0-20260715165912-72066cc9718b
+	github.com/openshift/client-go v0.0.0-20260715172546-dac61734e0ec
+	github.com/openshift/library-go v0.0.0-20260716164659-7926d144f96a
 	github.com/redhat-appstudio/jvm-build-service v0.0.0-20250301023318-b47170d413c5
 	github.com/stretchr/testify v1.11.1
 	github.com/tektoncd/cli v0.45.0
