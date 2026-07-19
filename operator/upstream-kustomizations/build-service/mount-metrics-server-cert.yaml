@@ -1,0 +1,26 @@
+# Mount metrics TLS at controller-runtime's default CertDir
+# (/tmp/k8s-metrics-server/serving-certs). No --metrics-cert-path flag —
+# build-service picks up tls.crt/tls.key from that path automatically.
+# Scrapers trust ca.crt from this Secret; mounts project tls.crt/tls.key only.
+#
+# optional: false — missing metrics-server-cert blocks pod start. Missing Secret blocks start; cert-manager renews in place. Heal must not delete the
+# Secret. Alternative: optional: true + metrics init that tolerates
+# empty CertDir (operands/controller-runtime may still fail without cert files at start).
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    name: metrics-certs
+    mountPath: /tmp/k8s-metrics-server/serving-certs
+    readOnly: true
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: metrics-certs
+    secret:
+      secretName: metrics-server-cert
+      optional: false
+      items:
+        - key: tls.crt
+          path: tls.crt
+        - key: tls.key
+          path: tls.key

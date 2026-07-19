@@ -58,7 +58,14 @@ func desiredOperatorServiceMonitor(namespace string) *unstructured.Unstructured 
 				"port":   "https",
 				"scheme": "https",
 				"tlsConfig": map[string]interface{}{
-					"insecureSkipVerify": true,
+					"insecureSkipVerify": false,
+					"serverName":         fmt.Sprintf("%s.%s.svc", OperatorMetricsServiceName, namespace),
+					"ca": map[string]interface{}{
+						"secret": map[string]interface{}{
+							"name": MetricsCASecretName,
+							"key":  MetricsCACertKey,
+						},
+					},
 				},
 			},
 		},

@@ -26,12 +26,16 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	testclock "k8s.io/utils/clock/testing"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
 
 // These tests use controller-runtime's fake client, which registers types on a shared
@@ -55,6 +59,33 @@ func (f *fakeTokenCreator) CreateScraperToken(
 	}
 	f.scraper = scraper
 	return f.token, f.expiresAt, nil
+}
+
+func metricsTLSObjects(t *testing.T) []client.Object {
+	t.Helper()
+	caPEM, leafPEM, err := kubernetes.NewSelfSignedMetricsTLSMaterial()
+	if err != nil {
+		t.Fatalf("tls material: %v", err)
+	}
+	return []client.Object{
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            kubernetes.MetricsServerCertSecretName,
+				Namespace:       testBuildServiceNamespace,
+				ResourceVersion: "leaf-1",
+			},
+			Data: map[string][]byte{
+				kubernetes.MetricsCACertKey:            caPEM,
+				kubernetes.MetricsServerCertTLSCertKey: leafPEM,
+			},
+		},
+	}
+}
+
+func clientWithMetricsTLS(t *testing.T, extra ...client.Object) client.Client {
+	t.Helper()
+	objs := append(metricsTLSObjects(t), extra...)
+	return fake.NewClientBuilder().WithObjects(objs...).Build()
 }
 
 func TestReconcilePrometheusScrapeToken_Validation(t *testing.T) {
@@ -153,7 +184,7 @@ func TestReconcilePrometheusScrapeToken_MintsAndSettles(t *testing.T) {
 	sm.SetNamespace(testBuildServiceNamespace)
 	sm.SetName(testBuildServiceNamespace)
 
-	c := fake.NewClientBuilder().WithObjects(sm).Build()
+	c := clientWithMetricsTLS(t, sm)
 	creator := &fakeTokenCreator{
 		token:     "operand-token",
 		expiresAt: now.Add(time.Hour),
@@ -239,7 +270,7 @@ func TestReconcilePrometheusScrapeToken_SecretSyncWhenRVChanges(t *testing.T) {
 		Data: map[string][]byte{kubernetes.ScrapeTokenSecretKey: []byte("token")},
 	}
 
-	c := fake.NewClientBuilder().WithObjects(sm, secret).Build()
+	c := clientWithMetricsTLS(t, sm, secret)
 	_, err := ReconcilePrometheusScrapeToken(ctx, ScrapeTokenReconcilerConfig{
 		Client:             c,
 		Clock:              testclock.NewFakeClock(now),
@@ -289,7 +320,7 @@ func TestReconcilePrometheusScrapeToken_SecretSyncBlockedDuringSettle(t *testing
 		Data: map[string][]byte{kubernetes.ScrapeTokenSecretKey: []byte("token")},
 	}
 
-	c := fake.NewClientBuilder().WithObjects(sm, secret).Build()
+	c := clientWithMetricsTLS(t, sm, secret)
 	_, err := ReconcilePrometheusScrapeToken(ctx, ScrapeTokenReconcilerConfig{
 		Client:             c,
 		Clock:              testclock.NewFakeClock(now),
@@ -317,7 +348,7 @@ func TestReconcilePrometheusScrapeToken_SecretSyncBlockedDuringSettle(t *testing
 func TestReconcilePrometheusScrapeToken_AppliesServiceMonitorWhenAbsent(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 7, 12, 8, 0, 0, 0, time.UTC)
-	c := fake.NewClientBuilder().Build()
+	c := clientWithMetricsTLS(t)
 	creator := &fakeTokenCreator{
 		token:     "operand-token",
 		expiresAt: now.Add(time.Hour),
@@ -391,7 +422,7 @@ func TestReconcilePrometheusScrapeToken_ReappliesServiceMonitorWhenPresent(t *te
 		Data: map[string][]byte{kubernetes.ScrapeTokenSecretKey: []byte("token")},
 	}
 
-	c := fake.NewClientBuilder().WithObjects(sm, secret).Build()
+	c := clientWithMetricsTLS(t, sm, secret)
 	applyCalls := 0
 	result, err := ReconcilePrometheusScrapeToken(ctx, ScrapeTokenReconcilerConfig{
 		Client:             c,
@@ -469,7 +500,7 @@ func TestReconcilePrometheusScrapeToken_TokenRefreshed(t *testing.T) {
 	sm.SetNamespace(testBuildServiceNamespace)
 	sm.SetName(testBuildServiceNamespace)
 
-	c := fake.NewClientBuilder().WithObjects(staleSecret, sm).Build()
+	c := clientWithMetricsTLS(t, staleSecret, sm)
 	creator := &fakeTokenCreator{
 		token:     "new-token",
 		expiresAt: now.Add(time.Hour),
@@ -554,7 +585,7 @@ func TestReconcilePrometheusScrapeToken_ApplyServiceMonitorFails(t *testing.T) {
 	}
 
 	_, err := ReconcilePrometheusScrapeToken(ctx, ScrapeTokenReconcilerConfig{
-		Client:             fake.NewClientBuilder().WithObjects(secret).Build(),
+		Client:             clientWithMetricsTLS(t, secret),
 		Clock:              testclock.NewFakeClock(now),
 		TokenCreator:       &fakeTokenCreator{},
 		Scraper:            kubernetes.OperandMetricsScraperSA(testBuildServiceNamespace),
@@ -573,7 +604,7 @@ func TestReconcilePrometheusScrapeToken_ApplyServiceMonitorFails(t *testing.T) {
 func TestReconcilePrometheusScrapeToken_SMNotFoundRequeuesWhenTokenUpdated(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 7, 12, 8, 0, 0, 0, time.UTC)
-	c := fake.NewClientBuilder().Build()
+	c := clientWithMetricsTLS(t)
 	creator := &fakeTokenCreator{
 		token:     "operand-token",
 		expiresAt: now.Add(time.Hour),
@@ -618,7 +649,7 @@ func TestReconcilePrometheusScrapeToken_NilApplyServiceMonitor(t *testing.T) {
 	sm.SetName(testBuildServiceNamespace)
 
 	_, err := ReconcilePrometheusScrapeToken(ctx, ScrapeTokenReconcilerConfig{
-		Client:             fake.NewClientBuilder().WithObjects(secret, sm).Build(),
+		Client:             clientWithMetricsTLS(t, secret, sm),
 		Clock:              testclock.NewFakeClock(now),
 		TokenCreator:       &fakeTokenCreator{},
 		Scraper:            kubernetes.OperandMetricsScraperSA(testBuildServiceNamespace),
@@ -655,7 +686,7 @@ func (l *laggingSecretGetClient) Get(
 func TestReconcilePrometheusScrapeToken_SucceedsWhenSecretCacheLagsAfterMint(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 7, 12, 8, 0, 0, 0, time.UTC)
-	base := fake.NewClientBuilder().Build()
+	base := clientWithMetricsTLS(t)
 	lagging := &laggingSecretGetClient{Client: base}
 	creator := &fakeTokenCreator{
 		token:     "operand-token",
@@ -715,7 +746,7 @@ func TestReconcilePrometheusScrapeToken_RequeueAfterOnFreshToken(t *testing.T) {
 		expiresAt: clk.Now().Add(time.Hour),
 	}
 
-	c := fake.NewClientBuilder().Build()
+	c := clientWithMetricsTLS(t)
 	cfg := ScrapeTokenReconcilerConfig{
 		Client:           c,
 		Clock:            clk,
@@ -779,4 +810,264 @@ func TestReconcilePrometheusScrapeToken_RequeueAfterOnFreshToken(t *testing.T) {
 	if result.RequeueAfter != 30*time.Minute {
 		t.Fatalf("boundary refresh requeue: got %v want 30m", result.RequeueAfter)
 	}
+}
+
+func TestReconcilePrometheusScrapeToken_DefersSMUntilTLSReady(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 7, 12, 8, 0, 0, 0, time.UTC)
+	c := fake.NewClientBuilder().Build()
+	applied := 0
+	result, err := ReconcilePrometheusScrapeToken(ctx, ScrapeTokenReconcilerConfig{
+		Client:             c,
+		Clock:              testclock.NewFakeClock(now),
+		TokenCreator:       &fakeTokenCreator{token: "tok", expiresAt: now.Add(time.Hour)},
+		Scraper:            kubernetes.OperandMetricsScraperSA(testBuildServiceNamespace),
+		OperandNamespace:   testBuildServiceNamespace,
+		ServiceMonitorName: testBuildServiceNamespace,
+		Apply: func(applyCtx context.Context, secret *corev1.Secret) error {
+			return c.Create(applyCtx, secret)
+		},
+		ApplyServiceMonitor: func(context.Context) error {
+			applied++
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if applied != 0 {
+		t.Fatalf("ApplyServiceMonitor calls: got %d want 0 while TLS missing", applied)
+	}
+	if result.RequeueAfter != kubernetes.DefaultMetricsTLSRequeue {
+		t.Fatalf("requeue: got %v want %v", result.RequeueAfter, kubernetes.DefaultMetricsTLSRequeue)
+	}
+}
+
+func TestReconcilePrometheusScrapeToken_CASyncWhenCARVChanges(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 7, 12, 8, 0, 0, 0, time.UTC)
+	sm := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{}}}
+	sm.SetGroupVersionKind(operandServiceMonitorGVK)
+	sm.SetNamespace(testBuildServiceNamespace)
+	sm.SetName(testBuildServiceNamespace)
+	sm.SetAnnotations(map[string]string{
+		kubernetes.ServiceMonitorResyncAnnotation:         "2026-07-12T07:00:00Z",
+		kubernetes.ServiceMonitorResyncSecretRVAnnotation: "200",
+		kubernetes.ServiceMonitorResyncCARVAnnotation:     "ca-old",
+		kubernetes.ServiceMonitorResyncReasonAnnotation:   kubernetes.ServiceMonitorResyncReasonTokenMinted,
+	})
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            kubernetes.ScrapeTokenSecretName,
+			Namespace:       testBuildServiceNamespace,
+			ResourceVersion: "200",
+			Annotations: map[string]string{
+				"konflux.konflux-ci.dev/scrape-token-expires-at": now.Add(45 * time.Minute).UTC().Format(time.RFC3339),
+			},
+		},
+		Data: map[string][]byte{kubernetes.ScrapeTokenSecretKey: []byte("token")},
+	}
+
+	c := clientWithMetricsTLS(t, sm, secret)
+	_, err := ReconcilePrometheusScrapeToken(ctx, ScrapeTokenReconcilerConfig{
+		Client:             c,
+		Clock:              testclock.NewFakeClock(now),
+		TokenCreator:       &fakeTokenCreator{},
+		Scraper:            kubernetes.OperandMetricsScraperSA(testBuildServiceNamespace),
+		OperandNamespace:   testBuildServiceNamespace,
+		ServiceMonitorName: testBuildServiceNamespace,
+		Apply:              func(context.Context, *corev1.Secret) error { return nil },
+	})
+	if err != nil {
+		t.Fatalf("ca sync reconcile: %v", err)
+	}
+
+	updated := &unstructured.Unstructured{}
+	updated.SetGroupVersionKind(operandServiceMonitorGVK)
+	if err := c.Get(ctx, types.NamespacedName{Namespace: testBuildServiceNamespace, Name: testBuildServiceNamespace}, updated); err != nil {
+		t.Fatalf("get SM: %v", err)
+	}
+	if updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation] != kubernetes.ServiceMonitorResyncReasonCASync {
+		t.Fatalf("reason: got %q want %q",
+			updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation],
+			kubernetes.ServiceMonitorResyncReasonCASync,
+		)
+	}
+	if updated.GetAnnotations()[kubernetes.ServiceMonitorResyncCARVAnnotation] != "leaf-1" {
+		t.Fatalf("ca rv annotation: got %q want leaf-1",
+			updated.GetAnnotations()[kubernetes.ServiceMonitorResyncCARVAnnotation])
+	}
+}
+
+func TestReconcilePrometheusScrapeToken_UsesSecretReaderNotStaleClient(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 7, 12, 8, 0, 0, 0, time.UTC)
+	base := clientWithMetricsTLS(t)
+	blind := &metricsTLSBlindClient{Client: base}
+	applied := 0
+
+	result, err := ReconcilePrometheusScrapeToken(ctx, ScrapeTokenReconcilerConfig{
+		Client:             blind,
+		SecretReader:       base,
+		Clock:              testclock.NewFakeClock(now),
+		TokenCreator:       &fakeTokenCreator{token: "tok", expiresAt: now.Add(time.Hour)},
+		Scraper:            kubernetes.OperandMetricsScraperSA(testBuildServiceNamespace),
+		OperandNamespace:   testBuildServiceNamespace,
+		ServiceMonitorName: testBuildServiceNamespace,
+		Apply: func(applyCtx context.Context, secret *corev1.Secret) error {
+			return base.Create(applyCtx, secret)
+		},
+		ApplyServiceMonitor: func(context.Context) error {
+			applied++
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if applied != 1 {
+		t.Fatalf("ApplyServiceMonitor calls: got %d want 1", applied)
+	}
+	if result.RequeueAfter != kubernetes.DefaultServiceMonitorResyncSettleDelay {
+		t.Fatalf("requeue: got %v", result.RequeueAfter)
+	}
+
+	// Without SecretReader, the same Client cannot see metrics TLS Secrets.
+	applied = 0
+	result, err = ReconcilePrometheusScrapeToken(ctx, ScrapeTokenReconcilerConfig{
+		Client:             blind,
+		Clock:              testclock.NewFakeClock(now),
+		TokenCreator:       &fakeTokenCreator{},
+		Scraper:            kubernetes.OperandMetricsScraperSA(testBuildServiceNamespace),
+		OperandNamespace:   testBuildServiceNamespace,
+		ServiceMonitorName: testBuildServiceNamespace,
+		Apply:              func(context.Context, *corev1.Secret) error { return nil },
+		ApplyServiceMonitor: func(context.Context) error {
+			applied++
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("reconcile without reader: %v", err)
+	}
+	if applied != 0 {
+		t.Fatal("expected SM apply deferred when Client cannot see metrics TLS")
+	}
+	if result.RequeueAfter != kubernetes.DefaultMetricsTLSRequeue {
+		t.Fatalf("requeue without reader: got %v", result.RequeueAfter)
+	}
+}
+
+// TestReconcilePrometheusScrapeToken_RetainsOwnedServiceMonitorAcrossTLSWaitCleanup
+// exercises the operand reconcile contract: ReconcilePrometheusScrapeToken then
+// tracking.CleanupOrphans. When TLS is not ready, an already-owned ServiceMonitor must
+// still be retained (ApplyOwned / tracked) so orphan cleanup does not delete it.
+func TestReconcilePrometheusScrapeToken_RetainsOwnedServiceMonitorAcrossTLSWaitCleanup(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
+
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("scheme: %v", err)
+	}
+
+	owner := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "konflux-build-service",
+			Namespace: testBuildServiceNamespace,
+			UID:       "owner-uid-tls-wait",
+		},
+	}
+	existingSM := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{}}}
+	existingSM.SetGroupVersionKind(operandServiceMonitorGVK)
+	existingSM.SetNamespace(testBuildServiceNamespace)
+	existingSM.SetName(testBuildServiceNamespace)
+	existingSM.SetLabels(map[string]string{
+		constant.KonfluxOwnerLabel:     owner.Name,
+		constant.KonfluxComponentLabel: "build-service",
+	})
+	existingSM.SetOwnerReferences([]metav1.OwnerReference{{
+		APIVersion: "v1",
+		Kind:       "ConfigMap",
+		Name:       owner.Name,
+		UID:        owner.UID,
+		Controller: ptr.To(true),
+	}})
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(owner, existingSM).Build()
+	// Fresh tracking client per reconcile (empty tracked set), matching controllers.
+	tc := tracking.NewClientWithOwnership(c, tracking.OwnershipConfig{
+		Owner:             owner,
+		OwnerLabelKey:     constant.KonfluxOwnerLabel,
+		ComponentLabelKey: constant.KonfluxComponentLabel,
+		Component:         "build-service",
+		FieldManager:      "test-build-service",
+	})
+
+	desiredSM := func() *unstructured.Unstructured {
+		sm := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{}}}
+		sm.SetGroupVersionKind(operandServiceMonitorGVK)
+		sm.SetNamespace(testBuildServiceNamespace)
+		sm.SetName(testBuildServiceNamespace)
+		return sm
+	}
+
+	_, err := ReconcilePrometheusScrapeToken(ctx, ScrapeTokenReconcilerConfig{
+		Client:             c,
+		Clock:              testclock.NewFakeClock(now),
+		TokenCreator:       &fakeTokenCreator{token: "tok", expiresAt: now.Add(time.Hour)},
+		Scraper:            kubernetes.OperandMetricsScraperSA(testBuildServiceNamespace),
+		OperandNamespace:   testBuildServiceNamespace,
+		ServiceMonitorName: testBuildServiceNamespace,
+		// No metrics-server-cert → TLS wait path (first-boot / heal).
+		Apply: func(applyCtx context.Context, secret *corev1.Secret) error {
+			return tc.ApplyOwned(applyCtx, secret)
+		},
+		ApplyServiceMonitor: func(applyCtx context.Context) error {
+			return tc.ApplyOwned(applyCtx, desiredSM())
+		},
+	})
+	if err != nil {
+		t.Fatalf("reconcile scrape token: %v", err)
+	}
+
+	if err := tc.CleanupOrphans(
+		ctx,
+		constant.KonfluxOwnerLabel,
+		owner.Name,
+		kubernetes.ComponentMetricsOrphanCleanupGVKs,
+	); err != nil {
+		t.Fatalf("cleanup orphans: %v", err)
+	}
+
+	got := &unstructured.Unstructured{}
+	got.SetGroupVersionKind(operandServiceMonitorGVK)
+	if err := c.Get(ctx, types.NamespacedName{
+		Namespace: testBuildServiceNamespace,
+		Name:      testBuildServiceNamespace,
+	}, got); err != nil {
+		t.Fatalf("owned ServiceMonitor must survive TLS-wait + CleanupOrphans: %v", err)
+	}
+}
+
+// metricsTLSBlindClient simulates a stale informer cache that has not observed metrics TLS Secrets.
+type metricsTLSBlindClient struct {
+	client.Client
+}
+
+func (m *metricsTLSBlindClient) Get(
+	ctx context.Context,
+	key types.NamespacedName,
+	obj client.Object,
+	opts ...client.GetOption,
+) error {
+	if _, ok := obj.(*corev1.Secret); ok {
+		switch key.Name {
+		case kubernetes.MetricsServerCertSecretName:
+			return apierrors.NewNotFound(corev1.Resource("secrets"), key.Name)
+		}
+	}
+	return m.Client.Get(ctx, key, obj, opts...)
 }

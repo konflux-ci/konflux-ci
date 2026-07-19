@@ -29,6 +29,38 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+func TestResyncOperandServiceMonitor_SetsCARV(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 7, 12, 8, 0, 0, 0, time.UTC)
+	sm := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{}}}
+	sm.SetGroupVersionKind(serviceMonitorGVK)
+	sm.SetNamespace("build-service")
+	sm.SetName("build-service")
+	c := fake.NewClientBuilder().WithObjects(sm).Build()
+
+	err := ResyncOperandServiceMonitor(ctx, c, "build-service", "build-service", ServiceMonitorResyncOptions{
+		Force:                 true,
+		Reason:                ServiceMonitorResyncReasonCASync,
+		SecretResourceVersion: "tok-1",
+		CAResourceVersion:     "ca-9",
+		Clock:                 testclock.NewFakeClock(now),
+	})
+	if err != nil {
+		t.Fatalf("resync: %v", err)
+	}
+	updated := &unstructured.Unstructured{}
+	updated.SetGroupVersionKind(serviceMonitorGVK)
+	if err := c.Get(ctx, client.ObjectKey{Namespace: "build-service", Name: "build-service"}, updated); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if updated.GetAnnotations()[ServiceMonitorResyncCARVAnnotation] != "ca-9" {
+		t.Fatalf("ca rv: %#v", updated.GetAnnotations())
+	}
+	if ServiceMonitorResyncCARV(updated) != "ca-9" {
+		t.Fatalf("helper CARV: %q", ServiceMonitorResyncCARV(updated))
+	}
+}
+
 func TestResyncOperandServiceMonitorSetsAnnotation(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -234,6 +266,9 @@ func TestServiceMonitorResyncHelpers(t *testing.T) {
 	if ServiceMonitorResyncSecretRV(nil) != "" {
 		t.Fatal("nil SM should have empty secret RV")
 	}
+	if ServiceMonitorResyncCARV(nil) != "" {
+		t.Fatal("nil SM should have empty CA RV")
+	}
 
 	sm := &unstructured.Unstructured{}
 	if ServiceMonitorResyncSettlePending(sm) {
@@ -242,15 +277,22 @@ func TestServiceMonitorResyncHelpers(t *testing.T) {
 	if ServiceMonitorResyncSecretRV(sm) != "" {
 		t.Fatal("empty annotations should have empty secret RV")
 	}
+	if ServiceMonitorResyncCARV(sm) != "" {
+		t.Fatal("empty annotations should have empty CA RV")
+	}
 
 	sm.SetAnnotations(map[string]string{
 		ServiceMonitorResyncSettleAnnotation:   serviceMonitorResyncSettlePending,
 		ServiceMonitorResyncSecretRVAnnotation: "42",
+		ServiceMonitorResyncCARVAnnotation:     "ca-7",
 	})
 	if !ServiceMonitorResyncSettlePending(sm) {
 		t.Fatal("expected settle pending")
 	}
 	if ServiceMonitorResyncSecretRV(sm) != "42" {
 		t.Fatalf("secret RV: got %q", ServiceMonitorResyncSecretRV(sm))
+	}
+	if ServiceMonitorResyncCARV(sm) != "ca-7" {
+		t.Fatalf("CA RV: got %q", ServiceMonitorResyncCARV(sm))
 	}
 }

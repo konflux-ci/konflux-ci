@@ -1,0 +1,35 @@
+# Operator self-metrics TLS must not depend on ClusterIssuer konflux-issuer:
+# that issuer is reconciled by this operator after it starts. Use a namespace-local
+# SelfSigned Issuer so metrics-server-cert exists before the manager pod mounts it.
+# cert-manager still writes tls.crt/tls.key and ca.crt into the same Secret.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  labels:
+    app.kubernetes.io/name: metrics-certificate
+    app.kubernetes.io/instance: metrics-certs
+    app.kubernetes.io/component: certificate
+  name: metrics-selfsigned-issuer
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/name: metrics-certificate
+    app.kubernetes.io/instance: metrics-certs
+    app.kubernetes.io/component: certificate
+  name: metrics-certs
+spec:
+  # Short CN only — X.509 commonName max is 64 bytes; the metrics Service FQDN is longer.
+  # Still set so SelfSigned leaves are not Subject-empty (helps OpenSSL/curl --cacert probes).
+  # SANs in dnsNames remain the TLS identity Prometheus verifies via serverName.
+  commonName: konflux-operator-metrics
+  dnsNames:
+  - SERVICE_NAME.SERVICE_NAMESPACE.svc
+  - SERVICE_NAME.SERVICE_NAMESPACE.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: metrics-selfsigned-issuer
+  secretName: metrics-server-cert

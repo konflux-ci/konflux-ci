@@ -1337,6 +1337,9 @@ spec:
         - mountPath: /workspace
           name: quaytoken
           readOnly: true
+        - mountPath: /tmp/k8s-metrics-server/serving-certs
+          name: metrics-certs
+          readOnly: true
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -1351,6 +1354,15 @@ spec:
       - name: quaytoken
         secret:
           secretName: quaytoken
+      - name: metrics-certs
+        secret:
+          items:
+          - key: tls.crt
+            path: tls.crt
+          - key: tls.key
+            path: tls.key
+          optional: false
+          secretName: metrics-server-cert
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -1460,6 +1472,25 @@ spec:
               secretName: quaytoken
   schedule: 0 3 * * *
 ---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/component: certificate
+    app.kubernetes.io/instance: metrics-certs
+    app.kubernetes.io/name: metrics-certificate
+  name: metrics-certs
+  namespace: image-controller
+spec:
+  dnsNames:
+  - image-controller-controller-manager-metrics-service.image-controller.svc
+  - image-controller-controller-manager-metrics-service.image-controller.svc.cluster.local
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: konflux-issuer
+  secretName: metrics-server-cert
+---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -1475,7 +1506,12 @@ spec:
     port: https
     scheme: https
     tlsConfig:
-      insecureSkipVerify: true
+      ca:
+        secret:
+          key: ca.crt
+          name: metrics-server-cert
+      insecureSkipVerify: false
+      serverName: image-controller-controller-manager-metrics-service.image-controller.svc
   selector:
     matchLabels:
       control-plane: controller-manager

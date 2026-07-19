@@ -31,3 +31,26 @@ spec:
     kind: Issuer
     name: selfsigned-issuer
   secretName: webhook-server-cert # this secret will not be prefixed, since it's not managed by kustomize
+---
+# Metrics serving certificate (konflux-issuer), separate from webhook serving-cert.
+# cert-manager writes tls.crt/tls.key and ca.crt atomically into metrics-server-cert.
+# ServiceMonitors trust ca.crt from that same Secret; pods mount tls.crt/tls.key only.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/name: metrics-certificate
+    app.kubernetes.io/instance: metrics-certs
+    app.kubernetes.io/component: certificate
+  name: metrics-certs
+  namespace: release-service
+spec:
+  # SERVICE_NAME and SERVICE_NAMESPACE are substituted by kustomize replacements.
+  dnsNames:
+  - SERVICE_NAME.SERVICE_NAMESPACE.svc
+  - SERVICE_NAME.SERVICE_NAMESPACE.svc.cluster.local
+  issuerRef:
+    kind: ClusterIssuer
+    group: cert-manager.io
+    name: konflux-issuer
+  secretName: metrics-server-cert

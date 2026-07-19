@@ -45,6 +45,16 @@ rules:
   - watch
 - apiGroups:
   - ""
+  resourceNames:
+  - metrics-server-cert
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
   resources:
   - serviceaccounts
   verbs:

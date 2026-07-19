@@ -41,6 +41,10 @@ const (
 	// resourceVersion last seen when the SM was nudged.
 	//nolint:gosec // G101: annotation key, not a credential
 	ServiceMonitorResyncSecretRVAnnotation = "konflux.konflux-ci.dev/metrics-scrape-resync-secret-rv"
+	// ServiceMonitorResyncCARVAnnotation records the metrics-ca Secret resourceVersion
+	// last seen when the SM was nudged (so UWM refreshes tls-assets on CA change).
+	//nolint:gosec // G101: annotation key, not a credential
+	ServiceMonitorResyncCARVAnnotation = "konflux.konflux-ci.dev/metrics-scrape-resync-ca-rv"
 	// ServiceMonitorResyncSettleAnnotation marks a pending delayed settle nudge.
 	ServiceMonitorResyncSettleAnnotation = "konflux.konflux-ci.dev/metrics-scrape-resync-settle"
 
@@ -48,6 +52,7 @@ const (
 	ServiceMonitorResyncReasonTokenMinted    = "token-minted"
 	ServiceMonitorResyncReasonTokenRefreshed = "token-refreshed"
 	ServiceMonitorResyncReasonSecretSync     = "secret-sync"
+	ServiceMonitorResyncReasonCASync         = "ca-sync"
 	ServiceMonitorResyncReasonSettleRetry    = "settle-retry"
 
 	// DefaultServiceMonitorResyncSettleDelay waits before a settle-retry SM patch.
@@ -72,10 +77,12 @@ type ServiceMonitorResyncOptions struct {
 	// Force patches even when a prior resync annotation exists.
 	Force bool
 	// Reason is stored in ServiceMonitorResyncReasonAnnotation (token-minted, token-refreshed,
-	// settle-retry, secret-sync).
+	// settle-retry, secret-sync, ca-sync).
 	Reason string
 	// SecretResourceVersion is stored in ServiceMonitorResyncSecretRVAnnotation.
 	SecretResourceVersion string
+	// CAResourceVersion is stored in ServiceMonitorResyncCARVAnnotation.
+	CAResourceVersion string
 	// MarkSettlePending sets metrics-scrape-resync-settle=pending until settle-retry clears it.
 	MarkSettlePending bool
 	// ClearSettlePending removes the settle-pending annotation (settle-retry path).
@@ -136,6 +143,9 @@ func ResyncOperandServiceMonitor(
 	if opts.SecretResourceVersion != "" {
 		annotations[ServiceMonitorResyncSecretRVAnnotation] = opts.SecretResourceVersion
 	}
+	if opts.CAResourceVersion != "" {
+		annotations[ServiceMonitorResyncCARVAnnotation] = opts.CAResourceVersion
+	}
 	if opts.MarkSettlePending {
 		annotations[ServiceMonitorResyncSettleAnnotation] = serviceMonitorResyncSettlePending
 	}
@@ -157,6 +167,7 @@ func ResyncOperandServiceMonitor(
 		"servicemonitor", name,
 		"reason", opts.Reason,
 		"secretResourceVersion", opts.SecretResourceVersion,
+		"caResourceVersion", opts.CAResourceVersion,
 		"resyncAt", resyncAt,
 	)
 	return nil
@@ -191,4 +202,16 @@ func ServiceMonitorResyncSecretRV(sm *unstructured.Unstructured) string {
 		return ""
 	}
 	return annotations[ServiceMonitorResyncSecretRVAnnotation]
+}
+
+// ServiceMonitorResyncCARV returns the metrics-ca resourceVersion recorded on the SM.
+func ServiceMonitorResyncCARV(sm *unstructured.Unstructured) string {
+	if sm == nil {
+		return ""
+	}
+	annotations := sm.GetAnnotations()
+	if annotations == nil {
+		return ""
+	}
+	return annotations[ServiceMonitorResyncCARVAnnotation]
 }

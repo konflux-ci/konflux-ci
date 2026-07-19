@@ -98,9 +98,11 @@ var ReleaseServiceClusterScopedAllowList = tracking.ClusterScopedAllowList{
 // KonfluxReleaseServiceReconciler reconciles a KonfluxReleaseService object
 type KonfluxReleaseServiceReconciler struct {
 	client.Client
-	Scheme              *runtime.Scheme
-	ObjectStore         *manifests.ObjectStore
-	TokenCreator        kubernetes.TokenCreator
+	Scheme       *runtime.Scheme
+	ObjectStore  *manifests.ObjectStore
+	TokenCreator kubernetes.TokenCreator
+	// SecretReader loads metrics TLS Secrets; prefer mgr.GetAPIReader() to avoid stale cache.
+	SecretReader        client.Reader
 	Clock               clock.Clock
 	TokenRotationEvents <-chan event.TypedGenericEvent[client.Object]
 }
@@ -165,6 +167,7 @@ func (r *KonfluxReleaseServiceReconciler) Reconcile(ctx context.Context, req ctr
 		var scrapeErr error
 		scrapeResult, scrapeErr = common.ReconcilePrometheusScrapeToken(ctx, common.ScrapeTokenReconcilerConfig{
 			Client:             r.Client,
+			SecretReader:       r.SecretReader,
 			Clock:              r.Clock,
 			TokenCreator:       r.TokenCreator,
 			Scraper:            scraper,
@@ -230,9 +233,9 @@ func (r *KonfluxReleaseServiceReconciler) applyManifests(ctx context.Context, tc
 
 	for _, obj := range objects {
 		// Deferred ServiceMonitor apply: skip operand SM until ReconcilePrometheusScrapeToken
-		// applies it after prometheus-scrape-token is readable.
+		// applies it after prometheus-scrape-token and metrics TLS are ready.
 		if deferServiceMonitor && kubernetes.IsComponentMetricsServiceMonitor(obj) {
-			log.V(1).Info("Deferring operand ServiceMonitor apply until scrape token is ready",
+			log.V(1).Info("Deferring operand ServiceMonitor apply until scrape token and metrics TLS are ready",
 				"kind", tracking.GetKind(obj),
 				"name", obj.GetName(),
 				"namespace", obj.GetNamespace(),
@@ -378,6 +381,17 @@ func (r *KonfluxReleaseServiceReconciler) SetupWithManager(mgr ctrl.Manager) err
 		controllerBuilder = controllerBuilder.Owns(
 			&corev1.Secret{},
 			builder.WithPredicates(predicate.PrometheusScrapeTokenSecretPredicate),
+		)
+		// metrics-server-cert is created by cert-manager (not CR ownerRefs).
+		controllerBuilder = controllerBuilder.Watches(
+			&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
+				if obj.GetNamespace() != releaseServiceNamespace {
+					return nil
+				}
+				return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: CRName}}}
+			}),
+			builder.WithPredicates(predicate.MetricsTLSSecretPredicate),
 		)
 	}
 	if r.TokenRotationEvents != nil && r.TokenCreator != nil {

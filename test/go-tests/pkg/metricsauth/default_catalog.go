@@ -21,7 +21,7 @@ var prometheusBodyMatchers = []string{
 // DefaultCatalog returns the built-in scrape targets for cluster integration tests.
 func DefaultCatalog() (*Catalog, error) {
 	defaultCatalogOnce.Do(func() {
-		tlsSkip := true
+		insecureSkipVerify := false
 		catalog := &Catalog{
 			Targets: []Target{
 				{
@@ -33,7 +33,8 @@ func DefaultCatalog() (*Catalog, error) {
 					PortName:                 "https",
 					Port:                     8443,
 					Path:                     "/metrics",
-					TLSInsecureSkipVerify:    &tlsSkip,
+					TLSInsecureSkipVerify:    &insecureSkipVerify,
+					MetricsCASecret:          MetricsCASecretName,
 					MetricsReaderClusterRole: "konflux-operator-metrics-reader",
 					ScrapeTokenSecret:        kubernetes.ScrapeTokenSecretName,
 					BodyMustMatchAny:         prometheusBodyMatchers,
@@ -47,7 +48,8 @@ func DefaultCatalog() (*Catalog, error) {
 					PortName:                 "https",
 					Port:                     8443,
 					Path:                     "/metrics",
-					TLSInsecureSkipVerify:    &tlsSkip,
+					TLSInsecureSkipVerify:    &insecureSkipVerify,
+					MetricsCASecret:          MetricsCASecretName,
 					MetricsReaderClusterRole: "build-service-metrics-reader",
 					ScrapeTokenSecret:        kubernetes.ScrapeTokenSecretName,
 					BodyMustMatchAny:         prometheusBodyMatchers,
@@ -74,7 +76,8 @@ func DefaultCatalog() (*Catalog, error) {
 					PortName:                 "https",
 					Port:                     8443,
 					Path:                     "/metrics",
-					TLSInsecureSkipVerify:    &tlsSkip,
+					TLSInsecureSkipVerify:    &insecureSkipVerify,
+					MetricsCASecret:          MetricsCASecretName,
 					MetricsReaderClusterRole: "release-service-metrics-reader",
 					ScrapeTokenSecret:        kubernetes.ScrapeTokenSecretName,
 					BodyMustMatchAny:         prometheusBodyMatchers,
@@ -88,7 +91,8 @@ func DefaultCatalog() (*Catalog, error) {
 					PortName:                 "https",
 					Port:                     8443,
 					Path:                     "/metrics",
-					TLSInsecureSkipVerify:    &tlsSkip,
+					TLSInsecureSkipVerify:    &insecureSkipVerify,
+					MetricsCASecret:          MetricsCASecretName,
 					MetricsReaderClusterRole: "image-controller-metrics-reader",
 					ScrapeTokenSecret:        kubernetes.ScrapeTokenSecretName,
 					BodyMustMatchAny:         prometheusBodyMatchers,

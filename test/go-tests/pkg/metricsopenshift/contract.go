@@ -35,6 +35,34 @@ func ValidateScrapeContract(ctx context.Context, c client.Reader, target metrics
 			target.Namespace, sm.GetName(), bearerSecret, kubernetes.ScrapeTokenSecretName)
 	}
 
+	skipVerify, caSecret, caKey, serverName, err := ServiceMonitorEndpointTLS(sm)
+	if err != nil {
+		return fmt.Errorf("servicemonitor tls: %w", err)
+	}
+	wantSkip := target.TLSInsecureSkipVerifyForScrape()
+	if skipVerify != wantSkip {
+		return fmt.Errorf("servicemonitor %s/%s insecureSkipVerify=%v, want %v",
+			target.Namespace, sm.GetName(), skipVerify, wantSkip)
+	}
+	if !wantSkip {
+		if caSecret != target.MetricsCASecret {
+			return fmt.Errorf("servicemonitor %s/%s tls ca secret %q, want %q",
+				target.Namespace, sm.GetName(), caSecret, target.MetricsCASecret)
+		}
+		if caKey != metricsauth.MetricsCACertKey {
+			return fmt.Errorf("servicemonitor %s/%s tls ca key %q, want %q",
+				target.Namespace, sm.GetName(), caKey, metricsauth.MetricsCACertKey)
+		}
+		wantServerName := target.TLSServerNameForScrape()
+		if serverName != wantServerName {
+			return fmt.Errorf("servicemonitor %s/%s serverName %q, want %q",
+				target.Namespace, sm.GetName(), serverName, wantServerName)
+		}
+		if _, err := metricsauth.SecretBytes(ctx, c, target.Namespace, target.MetricsCASecret, metricsauth.MetricsCACertKey); err != nil {
+			return fmt.Errorf("metrics CA secret: %w", err)
+		}
+	}
+
 	if _, err := metricsauth.SecretToken(ctx, c, target.Namespace, target.ScrapeTokenSecret, kubernetes.ScrapeTokenSecretKey); err != nil {
 		return fmt.Errorf("scrape token secret: %w", err)
 	}
