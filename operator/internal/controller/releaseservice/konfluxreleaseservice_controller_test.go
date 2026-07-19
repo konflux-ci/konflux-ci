@@ -38,12 +38,12 @@ import (
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
-	releaseServiceNamespace       = "release-service"
 	releaseServiceSAName          = "release-service-controller-manager"
 	metricsServiceName            = "release-service-controller-manager-metrics-service"
 	managerConfigMapName          = "release-service-manager-properties"
@@ -108,6 +108,27 @@ func rsCRDEntriesNameOnly() []TableEntry {
 }
 
 var _ = Describe("KonfluxReleaseService Controller", func() {
+	// startManager starts a per-test manager and registers a DeferCleanup to stop it.
+	// Per-test managers avoid races with scrape-token tests that wire TokenCreator.
+	startManager := func() {
+		mgrCtx, mgrCancel := context.WithCancel(testEnv.Ctx)
+		mgr := testutil.NewTestManager(testEnv)
+		Expect((&KonfluxReleaseServiceReconciler{
+			Client:      mgr.GetClient(),
+			Scheme:      mgr.GetScheme(),
+			ObjectStore: objectStore,
+		}).SetupWithManager(mgr)).To(Succeed())
+		waitForStop := testutil.StartManagerWithContext(mgrCtx, mgr)
+		DeferCleanup(func() {
+			mgrCancel()
+			waitForStop()
+		})
+	}
+
+	BeforeEach(func() {
+		startManager()
+	})
+
 	Context("When reconciling a resource", func() {
 		It("should successfully reconcile the resource", func(ctx context.Context) {
 			releaseRes := &konfluxv1alpha1.KonfluxReleaseService{
@@ -1334,7 +1355,7 @@ var _ = Describe("KonfluxReleaseService Controller", func() {
 		}
 		metricsReaderCRName := "release-service-metrics-reader"
 		metricsReaderCRBName := "prometheus-release-service-metrics-reader"
-		metricsReaderSAName := "release-service-metrics-reader"
+		metricsScraperSAName := "metrics-scraper"
 
 		metricsScrapeChildren := func() []client.Object {
 			sm := &unstructured.Unstructured{}
@@ -1343,8 +1364,8 @@ var _ = Describe("KonfluxReleaseService Controller", func() {
 			sm.SetNamespace(serviceMonitorNN.Namespace)
 			return []client.Object{
 				sm,
-				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: metricsReaderSAName, Namespace: releaseServiceNamespace}},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: metricsReaderSAName, Namespace: releaseServiceNamespace}},
+				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: metricsScraperSAName, Namespace: releaseServiceNamespace}},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: kubernetes.ScrapeTokenSecretName, Namespace: releaseServiceNamespace}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: metricsReaderCRName}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: metricsReaderCRBName}},
 			}
@@ -1391,6 +1412,28 @@ var _ = Describe("KonfluxReleaseService Controller", func() {
 				cr := &rbacv1.ClusterRole{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: metricsReaderCRName}, cr)).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      releaseControllerManagerDeploymentName,
+					Namespace: releaseServiceNamespace,
+				}, dep)).To(Succeed())
+				g.Expect(dep.Spec.Template.Spec.Containers).NotTo(BeEmpty())
+				g.Expect(dep.Spec.Template.Spec.Containers[0].Args).To(ContainElement("--metrics-bind-address=:8443"))
+				g.Expect(dep.Spec.Template.Spec.Containers[0].Args).To(ContainElement("--metrics-secure=true"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      metricsServiceName,
+					Namespace: releaseServiceNamespace,
+				}, svc)).To(Succeed())
+				g.Expect(svc.Spec.Ports).NotTo(BeEmpty())
+				g.Expect(svc.Spec.Ports[0].Name).To(Equal("https"))
+				g.Expect(svc.Spec.Ports[0].Port).To(Equal(int32(8443)))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
 		It("skips ServiceMonitor and metrics-reader ClusterRole when ComponentMetrics.Enabled is false", func(ctx context.Context) {
@@ -1407,6 +1450,19 @@ var _ = Describe("KonfluxReleaseService Controller", func() {
 			testutil.DeferCleanupParentAndChildren(k8sClient, releaseService)
 
 			waitForReconcile(ctx)
+
+			// Wait for orphan cleanup from the disabled reconcile (and any stale
+			// enabled reconcile racing the CR recreate) before Consistently.
+			Eventually(func(g Gomega) {
+				_, err := getServiceMonitor(ctx)
+				g.Expect(errors.IsNotFound(err)).To(BeTrue())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				cr := &rbacv1.ClusterRole{}
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: metricsReaderCRName}, cr)
+				g.Expect(errors.IsNotFound(err)).To(BeTrue())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			Consistently(func(g Gomega) {
 				_, err := getServiceMonitor(ctx)

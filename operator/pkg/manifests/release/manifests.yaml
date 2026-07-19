@@ -4397,13 +4397,13 @@ spec:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: release-service-controller-manager
+  name: metrics-scraper
   namespace: release-service
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: release-service-metrics-reader
+  name: release-service-controller-manager
   namespace: release-service
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -4979,15 +4979,14 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
+  annotations:
+    konflux.konflux-ci.dev/metrics-scraper-binding: "true"
   name: prometheus-release-service-metrics-reader
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: release-service-metrics-reader
-subjects:
-- kind: ServiceAccount
-  name: release-service-metrics-reader
-  namespace: release-service
+subjects: []
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -5162,15 +5161,6 @@ metadata:
   namespace: release-service
 ---
 apiVersion: v1
-kind: Secret
-metadata:
-  annotations:
-    kubernetes.io/service-account.name: release-service-metrics-reader
-  name: release-service-metrics-reader
-  namespace: release-service
-type: kubernetes.io/service-account-token
----
-apiVersion: v1
 kind: Service
 metadata:
   labels:
@@ -5181,10 +5171,10 @@ metadata:
   namespace: release-service
 spec:
   ports:
-  - name: http
-    port: 8080
+  - name: https
+    port: 8443
     protocol: TCP
-    targetPort: 8080
+    targetPort: 8443
   selector:
     control-plane: controller-manager
 ---
@@ -5226,7 +5216,8 @@ spec:
     spec:
       containers:
       - args:
-        - --metrics-bind-address=:8080
+        - --metrics-bind-address=:8443
+        - --metrics-secure=true
         - --leader-elect=false
         command:
         - /manager
@@ -5344,11 +5335,13 @@ spec:
   endpoints:
   - bearerTokenSecret:
       key: token
-      name: release-service-metrics-reader
+      name: prometheus-scrape-token
     interval: 15s
     path: /metrics
-    port: http
-    scheme: http
+    port: https
+    scheme: https
+    tlsConfig:
+      insecureSkipVerify: true
   selector:
     matchLabels:
       control-plane: controller-manager

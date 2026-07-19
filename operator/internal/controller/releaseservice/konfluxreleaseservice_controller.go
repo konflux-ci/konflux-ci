@@ -29,14 +29,20 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/utils/clock"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/common"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	crdhandler "github.com/konflux-ci/konflux-ci/operator/internal/controller/handler"
@@ -60,6 +66,9 @@ const (
 
 	// Container names
 	releaseManagerContainerName = "manager"
+
+	// releaseServiceNamespace is the operand namespace for release-service resources.
+	releaseServiceNamespace = "release-service"
 
 	// ReleaseServiceConfig identification
 	releaseServiceConfigKind  = "ReleaseServiceConfig"
@@ -89,8 +98,11 @@ var ReleaseServiceClusterScopedAllowList = tracking.ClusterScopedAllowList{
 // KonfluxReleaseServiceReconciler reconciles a KonfluxReleaseService object
 type KonfluxReleaseServiceReconciler struct {
 	client.Client
-	Scheme      *runtime.Scheme
-	ObjectStore *manifests.ObjectStore
+	Scheme              *runtime.Scheme
+	ObjectStore         *manifests.ObjectStore
+	TokenCreator        kubernetes.TokenCreator
+	Clock               clock.Clock
+	TokenRotationEvents <-chan event.TypedGenericEvent[client.Object]
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxreleaseservices,verbs=get;list;watch;create;update;patch;delete
@@ -99,6 +111,7 @@ type KonfluxReleaseServiceReconciler struct {
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=core,resources=services;secrets;serviceaccounts,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=core,resources=serviceaccounts/token,verbs=create
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,resourceNames=release-service-leader-election-role,verbs=bind;escalate
@@ -145,6 +158,42 @@ func (r *KonfluxReleaseServiceReconciler) Reconcile(ctx context.Context, req ctr
 		return errHandler.HandleApplyError(ctx, err)
 	}
 
+	scrapeResult := reconcile.Result{}
+	if releaseService.Spec.ComponentMetrics.IsEnabled() && r.TokenCreator != nil {
+		// Deferred ServiceMonitor apply: mint scrape token, apply SM after token, resync nudges.
+		scraper := kubernetes.OperandMetricsScraperSA(releaseServiceNamespace)
+		var scrapeErr error
+		scrapeResult, scrapeErr = common.ReconcilePrometheusScrapeToken(ctx, common.ScrapeTokenReconcilerConfig{
+			Client:             r.Client,
+			Clock:              r.Clock,
+			TokenCreator:       r.TokenCreator,
+			Scraper:            scraper,
+			OperandNamespace:   releaseServiceNamespace,
+			ServiceMonitorName: "release-service",
+			Apply: func(applyCtx context.Context, secret *corev1.Secret) error {
+				return tc.ApplyOwned(applyCtx, secret)
+			},
+			ApplyServiceMonitor: func(applyCtx context.Context) error {
+				objects, storeErr := r.ObjectStore.GetForComponent(manifests.Release)
+				if storeErr != nil {
+					return fmt.Errorf("get manifests for ServiceMonitor apply: %w", storeErr)
+				}
+				sm, ok := common.OperandServiceMonitorFromObjects(objects, releaseServiceNamespace, "release-service")
+				if !ok {
+					return fmt.Errorf("operand ServiceMonitor %s/%s not found in embedded manifests",
+						releaseServiceNamespace, "release-service")
+				}
+				if err := common.ApplyMetricsScraperBindingSubjects(releaseServiceNamespace, sm); err != nil {
+					return fmt.Errorf("apply metrics scraper binding subjects for ServiceMonitor: %w", err)
+				}
+				return tc.ApplyOwned(applyCtx, sm)
+			},
+		})
+		if scrapeErr != nil {
+			return errHandler.HandleWithReason(ctx, scrapeErr, condition.ReasonApplyFailed, "reconcile prometheus scrape token")
+		}
+	}
+
 	// Cleanup orphaned resources
 	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, releaseService.Name, ReleaseServiceCleanupGVKs,
 		tracking.WithClusterScopedAllowList(ReleaseServiceClusterScopedAllowList)); err != nil {
@@ -163,7 +212,7 @@ func (r *KonfluxReleaseServiceReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	log.Info("Successfully reconciled KonfluxReleaseService")
-	return ctrl.Result{}, nil
+	return scrapeResult, nil
 }
 
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
@@ -172,6 +221,7 @@ func (r *KonfluxReleaseServiceReconciler) applyManifests(ctx context.Context, tc
 	log := logf.FromContext(ctx)
 
 	metricsEnabled := owner.Spec.ComponentMetrics.IsEnabled()
+	deferServiceMonitor := metricsEnabled && r.TokenCreator != nil
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.Release)
 	if err != nil {
@@ -179,6 +229,16 @@ func (r *KonfluxReleaseServiceReconciler) applyManifests(ctx context.Context, tc
 	}
 
 	for _, obj := range objects {
+		// Deferred ServiceMonitor apply: skip operand SM until ReconcilePrometheusScrapeToken
+		// applies it after prometheus-scrape-token is readable.
+		if deferServiceMonitor && kubernetes.IsComponentMetricsServiceMonitor(obj) {
+			log.V(1).Info("Deferring operand ServiceMonitor apply until scrape token is ready",
+				"kind", tracking.GetKind(obj),
+				"name", obj.GetName(),
+				"namespace", obj.GetNamespace(),
+			)
+			continue
+		}
 		if !metricsEnabled && kubernetes.IsComponentMetricsScrapeResource(obj) {
 			log.V(1).Info("Skipping component metrics scrape resource",
 				"kind", tracking.GetKind(obj),
@@ -200,6 +260,10 @@ func (r *KonfluxReleaseServiceReconciler) applyManifests(ctx context.Context, tc
 			if err := applyReleaseServiceConfigCustomizations(obj, owner.Spec); err != nil {
 				return fmt.Errorf("failed to apply customizations to ReleaseServiceConfig %s: %w", obj.GetName(), err)
 			}
+		}
+
+		if err := common.ApplyMetricsScraperBindingSubjects(releaseServiceNamespace, obj); err != nil {
+			return fmt.Errorf("apply metrics scraper binding subjects for %s: %w", obj.GetName(), err)
 		}
 
 		// Apply with ownership using the tracking client
@@ -289,11 +353,10 @@ func (r *KonfluxReleaseServiceReconciler) SetupWithManager(mgr ctrl.Manager) err
 	rsc := &unstructured.Unstructured{}
 	rsc.SetGroupVersionKind(releaseServiceConfigGVK)
 
-	return ctrl.NewControllerManagedBy(mgr).
+	controllerBuilder := ctrl.NewControllerManagedBy(mgr).
 		For(&konfluxv1alpha1.KonfluxReleaseService{}).
 		Named("konfluxreleaseservice").
 		// Use predicates to filter out unnecessary updates and prevent reconcile loops
-		// Deployments: watch spec changes AND readiness status changes
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(predicate.DeploymentReadinessPredicate)).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
@@ -308,8 +371,23 @@ func (r *KonfluxReleaseServiceReconciler) SetupWithManager(mgr ctrl.Manager) err
 		Owns(&admissionregistrationv1.MutatingWebhookConfiguration{}).
 		Owns(&admissionregistrationv1.ValidatingWebhookConfiguration{}).
 		Owns(rsc, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
-		// Watch CRDs so that out-of-band deletion triggers reconcile and re-apply.
 		Watches(&apiextensionsv1.CustomResourceDefinition{},
-			handler.EnqueueRequestsFromMapFunc(crdMapFunc)).
-		Complete(r)
+			handler.EnqueueRequestsFromMapFunc(crdMapFunc))
+
+	if r.TokenCreator != nil {
+		controllerBuilder = controllerBuilder.Owns(
+			&corev1.Secret{},
+			builder.WithPredicates(predicate.PrometheusScrapeTokenSecretPredicate),
+		)
+	}
+	if r.TokenRotationEvents != nil && r.TokenCreator != nil {
+		controllerBuilder = controllerBuilder.WatchesRawSource(source.Channel(
+			r.TokenRotationEvents,
+			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, _ client.Object) []reconcile.Request {
+				return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: CRName}}}
+			}),
+		))
+	}
+
+	return controllerBuilder.Complete(r)
 }

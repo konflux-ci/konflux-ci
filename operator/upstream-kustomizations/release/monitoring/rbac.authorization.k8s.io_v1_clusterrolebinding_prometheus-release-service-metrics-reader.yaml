@@ -1,12 +1,11 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
+  annotations:
+    konflux.konflux-ci.dev/metrics-scraper-binding: "true"
   name: prometheus-release-service-metrics-reader
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: release-service-metrics-reader
-subjects:
-- kind: ServiceAccount
-  name: release-service-metrics-reader
-  namespace: release-service
+subjects: []
