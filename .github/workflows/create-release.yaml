@@ -89,7 +89,7 @@ jobs:
           echo "Using version: ${VERSION}"
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: operator/go.mod
 
