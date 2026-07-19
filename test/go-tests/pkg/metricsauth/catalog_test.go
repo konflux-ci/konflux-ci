@@ -25,7 +25,9 @@ func TestDefaultCatalog_TargetGroups(t *testing.T) {
 	assert.Equal(t, TargetGroupComponent, byID["image-controller"].LabelGroup())
 	assert.Equal(t, TargetGroupComponent, byID["konflux-ui-proxy"].LabelGroup())
 	assert.True(t, byID["integration-service"].UWMUpCheck)
-	assert.True(t, byID["release-service"].UWMUpCheck)
+	assert.False(t, byID["release-service"].UWMUpCheck)
+	assert.Equal(t, kubernetes.ScrapeTokenSecretName, byID["release-service"].ScrapeTokenSecret)
+	assert.Equal(t, "https", byID["release-service"].Scheme)
 	assert.True(t, byID["konflux-ui-proxy"].UWMUpCheck)
 	assert.Empty(t, byID["konflux-ui-proxy"].ScrapeTokenSecret)
 }
