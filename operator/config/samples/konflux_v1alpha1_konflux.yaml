@@ -154,7 +154,11 @@ spec:
       #     # noProxy: ""
       #     # allowPackageRegistryProxy: true
       #     # packageRegistryProxyNpmUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/npm-proxy"
-      #     # packageRegistryProxyYarnUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/yarn-proxy"
+      #     # # Yarn and pnpm use the same npm-compatible registry endpoint in most deployments.
+      #     # packageRegistryProxyYarnUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/npm-proxy"
+      #     # packageRegistryProxyGomodUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/go-proxy"
+      #     # packageRegistryProxyPipUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/pypi-proxy/simple"
+      #     # packageRegistryProxyPnpmUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/npm-proxy"
   # enterpriseContract:
   #   # skipPolicies disables deployment of EnterpriseContractPolicy resources.
   #   # When true, only CRDs, namespace, RBAC, and ConfigMap are deployed;

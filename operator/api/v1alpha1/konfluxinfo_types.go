@@ -314,17 +314,41 @@ type ClusterConfigData struct {
 	// +optional
 	// +kubebuilder:validation:XValidation:rule="!self.contains('@')",message="URL must not contain credentials (userinfo). Use a Secret for proxy authentication."
 	PackageRegistryProxyYarnURL string `json:"packageRegistryProxyYarnUrl,omitempty"`
+
+	// PackageRegistryProxyGomodURL is the URL of the Go module proxy.
+	// Written as "package-registry-proxy-gomod-url" in the cluster-config ConfigMap.
+	// Do not embed credentials in this URL — the ConfigMap is readable by all authenticated users.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="!self.contains('@')",message="URL must not contain credentials (userinfo). Use a Secret for proxy authentication."
+	PackageRegistryProxyGomodURL string `json:"packageRegistryProxyGomodUrl,omitempty"`
+
+	// PackageRegistryProxyPipURL is the URL of the pip (Python) package registry proxy.
+	// Written as "package-registry-proxy-pip-url" in the cluster-config ConfigMap.
+	// Do not embed credentials in this URL — the ConfigMap is readable by all authenticated users.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="!self.contains('@')",message="URL must not contain credentials (userinfo). Use a Secret for proxy authentication."
+	PackageRegistryProxyPipURL string `json:"packageRegistryProxyPipUrl,omitempty"`
+
+	// PackageRegistryProxyPnpmURL is the URL of the pnpm package registry proxy.
+	// Written as "package-registry-proxy-pnpm-url" in the cluster-config ConfigMap.
+	// Do not embed credentials in this URL — the ConfigMap is readable by all authenticated users.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="!self.contains('@')",message="URL must not contain credentials (userinfo). Use a Secret for proxy authentication."
+	PackageRegistryProxyPnpmURL string `json:"packageRegistryProxyPnpmUrl,omitempty"`
 }
 
 // ConfigMap key constants for cluster-config proxy fields.
 // These are the kebab-case keys written to the ConfigMap, mapped from camelCase CRD fields.
 const (
-	ClusterConfigKeyAllowCacheProxy             = "allow-cache-proxy"
-	ClusterConfigKeyHTTPProxy                   = "http-proxy"
-	ClusterConfigKeyNoProxy                     = "no-proxy"
-	ClusterConfigKeyAllowPackageRegistryProxy   = "allow-package-registry-proxy"
-	ClusterConfigKeyPackageRegistryProxyNpmURL  = "package-registry-proxy-npm-url"
-	ClusterConfigKeyPackageRegistryProxyYarnURL = "package-registry-proxy-yarn-url"
+	ClusterConfigKeyAllowCacheProxy              = "allow-cache-proxy"
+	ClusterConfigKeyHTTPProxy                    = "http-proxy"
+	ClusterConfigKeyNoProxy                      = "no-proxy"
+	ClusterConfigKeyAllowPackageRegistryProxy    = "allow-package-registry-proxy"
+	ClusterConfigKeyPackageRegistryProxyNpmURL   = "package-registry-proxy-npm-url"
+	ClusterConfigKeyPackageRegistryProxyYarnURL  = "package-registry-proxy-yarn-url"
+	ClusterConfigKeyPackageRegistryProxyGomodURL = "package-registry-proxy-gomod-url"
+	ClusterConfigKeyPackageRegistryProxyPipURL   = "package-registry-proxy-pip-url"
+	ClusterConfigKeyPackageRegistryProxyPnpmURL  = "package-registry-proxy-pnpm-url"
 )
 
 // All is an iterator that yields all non-empty key-value pairs from ClusterConfigData.
@@ -427,6 +451,21 @@ func (d ClusterConfigData) All(yield func(key, value string) bool) {
 	}
 	if d.PackageRegistryProxyYarnURL != "" {
 		if !yield(ClusterConfigKeyPackageRegistryProxyYarnURL, d.PackageRegistryProxyYarnURL) {
+			return
+		}
+	}
+	if d.PackageRegistryProxyGomodURL != "" {
+		if !yield(ClusterConfigKeyPackageRegistryProxyGomodURL, d.PackageRegistryProxyGomodURL) {
+			return
+		}
+	}
+	if d.PackageRegistryProxyPipURL != "" {
+		if !yield(ClusterConfigKeyPackageRegistryProxyPipURL, d.PackageRegistryProxyPipURL) {
+			return
+		}
+	}
+	if d.PackageRegistryProxyPnpmURL != "" {
+		if !yield(ClusterConfigKeyPackageRegistryProxyPnpmURL, d.PackageRegistryProxyPnpmURL) {
 			return
 		}
 	}
