@@ -1885,6 +1885,10 @@ spec:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
         volumeMounts:
+        - mountPath: /etc/ssl/certs/ca-custom-bundle.crt
+          name: trusted-ca
+          readOnly: true
+          subPath: ca-bundle.crt
         - mountPath: /tmp/k8s-webhook-server/serving-certs
           name: cert
           readOnly: true
@@ -1893,6 +1897,13 @@ spec:
       serviceAccountName: integration-service-controller-manager
       terminationGracePeriodSeconds: 10
       volumes:
+      - configMap:
+          items:
+          - key: ca-bundle.crt
+            path: ca-bundle.crt
+          name: trusted-ca
+          optional: true
+        name: trusted-ca
       - name: cert
         secret:
           defaultMode: 420
