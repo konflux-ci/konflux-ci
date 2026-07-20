@@ -311,7 +311,7 @@ func GetFailedPipelineRunDetails(c crclient.Client, pipelineRun *pipeline.Pipeli
 		}
 		condText += fmt.Sprintf("- TaskRun %s (pipeline task %q):\n", taskRun.Name, chr.PipelineTaskName)
 		for _, tc := range taskRun.Status.Conditions {
-			if tc.Reason == "Failed" {
+			if tc.Reason == "Failed" || tc.Reason == "StepFailed" {
 				d.FailedTaskRunName = taskRun.Name
 				d.PodName = taskRun.Status.PodName
 				for _, s := range taskRun.Status.Steps {
