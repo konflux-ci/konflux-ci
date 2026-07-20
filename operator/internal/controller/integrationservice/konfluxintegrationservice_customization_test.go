@@ -32,8 +32,9 @@ import (
 )
 
 const (
-	testConsoleURL         = "https://konflux.example.com"
-	testConsoleURLTemplate = "https://konflux.example.com/ns/{{ .Namespace }}/pipelinerun/{{ .PipelineRunName }}"
+	testConsoleURL                = "https://konflux.example.com"
+	testConsoleURLTemplate        = testConsoleURL + "/ns/{{ .Namespace }}/pipelinerun/{{ .PipelineRunName }}"
+	testConsoleURLTasklogTemplate = testConsoleURLTemplate + "/logs/{{ .TaskName }}"
 )
 
 // getIntegrationSnapshotGCCronJob returns a deep copy of the snapshot GC CronJob from the IntegrationService manifests.
@@ -590,6 +591,113 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		envVar = findEnvVar(managerContainer.Env, "CONSOLE_URL")
 		g.Expect(envVar).NotTo(gomega.BeNil())
 		g.Expect(envVar.Value).To(gomega.Equal(testConsoleURLTemplate))
+	})
+}
+
+func TestBuildControllerManagerOverlay_ConsoleURLTasklog(t *testing.T) {
+	t.Run("injects CONSOLE_URL_TASKLOG when provided", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{}
+
+		deployment := getIntegrationServiceDeployment(t)
+		overlay := buildControllerManagerOverlay(spec, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		envVar := findEnvVar(managerContainer.Env, "CONSOLE_URL_TASKLOG")
+		g.Expect(envVar).NotTo(gomega.BeNil())
+		g.Expect(envVar.Value).To(gomega.Equal(testConsoleURLTasklogTemplate))
+	})
+
+	t.Run("injects CONSOLE_URL_TASKLOG when provided with nil spec", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		deployment := getIntegrationServiceDeployment(t)
+		overlay := buildControllerManagerOverlay(nil, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		envVar := findEnvVar(managerContainer.Env, "CONSOLE_URL_TASKLOG")
+		g.Expect(envVar).NotTo(gomega.BeNil())
+		g.Expect(envVar.Value).To(gomega.Equal(testConsoleURLTasklogTemplate))
+	})
+
+	t.Run("injects CONSOLE_URL_TASKLOG with empty value when URL not available", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{}
+
+		deployment := getIntegrationServiceDeployment(t)
+		overlay := buildControllerManagerOverlay(spec, "", konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		envVar := findEnvVar(managerContainer.Env, "CONSOLE_URL_TASKLOG")
+		g.Expect(envVar).NotTo(gomega.BeNil())
+		g.Expect(envVar.Value).To(gomega.Equal(""))
+	})
+
+	t.Run("system-provided CONSOLE_URL_TASKLOG overrides user-provided value", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		userTasklogURL := "https://user-override.example.com/logs"
+		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+			Manager: &konfluxv1alpha1.ContainerSpec{
+				Env: []corev1.EnvVar{
+					{Name: "CONSOLE_URL_TASKLOG", Value: userTasklogURL},
+				},
+			},
+		}
+
+		deployment := getIntegrationServiceDeployment(t)
+		overlay := buildControllerManagerOverlay(spec, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		envVar := findEnvVar(managerContainer.Env, "CONSOLE_URL_TASKLOG")
+		g.Expect(envVar).NotTo(gomega.BeNil())
+		g.Expect(envVar.Value).To(gomega.Equal(testConsoleURLTasklogTemplate))
+	})
+
+	t.Run("updates CONSOLE_URL_TASKLOG when console URL changes", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		oldConsoleURL := "https://old.example.com"
+		oldTasklogTemplate := oldConsoleURL + "/ns/{{ .Namespace }}/pipelinerun/{{ .PipelineRunName }}/logs/{{ .TaskName }}"
+
+		spec := &konfluxv1alpha1.ControllerManagerDeploymentSpec{}
+
+		deployment := getIntegrationServiceDeployment(t)
+		overlay := buildControllerManagerOverlay(spec, oldConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		envVar := findEnvVar(managerContainer.Env, "CONSOLE_URL_TASKLOG")
+		g.Expect(envVar).NotTo(gomega.BeNil())
+		g.Expect(envVar.Value).To(gomega.Equal(oldTasklogTemplate))
+
+		overlay = buildControllerManagerOverlay(spec, testConsoleURL, konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})
+		err = overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+
+		envVar = findEnvVar(managerContainer.Env, "CONSOLE_URL_TASKLOG")
+		g.Expect(envVar).NotTo(gomega.BeNil())
+		g.Expect(envVar.Value).To(gomega.Equal(testConsoleURLTasklogTemplate))
 	})
 }
 

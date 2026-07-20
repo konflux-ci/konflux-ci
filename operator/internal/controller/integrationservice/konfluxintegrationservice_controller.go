@@ -254,9 +254,11 @@ func applyIntegrationServiceDeploymentCustomizations(deployment *appsv1.Deployme
 // When not set in the CRD, the upstream integration-service defaults apply.
 func buildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploymentSpec, consoleURL string, integrationSpec konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec) *customization.PodOverlay {
 	consoleURLTemplate := ""
+	consoleURLTasklogTemplate := ""
 	if consoleURL != "" {
-		consoleURLTemplate = fmt.Sprintf("%s/ns/{{ .Namespace }}/pipelinerun/{{ .PipelineRunName }}",
-			strings.TrimSuffix(consoleURL, "/"))
+		base := strings.TrimSuffix(consoleURL, "/")
+		consoleURLTemplate = base + "/ns/{{ .Namespace }}/pipelinerun/{{ .PipelineRunName }}"
+		consoleURLTasklogTemplate = consoleURLTemplate + "/logs/{{ .TaskName }}"
 	}
 
 	replicas := int32(1)
@@ -271,6 +273,7 @@ func buildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploy
 		customization.WithContainerOpts(managerContainerName, deployCtx,
 			customization.FromContainerSpec(managerSpec),
 			customization.WithEnvOverride("CONSOLE_URL", consoleURLTemplate),
+			customization.WithEnvOverride("CONSOLE_URL_TASKLOG", consoleURLTasklogTemplate),
 			customization.WithOptionalEnvOverride(envPipelineTimeout, integrationSpec.PipelineTimeout),
 			customization.WithOptionalEnvOverride(envTasksTimeout, integrationSpec.TasksTimeout),
 			customization.WithOptionalEnvOverride(envFinallyTimeout, integrationSpec.FinallyTimeout),
