@@ -1125,13 +1125,13 @@ metadata:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: integration-service-metrics-reader
+  name: integration-service-snapshot-garbage-collector
   namespace: integration-service
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: integration-service-snapshot-garbage-collector
+  name: metrics-scraper
   namespace: integration-service
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -1750,15 +1750,14 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
+  annotations:
+    konflux.konflux-ci.dev/metrics-scraper-binding: "true"
   name: prometheus-integration-service-metrics-reader
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: integration-service-metrics-reader
-subjects:
-- kind: ServiceAccount
-  name: integration-service-metrics-reader
-  namespace: integration-service
+subjects: []
 ---
 apiVersion: v1
 data:
@@ -1780,15 +1779,6 @@ metadata:
   namespace: integration-service
 ---
 apiVersion: v1
-kind: Secret
-metadata:
-  annotations:
-    kubernetes.io/service-account.name: integration-service-metrics-reader
-  name: integration-service-metrics-reader
-  namespace: integration-service
-type: kubernetes.io/service-account-token
----
-apiVersion: v1
 kind: Service
 metadata:
   labels:
@@ -1797,10 +1787,10 @@ metadata:
   namespace: integration-service
 spec:
   ports:
-  - name: http
-    port: 8080
+  - name: https
+    port: 8443
     protocol: TCP
-    targetPort: 8080
+    targetPort: 8443
   selector:
     control-plane: controller-manager
 ---
@@ -1846,7 +1836,8 @@ spec:
     spec:
       containers:
       - args:
-        - --metrics-bind-address=:8080
+        - --metrics-bind-address=:8443
+        - --metrics-secure=true
         - --leader-elect
         - --lease-duration=30s
         - --leader-renew-deadline=15s
@@ -1981,11 +1972,13 @@ spec:
   endpoints:
   - bearerTokenSecret:
       key: token
-      name: integration-service-metrics-reader
+      name: prometheus-scrape-token
     interval: 15s
     path: /metrics
-    port: http
-    scheme: http
+    port: https
+    scheme: https
+    tlsConfig:
+      insecureSkipVerify: true
   selector:
     matchLabels:
       control-plane: controller-manager
