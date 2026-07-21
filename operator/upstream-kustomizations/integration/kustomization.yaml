@@ -21,6 +21,33 @@ patches:
       - op: add
         path: /spec/progressDeadlineSeconds
         value: 2147483647
+  # Operator-owned HTTPS metrics: upstream still defaults to HTTP :8080 / metrics-secure=false.
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: integration-service-controller-manager
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/args/0
+        value: --metrics-bind-address=:8443
+      - op: add
+        path: /spec/template/spec/containers/0/args/1
+        value: --metrics-secure=true
+  - target:
+      version: v1
+      kind: Service
+      name: integration-service-controller-manager-metrics-service
+    patch: |-
+      - op: replace
+        path: /spec/ports/0/name
+        value: https
+      - op: replace
+        path: /spec/ports/0/port
+        value: 8443
+      - op: replace
+        path: /spec/ports/0/targetPort
+        value: 8443
   # Remove OpenShift-specific annotations as cert-manager is used for creating and injecting TLS secrets
   - target:
       kind: CustomResourceDefinition

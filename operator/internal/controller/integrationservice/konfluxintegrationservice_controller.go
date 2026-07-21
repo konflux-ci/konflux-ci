@@ -32,13 +32,18 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/utils/clock"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/common"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	crdhandler "github.com/konflux-ci/konflux-ci/operator/internal/controller/handler"
@@ -67,6 +72,9 @@ const (
 	// Container names
 	managerContainerName    = "manager"
 	snapshotGCContainerName = "test-gc"
+
+	// integrationServiceNamespace is the operand namespace for integration-service resources.
+	integrationServiceNamespace = "integration-service"
 
 	// Env var names for pipeline run timeout configuration.
 	envPipelineTimeout = "PIPELINE_TIMEOUT"
@@ -100,8 +108,11 @@ var IntegrationServiceClusterScopedAllowList = tracking.ClusterScopedAllowList{
 // KonfluxIntegrationServiceReconciler reconciles a KonfluxIntegrationService object
 type KonfluxIntegrationServiceReconciler struct {
 	client.Client
-	Scheme      *runtime.Scheme
-	ObjectStore *manifests.ObjectStore
+	Scheme              *runtime.Scheme
+	ObjectStore         *manifests.ObjectStore
+	TokenCreator        kubernetes.TokenCreator
+	Clock               clock.Clock
+	TokenRotationEvents <-chan event.TypedGenericEvent[client.Object]
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxintegrationservices,verbs=get;list;watch;create;update;patch;delete
@@ -112,6 +123,7 @@ type KonfluxIntegrationServiceReconciler struct {
 // +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=core,resources=services;secrets;serviceaccounts,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=core,resources=serviceaccounts/token,verbs=create
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,resourceNames=integration-service-leader-election-role,verbs=bind;escalate
@@ -168,6 +180,42 @@ func (r *KonfluxIntegrationServiceReconciler) Reconcile(ctx context.Context, req
 		return errHandler.HandleApplyError(ctx, err)
 	}
 
+	scrapeResult := reconcile.Result{}
+	if integrationService.Spec.ComponentMetrics.IsEnabled() && r.TokenCreator != nil {
+		// Deferred ServiceMonitor apply: mint scrape token, apply SM after token, resync nudges.
+		scraper := kubernetes.OperandMetricsScraperSA(integrationServiceNamespace)
+		var scrapeErr error
+		scrapeResult, scrapeErr = common.ReconcilePrometheusScrapeToken(ctx, common.ScrapeTokenReconcilerConfig{
+			Client:             r.Client,
+			Clock:              r.Clock,
+			TokenCreator:       r.TokenCreator,
+			Scraper:            scraper,
+			OperandNamespace:   integrationServiceNamespace,
+			ServiceMonitorName: "integration-service",
+			Apply: func(applyCtx context.Context, secret *corev1.Secret) error {
+				return tc.ApplyOwned(applyCtx, secret)
+			},
+			ApplyServiceMonitor: func(applyCtx context.Context) error {
+				objects, storeErr := r.ObjectStore.GetForComponent(manifests.Integration)
+				if storeErr != nil {
+					return fmt.Errorf("get manifests for ServiceMonitor apply: %w", storeErr)
+				}
+				sm, ok := common.OperandServiceMonitorFromObjects(objects, integrationServiceNamespace, "integration-service")
+				if !ok {
+					return fmt.Errorf("operand ServiceMonitor %s/%s not found in embedded manifests",
+						integrationServiceNamespace, "integration-service")
+				}
+				if err := common.ApplyMetricsScraperBindingSubjects(integrationServiceNamespace, sm); err != nil {
+					return fmt.Errorf("apply metrics scraper binding subjects for ServiceMonitor: %w", err)
+				}
+				return tc.ApplyOwned(applyCtx, sm)
+			},
+		})
+		if scrapeErr != nil {
+			return errHandler.HandleWithReason(ctx, scrapeErr, condition.ReasonApplyFailed, "reconcile prometheus scrape token")
+		}
+	}
+
 	// Cleanup orphaned resources
 	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, integrationService.Name, IntegrationServiceCleanupGVKs,
 		tracking.WithClusterScopedAllowList(IntegrationServiceClusterScopedAllowList)); err != nil {
@@ -186,7 +234,7 @@ func (r *KonfluxIntegrationServiceReconciler) Reconcile(ctx context.Context, req
 	}
 
 	log.Info("Successfully reconciled KonfluxIntegrationService")
-	return ctrl.Result{}, nil
+	return scrapeResult, nil
 }
 
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
@@ -195,6 +243,7 @@ func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context
 	log := logf.FromContext(ctx)
 
 	metricsEnabled := owner.Spec.ComponentMetrics.IsEnabled()
+	deferServiceMonitor := metricsEnabled && r.TokenCreator != nil
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.Integration)
 	if err != nil {
@@ -202,6 +251,16 @@ func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context
 	}
 
 	for _, obj := range objects {
+		// Deferred ServiceMonitor apply: skip operand SM until ReconcilePrometheusScrapeToken
+		// applies it after prometheus-scrape-token is readable.
+		if deferServiceMonitor && kubernetes.IsComponentMetricsServiceMonitor(obj) {
+			log.V(1).Info("Deferring operand ServiceMonitor apply until scrape token is ready",
+				"kind", tracking.GetKind(obj),
+				"name", obj.GetName(),
+				"namespace", obj.GetNamespace(),
+			)
+			continue
+		}
 		if !metricsEnabled && kubernetes.IsComponentMetricsScrapeResource(obj) {
 			log.V(1).Info("Skipping component metrics scrape resource",
 				"kind", tracking.GetKind(obj),
@@ -223,6 +282,10 @@ func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context
 			if err := applySnapshotGCCustomizations(cronJob, owner.Spec.KonfluxIntegrationServiceConfigSpec); err != nil {
 				return fmt.Errorf("failed to apply customizations to CronJob %s: %w", cronJob.Name, err)
 			}
+		}
+
+		if err := common.ApplyMetricsScraperBindingSubjects(integrationServiceNamespace, obj); err != nil {
+			return fmt.Errorf("apply metrics scraper binding subjects for %s: %w", obj.GetName(), err)
 		}
 
 		// Apply with ownership using the tracking client
@@ -330,7 +393,7 @@ func (r *KonfluxIntegrationServiceReconciler) SetupWithManager(mgr ctrl.Manager)
 	if err != nil {
 		return err
 	}
-	return ctrl.NewControllerManagedBy(mgr).
+	controllerBuilder := ctrl.NewControllerManagedBy(mgr).
 		For(&konfluxv1alpha1.KonfluxIntegrationService{}).
 		Named("konfluxintegrationservice").
 		// Use predicates to filter out unnecessary updates and prevent reconcile loops
@@ -355,6 +418,22 @@ func (r *KonfluxIntegrationServiceReconciler) SetupWithManager(mgr ctrl.Manager)
 		// Watch KonfluxUI CR for ingress status changes to update console URL
 		Watches(&konfluxv1alpha1.KonfluxUI{},
 			handler.EnqueueRequestsFromMapFunc(r.mapKonfluxUIToIntegrationService),
-			builder.WithPredicates(predicate.KonfluxUIIngressStatusChangedPredicate)).
-		Complete(r)
+			builder.WithPredicates(predicate.KonfluxUIIngressStatusChangedPredicate))
+
+	if r.TokenCreator != nil {
+		controllerBuilder = controllerBuilder.Owns(
+			&corev1.Secret{},
+			builder.WithPredicates(predicate.PrometheusScrapeTokenSecretPredicate),
+		)
+	}
+	if r.TokenRotationEvents != nil && r.TokenCreator != nil {
+		controllerBuilder = controllerBuilder.WatchesRawSource(source.Channel(
+			r.TokenRotationEvents,
+			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, _ client.Object) []reconcile.Request {
+				return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: CRName}}}
+			}),
+		))
+	}
+
+	return controllerBuilder.Complete(r)
 }
