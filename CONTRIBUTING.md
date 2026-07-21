@@ -8,6 +8,7 @@ Contributing Guidelines
 - [Editing Markdown Files](#editing-markdown-files)
 - [Using KubeLinter](#using-kubelinter)
 - [Operator Development](#operator-development)
+  * [Unstructured Field-Name Mapping Convention](#unstructured-field-name-mapping-convention)
 - [CI/CD and Testing](#cicd-and-testing)
   * [Operator rendered manifests](#operator-rendered-manifests)
   * [Automated E2E Tests](#automated-e2e-tests)
@@ -110,6 +111,41 @@ this file will allow you to ignore or include specific KubeLinter checks.
 For building and running the operator from source, see the
 [operator README](operator/README.md). To deploy a locally built operator on a
 Kind cluster, use `OPERATOR_INSTALL_METHOD=build` with `deploy-local.sh`.
+
+## Unstructured Field-Name Mapping Convention
+
+Some controllers manage upstream Custom Resources (CRs) that the operator does
+not own the Go types for (e.g., `ReleaseServiceConfig`). These CRs are
+manipulated via `*unstructured.Unstructured` objects, which use string-based
+field access instead of typed Go structs.
+
+When writing code that accesses fields on unstructured upstream objects, follow
+these rules:
+
+1. **Use the upstream CRD schema field names, not the operator's own json
+   tags.** The operator's Go types (e.g., `KonfluxReleaseServiceSpec`) use
+   camelCase json tags per Go convention (`emptyDirOverrides`), but the upstream
+   CRD may use different casing (e.g., `EmptyDirOverrides` in PascalCase). The
+   unstructured field access must match the upstream CRD schema exactly,
+   because the data is written to the upstream CR — not to the operator's own
+   CRD.
+
+2. **Define named string constants for unstructured field names.** Bare string
+   literals in `map[string]interface{}` access are hard to grep, review, and
+   update. Define constants in the controller file (e.g.,
+   `rscFieldEmptyDirOverrides = "EmptyDirOverrides"`) and reference them in
+   both production code and tests. This makes field names searchable, centrally
+   updatable, and easier to audit against the upstream schema.
+
+3. **Rely on `verify-manifests-in-sync.sh` as a safety net.** The CI workflow
+   `.github/workflows/verify-manifests-in-sync.yaml` detects when upstream CRD
+   schemas change. If upstream renames or restructures a field, the verify job
+   will fail, signaling that the string constants (and the code that uses them)
+   need updating. This does not eliminate the need for constants — it
+   complements them by catching upstream drift.
+
+See `operator/internal/controller/releaseservice/konfluxreleaseservice_controller.go`
+for an example of this pattern in practice.
 
 # CI/CD and Testing
 

@@ -73,6 +73,16 @@ const (
 	// ReleaseServiceConfig identification
 	releaseServiceConfigKind  = "ReleaseServiceConfig"
 	releaseServiceConfigGroup = "appstudio.redhat.com"
+
+	// Unstructured field names for ReleaseServiceConfig spec.
+	// These MUST match the upstream CRD schema exactly, not the operator's
+	// own Go json tags. See CONTRIBUTING.md "Unstructured Field-Name
+	// Mapping Convention" for details.
+	rscFieldDebug             = "debug"
+	rscFieldEmptyDirOverrides = "EmptyDirOverrides"
+	rscFieldURL               = "url"
+	rscFieldRevision          = "revision"
+	rscFieldPathInRepo        = "pathInRepo"
 )
 
 // releaseServiceConfigGVK is the GVK for ReleaseServiceConfig resources.
@@ -324,20 +334,20 @@ func applyReleaseServiceConfigCustomizations(obj client.Object, spec konfluxv1al
 		currentSpec = map[string]interface{}{}
 	}
 
-	currentSpec["debug"] = spec.Debug
+	currentSpec[rscFieldDebug] = spec.Debug
 
 	if len(spec.EmptyDirOverrides) > 0 {
 		overrides := make([]interface{}, len(spec.EmptyDirOverrides))
 		for i, o := range spec.EmptyDirOverrides {
 			overrides[i] = map[string]interface{}{
-				"url":        o.URL,
-				"revision":   o.Revision,
-				"pathInRepo": o.PathInRepo,
+				rscFieldURL:        o.URL,
+				rscFieldRevision:   o.Revision,
+				rscFieldPathInRepo: o.PathInRepo,
 			}
 		}
-		currentSpec["EmptyDirOverrides"] = overrides
+		currentSpec[rscFieldEmptyDirOverrides] = overrides
 	} else {
-		delete(currentSpec, "EmptyDirOverrides")
+		delete(currentSpec, rscFieldEmptyDirOverrides)
 	}
 
 	u.Object["spec"] = currentSpec
