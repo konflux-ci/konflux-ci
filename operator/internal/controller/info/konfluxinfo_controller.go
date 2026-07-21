@@ -47,6 +47,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/ingress"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/version"
@@ -147,6 +148,7 @@ type KonfluxInfoReconciler struct {
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=config.openshift.io,resources=clusterversions,verbs=get;list;watch
+// +kubebuilder:rbac:groups=config.openshift.io,resources=ingresses,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -286,13 +288,19 @@ func (r *KonfluxInfoReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.ConfigMap{}).
 		WatchesRawSource(channelSource)
 
-	// Conditionally watch ClusterVersion only on OpenShift
+	// Conditionally watch OpenShift resources only on OpenShift
 	if r.ClusterInfo != nil && r.ClusterInfo.IsOpenShift() {
-		controllerBuilder = controllerBuilder.Watches(
-			&configv1.ClusterVersion{},
-			handler.EnqueueRequestsFromMapFunc(r.enqueueKonfluxInfoForVersionChange),
-			builder.WithPredicates(ctrlpredicate.ResourceVersionChangedPredicate{}),
-		)
+		controllerBuilder = controllerBuilder.
+			Watches(
+				&configv1.ClusterVersion{},
+				handler.EnqueueRequestsFromMapFunc(r.enqueueKonfluxInfoForVersionChange),
+				builder.WithPredicates(ctrlpredicate.ResourceVersionChangedPredicate{}),
+			).
+			Watches(
+				&configv1.Ingress{},
+				handler.EnqueueRequestsFromMapFunc(r.enqueueKonfluxInfoForVersionChange),
+				builder.WithPredicates(ctrlpredicate.ResourceVersionChangedPredicate{}),
+			)
 	}
 
 	return controllerBuilder.Complete(r)
@@ -301,8 +309,9 @@ func (r *KonfluxInfoReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // generateInfoJSON generates info.json content from PublicInfo.
 // Provides defaults if fields are missing. k8sVersion is the current cluster Kubernetes version (non-cached).
 // clusterId is the stable cluster identifier (OpenShift ClusterVersion UID or kube-system namespace UID).
-func (r *KonfluxInfoReconciler) generateInfoJSON(config *konfluxv1alpha1.PublicInfo, k8sVersion, openShiftVersion, clusterId string) ([]byte, error) {
-	info := r.applyInfoDefaults(config, k8sVersion, openShiftVersion, clusterId)
+// ingressDomain is the OpenShift ingress domain used to construct the imageProxy URL (empty on non-OpenShift).
+func (r *KonfluxInfoReconciler) generateInfoJSON(config *konfluxv1alpha1.PublicInfo, k8sVersion, openShiftVersion, clusterId, ingressDomain string) ([]byte, error) {
+	info := r.applyInfoDefaults(config, k8sVersion, openShiftVersion, clusterId, ingressDomain)
 	var buf bytes.Buffer
 	encoder := json.NewEncoder(&buf)
 	encoder.SetEscapeHTML(false)
@@ -315,7 +324,8 @@ func (r *KonfluxInfoReconciler) generateInfoJSON(config *konfluxv1alpha1.PublicI
 }
 
 // applyInfoDefaults applies default values to PublicInfo if not specified.
-func (r *KonfluxInfoReconciler) applyInfoDefaults(config *konfluxv1alpha1.PublicInfo, k8sVersion, openShiftVersion, clusterId string) *infoJSON {
+// ingressDomain is the OpenShift ingress domain used to construct the imageProxy URL (empty on non-OpenShift).
+func (r *KonfluxInfoReconciler) applyInfoDefaults(config *konfluxv1alpha1.PublicInfo, k8sVersion, openShiftVersion, clusterId, ingressDomain string) *infoJSON {
 	info := &infoJSON{
 		Environment:       "development",
 		Visibility:        "public",
@@ -324,6 +334,15 @@ func (r *KonfluxInfoReconciler) applyInfoDefaults(config *konfluxv1alpha1.Public
 		KubernetesVersion: k8sVersion,
 		OpenShiftVersion:  openShiftVersion,
 		RBAC:              getDefaultRBACRoles(),
+	}
+
+	if ingressDomain != "" {
+		// The image-rbac-proxy Route is created externally with a custom hostname
+		// (not the standard <name>-<namespace>.<domain> OpenShift Route convention).
+		info.ImageProxy = &imageProxyJSON{
+			URL:       fmt.Sprintf("https://image-rbac-proxy.%s", ingressDomain),
+			OAuthPath: "/oauth",
+		}
 	}
 
 	if config == nil {
@@ -370,6 +389,7 @@ func (r *KonfluxInfoReconciler) reconcileInfoConfigMap(ctx context.Context, tc *
 	k8sVersion := ""
 	openShiftVersion := ""
 	clusterId := ""
+	ingressDomain := ""
 	if r.ClusterInfo != nil {
 		if v, err := r.ClusterInfo.K8sVersion(); err == nil && v != nil {
 			k8sVersion = v.GitVersion
@@ -384,6 +404,10 @@ func (r *KonfluxInfoReconciler) reconcileInfoConfigMap(ctx context.Context, tc *
 			if err != nil {
 				return fmt.Errorf("failed to get OpenShift cluster ID: %w", err)
 			}
+			ingressDomain, err = ingress.GetOpenShiftIngressDomain(ctx, r.Client)
+			if err != nil {
+				log.Info("Failed to get OpenShift ingress domain, imageProxy will not be set", "error", err)
+			}
 		} else {
 			var err error
 			clusterId, err = clusterinfo.GetKubeSystemUID(ctx, r.Client)
@@ -396,12 +420,12 @@ func (r *KonfluxInfoReconciler) reconcileInfoConfigMap(ctx context.Context, tc *
 	var infoJSON []byte
 	var err error
 	if info.Spec.PublicInfo != nil {
-		infoJSON, err = r.generateInfoJSON(info.Spec.PublicInfo, k8sVersion, openShiftVersion, clusterId)
+		infoJSON, err = r.generateInfoJSON(info.Spec.PublicInfo, k8sVersion, openShiftVersion, clusterId, ingressDomain)
 		if err != nil {
 			return fmt.Errorf("failed to generate info.json: %w", err)
 		}
 	} else {
-		infoJSON, err = r.generateInfoJSON(nil, k8sVersion, openShiftVersion, clusterId)
+		infoJSON, err = r.generateInfoJSON(nil, k8sVersion, openShiftVersion, clusterId, ingressDomain)
 		if err != nil {
 			return fmt.Errorf("failed to generate default info.json: %w", err)
 		}
@@ -501,9 +525,15 @@ type infoJSON struct {
 	KonfluxVersion    string                              `json:"konfluxVersion,omitempty"`
 	KubernetesVersion string                              `json:"kubernetesVersion,omitempty"`
 	OpenShiftVersion  string                              `json:"openshiftVersion,omitempty"`
+	ImageProxy        *imageProxyJSON                     `json:"imageProxy,omitempty"`
 	Integrations      *konfluxv1alpha1.IntegrationsConfig `json:"integrations,omitempty"`
 	StatusPageUrl     string                              `json:"statusPageUrl,omitempty"`
 	RBAC              []rbacRoleJSON                      `json:"rbac,omitempty"`
+}
+
+type imageProxyJSON struct {
+	URL       string `json:"url"`
+	OAuthPath string `json:"oauthPath"`
 }
 
 type rbacRoleJSON struct {
