@@ -198,6 +198,7 @@ rules:
   resources:
   - imagerepositories
   - imagerepositories/status
+  - nudgeconfigs
   - releaseplanadmissions
   verbs:
   - get
@@ -442,7 +443,7 @@ spec:
         - -webhook-config-path=/mnt/webhook-config.json
         command:
         - /manager
-        image: quay.io/konflux-ci/build-service:29243e1d94cf27bed43c7a47f0740937558f0038
+        image: quay.io/konflux-ci/build-service:177969c7a71c407e96f5e6e12ae40bda12cb528b
         livenessProbe:
           httpGet:
             path: /healthz
