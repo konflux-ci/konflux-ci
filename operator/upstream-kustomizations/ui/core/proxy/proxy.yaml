@@ -161,7 +161,7 @@ spec:
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
-      - image: quay.io/konflux-ci/oauth2-proxy@sha256:latest
+      - image: registry.access.redhat.com/hi/oauth2-proxy
         name: oauth2-proxy
         env:
         - name: OAUTH2_PROXY_CLIENT_SECRET
