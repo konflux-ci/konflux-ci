@@ -666,7 +666,7 @@ spec:
         - -R
         - /opt/app-root/src/.
         - /mnt/static-content/
-        image: quay.io/konflux-ci/konflux-ui@sha256:aea5f15d1cd7fb40da6741c8401fd897fa07d41aa3c9f194a1000f22af1089ef
+        image: quay.io/konflux-ci/konflux-ui@sha256:1c584fe446e327833c9ab936d4bd87d8bb32d77f50d90f569f87cfd1089a00f4
         name: copy-static-content
         resources:
           limits:
@@ -684,7 +684,7 @@ spec:
       - command:
         - sh
         - /var/run/scripts/konflux-ci.dev/generate-proxy-config.sh
-        image: quay.io/konflux-ci/konflux-ui@sha256:aea5f15d1cd7fb40da6741c8401fd897fa07d41aa3c9f194a1000f22af1089ef
+        image: quay.io/konflux-ci/konflux-ui@sha256:1c584fe446e327833c9ab936d4bd87d8bb32d77f50d90f569f87cfd1089a00f4
         name: generate-proxy-config
         resources:
           limits:
