@@ -29,54 +29,39 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func TestResyncOperandServiceMonitorSetsAnnotation(t *testing.T) {
-	t.Parallel()
+// ResyncOperandServiceMonitor is intentionally a no-op (no annotation patches).
+// These tests lock that behavior; restore patch assertions when reverting the experiment.
+
+func TestResyncOperandServiceMonitor_NoOpDoesNotPatch(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 7, 12, 8, 0, 0, 0, time.UTC)
-
-	sm := &unstructured.Unstructured{Object: map[string]any{
-		"spec": map[string]any{
-			"endpoints": []any{map[string]any{"port": "https"}},
-		},
-	}}
+	sm := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{}}}
 	sm.SetGroupVersionKind(serviceMonitorGVK)
 	sm.SetNamespace("build-service")
 	sm.SetName("build-service")
+	c := fake.NewClientBuilder().WithObjects(sm).Build()
 
-	c := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).WithObjects(sm).Build()
-	clk := testclock.NewFakeClock(now)
 	err := ResyncOperandServiceMonitor(ctx, c, "build-service", "build-service", ServiceMonitorResyncOptions{
 		Force:                 true,
-		Reason:                ServiceMonitorResyncReasonTokenMinted,
-		SecretResourceVersion: "100",
-		MarkSettlePending:     true,
-		Clock:                 clk,
+		Reason:                ServiceMonitorResyncReasonCASync,
+		SecretResourceVersion: "tok-1",
+		CAResourceVersion:     "ca-9",
+		Clock:                 testclock.NewFakeClock(now),
 	})
 	if err != nil {
 		t.Fatalf("resync: %v", err)
 	}
-
 	updated := &unstructured.Unstructured{}
 	updated.SetGroupVersionKind(serviceMonitorGVK)
-	if err := c.Get(ctx, types.NamespacedName{Namespace: "build-service", Name: "build-service"}, updated); err != nil {
-		t.Fatalf("get updated SM: %v", err)
+	if err := c.Get(ctx, client.ObjectKey{Namespace: "build-service", Name: "build-service"}, updated); err != nil {
+		t.Fatalf("get: %v", err)
 	}
-	annotations := updated.GetAnnotations()
-	if got := annotations[ServiceMonitorResyncAnnotation]; got != now.UTC().Format(time.RFC3339) {
-		t.Fatalf("resync annotation: got %q want %q", got, now.UTC().Format(time.RFC3339))
-	}
-	if annotations[ServiceMonitorResyncReasonAnnotation] != ServiceMonitorResyncReasonTokenMinted {
-		t.Fatalf("resync reason: got %q", annotations[ServiceMonitorResyncReasonAnnotation])
-	}
-	if annotations[ServiceMonitorResyncSecretRVAnnotation] != "100" {
-		t.Fatalf("secret rv: got %q", annotations[ServiceMonitorResyncSecretRVAnnotation])
-	}
-	if annotations[ServiceMonitorResyncSettleAnnotation] != serviceMonitorResyncSettlePending {
-		t.Fatalf("settle pending: got %q", annotations[ServiceMonitorResyncSettleAnnotation])
+	if len(updated.GetAnnotations()) != 0 {
+		t.Fatalf("expected no annotations on experiment no-op, got %#v", updated.GetAnnotations())
 	}
 }
 
-func TestResyncOperandServiceMonitorSkipsWhenAnnotated(t *testing.T) {
+func TestResyncOperandServiceMonitor_NoOpPreservesExistingAnnotations(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	now := time.Date(2026, 7, 12, 8, 0, 0, 0, time.UTC)
@@ -90,9 +75,10 @@ func TestResyncOperandServiceMonitorSkipsWhenAnnotated(t *testing.T) {
 	})
 
 	c := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).WithObjects(sm).Build()
-	clk := testclock.NewFakeClock(now)
 	err := ResyncOperandServiceMonitor(ctx, c, "build-service", "build-service", ServiceMonitorResyncOptions{
-		Clock: clk,
+		Force:  true,
+		Reason: ServiceMonitorResyncReasonTokenMinted,
+		Clock:  testclock.NewFakeClock(now),
 	})
 	if err != nil {
 		t.Fatalf("resync: %v", err)
@@ -100,51 +86,11 @@ func TestResyncOperandServiceMonitorSkipsWhenAnnotated(t *testing.T) {
 
 	updated := &unstructured.Unstructured{}
 	updated.SetGroupVersionKind(serviceMonitorGVK)
-	if err := c.Get(ctx, client.ObjectKey{Namespace: "build-service", Name: "build-service"}, updated); err != nil {
+	if err := c.Get(ctx, types.NamespacedName{Namespace: "build-service", Name: "build-service"}, updated); err != nil {
 		t.Fatalf("get updated SM: %v", err)
 	}
 	if updated.GetAnnotations()[ServiceMonitorResyncAnnotation] != "2026-07-12T07:00:00Z" {
-		t.Fatalf("expected resync annotation to remain unchanged")
-	}
-}
-
-func TestResyncOperandServiceMonitorForceWhenAnnotated(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	now := time.Date(2026, 7, 12, 8, 0, 0, 0, time.UTC)
-
-	sm := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{}}}
-	sm.SetGroupVersionKind(serviceMonitorGVK)
-	sm.SetNamespace("build-service")
-	sm.SetName("build-service")
-	sm.SetAnnotations(map[string]string{
-		ServiceMonitorResyncAnnotation:       "2026-07-12T07:00:00Z",
-		ServiceMonitorResyncSettleAnnotation: serviceMonitorResyncSettlePending,
-	})
-
-	c := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).WithObjects(sm).Build()
-	clk := testclock.NewFakeClock(now)
-	err := ResyncOperandServiceMonitor(ctx, c, "build-service", "build-service", ServiceMonitorResyncOptions{
-		Force:              true,
-		Reason:             ServiceMonitorResyncReasonSettleRetry,
-		ClearSettlePending: true,
-		Clock:              clk,
-	})
-	if err != nil {
-		t.Fatalf("resync: %v", err)
-	}
-
-	updated := &unstructured.Unstructured{}
-	updated.SetGroupVersionKind(serviceMonitorGVK)
-	if err := c.Get(ctx, client.ObjectKey{Namespace: "build-service", Name: "build-service"}, updated); err != nil {
-		t.Fatalf("get updated SM: %v", err)
-	}
-	annotations := updated.GetAnnotations()
-	if annotations[ServiceMonitorResyncReasonAnnotation] != ServiceMonitorResyncReasonSettleRetry {
-		t.Fatalf("reason: got %q", annotations[ServiceMonitorResyncReasonAnnotation])
-	}
-	if _, ok := annotations[ServiceMonitorResyncSettleAnnotation]; ok {
-		t.Fatalf("expected settle annotation to be cleared")
+		t.Fatalf("expected existing annotation unchanged, got %#v", updated.GetAnnotations())
 	}
 }
 
@@ -175,56 +121,6 @@ func TestResyncOperandServiceMonitor_NotFound(t *testing.T) {
 	}
 }
 
-func TestResyncOperandServiceMonitor_DefaultClock(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	sm := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{}}}
-	sm.SetGroupVersionKind(serviceMonitorGVK)
-	sm.SetNamespace("build-service")
-	sm.SetName("build-service")
-
-	c := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).WithObjects(sm).Build()
-	err := ResyncOperandServiceMonitor(ctx, c, "build-service", "build-service", ServiceMonitorResyncOptions{
-		Force:  true,
-		Reason: ServiceMonitorResyncReasonSecretSync,
-	})
-	if err != nil {
-		t.Fatalf("resync with default clock: %v", err)
-	}
-}
-
-func TestResyncOperandServiceMonitor_MarkSettleWhenAnnotated(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	now := time.Date(2026, 7, 12, 8, 0, 0, 0, time.UTC)
-
-	sm := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{}}}
-	sm.SetGroupVersionKind(serviceMonitorGVK)
-	sm.SetNamespace("build-service")
-	sm.SetName("build-service")
-	sm.SetAnnotations(map[string]string{
-		ServiceMonitorResyncAnnotation: "2026-07-12T07:00:00Z",
-	})
-
-	c := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).WithObjects(sm).Build()
-	err := ResyncOperandServiceMonitor(ctx, c, "build-service", "build-service", ServiceMonitorResyncOptions{
-		MarkSettlePending: true,
-		Clock:             testclock.NewFakeClock(now),
-	})
-	if err != nil {
-		t.Fatalf("resync: %v", err)
-	}
-
-	updated := &unstructured.Unstructured{}
-	updated.SetGroupVersionKind(serviceMonitorGVK)
-	if err := c.Get(ctx, client.ObjectKey{Namespace: "build-service", Name: "build-service"}, updated); err != nil {
-		t.Fatalf("get updated SM: %v", err)
-	}
-	if updated.GetAnnotations()[ServiceMonitorResyncSettleAnnotation] != serviceMonitorResyncSettlePending {
-		t.Fatalf("expected settle pending to be set")
-	}
-}
-
 func TestServiceMonitorResyncHelpers(t *testing.T) {
 	t.Parallel()
 
@@ -234,6 +130,9 @@ func TestServiceMonitorResyncHelpers(t *testing.T) {
 	if ServiceMonitorResyncSecretRV(nil) != "" {
 		t.Fatal("nil SM should have empty secret RV")
 	}
+	if ServiceMonitorResyncCARV(nil) != "" {
+		t.Fatal("nil SM should have empty CA RV")
+	}
 
 	sm := &unstructured.Unstructured{}
 	if ServiceMonitorResyncSettlePending(sm) {
@@ -242,15 +141,22 @@ func TestServiceMonitorResyncHelpers(t *testing.T) {
 	if ServiceMonitorResyncSecretRV(sm) != "" {
 		t.Fatal("empty annotations should have empty secret RV")
 	}
+	if ServiceMonitorResyncCARV(sm) != "" {
+		t.Fatal("empty annotations should have empty CA RV")
+	}
 
 	sm.SetAnnotations(map[string]string{
 		ServiceMonitorResyncSettleAnnotation:   serviceMonitorResyncSettlePending,
 		ServiceMonitorResyncSecretRVAnnotation: "42",
+		ServiceMonitorResyncCARVAnnotation:     "ca-7",
 	})
 	if !ServiceMonitorResyncSettlePending(sm) {
 		t.Fatal("expected settle pending")
 	}
 	if ServiceMonitorResyncSecretRV(sm) != "42" {
 		t.Fatalf("secret RV: got %q", ServiceMonitorResyncSecretRV(sm))
+	}
+	if ServiceMonitorResyncCARV(sm) != "ca-7" {
+		t.Fatalf("CA RV: got %q", ServiceMonitorResyncCARV(sm))
 	}
 }

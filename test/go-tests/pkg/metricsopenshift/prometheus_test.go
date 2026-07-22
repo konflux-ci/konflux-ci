@@ -194,6 +194,39 @@ func TestServiceMonitorMatchLabels(t *testing.T) {
 	assert.Equal(t, map[string]string{"control-plane": "controller-manager"}, labels)
 }
 
+func TestServiceMonitorEndpointTLS(t *testing.T) {
+	t.Parallel()
+
+	sm := &unstructured.Unstructured{Object: map[string]any{
+		"spec": map[string]any{
+			"endpoints": []any{
+				map[string]any{
+					"scheme": "https",
+					"tlsConfig": map[string]any{
+						"insecureSkipVerify": false,
+						"serverName":         "build-service-controller-manager-metrics-service.build-service.svc",
+						"ca": map[string]any{
+							"secret": map[string]any{
+								"name": "metrics-server-cert",
+								"key":  "ca.crt",
+							},
+						},
+					},
+				},
+			},
+		},
+	}}
+	sm.SetNamespace("build-service")
+	sm.SetName("build-service")
+
+	skip, caSecret, caKey, serverName, err := ServiceMonitorEndpointTLS(sm)
+	assert.NoError(t, err)
+	assert.False(t, skip)
+	assert.Equal(t, "metrics-server-cert", caSecret)
+	assert.Equal(t, "ca.crt", caKey)
+	assert.Equal(t, "build-service-controller-manager-metrics-service.build-service.svc", serverName)
+}
+
 func TestShouldEmitPollLog(t *testing.T) {
 	t.Parallel()
 

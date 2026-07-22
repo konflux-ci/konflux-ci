@@ -376,21 +376,42 @@ func GetServiceMonitor(ctx context.Context, c client.Reader, namespace, name str
 
 // ServiceMonitorEndpointScheme returns scheme and bearerTokenSecret name from the first endpoint.
 func ServiceMonitorEndpointScheme(sm *unstructured.Unstructured) (scheme, bearerSecret string, err error) {
-	if sm == nil {
-		return "", "", fmt.Errorf("serviceMonitor is nil")
-	}
-	endpoints, found, err := unstructured.NestedSlice(sm.Object, "spec", "endpoints")
+	ep, err := serviceMonitorFirstEndpoint(sm)
 	if err != nil {
 		return "", "", err
-	}
-	if !found || len(endpoints) == 0 {
-		return "", "", fmt.Errorf("servicemonitor %s/%s has no endpoints", sm.GetNamespace(), sm.GetName())
-	}
-	ep, ok := endpoints[0].(map[string]any)
-	if !ok {
-		return "", "", fmt.Errorf("unexpected endpoint shape in %s/%s", sm.GetNamespace(), sm.GetName())
 	}
 	scheme, _, _ = unstructured.NestedString(ep, "scheme")
 	bearerSecret, _, _ = unstructured.NestedString(ep, "bearerTokenSecret", "name")
 	return scheme, bearerSecret, nil
+}
+
+// ServiceMonitorEndpointTLS returns TLS settings from the first ServiceMonitor endpoint.
+func ServiceMonitorEndpointTLS(sm *unstructured.Unstructured) (insecureSkipVerify bool, caSecret, caKey, serverName string, err error) {
+	ep, err := serviceMonitorFirstEndpoint(sm)
+	if err != nil {
+		return false, "", "", "", err
+	}
+	insecureSkipVerify, _, _ = unstructured.NestedBool(ep, "tlsConfig", "insecureSkipVerify")
+	caSecret, _, _ = unstructured.NestedString(ep, "tlsConfig", "ca", "secret", "name")
+	caKey, _, _ = unstructured.NestedString(ep, "tlsConfig", "ca", "secret", "key")
+	serverName, _, _ = unstructured.NestedString(ep, "tlsConfig", "serverName")
+	return insecureSkipVerify, caSecret, caKey, serverName, nil
+}
+
+func serviceMonitorFirstEndpoint(sm *unstructured.Unstructured) (map[string]any, error) {
+	if sm == nil {
+		return nil, fmt.Errorf("serviceMonitor is nil")
+	}
+	endpoints, found, err := unstructured.NestedSlice(sm.Object, "spec", "endpoints")
+	if err != nil {
+		return nil, err
+	}
+	if !found || len(endpoints) == 0 {
+		return nil, fmt.Errorf("servicemonitor %s/%s has no endpoints", sm.GetNamespace(), sm.GetName())
+	}
+	ep, ok := endpoints[0].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("unexpected endpoint shape in %s/%s", sm.GetNamespace(), sm.GetName())
+	}
+	return ep, nil
 }
