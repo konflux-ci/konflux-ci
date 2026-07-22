@@ -150,7 +150,8 @@ var _ = Describe("Prometheus scrape token", func() {
 				g.Expect(hasFile).To(BeFalse())
 				testutil.ExpectVerifiedMetricsEndpointTLS(g, ep,
 					"build-service-controller-manager-metrics-service.build-service.svc")
-				g.Expect(sm.GetAnnotations()).To(HaveKey(kubernetes.ServiceMonitorResyncAnnotation))
+				// TEMP EXPERIMENT: annotation resync disabled on experiment/uwm-no-sm-resync.
+				g.Expect(sm.GetAnnotations()).NotTo(HaveKey(kubernetes.ServiceMonitorResyncAnnotation))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 

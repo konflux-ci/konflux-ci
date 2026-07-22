@@ -21,8 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/clock"
@@ -93,12 +91,10 @@ type ServiceMonitorResyncOptions struct {
 // ResyncOperandServiceMonitor patches operand ServiceMonitor annotations so prometheus-operator
 // re-evaluates scrape configuration.
 //
-// On OpenShift UWM, prometheus-operator can reject a ServiceMonitor when bearerTokenSecret is
-// not visible at evaluation time and may not recover when the Secret appears later. A merge
-// patch on resync annotations triggers re-processing without changing scrape spec.
-//
-// No-op when the ServiceMonitor CRD is absent or the object is not found. When Force is
-// false and a resync annotation already exists, skips unless MarkSettlePending is set.
+// TEMP EXPERIMENT (branch experiment/uwm-no-sm-resync): intentionally a no-op. Deferred SM
+// apply is unchanged; this arm measures whether annotation resync / settle-retry are needed
+// for UWM boot and token/CA rotation. See .local/uwm-resync-shrink-test-plan.md and PR that
+// targets this experiment. Do not merge as a permanent product change without that A/B.
 func ResyncOperandServiceMonitor(
 	ctx context.Context,
 	c client.Client,
@@ -108,77 +104,14 @@ func ResyncOperandServiceMonitor(
 	if namespace == "" || name == "" {
 		return fmt.Errorf("serviceMonitor namespace and name are required")
 	}
-	clk := opts.Clock
-	if clk == nil {
-		clk = clock.RealClock{}
-	}
-
-	existing := &unstructured.Unstructured{}
-	existing.SetGroupVersionKind(serviceMonitorGVK)
-	err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, existing)
-	if meta.IsNoMatchError(err) {
-		return nil
-	}
-	if apierrors.IsNotFound(err) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("get ServiceMonitor %s/%s: %w", namespace, name, err)
-	}
-
-	if !opts.Force && !opts.MarkSettlePending && hasServiceMonitorResyncAnnotation(existing) {
-		return nil
-	}
-
-	resyncAt := clk.Now().UTC().Format(time.RFC3339)
-	patch := existing.DeepCopy()
-	annotations := patch.GetAnnotations()
-	if annotations == nil {
-		annotations = map[string]string{}
-	}
-	annotations[ServiceMonitorResyncAnnotation] = resyncAt
-	if opts.Reason != "" {
-		annotations[ServiceMonitorResyncReasonAnnotation] = opts.Reason
-	}
-	if opts.SecretResourceVersion != "" {
-		annotations[ServiceMonitorResyncSecretRVAnnotation] = opts.SecretResourceVersion
-	}
-	if opts.CAResourceVersion != "" {
-		annotations[ServiceMonitorResyncCARVAnnotation] = opts.CAResourceVersion
-	}
-	if opts.MarkSettlePending {
-		annotations[ServiceMonitorResyncSettleAnnotation] = serviceMonitorResyncSettlePending
-	}
-	if opts.ClearSettlePending {
-		delete(annotations, ServiceMonitorResyncSettleAnnotation)
-	}
-	patch.SetAnnotations(annotations)
-
-	if err := c.Patch(ctx, patch, client.MergeFrom(existing)); err != nil {
-		if meta.IsNoMatchError(err) {
-			return nil
-		}
-		return fmt.Errorf("patch ServiceMonitor %s/%s: %w", namespace, name, err)
-	}
-
+	_ = c
 	logf.FromContext(ctx).Info(
-		"metrics scrape resync",
+		"metrics scrape resync skipped (experiment/uwm-no-sm-resync)",
 		"namespace", namespace,
 		"servicemonitor", name,
 		"reason", opts.Reason,
-		"secretResourceVersion", opts.SecretResourceVersion,
-		"caResourceVersion", opts.CAResourceVersion,
-		"resyncAt", resyncAt,
 	)
 	return nil
-}
-
-func hasServiceMonitorResyncAnnotation(sm *unstructured.Unstructured) bool {
-	if sm == nil {
-		return false
-	}
-	annotations := sm.GetAnnotations()
-	return annotations != nil && annotations[ServiceMonitorResyncAnnotation] != ""
 }
 
 // ServiceMonitorResyncSettlePending reports whether a delayed settle-retry nudge is pending.

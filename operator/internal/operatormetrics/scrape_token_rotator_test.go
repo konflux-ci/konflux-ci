@@ -145,7 +145,8 @@ func TestScrapeTokenRotator_ReconcileCreatesSecret(t *testing.T) {
 	if creator.calls != 1 {
 		t.Fatalf("expected one token mint, got %d", creator.calls)
 	}
-	if requeue != kubernetes.DefaultServiceMonitorResyncSettleDelay {
+	// TEMP EXPERIMENT: no settle-retry; 1h token → 30m refresh requeue.
+	if requeue != 30*time.Minute {
 		t.Fatalf("unexpected requeue: %s", requeue)
 	}
 

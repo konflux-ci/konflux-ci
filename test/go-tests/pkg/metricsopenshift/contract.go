@@ -12,8 +12,9 @@ import (
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/metricsauth"
 )
 
-// ValidateScrapeContract checks ServiceMonitor, scrape token, metrics-reader CRB wiring, and
-// that operand reconcilers set the metrics-scrape-resync annotation.
+// ValidateScrapeContract checks ServiceMonitor, scrape token, and metrics-reader CRB wiring.
+// TEMP EXPERIMENT (experiment/uwm-no-sm-resync): does not require metrics-scrape-resync
+// annotations; ValidateOperandScrapeResync asserts they are absent for component targets.
 func ValidateScrapeContract(ctx context.Context, c client.Reader, target metricsauth.Target) error {
 	sm, err := GetServiceMonitor(ctx, c, target.Namespace, ServiceMonitorName(target))
 	if err != nil {

@@ -213,8 +213,9 @@ func TestReconcilePrometheusScrapeToken_MintsAndSettles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mint reconcile: %v", err)
 	}
-	if result.RequeueAfter != kubernetes.DefaultServiceMonitorResyncSettleDelay {
-		t.Fatalf("requeue: got %v want %v", result.RequeueAfter, kubernetes.DefaultServiceMonitorResyncSettleDelay)
+	// TEMP EXPERIMENT: no settle-retry; token TTL drives requeue (30m for 1h token).
+	if result.RequeueAfter != 30*time.Minute {
+		t.Fatalf("requeue: got %v want 30m", result.RequeueAfter)
 	}
 
 	updated := &unstructured.Unstructured{}
@@ -222,26 +223,8 @@ func TestReconcilePrometheusScrapeToken_MintsAndSettles(t *testing.T) {
 	if err := c.Get(ctx, types.NamespacedName{Namespace: testBuildServiceNamespace, Name: testBuildServiceNamespace}, updated); err != nil {
 		t.Fatalf("get SM: %v", err)
 	}
-	if updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation] != kubernetes.ServiceMonitorResyncReasonTokenMinted {
-		t.Fatalf("reason: got %q", updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation])
-	}
-
-	settleResult, err := ReconcilePrometheusScrapeToken(ctx, cfg)
-	if err != nil {
-		t.Fatalf("settle reconcile: %v", err)
-	}
-	if settleResult.RequeueAfter != 30*time.Minute {
-		t.Fatalf("expected 30m requeue on settle pass, got %v", settleResult.RequeueAfter)
-	}
-
-	if err := c.Get(ctx, types.NamespacedName{Namespace: testBuildServiceNamespace, Name: testBuildServiceNamespace}, updated); err != nil {
-		t.Fatalf("get SM after settle: %v", err)
-	}
-	if updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation] != kubernetes.ServiceMonitorResyncReasonSettleRetry {
-		t.Fatalf("settle reason: got %q", updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation])
-	}
-	if _, ok := updated.GetAnnotations()[kubernetes.ServiceMonitorResyncSettleAnnotation]; ok {
-		t.Fatalf("expected settle pending to be cleared")
+	if _, ok := updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation]; ok {
+		t.Fatalf("expected no resync annotations on experiment arm, got %#v", updated.GetAnnotations())
 	}
 }
 
@@ -289,8 +272,9 @@ func TestReconcilePrometheusScrapeToken_SecretSyncWhenRVChanges(t *testing.T) {
 	if err := c.Get(ctx, client.ObjectKey{Namespace: testBuildServiceNamespace, Name: testBuildServiceNamespace}, updated); err != nil {
 		t.Fatalf("get SM: %v", err)
 	}
-	if updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation] != kubernetes.ServiceMonitorResyncReasonSecretSync {
-		t.Fatalf("reason: got %q", updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation])
+	// TEMP EXPERIMENT: secret-sync nudge disabled; seeded annotations remain.
+	if updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation] != kubernetes.ServiceMonitorResyncReasonTokenMinted {
+		t.Fatalf("expected pre-existing reason unchanged, got %q", updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation])
 	}
 }
 
@@ -339,9 +323,12 @@ func TestReconcilePrometheusScrapeToken_SecretSyncBlockedDuringSettle(t *testing
 	if err := c.Get(ctx, client.ObjectKey{Namespace: testBuildServiceNamespace, Name: testBuildServiceNamespace}, updated); err != nil {
 		t.Fatalf("get SM: %v", err)
 	}
-	if updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation] != kubernetes.ServiceMonitorResyncReasonSettleRetry {
-		t.Fatalf("expected settle-retry instead of secret-sync during settle pending, got %q",
-			updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation])
+	// TEMP EXPERIMENT: settle-retry nudge disabled; seeded annotations remain.
+	if updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation] != kubernetes.ServiceMonitorResyncReasonTokenMinted {
+		t.Fatalf("expected pre-existing reason unchanged, got %q", updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation])
+	}
+	if updated.GetAnnotations()[kubernetes.ServiceMonitorResyncSettleAnnotation] != "pending" {
+		t.Fatalf("expected settle pending to remain, got %#v", updated.GetAnnotations())
 	}
 }
 
@@ -389,8 +376,8 @@ func TestReconcilePrometheusScrapeToken_AppliesServiceMonitorWhenAbsent(t *testi
 	if !applied {
 		t.Fatal("expected ApplyServiceMonitor to run when SM is absent")
 	}
-	if result.RequeueAfter != kubernetes.DefaultServiceMonitorResyncSettleDelay {
-		t.Fatalf("requeue: got %v want %v", result.RequeueAfter, kubernetes.DefaultServiceMonitorResyncSettleDelay)
+	if result.RequeueAfter != 30*time.Minute {
+		t.Fatalf("requeue: got %v want 30m", result.RequeueAfter)
 	}
 
 	updated := &unstructured.Unstructured{}
@@ -398,8 +385,8 @@ func TestReconcilePrometheusScrapeToken_AppliesServiceMonitorWhenAbsent(t *testi
 	if err := c.Get(ctx, types.NamespacedName{Namespace: testBuildServiceNamespace, Name: testBuildServiceNamespace}, updated); err != nil {
 		t.Fatalf("get SM: %v", err)
 	}
-	if updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation] != kubernetes.ServiceMonitorResyncReasonTokenMinted {
-		t.Fatalf("reason: got %q", updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation])
+	if _, ok := updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation]; ok {
+		t.Fatalf("expected no resync annotations on experiment arm, got %#v", updated.GetAnnotations())
 	}
 }
 
@@ -525,8 +512,8 @@ func TestReconcilePrometheusScrapeToken_TokenRefreshed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("refresh reconcile: %v", err)
 	}
-	if result.RequeueAfter != kubernetes.DefaultServiceMonitorResyncSettleDelay {
-		t.Fatalf("requeue: got %v", result.RequeueAfter)
+	if result.RequeueAfter != 30*time.Minute {
+		t.Fatalf("requeue: got %v want 30m", result.RequeueAfter)
 	}
 
 	updated := &unstructured.Unstructured{}
@@ -534,11 +521,8 @@ func TestReconcilePrometheusScrapeToken_TokenRefreshed(t *testing.T) {
 	if err := c.Get(ctx, types.NamespacedName{Namespace: testBuildServiceNamespace, Name: testBuildServiceNamespace}, updated); err != nil {
 		t.Fatalf("get SM: %v", err)
 	}
-	if updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation] != kubernetes.ServiceMonitorResyncReasonTokenRefreshed {
-		t.Fatalf("reason: got %q want %q",
-			updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation],
-			kubernetes.ServiceMonitorResyncReasonTokenRefreshed,
-		)
+	if _, ok := updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation]; ok {
+		t.Fatalf("expected no resync annotations on experiment arm, got %#v", updated.GetAnnotations())
 	}
 }
 
@@ -624,8 +608,8 @@ func TestReconcilePrometheusScrapeToken_SMNotFoundRequeuesWhenTokenUpdated(t *te
 	if err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
-	if result.RequeueAfter != kubernetes.DefaultServiceMonitorResyncSettleDelay {
-		t.Fatalf("requeue: got %v want settle delay", result.RequeueAfter)
+	if result.RequeueAfter != 30*time.Minute {
+		t.Fatalf("requeue: got %v want 30m (no settle-retry)", result.RequeueAfter)
 	}
 }
 
@@ -721,8 +705,8 @@ func TestReconcilePrometheusScrapeToken_SucceedsWhenSecretCacheLagsAfterMint(t *
 	if !lagging.blockSecretGets {
 		t.Fatal("expected apply to enable lagging secret reads")
 	}
-	if result.RequeueAfter != kubernetes.DefaultServiceMonitorResyncSettleDelay {
-		t.Fatalf("requeue: got %v want %v", result.RequeueAfter, kubernetes.DefaultServiceMonitorResyncSettleDelay)
+	if result.RequeueAfter != 30*time.Minute {
+		t.Fatalf("requeue: got %v want 30m", result.RequeueAfter)
 	}
 
 	updated := &unstructured.Unstructured{}
@@ -730,11 +714,8 @@ func TestReconcilePrometheusScrapeToken_SucceedsWhenSecretCacheLagsAfterMint(t *
 	if err := base.Get(ctx, types.NamespacedName{Namespace: testBuildServiceNamespace, Name: testBuildServiceNamespace}, updated); err != nil {
 		t.Fatalf("get SM: %v", err)
 	}
-	if updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation] != kubernetes.ServiceMonitorResyncReasonTokenMinted {
-		t.Fatalf("reason: got %q want %q",
-			updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation],
-			kubernetes.ServiceMonitorResyncReasonTokenMinted,
-		)
+	if _, ok := updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation]; ok {
+		t.Fatalf("expected no resync annotations on experiment arm, got %#v", updated.GetAnnotations())
 	}
 }
 
@@ -888,15 +869,12 @@ func TestReconcilePrometheusScrapeToken_CASyncWhenCARVChanges(t *testing.T) {
 	if err := c.Get(ctx, types.NamespacedName{Namespace: testBuildServiceNamespace, Name: testBuildServiceNamespace}, updated); err != nil {
 		t.Fatalf("get SM: %v", err)
 	}
-	if updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation] != kubernetes.ServiceMonitorResyncReasonCASync {
-		t.Fatalf("reason: got %q want %q",
-			updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation],
-			kubernetes.ServiceMonitorResyncReasonCASync,
-		)
+	// TEMP EXPERIMENT: ca-sync nudge disabled; seeded annotations remain.
+	if updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation] != kubernetes.ServiceMonitorResyncReasonTokenMinted {
+		t.Fatalf("expected pre-existing reason unchanged, got %q", updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation])
 	}
-	if updated.GetAnnotations()[kubernetes.ServiceMonitorResyncCARVAnnotation] != "leaf-1" {
-		t.Fatalf("ca rv annotation: got %q want leaf-1",
-			updated.GetAnnotations()[kubernetes.ServiceMonitorResyncCARVAnnotation])
+	if updated.GetAnnotations()[kubernetes.ServiceMonitorResyncCARVAnnotation] != "ca-old" {
+		t.Fatalf("expected seeded ca rv unchanged, got %q", updated.GetAnnotations()[kubernetes.ServiceMonitorResyncCARVAnnotation])
 	}
 }
 
@@ -929,7 +907,7 @@ func TestReconcilePrometheusScrapeToken_UsesSecretReaderNotStaleClient(t *testin
 	if applied != 1 {
 		t.Fatalf("ApplyServiceMonitor calls: got %d want 1", applied)
 	}
-	if result.RequeueAfter != kubernetes.DefaultServiceMonitorResyncSettleDelay {
+	if result.RequeueAfter != 30*time.Minute {
 		t.Fatalf("requeue: got %v", result.RequeueAfter)
 	}
 

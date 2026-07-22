@@ -45,15 +45,19 @@ func ServiceMonitorResyncReason(sm *unstructured.Unstructured) string {
 	return annotations[konfluxkubernetes.ServiceMonitorResyncReasonAnnotation]
 }
 
-// ValidateOperandScrapeResync checks that operand reconcilers ran a resync nudge by
-// patching the ServiceMonitor metrics-scrape-resync annotation after minting the scrape token.
+// ValidateOperandScrapeResync checks scrape-resync annotation expectations for the
+// ServiceMonitor.
+//
+// TEMP EXPERIMENT (experiment/uwm-no-sm-resync): annotation resync is disabled, so
+// component targets must NOT have metrics-scrape-resync set. Evidence logging still
+// records MISSING resync_at while UWM up/sm_after_secret remain the health signals.
 func ValidateOperandScrapeResync(sm *unstructured.Unstructured, target metricsauth.Target) error {
 	if !OperandScrapeResyncExpected(target) {
 		return nil
 	}
-	if ServiceMonitorResyncAt(sm) == "" {
-		return fmt.Errorf("servicemonitor %s/%s missing %q annotation (operand scrape resync)",
-			target.Namespace, sm.GetName(), konfluxkubernetes.ServiceMonitorResyncAnnotation)
+	if at := ServiceMonitorResyncAt(sm); at != "" {
+		return fmt.Errorf("servicemonitor %s/%s unexpectedly has %q=%q (experiment arm disables annotation resync)",
+			target.Namespace, sm.GetName(), konfluxkubernetes.ServiceMonitorResyncAnnotation, at)
 	}
 	return nil
 }

@@ -88,8 +88,8 @@ type DeferredSMApplyResult struct {
 // EnsurePrometheusScrapeToken / EvaluateMetricsScrapeTLS results are used for resync decisions
 // instead of re-reading Secrets from the informer cache immediately after writes.
 //
-// Returns RequeueAfter on mint/refresh so settle-retry runs once more before steady state,
-// and while waiting for a verifying metrics TLS chain.
+// TEMP EXPERIMENT (experiment/uwm-no-sm-resync): annotation resync and settle-retry requeue are
+// disabled; RequeueAfter follows token TTL only. Deferred SM apply is unchanged.
 func ReconcilePrometheusScrapeToken(ctx context.Context, cfg ScrapeTokenReconcilerConfig) (reconcile.Result, error) {
 	if err := validateScrapeTokenReconcilerConfig(cfg); err != nil {
 		return reconcile.Result{}, err
@@ -122,14 +122,13 @@ func ReconcilePrometheusScrapeToken(ctx context.Context, cfg ScrapeTokenReconcil
 		return *wait, nil
 	}
 
-	smApply, wait, err := applyOrProbeOperandServiceMonitor(ctx, cfg, tokenResult)
+	smApply, err := applyOrProbeOperandServiceMonitor(ctx, cfg, tokenResult)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-	if wait != nil {
-		return *wait, nil
-	}
 
+	// TEMP EXPERIMENT: still compute/log resync options for observability, but
+	// ResyncOperandServiceMonitor is a no-op and we do not requeue solely for settle-retry.
 	resyncOpts := serviceMonitorResyncOptionsFor(ctx, cfg, tokenResult, tlsResult, smApply)
 	if resyncOpts.Force || resyncOpts.MarkSettlePending {
 		if resyncErr := kubernetes.ResyncOperandServiceMonitor(
@@ -143,9 +142,6 @@ func ReconcilePrometheusScrapeToken(ctx context.Context, cfg ScrapeTokenReconcil
 		}
 	}
 
-	if tokenResult.TokenUpdated {
-		return reconcile.Result{RequeueAfter: kubernetes.DefaultServiceMonitorResyncSettleDelay}, nil
-	}
 	return reconcile.Result{RequeueAfter: tokenResult.RequeueAfter}, nil
 }
 
@@ -232,21 +228,13 @@ func applyOrProbeOperandServiceMonitor(
 	ctx context.Context,
 	cfg ScrapeTokenReconcilerConfig,
 	tokenResult kubernetes.EnsureScrapeTokenResult,
-) (DeferredSMApplyResult, *reconcile.Result, error) {
+) (DeferredSMApplyResult, error) {
 	smKey := client.ObjectKey{Namespace: cfg.OperandNamespace, Name: cfg.ServiceMonitorName}
 	if cfg.ApplyServiceMonitor != nil {
-		smApply, applyErr := applyDeferredOperandServiceMonitor(ctx, cfg, tokenResult, smKey)
-		if applyErr != nil {
-			return DeferredSMApplyResult{}, nil, applyErr
-		}
-		return smApply, nil, nil
+		return applyDeferredOperandServiceMonitor(ctx, cfg, tokenResult, smKey)
 	}
-	smApply := probeOperandServiceMonitor(ctx, cfg.Client, smKey)
-	if !smApply.ExistedBeforeApply && tokenResult.TokenUpdated {
-		wait := reconcile.Result{RequeueAfter: kubernetes.DefaultServiceMonitorResyncSettleDelay}
-		return smApply, &wait, nil
-	}
-	return smApply, nil, nil
+	// TEMP EXPERIMENT: no settle-retry wait when SM is absent on the probe-only path.
+	return probeOperandServiceMonitor(ctx, cfg.Client, smKey), nil
 }
 
 func serviceMonitorResyncOptionsFor(
