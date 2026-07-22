@@ -2,6 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - core
+  - certmanager
   - ./monitoring
 patches:
   - target:
@@ -10,6 +11,12 @@ patches:
       kind: Deployment
       name: image-controller-controller-manager
     path: mount-quay-ca-bundle.yaml
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: image-controller-controller-manager
+    path: mount-metrics-server-cert.yaml
   # Prevent deployment failures during slow dependency setup
   - target:
       group: apps
@@ -19,3 +26,64 @@ patches:
       - op: add
         path: /spec/progressDeadlineSeconds
         value: 2147483647
+
+replacements:
+  # Certificate dnsNames + ServiceMonitor serverName from the metrics Service identity.
+  - source:
+      kind: Service
+      version: v1
+      name: image-controller-controller-manager-metrics-service
+      fieldPath: .metadata.name
+    targets:
+      - select:
+          kind: Certificate
+          group: cert-manager.io
+          version: v1
+          name: metrics-certs
+        fieldPaths:
+          - .spec.dnsNames.0
+          - .spec.dnsNames.1
+        options:
+          delimiter: '.'
+          index: 0
+          create: true
+      - select:
+          kind: ServiceMonitor
+          group: monitoring.coreos.com
+          version: v1
+          name: image-controller
+        fieldPaths:
+          - .spec.endpoints.0.tlsConfig.serverName
+        options:
+          delimiter: '.'
+          index: 0
+          create: true
+  - source:
+      kind: Service
+      version: v1
+      name: image-controller-controller-manager-metrics-service
+      fieldPath: .metadata.namespace
+    targets:
+      - select:
+          kind: Certificate
+          group: cert-manager.io
+          version: v1
+          name: metrics-certs
+        fieldPaths:
+          - .spec.dnsNames.0
+          - .spec.dnsNames.1
+        options:
+          delimiter: '.'
+          index: 1
+          create: true
+      - select:
+          kind: ServiceMonitor
+          group: monitoring.coreos.com
+          version: v1
+          name: image-controller
+        fieldPaths:
+          - .spec.endpoints.0.tlsConfig.serverName
+        options:
+          delimiter: '.'
+          index: 1
+          create: true

@@ -334,6 +334,8 @@ func main() {
 	if metricsAddr != "0" {
 		if err := mgr.Add(&operatormetrics.ScrapeTokenRotator{
 			Client:       mgr.GetClient(),
+			SecretReader: mgr.GetAPIReader(),
+			Cache:        mgr.GetCache(),
 			TokenCreator: tokenCreator,
 			Namespace:    operatormetrics.OperatorNamespace,
 		}); err != nil {
@@ -357,6 +359,7 @@ func main() {
 		ClusterInfo:         clusterInfo,
 		TokenCreator:        tokenCreator,
 		TokenRotationEvents: buildServiceRotation,
+		SecretReader:        mgr.GetAPIReader(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxBuildService")
 		os.Exit(1)
@@ -366,6 +369,7 @@ func main() {
 		Scheme:              mgr.GetScheme(),
 		ObjectStore:         objectStore,
 		TokenCreator:        tokenCreator,
+		SecretReader:        mgr.GetAPIReader(),
 		TokenRotationEvents: integrationServiceRotation,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxIntegrationService")
@@ -376,6 +380,7 @@ func main() {
 		Scheme:              mgr.GetScheme(),
 		ObjectStore:         objectStore,
 		TokenCreator:        tokenCreator,
+		SecretReader:        mgr.GetAPIReader(),
 		TokenRotationEvents: releaseServiceRotation,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxReleaseService")
@@ -422,6 +427,7 @@ func main() {
 		ClusterInfo:         clusterInfo,
 		TokenCreator:        tokenCreator,
 		TokenRotationEvents: imageControllerRotation,
+		SecretReader:        mgr.GetAPIReader(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxImageController")
 		os.Exit(1)

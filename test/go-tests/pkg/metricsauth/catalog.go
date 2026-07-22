@@ -9,6 +9,15 @@ const (
 	TargetGroupOperator = "operator"
 	// TargetGroupComponent labels metrics for operand controllers (build-service, etc.).
 	TargetGroupComponent = "component"
+
+	// MetricsServerCertSecretName is the TLS Secret with leaf (tls.crt/tls.key) and
+	// scrape trust (ca.crt) for HTTPS metrics — single-Secret / konflux-issuer pattern.
+	MetricsServerCertSecretName = "metrics-server-cert"
+	// MetricsCASecretName is the Secret ServiceMonitors and integration tests trust via
+	// tlsConfig.ca (key ca.crt). Same Secret as MetricsServerCertSecretName.
+	MetricsCASecretName = MetricsServerCertSecretName
+	// MetricsCACertKey is the CA certificate key in MetricsCASecretName.
+	MetricsCACertKey = "ca.crt"
 )
 
 // Catalog holds scrape targets for cluster integration tests.
@@ -27,6 +36,12 @@ type Target struct {
 	Port                     int32
 	Path                     string
 	TLSInsecureSkipVerify    *bool
+	// MetricsCASecret is the Secret name holding the CA used to verify HTTPS metrics
+	// (typically MetricsCASecretName). Required when TLS verification is enabled.
+	MetricsCASecret string
+	// TLSServerName overrides the expected TLS server name. When empty and verifying,
+	// defaults to <Service>.<Namespace>.svc.
+	TLSServerName            string
 	MetricsReaderClusterRole string
 	ScrapeTokenSecret        string
 	BodyMustMatchAny         []string
@@ -75,6 +90,9 @@ func (t *Target) validate() error {
 	if t.Scheme == "https" && t.ScrapeTokenSecret == "" {
 		return fmt.Errorf("scrapeTokenSecret is required for https targets")
 	}
+	if t.Scheme == "https" && !t.TLSInsecureSkipVerifyForScrape() && t.MetricsCASecret == "" {
+		return fmt.Errorf("metricsCASecret is required when TLS verification is enabled")
+	}
 	if t.Group == "" {
 		t.Group = TargetGroupComponent
 	}
@@ -100,4 +118,22 @@ func (t Target) TLSInsecureSkipVerifyForScrape() bool {
 		return *t.TLSInsecureSkipVerify
 	}
 	return t.Scheme == "https"
+}
+
+// TLSServerNameForScrape returns the TLS server name used when verifying HTTPS scrapes.
+func (t Target) TLSServerNameForScrape() string {
+	if t.TLSServerName != "" {
+		return t.TLSServerName
+	}
+	return fmt.Sprintf("%s.%s.svc", t.Service, t.Namespace)
+}
+
+// ScrapeTLSConfigFor returns TLS settings for a local scrape of this target.
+// caCertPEM may be nil when InsecureSkipVerify is true.
+func (t Target) ScrapeTLSConfigFor(caCertPEM []byte) ScrapeTLSConfig {
+	return ScrapeTLSConfig{
+		InsecureSkipVerify: t.TLSInsecureSkipVerifyForScrape(),
+		ServerName:         t.TLSServerNameForScrape(),
+		CACertPEM:          caCertPEM,
+	}
 }

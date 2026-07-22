@@ -41,12 +41,13 @@ func TestValidateOperandScrapeResync(t *testing.T) {
 	sm := &unstructured.Unstructured{}
 	sm.SetName("build-service")
 	sm.SetNamespace("build-service")
-	require.Error(t, ValidateOperandScrapeResync(sm, target))
+	// metrics-scrape-resync annotation must be absent.
+	require.NoError(t, ValidateOperandScrapeResync(sm, target))
 
 	sm.SetAnnotations(map[string]string{
 		konfluxkubernetes.ServiceMonitorResyncAnnotation: "2026-07-12T10:00:00Z",
 	})
-	require.NoError(t, ValidateOperandScrapeResync(sm, target))
+	require.Error(t, ValidateOperandScrapeResync(sm, target))
 }
 
 func TestServiceMonitorResyncAt(t *testing.T) {

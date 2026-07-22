@@ -465,3 +465,26 @@ func TestPrometheusScrapeTokenSecretPredicate(t *testing.T) {
 		}},
 	})).To(gomega.BeTrue())
 }
+
+func TestMetricsTLSSecretPredicate(t *testing.T) {
+	g := gomega.NewWithT(t)
+
+	g.Expect(MetricsTLSSecretPredicate.Create(event.CreateEvent{
+		Object: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name:      kubernetes.ScrapeTokenSecretName,
+			Namespace: "build-service",
+		}},
+	})).To(gomega.BeFalse())
+	g.Expect(MetricsTLSSecretPredicate.Create(event.CreateEvent{
+		Object: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name:      kubernetes.MetricsCASecretName,
+			Namespace: "build-service",
+		}},
+	})).To(gomega.BeTrue())
+	g.Expect(MetricsTLSSecretPredicate.Update(event.UpdateEvent{
+		ObjectNew: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name:      kubernetes.MetricsServerCertSecretName,
+			Namespace: "image-controller",
+		}},
+	})).To(gomega.BeTrue())
+}

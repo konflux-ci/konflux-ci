@@ -531,6 +531,15 @@ func dumpDirectScrape(ctx context.Context, w io.Writer, cfg *rest.Config, kube c
 		return
 	}
 
+	var caCert []byte
+	if target.MetricsCASecret != "" {
+		caCert, err = metricsauth.SecretBytes(ctx, kube, target.Namespace, target.MetricsCASecret, metricsauth.MetricsCACertKey)
+		if err != nil {
+			fmt.Fprintf(w, "[UWM debug] %s direct scrape: CA read error: %v\n", target.ID, err)
+			return
+		}
+	}
+
 	pf, err := metricsauth.StartPortForward(ctx, cfg, metricsauth.ServiceRef{
 		Namespace: target.Namespace,
 		Name:      target.Service,
@@ -543,7 +552,7 @@ func dumpDirectScrape(ctx context.Context, w io.Writer, cfg *rest.Config, kube c
 	defer pf.Close()
 
 	localURL := metricsauth.LocalMetricsURL(pf.LocalPort(), target.Path, target.Scheme)
-	result, err := metricsauth.ScrapeLocal(ctx, localURL, token, target.Scheme, target.TLSInsecureSkipVerifyForScrape())
+	result, err := metricsauth.ScrapeLocal(ctx, localURL, token, target.Scheme, target.ScrapeTLSConfigFor(caCert))
 	if err != nil {
 		fmt.Fprintf(w, "[UWM debug] %s direct scrape: request error: %v\n", target.ID, err)
 		return
