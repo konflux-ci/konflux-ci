@@ -27,7 +27,7 @@ import (
 
 const (
 	// renovate: datasource=docker depName=registry.access.redhat.com/ubi10/go-toolset
-	echoServerImage = "registry.access.redhat.com/ubi10/go-toolset@sha256:cb86a7f85cb6f93f63e67d45df8a34612f9768ab149c234e785362598a4cf35d"
+	echoServerImage = "registry.access.redhat.com/ubi10/go-toolset@sha256:50899ce52cb2e85179e415be387079d9078455d6a58199c7fb4dc07eee125d4d"
 
 	echoConfigMapName         = "echo-server-src"
 	defaultEchoDeployTimeout  = 300 * time.Second
