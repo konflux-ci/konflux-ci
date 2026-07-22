@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	securityv1 "github.com/openshift/api/security/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -117,6 +118,8 @@ type KonfluxBuildServiceReconciler struct {
 	TokenCreator        kubernetes.TokenCreator
 	Clock               clock.Clock
 	TokenRotationEvents <-chan event.TypedGenericEvent[client.Object]
+	// SecretReader loads metrics TLS Secrets; prefer mgr.GetAPIReader() to avoid stale cache.
+	SecretReader client.Reader
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxbuildservices,verbs=get;list;watch;create;update;patch;delete
@@ -124,7 +127,8 @@ type KonfluxBuildServiceReconciler struct {
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxbuildservices/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;patch
-// +kubebuilder:rbac:groups=core,resources=services;secrets;serviceaccounts,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=core,resources=services;serviceaccounts,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=core,resources=serviceaccounts/token,verbs=create
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
@@ -136,6 +140,7 @@ type KonfluxBuildServiceReconciler struct {
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=build-pipeline-runner-rolebinding;build-service-manager-rolebinding;build-service-metrics-auth-rolebinding;prometheus-build-service-metrics-reader,verbs=bind
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=cert-manager.io,resources=certificates;issuers,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=security.openshift.io,resources=securitycontextconstraints,verbs=get;list;watch;create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -190,11 +195,12 @@ func (r *KonfluxBuildServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	scrapeResult := reconcile.Result{}
 	if buildService.Spec.ComponentMetrics.IsEnabled() && r.TokenCreator != nil {
-		// Deferred ServiceMonitor apply: mint scrape token, apply SM after token, resync nudges.
+		// Deferred ServiceMonitor apply: mint scrape token, wait for metrics TLS, apply SM.
 		scraper := kubernetes.OperandMetricsScraperSA(webhookConfigNamespace)
 		var scrapeErr error
 		scrapeResult, scrapeErr = common.ReconcilePrometheusScrapeToken(ctx, common.ScrapeTokenReconcilerConfig{
 			Client:             r.Client,
+			SecretReader:       r.SecretReader,
 			Clock:              r.Clock,
 			TokenCreator:       r.TokenCreator,
 			Scraper:            scraper,
@@ -264,7 +270,7 @@ func (r *KonfluxBuildServiceReconciler) applyManifests(ctx context.Context, tc *
 		// Deferred ServiceMonitor apply: skip operand SM until ReconcilePrometheusScrapeToken
 		// applies it after prometheus-scrape-token is readable.
 		if deferServiceMonitor && kubernetes.IsComponentMetricsServiceMonitor(obj) {
-			log.V(1).Info("Deferring operand ServiceMonitor apply until scrape token is ready",
+			log.V(1).Info("Deferring operand ServiceMonitor apply until scrape token and metrics TLS are ready",
 				"kind", tracking.GetKind(obj),
 				"name", obj.GetName(),
 				"namespace", obj.GetNamespace(),
@@ -456,7 +462,9 @@ func (r *KonfluxBuildServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).
 		Owns(&rbacv1.ClusterRole{}).
-		Owns(&rbacv1.ClusterRoleBinding{})
+		Owns(&rbacv1.ClusterRoleBinding{}).
+		Owns(&certmanagerv1.Certificate{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
+		Owns(&certmanagerv1.Issuer{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate))
 
 	// Conditionally watch SCC only on OpenShift (the API doesn't exist on vanilla Kubernetes)
 	if r.ClusterInfo != nil && r.ClusterInfo.IsOpenShift() {
@@ -468,6 +476,17 @@ func (r *KonfluxBuildServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 		controllerBuilder = controllerBuilder.Owns(
 			&corev1.Secret{},
 			builder.WithPredicates(predicate.PrometheusScrapeTokenSecretPredicate),
+		)
+		// metrics-server-cert is created by cert-manager (not CR ownerRefs).
+		controllerBuilder = controllerBuilder.Watches(
+			&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
+				if obj.GetNamespace() != webhookConfigNamespace {
+					return nil
+				}
+				return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: CRName}}}
+			}),
+			builder.WithPredicates(predicate.MetricsTLSSecretPredicate),
 		)
 	}
 	if r.TokenRotationEvents != nil && r.TokenCreator != nil {

@@ -28,7 +28,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/cache"
 	testclock "k8s.io/utils/clock/testing"
+	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -67,6 +69,33 @@ func testClientBuilder() *fake.ClientBuilder {
 	return fake.NewClientBuilder().WithScheme(testScheme())
 }
 
+func mustMetricsTLS(t *testing.T, namespace string) []client.Object {
+	t.Helper()
+	caPEM, leafPEM, err := kubernetes.NewSelfSignedMetricsTLSMaterial()
+	if err != nil {
+		t.Fatalf("tls material: %v", err)
+	}
+	return []client.Object{
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            kubernetes.MetricsServerCertSecretName,
+				Namespace:       namespace,
+				ResourceVersion: "leaf-1",
+			},
+			Data: map[string][]byte{
+				kubernetes.MetricsCACertKey:            caPEM,
+				kubernetes.MetricsServerCertTLSCertKey: leafPEM,
+			},
+		},
+	}
+}
+
+func testClientWithMetricsTLS(t *testing.T, extra ...client.Object) client.Client {
+	t.Helper()
+	objs := append(mustMetricsTLS(t, OperatorNamespace), extra...)
+	return testClientBuilder().WithObjects(objs...).Build()
+}
+
 func TestScrapeTokenRotator_NeedLeaderElection(t *testing.T) {
 	t.Parallel()
 	rotator := &ScrapeTokenRotator{}
@@ -81,7 +110,7 @@ func TestScrapeTokenRotator_ReconcileWithoutKonfluxCR(t *testing.T) {
 	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
 	creator := &fakeTokenCreator{token: "operator-scrape-token", expiresAt: now.Add(time.Hour)}
 	rotator := &ScrapeTokenRotator{
-		Client:       testClientBuilder().Build(),
+		Client:       testClientWithMetricsTLS(t),
 		Clock:        testclock.NewFakeClock(now),
 		TokenCreator: creator,
 		Namespace:    OperatorNamespace,
@@ -101,7 +130,7 @@ func TestScrapeTokenRotator_ReconcileCreatesSecret(t *testing.T) {
 	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
 	expiresAt := now.Add(time.Hour)
 	creator := &fakeTokenCreator{token: "operator-scrape-token", expiresAt: expiresAt}
-	c := testClientBuilder().Build()
+	c := testClientWithMetricsTLS(t)
 	rotator := &ScrapeTokenRotator{
 		Client:       c,
 		Clock:        testclock.NewFakeClock(now),
@@ -116,6 +145,7 @@ func TestScrapeTokenRotator_ReconcileCreatesSecret(t *testing.T) {
 	if creator.calls != 1 {
 		t.Fatalf("expected one token mint, got %d", creator.calls)
 	}
+	// 1h token → 30m refresh requeue (no settle-retry requeue).
 	if requeue != 30*time.Minute {
 		t.Fatalf("unexpected requeue: %s", requeue)
 	}
@@ -187,7 +217,7 @@ func TestScrapeTokenRotator_ReconcileRefreshesStaleSecret(t *testing.T) {
 		token:     "fresh-token",
 		expiresAt: now.Add(time.Hour),
 	}
-	c := testClientBuilder().WithObjects(existing).Build()
+	c := testClientWithMetricsTLS(t, existing)
 	rotator := &ScrapeTokenRotator{
 		Client:       c,
 		Clock:        testclock.NewFakeClock(now),
@@ -222,7 +252,7 @@ func TestScrapeTokenRotator_ReconcileUsesOperandScraperSA(t *testing.T) {
 		token:     "configured-token",
 		expiresAt: now.Add(time.Hour),
 	}
-	c := testClientBuilder().Build()
+	c := testClientWithMetricsTLS(t)
 	rotator := &ScrapeTokenRotator{
 		Client:       c,
 		Clock:        testclock.NewFakeClock(now),
@@ -256,7 +286,7 @@ func TestScrapeTokenRotator_StartStopsOnCancel(t *testing.T) {
 
 	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
 	creator := &fakeTokenCreator{token: "tok", expiresAt: now.Add(time.Hour)}
-	c := testClientBuilder().Build()
+	c := testClientWithMetricsTLS(t)
 	rotator := &ScrapeTokenRotator{
 		Client:       c,
 		Clock:        testclock.NewFakeClock(now),
@@ -289,7 +319,7 @@ func TestScrapeTokenRotator_StartLogsReconcileErrors(t *testing.T) {
 
 	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
 	rotator := &ScrapeTokenRotator{
-		Client:       testClientBuilder().Build(),
+		Client:       testClientWithMetricsTLS(t),
 		Clock:        testclock.NewFakeClock(now),
 		TokenCreator: &fakeTokenCreator{err: fmt.Errorf("mint failed")},
 		Namespace:    OperatorNamespace,
@@ -319,7 +349,7 @@ func TestScrapeTokenRotator_StartUsesDefaultNamespace(t *testing.T) {
 
 	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
 	creator := &fakeTokenCreator{token: "tok", expiresAt: now.Add(time.Hour)}
-	c := testClientBuilder().Build()
+	c := testClientWithMetricsTLS(t)
 	rotator := &ScrapeTokenRotator{
 		Client:       c,
 		Clock:        testclock.NewFakeClock(now),
@@ -359,7 +389,7 @@ func TestScrapeTokenRotator_ReconcileUsesRealClockWhenUnset(t *testing.T) {
 		token:     "tok",
 		expiresAt: time.Now().Add(time.Hour),
 	}
-	c := testClientBuilder().Build()
+	c := testClientWithMetricsTLS(t)
 	rotator := &ScrapeTokenRotator{
 		Client:       c,
 		TokenCreator: creator,
@@ -368,5 +398,199 @@ func TestScrapeTokenRotator_ReconcileUsesRealClockWhenUnset(t *testing.T) {
 
 	if _, err := rotator.reconcile(ctx, OperatorNamespace); err != nil {
 		t.Fatalf("reconcile: %v", err)
+	}
+}
+
+func TestNotifyScrapeWiringWake(t *testing.T) {
+	t.Parallel()
+	wake := make(chan struct{}, 1)
+
+	notifyScrapeWiringWake(OperatorNamespace, wake, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "other", Namespace: OperatorNamespace},
+	})
+	select {
+	case <-wake:
+		t.Fatal("unexpected wake for unrelated secret")
+	default:
+	}
+
+	notifyScrapeWiringWake(OperatorNamespace, wake, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      kubernetes.MetricsCASecretName,
+			Namespace: "other-ns",
+		},
+	})
+	select {
+	case <-wake:
+		t.Fatal("unexpected wake for wrong namespace")
+	default:
+	}
+
+	notifyScrapeWiringWake(OperatorNamespace, wake, "not-a-secret")
+	select {
+	case <-wake:
+		t.Fatal("unexpected wake for non-secret")
+	default:
+	}
+
+	notifyScrapeWiringWake(OperatorNamespace, wake, cache.DeletedFinalStateUnknown{
+		Key: "x",
+		Obj: "not-a-secret",
+	})
+	select {
+	case <-wake:
+		t.Fatal("unexpected wake for tombstone with non-secret Obj")
+	default:
+	}
+
+	notifyScrapeWiringWake(OperatorNamespace, wake, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      kubernetes.MetricsCASecretName,
+			Namespace: OperatorNamespace,
+		},
+	})
+	select {
+	case <-wake:
+	default:
+		t.Fatal("expected wake for metrics TLS secret")
+	}
+
+	notifyScrapeWiringWake(OperatorNamespace, wake, cache.DeletedFinalStateUnknown{
+		Key: OperatorNamespace + "/" + kubernetes.ScrapeTokenSecretName,
+		Obj: &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      kubernetes.ScrapeTokenSecretName,
+				Namespace: OperatorNamespace,
+			},
+		},
+	})
+	select {
+	case <-wake:
+	default:
+		t.Fatal("expected wake for deleted scrape token tombstone")
+	}
+
+	// Non-blocking when already pending.
+	wake <- struct{}{}
+	notifyScrapeWiringWake(OperatorNamespace, wake, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      kubernetes.MetricsServerCertSecretName,
+			Namespace: OperatorNamespace,
+		},
+	})
+}
+
+func TestScrapeTokenRotator_WatchScrapeWiringSecretsNilCache(t *testing.T) {
+	t.Parallel()
+	rotator := &ScrapeTokenRotator{}
+	rotator.watchScrapeWiringSecrets(context.Background(), OperatorNamespace, make(chan struct{}, 1))
+}
+
+// stubCache implements ctrlcache.Cache enough for watchScrapeWiringSecrets tests.
+type stubCache struct {
+	ctrlcache.Cache
+	getInformer func(context.Context, client.Object) (ctrlcache.Informer, error)
+}
+
+func (s *stubCache) GetInformer(ctx context.Context, obj client.Object, _ ...ctrlcache.InformerGetOption) (ctrlcache.Informer, error) {
+	return s.getInformer(ctx, obj)
+}
+
+type stubInformer struct {
+	ctrlcache.Informer
+	addErr  error
+	handler cache.ResourceEventHandler
+}
+
+func (s *stubInformer) AddEventHandler(handler cache.ResourceEventHandler) (cache.ResourceEventHandlerRegistration, error) {
+	s.handler = handler
+	return nil, s.addErr
+}
+
+func TestScrapeTokenRotator_WatchScrapeWiringSecretsCache(t *testing.T) {
+	t.Parallel()
+	wake := make(chan struct{}, 1)
+
+	rotator := &ScrapeTokenRotator{Cache: &stubCache{
+		getInformer: func(context.Context, client.Object) (ctrlcache.Informer, error) {
+			return nil, fmt.Errorf("informer unavailable")
+		},
+	}}
+	rotator.watchScrapeWiringSecrets(context.Background(), OperatorNamespace, wake)
+
+	inf := &stubInformer{}
+	rotator = &ScrapeTokenRotator{Cache: &stubCache{
+		getInformer: func(context.Context, client.Object) (ctrlcache.Informer, error) {
+			return inf, nil
+		},
+	}}
+	rotator.watchScrapeWiringSecrets(context.Background(), OperatorNamespace, wake)
+	if inf.handler == nil {
+		t.Fatal("expected event handler registration")
+	}
+	inf.handler.OnAdd(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      kubernetes.MetricsCASecretName,
+			Namespace: OperatorNamespace,
+		},
+	}, false)
+	select {
+	case <-wake:
+	default:
+		t.Fatal("expected wake from registered AddFunc")
+	}
+
+	rotator = &ScrapeTokenRotator{Cache: &stubCache{
+		getInformer: func(context.Context, client.Object) (ctrlcache.Informer, error) {
+			return &stubInformer{addErr: fmt.Errorf("add handler failed")}, nil
+		},
+	}}
+	rotator.watchScrapeWiringSecrets(context.Background(), OperatorNamespace, make(chan struct{}, 1))
+}
+
+func TestScrapeTokenRotator_StartWakesOnSecretEvent(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	inf := &stubInformer{}
+	rotator := &ScrapeTokenRotator{
+		Client: testClientWithMetricsTLS(t),
+		Cache: &stubCache{getInformer: func(context.Context, client.Object) (ctrlcache.Informer, error) {
+			return inf, nil
+		}},
+		Clock:        testclock.NewFakeClock(now),
+		TokenCreator: &fakeTokenCreator{token: "tok", expiresAt: now.Add(time.Hour)},
+		Namespace:    OperatorNamespace,
+		Interval:     time.Hour,
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- rotator.Start(ctx) }()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for inf.handler == nil && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if inf.handler == nil {
+		t.Fatal("handler not registered")
+	}
+	inf.handler.OnUpdate(nil, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      kubernetes.MetricsServerCertSecretName,
+			Namespace: OperatorNamespace,
+		},
+	})
+	// Give Start a moment to take the wake path, then cancel to exit.
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Start did not exit")
 	}
 }

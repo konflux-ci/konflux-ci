@@ -33,6 +33,10 @@ import (
 // prometheus-scrape-token used for metrics scraping.
 var PrometheusScrapeTokenSecretPredicate = predicate.NewPredicateFuncs(kubernetes.IsPrometheusScrapeTokenSecret)
 
+// MetricsTLSSecretPredicate limits Secret watches to metrics-server-cert
+// (cert-manager issued; watched by name because it is not a CR ownerRef).
+var MetricsTLSSecretPredicate = predicate.NewPredicateFuncs(kubernetes.IsMetricsTLSSecret)
+
 // generationOrMetadataChanged returns true if the update is NOT a status-only change.
 // It detects spec changes (generation bump), ownerReference changes, and
 // label/annotation changes -- none of which are reflected in the generation

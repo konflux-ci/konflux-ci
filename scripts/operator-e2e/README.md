@@ -27,11 +27,11 @@ Tekton skips operator metrics because the deploy Task runs `bin/manager` out-of-
 
 Override with `METRICS_GINKGO_LABEL_FILTER` (see `run-metrics-integration-tests.sh`).
 
-Catalog: `test/go-tests/pkg/metricsauth.DefaultCatalog()` (`group: operator` or `component` per target; `scrapeTokenSecret` for HTTPS operands).
+Catalog: `test/go-tests/pkg/metricsauth.DefaultCatalog()` (`group: operator` or `component` per target; `scrapeTokenSecret` and `metricsCASecret` for verified HTTPS operands).
 
 ## OpenShift UWM metrics tests
 
-`openshift/run-metrics-openshift-tests.sh` runs `test/go-tests/metricsopenshift` against **user-workload Prometheus** (not port-forward direct scrape). Proves ServiceMonitors are picked up by UWM (`up{namespace,service}==1`) plus HTTPS scrape contract (ServiceMonitor, `prometheus-scrape-token`, metrics-reader CRB). UWM readiness (enable flag, Prometheus pods, optional canary) runs in the suite `BeforeSuite` (`pkg/metricsopenshift/wait.go`).
+`openshift/run-metrics-openshift-tests.sh` runs `test/go-tests/metricsopenshift` against **user-workload Prometheus** (not port-forward direct scrape). Proves ServiceMonitors are picked up by UWM (`up{namespace,service}==1`) plus HTTPS scrape contract (ServiceMonitor, `prometheus-scrape-token`, verified TLS: `insecureSkipVerify=false`, `tlsConfig.ca`, `serverName`, metrics-reader CRB). UWM readiness (enable flag, Prometheus pods, optional canary) runs in the suite `BeforeSuite` (`pkg/metricsopenshift/wait.go`).
 
 | Entry point | UWM enable | Canary wait | Tests |
 |-------------|------------|-------------|-------|
@@ -51,7 +51,7 @@ On UWM target failure, the suite logs to the CI build log (no live cluster login
 | `UWM_DEBUG_DIRECT_SCRAPE` | off | When `true`, failure snapshot also port-forwards the operand metrics Service and logs HTTP status |
 | `UWM_DEBUG_OPERATOR_LOG_LINES` | `500` | Tail lines from user-workload `prometheus-operator` pod; filtered to failed namespace and ServiceMonitor messages |
 
-Every run (pass or fail) emits `[UWM resync]` lines after UWM readiness: for `build-service` and `image-controller`, logs ServiceMonitor `resync_at` (`konflux.konflux-ci.dev/metrics-scrape-resync`), scrape-token presence, and UWM `active_targets` / strict `up` at that moment. The metrics-contract specs also require `resync_at` to be set on those operands.
+Every run (pass or fail) emits `[UWM scrape]` evidence lines after UWM readiness for scrape-token component targets (secret/SM resource versions, `sm_after_secret`, `uwm_active_targets` / `uwm_up`). Evidence may still show `resync_at=MISSING` — operand reconcilers do not write `metrics-scrape-resync` annotations; the metrics-contract specs require those annotations to be **absent**. Prefer `sm_after_secret=true` and `uwm_active_targets=1` / `uwm_up=1` as pass fingerprints.
 
 Failure snapshot includes strict/broad `up` queries, a **peer comparison** row per UWM target (active + dropped target counts + `up` for operator/build-service/image-controller), active/dropped target details for the failed namespace, namespace monitoring labels, ServiceMonitor vs metrics Service selector match, ServiceMonitor/secret metadata (creation time, resourceVersion, labels) for all peers, endpoints/pods for the failed target, filtered **prometheus-operator** log tail from `openshift-user-workload-monitoring`, and optional direct scrape.
 

@@ -108,9 +108,11 @@ var IntegrationServiceClusterScopedAllowList = tracking.ClusterScopedAllowList{
 // KonfluxIntegrationServiceReconciler reconciles a KonfluxIntegrationService object
 type KonfluxIntegrationServiceReconciler struct {
 	client.Client
-	Scheme              *runtime.Scheme
-	ObjectStore         *manifests.ObjectStore
-	TokenCreator        kubernetes.TokenCreator
+	Scheme       *runtime.Scheme
+	ObjectStore  *manifests.ObjectStore
+	TokenCreator kubernetes.TokenCreator
+	// SecretReader loads metrics TLS Secrets; prefer mgr.GetAPIReader() to avoid stale cache.
+	SecretReader        client.Reader
 	Clock               clock.Clock
 	TokenRotationEvents <-chan event.TypedGenericEvent[client.Object]
 }
@@ -182,11 +184,12 @@ func (r *KonfluxIntegrationServiceReconciler) Reconcile(ctx context.Context, req
 
 	scrapeResult := reconcile.Result{}
 	if integrationService.Spec.ComponentMetrics.IsEnabled() && r.TokenCreator != nil {
-		// Deferred ServiceMonitor apply: mint scrape token, apply SM after token, resync nudges.
+		// Deferred ServiceMonitor apply: mint scrape token, wait for metrics TLS, apply SM.
 		scraper := kubernetes.OperandMetricsScraperSA(integrationServiceNamespace)
 		var scrapeErr error
 		scrapeResult, scrapeErr = common.ReconcilePrometheusScrapeToken(ctx, common.ScrapeTokenReconcilerConfig{
 			Client:             r.Client,
+			SecretReader:       r.SecretReader,
 			Clock:              r.Clock,
 			TokenCreator:       r.TokenCreator,
 			Scraper:            scraper,
@@ -252,9 +255,9 @@ func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context
 
 	for _, obj := range objects {
 		// Deferred ServiceMonitor apply: skip operand SM until ReconcilePrometheusScrapeToken
-		// applies it after prometheus-scrape-token is readable.
+		// applies it after prometheus-scrape-token and metrics TLS are ready.
 		if deferServiceMonitor && kubernetes.IsComponentMetricsServiceMonitor(obj) {
-			log.V(1).Info("Deferring operand ServiceMonitor apply until scrape token is ready",
+			log.V(1).Info("Deferring operand ServiceMonitor apply until scrape token and metrics TLS are ready",
 				"kind", tracking.GetKind(obj),
 				"name", obj.GetName(),
 				"namespace", obj.GetNamespace(),
@@ -424,6 +427,17 @@ func (r *KonfluxIntegrationServiceReconciler) SetupWithManager(mgr ctrl.Manager)
 		controllerBuilder = controllerBuilder.Owns(
 			&corev1.Secret{},
 			builder.WithPredicates(predicate.PrometheusScrapeTokenSecretPredicate),
+		)
+		// metrics-server-cert is created by cert-manager (not CR ownerRefs).
+		controllerBuilder = controllerBuilder.Watches(
+			&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
+				if obj.GetNamespace() != integrationServiceNamespace {
+					return nil
+				}
+				return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: CRName}}}
+			}),
+			builder.WithPredicates(predicate.MetricsTLSSecretPredicate),
 		)
 	}
 	if r.TokenRotationEvents != nil && r.TokenCreator != nil {

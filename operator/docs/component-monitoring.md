@@ -81,16 +81,16 @@ the operator reconciles.
 
 Same model on OpenShift UWM, Kind, and other Kubernetes clusters: HTTPS metrics
 with controller-runtime `WithAuthenticationAndAuthorization` (no kube-rbac-proxy),
-verified server TLS when cert-manager is enabled, and **`bearerTokenSecret` →
+verified server TLS (**cert-manager required** for the migrated HTTPS components), and **`bearerTokenSecret` →
 operator-managed `prometheus-scrape-token`** (TokenRequest for the operand `metrics-scraper`
 ServiceAccount, rotated by the operator).
 
 | Piece | Target |
 |-------|--------|
 | Metrics server | HTTPS `:8443`, controller-runtime auth filters (no kube-rbac-proxy) |
-| Server TLS | cert-manager `Certificate` → `metrics-server-cert` (or OpenShift serving CA) |
+| Server TLS | Single Secret `metrics-server-cert` (`tls.crt`/`tls.key` + scrape trust `ca.crt`). Operands: Certificate via `ClusterIssuer/konflux-issuer`. Operator manager: namespace-local SelfSigned Issuer (`config/certmanager/`) so the Secret exists before the manager starts. **cert-manager is required** for verified scrape installs. |
 | ServiceMonitor | `scheme: https`, `port: https`, `bearerTokenSecret` → `prometheus-scrape-token` |
-| TLS verify | `tlsConfig.ca` + `serverName` — **not** `insecureSkipVerify: true` |
+| TLS verify | `tlsConfig.ca` from `metrics-server-cert` / `ca.crt` + `serverName` — **not** `insecureSkipVerify: true` |
 | Authorization | `<component>-metrics-reader` ClusterRole bound to the operator-owned `metrics-scraper` ServiceAccount in the operand namespace |
 | Scrape credentials | Short-lived bound tokens in `prometheus-scrape-token`; **not** `bearerTokenFile` or legacy `kubernetes.io/service-account-token` Secrets |
 
@@ -100,8 +100,8 @@ that set `bearerTokenFile` (`ArbitraryFSAccessThroughSMs`). Konflux uses
 
 Operator self-metrics reference: `internal/operatormetrics/scrape_wiring.go` and
 `ScrapeTokenRotator` in `cmd/main.go` (ServiceMonitor created at runtime when the
-ServiceMonitor CRD is installed; cert-manager TLS patches remain under
-`operator/config/prometheus/` for future use).
+ServiceMonitor CRD is installed). Metrics TLS certificates are issued via
+`operator/config/certmanager/` and mounted with `cert_metrics_manager_patch.yaml`.
 
 ## Shipped today (operator scrape token)
 
@@ -110,7 +110,7 @@ components on the **operator scrape token** model (see [Scope](#scope)).
 
 | Piece | Shipped |
 |-------|---------|
-| Metrics server | HTTPS `:8443` with auth filters (`insecureSkipVerify: true` on ServiceMonitor for now) |
+| Metrics server | HTTPS `:8443` with auth filters. **konflux-operator**, **build-service**, **image-controller**, **release-service**, and **integration-service** use a single `metrics-server-cert` Secret (leaf + `ca.crt`) with verified scrape TLS (`tlsConfig.ca` → `metrics-server-cert`/`ca.crt`, plus `serverName`). Pods mount `tls.crt`/`tls.key` only. Operands are issued by `konflux-issuer`; the operator uses a namespace-local SelfSigned Issuer at install time. Operand controllers mount at controller-runtime’s default CertDir (`/tmp/k8s-metrics-server/serving-certs`) with no `--metrics-cert-path`. |
 | ServiceMonitor | `bearerTokenSecret` → `prometheus-scrape-token` in the operand namespace |
 | Scrape Secret | **Not** in kustomize — reconciler mints a bound token via TokenRequest for the operand `metrics-scraper` SA and writes `prometheus-scrape-token`; refreshes before expiry |
 | Authorization | `<component>-metrics-reader` ClusterRole; CRB subjects bind the operator-owned `metrics-scraper` ServiceAccount in the operand namespace |
@@ -121,10 +121,13 @@ Implementation: `operator/internal/common/scrape_token.go` (high-level
 (lower-level token helpers), wired from operand reconcilers when
 `spec.componentMetrics` is enabled.
 
-Operand controllers use two complementary mechanisms:
+Operand controllers use complementary mechanisms:
 
-- **Secret watch** — `Owns` on `prometheus-scrape-token` (name-filtered) reconciles
+- **Secret watch (scrape token)** — `Owns` on `prometheus-scrape-token` (name-filtered) reconciles
   immediately when the owned Secret is deleted or replaced.
+- **Secret watch (metrics TLS)** — `Watches` on `metrics-server-cert` by name
+  (cert-manager creates this Secret without CR ownerRefs) so metrics TLS changes are detected without
+  waiting for the rotation ticker.
 - **Rotation broadcaster** — a leader-elected ticker (default every 15 minutes) nudges
   subscribed controllers to reconcile so tokens refresh before expiry and rotation still
   runs if a reconcile was skipped.
@@ -142,44 +145,41 @@ ServiceMonitor that references `bearerTokenSecret: prometheus-scrape-token` befo
 Secret exists can be rejected (`InvalidConfiguration: secret not found`) and may not
 recover when the Secret appears later.
 
-Operand reconcilers on the operator scrape-token model address this in two layers:
+Operand reconcilers on the operator scrape-token model address this by
+**deferred apply**: when `componentMetrics` is enabled, the operand ServiceMonitor
+is skipped in `applyManifests` and applied only from
+`ReconcilePrometheusScrapeToken` after the scrape token Secret is readable **and**
+`metrics-server-cert` has verifying `tls.crt` + `ca.crt`. The SM is
+re-applied on every reconcile (idempotent SSA) so tracking-client orphan cleanup
+retains ownership.
 
-1. **Deferred apply** — when `componentMetrics` is enabled, the operand ServiceMonitor
-   is skipped in `applyManifests` and applied only from
-   `ReconcilePrometheusScrapeToken` after the scrape token Secret is readable. The SM is
-   re-applied on every reconcile (idempotent SSA) so tracking-client orphan cleanup
-   retains ownership.
-2. **Resync nudges** — after apply, `ResyncOperandServiceMonitor` patches SM annotations
-   so prometheus-operator re-evaluates the SM when:
-   - the token is minted (`token-minted`) or refreshed (`token-refreshed`)
-   - a settle requeue fires (~15s, `settle-retry`)
-   - the secret resource version drifts (`secret-sync`, blocked while settle is pending)
-
-Annotations (on the operand ServiceMonitor):
-
-| Annotation | Purpose |
-|------------|---------|
-| `konflux.konflux-ci.dev/metrics-scrape-resync` | RFC3339 timestamp of last nudge |
-| `konflux.konflux-ci.dev/metrics-scrape-resync-reason` | `token-minted`, `token-refreshed`, `settle-retry`, or `secret-sync` |
-| `konflux.konflux-ci.dev/metrics-scrape-resync-secret-rv` | Last seen `prometheus-scrape-token` resourceVersion |
-| `konflux.konflux-ci.dev/metrics-scrape-resync-settle` | `pending` while waiting for settle requeue |
+Annotation-only "resync" patches on the ServiceMonitor are **not** used. Deferred
+apply is what prevents SM-before-Secret `InvalidConfiguration` rejection; once the
+SM is accepted, per-reconcile re-apply (and normal Secret remint/reissue) is
+sufficient for scrape continuity when the token or metrics TLS Secret changes.
+OpenShift UWM prometheus-operator still often lacks cross-namespace Secret watches,
+but that does not require annotation nudges when create ordering is correct.
 
 Implementation: `operator/internal/common/scrape_token.go`,
-`operator/pkg/kubernetes/servicemonitor_resync.go`, wired from build-service,
-image-controller, release-service, and integration-service reconcilers.
+`operator/pkg/kubernetes/metrics_tls.go`, wired from build-service,
+image-controller, release-service, and integration-service reconcilers and the
+operator `ScrapeTokenRotator`.
 
 `EnsurePrometheusScrapeToken` returns `EnsureScrapeTokenResult` (token bytes,
-`SecretExisted`, post-write `ResourceVersion`) from the write path. Operand
-reconciliation uses that result for resync decisions instead of re-reading the Secret
-or ServiceMonitor from the informer cache immediately after apply, when the cache may
-not have caught up yet.
+`SecretExisted`, post-write `ResourceVersion`) from the write path.
+`EvaluateMetricsScrapeTLS` / `ReconcileMetricsScrapeTLS` return metrics TLS
+`ResourceVersion` from the verification Get. Metrics TLS Secret Gets prefer
+`SecretReader` (`mgr.GetAPIReader()`) so cert-manager updates are not missed due to
+cache lag.
 
 Operator logs (verbosity 1 unless noted):
 
 - `metrics scrape deferred ServiceMonitor apply` — first SM create at Info;
   steady-state re-apply at V(1)
-- `metrics scrape resync` — Info, one line per annotation patch
-- `metrics scrape resync secret-sync deferred` — Info when settle blocks secret-sync
+- `metrics scrape deferred ServiceMonitor waiting for TLS chain` — Info while metrics TLS
+  are missing or not yet verifying (`tls.crt`/`ca.crt` empty or mismatched). Leaf/CA
+  rotation is owned by cert-manager; the operator only waits and re-applies the SM
+  when the Secret verifies again.
 
 ### OpenShift UWM integration tests
 
@@ -190,17 +190,18 @@ On OpenShift optional e2e (`konflux-e2e-v420-optional`, `konflux-e2e-v420-arm64-
 The suite verifies:
 
 - UWM Prometheus is ready in `openshift-user-workload-monitoring`
-- Operand scrape contract (ServiceMonitor spec, resync annotations, token Secret) for
-  scrape-token targets (`konflux-operator`, `build-service`, `image-controller`,
-  `release-service`, `integration-service`)
+- Operand scrape contract (ServiceMonitor spec, token Secret, absence of
+  `metrics-scrape-resync` annotations) for scrape-token targets
+  (`konflux-operator`, `build-service`, `image-controller`, `release-service`,
+  `integration-service`)
 - `up==1` in UWM Prometheus for scrape-token targets (`metrics-uwm`) and legacy interim
   HTTP operands with `UWMUpCheck` (`konflux-ui-proxy`; label
   `metrics-uwm-up-only`, no scrape-token contract)
 
-Before specs, tests emit `[UWM resync]` lines with `resync_reason`, secret/SM resource
+Before specs, tests emit `[UWM scrape]` evidence lines with secret/SM resource
 versions, `uwm_active_targets`, and `sm_after_secret` (SM `creationTimestamp` after
-scrape token). Use `sm_after_secret=true` and `uwm_active_targets=1` as pass fingerprints;
-`resync_reason` alone is not a reliable flake indicator.
+scrape token). Use `sm_after_secret=true` and `uwm_active_targets=1` / `uwm_up=1` as
+pass fingerprints.
 
 On failure, `[UWM debug]` dumps SM/secret metadata, prometheus-operator log tail, and
 peer target comparison. See `test/go-tests/pkg/metricsopenshift/`.
@@ -218,8 +219,8 @@ only when `--metrics-bind-address` is not `0` (metrics server enabled).
 | ServiceMonitor | `ScrapeTokenRotator` ensures `controller-manager-metrics-monitor` in `konflux-operator` — `bearerTokenSecret` → `prometheus-scrape-token` |
 | Scrape Secret | `ScrapeTokenRotator` in `cmd/main.go` mints and rotates `prometheus-scrape-token` |
 | Scraper CRB | Operand reconciler binds `metrics-scraper` in the operand namespace; operator rotator does the same in `konflux-operator` |
-| Rotation | `ScrapeTokenRotator` fixed-interval ticker (`DefaultScrapeTokenRotationInterval`, same as operand broadcaster); freshness check skips mint when token is still valid |
-| Server TLS (cert-manager) | Optional — `config/certmanager/` exists; not enabled in default `operator-rbac` kustomization yet |
+| Rotation | `ScrapeTokenRotator` adaptive timer (`DefaultScrapeTokenRotationInterval`, same as operand broadcaster) plus early wake on scrape-wiring Secret events (`metrics-server-cert`, scrape token); freshness check skips mint when token is still valid |
+| Server TLS (cert-manager) | **Required** for verified scrape — `config/certmanager/` is included from default `operator-rbac` kustomization; metrics TLS Secrets gate ServiceMonitor apply |
 
 Cluster integration tests scrape via the operator-managed `prometheus-scrape-token` Secret.
 
@@ -267,8 +268,8 @@ that already apply to operator scrape token components.
 
 ### 2. Operator `core/` + cert-manager
 
-- [ ] Add or extend `certmanager/` with a metrics `Certificate` (secret `metrics-server-cert`)
-- [ ] Patch Deployment: mount cert volume, `--metrics-cert-path=…`
+- [ ] Add or extend `certmanager/` with a Certificate that issues `metrics-server-cert` via `konflux-issuer` (operands) or a namespace-local SelfSigned Issuer (operator manager only)
+- [ ] Patch Deployment: mount leaf cert volume (`tls.crt`/`tls.key` from `metrics-server-cert`), `--metrics-cert-path=…` (or default CertDir)
 - [ ] Add kustomize `replacements` for ServiceMonitor `serverName` (see operator deploy kustomization)
 - [ ] Keep `core/` patches that delete upstream monitoring resources
 
@@ -289,7 +290,7 @@ that already apply to operator scrape token components.
 
 - [ ] `scheme: https`, `port: https`
 - [ ] `bearerTokenSecret` → `prometheus-scrape-token` (operand namespace) on all clusters
-- [ ] Replace `insecureSkipVerify: true` with `tlsConfig.ca` from `metrics-server-cert` and correct `serverName`
+- [ ] Replace `insecureSkipVerify: true` with `tlsConfig.ca` from `metrics-server-cert` / `ca.crt` and correct `serverName`
 
 **Operator reconciler (HTTPS components on OCP / Kind):**
 
@@ -411,5 +412,6 @@ steps (creating `monitoring/` kustomization, rebuilding embedded manifests via
 | Embedded manifests | `operator/pkg/manifests/<component>/manifests.yaml` |
 | Cluster integration tests | `test/go-tests/metricsintegration/` + `test/go-tests/pkg/metricsauth.DefaultCatalog()` (via `scripts/operator-e2e/run-metrics-integration-tests.sh`, hooked in `test/e2e/run-e2e.sh`) |
 | OpenShift UWM tests | `test/go-tests/metricsopenshift/` + `test/go-tests/pkg/metricsopenshift/` (via `scripts/operator-e2e/openshift/run-metrics-openshift-tests.sh`, optional OCP e2e in `test/e2e/run-e2e.sh`) |
-| ServiceMonitor resync | `operator/pkg/kubernetes/servicemonitor_resync.go` |
-| Deferred SM apply | `operator/internal/common/scrape_token.go`, `operand_servicemonitor.go` |
+| Deferred SM apply + scrape token | `operator/internal/common/scrape_token.go`, `operand_servicemonitor.go` |
+| Metrics TLS readiness | `operator/pkg/kubernetes/metrics_tls.go` |
+| Unused SM annotation helpers | `operator/pkg/kubernetes/servicemonitor_resync.go` (no-op; contract tests assert annotations absent) |

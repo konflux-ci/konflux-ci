@@ -1,0 +1,8 @@
+# Ensure namePrefix updates Certificate issuerRef to the prefixed Issuer.
+nameReference:
+- kind: Issuer
+  group: cert-manager.io
+  fieldSpecs:
+  - kind: Certificate
+    group: cert-manager.io
+    path: spec/issuerRef/name
