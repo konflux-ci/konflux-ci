@@ -290,10 +290,12 @@ spec:
                     type: object
                   replicas:
                     default: 1
-                    description: Replicas is the number of replicas for the namespace-lister
-                      deployment.
+                    description: |-
+                      Replicas is the number of replicas for the namespace-lister deployment.
+                      Set to 0 to scale the deployment down (e.g. to free capacity in CI).
+                      When omitted, defaults to 1. A pointer is used so an explicit 0 is distinct from unset.
                     format: int32
-                    minimum: 1
+                    minimum: 0
                     type: integer
                 type: object
             type: object

@@ -197,8 +197,10 @@ func (r *KonfluxNamespaceListerReconciler) applyManifests(ctx context.Context, t
 func applyNamespaceListerCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxNamespaceListerSpec) error {
 	var containerSpec *konfluxv1alpha1.ContainerSpec
 	if spec.NamespaceLister != nil {
-		if spec.NamespaceLister.Replicas > 0 {
-			deployment.Spec.Replicas = &spec.NamespaceLister.Replicas
+		// Always apply Replicas when set, including explicit 0 (scale-to-zero).
+		// Nil means unset — leave the manifest default (typically 1).
+		if spec.NamespaceLister.Replicas != nil {
+			deployment.Spec.Replicas = spec.NamespaceLister.Replicas
 		}
 		containerSpec = spec.NamespaceLister.NamespaceLister
 	}

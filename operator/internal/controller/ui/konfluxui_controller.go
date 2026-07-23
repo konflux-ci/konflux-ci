@@ -358,7 +358,7 @@ func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv
 	switch deployment.Name {
 	case proxyDeploymentName:
 		proxySpec := ui.Spec.GetProxy()
-		deployment.Spec.Replicas = &proxySpec.Replicas
+		deployment.Spec.Replicas = proxySpec.Replicas
 		// Build oauth2-proxy options based on endpoint URL and OpenShift login state
 		openShiftLoginEnabled := isOpenShiftLoginEnabled(ui, clusterInfo)
 		oauth2ProxyOpts := buildOAuth2ProxyOptions(endpoint, openShiftLoginEnabled)
@@ -376,7 +376,7 @@ func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv
 		}
 	case dexDeploymentName:
 		dexSpec := ui.Spec.GetDex()
-		deployment.Spec.Replicas = &dexSpec.Replicas
+		deployment.Spec.Replicas = dexSpec.Replicas
 		if err := buildDexOverlay(ui.Spec.Dex, dexConfigMapName).ApplyToDeployment(deployment); err != nil {
 			return err
 		}
@@ -514,15 +514,20 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, runtimeConfig 
 		))
 	}
 
+	replicas := int32(1)
+	if spec.Replicas != nil {
+		replicas = *spec.Replicas
+	}
+
 	podOpts = append(podOpts,
 		customization.WithContainerBuilder(
 			reverseProxyContainerName,
 			reverseProxyOpts...,
-		)(customization.DeploymentContext{Replicas: spec.Replicas}),
+		)(customization.DeploymentContext{Replicas: replicas}),
 		customization.WithContainerBuilder(
 			oauth2ProxyContainerName,
 			oauth2ProxyOpts...,
-		)(customization.DeploymentContext{Replicas: spec.Replicas}),
+		)(customization.DeploymentContext{Replicas: replicas}),
 	)
 	return customization.NewPodOverlay(podOpts...), nil
 }
@@ -621,9 +626,13 @@ func buildDexOverlay(spec *konfluxv1alpha1.DexDeploymentSpec, configMapName stri
 	// Add user-provided container customizations if spec is provided
 	if spec != nil {
 		containerOpts = append(containerOpts, customization.FromContainerSpec(spec.Dex))
+		replicas := int32(1)
+		if spec.Replicas != nil {
+			replicas = *spec.Replicas
+		}
 		opts = append(opts, customization.WithContainerOpts(
 			dexContainerName,
-			customization.DeploymentContext{Replicas: spec.Replicas},
+			customization.DeploymentContext{Replicas: replicas},
 			containerOpts...,
 		))
 	} else if len(containerOpts) > 0 {

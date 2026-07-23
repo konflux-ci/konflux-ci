@@ -23,9 +23,11 @@ import (
 // NamespaceListerDeploymentSpec defines customizations for the namespace-lister deployment.
 type NamespaceListerDeploymentSpec struct {
 	// Replicas is the number of replicas for the namespace-lister deployment.
+	// Set to 0 to scale the deployment down (e.g. to free capacity in CI).
+	// When omitted, defaults to 1. A pointer is used so an explicit 0 is distinct from unset.
 	// +kubebuilder:default=1
-	// +kubebuilder:validation:Minimum=1
-	Replicas int32 `json:"replicas,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	Replicas *int32 `json:"replicas,omitempty"`
 	// NamespaceLister defines customizations for the namespace-lister container.
 	// +optional
 	NamespaceLister *ContainerSpec `json:"namespaceLister,omitempty"`

@@ -81,6 +81,13 @@ fi
 # Operand metrics only: the deploy Task runs bin/manager OOC; operator metrics have no endpoints here.
 METRICS_GINKGO_LABEL_FILTER='metrics && component' \
   bash scripts/operator-e2e/run-metrics-integration-tests.sh "${REPO_ROOT}"
+
+# Stop UI port-forward before scaling the proxy Deployment to zero.
+cleanup
+PF_PID=""
+
+bash scripts/operator-e2e/quiet-cluster-for-conformance.sh "${REPO_ROOT}"
+
 eval "$(bash scripts/operator-e2e/prepare-conformance-env.sh "${REPO_ROOT}")"
 export GITHUB_TOKEN="${GH_TOKEN:-}"
 export MY_GITHUB_ORG="${GH_ORG:-}"

@@ -48,6 +48,9 @@ fi
 
 bash "${REPO_ROOT}/scripts/operator-e2e/run-metrics-integration-tests.sh" "${REPO_ROOT}"
 
+# Free Kind/GHA capacity before the heavy conformance PipelineRuns (UI/Dex/NL → 0, Results off).
+bash "${REPO_ROOT}/scripts/operator-e2e/quiet-cluster-for-conformance.sh" "${REPO_ROOT}"
+
 echo "Running E2E conformance tests..."
 cd "${REPO_ROOT}/test/go-tests"
 # -mod=mod overrides GOFLAGS=-mod=vendor that may be present on some systems; this repo doesn't vendor.

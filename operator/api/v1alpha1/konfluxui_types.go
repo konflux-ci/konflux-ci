@@ -23,6 +23,7 @@ import (
 
 	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 )
 
 // NodePortServiceSpec defines the NodePort service configuration for the proxy.
@@ -70,9 +71,11 @@ type IngressSpec struct {
 // ProxyDeploymentSpec defines customizations for the proxy deployment.
 type ProxyDeploymentSpec struct {
 	// Replicas is the number of replicas for the proxy deployment.
+	// Set to 0 to scale the deployment down (e.g. to free capacity in CI after UI tests).
+	// When omitted, defaults to 1. A pointer is used so an explicit 0 is distinct from unset.
 	// +kubebuilder:default=1
-	// +kubebuilder:validation:Minimum=1
-	Replicas int32 `json:"replicas,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	Replicas *int32 `json:"replicas,omitempty"`
 	// ReverseProxy defines customizations for the reverse proxy container.
 	// +optional
 	ReverseProxy *ContainerSpec `json:"reverseProxy,omitempty"`
@@ -129,9 +132,11 @@ type WatsonEndpointSpec struct {
 // DexDeploymentSpec defines customizations for the dex deployment.
 type DexDeploymentSpec struct {
 	// Replicas is the number of replicas for the dex deployment.
+	// Set to 0 to scale the deployment down (e.g. to free capacity in CI after UI tests).
+	// When omitted, defaults to 1. A pointer is used so an explicit 0 is distinct from unset.
 	// +kubebuilder:default=1
-	// +kubebuilder:validation:Minimum=1
-	Replicas int32 `json:"replicas,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	Replicas *int32 `json:"replicas,omitempty"`
 	// Dex defines customizations for the dex container.
 	// +optional
 	Dex *ContainerSpec `json:"dex,omitempty"`
@@ -328,19 +333,29 @@ func (s *KonfluxUIConfigSpec) GetNodePortService() *NodePortServiceSpec {
 }
 
 // GetProxy returns the ProxyDeploymentSpec with safe defaults if nil.
+// ResolvedReplicas is always non-nil (defaults to 1 when unset).
 func (s *KonfluxUIConfigSpec) GetProxy() ProxyDeploymentSpec {
 	if s.Proxy == nil {
-		return ProxyDeploymentSpec{Replicas: 1}
+		return ProxyDeploymentSpec{Replicas: ptr.To(int32(1))}
 	}
-	return *s.Proxy
+	out := *s.Proxy
+	if out.Replicas == nil {
+		out.Replicas = ptr.To(int32(1))
+	}
+	return out
 }
 
 // GetDex returns the DexDeploymentSpec with safe defaults if nil.
+// ResolvedReplicas is always non-nil (defaults to 1 when unset).
 func (s *KonfluxUIConfigSpec) GetDex() DexDeploymentSpec {
 	if s.Dex == nil {
-		return DexDeploymentSpec{Replicas: 1}
+		return DexDeploymentSpec{Replicas: ptr.To(int32(1))}
 	}
-	return *s.Dex
+	out := *s.Dex
+	if out.Replicas == nil {
+		out.Replicas = ptr.To(int32(1))
+	}
+	return out
 }
 
 // -----------------------------------------------------------------------------

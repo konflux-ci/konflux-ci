@@ -80,6 +80,7 @@ Use **one token per flag** where possible (e.g. `-ginkgo.skip=Flaky`). Values wi
 
 | Script | Purpose |
 |--------|---------|
+| `quiet-cluster-for-conformance.sh` | After proxy/metrics: patch Konflux CR to scale UI proxy/Dex/namespace-lister to 0 and disable Tekton Results (+ Postgres). Opt out: `E2E_QUIET_CLUSTER=false`. |
 | `prepare-conformance-env.sh` | Exports `CUSTOM_DOCKER_BUILD_OCI_TA_MIN_PIPELINE_BUNDLE` from `operator/pkg/manifests/build-service/manifests.yaml` (same pin as GitHub Actions E2E). |
 | `run-conformance-tests.sh` | Runs conformance tests. Requires `GH_ORG`, `GH_TOKEN` (conformance clears `QUAY_TOKEN` for the test run). |
 | `tekton-fetch-kubeconfig.sh` | **Tekton:** decodes kubeconfig from Secret into `/mnt/e2e-shared/kubeconfig`. Args: `SECRET_NAME` `[KEY]`. Env: `POD_NAMESPACE`. |

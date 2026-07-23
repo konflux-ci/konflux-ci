@@ -725,7 +725,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
 				Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
-					Replicas: 3,
+					Replicas: ptr.To(int32(3)),
 				},
 			},
 		})
@@ -738,12 +738,36 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g.Expect(*deployment.Spec.Replicas).To(gomega.Equal(int32(3)))
 	})
 
+	t.Run("scales proxy deployment to zero", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
+			KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+				Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
+					Replicas: ptr.To(int32(0)),
+				},
+				Dex: &konfluxv1alpha1.DexDeploymentSpec{
+					Replicas: ptr.To(int32(0)),
+				},
+			},
+		})
+
+		proxy := getUIDeployment(t, proxyDeploymentName)
+		g.Expect(applyUIDeploymentCustomizations(proxy, ui, nil, testConfigMapName, "", testEndpoint)).To(gomega.Succeed())
+		g.Expect(proxy.Spec.Replicas).NotTo(gomega.BeNil())
+		g.Expect(*proxy.Spec.Replicas).To(gomega.Equal(int32(0)))
+
+		dex := getUIDeployment(t, dexDeploymentName)
+		g.Expect(applyUIDeploymentCustomizations(dex, ui, nil, testConfigMapName, "", testEndpoint)).To(gomega.Succeed())
+		g.Expect(dex.Spec.Replicas).NotTo(gomega.BeNil())
+		g.Expect(*dex.Spec.Replicas).To(gomega.Equal(int32(0)))
+	})
+
 	t.Run("applies replicas to dex deployment", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
 				Dex: &konfluxv1alpha1.DexDeploymentSpec{
-					Replicas: 2,
+					Replicas: ptr.To(int32(2)),
 				},
 			},
 		})
@@ -761,7 +785,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
 				Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
-					Replicas: 1, // default value
+					Replicas: ptr.To(int32(1)), // default value
 				},
 			},
 		})
@@ -795,7 +819,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
 			KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
 				Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
-					Replicas: 5,
+					Replicas: ptr.To(int32(5)),
 					ReverseProxy: &konfluxv1alpha1.ContainerSpec{
 						Resources: &corev1.ResourceRequirements{
 							Limits: corev1.ResourceList{

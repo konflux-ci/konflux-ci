@@ -21,6 +21,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -757,6 +758,36 @@ var _ = Describe("Conditions Helper Functions", func() {
 			Expect(apimeta.FindStatusCondition(parent.GetConditions(), "build-service.old-deployment")).To(BeNil())
 			// other-component.Ready should still exist
 			Expect(apimeta.FindStatusCondition(parent.GetConditions(), "other-component.Ready")).NotTo(BeNil())
+		})
+	})
+
+	Describe("IsDeploymentReady", func() {
+		It("treats scale-to-zero as ready when no pods remain", func() {
+			zero := int32(0)
+			dep := &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{Replicas: &zero},
+				Status: appsv1.DeploymentStatus{
+					Replicas:        0,
+					ReadyReplicas:   0,
+					UpdatedReplicas: 0,
+				},
+			}
+			Expect(IsDeploymentReady(dep)).To(BeTrue())
+			cond := DeploymentCondition(dep)
+			Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+			Expect(cond.Message).To(Equal("Deployment scaled to zero"))
+		})
+
+		It("treats scale-to-zero as not ready while pods are terminating", func() {
+			zero := int32(0)
+			dep := &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{Replicas: &zero},
+				Status: appsv1.DeploymentStatus{
+					Replicas:      1,
+					ReadyReplicas: 0,
+				},
+			}
+			Expect(IsDeploymentReady(dep)).To(BeFalse())
 		})
 	})
 })
