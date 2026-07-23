@@ -105,6 +105,7 @@ PRs trigger the following workflows:
 
 ## PR Guidelines
 
+- **Human-authored PR review:** Apply **pr-review** (`skills/pr-review/SKILL.md`) — at minimum run its upstream/downstream hygiene check so named consumers are not reintroduced.
 - **Go / `go.mod` PRs:** Apply **go-toolchain-upgrade** (`skills/go-toolchain-upgrade/SKILL.md`) and follow its triage table—do not summarize the workflow from memory.
 - **MintMaker/Renovate parent or companion PRs:** Apply **companion-pr-review** (`skills/companion-pr-review/SKILL.md`) — skip review on companion-eligible parents; review companions lightly.
 - **`.tekton` task/pipeline edits:** `pipeline.yaml` tasks `deploy-konflux-its` and `konflux-e2e-tests-its` hardcode `taskRef.revision: main`. To verify changes, temporarily point both at the PR’s git ref, run operator E2E, then restore `main` before merge (see `.tekton/pipelines/operator-e2e/README.md`).
@@ -152,6 +153,7 @@ Detailed guides live in `skills/` — each subdirectory contains a `SKILL.md` wi
 |-------|----------|
 | [ginkgo-testing](skills/ginkgo-testing/SKILL.md) | Writing or reviewing Ginkgo tests — cleanup patterns, soft assertions |
 | [go-toolchain-upgrade](skills/go-toolchain-upgrade/SKILL.md) | `go.mod`/`go.sum`, Go pins, or `go.mod requires go` CI failures |
+| [pr-review](skills/pr-review/SKILL.md) | Reviewing human-authored PRs — upstream/downstream hygiene and related checks |
 | [create-pr](skills/create-pr/SKILL.md) | Opening PRs, fork `/allow` behavior |
 | [debug-e2e-tests](skills/debug-e2e-tests/SKILL.md) | Triaging or investigating failed e2e / OpenShift CI runs |
 | [update-upstream-deps](skills/update-upstream-deps/SKILL.md) | Bumping upstream SHAs or editing `upstream-kustomizations/` (triggers manifest rebuild) |
