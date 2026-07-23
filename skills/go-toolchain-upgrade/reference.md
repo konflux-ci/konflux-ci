@@ -36,11 +36,15 @@ cd openshift/release
 make ci-operator-prowgen WHAT='--config-dir ci-operator/config/konflux-ci/konflux-ci'
 ```
 
-## openshift/release — infra-deployments & legacy
+## openshift/release — legacy / external consumers
+
+External deployment repos and legacy App Studio jobs may still run conformance
+against this repo's `test/go-tests`. When the Go minimum rises, check their
+Prow configs and the shared runner image.
 
 | Area | Notes |
 |------|--------|
-| `ci-operator/config/redhat-appstudio/infra-deployments/redhat-appstudio-infra-deployments-main.yaml` | `appstudio-e2e-tests`; `e2e-test-runner` → `redhat-appstudio/ci` |
+| External deployment-repo Prow configs that run `appstudio-e2e-tests` | `e2e-test-runner` → `redhat-appstudio/ci` |
 | `ci-operator/step-registry/redhat-appstudio/conformance-tests/` | `from: e2e-test-runner` |
 | `ci-operator/step-registry/konflux-ci/install-konflux/` | `from: e2e-test-runner` |
 | `ci-operator/config/konflux-ci/e2e-tests/konflux-ci-e2e-tests-main.yaml` | builds/promotes `e2e-test-runner` |
@@ -49,10 +53,11 @@ make ci-operator-prowgen WHAT='--config-dir ci-operator/config/konflux-ci/konflu
 
 Rebuild when `test/go-tests` minimum Go rises—image is `redhat-appstudio/ci:e2e-test-runner`.
 
-## infra-deployments docs
+## External consumer docs
 
-- `components/konflux-operator/ci/openshift-overlay-e2e/README.md` — overlay step images
-- `docs/temp/operator-overlay-openshift-ci-e2e-notes.md` — `e2e-test-runner` vs `from: src`
+Some external deployment repos document operator-overlay CI images and when to
+use `e2e-test-runner` vs `from: src`. Consult those when Go bumps affect the
+runner image or overlay steps.
 
 Legacy `appstudio-e2e-tests`: `konflux-ci-install-konflux` + `redhat-appstudio-conformance-tests`.
 
@@ -66,7 +71,7 @@ Legacy `appstudio-e2e-tests`: `konflux-ci-install-konflux` + `redhat-appstudio-c
 ### openshift/release
 - [ ] build_root / golang tags:
 - [ ] Rehearse e2e:
-### infra-deployments / legacy
+### Legacy / external consumers
 - [ ] e2e-test-runner / overlay images:
 ### Merge order
 ```
@@ -78,7 +83,7 @@ Use **`rg`** ([ripgrep](https://github.com/BurntSushi/ripgrep)) or `grep -r` fro
 ```bash
 # openshift/release
 rg 'golang-1\.' ci-operator/config/konflux-ci/
-rg 'golang-1\.' ci-operator/config/redhat-appstudio/infra-deployments/
+rg 'golang-1\.' ci-operator/config/redhat-appstudio/
 rg 'e2e-test-runner|build_root' ci-operator/config/konflux-ci/konflux-ci/
 rg 'from: e2e-test-runner|from: src' ci-operator/step-registry/konflux-ci/
 rg 'from: e2e-test-runner' ci-operator/step-registry/redhat-appstudio/
@@ -94,4 +99,4 @@ rg 'GOTOOLCHAIN|golang|go version' deploy-konflux-on-ocp.sh test/e2e/run-e2e.sh 
 |-----|----------------|
 | `go.mod requires go >= 1.26` / `running go 1.25` | Stale Prow `build_root` or runner |
 | `GOTOOLCHAIN=auto` but env is `local` | RHEL builder; bump image |
-| infra-deployments conformance only fails | Stale `e2e-test-runner` |
+| External / legacy conformance only fails | Stale `e2e-test-runner` |
