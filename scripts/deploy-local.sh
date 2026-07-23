@@ -80,6 +80,7 @@ ENABLE_IMAGE_CACHE="${ENABLE_IMAGE_CACHE:-0}"
 OPERATOR_INSTALL_METHOD="${OPERATOR_INSTALL_METHOD:-release}"
 OPERATOR_IMAGE="${OPERATOR_IMAGE:-quay.io/konflux-ci/konflux-operator:latest}"
 SKIP_SECRETS="${SKIP_SECRETS:-false}"
+RELEASE_VERSION="${RELEASE_VERSION:-latest}"
 
 # Export variables for child scripts
 export KIND_CLUSTER KIND_MEMORY_GB PODMAN_MACHINE_NAME REGISTRY_HOST_PORT ENABLE_REGISTRY_PORT
@@ -192,7 +193,11 @@ case "${INSTALL_METHOD}" in
 
     release)
         echo "Installing from latest GitHub release..."
-        RELEASE_URL="https://github.com/konflux-ci/konflux-ci/releases/latest/download/install.yaml"
+        if [ "$RELEASE_VERSION" == "latest" ]; then
+            RELEASE_URL="https://github.com/konflux-ci/konflux-ci/releases/latest/download/install.yaml"
+        else
+            RELEASE_URL="https://github.com/konflux-ci/konflux-ci/releases/download/${RELEASE_VERSION}/install.yaml"
+        fi
         echo "Downloading: ${RELEASE_URL}"
         kubectl apply -f "${RELEASE_URL}"
         ;;
