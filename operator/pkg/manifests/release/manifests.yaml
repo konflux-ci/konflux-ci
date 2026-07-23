@@ -5278,6 +5278,9 @@ spec:
         - mountPath: /tmp/k8s-webhook-server/serving-certs
           name: cert
           readOnly: true
+        - mountPath: /tmp/k8s-metrics-server/serving-certs
+          name: metrics-certs
+          readOnly: true
       securityContext:
         runAsNonRoot: true
       serviceAccountName: release-service-controller-manager
@@ -5287,6 +5290,15 @@ spec:
         secret:
           defaultMode: 420
           secretName: webhook-server-cert
+      - name: metrics-certs
+        secret:
+          items:
+          - key: tls.crt
+            path: tls.crt
+          - key: tls.key
+            path: tls.key
+          optional: false
+          secretName: metrics-server-cert
 ---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ReleaseServiceConfig
@@ -5295,6 +5307,25 @@ metadata:
   namespace: release-service
 spec:
   debug: false
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/component: certificate
+    app.kubernetes.io/instance: metrics-certs
+    app.kubernetes.io/name: metrics-certificate
+  name: metrics-certs
+  namespace: release-service
+spec:
+  dnsNames:
+  - release-service-controller-manager-metrics-service.release-service.svc
+  - release-service-controller-manager-metrics-service.release-service.svc.cluster.local
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: konflux-issuer
+  secretName: metrics-server-cert
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -5341,7 +5372,12 @@ spec:
     port: https
     scheme: https
     tlsConfig:
-      insecureSkipVerify: true
+      ca:
+        secret:
+          key: ca.crt
+          name: metrics-server-cert
+      insecureSkipVerify: false
+      serverName: release-service-controller-manager-metrics-service.release-service.svc
   selector:
     matchLabels:
       control-plane: controller-manager

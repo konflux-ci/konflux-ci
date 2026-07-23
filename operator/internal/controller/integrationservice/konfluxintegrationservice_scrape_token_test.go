@@ -24,6 +24,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -85,6 +86,7 @@ var _ = Describe("Prometheus scrape token", func() {
 			Scheme:              mgr.GetScheme(),
 			ObjectStore:         objectStore,
 			TokenCreator:        tokenCreator,
+			SecretReader:        mgr.GetAPIReader(),
 			TokenRotationEvents: rotationEvents,
 		}
 		if clk != nil {
@@ -100,6 +102,10 @@ var _ = Describe("Prometheus scrape token", func() {
 	}
 
 	Context("when component metrics are enabled", func() {
+		BeforeEach(func(ctx context.Context) {
+			testutil.EnsureMetricsTLSSecrets(ctx, k8sClient, integrationServiceNamespace)
+		})
+
 		It("creates prometheus-scrape-token and wires ServiceMonitor bearerTokenSecret", func(ctx context.Context) {
 			clk := testclock.NewFakeClock(time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC))
 			fake := &fakeTokenCreator{
@@ -150,7 +156,10 @@ var _ = Describe("Prometheus scrape token", func() {
 				g.Expect(secretRef["key"]).To(Equal(kubernetes.ScrapeTokenSecretKey))
 				_, hasFile := ep["bearerTokenFile"]
 				g.Expect(hasFile).To(BeFalse())
-				g.Expect(sm.GetAnnotations()).To(HaveKey(kubernetes.ServiceMonitorResyncAnnotation))
+				testutil.ExpectVerifiedMetricsEndpointTLS(g, ep,
+					"integration-service-controller-manager-metrics-service.integration-service.svc")
+				// metrics-scrape-resync annotation must be absent.
+				g.Expect(sm.GetAnnotations()).NotTo(HaveKey(kubernetes.ServiceMonitorResyncAnnotation))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			// Exercise the rotation-event watch source (map func enqueues CRName).
@@ -209,6 +218,7 @@ var _ = Describe("Prometheus scrape token", func() {
 				Scheme:       mgr.GetScheme(),
 				ObjectStore:  objectStore,
 				TokenCreator: fake,
+				SecretReader: k8sClient,
 				Clock:        clk,
 			}
 
@@ -260,6 +270,57 @@ var _ = Describe("Prometheus scrape token", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("tokenrequest failed"))
 			Expect(fake.calls).To(BeNumerically(">=", 1))
+		})
+	})
+
+	Context("when metrics TLS secrets are missing", func() {
+		BeforeEach(func(ctx context.Context) {
+			testutil.DeleteMetricsTLSSecrets(ctx, k8sClient, integrationServiceNamespace)
+			sm := &unstructured.Unstructured{}
+			sm.SetGroupVersionKind(schema.GroupVersionKind{
+				Group: "monitoring.coreos.com", Version: "v1", Kind: "ServiceMonitor",
+			})
+			sm.SetNamespace(integrationServiceNamespace)
+			sm.SetName("integration-service")
+			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, sm))).To(Succeed())
+		})
+
+		It("mints the scrape token but defers ServiceMonitor apply", func(ctx context.Context) {
+			clk := testclock.NewFakeClock(time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC))
+			fake := &fakeTokenCreator{
+				token:     "envtest-scrape-token",
+				expiresAt: clk.Now().Add(time.Hour),
+			}
+			startManagerWithTokenCreator(fake, clk)
+
+			integrationService := testIntegrationServiceWithComponentMetrics(testutil.DefaultComponentMetricsConfig())
+			Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, integrationService)
+
+			secretNN := types.NamespacedName{
+				Name:      kubernetes.ScrapeTokenSecretName,
+				Namespace: integrationServiceNamespace,
+			}
+			Eventually(func(g Gomega) {
+				secret := &corev1.Secret{}
+				g.Expect(k8sClient.Get(ctx, secretNN, secret)).To(Succeed())
+				g.Expect(secret.Data[kubernetes.ScrapeTokenSecretKey]).To(Equal([]byte("envtest-scrape-token")))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			sm := &unstructured.Unstructured{}
+			sm.SetGroupVersionKind(schema.GroupVersionKind{
+				Group:   "monitoring.coreos.com",
+				Version: "v1",
+				Kind:    "ServiceMonitor",
+			})
+			Consistently(func(g Gomega) {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      "integration-service",
+					Namespace: integrationServiceNamespace,
+				}, sm)
+				g.Expect(client.IgnoreNotFound(err)).To(Succeed())
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}).WithTimeout(2 * time.Second).WithPolling(200 * time.Millisecond).Should(Succeed())
 		})
 	})
 

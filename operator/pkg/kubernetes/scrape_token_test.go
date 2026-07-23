@@ -295,6 +295,31 @@ func TestIsPrometheusScrapeTokenSecret(t *testing.T) {
 	}
 }
 
+func TestIsMetricsTLSSecret(t *testing.T) {
+	t.Parallel()
+	if IsMetricsTLSSecret(nil) {
+		t.Fatal("nil object should not match")
+	}
+	if IsMetricsTLSSecret(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: MetricsServerCertSecretName}}) {
+		t.Fatal("empty namespace should not match")
+	}
+	if !IsMetricsTLSSecret(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: MetricsServerCertSecretName, Namespace: "build-service"},
+	}) {
+		t.Fatal("expected metrics-server-cert to match")
+	}
+	if IsMetricsTLSSecret(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "metrics-ca", Namespace: "build-service"},
+	}) {
+		t.Fatal("legacy metrics-ca name should not match")
+	}
+	if !IsMetricsScrapeWiringSecret(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: ScrapeTokenSecretName, Namespace: "ns"},
+	}) {
+		t.Fatal("expected scrape token to match scrape-wiring helper")
+	}
+}
+
 func TestIgnoreScrapeTokenNotFound(t *testing.T) {
 	t.Parallel()
 	if err := IgnoreScrapeTokenNotFound(nil); err != nil {

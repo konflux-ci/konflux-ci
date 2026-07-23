@@ -2,7 +2,7 @@
 // metrics integration tests used by test/go-tests/metricsopenshift.
 //
 // Operator scrape wiring is documented in operator/docs/component-monitoring.md (deferred
-// ServiceMonitor apply, resync nudges). This package implements the test-side waits,
+// ServiceMonitor apply and verified TLS). This package implements the test-side waits,
 // contract checks, Prometheus queries, and CI log evidence.
 package metricsopenshift
 

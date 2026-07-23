@@ -1,6 +1,6 @@
 // Package metricsopenshift is the Ginkgo e2e suite for OpenShift UWM metrics.
 //
-// BeforeSuite enables UWM readiness polling, then logs [UWM resync] evidence before specs.
+// BeforeSuite enables UWM readiness polling, then logs [UWM scrape] evidence before specs.
 // Contract specs validate scrape wiring; uwm_targets specs poll up==1 in UWM Prometheus.
 package metricsopenshift
 

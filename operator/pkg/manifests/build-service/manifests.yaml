@@ -478,6 +478,9 @@ spec:
         - mountPath: /mnt
           name: webhook-config
           readOnly: true
+        - mountPath: /tmp/k8s-metrics-server/serving-certs
+          name: metrics-certs
+          readOnly: true
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -499,6 +502,34 @@ spec:
           name: webhook-config
           optional: true
         name: webhook-config
+      - name: metrics-certs
+        secret:
+          items:
+          - key: tls.crt
+            path: tls.crt
+          - key: tls.key
+            path: tls.key
+          optional: false
+          secretName: metrics-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/component: certificate
+    app.kubernetes.io/instance: metrics-certs
+    app.kubernetes.io/name: metrics-certificate
+  name: metrics-certs
+  namespace: build-service
+spec:
+  dnsNames:
+  - build-service-controller-manager-metrics-service.build-service.svc
+  - build-service-controller-manager-metrics-service.build-service.svc.cluster.local
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: konflux-issuer
+  secretName: metrics-server-cert
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -515,7 +546,12 @@ spec:
     port: https
     scheme: https
     tlsConfig:
-      insecureSkipVerify: true
+      ca:
+        secret:
+          key: ca.crt
+          name: metrics-server-cert
+      insecureSkipVerify: false
+      serverName: build-service-controller-manager-metrics-service.build-service.svc
   selector:
     matchLabels:
       control-plane: controller-manager

@@ -45,6 +45,16 @@ func scrapeTarget(ctx SpecContext, target metricsauth.Target) {
 		}).WithTimeout(metricsReadyTimeout).WithPolling(metricsReadyInterval).Should(Succeed())
 	}
 
+	var caCert []byte
+	if target.MetricsCASecret != "" {
+		Eventually(func(g Gomega) {
+			var caErr error
+			caCert, caErr = metricsauth.SecretBytes(ctx, kubeClient, target.Namespace, target.MetricsCASecret, metricsauth.MetricsCACertKey)
+			g.Expect(caErr).NotTo(HaveOccurred())
+			g.Expect(caCert).NotTo(BeEmpty())
+		}).WithTimeout(metricsReadyTimeout).WithPolling(metricsReadyInterval).Should(Succeed())
+	}
+
 	pf, err := metricsauth.StartPortForward(ctx, kubeREST, metricsauth.ServiceRef{
 		Namespace: target.Namespace,
 		Name:      target.Service,
@@ -54,7 +64,7 @@ func scrapeTarget(ctx SpecContext, target metricsauth.Target) {
 	defer pf.Close()
 
 	scrapeURL := metricsauth.LocalMetricsURL(pf.LocalPort(), target.Path, target.Scheme)
-	result, err := metricsauth.ScrapeLocal(ctx, scrapeURL, token, target.Scheme, target.TLSInsecureSkipVerifyForScrape())
+	result, err := metricsauth.ScrapeLocal(ctx, scrapeURL, token, target.Scheme, target.ScrapeTLSConfigFor(caCert))
 	Expect(err).NotTo(HaveOccurred())
 	Expect(metricsauth.ValidatePrometheusText(result, target.BodyMustMatchAny)).To(Succeed())
 }

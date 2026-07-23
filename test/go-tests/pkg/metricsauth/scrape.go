@@ -3,6 +3,7 @@ package metricsauth
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"net/http"
@@ -51,19 +52,35 @@ func ServiceAccountToken(ctx context.Context, cfg *rest.Config, namespace, name 
 
 // SecretToken reads a bearer token from an operand scrape Secret.
 func SecretToken(ctx context.Context, c client.Reader, namespace, name, key string) (string, error) {
-	secret := &corev1.Secret{}
-	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, secret); err != nil {
+	data, err := SecretBytes(ctx, c, namespace, name, key)
+	if err != nil {
 		return "", err
 	}
-	token := secret.Data[key]
-	if len(token) == 0 {
-		return "", fmt.Errorf("secret %s/%s key %q is empty", namespace, name, key)
+	return string(data), nil
+}
+
+// SecretBytes reads a key from a Secret.
+func SecretBytes(ctx context.Context, c client.Reader, namespace, name, key string) ([]byte, error) {
+	secret := &corev1.Secret{}
+	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, secret); err != nil {
+		return nil, err
 	}
-	return string(token), nil
+	data := secret.Data[key]
+	if len(data) == 0 {
+		return nil, fmt.Errorf("secret %s/%s key %q is empty", namespace, name, key)
+	}
+	return data, nil
+}
+
+// ScrapeTLSConfig configures HTTPS verification for ScrapeLocal.
+type ScrapeTLSConfig struct {
+	InsecureSkipVerify bool
+	ServerName         string
+	CACertPEM          []byte
 }
 
 // ScrapeLocal GETs a metrics URL using a bearer token.
-func ScrapeLocal(ctx context.Context, localURL, token, scheme string, tlsInsecureSkipVerify bool) (*ScrapeResult, error) {
+func ScrapeLocal(ctx context.Context, localURL, token, scheme string, tlsCfg ScrapeTLSConfig) (*ScrapeResult, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, localURL, nil)
 	if err != nil {
 		return nil, err
@@ -76,9 +93,18 @@ func ScrapeLocal(ctx context.Context, localURL, token, scheme string, tlsInsecur
 	if scheme == "http" {
 		transport = &http.Transport{}
 	} else {
-		transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: tlsInsecureSkipVerify}, //nolint:gosec // controlled by catalog until CA wiring lands
+		tlsConfig := &tls.Config{
+			InsecureSkipVerify: tlsCfg.InsecureSkipVerify, //nolint:gosec // controlled by catalog
+			ServerName:         tlsCfg.ServerName,
 		}
+		if len(tlsCfg.CACertPEM) > 0 {
+			pool := x509.NewCertPool()
+			if !pool.AppendCertsFromPEM(tlsCfg.CACertPEM) {
+				return nil, fmt.Errorf("failed to parse CA certificate PEM")
+			}
+			tlsConfig.RootCAs = pool
+		}
+		transport = &http.Transport{TLSClientConfig: tlsConfig}
 	}
 	client := &http.Client{Timeout: scrapeRequestTimeout, Transport: transport}
 	resp, err := client.Do(req)
@@ -95,9 +121,8 @@ func ScrapeLocal(ctx context.Context, localURL, token, scheme string, tlsInsecur
 }
 
 // ScrapeLocalHTTPS GETs an HTTPS metrics URL using a bearer token.
-// tlsInsecureSkipVerify should be true until cert-manager CA verification is wired.
-func ScrapeLocalHTTPS(ctx context.Context, localURL, token string, tlsInsecureSkipVerify bool) (*ScrapeResult, error) {
-	return ScrapeLocal(ctx, localURL, token, "https", tlsInsecureSkipVerify)
+func ScrapeLocalHTTPS(ctx context.Context, localURL, token string, tlsCfg ScrapeTLSConfig) (*ScrapeResult, error) {
+	return ScrapeLocal(ctx, localURL, token, "https", tlsCfg)
 }
 
 // ValidatePrometheusText checks status and that the body looks like Prometheus exposition.
