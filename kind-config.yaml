@@ -19,6 +19,7 @@ nodes:
     apiServer:
       extraArgs:
         service-account-issuer: https://kubernetes.default.svc
+        service-account-jwks-uri: https://kubernetes.default.svc/openid/v1/jwks
     etcd:
       local:
         extraArgs:
