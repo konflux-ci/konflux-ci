@@ -449,9 +449,12 @@ spec:
                     type: object
                   replicas:
                     default: 1
-                    description: Replicas is the number of replicas for the dex deployment.
+                    description: |-
+                      Replicas is the number of replicas for the dex deployment.
+                      Set to 0 to scale the deployment down (e.g. to free capacity in CI after UI tests).
+                      When omitted, defaults to 1. A pointer is used so an explicit 0 is distinct from unset.
                     format: int32
-                    minimum: 1
+                    minimum: 0
                     type: integer
                 type: object
               ingress:
@@ -796,10 +799,12 @@ spec:
                     type: object
                   replicas:
                     default: 1
-                    description: Replicas is the number of replicas for the proxy
-                      deployment.
+                    description: |-
+                      Replicas is the number of replicas for the proxy deployment.
+                      Set to 0 to scale the deployment down (e.g. to free capacity in CI after UI tests).
+                      When omitted, defaults to 1. A pointer is used so an explicit 0 is distinct from unset.
                     format: int32
-                    minimum: 1
+                    minimum: 0
                     type: integer
                   reverseProxy:
                     description: ReverseProxy defines customizations for the reverse

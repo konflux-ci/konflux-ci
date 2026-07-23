@@ -19,6 +19,8 @@ package namespacelister
 import (
 	"context"
 
+	"k8s.io/utils/ptr"
+
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -822,12 +824,23 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 	It("should apply replicas override", func() {
 		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
 			NamespaceLister: &konfluxv1alpha1.NamespaceListerDeploymentSpec{
-				Replicas: 3,
+				Replicas: ptr.To(int32(3)),
 			},
 		}
 		err := applyNamespaceListerCustomizations(deployment, spec)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*deployment.Spec.Replicas).To(Equal(int32(3)))
+	})
+
+	It("should scale namespace-lister to zero", func() {
+		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+			NamespaceLister: &konfluxv1alpha1.NamespaceListerDeploymentSpec{
+				Replicas: ptr.To(int32(0)),
+			},
+		}
+		err := applyNamespaceListerCustomizations(deployment, spec)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(*deployment.Spec.Replicas).To(Equal(int32(0)))
 	})
 
 	It("should apply resources override", func() {
@@ -860,7 +873,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 	It("should apply both replicas and resources", func() {
 		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
 			NamespaceLister: &konfluxv1alpha1.NamespaceListerDeploymentSpec{
-				Replicas: 2,
+				Replicas: ptr.To(int32(2)),
 				NamespaceLister: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
