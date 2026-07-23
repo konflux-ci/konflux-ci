@@ -1,6 +1,6 @@
 module github.com/konflux-ci/konflux-ci/test/go-tests
 
-go 1.26.0
+go 1.26.4
 
 require (
 	github.com/coder/websocket v1.8.15
@@ -30,7 +30,7 @@ require (
 	github.com/redhat-appstudio/jvm-build-service v0.0.0-20250301023318-b47170d413c5
 	github.com/stretchr/testify v1.11.1
 	github.com/tektoncd/cli v0.45.0
-	github.com/tektoncd/pipeline v1.13.1
+	github.com/tektoncd/pipeline v1.14.1
 	github.com/xanzy/go-gitlab v0.114.0
 	golang.org/x/oauth2 v0.36.0
 	k8s.io/api v0.36.2
