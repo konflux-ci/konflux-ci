@@ -67,10 +67,22 @@ func CleanupStaleConditions(obj konfluxv1alpha1.ConditionAccessor, shouldKeep fu
 }
 
 // IsDeploymentReady returns true if the deployment has all replicas ready and updated.
+// A desired replica count of 0 is treated as ready once no pods remain (scaled-to-zero).
 func IsDeploymentReady(deployment *appsv1.Deployment) bool {
+	if deploymentDesiredReplicas(deployment) == 0 {
+		return deployment.Status.Replicas == 0
+	}
 	return deployment.Status.ReadyReplicas == deployment.Status.Replicas &&
 		deployment.Status.Replicas > 0 &&
 		deployment.Status.UpdatedReplicas == deployment.Status.Replicas
+}
+
+func deploymentDesiredReplicas(deployment *appsv1.Deployment) int32 {
+	if deployment.Spec.Replicas != nil {
+		return *deployment.Spec.Replicas
+	}
+	// Deployment default when Spec.Replicas is unset is 1.
+	return 1
 }
 
 // DeploymentCondition creates a condition representing the current state of a deployment.
@@ -79,11 +91,15 @@ func DeploymentCondition(deployment *appsv1.Deployment) metav1.Condition {
 	conditionType := fmt.Sprintf("%s/%s", deployment.Namespace, deployment.Name)
 
 	if IsDeploymentReady(deployment) {
+		message := fmt.Sprintf("Deployment has %d/%d replicas ready", deployment.Status.ReadyReplicas, deployment.Status.Replicas)
+		if deploymentDesiredReplicas(deployment) == 0 {
+			message = "Deployment scaled to zero"
+		}
 		return metav1.Condition{
 			Type:    conditionType,
 			Status:  metav1.ConditionTrue,
 			Reason:  ReasonDeploymentReady,
-			Message: fmt.Sprintf("Deployment has %d/%d replicas ready", deployment.Status.ReadyReplicas, deployment.Status.Replicas),
+			Message: message,
 		}
 	}
 
