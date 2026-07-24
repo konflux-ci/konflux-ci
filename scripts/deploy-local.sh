@@ -230,7 +230,17 @@ if [ "${INSTALL_METHOD}" != "none" ]; then
     echo "Step 5: Applying Konflux configuration"
     echo "========================================="
     echo "Applying: ${KONFLUX_CR}"
-    kubectl apply -f "${KONFLUX_CR}"
+    # When using the released operator, the sample CR on main may contain
+    # fields not yet in the released CRD schema. Use lenient field validation
+    # so unknown fields produce warnings instead of errors. The API server
+    # prunes (drops) unknown fields, which is expected — the released operator
+    # cannot act on them anyway. For other install methods the CRDs come from
+    # the current checkout and match the sample CR, so strict is fine.
+    KUBECTL_VALIDATE="--validate=strict"
+    if [ "${INSTALL_METHOD}" = "release" ]; then
+        KUBECTL_VALIDATE="--validate=warn"
+    fi
+    kubectl apply ${KUBECTL_VALIDATE} -f "${KONFLUX_CR}"
 else
     echo ""
     echo "========================================="
