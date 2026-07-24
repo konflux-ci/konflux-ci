@@ -225,8 +225,9 @@ func (r *KonfluxInternalRegistryReconciler) ensureRegistryCredentials(ctx contex
 
 	// Keep credentials unchanged only when both secrets already have data.
 	// If either side is missing/empty, rotate both so they stay in sync.
-	rotateCredentials := !hasSecretData(htpasswd, "htpasswd") ||
-		!hasSecretData(registryAuthSecret, corev1.DockerConfigJsonKey)
+	htpasswdHasData := hasSecretData(htpasswd, "htpasswd")
+	dockerHasData := hasSecretData(registryAuthSecret, corev1.DockerConfigJsonKey)
+	rotateCredentials := !htpasswdHasData || !dockerHasData
 
 	password := ""
 	if rotateCredentials {
@@ -237,63 +238,83 @@ func (r *KonfluxInternalRegistryReconciler) ensureRegistryCredentials(ctx contex
 		}
 	}
 
-	_, err := tc.CreateOrUpdate(ctx, htpasswd, func() error {
-		if err := tc.SetOwnership(htpasswd); err != nil {
-			return err
-		}
-		if htpasswd.Type == "" {
-			htpasswd.Type = corev1.SecretTypeOpaque
-		}
-		if htpasswd.StringData == nil {
-			htpasswd.StringData = map[string]string{}
-		}
-		if htpasswd.Data == nil {
-			htpasswd.Data = map[string][]byte{}
-		}
-
-		if rotateCredentials {
-			hash, hashErr := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-			if hashErr != nil {
-				return fmt.Errorf("generate htpasswd hash: %w", hashErr)
+	ensureHtpasswd := func() error {
+		_, err := tc.CreateOrUpdate(ctx, htpasswd, func() error {
+			if err := tc.SetOwnership(htpasswd); err != nil {
+				return err
 			}
-			htpasswd.Data["htpasswd"] = []byte(fmt.Sprintf("%s:%s\n", RegistryAuthUsername, string(hash)))
-			delete(htpasswd.StringData, "htpasswd")
+			if htpasswd.Type == "" {
+				htpasswd.Type = corev1.SecretTypeOpaque
+			}
+			if htpasswd.StringData == nil {
+				htpasswd.StringData = map[string]string{}
+			}
+			if htpasswd.Data == nil {
+				htpasswd.Data = map[string][]byte{}
+			}
+
+			if rotateCredentials {
+				hash, hashErr := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+				if hashErr != nil {
+					return fmt.Errorf("generate htpasswd hash: %w", hashErr)
+				}
+				htpasswd.Data["htpasswd"] = []byte(fmt.Sprintf("%s:%s\n", RegistryAuthUsername, string(hash)))
+				delete(htpasswd.StringData, "htpasswd")
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("ensure %s: %w", HtpasswdSecretName, err)
 		}
 		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("ensure %s: %w", HtpasswdSecretName, err)
 	}
 
-	_, err = tc.CreateOrUpdate(ctx, registryAuthSecret, func() error {
-		if err := tc.SetOwnership(registryAuthSecret); err != nil {
-			return err
-		}
-		if registryAuthSecret.Type == "" {
-			registryAuthSecret.Type = corev1.SecretTypeDockerConfigJson
-		}
-		if registryAuthSecret.StringData == nil {
-			registryAuthSecret.StringData = map[string]string{}
-		}
-		if registryAuthSecret.Data == nil {
-			registryAuthSecret.Data = map[string][]byte{}
-		}
-
-		if rotateCredentials {
-			dockerConfigJSON, buildErr := buildDockerConfigJSON(RegistryServiceHost, RegistryAuthUsername, password)
-			if buildErr != nil {
-				return buildErr
+	ensureDocker := func() error {
+		_, err := tc.CreateOrUpdate(ctx, registryAuthSecret, func() error {
+			if err := tc.SetOwnership(registryAuthSecret); err != nil {
+				return err
 			}
-			registryAuthSecret.Data[corev1.DockerConfigJsonKey] = []byte(dockerConfigJSON)
-			delete(registryAuthSecret.StringData, corev1.DockerConfigJsonKey)
+			if registryAuthSecret.Type == "" {
+				registryAuthSecret.Type = corev1.SecretTypeDockerConfigJson
+			}
+			if registryAuthSecret.StringData == nil {
+				registryAuthSecret.StringData = map[string]string{}
+			}
+			if registryAuthSecret.Data == nil {
+				registryAuthSecret.Data = map[string][]byte{}
+			}
+
+			if rotateCredentials {
+				dockerConfigJSON, buildErr := buildDockerConfigJSON(RegistryServiceHost, RegistryAuthUsername, password)
+				if buildErr != nil {
+					return buildErr
+				}
+				registryAuthSecret.Data[corev1.DockerConfigJsonKey] = []byte(dockerConfigJSON)
+				delete(registryAuthSecret.StringData, corev1.DockerConfigJsonKey)
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("ensure %s: %w", ClientCredentialsSecretName, err)
 		}
 		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("ensure %s: %w", ClientCredentialsSecretName, err)
 	}
 
-	return nil
+	// When rotating with exactly one secret already populated, update that
+	// secret first. If the second write fails, the empty side stays empty and
+	// the next reconcile retries a paired rotation instead of permanently
+	// desyncing (both non-empty with different passwords).
+	if rotateCredentials && dockerHasData && !htpasswdHasData {
+		if err := ensureDocker(); err != nil {
+			return err
+		}
+		return ensureHtpasswd()
+	}
+
+	if err := ensureHtpasswd(); err != nil {
+		return err
+	}
+	return ensureDocker()
 }
 
 // hasSecretData returns true when the given key has non-empty data in either
