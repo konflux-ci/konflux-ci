@@ -10,13 +10,13 @@ import (
 	"io"
 	"path/filepath"
 
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 )
 
 //go:embed all:application-api all:build-service all:cli all:enterprise-contract all:image-controller all:integration all:namespace-lister all:rbac all:release all:ui all:info all:cert-manager all:registry all:default-tenant all:segment-bridge
@@ -185,19 +185,48 @@ func (s *ObjectStore) GetForComponent(component Component) ([]client.Object, err
 	return deepCopyObjects(objects), nil
 }
 
-// GetCRDNamesForComponent returns the names of CustomResourceDefinitions
-// that are part of the component's manifests. Used to watch CRDs and enqueue
-// the component's CR when a managed CRD is deleted out of band.
-func (s *ObjectStore) GetCRDNamesForComponent(component Component) ([]string, error) {
+// objectsByGVK returns references to stored objects whose GVK exactly matches gvk.
+// Callers must treat the returned objects as read-only.
+func (s *ObjectStore) objectsByGVK(component Component, gvk schema.GroupVersionKind) ([]client.Object, error) {
 	objects, ok := s.objects[component]
 	if !ok {
 		return nil, fmt.Errorf("unknown component: %s", component)
 	}
+
+	var result []client.Object
+	for _, obj := range objects {
+		if obj.GetObjectKind().GroupVersionKind() == gvk {
+			result = append(result, obj)
+		}
+	}
+	return result, nil
+}
+
+// GetByGVK returns deep copies of objects for a component whose GVK exactly matches gvk.
+// Objects stored by ObjectStore retain the GVK parsed from their embedded manifests.
+func (s *ObjectStore) GetByGVK(component Component, gvk schema.GroupVersionKind) ([]client.Object, error) {
+	objects, err := s.objectsByGVK(component, gvk)
+	if err != nil {
+		return nil, err
+	}
+	if objects == nil {
+		return nil, nil
+	}
+	return deepCopyObjects(objects), nil
+}
+
+// GetCRDNamesForComponent returns the names of CustomResourceDefinitions
+// that are part of the component's manifests. Used to watch CRDs and enqueue
+// the component's CR when a managed CRD is deleted out of band.
+func (s *ObjectStore) GetCRDNamesForComponent(component Component) ([]string, error) {
+	objects, err := s.objectsByGVK(component, apiextensionsv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"))
+	if err != nil {
+		return nil, err
+	}
+
 	var names []string
 	for _, obj := range objects {
-		if kubernetes.IsCustomResourceDefinition(obj) {
-			names = append(names, obj.GetName())
-		}
+		names = append(names, obj.GetName())
 	}
 	return names, nil
 }
