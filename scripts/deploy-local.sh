@@ -3,18 +3,19 @@
 # Deploy Konflux for Local Development
 #
 # This script provides a one-command local development deployment of Konflux
-# on a Kind cluster. It's designed for LOCAL DEVELOPMENT CONVENIENCE ONLY.
+# on a Kind or Minikube cluster. It's designed for LOCAL DEVELOPMENT
+# CONVENIENCE ONLY.
 #
 # For production deployments on real clusters, see docs/operator-deployment.md
 #
 # What this script does:
-#  1. Creates a Kind cluster with proper configuration
+#  1. Creates a Kind/Minikube cluster with proper configuration
 #  2. Deploys the Konflux operator
 #  3. Applies a Konflux CR configuration
 #  4. Creates secrets for GitHub integration
 #
 # Prerequisites:
-#  - kind, kubectl, podman (or docker)
+#  - kind or minikube, kubectl, podman/docker
 #  - kustomize (only for 'local' install method)
 #  - Configuration file: scripts/deploy-local.env
 #
@@ -27,6 +28,9 @@
 #   cp scripts/deploy-local.env.template scripts/deploy-local.env
 #   # Edit deploy-local.env with your secrets
 #   ./scripts/deploy-local.sh
+#
+# For Minikube instead of Kind:
+#   DEPLOY_DRIVER=minikube ./scripts/deploy-local.sh
 #
 # To customize the Konflux configuration:
 #   cp operator/config/samples/konflux_v1alpha1_konflux.yaml my-konflux.yaml
@@ -55,6 +59,26 @@ set -euo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 REPO_ROOT=$(dirname "$SCRIPT_DIR")
 
+# Cluster driver: "kind" (default) or "minikube"
+DEPLOY_DRIVER="${DEPLOY_DRIVER:-kind}"
+
+case "${DEPLOY_DRIVER}" in
+    kind)
+        DRIVER_LABEL="Kind"
+        CLUSTER_SETUP_SCRIPT="${SCRIPT_DIR}/setup-kind-local-cluster.sh"
+        ;;
+    minikube)
+        DRIVER_LABEL="Minikube"
+        CLUSTER_SETUP_SCRIPT="${SCRIPT_DIR}/setup-minikube-local-cluster.sh"
+        trap 'echo ""; echo "ERROR: Deployment failed. The Minikube cluster may still be running."; echo "       Fix the issue and rerun this script to retry."; echo "       To delete the cluster: minikube -p ${MINIKUBE_PROFILE:-konflux} delete"' ERR
+        ;;
+    *)
+        echo "ERROR: Invalid DEPLOY_DRIVER: ${DEPLOY_DRIVER}"
+        echo "Valid options: kind, minikube"
+        exit 1
+        ;;
+esac
+
 # Optional: Load environment configuration from file if it exists.
 # Precedence (high to low): injected env vars > env file > script defaults.
 # Snapshot the caller's environment first so that any vars passed on the
@@ -70,20 +94,34 @@ if [ -f "${ENV_FILE}" ]; then
     unset _pre_env
 fi
 
-# Optional variables with defaults (using :- pattern)
-KIND_CLUSTER="${KIND_CLUSTER:-konflux}"
-KIND_MEMORY_GB="${KIND_MEMORY_GB:-8}"
+# Driver-specific variables
+case "${DEPLOY_DRIVER}" in
+    kind)
+        KIND_CLUSTER="${KIND_CLUSTER:-konflux}"
+        KIND_MEMORY_GB="${KIND_MEMORY_GB:-8}"
+        INCREASE_PODMAN_PIDS_LIMIT="${INCREASE_PODMAN_PIDS_LIMIT:-1}"
+        ENABLE_IMAGE_CACHE="${ENABLE_IMAGE_CACHE:-0}"
+        export KIND_CLUSTER KIND_MEMORY_GB PODMAN_MACHINE_NAME
+        export INCREASE_PODMAN_PIDS_LIMIT ENABLE_IMAGE_CACHE
+        ;;
+    minikube)
+        MINIKUBE_PROFILE="${MINIKUBE_PROFILE:-konflux}"
+        MINIKUBE_MEMORY_MB="${MINIKUBE_MEMORY_MB:-max}"
+        MINIKUBE_CPUS="${MINIKUBE_CPUS:-max}"
+        MINIKUBE_DISK_SIZE="${MINIKUBE_DISK_SIZE:-100g}"
+        export MINIKUBE_PROFILE MINIKUBE_MEMORY_MB MINIKUBE_CPUS MINIKUBE_DISK_SIZE
+        ;;
+esac
+
+# Shared variables with defaults
 REGISTRY_HOST_PORT="${REGISTRY_HOST_PORT:-5001}"
 ENABLE_REGISTRY_PORT="${ENABLE_REGISTRY_PORT:-1}"
-INCREASE_PODMAN_PIDS_LIMIT="${INCREASE_PODMAN_PIDS_LIMIT:-1}"
-ENABLE_IMAGE_CACHE="${ENABLE_IMAGE_CACHE:-0}"
 OPERATOR_INSTALL_METHOD="${OPERATOR_INSTALL_METHOD:-release}"
 OPERATOR_IMAGE="${OPERATOR_IMAGE:-quay.io/konflux-ci/konflux-operator:latest}"
 SKIP_SECRETS="${SKIP_SECRETS:-false}"
 
 # Export variables for child scripts
-export KIND_CLUSTER KIND_MEMORY_GB PODMAN_MACHINE_NAME REGISTRY_HOST_PORT ENABLE_REGISTRY_PORT
-export INCREASE_PODMAN_PIDS_LIMIT ENABLE_IMAGE_CACHE
+export REGISTRY_HOST_PORT ENABLE_REGISTRY_PORT
 export GITHUB_PRIVATE_KEY GITHUB_PRIVATE_KEY_PATH GITHUB_APP_ID WEBHOOK_SECRET QUAY_TOKEN QUAY_ORGANIZATION QUAY_API_URL
 export SEGMENT_WRITE_KEY
 
@@ -100,11 +138,17 @@ KONFLUX_CR=$("${SCRIPT_DIR}/resolve-konflux-cr.sh")
 
 echo "========================================="
 echo "Konflux Local Development Deployment"
+if [ "${DEPLOY_DRIVER}" = "minikube" ]; then
+    echo "  (Minikube + Docker)"
+fi
 echo "========================================="
 echo ""
 echo "Configuration:"
 echo "  Environment: ${ENV_FILE}"
 echo "  Konflux CR:  ${KONFLUX_CR}"
+if [ "${DEPLOY_DRIVER}" = "minikube" ]; then
+    echo "  Profile:     ${MINIKUBE_PROFILE}"
+fi
 echo ""
 
 INSTALL_METHOD="${OPERATOR_INSTALL_METHOD:-local}"
@@ -121,16 +165,17 @@ if [ "${INSTALL_METHOD}" = "build" ]; then
     echo ""
 fi
 
-# Step 1: Setup Kind cluster (skip when using an existing kubeconfig, e.g. Tekton kind-aws-provision)
-if [ "${DEPLOY_LOCAL_SKIP_KIND:-0}" = "1" ]; then
+# Step 1: Setup cluster (skip when using an existing kubeconfig, e.g. Tekton kind-aws-provision)
+DEPLOY_LOCAL_SKIP_CLUSTER="${DEPLOY_LOCAL_SKIP_CLUSTER:-${DEPLOY_LOCAL_SKIP_KIND:-0}}"
+if [ "${DEPLOY_LOCAL_SKIP_CLUSTER}" = "1" ]; then
     echo "========================================="
-    echo "Step 1: Skipped (DEPLOY_LOCAL_SKIP_KIND=1 — using current KUBECONFIG)"
+    echo "Step 1: Skipped (using current KUBECONFIG)"
     echo "========================================="
 else
     echo "========================================="
-    echo "Step 1: Creating Kind cluster"
+    echo "Step 1: Creating ${DRIVER_LABEL} cluster"
     echo "========================================="
-    "${SCRIPT_DIR}/setup-kind-local-cluster.sh"
+    "${CLUSTER_SETUP_SCRIPT}"
 fi
 
 # Step 2: Deploy dependencies
@@ -178,9 +223,12 @@ case "${INSTALL_METHOD}" in
         ;;
 
     build)
-        echo "Loading operator image into Kind cluster..."
+        echo "Loading operator image into ${DRIVER_LABEL} cluster..."
         cd "${REPO_ROOT}/operator"
-        kind load docker-image "${OPERATOR_IMG}" --name "${KIND_CLUSTER}"
+        case "${DEPLOY_DRIVER}" in
+            kind)     kind load docker-image "${OPERATOR_IMG}" --name "${KIND_CLUSTER}" ;;
+            minikube) minikube -p "${MINIKUBE_PROFILE}" image load "${OPERATOR_IMG}" ;;
+        esac
 
         echo "Installing CRDs..."
         make install
@@ -289,7 +337,7 @@ echo "========================================="
 echo ""
 
 if [ "${INSTALL_METHOD}" = "none" ]; then
-    echo "Kind cluster and dependencies are ready."
+    echo "${DRIVER_LABEL} cluster and dependencies are ready."
     echo ""
     echo "Next steps - run the operator:"
     echo "  cd operator"
@@ -300,7 +348,7 @@ if [ "${INSTALL_METHOD}" = "none" ]; then
     echo "  kubectl apply -f ${KONFLUX_CR}"
     echo ""
 else
-    echo "Konflux is now running on your local Kind cluster"
+    echo "Konflux is now running on your local ${DRIVER_LABEL} cluster"
     echo ""
     echo "Access the UI:"
     echo "  https://localhost:9443"
@@ -315,5 +363,13 @@ fi
 if [[ "${ENABLE_REGISTRY_PORT:-1}" -eq 1 ]]; then
     echo "Internal registry:"
     echo "  localhost:${REGISTRY_HOST_PORT:-5001}"
+    echo ""
+fi
+
+if [ "${DEPLOY_DRIVER}" = "minikube" ]; then
+    echo "Useful minikube commands:"
+    echo "  minikube -p ${MINIKUBE_PROFILE} status      # Check cluster status"
+    echo "  minikube -p ${MINIKUBE_PROFILE} dashboard    # Open Kubernetes dashboard"
+    echo "  minikube -p ${MINIKUBE_PROFILE} delete       # Delete the cluster"
     echo ""
 fi
