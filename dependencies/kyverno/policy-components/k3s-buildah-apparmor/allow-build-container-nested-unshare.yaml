@@ -1,0 +1,48 @@
+---
+# Narrow mutate for native k3s on Ubuntu: default cri-containerd AppArmor blocks
+# buildah `unshare -m` (filesystem propagation). Diagnostics showed:
+#   default fail; privileged ok; AppArmor+seccomp Unconfined (non-priv) ok.
+# Scope: only the image-build TaskRun pod (pipelineTask=build-container), CREATE,
+# admission-only (no background scans). Applied when CLUSTER_BACKEND=k3s.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: allow-build-container-nested-unshare
+  annotations:
+    policies.kyverno.io/title: Allow nested unshare for build-container TaskRuns
+    policies.kyverno.io/description: >-
+      On host-level k3s (Ubuntu), cri-containerd.apparmor.d blocks nested mount
+      namespaces needed by buildah in the build-container TaskRun. Sets AppArmor
+      and seccomp to Unconfined on that TaskRun's containers only. Applied only
+      when CLUSTER_BACKEND=k3s. Prefer Unconfined over privileged.
+spec:
+  background: false
+  rules:
+  - name: build-container-apparmor-seccomp-unconfined
+    match:
+      any:
+      - resources:
+          kinds:
+          - Pod
+          names:
+          - '*-pod'
+          operations:
+          - CREATE
+          selector:
+            matchLabels:
+              pipelines.appstudio.openshift.io/type: build
+              tekton.dev/pipelineTask: build-container
+    mutate:
+      # Per-container: Tekton often sets step securityContext that would override
+      # pod-level seccomp/AppArmor. Only this TaskRun's containers are touched.
+      foreach:
+      - list: request.object.spec.containers
+        patchStrategicMerge:
+          spec:
+            containers:
+            - name: "{{ element.name }}"
+              securityContext:
+                appArmorProfile:
+                  type: Unconfined
+                seccompProfile:
+                  type: Unconfined

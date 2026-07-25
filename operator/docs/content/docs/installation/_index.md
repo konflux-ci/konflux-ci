@@ -10,7 +10,8 @@ the right guide for your situation:
 
 | My situation | Guide |
 |---|---|
-| Quick local development | [Local Deployment (Kind)]({{< relref "install-local" >}}) |
+| Quick local development (Kind) | [Local Deployment (Kind)]({{< relref "install-local" >}}) |
+| Local / CI on Linux with k3s | See `docs/local-k3s.md` in the repository |
 | Existing OpenShift cluster | [Installing on OpenShift]({{< relref "install-openshift" >}}) |
 | Any Kubernetes cluster, building the operator from source | [Building and Installing from Source]({{< relref "install-from-source" >}}) |
 | Any Kubernetes cluster, release bundle | [Installing from Release]({{< relref "install-release" >}}) |

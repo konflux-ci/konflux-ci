@@ -48,6 +48,8 @@ jobs:
       operator: ${{ steps.changed-files.outputs.any_changed }}
       check_run_id: ${{ steps.create-check.outputs.check_run_id }}
       check_run_id_arm64: ${{ steps.create-check.outputs.check_run_id_arm64 }}
+      check_run_id_k3s_amd64: ${{ steps.create-check.outputs.check_run_id_k3s_amd64 }}
+      check_run_id_k3s_arm64: ${{ steps.create-check.outputs.check_run_id_k3s_arm64 }}
     steps:
       - name: Set checkout ref
         id: set-ref
@@ -66,22 +68,27 @@ jobs:
         with:
           script: |
             const head_sha = '${{ steps.set-ref.outputs.ref }}';
-            const { data: e2e } = await github.rest.checks.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              name: 'Run Operator E2E Tests (AMD64)',
-              head_sha,
-              status: 'in_progress'
-            });
-            const { data: arm64 } = await github.rest.checks.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              name: 'Run Operator E2E Tests (ARM64)',
-              head_sha,
-              status: 'in_progress'
-            });
-            core.setOutput('check_run_id', e2e.id);
-            core.setOutput('check_run_id_arm64', arm64.id);
+            const checks = [
+              'Run Operator E2E Tests (AMD64)',
+              'Run Operator E2E Tests (ARM64)',
+              'Run Operator E2E Tests (k3s AMD64)',
+              'Run Operator E2E Tests (k3s ARM64)',
+            ];
+            const ids = {};
+            for (const name of checks) {
+              const { data } = await github.rest.checks.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name,
+                head_sha,
+                status: 'in_progress'
+              });
+              ids[name] = data.id;
+            }
+            core.setOutput('check_run_id', ids['Run Operator E2E Tests (AMD64)']);
+            core.setOutput('check_run_id_arm64', ids['Run Operator E2E Tests (ARM64)']);
+            core.setOutput('check_run_id_k3s_amd64', ids['Run Operator E2E Tests (k3s AMD64)']);
+            core.setOutput('check_run_id_k3s_arm64', ids['Run Operator E2E Tests (k3s ARM64)']);
       - name: Checkout PR branch
         uses: actions/checkout@v7
         with:
@@ -97,6 +104,12 @@ jobs:
             test/e2e/**
             test/go-tests/**
             kind-config.yaml
+            scripts/deploy-local.sh
+            scripts/setup-kind-local-cluster.sh
+            scripts/setup-k3s-local-cluster.sh
+            scripts/publish-kind-compatible-host-ports.sh
+            scripts/diagnose-nested-unshare.sh
+            docs/local-k3s.md
             generate-err-logs.sh
             .github/workflows/operator-test-e2e.yaml
 
@@ -114,6 +127,7 @@ jobs:
       matrix:
         include:
           - arch: amd64
+            backend: kind
             runner: ubuntu-latest
             kind_binary: kind-linux-amd64
             kubectl_arch: amd64
@@ -127,6 +141,7 @@ jobs:
             webhook_secret: APP_WEBHOOK_SECRET_AMD64
             smee_channel: SMEE_CHANNEL_AMD64
           - arch: arm64
+            backend: kind
             runner: ubuntu-24.04-arm
             kind_binary: kind-linux-arm64
             kubectl_arch: arm64
@@ -135,6 +150,34 @@ jobs:
             test_scope: "integration+e2e"
             konflux_cr: "operator/config/samples/konflux-e2e.yaml"
             job_name: "Run Operator E2E Tests (ARM64)"
+            github_app_id: APP_ID_ARM64
+            github_private_key: APP_PRIVATE_KEY_ARM64
+            webhook_secret: APP_WEBHOOK_SECRET_ARM64
+            smee_channel: SMEE_CHANNEL_ARM64
+          - arch: amd64
+            backend: k3s
+            runner: ubuntu-latest
+            kind_binary: kind-linux-amd64
+            kubectl_arch: amd64
+            image_suffix: "-k3s"
+            cluster_suffix: "-k3s"
+            test_scope: "integration+e2e"
+            konflux_cr: "operator/config/samples/konflux-e2e.yaml"
+            job_name: "Run Operator E2E Tests (k3s AMD64)"
+            github_app_id: APP_ID_AMD64
+            github_private_key: APP_PRIVATE_KEY_AMD64
+            webhook_secret: APP_WEBHOOK_SECRET_AMD64
+            smee_channel: SMEE_CHANNEL_AMD64
+          - arch: arm64
+            backend: k3s
+            runner: ubuntu-24.04-arm
+            kind_binary: kind-linux-arm64
+            kubectl_arch: arm64
+            image_suffix: "-k3s-arm64"
+            cluster_suffix: "-k3s-arm"
+            test_scope: "integration+e2e"
+            konflux_cr: "operator/config/samples/konflux-e2e.yaml"
+            job_name: "Run Operator E2E Tests (k3s ARM64)"
             github_app_id: APP_ID_ARM64
             github_private_key: APP_PRIVATE_KEY_ARM64
             webhook_secret: APP_WEBHOOK_SECRET_ARM64
@@ -150,11 +193,12 @@ jobs:
     runs-on: ${{ matrix.runner }}
     needs: [check-prerequisites, check-changes]
     if: needs.check-changes.outputs.operator == 'true'
-    # Cancel superseded test jobs per PR/arch to reduce shared smee contention (#6551).
+    # Cancel superseded test jobs per PR/arch/backend to reduce shared smee contention (#6551).
     # Job-level (not workflow-level) so report-operator-e2e-status can finalize /allow
     # Checks API runs when a superseded run's test job is cancelled.
     # Group key (first match wins): pull_request.number, client_payload.pr_number,
-    # ref (merge queue), run_id; matrix.arch keeps AMD64/ARM64 from cancelling each other.
+    # ref (merge queue), run_id; matrix.arch+backend keeps Kind/k3s and AMD64/ARM64
+    # from cancelling each other.
     concurrency:
       group: >-
         operator-e2e-${{
@@ -162,13 +206,14 @@ jobs:
           || github.event.client_payload.pr_number
           || github.ref
           || github.run_id
-        }}-${{ matrix.arch }}
+        }}-${{ matrix.arch }}-${{ matrix.backend }}
       cancel-in-progress: true
     strategy:
       fail-fast: false
       matrix:
         include:
           - arch: amd64
+            backend: kind
             runner: ubuntu-latest
             kind_binary: kind-linux-amd64
             kubectl_arch: amd64
@@ -182,6 +227,7 @@ jobs:
             webhook_secret: APP_WEBHOOK_SECRET_AMD64
             smee_channel: SMEE_CHANNEL_AMD64
           - arch: arm64
+            backend: kind
             runner: ubuntu-24.04-arm
             kind_binary: kind-linux-arm64
             kubectl_arch: arm64
@@ -194,13 +240,44 @@ jobs:
             github_private_key: APP_PRIVATE_KEY_ARM64
             webhook_secret: APP_WEBHOOK_SECRET_ARM64
             smee_channel: SMEE_CHANNEL_ARM64
+          - arch: amd64
+            backend: k3s
+            runner: ubuntu-latest
+            kind_binary: kind-linux-amd64
+            kubectl_arch: amd64
+            image_suffix: "-k3s"
+            cluster_suffix: "-k3s"
+            test_scope: "integration+e2e"
+            konflux_cr: "operator/config/samples/konflux-e2e.yaml"
+            job_name: "Run Operator E2E Tests (k3s AMD64)"
+            github_app_id: APP_ID_AMD64
+            github_private_key: APP_PRIVATE_KEY_AMD64
+            webhook_secret: APP_WEBHOOK_SECRET_AMD64
+            smee_channel: SMEE_CHANNEL_AMD64
+          - arch: arm64
+            backend: k3s
+            runner: ubuntu-24.04-arm
+            kind_binary: kind-linux-arm64
+            kubectl_arch: arm64
+            image_suffix: "-k3s-arm64"
+            cluster_suffix: "-k3s-arm"
+            test_scope: "integration+e2e"
+            konflux_cr: "operator/config/samples/konflux-e2e.yaml"
+            job_name: "Run Operator E2E Tests (k3s ARM64)"
+            github_app_id: APP_ID_ARM64
+            github_private_key: APP_PRIVATE_KEY_ARM64
+            webhook_secret: APP_WEBHOOK_SECRET_ARM64
+            smee_channel: SMEE_CHANNEL_ARM64
     env:
       # renovate: datasource=github-releases depName=kubernetes-sigs/kind
       KIND_VERSION: "0.32.0"
       # renovate: datasource=github-releases depName=kubernetes/kubernetes
       KUBECTL_VERSION: "1.36.2"
+      # Optional pin for k3s (empty = channel stable from get.k3s.io)
+      K3S_VERSION: ""
       OPERATOR_IMAGE: example.com/konflux-operator:v0.0.1${{ matrix.image_suffix }}
       KIND_CLUSTER: konflux-operator-test-e2e${{ matrix.cluster_suffix }}
+      CLUSTER_BACKEND: ${{ matrix.backend }}
     defaults:
       run:
         working-directory: operator
@@ -227,10 +304,14 @@ jobs:
         with:
           ref: ${{ steps.set-ref.outputs.ref }}
 
-      - name: Disable AppArmor
-        # works around a change in ubuntu 24.04 that restricts Linux namespace access
-        # for unprivileged users
-        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Relax AppArmor userns sysctls (Ubuntu)
+        # works around Ubuntu 24.04 restricting unprivileged user namespaces.
+        # Do not aa-teardown / disable host AppArmor: that breaks Docker/BuildKit
+        # (operator image build). Nested-build diagnostics live in a later k3s step.
+        working-directory: ${{ github.workspace }}
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0 || true
 
       - name: Setup Go
         uses: actions/setup-go@v7
@@ -239,6 +320,7 @@ jobs:
           cache-dependency-path: operator/go.sum
 
       - name: Install kind (${{ matrix.arch }})
+        if: matrix.backend == 'kind'
         run: |
           curl -Lo ./kind https://kind.sigs.k8s.io/dl/v${KIND_VERSION}/${{ matrix.kind_binary }}
           chmod +x ./kind
@@ -251,13 +333,18 @@ jobs:
           sudo mv kubectl /usr/local/bin/kubectl
 
       - name: Verify kind installation
+        if: matrix.backend == 'kind'
         run: kind version
 
       - name: Deploy Konflux using deploy-local.sh
         working-directory: ${{ github.workspace }}
         env:
           # Cluster configuration
+          CLUSTER_BACKEND: ${{ matrix.backend }}
           KIND_CLUSTER: ${{ env.KIND_CLUSTER }}
+          K3S_VERSION: ${{ env.K3S_VERSION }}
+          # GHA Ubuntu has no firewalld; skip even if present
+          K3S_CONFIGURE_FIREWALL: "0"
           OPERATOR_INSTALL_METHOD: "build"
           OPERATOR_IMAGE: ${{ env.OPERATOR_IMAGE }}
 
@@ -285,11 +372,22 @@ jobs:
         working-directory: operator
         run: |
           kubectl version
-          kind version
+          if [[ "${{ matrix.backend }}" == "kind" ]]; then
+            kind version
+          else
+            k3s --version || true
+          fi
 
       - name: List namespaces
         run: |
           kubectl get namespace
+
+      - name: Diagnose nested unshare (k3s)
+        if: matrix.backend == 'k3s'
+        working-directory: ${{ github.workspace }}
+        run: |
+          chmod +x scripts/diagnose-nested-unshare.sh
+          ./scripts/diagnose-nested-unshare.sh
 
       - name: Run go-tests pkg unit tests
         working-directory: ${{ github.workspace }}
@@ -318,7 +416,7 @@ jobs:
         run: |
           ./test/e2e/run-e2e.sh \
             -ginkgo.github-output \
-            -ginkgo.junit-report=${{ github.workspace }}/junit-conformance-${{ matrix.arch }}.xml
+            -ginkgo.junit-report=${{ github.workspace }}/junit-conformance-${{ matrix.arch }}-${{ matrix.backend }}.xml
 
       - name: Generate error logs
         if: ${{ !cancelled() }}
@@ -333,13 +431,13 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           mkdir -p logs/junit
-          cp junit-conformance-${{ matrix.arch }}.xml logs/junit/ 2>/dev/null || true
+          cp junit-conformance-${{ matrix.arch }}-${{ matrix.backend }}.xml logs/junit/ 2>/dev/null || true
 
       - name: Archive logs
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
-          name: logs-${{ matrix.arch }}
+          name: logs-${{ matrix.arch }}-${{ matrix.backend }}
           path: logs
 
   # Report check result to PR when triggered by /allow (so the run appears on the PR and can gate it)
@@ -354,18 +452,25 @@ jobs:
         uses: actions/github-script@v9
         with:
           script: |
-            const checkRunId = parseInt(process.env.CHECK_RUN_ID);
-            const checkRunIdArm64 = parseInt(process.env.CHECK_RUN_ID_ARM64);
+            const ids = [
+              process.env.CHECK_RUN_ID,
+              process.env.CHECK_RUN_ID_ARM64,
+              process.env.CHECK_RUN_ID_K3S_AMD64,
+              process.env.CHECK_RUN_ID_K3S_ARM64,
+            ].map((v) => parseInt(v, 10)).filter((n) => Number.isFinite(n));
             const testResult = process.env.TEST_RESULT;
             const testSkipResult = process.env.TEST_SKIP_RESULT;
             let conclusion = 'failure';
             if (testResult === 'success' || testSkipResult === 'success') conclusion = 'success';
             else if (testResult === 'cancelled' || testSkipResult === 'cancelled') conclusion = 'cancelled';
             const update = { owner: context.repo.owner, repo: context.repo.repo, status: 'completed', conclusion };
-            await github.rest.checks.update({ ...update, check_run_id: checkRunId });
-            await github.rest.checks.update({ ...update, check_run_id: checkRunIdArm64 });
+            for (const check_run_id of ids) {
+              await github.rest.checks.update({ ...update, check_run_id });
+            }
         env:
           CHECK_RUN_ID: ${{ needs.check-changes.outputs.check_run_id }}
           CHECK_RUN_ID_ARM64: ${{ needs.check-changes.outputs.check_run_id_arm64 }}
+          CHECK_RUN_ID_K3S_AMD64: ${{ needs.check-changes.outputs.check_run_id_k3s_amd64 }}
+          CHECK_RUN_ID_K3S_ARM64: ${{ needs.check-changes.outputs.check_run_id_k3s_arm64 }}
           TEST_RESULT: ${{ needs.test.result }}
           TEST_SKIP_RESULT: ${{ needs.test-skip.result }}

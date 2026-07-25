@@ -63,6 +63,13 @@ export KIND_EXPERIMENTAL_PROVIDER=podman
 {{% /alert %}}
 
 
+{{% alert color="info" %}}
+On **Linux**, you can use native k3s instead of Kind:
+`CLUSTER_BACKEND=k3s ./scripts/deploy-local.sh`.
+See `docs/local-k3s.md` in the repository for firewalld/sudo requirements.
+macOS continues to use Kind.
+{{% /alert %}}
+
 ```bash
 ./scripts/deploy-local.sh
 ```

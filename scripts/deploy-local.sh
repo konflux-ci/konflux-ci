@@ -3,23 +3,26 @@
 # Deploy Konflux for Local Development
 #
 # This script provides a one-command local development deployment of Konflux
-# on a Kind cluster. It's designed for LOCAL DEVELOPMENT CONVENIENCE ONLY.
+# on Kind (default) or native k3s (Linux). Designed for LOCAL / CI convenience.
 #
 # For production deployments on real clusters, see docs/operator-deployment.md
+# For k3s host/firewall/sudo notes, see docs/local-k3s.md
 #
 # What this script does:
-#  1. Creates a Kind cluster with proper configuration
+#  1. Creates a Kind or k3s cluster (CLUSTER_BACKEND)
 #  2. Deploys the Konflux operator
 #  3. Applies a Konflux CR configuration
 #  4. Creates secrets for GitHub integration
 #
 # Prerequisites:
-#  - kind, kubectl, podman (or docker)
+#  - kind (CLUSTER_BACKEND=kind), or Linux + sudo for k3s (CLUSTER_BACKEND=k3s)
+#  - kubectl, podman (or docker)
 #  - kustomize (only for 'local' install method)
 #  - Configuration file: scripts/deploy-local.env
 #
 # Usage:
 #   ./scripts/deploy-local.sh [konflux-cr-file]
+#   CLUSTER_BACKEND=k3s ./scripts/deploy-local.sh
 #
 # By default, uses operator/config/samples/konflux_v1alpha1_konflux.yaml
 #
@@ -45,7 +48,7 @@
 #   git checkout v1.0.0  # or the desired release tag
 #   OPERATOR_INSTALL_METHOD=local ./scripts/deploy-local.sh
 #
-# For 'none' method, the script sets up Kind + dependencies + secrets, then exits.
+# For 'none' method, the script sets up the cluster + dependencies + secrets, then exits.
 # You then run the operator yourself:
 #   cd operator && make install && make run
 
@@ -71,6 +74,7 @@ if [ -f "${ENV_FILE}" ]; then
 fi
 
 # Optional variables with defaults (using :- pattern)
+CLUSTER_BACKEND="${CLUSTER_BACKEND:-kind}" # kind | k3s
 KIND_CLUSTER="${KIND_CLUSTER:-konflux}"
 KIND_MEMORY_GB="${KIND_MEMORY_GB:-8}"
 REGISTRY_HOST_PORT="${REGISTRY_HOST_PORT:-5001}"
@@ -80,12 +84,51 @@ ENABLE_IMAGE_CACHE="${ENABLE_IMAGE_CACHE:-0}"
 OPERATOR_INSTALL_METHOD="${OPERATOR_INSTALL_METHOD:-release}"
 OPERATOR_IMAGE="${OPERATOR_IMAGE:-quay.io/konflux-ci/konflux-operator:latest}"
 SKIP_SECRETS="${SKIP_SECRETS:-false}"
+# Skip cluster create when kubeconfig already points at a usable cluster
+# (Tekton kind-aws, preinstalled k3s, etc.). DEPLOY_LOCAL_SKIP_KIND is kept as alias.
+DEPLOY_LOCAL_SKIP_CLUSTER="${DEPLOY_LOCAL_SKIP_CLUSTER:-${DEPLOY_LOCAL_SKIP_KIND:-0}}"
+
+case "${CLUSTER_BACKEND}" in
+kind | k3s) ;;
+*)
+	echo "ERROR: Invalid CLUSTER_BACKEND: ${CLUSTER_BACKEND} (expected kind or k3s)" >&2
+	exit 1
+	;;
+esac
 
 # Export variables for child scripts
+export CLUSTER_BACKEND
 export KIND_CLUSTER KIND_MEMORY_GB PODMAN_MACHINE_NAME REGISTRY_HOST_PORT ENABLE_REGISTRY_PORT
 export INCREASE_PODMAN_PIDS_LIMIT ENABLE_IMAGE_CACHE
 export GITHUB_PRIVATE_KEY GITHUB_PRIVATE_KEY_PATH GITHUB_APP_ID WEBHOOK_SECRET QUAY_TOKEN QUAY_ORGANIZATION QUAY_API_URL
 export SEGMENT_WRITE_KEY
+
+# Load a locally built image into the cluster node store (build install method).
+load_operator_image_into_cluster() {
+	local img="$1"
+	local container_tool="${CONTAINER_TOOL:-}"
+	if [[ -z "${container_tool}" ]]; then
+		if command -v docker >/dev/null 2>&1; then
+			container_tool=docker
+		elif command -v podman >/dev/null 2>&1; then
+			container_tool=podman
+		else
+			echo "ERROR: docker or podman required to load ${img}" >&2
+			exit 1
+		fi
+	fi
+
+	case "${CLUSTER_BACKEND}" in
+	kind)
+		echo "Loading operator image into Kind cluster (${KIND_CLUSTER})..."
+		kind load docker-image "${img}" --name "${KIND_CLUSTER}"
+		;;
+	k3s)
+		echo "Importing operator image into k3s containerd (requires sudo)..."
+		"${container_tool}" save "${img}" | sudo k3s ctr images import -
+		;;
+	esac
+}
 
 # Child scripts only see exported variables (values from deploy-local.env are not
 # exported by sourcing); validate secrets after exports so checks see the same env.
@@ -104,6 +147,7 @@ echo "========================================="
 echo ""
 echo "Configuration:"
 echo "  Environment: ${ENV_FILE}"
+echo "  Cluster:     ${CLUSTER_BACKEND}"
 echo "  Konflux CR:  ${KONFLUX_CR}"
 echo ""
 
@@ -121,16 +165,25 @@ if [ "${INSTALL_METHOD}" = "build" ]; then
     echo ""
 fi
 
-# Step 1: Setup Kind cluster (skip when using an existing kubeconfig, e.g. Tekton kind-aws-provision)
-if [ "${DEPLOY_LOCAL_SKIP_KIND:-0}" = "1" ]; then
+# Step 1: Setup cluster (skip when using an existing kubeconfig, e.g. Tekton kind-aws-provision)
+if [ "${DEPLOY_LOCAL_SKIP_CLUSTER}" = "1" ]; then
     echo "========================================="
-    echo "Step 1: Skipped (DEPLOY_LOCAL_SKIP_KIND=1 — using current KUBECONFIG)"
+    echo "Step 1: Skipped (DEPLOY_LOCAL_SKIP_CLUSTER=1 — using current KUBECONFIG)"
     echo "========================================="
 else
     echo "========================================="
-    echo "Step 1: Creating Kind cluster"
+    echo "Step 1: Creating ${CLUSTER_BACKEND} cluster"
     echo "========================================="
-    "${SCRIPT_DIR}/setup-kind-local-cluster.sh"
+    case "${CLUSTER_BACKEND}" in
+    kind)
+        "${SCRIPT_DIR}/setup-kind-local-cluster.sh"
+        ;;
+    k3s)
+        "${SCRIPT_DIR}/setup-k3s-local-cluster.sh"
+        # setup-k3s runs in a subshell; point this process at the kubeconfig it wrote.
+        export KUBECONFIG="${K3S_KUBECONFIG:-${HOME}/.kube/k3s.yaml}"
+        ;;
+    esac
 fi
 
 # Step 2: Deploy dependencies
@@ -178,15 +231,16 @@ case "${INSTALL_METHOD}" in
         ;;
 
     build)
-        echo "Loading operator image into Kind cluster..."
         cd "${REPO_ROOT}/operator"
-        kind load docker-image "${OPERATOR_IMG}" --name "${KIND_CLUSTER}"
+        load_operator_image_into_cluster "${OPERATOR_IMG}"
 
         echo "Installing CRDs..."
         make install
 
         echo "Deploying operator..."
         make deploy IMG="${OPERATOR_IMG}"
+        # Avoid leaving a dirty kustomization after set image
+        git checkout config/manager/kustomization.yaml 2>/dev/null || true
         cd "${REPO_ROOT}"
         ;;
 
@@ -289,7 +343,7 @@ echo "========================================="
 echo ""
 
 if [ "${INSTALL_METHOD}" = "none" ]; then
-    echo "Kind cluster and dependencies are ready."
+    echo "${CLUSTER_BACKEND} cluster and dependencies are ready."
     echo ""
     echo "Next steps - run the operator:"
     echo "  cd operator"
@@ -300,7 +354,7 @@ if [ "${INSTALL_METHOD}" = "none" ]; then
     echo "  kubectl apply -f ${KONFLUX_CR}"
     echo ""
 else
-    echo "Konflux is now running on your local Kind cluster"
+    echo "Konflux is now running on your local ${CLUSTER_BACKEND} cluster"
     echo ""
     echo "Access the UI:"
     echo "  https://localhost:9443"

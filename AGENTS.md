@@ -26,7 +26,7 @@ Always `cd operator` before running `make`, `go test`, or linting commands.
 ## Setup Commands
 
 ```bash
-# Local Kind deployment
+# Local Kind deployment (Linux: CLUSTER_BACKEND=k3s — see docs/local-k3s.md)
 cp scripts/deploy-local.env.template scripts/deploy-local.env
 # Fill in GITHUB_APP_ID, GITHUB_PRIVATE_KEY, WEBHOOK_SECRET
 ./scripts/deploy-local.sh

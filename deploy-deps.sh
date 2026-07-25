@@ -504,6 +504,16 @@ deploy_kyverno() {
     kyverno_apply_cmd=$(printf 'kubectl apply -k %q' "${kyverno_policy_dir}")
     retry "${kyverno_apply_cmd}" \
           "Failed to apply Kyverno policies (webhook may not be ready yet)"
+    # k3s on Ubuntu: cri-containerd AppArmor blocks buildah unshare in build-container.
+    # Kind does not need this; keep admission mutate off that path.
+    if [[ "${CLUSTER_BACKEND:-kind}" == "k3s" ]]; then
+        local k3s_apparmor_dir="${script_path}/dependencies/kyverno/policy-components/k3s-buildah-apparmor"
+        echo "  🛡️  Applying k3s buildah AppArmor policy from ${k3s_apparmor_dir}" >&2
+        local k3s_apparmor_cmd
+        k3s_apparmor_cmd=$(printf 'kubectl apply -k %q' "${k3s_apparmor_dir}")
+        retry "${k3s_apparmor_cmd}" \
+              "Failed to apply k3s buildah AppArmor Kyverno policy"
+    fi
 }
 
 deploy_konflux_info() {
