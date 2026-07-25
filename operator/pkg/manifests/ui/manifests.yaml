@@ -644,7 +644,7 @@ spec:
             secretKeyRef:
               key: cookie-secret
               name: oauth2-proxy-cookie-secret
-        image: quay.io/konflux-ci/oauth2-proxy@sha256:8ec3c8daa74c4b3945f0364bf1827c877bebc38d0671d0f268803605a5fc73e3
+        image: quay.io/konflux-ci/oauth2-proxy@sha256:01ace4955d804760876faa40b2098c57143f9e87802a56d71e94f4cb96486f6d
         name: oauth2-proxy
         ports:
         - containerPort: 6000
