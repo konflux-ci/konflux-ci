@@ -39,4 +39,4 @@ kubectl get konflux konflux
 NAME      READY   UI-URL                                                    AGE
 konflux   True    https://konflux-ui-konflux-ui.apps.<cluster-domain>       10m
 
-````
+```
