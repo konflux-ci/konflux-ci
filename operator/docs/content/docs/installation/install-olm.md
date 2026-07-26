@@ -35,7 +35,7 @@ Substitute the appropriate stream (e.g. `v0.2`) when a newer stream is available
   - Tekton (or OpenShift Pipelines when using OpenShift)
   - cert-manager
   - trust-manager
-  - Kyverno
+  - MutatingAdmissionPolicies (Kubernetes 1.36+; skipped if the API is unavailable)
   - Pipelines-as-Code
 
 {{< alert color="info" >}}

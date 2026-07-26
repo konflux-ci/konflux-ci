@@ -42,8 +42,8 @@ logs/
 ├── container-resources.log       # Docker/containerd stats
 ├── operator-logs.log             # Konflux operator deployment + pod logs + events
 ├── konflux-crs-status.log        # Konflux CR and all sub-CRs (KonfluxBuildService, etc.)
-├── kyverno-policy-pods.log       # Pods matching Kyverno policy labels
-├── kyverno-policy-pod-definitions.yaml
+├── admission-policy-pods.log       # Pods matching CI MAP labels (resource-reduce)
+├── admission-policy-pod-definitions.yaml
 ├── failed-pods-definitions.yaml  # Full YAML of pods with Warning events
 ├── failed-pods-logs.log          # Container logs from warning-event pods
 ├── failed-deployment-event-log.log
@@ -124,7 +124,7 @@ gh api "repos/konflux-ci/<service>/commits?sha=main&per_page=10" \
 | `context deadline exceeded` in test | Test timeout — slow cluster or stuck reconciliation | `operator-logs.log`, `pipelineruns.json` |
 | `ImagePullBackOff` in pod logs | Bad image tag or registry issue | `failed-pods-definitions.yaml` |
 | `no matches for kind` in operator log | Missing CRDs — upstream kustomization issue | `operator-logs.log`, check CRD installation |
-| `admission webhook denied` | Kyverno policy blocking resource creation | `events.json`, `kyverno-policy-pods.log` |
+| `admission webhook denied` | Admission policy or webhook blocking resource creation | `events.json`, `admission-policy-pods.log` |
 | `OOMKilled` in pod status | Container hit memory limit | `failed-pods-definitions.yaml`, `cluster-resources.log` |
 | Reconcile error loop in operator | Controller bug or bad CR spec | `operator-logs.log` |
 | PipelineRun stuck `Running` | Tekton task issue or missing resources | `pipelineruns.json`, `taskruns.json` |

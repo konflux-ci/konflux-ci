@@ -11,7 +11,7 @@ Main components:
 - `operator/upstream-kustomizations/` — Pinned upstream component versions
 - `operator/pkg/manifests/` — Embedded upstream manifest content
 - `operator/docs/` — Project documentation (Hugo site, source content in `operator/docs/content/`)
-- `dependencies/` — Extra cluster layers (cert-manager, dex, quay, registry, tekton, kyverno)
+- `dependencies/` — Extra cluster layers (cert-manager, dex, quay, registry, tekton, admission-policies)
 - `integrations/` — Auxiliary scripts (sigstore, quay image-controller)
 - `test/go-tests/` — Platform conformance tests
 - `scripts/` — Local development helpers
