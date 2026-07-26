@@ -125,7 +125,7 @@ is not `none`.
 | Kyverno | Policy engine for namespace and RBAC automation |
 | smee client | Webhook proxy relay for GitHub events |
 
-### `release`, `local` and `build` methods
+### `checkout`, `release` and `build` methods
 
 | Component | Details |
 |-----------|---------|
@@ -151,24 +151,35 @@ OPERATOR_INSTALL_METHOD=build ./scripts/deploy-local.sh
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OPERATOR_INSTALL_METHOD` | `release` | How the operator is installed. See [install method values](#install-method-values) below |
-| `OPERATOR_IMAGE` | `quay.io/konflux-ci/konflux-operator:latest` | Operator image used with the `local` and `build` methods |
-| `KONFLUX_CR` | *(auto-selected)* | Path to the Konflux CR file to apply. Available samples are in `operator/config/samples/`. Can also be passed as a positional argument to the script |
+| `OPERATOR_INSTALL_METHOD` | `checkout` | How the operator is installed. See [install method values](#install-method-values) below |
+| `OPERATOR_GIT_SHA` | current `HEAD` | Git SHA used to resolve the Quay image for `checkout` |
+| `OPERATOR_RELEASE` | `latest` | GitHub release tag for `release` (`install.yaml` + `samples.tar.gz`) |
+| `OPERATOR_IMAGE` | *(method-specific)* | Optional image override for `checkout` / `build` |
+| `KONFLUX_CR` | *(auto-selected)* | Path to the Konflux CR file to apply. For `release`, defaults come from that release's samples unless overridden. Can also be passed as a positional argument to the script |
 
 #### Install method values
 
 | Value | Description | When to use |
 |-------|-------------|-------------|
-| `release` | Installs from the latest GitHub release (`install.yaml`) | Normal local development |
-| `local` | Deploys from your current checkout using kustomize, with the latest released image | Testing manifest changes against a specific release image |
-| `build` | Builds the operator image locally before deploying | Operator development - testing code changes |
+| `checkout` | Deploys manifests/CRDs from your checkout with `quay.io/konflux-ci/konflux-operator:<sha>` (verified via docker/podman) | Default — SHA on main (or any SHA) that already has a Quay image |
+| `release` | Installs released `install.yaml` and applies a sample CR from the same release | Released stack only (no main/release skew) |
+| `build` | Builds the operator image locally before deploying | Local/unpushed commits that are not on Quay yet |
 | `none` | Sets up Kind + dependencies + secrets, then exits without installing the operator | Running the operator manually - see [Building and Installing from Source]({{< relref "install-from-source" >}}) |
 
+Examples:
+
+```bash
+# Latest GitHub release (install.yaml + samples from that release)
+OPERATOR_INSTALL_METHOD=release ./scripts/deploy-local.sh
+
+# Pin a specific release tag
+OPERATOR_INSTALL_METHOD=release OPERATOR_RELEASE=v0.1.13 ./scripts/deploy-local.sh
+```
+
 {{< alert color="info" >}}
-When using <code>local</code>, the manifests from your checkout are applied with the latest
-released image. To avoid version mismatches, checkout the matching release tag first:
-<pre><code>git checkout v1.0.0
-OPERATOR_INSTALL_METHOD=local ./scripts/deploy-local.sh</code></pre>
+<code>checkout</code> fails early if the Quay image for the git SHA does not exist, and
+suggests <code>OPERATOR_INSTALL_METHOD=build</code>. The legacy value
+<code>local</code> is accepted as an alias for <code>checkout</code>.
 {{< /alert >}}
 
 The default CR does **not** enable image-controller. If you set `QUAY_TOKEN` and

@@ -8,7 +8,7 @@ description: Deploy Konflux on a local Kind cluster. Supports development mode (
 Deploy Konflux on a local Kind cluster. Two modes are available:
 
 - **Development** (`OPERATOR_INSTALL_METHOD=none`) — operator runs on the host for fast rebuild-restart cycles. **This is the default mode for this skill.**
-- **Preview** (`release`, `build`, or `local`) — operator runs in-cluster; `deploy-local.sh` handles everything end-to-end.
+- **Preview** (`checkout`, `release`, or `build`) — operator runs in-cluster; `deploy-local.sh` handles everything end-to-end.
 
 If the user doesn't specify, use **development** mode. Ask only if their intent is ambiguous.
 
@@ -43,9 +43,9 @@ GitHub App setup guide: `operator/docs/content/docs/guides/github-secrets.md`
 | Value | Mode | Description |
 |-------|------|-------------|
 | `none` | Development | Operator runs on host via `make run` |
-| `release` | Preview | Install from latest GitHub release |
+| `checkout` | Preview | Checkout manifests + Quay image tagged with git SHA |
+| `release` | Preview | Released install.yaml + released sample CR |
 | `build` | Preview | Build operator image from source |
-| `local` | Preview | Kustomize from current checkout |
 
 Set the appropriate value in `deploy-local.env` before running. If the file already has a different value, change it using StrReplace.
 
@@ -160,7 +160,7 @@ Use this when the user wants a fully self-contained Konflux instance without run
 Track progress with TodoWrite:
 
 ```
-- [ ] Ensure scripts/deploy-local.env exists with desired OPERATOR_INSTALL_METHOD (release/build/local)
+- [ ] Ensure scripts/deploy-local.env exists with desired OPERATOR_INSTALL_METHOD (checkout/release/build/none)
 - [ ] (Optional) Delete existing Kind cluster
 - [ ] Run deploy-local.sh — handles everything
 - [ ] Wait for Konflux to become ready
@@ -171,9 +171,9 @@ Track progress with TodoWrite:
 
 Set the desired method in `scripts/deploy-local.env`:
 
-- `release` — latest GitHub release (simplest, recommended for preview)
+- `checkout` — checkout manifests + Quay image for the git SHA (default; fails early if image missing)
+- `release` — released install.yaml + released sample CR
 - `build` — builds the operator image from the current checkout
-- `local` — applies kustomize manifests from the current checkout with the latest released image
 
 ### Step 2: Run deploy-local.sh
 

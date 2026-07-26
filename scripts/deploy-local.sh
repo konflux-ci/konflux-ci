@@ -15,13 +15,14 @@
 #
 # Prerequisites:
 #  - kind, kubectl, podman (or docker)
-#  - kustomize (only for 'local' install method)
+#  - kustomize (only for 'checkout' / 'build' install methods)
 #  - Configuration file: scripts/deploy-local.env
 #
 # Usage:
 #   ./scripts/deploy-local.sh [konflux-cr-file]
 #
 # By default, uses operator/config/samples/konflux_v1alpha1_konflux.yaml
+# (or the matching sample from a GitHub release when using OPERATOR_INSTALL_METHOD=release).
 #
 # Example:
 #   cp scripts/deploy-local.env.template scripts/deploy-local.env
@@ -34,16 +35,22 @@
 #   ./scripts/deploy-local.sh my-konflux.yaml
 #
 # Operator Installation Methods (OPERATOR_INSTALL_METHOD):
-#   release (default) - Install from latest GitHub release
-#   local             - Install from current checkout using kustomize (see note below)
-#   build             - Build operator image locally and install (for operator developers)
-#   none              - Skip operator install and Konflux CR (for running operator locally)
+#   checkout (default) - Install from current checkout; image tagged with git SHA on Quay
+#   release            - Install released install.yaml + released sample CR (same release)
+#   build              - Build operator image locally and install (for operator developers)
+#   none               - Skip operator install and Konflux CR (for running operator locally)
 #
-# NOTE: The 'local' method applies manifests from your checkout with the latest
-# released image, which may cause mismatches if your checkout differs from the
-# release. To avoid this, checkout a specific release tag first:
-#   git checkout v1.0.0  # or the desired release tag
-#   OPERATOR_INSTALL_METHOD=local ./scripts/deploy-local.sh
+# The legacy value 'local' is accepted as an alias for 'checkout'.
+#
+# checkout image selection:
+#   1. OPERATOR_IMAGE if set
+#   2. else quay.io/konflux-ci/konflux-operator:<OPERATOR_GIT_SHA|HEAD>
+# The image must exist on the registry (checked via docker/podman manifest inspect).
+# If it does not, the script exits and suggests OPERATOR_INSTALL_METHOD=build.
+#
+# release selection (OPERATOR_RELEASE, default: latest):
+#   OPERATOR_INSTALL_METHOD=release ./scripts/deploy-local.sh
+#   OPERATOR_INSTALL_METHOD=release OPERATOR_RELEASE=v0.1.13 ./scripts/deploy-local.sh
 #
 # For 'none' method, the script sets up Kind + dependencies + secrets, then exits.
 # You then run the operator yourself:
@@ -54,6 +61,118 @@ set -euo pipefail
 # Determine the absolute path of the repository root
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 REPO_ROOT=$(dirname "$SCRIPT_DIR")
+
+OPERATOR_IMAGE_REPO="${OPERATOR_IMAGE_REPO:-quay.io/konflux-ci/konflux-operator}"
+RELEASE_DOWNLOAD_BASE="${RELEASE_DOWNLOAD_BASE:-https://github.com/konflux-ci/konflux-ci/releases}"
+
+# Prefer docker then podman — same selection order as operator/Makefile CONTAINER_TOOL.
+resolve_container_tool() {
+    if [ -n "${CONTAINER_TOOL:-}" ]; then
+        echo "${CONTAINER_TOOL}"
+        return
+    fi
+    if command -v docker >/dev/null 2>&1; then
+        echo docker
+        return
+    fi
+    if command -v podman >/dev/null 2>&1; then
+        echo podman
+        return
+    fi
+    echo ""
+}
+
+# Return 0 if the image ref exists in a remote registry.
+remote_image_exists() {
+    local image="$1"
+    local tool="$2"
+    # Both docker and podman support `manifest inspect` for remote refs.
+    "${tool}" manifest inspect "${image}" >/dev/null 2>&1
+}
+
+suggest_checkout_alternatives() {
+    local image="$1"
+    local sha="$2"
+    cat >&2 <<EOF
+
+No image found at: ${image}
+
+This usually means the commit has not been built yet (local/unpushed work, or the
+push build is still running).
+
+Options:
+  1. Build and deploy locally (typical for unbuilt local commits):
+       OPERATOR_INSTALL_METHOD=build ./scripts/deploy-local.sh
+
+  2. Use a SHA that already has an image on Quay:
+       OPERATOR_GIT_SHA=<sha-with-image> OPERATOR_INSTALL_METHOD=checkout ./scripts/deploy-local.sh
+     or:
+       git checkout <sha-with-image>
+
+  3. Use a GitHub release (released install.yaml + released sample CR):
+       OPERATOR_INSTALL_METHOD=release ./scripts/deploy-local.sh
+     or pin a specific release tag:
+       OPERATOR_INSTALL_METHOD=release OPERATOR_RELEASE=v0.1.13 ./scripts/deploy-local.sh
+
+Current git SHA considered: ${sha}
+EOF
+}
+
+release_asset_url() {
+    local release="$1"
+    local asset="$2"
+    if [ "${release}" = "latest" ]; then
+        echo "${RELEASE_DOWNLOAD_BASE}/latest/download/${asset}"
+    else
+        echo "${RELEASE_DOWNLOAD_BASE}/download/${release}/${asset}"
+    fi
+}
+
+# Download and extract release samples into a repo-local directory; print the path.
+# Expected layout matches generate-release-artifacts.sh: flat YAML at the archive root
+# (e.g. konflux_v1alpha1_konflux.yaml), not nested under a subdirectory.
+# Directory is gitignored (.tmp/); cleared at the start of each fetch.
+fetch_release_samples() {
+    local release="$1"
+    local url samples_dir
+    url="$(release_asset_url "${release}" "samples.tar.gz")"
+    samples_dir="${REPO_ROOT}/.tmp/release-samples"
+    rm -rf "${samples_dir}"
+    mkdir -p "${samples_dir}"
+    echo "Downloading release samples: ${url}" >&2
+    if ! curl -fsSL "${url}" | tar -xzf - -C "${samples_dir}"; then
+        echo "ERROR: Failed to download or extract release samples from ${url}" >&2
+        rm -rf "${samples_dir}"
+        exit 1
+    fi
+    if [ ! -f "${samples_dir}/konflux_v1alpha1_konflux.yaml" ]; then
+        echo "ERROR: Release samples missing expected file konflux_v1alpha1_konflux.yaml in ${samples_dir}" >&2
+        echo "Expected flat YAML at archive root (as produced by generate-release-artifacts.sh)." >&2
+        ls -la "${samples_dir}" >&2
+        rm -rf "${samples_dir}"
+        exit 1
+    fi
+    echo "${samples_dir}"
+}
+
+verify_release_assets() {
+    local release="$1"
+    local install_url samples_url
+    install_url="$(release_asset_url "${release}" "install.yaml")"
+    samples_url="$(release_asset_url "${release}" "samples.tar.gz")"
+    echo "Verifying release assets for '${release}'..."
+    if ! curl -fsSIL "${install_url}" >/dev/null; then
+        echo "ERROR: install.yaml not reachable: ${install_url}" >&2
+        exit 1
+    fi
+    if ! curl -fsSIL "${samples_url}" >/dev/null; then
+        echo "ERROR: samples.tar.gz not reachable: ${samples_url}" >&2
+        exit 1
+    fi
+    echo "✓ Release assets reachable"
+    echo "  install: ${install_url}"
+    echo "  samples: ${samples_url}"
+}
 
 # Optional: Load environment configuration from file if it exists.
 # Precedence (high to low): injected env vars > env file > script defaults.
@@ -77,8 +196,8 @@ REGISTRY_HOST_PORT="${REGISTRY_HOST_PORT:-5001}"
 ENABLE_REGISTRY_PORT="${ENABLE_REGISTRY_PORT:-1}"
 INCREASE_PODMAN_PIDS_LIMIT="${INCREASE_PODMAN_PIDS_LIMIT:-1}"
 ENABLE_IMAGE_CACHE="${ENABLE_IMAGE_CACHE:-0}"
-OPERATOR_INSTALL_METHOD="${OPERATOR_INSTALL_METHOD:-release}"
-OPERATOR_IMAGE="${OPERATOR_IMAGE:-quay.io/konflux-ci/konflux-operator:latest}"
+OPERATOR_INSTALL_METHOD="${OPERATOR_INSTALL_METHOD:-checkout}"
+OPERATOR_RELEASE="${OPERATOR_RELEASE:-latest}"
 SKIP_SECRETS="${SKIP_SECRETS:-false}"
 
 # Export variables for child scripts
@@ -91,23 +210,101 @@ export SEGMENT_WRITE_KEY
 # exported by sourcing); validate secrets after exports so checks see the same env.
 [ "${SKIP_SECRETS}" = "true" ] || VALIDATE_ONLY=true "${SCRIPT_DIR}/deploy-secrets.sh"
 
-# Get Konflux CR file path (command-line arg takes highest precedence)
-KONFLUX_CR="${1:-${KONFLUX_CR:-}}"
-export KONFLUX_CR
+INSTALL_METHOD="${OPERATOR_INSTALL_METHOD}"
+if [ "${INSTALL_METHOD}" = "local" ]; then
+    echo "WARNING: OPERATOR_INSTALL_METHOD=local is deprecated; use 'checkout' instead."
+    echo "         Continuing with checkout (checkout manifests + SHA-tagged Quay image)."
+    INSTALL_METHOD="checkout"
+fi
 
-# Resolve CR using shared logic (auto-selects e2e CR when Quay credentials are set)
-KONFLUX_CR=$("${SCRIPT_DIR}/resolve-konflux-cr.sh")
+case "${INSTALL_METHOD}" in
+    checkout|release|build|none) ;;
+    *)
+        echo "ERROR: Invalid OPERATOR_INSTALL_METHOD: ${INSTALL_METHOD}" >&2
+        echo "Valid options: checkout, release, build, none (legacy alias: local)" >&2
+        exit 1
+        ;;
+esac
+
+# Resolve operator image (and git SHA only for checkout — release/none/build
+# must not require a .git directory).
+OPERATOR_IMG=""
+RELEASE_SAMPLES_DIR=""
+CONTAINER_TOOL="$(resolve_container_tool)"
+
+case "${INSTALL_METHOD}" in
+    checkout)
+        if [ -z "${CONTAINER_TOOL}" ]; then
+            echo "ERROR: Neither docker nor podman is available." >&2
+            echo "Install one of them (same requirement as operator/Makefile CONTAINER_TOOL)." >&2
+            exit 1
+        fi
+        if [ -n "${OPERATOR_IMAGE:-}" ]; then
+            OPERATOR_IMG="${OPERATOR_IMAGE}"
+            # SHA is optional when an explicit image is provided (for error messaging only).
+            OPERATOR_GIT_SHA="${OPERATOR_GIT_SHA:-}"
+        else
+            OPERATOR_GIT_SHA="${OPERATOR_GIT_SHA:-$(git -C "${REPO_ROOT}" rev-parse HEAD)}"
+            OPERATOR_IMG="${OPERATOR_IMAGE_REPO}:${OPERATOR_GIT_SHA}"
+        fi
+        echo "Using container tool: ${CONTAINER_TOOL}"
+        echo "Checking operator image exists: ${OPERATOR_IMG}"
+        if ! remote_image_exists "${OPERATOR_IMG}" "${CONTAINER_TOOL}"; then
+            echo "ERROR: Operator image not found for checkout install method." >&2
+            suggest_checkout_alternatives "${OPERATOR_IMG}" "${OPERATOR_GIT_SHA:-unknown}"
+            exit 1
+        fi
+        echo "✓ Operator image found"
+        ;;
+    release)
+        verify_release_assets "${OPERATOR_RELEASE}"
+        ;;
+    build)
+        if [ -z "${CONTAINER_TOOL}" ]; then
+            echo "ERROR: Neither docker nor podman is available (required to build the operator image)." >&2
+            exit 1
+        fi
+        echo "Using container tool: ${CONTAINER_TOOL}"
+        OPERATOR_IMG="${OPERATOR_IMAGE:-localhost/konflux-operator:local}"
+        ;;
+    none)
+        ;;
+esac
+
+# Resolve Konflux CR
+# For release: use samples from the same release unless the caller set KONFLUX_CR /
+# passed a positional CR path (explicit override).
+KONFLUX_CR_EXPLICIT="${1:-${KONFLUX_CR:-}}"
+if [ "${INSTALL_METHOD}" = "release" ] && [ -z "${KONFLUX_CR_EXPLICIT}" ]; then
+    RELEASE_SAMPLES_DIR="$(fetch_release_samples "${OPERATOR_RELEASE}")"
+    export SAMPLES_DIR="${RELEASE_SAMPLES_DIR}"
+    unset KONFLUX_CR
+    KONFLUX_CR="$(SAMPLES_DIR="${RELEASE_SAMPLES_DIR}" "${SCRIPT_DIR}/resolve-konflux-cr.sh")"
+else
+    KONFLUX_CR="${KONFLUX_CR_EXPLICIT}"
+    export KONFLUX_CR
+    KONFLUX_CR=$("${SCRIPT_DIR}/resolve-konflux-cr.sh")
+fi
+export KONFLUX_CR
 
 echo "========================================="
 echo "Konflux Local Development Deployment"
 echo "========================================="
 echo ""
 echo "Configuration:"
-echo "  Environment: ${ENV_FILE}"
-echo "  Konflux CR:  ${KONFLUX_CR}"
+echo "  Environment:     ${ENV_FILE}"
+echo "  Install method:  ${INSTALL_METHOD}"
+echo "  Konflux CR:      ${KONFLUX_CR}"
+if [ -n "${OPERATOR_IMG}" ]; then
+    echo "  Operator image:  ${OPERATOR_IMG}"
+fi
+if [ "${INSTALL_METHOD}" = "checkout" ] && [ -n "${OPERATOR_GIT_SHA:-}" ]; then
+    echo "  Git SHA:         ${OPERATOR_GIT_SHA}"
+fi
+if [ "${INSTALL_METHOD}" = "release" ]; then
+    echo "  Release:         ${OPERATOR_RELEASE}"
+fi
 echo ""
-
-INSTALL_METHOD="${OPERATOR_INSTALL_METHOD:-local}"
 
 # For 'build' method, build the operator image before creating the cluster to reduce peak memory (no Kind container during go build)
 if [ "${INSTALL_METHOD}" = "build" ]; then
@@ -115,8 +312,8 @@ if [ "${INSTALL_METHOD}" = "build" ]; then
     echo "Building operator image (before cluster)"
     echo "========================================="
     cd "${REPO_ROOT}/operator"
-    OPERATOR_IMG="localhost/konflux-operator:local"
-    make docker-build IMG="${OPERATOR_IMG}"
+    # Ensure Makefile uses the same container tool selection when possible.
+    make docker-build IMG="${OPERATOR_IMG}" CONTAINER_TOOL="${CONTAINER_TOOL}"
     cd "${REPO_ROOT}"
     echo ""
 fi
@@ -165,11 +362,9 @@ echo "========================================="
 echo "Using installation method: ${INSTALL_METHOD}"
 
 case "${INSTALL_METHOD}" in
-    local)
-        echo "Installing from current commit using kustomize..."
+    checkout)
+        echo "Installing from current checkout with Quay image ${OPERATOR_IMG}..."
         cd "${REPO_ROOT}/operator"
-        OPERATOR_IMG="${OPERATOR_IMAGE:-quay.io/konflux-ci/konflux-operator:latest}"
-
         make deploy IMG="${OPERATOR_IMG}"
 
         # Reset kustomization changes to avoid leaving modified files
@@ -191,8 +386,8 @@ case "${INSTALL_METHOD}" in
         ;;
 
     release)
-        echo "Installing from latest GitHub release..."
-        RELEASE_URL="https://github.com/konflux-ci/konflux-ci/releases/latest/download/install.yaml"
+        RELEASE_URL="$(release_asset_url "${OPERATOR_RELEASE}" "install.yaml")"
+        echo "Installing from GitHub release (${OPERATOR_RELEASE})..."
         echo "Downloading: ${RELEASE_URL}"
         kubectl apply -f "${RELEASE_URL}"
         ;;
@@ -201,12 +396,6 @@ case "${INSTALL_METHOD}" in
         echo "Skipping operator installation (OPERATOR_INSTALL_METHOD=none)"
         echo "You will need to run the operator manually after deployment completes:"
         echo "  cd operator && make install && make run"
-        ;;
-
-    *)
-        echo "ERROR: Invalid OPERATOR_INSTALL_METHOD: ${INSTALL_METHOD}"
-        echo "Valid options: local, build, release, none"
-        exit 1
         ;;
 esac
 

@@ -108,8 +108,21 @@ this file will allow you to ignore or include specific KubeLinter checks.
 # Operator Development
 
 For building and running the operator from source, see the
-[operator README](operator/README.md). To deploy a locally built operator on a
-Kind cluster, use `OPERATOR_INSTALL_METHOD=build` with `deploy-local.sh`.
+[operator README](operator/README.md). Local Kind deploys use `scripts/deploy-local.sh`;
+see [Local Deployment (Kind)](operator/docs/content/docs/installation/install-local.md)
+for the install-method matrix. In short:
+
+- **`checkout`** (default) — checkout manifests/CRDs with the Quay image tagged by git SHA
+- **`release`** — released `install.yaml` + sample CR from the same release
+  (`OPERATOR_RELEASE=vX.Y.Z` to pin a tag; default `latest`)
+- **`build`** — build the operator image locally, then deploy (for unpushed/local commits)
+- **`none`** — Kind + dependencies only; run the operator with `make run`
+
+Example for a locally built operator:
+
+```bash
+OPERATOR_INSTALL_METHOD=build ./scripts/deploy-local.sh
+```
 
 # CI/CD and Testing
 
