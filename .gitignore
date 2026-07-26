@@ -25,3 +25,6 @@ scripts/smee-channel-id.yaml
 
 # Git worktrees
 .worktrees/
+
+# Local scratch (e.g. release samples fetch, operator overrides tmp)
+.tmp/
