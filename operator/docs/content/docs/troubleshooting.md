@@ -156,9 +156,9 @@ It may take a few minutes for the UI to become available again.
    verify the smee channel URL in the smee-client manifest, then redeploy it:
 
    ```bash
-   kubectl delete -f ./smee/smee-client.yaml
+   kubectl delete -f ./dependencies/smee/smee-client.yaml
    # fix the channel URL in the manifest
-   kubectl create -f ./smee/smee-client.yaml
+   kubectl create -f ./dependencies/smee/smee-client.yaml
    ```
 
    {{< alert color="info" >}}
