@@ -1,0 +1,64 @@
+---
+# CI/local: shrink Tekton TaskRun pod requests and prefer local images.
+# Replaces the former Kyverno ClusterPolicy of the same name.
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: reduce-tekton-pr-taskrun-resource-requests
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      operations: ["CREATE"]
+      resources: ["pods"]
+  matchConditions:
+  - name: name-ends-with-pod
+    # ReplicaSet pods often arrive with generateName only; unguarded .name errors
+    # and failurePolicy:Fail then denies unrelated creates (e.g. the operator).
+    expression: has(object.metadata.name) && object.metadata.name.endsWith("-pod")
+  - name: build-or-ec-label
+    expression: >
+      has(object.metadata.labels) &&
+      (
+        ("pipelines.appstudio.openshift.io/type" in object.metadata.labels &&
+          object.metadata.labels["pipelines.appstudio.openshift.io/type"] == "build") ||
+        ("tekton.dev/task" in object.metadata.labels &&
+          object.metadata.labels["tekton.dev/task"] == "verify-enterprise-contract")
+      )
+  reinvocationPolicy: IfNeeded
+  mutations:
+  - patchType: JSONPatch
+    jsonPatch:
+      # Only evaluated when matchConditions pass. Still guard containers so a
+      # Fail policy cannot deny a matched CREATE on a CEL/key error.
+      expression: >
+        !(has(object.spec.containers) && size(object.spec.containers) > 0)
+          ? []
+          : object.spec.containers.map(c,
+              has(c.resources) && has(c.resources.requests) && size(c.resources.requests) > 0
+                ? [
+                    JSONPatch{
+                      op: "add",
+                      path: "/spec/containers/" + string(object.spec.containers.indexOf(c)) + "/resources/requests",
+                      value: {"cpu": "1m", "memory": "1Mi"}
+                    }
+                  ]
+                : []
+            ).flatten() +
+            object.spec.containers.map(c, [
+              JSONPatch{
+                op: "add",
+                path: "/spec/containers/" + string(object.spec.containers.indexOf(c)) + "/imagePullPolicy",
+                value: "IfNotPresent"
+              }
+            ]).flatten()
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: reduce-tekton-pr-taskrun-resource-requests
+spec:
+  policyName: reduce-tekton-pr-taskrun-resource-requests
+  matchResources: {}

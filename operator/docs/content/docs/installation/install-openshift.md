@@ -63,7 +63,7 @@ The script performs all of the following automatically:
 |-----------|---------|
 | OpenShift Pipelines | Installed via OLM (Red Hat's productized Tekton) |
 | cert-manager | Installed via the Red Hat cert-manager OLM operator |
-| Kyverno | Policy engine for namespace and RBAC automation |
+| MutatingAdmissionPolicies | CI/local: reduce Tekton TaskRun pod requests when the API is available (Kubernetes 1.36+) |
 | Pipelines-as-Code | GitHub-triggered pipeline automation |
 | Tekton Chains RBAC | RBAC for supply-chain signing using OpenShift namespaces |
 

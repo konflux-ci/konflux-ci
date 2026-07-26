@@ -132,9 +132,9 @@ deploy() {
     deploy_smee
     COMPLETED_STEPS+=("$CURRENT_STEP")
 
-    CURRENT_STEP="Kyverno"
-    echo "🛡️  Deploying Kyverno..." >&2
-    deploy_kyverno
+    CURRENT_STEP="Admission policies"
+    echo "🛡️  Deploying admission policies..." >&2
+    deploy_admission_policies
     COMPLETED_STEPS+=("$CURRENT_STEP")
 
     CURRENT_STEP="Konflux Info"
@@ -484,26 +484,27 @@ deploy_smee() {
     fi
 }
 
-deploy_kyverno() {
-    kubectl apply -k "${script_path}/dependencies/kyverno" --server-side
-    # Policies are validated/mutated by the Kyverno admission webhook. The webhook is served
-    # by kyverno-admission-controller; if we apply policies before that deployment is ready,
-    # the API server gets "connection refused" from the webhook. Wait for it to be Available.
-    echo "  ⏳ Waiting for Kyverno admission controller..." >&2
-    retry "kubectl wait --for=condition=Available deployment/kyverno-admission-controller -n kyverno --timeout=60s" \
-          "Kyverno admission controller did not become available within the allocated time"
-    # Default SET_SKIP_CHECKS=false: reduce-tekton only (pipeline security checks are not defaulted off).
-    # SET_SKIP_CHECKS=true applies set-skip-checks-parameter (e.g. GitHub Actions operator e2e; flaky scans).
-    : "${SET_SKIP_CHECKS:=false}"
-    local kyverno_policy_dir="${script_path}/dependencies/kyverno/policy"
-    if [[ "${SET_SKIP_CHECKS}" == "true" ]]; then
-        kyverno_policy_dir="${script_path}/dependencies/kyverno/policy-with-skip-checks-mutation"
+deploy_admission_policies() {
+    # In-process MutatingAdmissionPolicy (stable in Kubernetes 1.36+; Kind 0.32 default).
+    # Older clusters (e.g. some OpenShift minors) may lack the API — skip with a warning.
+    if ! kubectl api-resources --api-group=admissionregistration.k8s.io 2>/dev/null | grep -q '^mutatingadmissionpolicies'; then
+        echo "  ⚠️  MutatingAdmissionPolicy API not available; skipping CI admission policies" >&2
+        # So COMPLETED_STEPS does not look like policies were applied.
+        CURRENT_STEP="Admission policies (skipped)"
+        return 0
     fi
-    echo "  🛡️  Applying Kyverno policies from ${kyverno_policy_dir}" >&2
-    local kyverno_apply_cmd
-    kyverno_apply_cmd=$(printf 'kubectl apply -k %q' "${kyverno_policy_dir}")
-    retry "${kyverno_apply_cmd}" \
-          "Failed to apply Kyverno policies (webhook may not be ready yet)"
+    # Default SET_SKIP_CHECKS=false: reduce-tekton only (pipeline security checks remain on).
+    # SET_SKIP_CHECKS=true also applies set-skip-checks-parameter (e.g. GHA operator e2e).
+    : "${SET_SKIP_CHECKS:=false}"
+    local policy_dir="${script_path}/dependencies/admission-policies/policy"
+    if [[ "${SET_SKIP_CHECKS}" == "true" ]]; then
+        policy_dir="${script_path}/dependencies/admission-policies/policy-with-skip-checks-mutation"
+    fi
+    echo "  🛡️  Applying MutatingAdmissionPolicies from ${policy_dir}" >&2
+    local apply_cmd
+    apply_cmd=$(printf 'kubectl apply -k %q' "${policy_dir}")
+    retry "${apply_cmd}" \
+          "Failed to apply MutatingAdmissionPolicies"
 }
 
 deploy_konflux_info() {

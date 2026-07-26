@@ -1,0 +1,50 @@
+---
+# Optional CI mutate: default skip-checks to true on matched push PipelineRuns.
+# Applied when SET_SKIP_CHECKS=true (see deploy-deps.sh). Replaces former Kyverno policy.
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: set-skip-checks-parameter
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups: ["tekton.dev"]
+      apiVersions: ["v1"]
+      operations: ["CREATE"]
+      resources: ["pipelineruns"]
+  matchConditions:
+  # Prefer has()/in so missing fields are false, not CEL errors (failurePolicy: Fail
+  # turns matchCondition evaluation errors into denied creates).
+  - name: original-prname-push
+    expression: >
+      has(object.metadata.labels) &&
+      "pipelinesascode.tekton.dev/original-prname" in object.metadata.labels &&
+      object.metadata.labels["pipelinesascode.tekton.dev/original-prname"].startsWith("konflux-ci-upstream-") &&
+      object.metadata.labels["pipelinesascode.tekton.dev/original-prname"].endsWith("-on-push")
+  - name: has-skip-checks-param
+    expression: >
+      has(object.spec.pipelineSpec) &&
+      has(object.spec.pipelineSpec.params) &&
+      object.spec.pipelineSpec.params.exists(p, has(p.name) && p.name == "skip-checks")
+  reinvocationPolicy: IfNeeded
+  mutations:
+  - patchType: JSONPatch
+    jsonPatch:
+      # add upserts /default (present or not); replace would fail if default is absent.
+      expression: >
+        object.spec.pipelineSpec.params.filter(p, has(p.name) && p.name == "skip-checks").map(p,
+          JSONPatch{
+            op: "add",
+            path: "/spec/pipelineSpec/params/" + string(object.spec.pipelineSpec.params.indexOf(p)) + "/default",
+            value: "true"
+          }
+        )
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: set-skip-checks-parameter
+spec:
+  policyName: set-skip-checks-parameter
+  matchResources: {}

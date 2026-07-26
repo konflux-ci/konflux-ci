@@ -69,9 +69,9 @@ generate_logs() {
         echo ""
     } > "$logs_dir/cluster-resources.log"
 
-    # Capture pods matching Kyverno policy labels
+    # Capture pods matching CI MutatingAdmissionPolicy labels (resource-reduce MAP)
     {
-        echo "=== PODS MATCHING KYVERNO POLICY LABELS ==="
+        echo "=== PODS MATCHING ADMISSION POLICY LABELS ==="
         echo "Date: $(date)"
         echo ""
 
@@ -90,11 +90,11 @@ generate_logs() {
         echo "--- All taskrun pods (broader search) ---"
         kubectl get pods --all-namespaces -l "tekton.dev/taskRun" --show-labels -o wide 2>&1 || echo "No pods found with tekton.dev/taskRun label"
         echo ""
-    } > "$logs_dir/kyverno-policy-pods.log"
+    } > "$logs_dir/admission-policy-pods.log"
 
-    # Capture detailed definitions for pods matching Kyverno policy
+    # Capture detailed definitions for pods matching admission policy labels
     {
-        echo "=== DETAILED DEFINITIONS FOR KYVERNO POLICY PODS ==="
+        echo "=== DETAILED DEFINITIONS FOR ADMISSION POLICY PODS ==="
         echo "Date: $(date)"
         echo ""
 
@@ -113,7 +113,7 @@ generate_logs() {
         echo "--- Pod definitions with tekton.dev/taskRun label (broader search) ---"
         kubectl get pods --all-namespaces -l "tekton.dev/taskRun" -o yaml 2>&1 || echo "No pods found with tekton.dev/taskRun label"
         echo ""
-    } > "$logs_dir/kyverno-policy-pod-definitions.yaml"
+    } > "$logs_dir/admission-policy-pod-definitions.yaml"
 
     # Docker/containerd resources
     {

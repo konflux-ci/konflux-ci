@@ -1,0 +1,8 @@
+---
+# Default admission-policy bundle: reduce Tekton resource requests for CI.
+# Does not include set-skip-checks-parameter (full pipeline checks remain default).
+# SET_SKIP_CHECKS=true selects policy-with-skip-checks-mutation (see deploy-deps.sh).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../policy-base

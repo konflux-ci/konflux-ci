@@ -122,7 +122,7 @@ is not `none`.
 | cert-manager | TLS certificate lifecycle management |
 | trust-manager | CA bundle distribution across namespaces |
 | Tekton + Pipelines as Code | Pipeline execution engine and GitHub-triggered pipeline automation |
-| Kyverno | Policy engine for namespace and RBAC automation |
+| MutatingAdmissionPolicies | CI/local: reduce Tekton TaskRun pod requests (requires Kubernetes 1.36+) |
 | smee client | Webhook proxy relay for GitHub events |
 
 ### `release`, `local` and `build` methods
