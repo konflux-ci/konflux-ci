@@ -1421,6 +1421,14 @@ rules:
   - watch
 - apiGroups:
   - rbac.authorization.k8s.io
+  resourceNames:
+  - konflux-integration-runner
+  resources:
+  - clusterroles
+  verbs:
+  - bind
+- apiGroups:
+  - rbac.authorization.k8s.io
   resources:
   - rolebindings
   verbs:
@@ -1851,7 +1859,7 @@ spec:
         - --leader-elector-retry-period=5s
         command:
         - /manager
-        image: quay.io/konflux-ci/integration-service:3d5369d6ce7ea05171d603d54dc2a206bbffa157
+        image: quay.io/konflux-ci/integration-service:6a0b70b3cdd5880c3aeea553732f200ae7a701f7
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1935,7 +1943,7 @@ spec:
             - --zap-log-level=debug
             - --pr-snapshots-to-keep=70
             - --non-pr-snapshots-to-keep=640
-            image: quay.io/konflux-ci/integration-service:3d5369d6ce7ea05171d603d54dc2a206bbffa157
+            image: quay.io/konflux-ci/integration-service:6a0b70b3cdd5880c3aeea553732f200ae7a701f7
             imagePullPolicy: Always
             name: test-gc
             resources:
