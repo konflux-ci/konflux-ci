@@ -164,12 +164,11 @@ the Secret verifies again. For other not-ready reasons (`metrics-ca-empty`,
 `metrics-server-cert-empty`, `leaf-ca-mismatch`) the Secret object exists and
 CA references resolve, so retain runs normally.
 
-Annotation-only "resync" patches on the ServiceMonitor are **not** used. Deferred
-apply is what prevents SM-before-Secret `InvalidConfiguration` rejection; once the
-SM is accepted, per-reconcile re-apply (and normal Secret remint/reissue) is
-sufficient for scrape continuity when the token or metrics TLS Secret changes.
-OpenShift UWM prometheus-operator still often lacks cross-namespace Secret watches,
-but that does not require annotation nudges when create ordering is correct.
+Annotation-based ServiceMonitor "resync" nudges have been removed. Deferred
+apply prevents SM-before-Secret `InvalidConfiguration` rejection; once the
+SM is accepted, per-reconcile re-apply is sufficient for scrape continuity
+when the token or metrics TLS Secret changes. Contract tests assert that
+`metrics-scrape-resync` annotations remain absent.
 
 Implementation: `operator/internal/common/scrape_token.go`,
 `operator/pkg/kubernetes/metrics_tls.go`, wired from build-service,
@@ -427,4 +426,4 @@ steps (creating `monitoring/` kustomization, rebuilding embedded manifests via
 | OpenShift UWM tests | `test/go-tests/metricsopenshift/` + `test/go-tests/pkg/metricsopenshift/` (via `scripts/operator-e2e/openshift/run-metrics-openshift-tests.sh`, optional OCP e2e in `test/e2e/run-e2e.sh`) |
 | Deferred SM apply + scrape token | `operator/internal/common/scrape_token.go`, `operand_servicemonitor.go` |
 | Metrics TLS readiness | `operator/pkg/kubernetes/metrics_tls.go` |
-| Unused SM annotation helpers | `operator/pkg/kubernetes/servicemonitor_resync.go` (no-op; contract tests assert annotations absent) |
+| SM annotation keys | `operator/pkg/kubernetes/servicemonitor_resync.go` (historical constants; contract tests assert annotations absent) |

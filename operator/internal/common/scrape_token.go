@@ -60,13 +60,6 @@ type ScrapeTokenReconcilerConfig struct {
 	SecretReader client.Reader
 }
 
-// DeferredSMApplyResult captures operand ServiceMonitor state from deferred apply without
-// re-reading the informer cache immediately after the write.
-type DeferredSMApplyResult struct {
-	ExistedBeforeApply bool
-	Prior              *unstructured.Unstructured
-}
-
 // ReconcilePrometheusScrapeToken ensures the operand scrape token Secret exists and is fresh.
 // When ServiceMonitorName is set, it also applies the operand ServiceMonitor after the token
 // is readable and metrics-server-cert is ready (deferred ServiceMonitor apply).
@@ -131,24 +124,8 @@ func ReconcilePrometheusScrapeToken(ctx context.Context, cfg ScrapeTokenReconcil
 		return *wait, nil
 	}
 
-	smApply, err := applyOrProbeOperandServiceMonitor(ctx, cfg, tokenResult)
-	if err != nil {
+	if err := applyOperandServiceMonitor(ctx, cfg, tokenResult); err != nil {
 		return reconcile.Result{}, err
-	}
-
-	// ResyncOperandServiceMonitor is a no-op (no annotation patches). Kept so existing
-	// call sites and option/logging helpers stay wired without writing SM annotations.
-	resyncOpts := serviceMonitorResyncOptionsFor(cfg, tokenResult, tlsResult, smApply)
-	if resyncOpts.Force || resyncOpts.MarkSettlePending {
-		if resyncErr := kubernetes.ResyncOperandServiceMonitor(
-			ctx,
-			cfg.Client,
-			cfg.OperandNamespace,
-			cfg.ServiceMonitorName,
-			resyncOpts,
-		); resyncErr != nil {
-			return reconcile.Result{}, fmt.Errorf("resync servicemonitor %q: %w", cfg.ServiceMonitorName, resyncErr)
-		}
 	}
 
 	return reconcile.Result{RequeueAfter: tokenResult.RequeueAfter}, nil
@@ -233,89 +210,28 @@ func retainOperandServiceMonitorIfPresent(ctx context.Context, cfg ScrapeTokenRe
 	return nil
 }
 
-func applyOrProbeOperandServiceMonitor(
-	ctx context.Context,
-	cfg ScrapeTokenReconcilerConfig,
-	tokenResult kubernetes.EnsureScrapeTokenResult,
-) (DeferredSMApplyResult, error) {
-	smKey := client.ObjectKey{Namespace: cfg.OperandNamespace, Name: cfg.ServiceMonitorName}
-	if cfg.ApplyServiceMonitor != nil {
-		return applyDeferredOperandServiceMonitor(ctx, cfg, tokenResult, smKey)
-	}
-	return probeOperandServiceMonitor(ctx, cfg.Client, smKey), nil
-}
-
-func serviceMonitorResyncOptionsFor(
-	cfg ScrapeTokenReconcilerConfig,
-	tokenResult kubernetes.EnsureScrapeTokenResult,
-	tlsResult kubernetes.MetricsScrapeTLSResult,
-	smApply DeferredSMApplyResult,
-) kubernetes.ServiceMonitorResyncOptions {
-	secretRV := tokenResult.ResourceVersion
-	caRV := tlsResult.CAResourceVersion
-	var storedSecretRV string
-	var storedCARV string
-	var settlePending bool
-	if smApply.ExistedBeforeApply && smApply.Prior != nil {
-		storedSecretRV = kubernetes.ServiceMonitorResyncSecretRV(smApply.Prior)
-		storedCARV = kubernetes.ServiceMonitorResyncCARV(smApply.Prior)
-		settlePending = kubernetes.ServiceMonitorResyncSettlePending(smApply.Prior)
-	}
-
-	resyncOpts := kubernetes.ServiceMonitorResyncOptions{Clock: cfg.Clock}
-	switch {
-	case tokenResult.TokenUpdated:
-		resyncOpts.Force = true
-		if tokenResult.SecretExisted {
-			resyncOpts.Reason = kubernetes.ServiceMonitorResyncReasonTokenRefreshed
-		} else {
-			resyncOpts.Reason = kubernetes.ServiceMonitorResyncReasonTokenMinted
-		}
-		resyncOpts.SecretResourceVersion = secretRV
-		resyncOpts.CAResourceVersion = caRV
-		resyncOpts.MarkSettlePending = true
-	case settlePending:
-		resyncOpts.Force = true
-		resyncOpts.Reason = kubernetes.ServiceMonitorResyncReasonSettleRetry
-		resyncOpts.SecretResourceVersion = secretRV
-		resyncOpts.CAResourceVersion = caRV
-		resyncOpts.ClearSettlePending = true
-	case secretRV != "" && secretRV != storedSecretRV && !settlePending:
-		resyncOpts.Force = true
-		resyncOpts.Reason = kubernetes.ServiceMonitorResyncReasonSecretSync
-		resyncOpts.SecretResourceVersion = secretRV
-		resyncOpts.CAResourceVersion = caRV
-	case caRV != "" && caRV != storedCARV && !settlePending:
-		resyncOpts.Force = true
-		resyncOpts.Reason = kubernetes.ServiceMonitorResyncReasonCASync
-		resyncOpts.SecretResourceVersion = secretRV
-		resyncOpts.CAResourceVersion = caRV
-	}
-	return resyncOpts
-}
-
-// applyDeferredOperandServiceMonitor invokes ApplyServiceMonitor after the scrape token is
+// applyOperandServiceMonitor invokes ApplyServiceMonitor after the scrape token is
 // readable. Deferred ServiceMonitor apply ensures prometheus-operator first sees the SM when
 // bearerTokenSecret exists. Re-applies on every reconcile for tracking-client orphan retention.
-func applyDeferredOperandServiceMonitor(
+func applyOperandServiceMonitor(
 	ctx context.Context,
 	cfg ScrapeTokenReconcilerConfig,
 	tokenResult kubernetes.EnsureScrapeTokenResult,
-	smKey client.ObjectKey,
-) (DeferredSMApplyResult, error) {
+) error {
 	if cfg.ApplyServiceMonitor == nil {
-		return DeferredSMApplyResult{}, nil
+		return nil
 	}
 
+	smKey := client.ObjectKey{Namespace: cfg.OperandNamespace, Name: cfg.ServiceMonitorName}
+
 	log := logf.FromContext(ctx)
-	result := DeferredSMApplyResult{}
+	existedBeforeApply := false
 	existedKnown := true
 	probe := &unstructured.Unstructured{}
 	probe.SetGroupVersionKind(operandServiceMonitorGVK)
 	switch probeErr := cfg.Client.Get(ctx, smKey, probe); {
 	case probeErr == nil:
-		result.ExistedBeforeApply = true
-		result.Prior = probe.DeepCopy()
+		existedBeforeApply = true
 	case apierrors.IsNotFound(probeErr), meta.IsNoMatchError(probeErr):
 	default:
 		existedKnown = false
@@ -328,34 +244,18 @@ func applyDeferredOperandServiceMonitor(
 	}
 
 	logApply := log.Info
-	if existedKnown && result.ExistedBeforeApply {
+	if existedKnown && existedBeforeApply {
 		logApply = log.V(1).Info
 	}
 	logApply(
 		"metrics scrape deferred ServiceMonitor apply",
 		"namespace", cfg.OperandNamespace,
 		"servicemonitor", cfg.ServiceMonitorName,
-		"existedBeforeApply", result.ExistedBeforeApply,
+		"existedBeforeApply", existedBeforeApply,
 		"secretResourceVersion", tokenResult.ResourceVersion,
 	)
 	if applyErr := cfg.ApplyServiceMonitor(ctx); applyErr != nil {
-		return DeferredSMApplyResult{}, fmt.Errorf("apply ServiceMonitor %q: %w", cfg.ServiceMonitorName, applyErr)
+		return fmt.Errorf("apply ServiceMonitor %q: %w", cfg.ServiceMonitorName, applyErr)
 	}
-	return result, nil
-}
-
-func probeOperandServiceMonitor(ctx context.Context, c client.Client, smKey client.ObjectKey) DeferredSMApplyResult {
-	probe := &unstructured.Unstructured{}
-	probe.SetGroupVersionKind(operandServiceMonitorGVK)
-	switch err := c.Get(ctx, smKey, probe); {
-	case err == nil:
-		return DeferredSMApplyResult{
-			ExistedBeforeApply: true,
-			Prior:              probe.DeepCopy(),
-		}
-	case apierrors.IsNotFound(err), meta.IsNoMatchError(err):
-		return DeferredSMApplyResult{}
-	default:
-		return DeferredSMApplyResult{}
-	}
+	return nil
 }
