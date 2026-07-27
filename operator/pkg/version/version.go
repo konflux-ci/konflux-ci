@@ -18,6 +18,18 @@ package version
 
 // These variables are set at build time via ldflags.
 // Default values are "unknown" and will be replaced during the build process.
+//
+// Version and GitCommit are immutable build identity: they describe which
+// source produced this binary and are safe to bake in, since they carry no
+// access and are identical for every consumer of a given image.
+//
+// This is deliberately different from the Segment write key, which is a
+// runtime credential rather than build identity. Baking a shared credential
+// into the binary would embed it in every published image and make it
+// effectively public; instead it is supplied at runtime via the Konflux CR
+// (see operator/pkg/segment). Don't add credentials to this file or wire
+// them through ldflags — pass them through the CR/runtime config path
+// instead.
 var (
 	// Version is the version of the operator (e.g., "v0.0.1")
 	Version = "unknown"

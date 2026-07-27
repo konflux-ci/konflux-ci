@@ -36,8 +36,8 @@ const (
 // KonfluxSegmentBridgeSpec defines the desired state of KonfluxSegmentBridge.
 type KonfluxSegmentBridgeSpec struct {
 	// SegmentKey is the write key used to authenticate with the Segment API.
-	// When not specified, a default key baked into the operator build is used,
-	// routing telemetry data to the Konflux dev team's Segment project.
+	// When not specified, no telemetry data is sent. Provide your own Segment
+	// write key to enable telemetry.
 	// +optional
 	SegmentKey string `json:"segmentKey,omitempty"`
 

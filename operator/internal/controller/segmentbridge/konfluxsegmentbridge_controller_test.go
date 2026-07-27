@@ -40,9 +40,6 @@ import (
 
 const childResourceName = "segment-bridge"
 
-func noDefaultKey() string             { return "" }
-func staticKey(k string) func() string { return func() string { return k } }
-
 type mockDiscoveryClient struct {
 	resources     map[string]*metav1.APIResourceList
 	serverVersion *version.Info
@@ -65,16 +62,14 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 	// startManager creates a per-test manager with the given reconciler configuration
 	// and registers a DeferCleanup to cancel it after the test.
 	// A per-test manager is required because each test wires the reconciler with a different
-	// GetDefaultSegmentKey or ClusterInfo, and a shared suite-level manager cannot be
-	// re-configured between tests.
-	startManager := func(getDefaultSegmentKey func() string, clusterInfo *clusterinfo.Info) {
+	// ClusterInfo, and a shared suite-level manager cannot be re-configured between tests.
+	startManager := func(clusterInfo *clusterinfo.Info) {
 		mgr := testutil.NewTestManager(testEnv)
 		Expect((&KonfluxSegmentBridgeReconciler{
-			Client:               mgr.GetClient(),
-			Scheme:               mgr.GetScheme(),
-			ObjectStore:          objectStore,
-			GetDefaultSegmentKey: getDefaultSegmentKey,
-			ClusterInfo:          clusterInfo,
+			Client:      mgr.GetClient(),
+			Scheme:      mgr.GetScheme(),
+			ObjectStore: objectStore,
+			ClusterInfo: clusterInfo,
 		}).SetupWithManager(mgr)).To(Succeed())
 		mgrCtx, cancel := context.WithCancel(testEnv.Ctx)
 		waitForStop := testutil.StartManagerWithContext(mgrCtx, mgr)
@@ -119,7 +114,7 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 
 	Context("When reconciling a resource", func() {
 		Context("with no-op default segment key", func() {
-			BeforeEach(func() { startManager(noDefaultKey, nil) })
+			BeforeEach(func() { startManager(nil) })
 
 			It("should successfully reconcile the resource", func(ctx context.Context) {
 				createCR(ctx)
@@ -214,34 +209,6 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 			})
 		})
 
-		Context("with build-time default key", func() {
-			BeforeEach(func() { startManager(staticKey("build-time-key"), nil) })
-
-			It("should use build-time default key when CR key is empty", func(ctx context.Context) {
-				createCR(ctx)
-				waitForSecret(ctx, func(g Gomega, data map[string][]byte) {
-					g.Expect(string(data["SEGMENT_WRITE_KEY"])).To(Equal("build-time-key"))
-					g.Expect(string(data["SEGMENT_BATCH_API"])).To(Equal(
-						konfluxv1alpha1.DefaultSegmentAPIURL + "/batch"))
-					g.Expect(string(data["TEKTON_RESULTS_API_ADDR"])).To(Equal(tektonResultsAPIAddrK8s))
-				})
-			})
-
-			It("should prefer CR inline key over build-time default", func(ctx context.Context) {
-				createCR(ctx)
-
-				resource := &konfluxv1alpha1.KonfluxSegmentBridge{}
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, resource)).To(Succeed())
-				resource.Spec.SegmentKey = "cr-override-key"
-				Expect(k8sClient.Update(ctx, resource)).To(Succeed())
-
-				waitForSecret(ctx, func(g Gomega, data map[string][]byte) {
-					g.Expect(string(data["SEGMENT_WRITE_KEY"])).To(Equal("cr-override-key"))
-					g.Expect(string(data["TEKTON_RESULTS_API_ADDR"])).To(Equal(tektonResultsAPIAddrK8s))
-				})
-			})
-		})
-
 		Context("on OpenShift", func() {
 			BeforeEach(func() {
 				openShiftClusterInfo, err := clusterinfo.DetectWithClient(&mockDiscoveryClient{
@@ -255,7 +222,7 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 					serverVersion: &version.Info{GitVersion: "v1.29.0"},
 				})
 				Expect(err).NotTo(HaveOccurred())
-				startManager(noDefaultKey, openShiftClusterInfo)
+				startManager(openShiftClusterInfo)
 			})
 
 			It("should use OpenShift Tekton Results API address when running on OpenShift", func(ctx context.Context) {
@@ -274,7 +241,7 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 	})
 
 	Context("Self-healing", func() {
-		BeforeEach(func() { startManager(noDefaultKey, nil) })
+		BeforeEach(func() { startManager(nil) })
 
 		It("recreates ServiceAccount when deleted", func(ctx context.Context) {
 			cr := &konfluxv1alpha1.KonfluxSegmentBridge{
@@ -408,7 +375,7 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 	})
 
 	Context("Drift correction", func() {
-		BeforeEach(func() { startManager(noDefaultKey, nil) })
+		BeforeEach(func() { startManager(nil) })
 
 		It("restores Namespace labels when stripped", func(ctx context.Context) {
 			cr := &konfluxv1alpha1.KonfluxSegmentBridge{

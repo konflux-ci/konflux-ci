@@ -186,7 +186,7 @@ spec:
   #   # Defaults to false if not specified.
   #   enabled: true
   #   spec:
-  #     # segmentKey is the Segment write key; omit to use the default build-time key
+  #     # segmentKey is the Segment write key (required for telemetry to send data)
   #     # segmentKey: "your-write-key"
   #
   #     # segmentAPIURL is the base URL without "/batch". The operator appends "/batch".
