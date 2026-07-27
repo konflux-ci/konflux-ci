@@ -2279,6 +2279,755 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    controller-gen.kubebuilder.io/version: v0.17.2
+  name: components.konflux-ci.dev
+spec:
+  group: konflux-ci.dev
+  names:
+    kind: Component
+    listKind: ComponentList
+    plural: components
+    shortNames:
+    - cmp
+    - comp
+    singular: component
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .spec.source.url
+      name: URL
+      type: string
+    - jsonPath: .status.pac-repository
+      name: Repository
+      type: string
+    - jsonPath: .status.message
+      name: Message
+      priority: 1
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Component is the Schema for the components API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ComponentSpec defines the desired state of Component
+            properties:
+              actions:
+                description: |-
+                  Specific actions that will be processed by the controller and then removed from 'spec.actions'.
+                  Used for triggering builds or creating pipeline configuration PRs.
+                  Optional.
+                properties:
+                  create-pipeline-configuration-pr:
+                    description: |-
+                      Send a PR with build pipeline configuration proposal for Component version(s).
+                      If not set, version onboarding will be done without pipeline configuration PR.
+                      Could be used after onboarding to create / renew build pipeline definition.
+                      Optional.
+                    properties:
+                      all-versions:
+                        description: |-
+                          When specified it will send a PR with build pipeline configuration proposal for all Component versions.
+                          Has precedence over 'version' and 'versions'.
+                          Optional.
+                        type: boolean
+                      version:
+                        description: |-
+                          When specified it will send a PR with build pipeline configuration proposal for the Component version.
+                          Can be specified together with 'versions' and any duplicates will be removed.
+                          Optional.
+                        type: string
+                      versions:
+                        description: |-
+                          When specified it will send a PR with build pipeline configuration proposal for Component versions.
+                          Can be specified together with 'version' and any duplicates will be removed.
+                          Optional.
+                        items:
+                          type: string
+                        type: array
+                    type: object
+                  trigger-push-build:
+                    description: |-
+                      Specify name of component version to restart the push build for.
+                      Can be specified together with 'trigger-push-builds' and any duplicates will be removed.
+                      Optional.
+                    type: string
+                  trigger-push-builds:
+                    description: |-
+                      Specify names of component versions to restart the push build for.
+                      Can be specified together with 'trigger-push-build' and any duplicates will be removed.
+                      Optional.
+                    items:
+                      type: string
+                    type: array
+                type: object
+              containerImage:
+                description: |-
+                  The container image repository to use for this component (without tag).
+                  Either will be set by Image Repository, or explicitly specified with custom repo.
+                  All versions of this component will use this single image repository.
+                  Example: quay.io/org/tenant/component
+                  Optional.
+                type: string
+              default-build-pipeline:
+                description: |-
+                  Used only when sending a PR with build pipeline configuration was requested via 'spec.actions.create-pipeline-configuration-pr'.
+                  Pipeline used for all versions, unless explicitly specified for a specific version.
+                  When omitted it has to be specified in all versions.
+                  Optional.
+                nullable: true
+                properties:
+                  pull:
+                    description: |-
+                      Pipeline used for pull pipeline run.
+                      Can specify just one of: pipelinespec-from-bundle, pipelineref-by-name, pipelineref-by-git-resolver.
+                      Optional.
+                    nullable: true
+                    properties:
+                      pipelineref-by-git-resolver:
+                        description: |-
+                          Will be used to fill out PipelineRef in pipeline runs to user specific pipeline via git resolver,
+                          specifying repository with a pipeline definition.
+                          Optional.
+                        nullable: true
+                        properties:
+                          pathInRepo:
+                            description: |-
+                              Path to the pipeline definition file within the repository.
+                              Example: pipeline/push.yaml
+                              Required.
+                            minLength: 1
+                            type: string
+                          revision:
+                            description: |-
+                              Git revision (branch, tag, or commit) to use.
+                              Example: main
+                              Required.
+                            minLength: 1
+                            type: string
+                          url:
+                            description: |-
+                              Git repository URL containing the pipeline definition.
+                              Example: https://github.com/custom-pipelines/pipelines.git
+                              Required.
+                            minLength: 1
+                            type: string
+                        required:
+                        - pathInRepo
+                        - revision
+                        - url
+                        type: object
+                      pipelineref-by-name:
+                        description: |-
+                          Will be used to fill out PipelineRef in pipeline runs to user specific pipeline.
+                          Such pipeline definition has to be in .tekton.
+                          Optional.
+                        type: string
+                      pipelinespec-from-bundle:
+                        description: |-
+                          Will be used to fetch bundle and fill out PipelineSpec in pipeline runs.
+                          Pipeline name is based on build-pipeline-config CM in build-service NS.
+                          When 'latest' bundle is specified, bundle image will be used from CM.
+                          When bundle is specified to specific image bundle, then that one will be used
+                          and pipeline name will be used to fetch pipeline from that bundle.
+                          Optional.
+                        nullable: true
+                        properties:
+                          bundle:
+                            description: |-
+                              Bundle image reference. Use 'latest' to get bundle from build-pipeline-config CM,
+                              or specify a specific bundle image.
+                              Required.
+                            minLength: 1
+                            type: string
+                          name:
+                            description: |-
+                              Pipeline name to fetch from the bundle, or from build-pipeline-config CM.
+                              Required.
+                            minLength: 1
+                            type: string
+                        required:
+                        - bundle
+                        - name
+                        type: object
+                    type: object
+                  pull-and-push:
+                    description: |-
+                      Pipeline used for pull and push pipeline runs.
+                      Can specify just one of: pipelinespec-from-bundle, pipelineref-by-name, pipelineref-by-git-resolver.
+                      Optional.
+                    nullable: true
+                    properties:
+                      pipelineref-by-git-resolver:
+                        description: |-
+                          Will be used to fill out PipelineRef in pipeline runs to user specific pipeline via git resolver,
+                          specifying repository with a pipeline definition.
+                          Optional.
+                        nullable: true
+                        properties:
+                          pathInRepo:
+                            description: |-
+                              Path to the pipeline definition file within the repository.
+                              Example: pipeline/push.yaml
+                              Required.
+                            minLength: 1
+                            type: string
+                          revision:
+                            description: |-
+                              Git revision (branch, tag, or commit) to use.
+                              Example: main
+                              Required.
+                            minLength: 1
+                            type: string
+                          url:
+                            description: |-
+                              Git repository URL containing the pipeline definition.
+                              Example: https://github.com/custom-pipelines/pipelines.git
+                              Required.
+                            minLength: 1
+                            type: string
+                        required:
+                        - pathInRepo
+                        - revision
+                        - url
+                        type: object
+                      pipelineref-by-name:
+                        description: |-
+                          Will be used to fill out PipelineRef in pipeline runs to user specific pipeline.
+                          Such pipeline definition has to be in .tekton.
+                          Optional.
+                        type: string
+                      pipelinespec-from-bundle:
+                        description: |-
+                          Will be used to fetch bundle and fill out PipelineSpec in pipeline runs.
+                          Pipeline name is based on build-pipeline-config CM in build-service NS.
+                          When 'latest' bundle is specified, bundle image will be used from CM.
+                          When bundle is specified to specific image bundle, then that one will be used
+                          and pipeline name will be used to fetch pipeline from that bundle.
+                          Optional.
+                        nullable: true
+                        properties:
+                          bundle:
+                            description: |-
+                              Bundle image reference. Use 'latest' to get bundle from build-pipeline-config CM,
+                              or specify a specific bundle image.
+                              Required.
+                            minLength: 1
+                            type: string
+                          name:
+                            description: |-
+                              Pipeline name to fetch from the bundle, or from build-pipeline-config CM.
+                              Required.
+                            minLength: 1
+                            type: string
+                        required:
+                        - bundle
+                        - name
+                        type: object
+                    type: object
+                  push:
+                    description: |-
+                      Pipeline used for push pipeline run.
+                      Can specify just one of: pipelinespec-from-bundle, pipelineref-by-name, pipelineref-by-git-resolver.
+                      Optional.
+                    nullable: true
+                    properties:
+                      pipelineref-by-git-resolver:
+                        description: |-
+                          Will be used to fill out PipelineRef in pipeline runs to user specific pipeline via git resolver,
+                          specifying repository with a pipeline definition.
+                          Optional.
+                        nullable: true
+                        properties:
+                          pathInRepo:
+                            description: |-
+                              Path to the pipeline definition file within the repository.
+                              Example: pipeline/push.yaml
+                              Required.
+                            minLength: 1
+                            type: string
+                          revision:
+                            description: |-
+                              Git revision (branch, tag, or commit) to use.
+                              Example: main
+                              Required.
+                            minLength: 1
+                            type: string
+                          url:
+                            description: |-
+                              Git repository URL containing the pipeline definition.
+                              Example: https://github.com/custom-pipelines/pipelines.git
+                              Required.
+                            minLength: 1
+                            type: string
+                        required:
+                        - pathInRepo
+                        - revision
+                        - url
+                        type: object
+                      pipelineref-by-name:
+                        description: |-
+                          Will be used to fill out PipelineRef in pipeline runs to user specific pipeline.
+                          Such pipeline definition has to be in .tekton.
+                          Optional.
+                        type: string
+                      pipelinespec-from-bundle:
+                        description: |-
+                          Will be used to fetch bundle and fill out PipelineSpec in pipeline runs.
+                          Pipeline name is based on build-pipeline-config CM in build-service NS.
+                          When 'latest' bundle is specified, bundle image will be used from CM.
+                          When bundle is specified to specific image bundle, then that one will be used
+                          and pipeline name will be used to fetch pipeline from that bundle.
+                          Optional.
+                        nullable: true
+                        properties:
+                          bundle:
+                            description: |-
+                              Bundle image reference. Use 'latest' to get bundle from build-pipeline-config CM,
+                              or specify a specific bundle image.
+                              Required.
+                            minLength: 1
+                            type: string
+                          name:
+                            description: |-
+                              Pipeline name to fetch from the bundle, or from build-pipeline-config CM.
+                              Required.
+                            minLength: 1
+                            type: string
+                        required:
+                        - bundle
+                        - name
+                        type: object
+                    type: object
+                type: object
+              repository-settings:
+                description: |-
+                  Used for setting additional settings for the Repository CR.
+                  Optional.
+                properties:
+                  comment-strategy:
+                    description: |-
+                      When specified, will set value of `comment_strategy` in the Repository CR
+                      Optional.
+                    type: string
+                  github-app-token-scope-repos:
+                    description: |-
+                      When specified, will add values to `github_app_token_scope_repos` in the Repository CR
+                      Optional.
+                    items:
+                      type: string
+                    type: array
+                type: object
+              skip-offboarding-pr:
+                description: |-
+                  When 'true', during offboarding a cleaning PR won't be created.
+                  Default: false.
+                  Optional.
+                type: boolean
+              source:
+                description: |-
+                  Source describes the Component source.
+                  Required.
+                properties:
+                  dockerfilePath:
+                    description: |-
+                      Dockerfile path for all versions, unless explicitly specified for a version.
+                      Used only when sending a PR with build pipeline configuration was requested via 'spec.actions.create-pipeline-configuration-pr'.
+                      Default: "Dockerfile"
+                      Optional.
+                    type: string
+                  url:
+                    description: |-
+                      Git repository URL for the component.
+                      Required.
+                    maxLength: 2048
+                    type: string
+                    x-kubernetes-validations:
+                    - message: git repository URL can't be empty and must use https
+                      rule: self.startsWith('https://')
+                    - message: git repository URL cannot be changed
+                      rule: self == oldSelf
+                  versions:
+                    description: |-
+                      List of all versions for this component.
+                      Optional.
+                    items:
+                      properties:
+                        build-pipeline:
+                          description: |-
+                            Used only when sending a PR with build pipeline configuration was requested via 'spec.actions.create-pipeline-configuration-pr'.
+                            Pipeline used for the version; when omitted, the default pipeline will be used from 'spec.default-build-pipeline'.
+                            Optional.
+                          nullable: true
+                          properties:
+                            pull:
+                              description: |-
+                                Pipeline used for pull pipeline run.
+                                Can specify just one of: pipelinespec-from-bundle, pipelineref-by-name, pipelineref-by-git-resolver.
+                                Optional.
+                              nullable: true
+                              properties:
+                                pipelineref-by-git-resolver:
+                                  description: |-
+                                    Will be used to fill out PipelineRef in pipeline runs to user specific pipeline via git resolver,
+                                    specifying repository with a pipeline definition.
+                                    Optional.
+                                  nullable: true
+                                  properties:
+                                    pathInRepo:
+                                      description: |-
+                                        Path to the pipeline definition file within the repository.
+                                        Example: pipeline/push.yaml
+                                        Required.
+                                      minLength: 1
+                                      type: string
+                                    revision:
+                                      description: |-
+                                        Git revision (branch, tag, or commit) to use.
+                                        Example: main
+                                        Required.
+                                      minLength: 1
+                                      type: string
+                                    url:
+                                      description: |-
+                                        Git repository URL containing the pipeline definition.
+                                        Example: https://github.com/custom-pipelines/pipelines.git
+                                        Required.
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - pathInRepo
+                                  - revision
+                                  - url
+                                  type: object
+                                pipelineref-by-name:
+                                  description: |-
+                                    Will be used to fill out PipelineRef in pipeline runs to user specific pipeline.
+                                    Such pipeline definition has to be in .tekton.
+                                    Optional.
+                                  type: string
+                                pipelinespec-from-bundle:
+                                  description: |-
+                                    Will be used to fetch bundle and fill out PipelineSpec in pipeline runs.
+                                    Pipeline name is based on build-pipeline-config CM in build-service NS.
+                                    When 'latest' bundle is specified, bundle image will be used from CM.
+                                    When bundle is specified to specific image bundle, then that one will be used
+                                    and pipeline name will be used to fetch pipeline from that bundle.
+                                    Optional.
+                                  nullable: true
+                                  properties:
+                                    bundle:
+                                      description: |-
+                                        Bundle image reference. Use 'latest' to get bundle from build-pipeline-config CM,
+                                        or specify a specific bundle image.
+                                        Required.
+                                      minLength: 1
+                                      type: string
+                                    name:
+                                      description: |-
+                                        Pipeline name to fetch from the bundle, or from build-pipeline-config CM.
+                                        Required.
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - bundle
+                                  - name
+                                  type: object
+                              type: object
+                            pull-and-push:
+                              description: |-
+                                Pipeline used for pull and push pipeline runs.
+                                Can specify just one of: pipelinespec-from-bundle, pipelineref-by-name, pipelineref-by-git-resolver.
+                                Optional.
+                              nullable: true
+                              properties:
+                                pipelineref-by-git-resolver:
+                                  description: |-
+                                    Will be used to fill out PipelineRef in pipeline runs to user specific pipeline via git resolver,
+                                    specifying repository with a pipeline definition.
+                                    Optional.
+                                  nullable: true
+                                  properties:
+                                    pathInRepo:
+                                      description: |-
+                                        Path to the pipeline definition file within the repository.
+                                        Example: pipeline/push.yaml
+                                        Required.
+                                      minLength: 1
+                                      type: string
+                                    revision:
+                                      description: |-
+                                        Git revision (branch, tag, or commit) to use.
+                                        Example: main
+                                        Required.
+                                      minLength: 1
+                                      type: string
+                                    url:
+                                      description: |-
+                                        Git repository URL containing the pipeline definition.
+                                        Example: https://github.com/custom-pipelines/pipelines.git
+                                        Required.
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - pathInRepo
+                                  - revision
+                                  - url
+                                  type: object
+                                pipelineref-by-name:
+                                  description: |-
+                                    Will be used to fill out PipelineRef in pipeline runs to user specific pipeline.
+                                    Such pipeline definition has to be in .tekton.
+                                    Optional.
+                                  type: string
+                                pipelinespec-from-bundle:
+                                  description: |-
+                                    Will be used to fetch bundle and fill out PipelineSpec in pipeline runs.
+                                    Pipeline name is based on build-pipeline-config CM in build-service NS.
+                                    When 'latest' bundle is specified, bundle image will be used from CM.
+                                    When bundle is specified to specific image bundle, then that one will be used
+                                    and pipeline name will be used to fetch pipeline from that bundle.
+                                    Optional.
+                                  nullable: true
+                                  properties:
+                                    bundle:
+                                      description: |-
+                                        Bundle image reference. Use 'latest' to get bundle from build-pipeline-config CM,
+                                        or specify a specific bundle image.
+                                        Required.
+                                      minLength: 1
+                                      type: string
+                                    name:
+                                      description: |-
+                                        Pipeline name to fetch from the bundle, or from build-pipeline-config CM.
+                                        Required.
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - bundle
+                                  - name
+                                  type: object
+                              type: object
+                            push:
+                              description: |-
+                                Pipeline used for push pipeline run.
+                                Can specify just one of: pipelinespec-from-bundle, pipelineref-by-name, pipelineref-by-git-resolver.
+                                Optional.
+                              nullable: true
+                              properties:
+                                pipelineref-by-git-resolver:
+                                  description: |-
+                                    Will be used to fill out PipelineRef in pipeline runs to user specific pipeline via git resolver,
+                                    specifying repository with a pipeline definition.
+                                    Optional.
+                                  nullable: true
+                                  properties:
+                                    pathInRepo:
+                                      description: |-
+                                        Path to the pipeline definition file within the repository.
+                                        Example: pipeline/push.yaml
+                                        Required.
+                                      minLength: 1
+                                      type: string
+                                    revision:
+                                      description: |-
+                                        Git revision (branch, tag, or commit) to use.
+                                        Example: main
+                                        Required.
+                                      minLength: 1
+                                      type: string
+                                    url:
+                                      description: |-
+                                        Git repository URL containing the pipeline definition.
+                                        Example: https://github.com/custom-pipelines/pipelines.git
+                                        Required.
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - pathInRepo
+                                  - revision
+                                  - url
+                                  type: object
+                                pipelineref-by-name:
+                                  description: |-
+                                    Will be used to fill out PipelineRef in pipeline runs to user specific pipeline.
+                                    Such pipeline definition has to be in .tekton.
+                                    Optional.
+                                  type: string
+                                pipelinespec-from-bundle:
+                                  description: |-
+                                    Will be used to fetch bundle and fill out PipelineSpec in pipeline runs.
+                                    Pipeline name is based on build-pipeline-config CM in build-service NS.
+                                    When 'latest' bundle is specified, bundle image will be used from CM.
+                                    When bundle is specified to specific image bundle, then that one will be used
+                                    and pipeline name will be used to fetch pipeline from that bundle.
+                                    Optional.
+                                  nullable: true
+                                  properties:
+                                    bundle:
+                                      description: |-
+                                        Bundle image reference. Use 'latest' to get bundle from build-pipeline-config CM,
+                                        or specify a specific bundle image.
+                                        Required.
+                                      minLength: 1
+                                      type: string
+                                    name:
+                                      description: |-
+                                        Pipeline name to fetch from the bundle, or from build-pipeline-config CM.
+                                        Required.
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - bundle
+                                  - name
+                                  type: object
+                              type: object
+                          type: object
+                        context:
+                          description: |-
+                            Context directory for the version.
+                            Used only when sending a PR with build pipeline configuration was requested via 'spec.actions.create-pipeline-configuration-pr'.
+                            Default: "" (empty string, root of repository).
+                            Optional.
+                          type: string
+                        dockerfilePath:
+                          description: |-
+                            Dockerfile path for the version.
+                            Used only when sending a PR with build pipeline configuration was requested via 'spec.actions.create-pipeline-configuration-pr'.
+                            Default: "Dockerfile".
+                            Optional.
+                          type: string
+                        name:
+                          description: |-
+                            User defined name for the version.
+                            After sanitization (lower case, removing spaces, etc) all version names must be unique.
+                            Required.
+                          minLength: 1
+                          type: string
+                        revision:
+                          description: |-
+                            Git branch to use for the version.
+                            Required.
+                          minLength: 1
+                          type: string
+                        skip-builds:
+                          description: |-
+                            When 'true' it will disable builds for a revision in the version.
+                            Default: false.
+                            Optional.
+                          type: boolean
+                      required:
+                      - name
+                      - revision
+                      type: object
+                    type: array
+                required:
+                - url
+                type: object
+            required:
+            - source
+            type: object
+          status:
+            description: ComponentStatus defines the observed state of Component
+            properties:
+              message:
+                description: |-
+                  General error message, not specific to any version (version-specific errors are in versions[].message).
+                  Example: "Spec.ContainerImage is not set" or "GitHub App is not installed".
+                type: string
+              pac-repository:
+                description: Name of Repository CR for the component.
+                type: string
+              repository-settings:
+                description: Identifies which additional settings are used for the
+                  Repository CR.
+                properties:
+                  comment-strategy:
+                    description: |-
+                      When specified, will set value of `comment_strategy` in the Repository CR
+                      Optional.
+                    type: string
+                  github-app-token-scope-repos:
+                    description: |-
+                      When specified, will add values to `github_app_token_scope_repos` in the Repository CR
+                      Optional.
+                    items:
+                      type: string
+                    type: array
+                type: object
+              versions:
+                description: |-
+                  All versions which were processed by onboarding.
+                  When version is removed from the spec, offboarding will remove it from the status.
+                items:
+                  properties:
+                    configuration-merge-url:
+                      description: |-
+                        Link with onboarding PR if requested by 'spec.actions.create-pipeline-configuration-pr'.
+                        Only present if onboarding was successful.
+                        Example: https://github.com/user/repo/pull/1
+                      type: string
+                    message:
+                      description: |-
+                        Version specific error message.
+                        Example: "pipeline for this version doesn't exist"
+                      type: string
+                    name:
+                      description: Name for the version.
+                      type: string
+                    onboarding-status:
+                      description: Onboarding status will be either 'succeeded' or
+                        'failed' ('disabled' won't be there because we will just remove
+                        specific version section).
+                      type: string
+                    onboarding-time:
+                      description: |-
+                        Timestamp for when onboarding happened.
+                        Only present if onboarding was successful.
+                        Example: "29 May 2024 15:11:16 UTC"
+                      type: string
+                    revision:
+                      description: Git revision (branch) for the version.
+                      type: string
+                    skip-builds:
+                      description: Identifies that builds for the revision in the
+                        version are disabled.
+                      type: boolean
+                  type: object
+                type: array
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
     controller-gen.kubebuilder.io/version: v0.10.0
   creationTimestamp: null
   name: deploymenttargetclaims.appstudio.redhat.com
