@@ -29,12 +29,14 @@ If deployment fails with `toomanyrequests` errors, check for rate limit events:
 kubectl get events -A | grep toomanyrequests
 ```
 
-Pre-load the affected images into Kind to bypass Docker Hub:
+Pre-load the affected images into Kind to bypass Docker Hub.
+
+The local registry image is defined in `dependencies/registry/kustomization.yml`.
+Check that file for the current image and digest, then pre-load it:
 
 ```bash
-podman login docker.io
-podman pull ghcr.io/project-zot/zot:v2.1.13
-kind load docker-image ghcr.io/project-zot/zot:v2.1.13 --name konflux
+podman pull quay.io/konflux-ci/zot@sha256:1c9661922575fcd0ff016dae37e7ee24ad3ea4b9786ffa848588f007595320fc
+kind load docker-image quay.io/konflux-ci/zot@sha256:1c9661922575fcd0ff016dae37e7ee24ad3ea4b9786ffa848588f007595320fc --name konflux
 ```
 
 ### `unknown field "replacements"` error
