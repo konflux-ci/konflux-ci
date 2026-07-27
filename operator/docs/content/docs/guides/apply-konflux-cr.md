@@ -38,5 +38,4 @@ Check the Konflux CR status. When Konflux CR is ready, the output includes the U
 kubectl get konflux konflux
 NAME      READY   UI-URL                                                    AGE
 konflux   True    https://konflux-ui-konflux-ui.apps.<cluster-domain>       10m
-
-````
+```

@@ -21,22 +21,6 @@ REGISTRY_HOST_PORT=5001
 
 
 
-### Docker Hub rate limits
-
-If deployment fails with `toomanyrequests` errors, check for rate limit events:
-
-```bash
-kubectl get events -A | grep toomanyrequests
-```
-
-Pre-load the affected images into Kind to bypass Docker Hub:
-
-```bash
-podman login docker.io
-podman pull ghcr.io/project-zot/zot:v2.1.13
-kind load docker-image ghcr.io/project-zot/zot:v2.1.13 --name konflux
-```
-
 ### `unknown field "replacements"` error
 
 If you see `error: json: unknown field "replacements"` while running setup scripts,
@@ -156,9 +140,9 @@ It may take a few minutes for the UI to become available again.
    verify the smee channel URL in the smee-client manifest, then redeploy it:
 
    ```bash
-   kubectl delete -f ./smee/smee-client.yaml
+   kubectl delete -f ./dependencies/smee/smee-client.yaml
    # fix the channel URL in the manifest
-   kubectl create -f ./smee/smee-client.yaml
+   kubectl create -f ./dependencies/smee/smee-client.yaml
    ```
 
    {{< alert color="info" >}}

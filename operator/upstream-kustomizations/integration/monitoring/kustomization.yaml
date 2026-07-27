@@ -2,8 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-  - v1_serviceaccount_integration-service-metrics-reader.yaml
-  - v1_secret_integration-service-metrics-reader.yaml
+  - v1_serviceaccount_metrics-scraper.yaml
   - rbac.authorization.k8s.io_v1_clusterrole_integration-service-metrics-reader.yaml
   - rbac.authorization.k8s.io_v1_clusterrolebinding_prometheus-integration-service-metrics-reader.yaml
   - monitoring.coreos.com_v1_servicemonitor_integration-service.yaml

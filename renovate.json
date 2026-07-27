@@ -187,22 +187,10 @@
         "operator/upstream-kustomizations/enterprise-contract/policies/.*\\.yaml$"
       ],
       "matchStrings": [
-        "- oci::(?<depName>quay\\.io/konflux-ci/tekton-catalog/data-acceptable-bundles):latest@(?<currentDigest>sha256:[a-f0-9]{64})"
+        "- github\\.com/konflux-ci/konflux-operator-trusted-sources//data\\?ref=(?<currentDigest>[a-f0-9]{40})"
       ],
-      "autoReplaceStringTemplate": "- oci::{{depName}}:latest@{{newDigest}}",
-      "datasourceTemplate": "docker",
-      "currentValueTemplate": "latest"
-    },
-    {
-      "customType": "regex",
-      "fileMatch": [
-        "operator/upstream-kustomizations/enterprise-contract/policies/.*\\.yaml$"
-      ],
-      "matchStrings": [
-        "- github\\.com/redhat-appstudio/tsf-conforma-data//data\\?ref=(?<currentDigest>[a-f0-9]{40})"
-      ],
-      "depNameTemplate": "https://github.com/redhat-appstudio/tsf-conforma-data",
-      "autoReplaceStringTemplate": "- github.com/redhat-appstudio/tsf-conforma-data//data?ref={{newDigest}}",
+      "depNameTemplate": "https://github.com/konflux-ci/konflux-operator-trusted-sources",
+      "autoReplaceStringTemplate": "- github.com/konflux-ci/konflux-operator-trusted-sources//data?ref={{newDigest}}",
       "datasourceTemplate": "git-refs",
       "currentValueTemplate": "main",
       "versioningTemplate": "git"

@@ -45,6 +45,16 @@ rules:
   - watch
 - apiGroups:
   - ""
+  resourceNames:
+  - metrics-server-cert
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
   resources:
   - serviceaccounts
   verbs:
@@ -155,16 +165,11 @@ rules:
   - config.openshift.io
   resources:
   - clusterversions
+  - ingresses
   verbs:
   - get
   - list
   - watch
-- apiGroups:
-  - config.openshift.io
-  resources:
-  - ingresses
-  verbs:
-  - get
 - apiGroups:
   - console.openshift.io
   resources:

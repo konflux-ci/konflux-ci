@@ -20,8 +20,11 @@ import (
 	"context"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
@@ -75,6 +78,30 @@ func TestEnsureOperatorServiceMonitorRequiresNamespace(t *testing.T) {
 	}
 }
 
+func TestEnsureOperatorServiceMonitor_NoMatchSkipped(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	c := &noMatchServiceMonitorClient{}
+	if err := EnsureOperatorServiceMonitor(ctx, c, OperatorNamespace); err != nil {
+		t.Fatalf("expected NoMatch to be skipped, got %v", err)
+	}
+}
+
+type noMatchServiceMonitorClient struct {
+	client.Client
+}
+
+func (c *noMatchServiceMonitorClient) Get(
+	_ context.Context,
+	_ client.ObjectKey,
+	_ client.Object,
+	_ ...client.GetOption,
+) error {
+	return &meta.NoKindMatchError{
+		GroupKind: schema.GroupKind{Group: "monitoring.coreos.com", Kind: "ServiceMonitor"},
+	}
+}
+
 func TestDesiredOperatorServiceMonitorSpec(t *testing.T) {
 	t.Parallel()
 	sm := desiredOperatorServiceMonitor(OperatorNamespace)
@@ -91,5 +118,24 @@ func TestDesiredOperatorServiceMonitorSpec(t *testing.T) {
 	}
 	if endpoint["scheme"] != "https" {
 		t.Fatalf("unexpected scheme: %#v", endpoint["scheme"])
+	}
+	tlsConfig, ok := endpoint["tlsConfig"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected tlsConfig map")
+	}
+	if tlsConfig["insecureSkipVerify"] != false {
+		t.Fatalf("expected insecureSkipVerify false, got %#v", tlsConfig["insecureSkipVerify"])
+	}
+	wantServerName := OperatorMetricsServiceName + "." + OperatorNamespace + ".svc"
+	if tlsConfig["serverName"] != wantServerName {
+		t.Fatalf("unexpected serverName: %#v", tlsConfig["serverName"])
+	}
+	ca, ok := tlsConfig["ca"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected tlsConfig.ca map")
+	}
+	secret, ok := ca["secret"].(map[string]interface{})
+	if !ok || secret["name"] != MetricsCASecretName || secret["key"] != MetricsCACertKey {
+		t.Fatalf("unexpected tlsConfig.ca.secret: %#v", ca["secret"])
 	}
 }

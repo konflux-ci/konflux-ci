@@ -650,13 +650,13 @@ func TestApplyInfoDefaultsClusterId(t *testing.T) {
 
 	t.Run("should include clusterId when provided", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		info := r.applyInfoDefaults(nil, "v1.29.0", "", "test-cluster-id-123")
+		info := r.applyInfoDefaults(nil, "v1.29.0", "", "test-cluster-id-123", "")
 		g.Expect(info.ClusterId).To(gomega.Equal("test-cluster-id-123"))
 	})
 
 	t.Run("should omit clusterId when empty", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		info := r.applyInfoDefaults(nil, "v1.29.0", "", "")
+		info := r.applyInfoDefaults(nil, "v1.29.0", "", "", "")
 		g.Expect(info.ClusterId).To(gomega.BeEmpty())
 
 		jsonBytes, err := json.Marshal(info)
@@ -666,13 +666,50 @@ func TestApplyInfoDefaultsClusterId(t *testing.T) {
 
 	t.Run("should serialize clusterId in JSON output", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		jsonBytes, err := r.generateInfoJSON(nil, "v1.29.0", "", "my-cluster-uid")
+		jsonBytes, err := r.generateInfoJSON(nil, "v1.29.0", "", "my-cluster-uid", "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		var data map[string]interface{}
 		err = json.Unmarshal(jsonBytes, &data)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(data["clusterId"]).To(gomega.Equal("my-cluster-uid"))
+	})
+}
+
+func TestApplyInfoDefaultsImageProxy(t *testing.T) {
+	r := &KonfluxInfoReconciler{}
+
+	t.Run("should include imageProxy when ingressDomain is provided", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		info := r.applyInfoDefaults(nil, "v1.29.0", "4.15.0", "", "apps.stone-stage-p01.example.com")
+		g.Expect(info.ImageProxy).NotTo(gomega.BeNil())
+		g.Expect(info.ImageProxy.URL).To(gomega.Equal("https://image-rbac-proxy.apps.stone-stage-p01.example.com"))
+		g.Expect(info.ImageProxy.OAuthPath).To(gomega.Equal("/oauth"))
+	})
+
+	t.Run("should omit imageProxy when ingressDomain is empty", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		info := r.applyInfoDefaults(nil, "v1.29.0", "", "", "")
+		g.Expect(info.ImageProxy).To(gomega.BeNil())
+
+		jsonBytes, err := json.Marshal(info)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(string(jsonBytes)).NotTo(gomega.ContainSubstring("imageProxy"))
+	})
+
+	t.Run("should serialize imageProxy in JSON output", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		jsonBytes, err := r.generateInfoJSON(nil, "v1.29.0", "4.15.0", "", "apps.example.com")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		var data map[string]interface{}
+		err = json.Unmarshal(jsonBytes, &data)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		imageProxy, ok := data["imageProxy"].(map[string]interface{})
+		g.Expect(ok).To(gomega.BeTrue())
+		g.Expect(imageProxy["url"]).To(gomega.Equal("https://image-rbac-proxy.apps.example.com"))
+		g.Expect(imageProxy["oauthPath"]).To(gomega.Equal("/oauth"))
 	})
 }
 
@@ -752,7 +789,7 @@ func TestGenerateInfoJSONDoesNotEscapeAngleBrackets(t *testing.T) {
 			},
 		}
 
-		jsonBytes, err := r.generateInfoJSON(config, "v1.29.0", "", "")
+		jsonBytes, err := r.generateInfoJSON(config, "v1.29.0", "", "", "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		jsonStr := string(jsonBytes)
@@ -768,7 +805,7 @@ func TestGenerateInfoJSONDoesNotEscapeAngleBrackets(t *testing.T) {
 			StatusPageUrl: "https://status.example.com/<org>",
 		}
 
-		jsonBytes, err := r.generateInfoJSON(config, "v1.29.0", "", "")
+		jsonBytes, err := r.generateInfoJSON(config, "v1.29.0", "", "", "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		jsonStr := string(jsonBytes)

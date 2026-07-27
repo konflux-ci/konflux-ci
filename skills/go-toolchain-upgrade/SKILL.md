@@ -31,7 +31,7 @@ Patch within same minor (1.26.0→1.26.1) = **Routine** unless other signals app
 
 ```markdown
 **Go toolchain (routine):** Dependency-only update; minimum Go unchanged. No
-openshift/release or infra-deployments image changes expected. In-repo CI suffices.
+openshift/release or external-consumer image changes expected. In-repo CI suffices.
 ```
 
 Do not request **Go toolchain impact**, parallel PRs, or local `make test`/`make lint`.
@@ -45,7 +45,7 @@ Do not ask the author to run them locally. Prow-only paths (`deploy-konflux-on-o
 **Author must identify** (link PRs; external repos may have no agent skills):
 
 - openshift/release — `build_root` / golang tags for konflux-ci jobs; rehearse OpenShift e2e
-- infra-deployments / legacy — `e2e-test-runner` if `test/go-tests` minimum Go rose
+- legacy / external consumers — `e2e-test-runner` if `test/go-tests` minimum Go rose
 - `.github/workflows` / `.tekton/` only if this PR changes Go or builder pins there
 
 Paths, PR body template, grep: [reference.md](reference.md). On significant PRs,

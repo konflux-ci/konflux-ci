@@ -1125,13 +1125,13 @@ metadata:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: integration-service-metrics-reader
+  name: integration-service-snapshot-garbage-collector
   namespace: integration-service
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: integration-service-snapshot-garbage-collector
+  name: metrics-scraper
   namespace: integration-service
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -1404,6 +1404,13 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - nudgeconfigs/status
+  verbs:
+  - get
+  - patch
 - apiGroups:
   - pipelinesascode.tekton.dev
   resources:
@@ -1750,15 +1757,14 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
+  annotations:
+    konflux.konflux-ci.dev/metrics-scraper-binding: "true"
   name: prometheus-integration-service-metrics-reader
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: integration-service-metrics-reader
-subjects:
-- kind: ServiceAccount
-  name: integration-service-metrics-reader
-  namespace: integration-service
+subjects: []
 ---
 apiVersion: v1
 data:
@@ -1780,15 +1786,6 @@ metadata:
   namespace: integration-service
 ---
 apiVersion: v1
-kind: Secret
-metadata:
-  annotations:
-    kubernetes.io/service-account.name: integration-service-metrics-reader
-  name: integration-service-metrics-reader
-  namespace: integration-service
-type: kubernetes.io/service-account-token
----
-apiVersion: v1
 kind: Service
 metadata:
   labels:
@@ -1797,10 +1794,10 @@ metadata:
   namespace: integration-service
 spec:
   ports:
-  - name: http
-    port: 8080
+  - name: https
+    port: 8443
     protocol: TCP
-    targetPort: 8080
+    targetPort: 8443
   selector:
     control-plane: controller-manager
 ---
@@ -1846,14 +1843,15 @@ spec:
     spec:
       containers:
       - args:
-        - --metrics-bind-address=:8080
+        - --metrics-bind-address=:8443
+        - --metrics-secure=true
         - --leader-elect
         - --lease-duration=30s
         - --leader-renew-deadline=15s
         - --leader-elector-retry-period=5s
         command:
         - /manager
-        image: quay.io/konflux-ci/integration-service:a47b7321067105145e3b193587d83840fb0bb320
+        image: quay.io/konflux-ci/integration-service:3d5369d6ce7ea05171d603d54dc2a206bbffa157
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1892,6 +1890,9 @@ spec:
         - mountPath: /tmp/k8s-webhook-server/serving-certs
           name: cert
           readOnly: true
+        - mountPath: /tmp/k8s-metrics-server/serving-certs
+          name: metrics-certs
+          readOnly: true
       securityContext:
         runAsNonRoot: true
       serviceAccountName: integration-service-controller-manager
@@ -1908,6 +1909,15 @@ spec:
         secret:
           defaultMode: 420
           secretName: webhook-server-cert
+      - name: metrics-certs
+        secret:
+          items:
+          - key: tls.crt
+            path: tls.crt
+          - key: tls.key
+            path: tls.key
+          optional: false
+          secretName: metrics-server-cert
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -1925,7 +1935,7 @@ spec:
             - --zap-log-level=debug
             - --pr-snapshots-to-keep=70
             - --non-pr-snapshots-to-keep=640
-            image: quay.io/konflux-ci/integration-service:a47b7321067105145e3b193587d83840fb0bb320
+            image: quay.io/konflux-ci/integration-service:3d5369d6ce7ea05171d603d54dc2a206bbffa157
             imagePullPolicy: Always
             name: test-gc
             resources:
@@ -1941,6 +1951,25 @@ spec:
           restartPolicy: Never
           serviceAccountName: integration-service-snapshot-garbage-collector
   schedule: 0 */6 * * *
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/component: certificate
+    app.kubernetes.io/instance: metrics-certs
+    app.kubernetes.io/name: metrics-certificate
+  name: metrics-certs
+  namespace: integration-service
+spec:
+  dnsNames:
+  - integration-service-controller-manager-metrics-service.integration-service.svc
+  - integration-service-controller-manager-metrics-service.integration-service.svc.cluster.local
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: konflux-issuer
+  secretName: metrics-server-cert
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -1981,11 +2010,18 @@ spec:
   endpoints:
   - bearerTokenSecret:
       key: token
-      name: integration-service-metrics-reader
+      name: prometheus-scrape-token
     interval: 15s
     path: /metrics
-    port: http
-    scheme: http
+    port: https
+    scheme: https
+    tlsConfig:
+      ca:
+        secret:
+          key: ca.crt
+          name: metrics-server-cert
+      insecureSkipVerify: false
+      serverName: integration-service-controller-manager-metrics-service.integration-service.svc
   selector:
     matchLabels:
       control-plane: controller-manager

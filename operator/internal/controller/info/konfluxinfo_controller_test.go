@@ -25,6 +25,7 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -547,6 +548,178 @@ var _ = Describe("KonfluxInfo Controller", func() {
 				g.Expect(info["kubernetesVersion"]).To(Equal("v1.29.0"))
 				g.Expect(info["openshiftVersion"]).To(Equal("4.15.0"))
 				g.Expect(info["clusterId"]).To(Equal("test-cluster-id-12345"))
+				g.Expect(info).NotTo(HaveKey("imageProxy"), "imageProxy should be absent when no Ingress config exists")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
+	Context("OpenShift imageProxy", func() {
+		It("should not include imageProxy in info.json without ClusterInfo", func(ctx context.Context) {
+			startManager(nil)
+
+			cr := &konfluxv1alpha1.KonfluxInfo{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+
+			cmNN := types.NamespacedName{Name: infoConfigMapName, Namespace: infoNamespace}
+			Eventually(func(g Gomega) {
+				cm := &corev1.ConfigMap{}
+				g.Expect(k8sClient.Get(ctx, cmNN, cm)).To(Succeed())
+				g.Expect(cm.Data).To(HaveKey("info.json"))
+
+				var info map[string]interface{}
+				g.Expect(json.Unmarshal([]byte(cm.Data["info.json"]), &info)).To(Succeed())
+				g.Expect(info).NotTo(HaveKey("imageProxy"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should include imageProxy in info.json on OpenShift when ingress domain is available", func(ctx context.Context) {
+			By("building OpenShift cluster info")
+			mockDiscovery := &MockDiscoveryClient{
+				resources: map[string]*metav1.APIResourceList{
+					"config.openshift.io/v1": {
+						APIResources: []metav1.APIResource{{Kind: "ClusterVersion"}},
+					},
+				},
+			}
+			mockDiscovery.SetVersion("v1.29.0")
+			openShiftClusterInfo, err := clusterinfo.DetectWithClient(mockDiscovery)
+			Expect(err).NotTo(HaveOccurred())
+
+			startManager(openShiftClusterInfo)
+
+			By("creating the OpenShift Ingress config")
+			ingressConfig := &configv1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+				Spec: configv1.IngressSpec{
+					Domain: "apps.test-cluster.example.com",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ingressConfig)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ingressConfig)
+
+			By("creating the ClusterVersion resource")
+			clusterVersion := &configv1.ClusterVersion{
+				ObjectMeta: metav1.ObjectMeta{Name: "version"},
+				Spec: configv1.ClusterVersionSpec{
+					ClusterID: "test-cluster-id",
+				},
+			}
+			Expect(k8sClient.Create(ctx, clusterVersion)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, clusterVersion)
+
+			clusterVersion.Status = configv1.ClusterVersionStatus{
+				History: []configv1.UpdateHistory{
+					{State: configv1.CompletedUpdate, Version: "4.15.0", StartedTime: metav1.Now()},
+				},
+			}
+			Expect(k8sClient.Status().Update(ctx, clusterVersion)).To(Succeed())
+
+			By("creating the KonfluxInfo CR")
+			cr := &konfluxv1alpha1.KonfluxInfo{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+
+			By("verifying info.json contains imageProxy")
+			cmNN := types.NamespacedName{Name: infoConfigMapName, Namespace: infoNamespace}
+			Eventually(func(g Gomega) {
+				cm := &corev1.ConfigMap{}
+				g.Expect(k8sClient.Get(ctx, cmNN, cm)).To(Succeed())
+				g.Expect(cm.Data).To(HaveKey("info.json"))
+
+				var info map[string]interface{}
+				g.Expect(json.Unmarshal([]byte(cm.Data["info.json"]), &info)).To(Succeed())
+
+				imageProxy, ok := info["imageProxy"].(map[string]interface{})
+				g.Expect(ok).To(BeTrue(), "imageProxy should be present in info.json")
+				g.Expect(imageProxy["url"]).To(Equal("https://image-rbac-proxy.apps.test-cluster.example.com"))
+				g.Expect(imageProxy["oauthPath"]).To(Equal("/oauth"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should add imageProxy after Ingress config is created (watch triggers re-reconcile)", func(ctx context.Context) {
+			By("building OpenShift cluster info")
+			mockDiscovery := &MockDiscoveryClient{
+				resources: map[string]*metav1.APIResourceList{
+					"config.openshift.io/v1": {
+						APIResources: []metav1.APIResource{{Kind: "ClusterVersion"}},
+					},
+				},
+			}
+			mockDiscovery.SetVersion("v1.29.0")
+			openShiftClusterInfo, err := clusterinfo.DetectWithClient(mockDiscovery)
+			Expect(err).NotTo(HaveOccurred())
+
+			startManager(openShiftClusterInfo)
+
+			By("creating the ClusterVersion resource (no Ingress config yet)")
+			clusterVersion := &configv1.ClusterVersion{
+				ObjectMeta: metav1.ObjectMeta{Name: "version"},
+				Spec: configv1.ClusterVersionSpec{
+					ClusterID: "test-cluster-id",
+				},
+			}
+			Expect(k8sClient.Create(ctx, clusterVersion)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, clusterVersion)
+
+			clusterVersion.Status = configv1.ClusterVersionStatus{
+				History: []configv1.UpdateHistory{
+					{State: configv1.CompletedUpdate, Version: "4.15.0", StartedTime: metav1.Now()},
+				},
+			}
+			Expect(k8sClient.Status().Update(ctx, clusterVersion)).To(Succeed())
+
+			By("verifying Ingress 'cluster' does not exist (precondition)")
+			ingressCheck := &configv1.Ingress{}
+			Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, ingressCheck))).
+				To(BeTrue(), "Ingress 'cluster' should not exist at this point")
+
+			By("creating the KonfluxInfo CR")
+			cr := &konfluxv1alpha1.KonfluxInfo{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+
+			cmNN := types.NamespacedName{Name: infoConfigMapName, Namespace: infoNamespace}
+
+			By("verifying info.json has no imageProxy (Ingress config does not exist)")
+			Eventually(func(g Gomega) {
+				cm := &corev1.ConfigMap{}
+				g.Expect(k8sClient.Get(ctx, cmNN, cm)).To(Succeed())
+				g.Expect(cm.Data).To(HaveKey("info.json"))
+
+				var info map[string]interface{}
+				g.Expect(json.Unmarshal([]byte(cm.Data["info.json"]), &info)).To(Succeed())
+				g.Expect(info).NotTo(HaveKey("imageProxy"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("creating the OpenShift Ingress config (triggers watch)")
+			ingressConfig := &configv1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+				Spec: configv1.IngressSpec{
+					Domain: "apps.late-cluster.example.com",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ingressConfig)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ingressConfig)
+
+			By("verifying imageProxy appears after Ingress config is created")
+			Eventually(func(g Gomega) {
+				cm := &corev1.ConfigMap{}
+				g.Expect(k8sClient.Get(ctx, cmNN, cm)).To(Succeed())
+
+				var info map[string]interface{}
+				g.Expect(json.Unmarshal([]byte(cm.Data["info.json"]), &info)).To(Succeed())
+
+				imageProxy, ok := info["imageProxy"].(map[string]interface{})
+				g.Expect(ok).To(BeTrue(), "imageProxy should appear after Ingress config is created")
+				g.Expect(imageProxy["url"]).To(Equal("https://image-rbac-proxy.apps.late-cluster.example.com"))
+				g.Expect(imageProxy["oauthPath"]).To(Equal("/oauth"))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})

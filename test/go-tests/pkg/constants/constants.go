@@ -46,8 +46,6 @@ const (
 	QuayRepositorySecretName      = "quay-repository"
 	QuayRepositorySecretNamespace = "e2e-secrets"
 
-	BuildPipelineConfigConfigMapYamlURL = "https://raw.githubusercontent.com/redhat-appstudio/infra-deployments/main/components/build-service/base/build-pipeline-config/build-pipeline-config.yaml"
-
 	TektonTaskTestOutputName     = "TEST_OUTPUT"
 	DefaultPipelineServiceAccount = "konflux-integration-runner"
 	PaCPullRequestBranchPrefix    = "konflux-"

@@ -1,5 +1,5 @@
 ---
-# Based on https://raw.githubusercontent.com/redhat-appstudio/infra-deployments/main/components/konflux-rbac/base/konflux-integration-runner.yaml
+# ClusterRole for the konflux-integration-runner service account.
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:

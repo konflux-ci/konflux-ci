@@ -14,6 +14,12 @@
   value: --metrics-cert-path=/tmp/k8s-metrics-server/metrics-certs
 
 # Add the metrics-server certs volume configuration
+# (tls.crt/tls.key only — scrapers use ca.crt from the same Secret)
+#
+# optional: false — kubelet will not start the manager if metrics-server-cert is missing.
+# Pair with the namespace-local SelfSigned Issuer in config/certmanager/ so cert-manager can
+# mint the Secret at install time (before KonfluxCertManager creates konflux-issuer).
+# optional: true would not converge on konflux-issuer without a late-load certwatcher path.
 - op: add
   path: /spec/template/spec/volumes/-
   value:
@@ -22,8 +28,6 @@
       secretName: metrics-server-cert
       optional: false
       items:
-        - key: ca.crt
-          path: ca.crt
         - key: tls.crt
           path: tls.crt
         - key: tls.key
