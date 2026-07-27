@@ -48,6 +48,11 @@ const (
 
 	// DefaultMetricsTLSRequeue is used while waiting for metrics-server-cert readiness.
 	DefaultMetricsTLSRequeue = 15 * time.Second
+
+	// MetricsTLSReasonCertMissing is the Reason returned by EvaluateMetricsScrapeTLS when the
+	// metrics-server-cert Secret does not exist. Consumers (e.g. scrape_token.go) compare
+	// against this constant to decide whether SM retention should be skipped during TLS wait.
+	MetricsTLSReasonCertMissing = "metrics-server-cert-missing"
 )
 
 // MetricsScrapeTLSResult is the outcome of evaluating metrics scrape TLS readiness.
@@ -101,7 +106,7 @@ func EvaluateMetricsScrapeTLS(ctx context.Context, in MetricsScrapeTLSInput) (Me
 		Name:      MetricsServerCertSecretName,
 	}, secret); err != nil {
 		if apierrors.IsNotFound(err) {
-			return MetricsScrapeTLSResult{Reason: "metrics-server-cert-missing"}, nil
+			return MetricsScrapeTLSResult{Reason: MetricsTLSReasonCertMissing}, nil
 		}
 		return MetricsScrapeTLSResult{}, fmt.Errorf("get metrics TLS secret: %w", err)
 	}

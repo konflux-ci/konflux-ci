@@ -75,9 +75,12 @@ type DeferredSMApplyResult struct {
 // when componentMetrics is enabled. This function creates/updates the SM via ApplyServiceMonitor
 // only after the scrape token Secret exists with non-empty token bytes and metrics-server-cert
 // has verifying tls.crt + ca.crt (konflux-issuer single-Secret pattern). While waiting for TLS,
-// if an SM already exists it is still re-applied (retain vs create) so tracking-client orphan
-// cleanup does not delete it during heal windows. The SM is also re-applied on every successful
-// scrape-token reconcile (idempotent SSA / orphan ownership).
+// if an SM already exists it is normally re-applied (retain vs create) so tracking-client orphan
+// cleanup does not delete it during heal windows — except when metrics-server-cert is absent
+// (MetricsTLSReasonCertMissing): retain is skipped so orphan cleanup removes the stale SM whose
+// tlsConfig.ca references the missing Secret; deferred apply recreates it once the Secret
+// verifies again. The SM is also re-applied on every successful scrape-token reconcile
+// (idempotent SSA / orphan ownership).
 //
 // Annotation-based UWM "resync" nudges are not used: deferred apply avoids SM-before-Secret
 // rejection, and per-reconcile SM re-apply is enough for scrape health on token/CA change.
@@ -114,7 +117,7 @@ func ReconcilePrometheusScrapeToken(ctx context.Context, cfg ScrapeTokenReconcil
 		// (whose tlsConfig.ca references the absent Secret); deferred apply recreates the
 		// SM once the Secret verifies again. For other not-ready reasons (empty, mismatch)
 		// the Secret object still exists and CA refs resolve, so retain is safe.
-		if tlsResult.Reason == "metrics-server-cert-missing" {
+		if tlsResult.Reason == kubernetes.MetricsTLSReasonCertMissing {
 			logf.FromContext(ctx).Info(
 				"skipping ServiceMonitor retain while metrics-server-cert is absent",
 				"namespace", cfg.OperandNamespace,
