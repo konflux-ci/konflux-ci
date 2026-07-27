@@ -68,7 +68,6 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
-	"github.com/konflux-ci/konflux-ci/operator/pkg/segment"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/version"
 	// +kubebuilder:scaffold:imports
 )
@@ -387,11 +386,10 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&ui.KonfluxUIReconciler{
-		Client:               mgr.GetClient(),
-		Scheme:               mgr.GetScheme(),
-		ObjectStore:          objectStore,
-		ClusterInfo:          clusterInfo,
-		GetDefaultSegmentKey: segment.GetDefaultWriteKey,
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		ObjectStore: objectStore,
+		ClusterInfo: clusterInfo,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxUI")
 		os.Exit(1)
@@ -474,11 +472,10 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&segmentbridge.KonfluxSegmentBridgeReconciler{
-		Client:               mgr.GetClient(),
-		Scheme:               mgr.GetScheme(),
-		ObjectStore:          objectStore,
-		ClusterInfo:          clusterInfo,
-		GetDefaultSegmentKey: segment.GetDefaultWriteKey,
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		ObjectStore: objectStore,
+		ClusterInfo: clusterInfo,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxSegmentBridge")
 		os.Exit(1)

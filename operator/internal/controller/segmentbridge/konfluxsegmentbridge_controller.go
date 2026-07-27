@@ -91,10 +91,9 @@ type manifestSource interface {
 // KonfluxSegmentBridgeReconciler reconciles a KonfluxSegmentBridge object
 type KonfluxSegmentBridgeReconciler struct {
 	client.Client
-	Scheme               *runtime.Scheme
-	ObjectStore          manifestSource
-	ClusterInfo          *clusterinfo.Info
-	GetDefaultSegmentKey func() string
+	Scheme      *runtime.Scheme
+	ObjectStore manifestSource
+	ClusterInfo *clusterinfo.Info
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxsegmentbridges,verbs=get;list;watch;create;update;patch;delete
@@ -204,14 +203,13 @@ func (r *KonfluxSegmentBridgeReconciler) tektonResultsAPIAddr() string {
 //
 // Key resolution precedence:
 //  1. CR inline spec.segmentKey (admin override)
-//  2. Build-time default from GetDefaultSegmentKey (baked into binary via ldflags)
-//  3. Empty -- Secret is still created so the CronJob can reach the Results API;
+//  2. Empty -- Secret is still created so the CronJob can reach the Results API;
 //     the segment-bridge scripts handle the missing key gracefully by skipping the
 //     upload step.
 func (r *KonfluxSegmentBridgeReconciler) reconcileSegmentBridgeSecret(ctx context.Context, tc *tracking.Client, spec *konfluxv1alpha1.KonfluxSegmentBridgeSpec) error {
 	log := logf.FromContext(ctx)
 
-	segmentKey, source := segment.ResolveWriteKey(spec.GetSegmentKey(), r.GetDefaultSegmentKey())
+	segmentKey, source := segment.ResolveWriteKey(spec.GetSegmentKey())
 	segment.LogWriteKeyResolution(log, segmentKey, source)
 
 	batchURL, err := url.JoinPath(spec.GetSegmentAPIURL(), "batch")

@@ -143,10 +143,9 @@ var UIClusterScopedAllowList = tracking.ClusterScopedAllowList{
 // KonfluxUIReconciler reconciles a KonfluxUI object
 type KonfluxUIReconciler struct {
 	client.Client
-	Scheme               *runtime.Scheme
-	ObjectStore          *manifests.ObjectStore
-	ClusterInfo          *clusterinfo.Info
-	GetDefaultSegmentKey func() string
+	Scheme      *runtime.Scheme
+	ObjectStore *manifests.ObjectStore
+	ClusterInfo *clusterinfo.Info
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxuis,verbs=get;list;watch;create;update;patch;delete
@@ -770,8 +769,8 @@ func (r *KonfluxUIReconciler) reconcileSegmentSecret(ctx context.Context, tc *tr
 		return "", nil
 	}
 
-	// Resolve the write key (CR spec → build-time default → empty)
-	segmentKey, source := segment.ResolveWriteKey(segmentBridge.Spec.GetSegmentKey(), r.GetDefaultSegmentKey())
+	// Resolve the write key (CR spec → empty)
+	segmentKey, source := segment.ResolveWriteKey(segmentBridge.Spec.GetSegmentKey())
 	if !segment.LogWriteKeyResolution(log, segmentKey, source) {
 		return "", nil
 	}

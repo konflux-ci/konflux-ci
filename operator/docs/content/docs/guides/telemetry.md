@@ -9,15 +9,14 @@ Konflux includes an optional telemetry component called **segment-bridge** that
 collects anonymized usage data and sends it to [Segment](https://segment.com/)
 for downstream analysis in tools such as [Amplitude](https://amplitude.com/).
 
-On **OpenShift**, telemetry is **enabled by default**. On **vanilla
-Kubernetes** clusters, telemetry is **disabled by default** and must be
-explicitly opted in.
+Telemetry is **disabled by default** and must be explicitly enabled in your
+`Konflux` CR.
 
 ## Enabling telemetry
 
-On OpenShift no action is needed — telemetry is active out of the box. On
-vanilla Kubernetes, set `spec.telemetry.enabled` to `true` in your `Konflux`
-CR:
+Set `spec.telemetry.enabled` to `true` and provide a Segment write key in
+`spec.telemetry.spec.segmentKey`. The operator does not ship a default key —
+without one, the CronJob may still run but no events are uploaded to Segment.
 
 ```yaml
 apiVersion: konflux.konflux-ci.dev/v1alpha1
@@ -27,6 +26,8 @@ metadata:
 spec:
   telemetry:
     enabled: true
+    spec:
+      segmentKey: "your-write-key"
 ```
 
 Apply the change:
@@ -47,21 +48,19 @@ resource and deploys the following into the `segment-bridge` namespace:
 Disabling telemetry (setting `enabled: false`) causes the operator to clean
 up all of these resources automatically.
 
-### Optional overrides
+### Segment endpoint
 
-You can override the Segment write key and API endpoint. If omitted the
-operator uses the key baked into the image at build time and the default
-Segment API (`https://api.segment.io/v1`).
+By default, events are sent to Segment's public API at
+`https://api.segment.io/v1` (the operator appends `/batch` for the upload
+endpoint). To route through a proxy or alternate host, set `segmentAPIURL` to
+the base URL only — do not include `/batch`:
 
 ```yaml
 spec:
   telemetry:
     enabled: true
     spec:
-      # Override the Segment write key (omit to use the build-time default)
       segmentKey: "your-write-key"
-
-      # Override the Segment API base URL — do NOT include "/batch"
       segmentAPIURL: "https://your-segment-proxy.example.com/v1"
 ```
 
@@ -187,9 +186,9 @@ information (PII):
 - **User and namespace names are hashed.** A one-way hash of the name is
   combined with a **cluster identifier** to produce an opaque, per-cluster
   unique ID. The original names are never sent to Segment.
-- **Cluster identifier** is derived from the OpenShift `ClusterVersion` object.
-  On vanilla Kubernetes clusters the `kube-system` namespace UID is used
-  instead.
+- **Cluster identifier** is published by the operator in the `konflux-public-info`
+  ConfigMap. When no cluster-wide ID is available, the `kube-system` namespace
+  UID is used as a fallback.
 - **No credentials or secrets** are included in telemetry events.
 - **No source code, image contents, or build logs** are transmitted.
 
@@ -198,15 +197,8 @@ outcomes) and component/namespace identifiers in hashed form.
 
 ## Accessing telemetry data
 
-Where telemetry data lands depends on the Segment write key used by your
-deployment:
-
-- **Build-time default key** — if no `segmentKey` is set in the CR, the
-  operator uses the key baked into the image at build time. Data is sent to
-  whichever Segment workspace that key belongs to.
-- **Custom key** — if you provide your own key via
-  `spec.telemetry.spec.segmentKey`, data is routed to your own Segment
-  workspace instead.
+Events are routed to the Segment workspace that owns the write key configured
+in `spec.telemetry.spec.segmentKey`.
 
 To view incoming events, log in to [app.segment.com](https://app.segment.com)
 with the account that owns the write key and open the source's **Debugger**
@@ -215,8 +207,7 @@ Segment workspace.
 
 ## Disabling telemetry
 
-To opt out of telemetry (including on OpenShift where it is on by default),
-set `enabled` to `false` in your Konflux CR:
+To opt out of telemetry, set `enabled` to `false` in your Konflux CR:
 
 ```yaml
 spec:
