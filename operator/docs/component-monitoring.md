@@ -153,6 +153,17 @@ is skipped in `applyManifests` and applied only from
 re-applied on every reconcile (idempotent SSA) so tracking-client orphan cleanup
 retains ownership.
 
+**Conditional retain during TLS wait:** while waiting for TLS readiness, an
+already-existing ServiceMonitor is normally re-applied (retained) so
+tracking-client orphan cleanup does not delete it. However, when
+`metrics-server-cert` is absent (`MetricsTLSReasonCertMissing`), retain is
+**skipped** — the SM's `tlsConfig.ca` references the missing Secret, so
+prometheus-operator can reject it (`InvalidConfiguration`). Skipping retain
+lets orphan cleanup remove the stale SM; deferred apply recreates it once
+the Secret verifies again. For other not-ready reasons (`metrics-ca-empty`,
+`metrics-server-cert-empty`, `leaf-ca-mismatch`) the Secret object exists and
+CA references resolve, so retain runs normally.
+
 Annotation-only "resync" patches on the ServiceMonitor are **not** used. Deferred
 apply is what prevents SM-before-Secret `InvalidConfiguration` rejection; once the
 SM is accepted, per-reconcile re-apply (and normal Secret remint/reissue) is

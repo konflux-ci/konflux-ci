@@ -1046,7 +1046,7 @@ func TestReconcilePrometheusScrapeToken_SkipsRetainWhenCertMissing(t *testing.T)
 	ctx := context.Background()
 	now := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
 
-	// Existing SM but no metrics-server-cert Secret → reason "metrics-server-cert-missing".
+	// Existing SM but no metrics-server-cert Secret → reason MetricsTLSReasonCertMissing.
 	sm := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{}}}
 	sm.SetGroupVersionKind(operandServiceMonitorGVK)
 	sm.SetNamespace(testBuildServiceNamespace)

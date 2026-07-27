@@ -130,7 +130,7 @@ func TestEvaluateMetricsScrapeTLS_ValidationAndMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("missing: %v", err)
 	}
-	if result.Ready || result.Reason != "metrics-server-cert-missing" {
+	if result.Ready || result.Reason != MetricsTLSReasonCertMissing {
 		t.Fatalf("got ready=%v reason=%q", result.Ready, result.Reason)
 	}
 
@@ -262,7 +262,7 @@ func TestEvaluateMetricsScrapeTLS_NotFoundTyped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
-	if result.Reason != "metrics-server-cert-missing" {
+	if result.Reason != MetricsTLSReasonCertMissing {
 		t.Fatalf("reason=%q", result.Reason)
 	}
 }
