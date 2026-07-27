@@ -58,23 +58,18 @@ const (
 	caIssuerName              = "ui-ca-issuer"
 )
 
-func noDefaultSegmentKey() string             { return "" }
-func staticSegmentKey(k string) func() string { return func() string { return k } }
-
 var _ = Describe("KonfluxUI Controller", func() {
 	// startManager creates a per-test manager with the given reconciler configuration
 	// and registers a DeferCleanup to cancel it after the test.
 	// A per-test manager is required because each test wires the reconciler with a different
-	// GetDefaultSegmentKey or ClusterInfo, and a shared suite-level manager cannot be
-	// re-configured between tests.
-	startManager := func(getDefaultSegmentKey func() string, clusterInfo *clusterinfo.Info) {
+	// ClusterInfo, and a shared suite-level manager cannot be re-configured between tests.
+	startManager := func(clusterInfo *clusterinfo.Info) {
 		mgr := testutil.NewTestManager(testEnv)
 		Expect((&KonfluxUIReconciler{
-			Client:               mgr.GetClient(),
-			Scheme:               mgr.GetScheme(),
-			ObjectStore:          objectStore,
-			GetDefaultSegmentKey: getDefaultSegmentKey,
-			ClusterInfo:          clusterInfo,
+			Client:      mgr.GetClient(),
+			Scheme:      mgr.GetScheme(),
+			ObjectStore: objectStore,
+			ClusterInfo: clusterInfo,
 		}).SetupWithManager(mgr)).To(Succeed())
 		mgrCtx, cancel := context.WithCancel(testEnv.Ctx)
 		waitForStop := testutil.StartManagerWithContext(mgrCtx, mgr)
@@ -99,7 +94,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 	Context("When reconciling a resource", func() {
 		It("should successfully reconcile the resource", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxUI{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
@@ -128,7 +123,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		}
 
 		BeforeEach(func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			By("ensuring the UI namespace exists")
 			uiNs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: uiNamespace}}
@@ -431,7 +426,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		}
 
 		BeforeEach(func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			By("pre-cleaning any existing Ingress")
 			_ = k8sClient.Delete(ctx, &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{
@@ -634,7 +629,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		}
 
 		It("Should create OpenShift OAuth resources when running on OpenShift (default behavior)", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, openShiftClusterInfo)
+			startManager(openShiftClusterInfo)
 			createCR(ctx)
 
 			Eventually(func(g Gomega) {
@@ -650,7 +645,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("Should NOT annotate dex ServiceAccount when NOT running on OpenShift", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, defaultClusterInfo)
+			startManager(defaultClusterInfo)
 			createCR(ctx)
 
 			By("waiting for initial reconcile to complete")
@@ -666,7 +661,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("Should NOT create OpenShift OAuth resources when ClusterInfo is nil", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 			createCR(ctx)
 
 			By("waiting for initial reconcile to complete")
@@ -682,7 +677,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("Should NOT create OpenShift OAuth resources when explicitly disabled on OpenShift", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, openShiftClusterInfo)
+			startManager(openShiftClusterInfo)
 			ui := createCR(ctx)
 
 			By("disabling OpenShift login before first reconcile settles")
@@ -707,7 +702,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("Should create OpenShift OAuth resources when explicitly enabled on OpenShift", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, openShiftClusterInfo)
+			startManager(openShiftClusterInfo)
 			ui := createCR(ctx)
 
 			By("explicitly enabling OpenShift login")
@@ -732,7 +727,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("Should delete OpenShift OAuth resources when disabled after being enabled", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, openShiftClusterInfo)
+			startManager(openShiftClusterInfo)
 			ui := createCR(ctx)
 
 			By("waiting for OAuth resources to be created")
@@ -763,7 +758,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("Should set owner reference on OpenShift OAuth resources", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, openShiftClusterInfo)
+			startManager(openShiftClusterInfo)
 			createCR(ctx)
 
 			Eventually(func(g Gomega) {
@@ -778,7 +773,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("Should use correct redirect URI format without port", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, openShiftClusterInfo)
+			startManager(openShiftClusterInfo)
 			createCR(ctx)
 
 			Eventually(func(g Gomega) {
@@ -797,7 +792,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		var ui *konfluxv1alpha1.KonfluxUI
 
 		BeforeEach(func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui = &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
@@ -951,7 +946,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		}
 
 		It("Should create ConsoleLink when ingress is enabled and running on OpenShift", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, openShiftClusterInfo)
+			startManager(openShiftClusterInfo)
 			createCR(ctx)
 
 			Eventually(func(g Gomega) {
@@ -968,7 +963,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("Should NOT create ConsoleLink when NOT running on OpenShift", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, defaultClusterInfo)
+			startManager(defaultClusterInfo)
 			createCR(ctx)
 
 			By("waiting for initial reconcile to complete")
@@ -980,7 +975,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("Should NOT create ConsoleLink when ClusterInfo is nil", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 			createCR(ctx)
 
 			By("waiting for initial reconcile to complete")
@@ -992,7 +987,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("Should NOT create ConsoleLink when ingress is disabled on OpenShift", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, openShiftClusterInfo)
+			startManager(openShiftClusterInfo)
 			ui := createCR(ctx)
 
 			By("disabling ingress")
@@ -1008,7 +1003,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("Should delete ConsoleLink when ingress is disabled", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, openShiftClusterInfo)
+			startManager(openShiftClusterInfo)
 			ui := createCR(ctx)
 
 			By("waiting for ConsoleLink to be created")
@@ -1031,7 +1026,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("Should update ConsoleLink when hostname changes", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, openShiftClusterInfo)
+			startManager(openShiftClusterInfo)
 			ui := createCR(ctx)
 
 			By("waiting for initial ConsoleLink")
@@ -1058,7 +1053,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("recreates ConsoleLink when deleted while ingress is enabled", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, openShiftClusterInfo)
+			startManager(openShiftClusterInfo)
 			createCR(ctx)
 
 			By("waiting for initial ConsoleLink creation")
@@ -1090,7 +1085,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 	Context("Self-healing", func() {
 		It("recreates Deployment when deleted", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
@@ -1120,7 +1115,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("recreates Service when deleted", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
@@ -1147,7 +1142,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("recreates ServiceAccount when deleted", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
@@ -1174,7 +1169,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("recreates ClusterRole when deleted", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
@@ -1201,7 +1196,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("recreates ClusterRoleBinding when deleted", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
@@ -1228,7 +1223,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("recreates Certificate when deleted", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
@@ -1255,7 +1250,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("recreates Issuer when deleted", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
@@ -1282,7 +1277,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("recreates ConfigMap when deleted", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
@@ -1319,7 +1314,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 	Context("Drift correction", func() {
 		It("restores Deployment image when modified", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
@@ -1359,7 +1354,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("restores ServiceAccount labels when stripped", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
@@ -1393,7 +1388,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("restores Service labels when stripped", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
@@ -1427,7 +1422,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("restores Service spec when modified", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
@@ -1463,7 +1458,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("restores Namespace labels when stripped", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
@@ -1497,7 +1492,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("restores ClusterRole rules when modified", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
@@ -1535,7 +1530,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("restores ClusterRoleBinding subjects when modified", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
@@ -1573,7 +1568,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("restores Certificate labels when stripped", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
@@ -1607,7 +1602,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("restores Issuer labels when stripped", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
@@ -1641,7 +1636,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("restores Certificate DNSNames when modified", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
@@ -1675,7 +1670,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("restores Issuer CA secret name when modified", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
@@ -1710,7 +1705,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("restores dex Deployment image when modified", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
 			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
@@ -1750,7 +1745,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 
 		It("restores Ingress spec when modified", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
@@ -1808,7 +1803,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			startManager(noDefaultSegmentKey, openShiftClusterInfo)
+			startManager(openShiftClusterInfo)
 
 			ui := &konfluxv1alpha1.KonfluxUI{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
@@ -1906,7 +1901,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		}
 
 		It("Should not create segment secret when KonfluxSegmentBridge CR does not exist", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 			createUI(ctx)
 
 			By("waiting for initial reconcile to complete")
@@ -1917,7 +1912,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 		It("Should not create segment secret when no write key is configured", func(ctx context.Context) {
 			bridge := createBridgeCR(ctx)
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 			createUI(ctx)
 
 			By("waiting for initial reconcile with empty Bridge key")
@@ -1933,7 +1928,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			bridge.Spec.SegmentKey = "test-write-key"
 			Expect(k8sClient.Update(ctx, bridge)).To(Succeed())
 
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 			createUI(ctx)
 
 			name := expectedSecretName("test-write-key", konfluxv1alpha1.DefaultSegmentAPIURL)
@@ -1954,7 +1949,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			bridge.Spec.SegmentAPIURL = "https://console.redhat.com/connections/api/v1"
 			Expect(k8sClient.Update(ctx, bridge)).To(Succeed())
 
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 			createUI(ctx)
 
 			name := expectedSecretName("test-write-key", "https://console.redhat.com/connections/api/v1")
@@ -1968,47 +1963,13 @@ var _ = Describe("KonfluxUI Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
-		It("Should use build-time default key when CR key is empty", func(ctx context.Context) {
-			createBridgeCR(ctx)
-			startManager(staticSegmentKey("build-time-key"), nil)
-			createUI(ctx)
-
-			name := expectedSecretName("build-time-key", konfluxv1alpha1.DefaultSegmentAPIURL)
-			Eventually(func(g Gomega) {
-				secret := &corev1.Secret{}
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: name, Namespace: uiNamespace,
-				}, secret)).To(Succeed())
-				g.Expect(string(secret.Data[segmentKeyWriteKey])).To(Equal("build-time-key"))
-			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-		})
-
-		It("Should prefer CR key over build-time default", func(ctx context.Context) {
-			bridge := createBridgeCR(ctx)
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: segmentbridge.CRName}, bridge)).To(Succeed())
-			bridge.Spec.SegmentKey = "cr-override-key"
-			Expect(k8sClient.Update(ctx, bridge)).To(Succeed())
-
-			startManager(staticSegmentKey("build-time-key"), nil)
-			createUI(ctx)
-
-			name := expectedSecretName("cr-override-key", konfluxv1alpha1.DefaultSegmentAPIURL)
-			Eventually(func(g Gomega) {
-				secret := &corev1.Secret{}
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: name, Namespace: uiNamespace,
-				}, secret)).To(Succeed())
-				g.Expect(string(secret.Data[segmentKeyWriteKey])).To(Equal("cr-override-key"))
-			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-		})
-
 		It("Should create a new secret and clean up old one when segment key changes", func(ctx context.Context) {
 			bridge := createBridgeCR(ctx)
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: segmentbridge.CRName}, bridge)).To(Succeed())
 			bridge.Spec.SegmentKey = "initial-key"
 			Expect(k8sClient.Update(ctx, bridge)).To(Succeed())
 
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 			createUI(ctx)
 
 			initialName := expectedSecretName("initial-key", konfluxv1alpha1.DefaultSegmentAPIURL)
@@ -2042,7 +2003,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			bridge.Spec.SegmentKey = "temporary-key"
 			Expect(k8sClient.Update(ctx, bridge)).To(Succeed())
 
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 			createUI(ctx)
 
 			By("waiting for the secret to be created")
@@ -2066,7 +2027,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			bridge.Spec.SegmentKey = "owner-ref-test-key"
 			Expect(k8sClient.Update(ctx, bridge)).To(Succeed())
 
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 			createUI(ctx)
 
 			Eventually(func(g Gomega) {
@@ -2081,7 +2042,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 	Context("RuntimeConfig reconciliation via Reconcile", Serial, func() {
 		BeforeEach(func() {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 		})
 
 		It("Should set RUNTIME_* env vars on generate-proxy-config init container", func(ctx context.Context) {
@@ -2193,7 +2154,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		}
 
 		It("applies ServiceMonitor and metrics-reader ClusterRole when ComponentMetrics is nil (default enabled)", func(ctx context.Context) {
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
@@ -2219,7 +2180,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 		It("skips ServiceMonitor and metrics-reader ClusterRole when ComponentMetrics.Enabled is false", func(ctx context.Context) {
 			cleanupMetricsResources(ctx)
 
-			startManager(noDefaultSegmentKey, nil)
+			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
