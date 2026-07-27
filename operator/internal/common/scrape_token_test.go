@@ -939,8 +939,9 @@ func TestReconcilePrometheusScrapeToken_UsesSecretReaderNotStaleClient(t *testin
 
 // TestReconcilePrometheusScrapeToken_RetainsOwnedServiceMonitorAcrossTLSWaitCleanup
 // exercises the operand reconcile contract: ReconcilePrometheusScrapeToken then
-// tracking.CleanupOrphans. When TLS is not ready, an already-owned ServiceMonitor must
-// still be retained (ApplyOwned / tracked) so orphan cleanup does not delete it.
+// tracking.CleanupOrphans. When TLS is not ready but the Secret exists (e.g. empty CA),
+// an already-owned ServiceMonitor must still be retained (ApplyOwned / tracked) so orphan
+// cleanup does not delete it.
 func TestReconcilePrometheusScrapeToken_RetainsOwnedServiceMonitorAcrossTLSWaitCleanup(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
@@ -973,8 +974,19 @@ func TestReconcilePrometheusScrapeToken_RetainsOwnedServiceMonitorAcrossTLSWaitC
 		UID:        owner.UID,
 		Controller: ptr.To(true),
 	}})
+	// metrics-server-cert with empty CA → TLS wait reason "metrics-ca-empty" (Secret
+	// present, CA not populated yet). Retain must run for this reason.
+	emptyCACert := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      kubernetes.MetricsServerCertSecretName,
+			Namespace: testBuildServiceNamespace,
+		},
+		Data: map[string][]byte{
+			kubernetes.MetricsCACertKey: {},
+		},
+	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(owner, existingSM).Build()
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(owner, existingSM, emptyCACert).Build()
 	// Fresh tracking client per reconcile (empty tracked set), matching controllers.
 	tc := tracking.NewClientWithOwnership(c, tracking.OwnershipConfig{
 		Owner:             owner,
@@ -999,7 +1011,7 @@ func TestReconcilePrometheusScrapeToken_RetainsOwnedServiceMonitorAcrossTLSWaitC
 		Scraper:            kubernetes.OperandMetricsScraperSA(testBuildServiceNamespace),
 		OperandNamespace:   testBuildServiceNamespace,
 		ServiceMonitorName: testBuildServiceNamespace,
-		// No metrics-server-cert → TLS wait path (first-boot / heal).
+		// metrics-server-cert with empty CA → TLS wait path; retain should run.
 		Apply: func(applyCtx context.Context, secret *corev1.Secret) error {
 			return tc.ApplyOwned(applyCtx, secret)
 		},
@@ -1027,6 +1039,125 @@ func TestReconcilePrometheusScrapeToken_RetainsOwnedServiceMonitorAcrossTLSWaitC
 		Name:      testBuildServiceNamespace,
 	}, got); err != nil {
 		t.Fatalf("owned ServiceMonitor must survive TLS-wait + CleanupOrphans: %v", err)
+	}
+}
+
+func TestReconcilePrometheusScrapeToken_SkipsRetainWhenCertMissing(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
+
+	// Existing SM but no metrics-server-cert Secret → reason "metrics-server-cert-missing".
+	sm := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{}}}
+	sm.SetGroupVersionKind(operandServiceMonitorGVK)
+	sm.SetNamespace(testBuildServiceNamespace)
+	sm.SetName(testBuildServiceNamespace)
+
+	c := fake.NewClientBuilder().WithObjects(sm).Build()
+	retainCalls := 0
+	result, err := ReconcilePrometheusScrapeToken(ctx, ScrapeTokenReconcilerConfig{
+		Client:             c,
+		Clock:              testclock.NewFakeClock(now),
+		TokenCreator:       &fakeTokenCreator{token: "tok", expiresAt: now.Add(time.Hour)},
+		Scraper:            kubernetes.OperandMetricsScraperSA(testBuildServiceNamespace),
+		OperandNamespace:   testBuildServiceNamespace,
+		ServiceMonitorName: testBuildServiceNamespace,
+		Apply: func(applyCtx context.Context, secret *corev1.Secret) error {
+			return c.Create(applyCtx, secret)
+		},
+		ApplyServiceMonitor: func(context.Context) error {
+			retainCalls++
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if retainCalls != 0 {
+		t.Fatalf("ApplyServiceMonitor calls: got %d want 0 when cert is missing", retainCalls)
+	}
+	if result.RequeueAfter != kubernetes.DefaultMetricsTLSRequeue {
+		t.Fatalf("requeue: got %v want %v", result.RequeueAfter, kubernetes.DefaultMetricsTLSRequeue)
+	}
+}
+
+func TestReconcilePrometheusScrapeToken_RetainsSMWhenCertPresentButNotReady(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
+
+	// Existing SM + metrics-server-cert with empty CA → reason "metrics-ca-empty".
+	sm := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{}}}
+	sm.SetGroupVersionKind(operandServiceMonitorGVK)
+	sm.SetNamespace(testBuildServiceNamespace)
+	sm.SetName(testBuildServiceNamespace)
+
+	emptyCACert := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      kubernetes.MetricsServerCertSecretName,
+			Namespace: testBuildServiceNamespace,
+		},
+		Data: map[string][]byte{
+			kubernetes.MetricsCACertKey: {},
+		},
+	}
+
+	c := fake.NewClientBuilder().WithObjects(sm, emptyCACert).Build()
+	retainCalls := 0
+	result, err := ReconcilePrometheusScrapeToken(ctx, ScrapeTokenReconcilerConfig{
+		Client:             c,
+		Clock:              testclock.NewFakeClock(now),
+		TokenCreator:       &fakeTokenCreator{token: "tok", expiresAt: now.Add(time.Hour)},
+		Scraper:            kubernetes.OperandMetricsScraperSA(testBuildServiceNamespace),
+		OperandNamespace:   testBuildServiceNamespace,
+		ServiceMonitorName: testBuildServiceNamespace,
+		Apply: func(applyCtx context.Context, secret *corev1.Secret) error {
+			return c.Create(applyCtx, secret)
+		},
+		ApplyServiceMonitor: func(context.Context) error {
+			retainCalls++
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if retainCalls != 1 {
+		t.Fatalf("ApplyServiceMonitor calls: got %d want 1 when cert is present but not ready", retainCalls)
+	}
+	if result.RequeueAfter != kubernetes.DefaultMetricsTLSRequeue {
+		t.Fatalf("requeue: got %v want %v", result.RequeueAfter, kubernetes.DefaultMetricsTLSRequeue)
+	}
+}
+
+func TestReconcilePrometheusScrapeToken_NoSMGreenfield_NoRetainEitherWay(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
+
+	// No SM exists (greenfield). Retain is a no-op regardless of TLS reason.
+	c := fake.NewClientBuilder().Build()
+	retainCalls := 0
+	result, err := ReconcilePrometheusScrapeToken(ctx, ScrapeTokenReconcilerConfig{
+		Client:             c,
+		Clock:              testclock.NewFakeClock(now),
+		TokenCreator:       &fakeTokenCreator{token: "tok", expiresAt: now.Add(time.Hour)},
+		Scraper:            kubernetes.OperandMetricsScraperSA(testBuildServiceNamespace),
+		OperandNamespace:   testBuildServiceNamespace,
+		ServiceMonitorName: testBuildServiceNamespace,
+		Apply: func(applyCtx context.Context, secret *corev1.Secret) error {
+			return c.Create(applyCtx, secret)
+		},
+		ApplyServiceMonitor: func(context.Context) error {
+			retainCalls++
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if retainCalls != 0 {
+		t.Fatalf("ApplyServiceMonitor calls: got %d want 0 on greenfield (no SM)", retainCalls)
+	}
+	if result.RequeueAfter != kubernetes.DefaultMetricsTLSRequeue {
+		t.Fatalf("requeue: got %v want %v", result.RequeueAfter, kubernetes.DefaultMetricsTLSRequeue)
 	}
 }
 

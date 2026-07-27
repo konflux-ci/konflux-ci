@@ -109,28 +109,21 @@ func ReconcilePrometheusScrapeToken(ctx context.Context, cfg ScrapeTokenReconcil
 		return reconcile.Result{}, err
 	}
 	if wait != nil {
-		// Retain an existing SM for orphan cleanup; do not create one until TLS verifies.
-		//
-		// TODO(metrics-tls): Skip retain when metrics-server-cert is absent
-		// (tlsResult.Reason == "metrics-server-cert-missing").
-		//
-		// When it hits: SM already exists (post-boot / after scrape was healthy) and the
-		// metrics TLS Secret is deleted or not yet recreated (manual delete, cert-manager
-		// lag, namespace recreate). Greenfield first create is unaffected (no SM → retain
-		// is a no-op). Empty/mismatch with Secret present is a weaker case — CA refs still
-		// resolve.
-		//
-		// What goes wrong: retain re-applies the desired SM (tlsConfig.ca → that Secret)
-		// while the Secret is gone. On OpenShift UWM, prometheus-operator can reject the
-		// SM (InvalidConfiguration) and stay stuck until the SM is deleted/recreated;
-		// operand metrics scrape stays down until then.
-		//
-		// Fix: when Reason is metrics-server-cert-missing, skip retain so orphan cleanup
-		// can drop the SM; once the Secret verifies again, deferred apply creates a fresh
-		// SM. Keep retain for other not-ready reasons. Unit-test both branches; no cluster
-		// migration needed when adding this later.
-		if retainErr := retainOperandServiceMonitorIfPresent(ctx, cfg); retainErr != nil {
-			return reconcile.Result{}, retainErr
+		// Retain an existing SM for orphan cleanup unless the metrics-server-cert Secret
+		// is absent. When it is missing, skip retain so orphan cleanup drops the stale SM
+		// (whose tlsConfig.ca references the absent Secret); deferred apply recreates the
+		// SM once the Secret verifies again. For other not-ready reasons (empty, mismatch)
+		// the Secret object still exists and CA refs resolve, so retain is safe.
+		if tlsResult.Reason == "metrics-server-cert-missing" {
+			logf.FromContext(ctx).Info(
+				"skipping ServiceMonitor retain while metrics-server-cert is absent",
+				"namespace", cfg.OperandNamespace,
+				"servicemonitor", cfg.ServiceMonitorName,
+			)
+		} else {
+			if retainErr := retainOperandServiceMonitorIfPresent(ctx, cfg); retainErr != nil {
+				return reconcile.Result{}, retainErr
+			}
 		}
 		return *wait, nil
 	}
