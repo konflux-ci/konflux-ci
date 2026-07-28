@@ -382,6 +382,13 @@ func (r *KonfluxReleaseServiceReconciler) SetupWithManager(mgr ctrl.Manager) err
 			&corev1.Secret{},
 			builder.WithPredicates(predicate.PrometheusScrapeTokenSecretPredicate),
 		)
+		// ServiceMonitor: owned by the CR via ApplyOwned; Owns triggers
+		// reconcile on out-of-band delete/mutate so deferred apply recreates it.
+		sm := &unstructured.Unstructured{}
+		sm.SetGroupVersionKind(schema.GroupVersionKind{
+			Group: "monitoring.coreos.com", Version: "v1", Kind: "ServiceMonitor",
+		})
+		controllerBuilder = controllerBuilder.Owns(sm)
 		// metrics-server-cert is created by cert-manager (not CR ownerRefs).
 		controllerBuilder = controllerBuilder.Watches(
 			&corev1.Secret{},

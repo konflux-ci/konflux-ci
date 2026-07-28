@@ -27,6 +27,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -394,6 +395,13 @@ func (r *KonfluxImageControllerReconciler) SetupWithManager(mgr ctrl.Manager) er
 			&corev1.Secret{},
 			builder.WithPredicates(predicate.PrometheusScrapeTokenSecretPredicate),
 		)
+		// ServiceMonitor: owned by the CR via ApplyOwned; Owns triggers
+		// reconcile on out-of-band delete/mutate so deferred apply recreates it.
+		sm := &unstructured.Unstructured{}
+		sm.SetGroupVersionKind(schema.GroupVersionKind{
+			Group: "monitoring.coreos.com", Version: "v1", Kind: "ServiceMonitor",
+		})
+		controllerBuilder = controllerBuilder.Owns(sm)
 		// metrics-server-cert is created by cert-manager (not CR ownerRefs).
 		controllerBuilder = controllerBuilder.Watches(
 			&corev1.Secret{},

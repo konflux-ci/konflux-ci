@@ -548,6 +548,130 @@ func TestScrapeTokenRotator_WatchScrapeWiringSecretsCache(t *testing.T) {
 	rotator.watchScrapeWiringSecrets(context.Background(), OperatorNamespace, make(chan struct{}, 1))
 }
 
+func TestNotifyOperatorServiceMonitorWake(t *testing.T) {
+	t.Parallel()
+	wake := make(chan struct{}, 1)
+
+	// Unrelated SM name — no wake.
+	other := &unstructured.Unstructured{}
+	other.SetGroupVersionKind(serviceMonitorGVK)
+	other.SetName("other")
+	other.SetNamespace(OperatorNamespace)
+	notifyOperatorServiceMonitorWake(OperatorNamespace, wake, other)
+	select {
+	case <-wake:
+		t.Fatal("unexpected wake for unrelated ServiceMonitor")
+	default:
+	}
+
+	// Wrong namespace — no wake.
+	wrongNS := &unstructured.Unstructured{}
+	wrongNS.SetGroupVersionKind(serviceMonitorGVK)
+	wrongNS.SetName(operatorServiceMonitorName)
+	wrongNS.SetNamespace("other-ns")
+	notifyOperatorServiceMonitorWake(OperatorNamespace, wake, wrongNS)
+	select {
+	case <-wake:
+		t.Fatal("unexpected wake for wrong namespace")
+	default:
+	}
+
+	// Non-unstructured object — no wake.
+	notifyOperatorServiceMonitorWake(OperatorNamespace, wake, "not-an-unstructured")
+	select {
+	case <-wake:
+		t.Fatal("unexpected wake for non-unstructured")
+	default:
+	}
+
+	// Tombstone wrapping non-unstructured — no wake.
+	notifyOperatorServiceMonitorWake(OperatorNamespace, wake, cache.DeletedFinalStateUnknown{
+		Key: "x",
+		Obj: "not-an-unstructured",
+	})
+	select {
+	case <-wake:
+		t.Fatal("unexpected wake for tombstone with non-unstructured Obj")
+	default:
+	}
+
+	// Matching operator SM — should wake.
+	match := &unstructured.Unstructured{}
+	match.SetGroupVersionKind(serviceMonitorGVK)
+	match.SetName(operatorServiceMonitorName)
+	match.SetNamespace(OperatorNamespace)
+	notifyOperatorServiceMonitorWake(OperatorNamespace, wake, match)
+	select {
+	case <-wake:
+	default:
+		t.Fatal("expected wake for operator ServiceMonitor")
+	}
+
+	// Tombstone wrapping matching SM — should wake.
+	notifyOperatorServiceMonitorWake(OperatorNamespace, wake, cache.DeletedFinalStateUnknown{
+		Key: OperatorNamespace + "/" + operatorServiceMonitorName,
+		Obj: match,
+	})
+	select {
+	case <-wake:
+	default:
+		t.Fatal("expected wake for deleted operator ServiceMonitor tombstone")
+	}
+
+	// Non-blocking when already pending.
+	wake <- struct{}{}
+	notifyOperatorServiceMonitorWake(OperatorNamespace, wake, match)
+}
+
+func TestScrapeTokenRotator_WatchOperatorServiceMonitorNilCache(t *testing.T) {
+	t.Parallel()
+	rotator := &ScrapeTokenRotator{}
+	rotator.watchOperatorServiceMonitor(context.Background(), OperatorNamespace, make(chan struct{}, 1))
+}
+
+func TestScrapeTokenRotator_WatchOperatorServiceMonitorCache(t *testing.T) {
+	t.Parallel()
+	wake := make(chan struct{}, 1)
+
+	// Informer unavailable — logs error, does not panic.
+	rotator := &ScrapeTokenRotator{Cache: &stubCache{
+		getInformer: func(context.Context, client.Object) (ctrlcache.Informer, error) {
+			return nil, fmt.Errorf("informer unavailable")
+		},
+	}}
+	rotator.watchOperatorServiceMonitor(context.Background(), OperatorNamespace, wake)
+
+	// Informer available — handler registered.
+	inf := &stubInformer{}
+	rotator = &ScrapeTokenRotator{Cache: &stubCache{
+		getInformer: func(context.Context, client.Object) (ctrlcache.Informer, error) {
+			return inf, nil
+		},
+	}}
+	rotator.watchOperatorServiceMonitor(context.Background(), OperatorNamespace, wake)
+	if inf.handler == nil {
+		t.Fatal("expected event handler registration")
+	}
+	sm := &unstructured.Unstructured{}
+	sm.SetGroupVersionKind(serviceMonitorGVK)
+	sm.SetName(operatorServiceMonitorName)
+	sm.SetNamespace(OperatorNamespace)
+	inf.handler.OnAdd(sm, false)
+	select {
+	case <-wake:
+	default:
+		t.Fatal("expected wake from registered AddFunc")
+	}
+
+	// AddEventHandler failure — logs error, does not panic.
+	rotator = &ScrapeTokenRotator{Cache: &stubCache{
+		getInformer: func(context.Context, client.Object) (ctrlcache.Informer, error) {
+			return &stubInformer{addErr: fmt.Errorf("add handler failed")}, nil
+		},
+	}}
+	rotator.watchOperatorServiceMonitor(context.Background(), OperatorNamespace, make(chan struct{}, 1))
+}
+
 func TestScrapeTokenRotator_StartWakesOnSecretEvent(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())

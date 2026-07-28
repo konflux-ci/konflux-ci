@@ -125,6 +125,9 @@ Operand controllers use complementary mechanisms:
 
 - **Secret watch (scrape token)** — `Owns` on `prometheus-scrape-token` (name-filtered) reconciles
   immediately when the owned Secret is deleted or replaced.
+- **ServiceMonitor watch** — `Owns` on the component ServiceMonitor (owned via `ApplyOwned`)
+  so out-of-band deletion or mutation triggers immediate reconcile and deferred apply recreates
+  the SM without waiting for the rotation interval.
 - **Secret watch (metrics TLS)** — `Watches` on `metrics-server-cert` by name
   (cert-manager creates this Secret without CR ownerRefs) so metrics TLS changes are detected without
   waiting for the rotation ticker.
@@ -394,27 +397,35 @@ steps (creating `monitoring/` kustomization, rebuilding embedded manifests via
    `get;list;watch;create;patch` — omitting `create` will prevent the
    controller from creating ServiceMonitors
 
+**ServiceMonitor watch:**
+
+8. In `SetupWithManager`, inside the `if r.TokenCreator != nil` block,
+   add `Owns` on an unstructured `ServiceMonitor`
+   (`monitoring.coreos.com/v1`) so out-of-band deletion or mutation
+   triggers reconcile and deferred apply recreates the SM immediately
+   (without waiting for the rotation interval)
+
 **Orphan cleanup:**
 
-8. Extend orphan cleanup GVKs with
+9. Extend orphan cleanup GVKs with
    `kubernetes.ComponentMetricsOrphanCleanupGVKs` and add
    ClusterRole/ClusterRoleBinding names to the cluster-scoped resource
    allowlist in the component reconciler
 
 **Tests:**
 
-9. Add unit tests for both gating paths: `ComponentMetrics: nil` (enabled by
-   default) and `ComponentMetrics: &ComponentMetricsConfig{Enabled:
-   ptr.To(false)}` (disabled, scrape resources skipped/deleted). Follow the
-   test style established in the target package; if the package uses
-   Ginkgo/Gomega, apply [ginkgo-testing](../../skills/ginkgo-testing/SKILL.md)
-   conventions.
-10. Register the new scrape target in the metrics integration test catalog
+10. Add unit tests for both gating paths: `ComponentMetrics: nil` (enabled by
+    default) and `ComponentMetrics: &ComponentMetricsConfig{Enabled:
+    ptr.To(false)}` (disabled, scrape resources skipped/deleted). Follow the
+    test style established in the target package; if the package uses
+    Ginkgo/Gomega, apply [ginkgo-testing](../../skills/ginkgo-testing/SKILL.md)
+    conventions.
+11. Register the new scrape target in the metrics integration test catalog
     (`test/go-tests/pkg/metricsauth/default_catalog.go`)
 
 **Documentation:**
 
-11. Update this document to list the new component under the appropriate
+12. Update this document to list the new component under the appropriate
     scrape model in the [Scope](#scope) tables
 
 ## Related paths

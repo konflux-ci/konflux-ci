@@ -21,6 +21,8 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/utils/clock"
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
@@ -89,6 +91,7 @@ func (r *ScrapeTokenRotator) Start(ctx context.Context) error {
 
 	wake := make(chan struct{}, 1)
 	r.watchScrapeWiringSecrets(ctx, namespace, wake)
+	r.watchOperatorServiceMonitor(ctx, namespace, wake)
 
 	for {
 		requeue, err := r.reconcile(ctx, namespace)
@@ -140,6 +143,57 @@ func (r *ScrapeTokenRotator) watchScrapeWiringSecrets(ctx context.Context, names
 	})
 	if err != nil {
 		log.Error(err, "unable to register scrape-wiring Secret handler; relying on rotation interval only")
+	}
+}
+
+func (r *ScrapeTokenRotator) watchOperatorServiceMonitor(ctx context.Context, namespace string, wake chan struct{}) {
+	if r.Cache == nil {
+		return
+	}
+	log := logf.FromContext(ctx).WithName("operator-scrape-wiring")
+	sm := &unstructured.Unstructured{}
+	sm.SetGroupVersionKind(schema.GroupVersionKind{
+		Group: "monitoring.coreos.com", Version: "v1", Kind: "ServiceMonitor",
+	})
+	informer, err := r.Cache.GetInformer(ctx, sm)
+	if err != nil {
+		log.Error(err, "unable to watch operator ServiceMonitor; relying on rotation interval only")
+		return
+	}
+	notify := func(obj any) {
+		notifyOperatorServiceMonitorWake(namespace, wake, obj)
+	}
+	_, err = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    notify,
+		UpdateFunc: func(_, newObj any) { notify(newObj) },
+		DeleteFunc: notify,
+	})
+	if err != nil {
+		log.Error(err, "unable to register operator ServiceMonitor handler; relying on rotation interval only")
+	}
+}
+
+// notifyOperatorServiceMonitorWake signals wake when obj is the operator ServiceMonitor
+// (controller-manager-metrics-monitor) in namespace. Non-blocking: a full wake channel
+// means a reconcile is already pending.
+func notifyOperatorServiceMonitorWake(namespace string, wake chan struct{}, obj any) {
+	u, ok := obj.(*unstructured.Unstructured)
+	if !ok {
+		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+		if !ok {
+			return
+		}
+		u, ok = tombstone.Obj.(*unstructured.Unstructured)
+		if !ok {
+			return
+		}
+	}
+	if u.GetNamespace() != namespace || u.GetName() != operatorServiceMonitorName {
+		return
+	}
+	select {
+	case wake <- struct{}{}:
+	default:
 	}
 }
 
