@@ -50,9 +50,9 @@ const (
 	operatorMetricsReaderBinding     = "konflux-operator-prometheus-konflux-operator-metrics-reader"
 )
 
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=konflux-operator-prometheus-konflux-operator-metrics-reader,verbs=get;create;patch;bind
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=konflux-operator-prometheus-konflux-operator-metrics-reader,verbs=get;create;patch;delete;bind
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=konflux-operator-metrics-reader,verbs=bind;escalate
-// +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,resourceNames=controller-manager-metrics-monitor,verbs=get;create;patch
+// +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,resourceNames=controller-manager-metrics-monitor,verbs=get;create;patch;delete
 // +kubebuilder:rbac:groups=core,resources=secrets,resourceNames=metrics-server-cert,verbs=get;list;watch
 
 // ScrapeTokenRotator reconciles operator metrics scrape wiring: scraper CRB, scrape token, and ServiceMonitor.
