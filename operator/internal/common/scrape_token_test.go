@@ -1128,6 +1128,51 @@ func TestReconcilePrometheusScrapeToken_RetainsSMWhenCertPresentButNotReady(t *t
 	}
 }
 
+func TestReconcilePrometheusScrapeToken_RetainErrorPropagatesDuringTLSWait(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
+
+	// Existing SM + metrics-server-cert with empty CA → reason "metrics-ca-empty".
+	// Retain runs for this reason but ApplyServiceMonitor returns an error.
+	sm := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{}}}
+	sm.SetGroupVersionKind(operandServiceMonitorGVK)
+	sm.SetNamespace(testBuildServiceNamespace)
+	sm.SetName(testBuildServiceNamespace)
+
+	emptyCACert := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      kubernetes.MetricsServerCertSecretName,
+			Namespace: testBuildServiceNamespace,
+		},
+		Data: map[string][]byte{
+			kubernetes.MetricsCACertKey: {},
+		},
+	}
+
+	retainErr := errors.New("retain apply failed")
+	c := fake.NewClientBuilder().WithObjects(sm, emptyCACert).Build()
+	_, err := ReconcilePrometheusScrapeToken(ctx, ScrapeTokenReconcilerConfig{
+		Client:             c,
+		Clock:              testclock.NewFakeClock(now),
+		TokenCreator:       &fakeTokenCreator{token: "tok", expiresAt: now.Add(time.Hour)},
+		Scraper:            kubernetes.OperandMetricsScraperSA(testBuildServiceNamespace),
+		OperandNamespace:   testBuildServiceNamespace,
+		ServiceMonitorName: testBuildServiceNamespace,
+		Apply: func(applyCtx context.Context, secret *corev1.Secret) error {
+			return c.Create(applyCtx, secret)
+		},
+		ApplyServiceMonitor: func(context.Context) error {
+			return retainErr
+		},
+	})
+	if err == nil {
+		t.Fatal("expected retain error to propagate during TLS wait")
+	}
+	if !errors.Is(err, retainErr) {
+		t.Fatalf("expected retain error, got: %v", err)
+	}
+}
+
 func TestReconcilePrometheusScrapeToken_NoSMGreenfield_NoRetainEitherWay(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
