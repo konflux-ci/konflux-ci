@@ -236,7 +236,7 @@ func (r *KonfluxImageControllerReconciler) applyManifests(ctx context.Context, t
 		// Deferred ServiceMonitor apply: skip operand SM until ReconcilePrometheusScrapeToken
 		// applies it after prometheus-scrape-token is readable.
 		if deferServiceMonitor && kubernetes.IsComponentMetricsServiceMonitor(obj) {
-			log.V(1).Info("Deferring operand ServiceMonitor apply until scrape token and metrics TLS are ready",
+			log.V(2).Info("Deferring operand ServiceMonitor apply until scrape token and metrics TLS are ready",
 				"kind", tracking.GetKind(obj),
 				"name", obj.GetName(),
 				"namespace", obj.GetNamespace(),

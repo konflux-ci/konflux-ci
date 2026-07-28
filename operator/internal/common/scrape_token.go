@@ -182,7 +182,7 @@ func ensureMetricsTLSReadyForServiceMonitor(
 	if tlsResult.Ready {
 		return tlsResult, nil, nil
 	}
-	logf.FromContext(ctx).Info(
+	logf.FromContext(ctx).V(1).Info(
 		"metrics scrape deferred ServiceMonitor waiting for TLS chain",
 		"namespace", cfg.OperandNamespace,
 		"servicemonitor", cfg.ServiceMonitorName,
@@ -222,7 +222,7 @@ func retainOperandServiceMonitorIfPresent(ctx context.Context, cfg ScrapeTokenRe
 		return fmt.Errorf("probe ServiceMonitor %q for TLS-wait retain: %w", cfg.ServiceMonitorName, err)
 	}
 
-	logf.FromContext(ctx).V(1).Info(
+	logf.FromContext(ctx).V(2).Info(
 		"retaining existing ServiceMonitor while waiting for metrics TLS chain",
 		"namespace", cfg.OperandNamespace,
 		"servicemonitor", cfg.ServiceMonitorName,
@@ -329,7 +329,7 @@ func applyDeferredOperandServiceMonitor(
 
 	logApply := log.Info
 	if existedKnown && result.ExistedBeforeApply {
-		logApply = log.V(1).Info
+		logApply = log.V(2).Info
 	}
 	logApply(
 		"metrics scrape deferred ServiceMonitor apply",

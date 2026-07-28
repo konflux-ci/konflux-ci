@@ -183,14 +183,29 @@ operator `ScrapeTokenRotator`.
 `SecretReader` (`mgr.GetAPIReader()`) so cert-manager updates are not missed due to
 cache lag.
 
-Operator logs (verbosity 1 unless noted):
+Operator logs:
 
+- `Deferring operand ServiceMonitor apply` — V(2); logged each reconcile
+  when deferred apply is active. Silent at default verbosity.
 - `metrics scrape deferred ServiceMonitor apply` — first SM create at Info;
-  steady-state re-apply at V(1)
-- `metrics scrape deferred ServiceMonitor waiting for TLS chain` — Info while metrics TLS
-  are missing or not yet verifying (`tls.crt`/`ca.crt` empty or mismatched). Leaf/CA
-  rotation is owned by cert-manager; the operator only waits and re-applies the SM
+  steady-state re-apply (SM already exists) at V(2). Silent at default
+  verbosity once the SM is created.
+- `metrics scrape deferred ServiceMonitor waiting for TLS chain` — V(1)
+  while metrics TLS are missing or not yet verifying (`tls.crt`/`ca.crt`
+  empty or mismatched). Visible at `-v=1` (debug). Leaf/CA rotation is
+  owned by cert-manager; the operator only waits and re-applies the SM
   when the Secret verifies again.
+- `retaining existing ServiceMonitor while waiting for metrics TLS chain`
+  — V(2); logged when an SM is re-applied during TLS wait to prevent
+  orphan cleanup from deleting it. Silent at default verbosity.
+- `skipping ServiceMonitor retain while metrics-server-cert is absent` —
+  Info; logged when metrics-server-cert is missing and retain is skipped
+  so orphan cleanup removes the stale SM.
+
+Steady-state reconciles at default verbosity produce no metrics scrape log
+lines when the ServiceMonitor exists and TLS is ready. Use `-v=1` to see
+TLS-wait messages, and `-v=2` to see per-reconcile deferral and re-apply
+details.
 
 ### OpenShift UWM integration tests
 
