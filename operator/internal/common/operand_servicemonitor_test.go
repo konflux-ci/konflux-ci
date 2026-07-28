@@ -19,49 +19,37 @@ package common
 import (
 	"testing"
 
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/apimachinery/pkg/runtime"
+
+	. "github.com/onsi/gomega"
+
+	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
-func TestOperandServiceMonitorFromObjects(t *testing.T) {
+func TestOperandServiceMonitorFromStore(t *testing.T) {
 	t.Parallel()
+	g := NewWithT(t)
 
-	sm := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{}}}
-	sm.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "monitoring.coreos.com",
-		Version: "v1",
-		Kind:    "ServiceMonitor",
-	})
-	sm.SetNamespace(testBuildServiceNamespace)
-	sm.SetName(testBuildServiceNamespace)
+	store, err := manifests.NewObjectStore(runtime.NewScheme())
+	g.Expect(err).NotTo(HaveOccurred())
 
-	other := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{}}}
-	other.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "monitoring.coreos.com",
-		Version: "v1",
-		Kind:    "ServiceMonitor",
-	})
-	other.SetNamespace("image-controller")
-	other.SetName("image-controller")
+	got, ok, err := OperandServiceMonitorFromStore(
+		store, manifests.BuildService, testBuildServiceNamespace, testBuildServiceNamespace,
+	)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(ok).To(BeTrue())
+	g.Expect(got.GetName()).To(Equal(testBuildServiceNamespace))
+	g.Expect(got.GetNamespace()).To(Equal(testBuildServiceNamespace))
 
-	objects := []client.Object{
-		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "noop"}},
-		sm,
-		other,
-	}
+	_, ok, err = OperandServiceMonitorFromStore(
+		store, manifests.BuildService, testBuildServiceNamespace, "missing",
+	)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(ok).To(BeFalse())
 
-	got, ok := OperandServiceMonitorFromObjects(objects, testBuildServiceNamespace, testBuildServiceNamespace)
-	if !ok {
-		t.Fatal("expected to find build-service ServiceMonitor")
-	}
-	if got.GetName() != testBuildServiceNamespace || got.GetNamespace() != testBuildServiceNamespace {
-		t.Fatalf("unexpected SM: %s/%s", got.GetNamespace(), got.GetName())
-	}
-
-	if _, ok := OperandServiceMonitorFromObjects(objects, testBuildServiceNamespace, "missing"); ok {
-		t.Fatal("expected missing ServiceMonitor to not be found")
-	}
+	_, ok, err = OperandServiceMonitorFromStore(
+		store, manifests.Component("unknown"), testBuildServiceNamespace, testBuildServiceNamespace,
+	)
+	g.Expect(err).To(MatchError("unknown component: unknown"))
+	g.Expect(ok).To(BeFalse())
 }

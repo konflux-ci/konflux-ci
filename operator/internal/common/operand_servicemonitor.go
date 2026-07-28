@@ -19,20 +19,22 @@ package common
 import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
-// OperandServiceMonitorFromObjects returns the embedded operand ServiceMonitor matching
-// namespace and name from a component manifest object list. Used by ApplyServiceMonitor
-// callbacks in deferred ServiceMonitor apply (SM is skipped in applyManifests, applied here).
-func OperandServiceMonitorFromObjects(objects []client.Object, namespace, name string) (client.Object, bool) {
+// OperandServiceMonitorFromStore returns the embedded operand ServiceMonitor matching
+// namespace and name for a component. Used by ApplyServiceMonitor callbacks in deferred
+// ServiceMonitor apply (SM is skipped in applyManifests, applied here).
+func OperandServiceMonitorFromStore(store *manifests.ObjectStore, component manifests.Component, namespace, name string) (client.Object, bool, error) {
+	objects, err := store.GetByGVK(component, operandServiceMonitorGVK)
+	if err != nil {
+		return nil, false, err
+	}
+
 	for _, obj := range objects {
-		if !kubernetes.IsComponentMetricsServiceMonitor(obj) {
-			continue
-		}
 		if obj.GetNamespace() == namespace && obj.GetName() == name {
-			return obj, true
+			return obj, true, nil
 		}
 	}
-	return nil, false
+	return nil, false, nil
 }
