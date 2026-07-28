@@ -233,7 +233,7 @@ only when `--metrics-bind-address` is not `0` (metrics server enabled).
 | ServiceMonitor | `ScrapeTokenRotator` ensures `controller-manager-metrics-monitor` in `konflux-operator` — `bearerTokenSecret` → `prometheus-scrape-token` |
 | Scrape Secret | `ScrapeTokenRotator` in `cmd/main.go` mints and rotates `prometheus-scrape-token` |
 | Scraper CRB | Operand reconciler binds `metrics-scraper` in the operand namespace; operator rotator does the same in `konflux-operator` |
-| Rotation | `ScrapeTokenRotator` adaptive timer (`DefaultScrapeTokenRotationInterval`, same as operand broadcaster) plus early wake on scrape-wiring Secret events (`metrics-server-cert`, scrape token); freshness check skips mint when token is still valid |
+| Rotation | `ScrapeTokenRotator` adaptive timer (`DefaultScrapeTokenRotationInterval`, same as operand broadcaster) plus early wake on scrape-wiring events (`metrics-server-cert` Secret, scrape token Secret, operator ServiceMonitor); freshness check skips mint when token is still valid |
 | Server TLS (cert-manager) | **Required** for verified scrape — `config/certmanager/` is included from default `operator-rbac` kustomization; metrics TLS Secrets gate ServiceMonitor apply |
 
 Cluster integration tests scrape via the operator-managed `prometheus-scrape-token` Secret.
@@ -403,7 +403,9 @@ steps (creating `monitoring/` kustomization, rebuilding embedded manifests via
    add `Owns` on an unstructured `ServiceMonitor`
    (`monitoring.coreos.com/v1`) so out-of-band deletion or mutation
    triggers reconcile and deferred apply recreates the SM immediately
-   (without waiting for the rotation interval)
+   (without waiting for the rotation interval). Wrap the `Owns(sm)` call
+   in a `mgr.GetRESTMapper().RESTMapping(...)` existence check so the
+   watch is skipped when the ServiceMonitor CRD is not installed
 
 **Orphan cleanup:**
 

@@ -498,12 +498,14 @@ func (s *stubCache) GetInformer(ctx context.Context, obj client.Object, _ ...ctr
 
 type stubInformer struct {
 	ctrlcache.Informer
-	addErr  error
-	handler cache.ResourceEventHandler
+	addErr   error
+	handler  cache.ResourceEventHandler
+	handlers []cache.ResourceEventHandler
 }
 
 func (s *stubInformer) AddEventHandler(handler cache.ResourceEventHandler) (cache.ResourceEventHandlerRegistration, error) {
 	s.handler = handler
+	s.handlers = append(s.handlers, handler)
 	return nil, s.addErr
 }
 
@@ -678,11 +680,15 @@ func TestScrapeTokenRotator_StartWakesOnSecretEvent(t *testing.T) {
 	defer cancel()
 
 	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
-	inf := &stubInformer{}
+	secretInf := &stubInformer{}
+	smInf := &stubInformer{}
 	rotator := &ScrapeTokenRotator{
 		Client: testClientWithMetricsTLS(t),
-		Cache: &stubCache{getInformer: func(context.Context, client.Object) (ctrlcache.Informer, error) {
-			return inf, nil
+		Cache: &stubCache{getInformer: func(_ context.Context, obj client.Object) (ctrlcache.Informer, error) {
+			if _, ok := obj.(*unstructured.Unstructured); ok {
+				return smInf, nil
+			}
+			return secretInf, nil
 		}},
 		Clock:        testclock.NewFakeClock(now),
 		TokenCreator: &fakeTokenCreator{token: "tok", expiresAt: now.Add(time.Hour)},
@@ -694,13 +700,13 @@ func TestScrapeTokenRotator_StartWakesOnSecretEvent(t *testing.T) {
 	go func() { done <- rotator.Start(ctx) }()
 
 	deadline := time.Now().Add(2 * time.Second)
-	for inf.handler == nil && time.Now().Before(deadline) {
+	for secretInf.handler == nil && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
-	if inf.handler == nil {
-		t.Fatal("handler not registered")
+	if secretInf.handler == nil {
+		t.Fatal("secret handler not registered")
 	}
-	inf.handler.OnUpdate(nil, &corev1.Secret{
+	secretInf.handler.OnUpdate(nil, &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      kubernetes.MetricsServerCertSecretName,
 			Namespace: OperatorNamespace,
