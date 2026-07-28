@@ -498,14 +498,12 @@ func (s *stubCache) GetInformer(ctx context.Context, obj client.Object, _ ...ctr
 
 type stubInformer struct {
 	ctrlcache.Informer
-	addErr   error
-	handler  cache.ResourceEventHandler
-	handlers []cache.ResourceEventHandler
+	addErr  error
+	handler cache.ResourceEventHandler
 }
 
 func (s *stubInformer) AddEventHandler(handler cache.ResourceEventHandler) (cache.ResourceEventHandlerRegistration, error) {
 	s.handler = handler
-	s.handlers = append(s.handlers, handler)
 	return nil, s.addErr
 }
 
