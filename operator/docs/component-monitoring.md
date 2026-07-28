@@ -394,8 +394,10 @@ steps (creating `monitoring/` kustomization, rebuilding embedded manifests via
 
 9. Add unit tests for both gating paths: `ComponentMetrics: nil` (enabled by
    default) and `ComponentMetrics: &ComponentMetricsConfig{Enabled:
-   ptr.To(false)}` (disabled, scrape resources skipped/deleted). Follow
-   [ginkgo-testing](../../skills/ginkgo-testing/SKILL.md) conventions.
+   ptr.To(false)}` (disabled, scrape resources skipped/deleted). Follow the
+   test style established in the target package; if the package uses
+   Ginkgo/Gomega, apply [ginkgo-testing](../../skills/ginkgo-testing/SKILL.md)
+   conventions.
 10. Register the new scrape target in the metrics integration test catalog
     (`test/go-tests/pkg/metricsauth/default_catalog.go`)
 

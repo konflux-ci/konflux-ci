@@ -33,11 +33,23 @@ If that prints matches:
 Also flag other named consumer repos or internal deployment URLs introduced
 without a clear upstream need.
 
+## Test framework consistency
+
+When a PR touches test files, verify framework and assertion consistency with the
+target file and its neighbors. The repo intentionally uses mixed styles
+(Ginkgo/Gomega, `testing.T`+Gomega, testify, plain `testing.T`) across different
+packages — see AGENTS.md § Code Style for the locality rule. Do not request
+framework conversion unless the PR itself introduces an inconsistent mix
+**within** a package that has no precedent for that style.
+
+Apply [ginkgo-testing](../ginkgo-testing/SKILL.md) patterns only to tests that
+use Ginkgo/Gomega.
+
 ## Also apply when relevant
 
 | Diff touches | Skill / rule |
 |--------------|--------------|
 | `go.mod` / Go pins | [go-toolchain-upgrade](../go-toolchain-upgrade/SKILL.md) |
 | MintMaker/Renovate companion flow | [companion-pr-review](../companion-pr-review/SKILL.md) |
-| Ginkgo tests | [ginkgo-testing](../ginkgo-testing/SKILL.md) |
+| Ginkgo tests | [ginkgo-testing](../ginkgo-testing/SKILL.md) (applies only when Ginkgo/Gomega is the established style) |
 | `operator/upstream-kustomizations/` | Rebuild manifests; [update-upstream-deps](../update-upstream-deps/SKILL.md) |
