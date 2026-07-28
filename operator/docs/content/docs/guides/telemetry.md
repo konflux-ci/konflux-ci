@@ -49,16 +49,16 @@ up all of these resources automatically.
 
 ### Optional overrides
 
-You can override the Segment write key and API endpoint. If omitted the
-operator uses the key baked into the image at build time and the default
-Segment API (`https://api.segment.io/v1`).
+You can override the Segment write key and API endpoint. A `segmentKey`
+must be provided for telemetry data to be sent; the default Segment API
+(`https://api.segment.io/v1`) is used unless overridden.
 
 ```yaml
 spec:
   telemetry:
     enabled: true
     spec:
-      # Override the Segment write key (omit to use the build-time default)
+      # Segment write key (required for telemetry data to be sent)
       segmentKey: "your-write-key"
 
       # Override the Segment API base URL — do NOT include "/batch"
@@ -201,12 +201,9 @@ outcomes) and component/namespace identifiers in hashed form.
 Where telemetry data lands depends on the Segment write key used by your
 deployment:
 
-- **Build-time default key** — if no `segmentKey` is set in the CR, the
-  operator uses the key baked into the image at build time. Data is sent to
-  whichever Segment workspace that key belongs to.
 - **Custom key** — if you provide your own key via
   `spec.telemetry.spec.segmentKey`, data is routed to your own Segment
-  workspace instead.
+  workspace.
 
 To view incoming events, log in to [app.segment.com](https://app.segment.com)
 with the account that owns the write key and open the source's **Debugger**

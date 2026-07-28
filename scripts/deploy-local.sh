@@ -85,7 +85,6 @@ SKIP_SECRETS="${SKIP_SECRETS:-false}"
 export KIND_CLUSTER KIND_MEMORY_GB PODMAN_MACHINE_NAME REGISTRY_HOST_PORT ENABLE_REGISTRY_PORT
 export INCREASE_PODMAN_PIDS_LIMIT ENABLE_IMAGE_CACHE
 export GITHUB_PRIVATE_KEY GITHUB_PRIVATE_KEY_PATH GITHUB_APP_ID WEBHOOK_SECRET QUAY_TOKEN QUAY_ORGANIZATION QUAY_API_URL
-export SEGMENT_WRITE_KEY
 
 # Child scripts only see exported variables (values from deploy-local.env are not
 # exported by sourcing); validate secrets after exports so checks see the same env.

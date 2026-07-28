@@ -153,37 +153,6 @@ spec:
       workspaces:
         - name: basic-auth
           workspace: git-auth
-    # The Segment write key is a client-side analytics token (similar to a
-    # Google Analytics tracking ID). It only permits writing telemetry events
-    # and is baked into the public binary via ldflags, so exposing it through
-    # a Tekton result is acceptable.
-    - name: read-segment-key
-      runAfter:
-        - init
-      taskSpec:
-        results:
-          - name: segment-write-key
-            description: Segment write key read from the default-segment-key secret
-        volumes:
-          - name: segment-key
-            secret:
-              secretName: default-segment-key
-              optional: true
-        steps:
-          - name: read-secret
-            image: registry.access.redhat.com/ubi10/ubi-minimal@sha256:04140c8d78c6c6915b5c1fdad2f16d10eac3630c3339999ccdf659d8c903be50
-            volumeMounts:
-              - name: segment-key
-                mountPath: /var/run/secrets/segment
-                readOnly: true
-            script: |
-              #!/usr/bin/env bash
-              KEY_FILE="/var/run/secrets/segment/SEGMENT_WRITE_KEY"
-              if [ -f "$KEY_FILE" ]; then
-                tr -d '\n' < "$KEY_FILE" > "$(results.segment-write-key.path)"
-              else
-                printf '' > "$(results.segment-write-key.path)"
-              fi
     - name: prefetch-dependencies
       params:
         - name: input
@@ -236,7 +205,6 @@ spec:
         - name: BUILD_ARGS
           value:
             - $(params.build-args[*])
-            - "SEGMENT_WRITE_KEY=$(tasks.read-segment-key.results.segment-write-key)"
         - name: BUILD_ARGS_FILE
           value: $(params.build-args-file)
         - name: PRIVILEGED_NESTED
@@ -265,7 +233,6 @@ spec:
           value: $(params.omit-history)
       runAfter:
         - prefetch-dependencies
-        - read-segment-key
       taskRef:
         params:
           - name: name

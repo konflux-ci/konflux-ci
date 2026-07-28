@@ -17,75 +17,33 @@ limitations under the License.
 package segment
 
 import (
-	"testing"
-
 	"github.com/go-logr/logr"
-	"github.com/onsi/gomega"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-func TestGetDefaultWriteKey(t *testing.T) {
-	g := gomega.NewWithT(t)
-	g.Expect(GetDefaultWriteKey()).To(gomega.BeEmpty(), "should return empty in source (no ldflags)")
-}
+var _ = Describe("ResolveWriteKey", func() {
+	It("returns the CR key and source when the CR key is set", func() {
+		key, source := ResolveWriteKey("cr-key")
+		Expect(key).To(Equal("cr-key"))
+		Expect(source).To(Equal("cr"))
+	})
 
-func TestResolveWriteKey(t *testing.T) {
-	tests := []struct {
-		name       string
-		crKey      string
-		defaultKey string
-		wantKey    string
-		wantSource string
-	}{
-		{
-			name:       "CR key takes precedence",
-			crKey:      "cr-key",
-			wantKey:    "cr-key",
-			wantSource: "cr",
-		},
-		{
-			name:       "CR key takes precedence over default",
-			crKey:      "cr-key",
-			defaultKey: "build-key",
-			wantKey:    "cr-key",
-			wantSource: "cr",
-		},
-		{
-			name:       "falls back to default when CR key is empty",
-			crKey:      "",
-			defaultKey: "build-key",
-			wantKey:    "build-key",
-			wantSource: "build-time-default",
-		},
-		{
-			name:       "returns empty when neither is set",
-			crKey:      "",
-			defaultKey: "",
-			wantKey:    "",
-			wantSource: "",
-		},
-	}
+	It("returns empty key and source when the CR key is not set", func() {
+		key, source := ResolveWriteKey("")
+		Expect(key).To(BeEmpty())
+		Expect(source).To(BeEmpty())
+	})
+})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := gomega.NewWithT(t)
-
-			gotKey, gotSource := ResolveWriteKey(tt.crKey, tt.defaultKey)
-			g.Expect(gotKey).To(gomega.Equal(tt.wantKey))
-			g.Expect(gotSource).To(gomega.Equal(tt.wantSource))
-		})
-	}
-}
-
-func TestLogWriteKeyResolution(t *testing.T) {
+var _ = Describe("LogWriteKeyResolution", func() {
 	log := logr.Discard()
 
-	t.Run("returns false when key is empty", func(t *testing.T) {
-		g := gomega.NewWithT(t)
-		g.Expect(LogWriteKeyResolution(log, "", "")).To(gomega.BeFalse())
+	It("returns false when the key is empty", func() {
+		Expect(LogWriteKeyResolution(log, "", "")).To(BeFalse())
 	})
 
-	t.Run("returns true when key is present", func(t *testing.T) {
-		g := gomega.NewWithT(t)
-		g.Expect(LogWriteKeyResolution(log, "some-key", "cr")).To(gomega.BeTrue())
+	It("returns true when the key is present", func() {
+		Expect(LogWriteKeyResolution(log, "some-key", "cr")).To(BeTrue())
 	})
-}
+})
