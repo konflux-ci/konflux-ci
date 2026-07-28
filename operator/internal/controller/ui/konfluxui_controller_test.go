@@ -1119,6 +1119,45 @@ var _ = Describe("KonfluxUI Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
+		It("removes stale containers left by SSA merge after container rename", func(ctx context.Context) {
+			startManager(noDefaultSegmentKey, nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			deploymentNN := types.NamespacedName{Name: proxyDeploymentName, Namespace: uiNamespace}
+
+			By("waiting for initial Deployment creation")
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
+				g.Expect(testutil.FindContainer(dep.Spec.Template.Spec.Containers, reverseProxyContainerName)).
+					NotTo(BeNil(), "reverse-proxy container should exist")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("injecting a stale container to simulate SSA merge from a container rename")
+			dep := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
+			dep.Spec.Template.Spec.Containers = append(dep.Spec.Template.Spec.Containers, corev1.Container{
+				Name:  "nginx",
+				Image: "nginx:latest",
+			})
+			Expect(k8sClient.Update(ctx, dep)).To(Succeed())
+
+			By("verifying the stale container is removed on next reconcile")
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
+				g.Expect(testutil.FindContainer(dep.Spec.Template.Spec.Containers, "nginx")).
+					To(BeNil(), "stale nginx container should have been removed")
+				g.Expect(testutil.FindContainer(dep.Spec.Template.Spec.Containers, reverseProxyContainerName)).
+					NotTo(BeNil(), "reverse-proxy container should still exist")
+				g.Expect(testutil.FindContainer(dep.Spec.Template.Spec.Containers, oauth2ProxyContainerName)).
+					NotTo(BeNil(), "oauth2-proxy container should still exist")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
 		It("recreates Service when deleted", func(ctx context.Context) {
 			startManager(noDefaultSegmentKey, nil)
 
