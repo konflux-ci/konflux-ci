@@ -5,6 +5,10 @@ description: Ginkgo/Gomega testing patterns for Konflux — test cleanup (envtes
 
 # Ginkgo / Gomega Testing Patterns
 
+## When to use this skill
+
+This skill applies **after** you have determined that Ginkgo/Gomega is the correct framework for the code you are writing or reviewing. Framework selection follows a locality rule (see AGENTS.md § Code Style): (1) match the existing file, (2) match neighboring files, (3) default to Ginkgo/Gomega only when no established style exists. Do not use this skill to justify converting packages that use testify, `testing.T`+Gomega, or plain table tests to Ginkgo.
+
 ## Test cleanup in envtest
 
 envtest has no garbage collector — deleted parent CRs do not cascade-delete their children. Two cleanup patterns handle this:

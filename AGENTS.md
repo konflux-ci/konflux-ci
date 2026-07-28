@@ -59,7 +59,7 @@ After changing APIs or RBAC annotations, run `make manifests generate` from `ope
 ## Code Style
 
 - Shell: `set -euo pipefail`, quote variables. Scripts that run on the user's host (deployment scripts, CLI helpers, and scripts stored in ConfigMaps that users fetch and run locally) must be compatible with both Linux and macOS — avoid GNU-only flags, prefer POSIX-compatible constructs, and test with both GNU and BSD coreutils (e.g. `sed`, `date`, `readlink`)
-- Go: Standard formatting, Ginkgo for tests, Gomega for assertions/matchers (all test types: unit, functional, e2e)
+- Go: Standard formatting. For test framework and assertion selection, follow locality: (1) match the style already used in the file you are editing, (2) match neighboring files in the same or adjacent subdirectory, (3) if no clear neighbors exist, default to Ginkgo/Gomega. Do not convert established packages to a different framework
 - Go (test client code in `test/go-tests/`): Prefer using nil-safe `Get*()` getters on `go-github` types (e.g., `pr.GetHead().GetRepo().GetCloneURL()`, `pr.GetHead().GetRef()`) instead of directly dereferencing pointer fields (`*pr.Head.Repo.CloneURL`, `*pr.Head.Ref`), which can panic on nil.
 - Kustomizations: Pin exact SHAs, not branches
 - Markdown: Update TOC with `npx markdown-toc -i` if structure changes
@@ -70,9 +70,11 @@ After changing APIs or RBAC annotations, run `make manifests generate` from `ope
 **Two distinct test suites:**
 
 1. **Platform conformance** (`test/go-tests/tests/conformance/`) — end-to-end tests against a deployed Konflux instance, run via `test/e2e/run-e2e.sh`. Uses Ginkgo/Gomega with a shared `Framework` in `test/go-tests/pkg/framework/`.
-2. **Operator unit/integration** (`operator/`) — controller tests using controller-runtime **envtest** (no real cluster needed). **Prefer Gomega matchers** for assertions in unit and functional tests. Shared test utilities in `operator/internal/controller/testutil/`. Run via `make test` from `operator/`.
+2. **Operator unit/integration** (`operator/`) — controller tests using controller-runtime **envtest** (no real cluster needed). Shared test utilities in `operator/internal/controller/testutil/`. Run via `make test` from `operator/`.
 
-For test cleanup patterns (envtest garbage collection, `DeferCleanupParentAndChildren`), `Eventually`/`Consistently` soft-assertion conventions, and K8s API error assertion idioms (`apierrors.IsNotFound()` instead of string matching), see the [ginkgo-testing](skills/ginkgo-testing/SKILL.md) skill.
+**Mixed styles by design:** The codebase uses Ginkgo/Gomega, `testing.T`+Gomega (`gomega.NewWithT`), testify, and plain `testing.T` table tests across different packages. This is intentional — follow the locality rule from Code Style above rather than converting to a single framework.
+
+For Ginkgo-specific conventions (test cleanup, soft assertions, K8s API error patterns) once Ginkgo/Gomega is the selected style, see the [ginkgo-testing](skills/ginkgo-testing/SKILL.md) skill.
 
 **CRD test conventions:**
 

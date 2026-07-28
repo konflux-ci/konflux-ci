@@ -9,6 +9,7 @@ Contributing Guidelines
 - [Using KubeLinter](#using-kubelinter)
 - [Operator Development](#operator-development)
 - [CI/CD and Testing](#cicd-and-testing)
+  * [Writing tests](#writing-tests)
   * [Operator rendered manifests](#operator-rendered-manifests)
   * [Automated E2E Tests](#automated-e2e-tests)
   * [OpenShift CI Periodic Tests](#openshift-ci-periodic-tests)
@@ -112,6 +113,18 @@ For building and running the operator from source, see the
 Kind cluster, use `OPERATOR_INSTALL_METHOD=build` with `deploy-local.sh`.
 
 # CI/CD and Testing
+
+## Writing tests
+
+When choosing a test framework and assertion library, follow this order:
+
+1. **Adding tests to an existing file** — match the style already used in that file.
+2. **Adding a new test file** — match neighboring files in the same or adjacent subdirectory.
+3. **No clear neighbors** — use Ginkgo/Gomega.
+
+The codebase uses several styles by design: Ginkgo/Gomega (most controller envtest suites and conformance tests), `testing.T` + Gomega (`operator/api`, many `operator/pkg/` packages), testify (some `test/go-tests/pkg/` helpers), and plain `testing.T` table tests. Do not convert established packages to a different framework.
+
+For Ginkgo-specific patterns (test cleanup, soft assertions, K8s API error idioms), see [AGENTS.md](AGENTS.md) § Testing and `skills/ginkgo-testing/SKILL.md`.
 
 ## Operator rendered manifests
 
