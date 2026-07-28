@@ -32,22 +32,21 @@ func TestOperandScrapeResyncExpected(t *testing.T) {
 
 func TestValidateOperandScrapeResync(t *testing.T) {
 	target := metricsauth.Target{
-		ID:        "build-service",
-		Namespace: "build-service",
-		Group:     metricsauth.TargetGroupComponent,
+		ID:                "build-service",
+		Namespace:         "build-service",
+		Group:             metricsauth.TargetGroupComponent,
 		ScrapeTokenSecret: konfluxkubernetes.ScrapeTokenSecretName,
 	}
 
 	sm := &unstructured.Unstructured{}
 	sm.SetName("build-service")
 	sm.SetNamespace("build-service")
-	// metrics-scrape-resync annotation must be absent.
-	require.NoError(t, ValidateOperandScrapeResync(sm, target))
+	require.Error(t, ValidateOperandScrapeResync(sm, target))
 
 	sm.SetAnnotations(map[string]string{
 		konfluxkubernetes.ServiceMonitorResyncAnnotation: "2026-07-12T10:00:00Z",
 	})
-	require.Error(t, ValidateOperandScrapeResync(sm, target))
+	require.NoError(t, ValidateOperandScrapeResync(sm, target))
 }
 
 func TestServiceMonitorResyncAt(t *testing.T) {
