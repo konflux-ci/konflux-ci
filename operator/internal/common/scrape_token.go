@@ -19,6 +19,7 @@ package common
 import (
 	"context"
 	"fmt"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -82,11 +83,13 @@ type DeferredSMApplyResult struct {
 // verifies again. The SM is also re-applied on every successful scrape-token reconcile
 // (idempotent SSA / orphan ownership).
 //
-// Annotation-based UWM "resync" nudges are not used: deferred apply avoids SM-before-Secret
-// rejection, and per-reconcile SM re-apply is enough for scrape health on token/CA change.
+// After the SM is applied, annotation-only "resync" patches nudge OpenShift UWM
+// prometheus-operator to re-read bearerTokenSecret / CA material when the token is
+// reminted or scrape-wiring Secret RVs change. Identical SM SSA alone does not enqueue UWM.
 // EnsurePrometheusScrapeToken / EvaluateMetricsScrapeTLS results feed scrape readiness
 // instead of re-reading Secrets from the informer cache immediately after writes.
-// RequeueAfter follows the scrape-token TTL.
+// RequeueAfter follows the scrape-token TTL, or the remaining settle delay while a
+// settle deadline is pending after TokenUpdated.
 func ReconcilePrometheusScrapeToken(ctx context.Context, cfg ScrapeTokenReconcilerConfig) (reconcile.Result, error) {
 	if err := validateScrapeTokenReconcilerConfig(cfg); err != nil {
 		return reconcile.Result{}, err
@@ -136,9 +139,7 @@ func ReconcilePrometheusScrapeToken(ctx context.Context, cfg ScrapeTokenReconcil
 		return reconcile.Result{}, err
 	}
 
-	// ResyncOperandServiceMonitor is a no-op (no annotation patches). Kept so existing
-	// call sites and option/logging helpers stay wired without writing SM annotations.
-	resyncOpts := serviceMonitorResyncOptionsFor(cfg, tokenResult, tlsResult, smApply)
+	resyncOpts, settleWait := planServiceMonitorResync(cfg, tokenResult, tlsResult, smApply)
 	if resyncOpts.Force || resyncOpts.MarkSettlePending {
 		if resyncErr := kubernetes.ResyncOperandServiceMonitor(
 			ctx,
@@ -151,6 +152,14 @@ func ReconcilePrometheusScrapeToken(ctx context.Context, cfg ScrapeTokenReconcil
 		}
 	}
 
+	if tokenResult.TokenUpdated {
+		return reconcile.Result{RequeueAfter: kubernetes.DefaultServiceMonitorResyncSettleDelay}, nil
+	}
+	// Secret watches can enqueue before RequeueAfter; keep the settle marker and
+	// return the remaining delay from the same clock sample used for the due check.
+	if settleWait > 0 {
+		return reconcile.Result{RequeueAfter: settleWait}, nil
+	}
 	return reconcile.Result{RequeueAfter: tokenResult.RequeueAfter}, nil
 }
 
@@ -245,12 +254,15 @@ func applyOrProbeOperandServiceMonitor(
 	return probeOperandServiceMonitor(ctx, cfg.Client, smKey), nil
 }
 
-func serviceMonitorResyncOptionsFor(
+// planServiceMonitorResync decides annotation nudges and any settle wait from a
+// single clock sample. Sampling twice (due-check then requeue) can miss settle-retry
+// when the deadline crosses between calls.
+func planServiceMonitorResync(
 	cfg ScrapeTokenReconcilerConfig,
 	tokenResult kubernetes.EnsureScrapeTokenResult,
 	tlsResult kubernetes.MetricsScrapeTLSResult,
 	smApply DeferredSMApplyResult,
-) kubernetes.ServiceMonitorResyncOptions {
+) (kubernetes.ServiceMonitorResyncOptions, time.Duration) {
 	secretRV := tokenResult.ResourceVersion
 	caRV := tlsResult.CAResourceVersion
 	var storedSecretRV string
@@ -262,7 +274,14 @@ func serviceMonitorResyncOptionsFor(
 		settlePending = kubernetes.ServiceMonitorResyncSettlePending(smApply.Prior)
 	}
 
+	clk := cfg.Clock
+	if clk == nil {
+		clk = clock.RealClock{}
+	}
+	now := clk.Now()
+
 	resyncOpts := kubernetes.ServiceMonitorResyncOptions{Clock: cfg.Clock}
+	var settleWait time.Duration
 	switch {
 	case tokenResult.TokenUpdated:
 		resyncOpts.Force = true
@@ -275,6 +294,12 @@ func serviceMonitorResyncOptionsFor(
 		resyncOpts.CAResourceVersion = caRV
 		resyncOpts.MarkSettlePending = true
 	case settlePending:
+		// Wait for the settle deadline; early Secret-watch reconciles must not
+		// clear the marker or issue settle-retry before DefaultServiceMonitorResyncSettleDelay.
+		settleWait = kubernetes.ServiceMonitorResyncSettleRemaining(smApply.Prior, now)
+		if settleWait > 0 {
+			break
+		}
 		resyncOpts.Force = true
 		resyncOpts.Reason = kubernetes.ServiceMonitorResyncReasonSettleRetry
 		resyncOpts.SecretResourceVersion = secretRV
@@ -291,7 +316,7 @@ func serviceMonitorResyncOptionsFor(
 		resyncOpts.SecretResourceVersion = secretRV
 		resyncOpts.CAResourceVersion = caRV
 	}
-	return resyncOpts
+	return resyncOpts, settleWait
 }
 
 // applyDeferredOperandServiceMonitor invokes ApplyServiceMonitor after the scrape token is
