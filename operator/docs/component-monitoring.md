@@ -128,6 +128,10 @@ Operand controllers use complementary mechanisms:
 - **Secret watch (metrics TLS)** — `Watches` on `metrics-server-cert` by name
   (cert-manager creates this Secret without CR ownerRefs) so metrics TLS changes are detected without
   waiting for the rotation ticker.
+- **ServiceMonitor watch** — CRD-gated `Owns` on the operand ServiceMonitor (via
+  `common.OperandServiceMonitorWatchObjectIfInstalled`) so out-of-band delete/mutate
+  triggers immediate reconcile. When the ServiceMonitor CRD is absent, controllers
+  fall back to the rotation broadcaster.
 - **Rotation broadcaster** — a leader-elected ticker (default every 15 minutes) nudges
   subscribed controllers to reconcile so tokens refresh before expiry and rotation still
   runs if a reconcile was skipped.
@@ -418,27 +422,36 @@ steps (creating `monitoring/` kustomization, rebuilding embedded manifests via
    `get;list;watch;create;patch` — omitting `create` will prevent the
    controller from creating ServiceMonitors
 
+**Controller watches:**
+
+8. In `SetupWithManager`, register a CRD-gated ServiceMonitor `Owns` watch
+   with `common.OperandServiceMonitorWatchObjectIfInstalled(mgr.GetRESTMapper())`
+   so out-of-band ServiceMonitor delete/mutate triggers immediate reconcile.
+   Follow the pattern in build-service, image-controller, release-service,
+   integration-service, and UI. When the CRD is absent, skip the watch and
+   rely on the rotation broadcaster.
+
 **Orphan cleanup:**
 
-8. Extend orphan cleanup GVKs with
+9. Extend orphan cleanup GVKs with
    `kubernetes.ComponentMetricsOrphanCleanupGVKs` and add
    ClusterRole/ClusterRoleBinding names to the cluster-scoped resource
    allowlist in the component reconciler
 
 **Tests:**
 
-9. Add unit tests for both gating paths: `ComponentMetrics: nil` (enabled by
-   default) and `ComponentMetrics: &ComponentMetricsConfig{Enabled:
-   ptr.To(false)}` (disabled, scrape resources skipped/deleted). Follow the
-   test style established in the target package; if the package uses
-   Ginkgo/Gomega, apply [ginkgo-testing](../../skills/ginkgo-testing/SKILL.md)
-   conventions.
-10. Register the new scrape target in the metrics integration test catalog
+10. Add unit tests for both gating paths: `ComponentMetrics: nil` (enabled by
+    default) and `ComponentMetrics: &ComponentMetricsConfig{Enabled:
+    ptr.To(false)}` (disabled, scrape resources skipped/deleted). Follow the
+    test style established in the target package; if the package uses
+    Ginkgo/Gomega, apply [ginkgo-testing](../../skills/ginkgo-testing/SKILL.md)
+    conventions.
+11. Register the new scrape target in the metrics integration test catalog
     (`test/go-tests/pkg/metricsauth/default_catalog.go`)
 
 **Documentation:**
 
-11. Update this document to list the new component under the appropriate
+12. Update this document to list the new component under the appropriate
     scrape model in the [Scope](#scope) tables
 
 ## Related paths

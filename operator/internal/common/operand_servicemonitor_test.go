@@ -17,9 +17,11 @@ limitations under the License.
 package common
 
 import (
+	"errors"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -64,4 +66,71 @@ func TestOperandServiceMonitorFromObjects(t *testing.T) {
 	if _, ok := OperandServiceMonitorFromObjects(objects, testBuildServiceNamespace, "missing"); ok {
 		t.Fatal("expected missing ServiceMonitor to not be found")
 	}
+}
+
+func TestOperandServiceMonitorWatchObjectIfInstalled(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil mapper", func(t *testing.T) {
+		t.Parallel()
+		if sm, ok := OperandServiceMonitorWatchObjectIfInstalled(nil); ok || sm != nil {
+			t.Fatalf("expected nil mapper to skip watch object, got ok=%v sm=%v", ok, sm)
+		}
+	})
+
+	t.Run("CRD absent", func(t *testing.T) {
+		t.Parallel()
+		mapper := meta.NewDefaultRESTMapper(nil)
+		if sm, ok := OperandServiceMonitorWatchObjectIfInstalled(mapper); ok || sm != nil {
+			t.Fatalf("expected absent CRD to skip watch object, got ok=%v sm=%v", ok, sm)
+		}
+	})
+
+	t.Run("CRD present", func(t *testing.T) {
+		t.Parallel()
+		mapper := meta.NewDefaultRESTMapper([]schema.GroupVersion{operandServiceMonitorGVK.GroupVersion()})
+		mapper.Add(operandServiceMonitorGVK, meta.RESTScopeNamespace)
+		sm, ok := OperandServiceMonitorWatchObjectIfInstalled(mapper)
+		if !ok || sm == nil {
+			t.Fatal("expected watch object when ServiceMonitor CRD is mapped")
+		}
+		if sm.GroupVersionKind() != operandServiceMonitorGVK {
+			t.Fatalf("unexpected GVK: %#v", sm.GroupVersionKind())
+		}
+	})
+
+	t.Run("non-NoMatch mapping error", func(t *testing.T) {
+		t.Parallel()
+		sm, ok := OperandServiceMonitorWatchObjectIfInstalled(errRESTMapper{err: errors.New("discovery unavailable")})
+		if ok || sm != nil {
+			t.Fatalf("expected non-NoMatch mapping error to skip watch object, got ok=%v sm=%v", ok, sm)
+		}
+	})
+}
+
+// errRESTMapper returns a fixed RESTMapping error for ServiceMonitor lookups.
+type errRESTMapper struct {
+	err error
+}
+
+func (m errRESTMapper) KindFor(_ schema.GroupVersionResource) (schema.GroupVersionKind, error) {
+	return schema.GroupVersionKind{}, m.err
+}
+func (m errRESTMapper) KindsFor(_ schema.GroupVersionResource) ([]schema.GroupVersionKind, error) {
+	return nil, m.err
+}
+func (m errRESTMapper) ResourceFor(_ schema.GroupVersionResource) (schema.GroupVersionResource, error) {
+	return schema.GroupVersionResource{}, m.err
+}
+func (m errRESTMapper) ResourcesFor(_ schema.GroupVersionResource) ([]schema.GroupVersionResource, error) {
+	return nil, m.err
+}
+func (m errRESTMapper) RESTMapping(_ schema.GroupKind, _ ...string) (*meta.RESTMapping, error) {
+	return nil, m.err
+}
+func (m errRESTMapper) RESTMappings(_ schema.GroupKind, _ ...string) ([]*meta.RESTMapping, error) {
+	return nil, m.err
+}
+func (m errRESTMapper) ResourceSingularizer(_ string) (string, error) {
+	return "", m.err
 }

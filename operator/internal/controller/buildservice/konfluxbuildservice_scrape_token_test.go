@@ -186,6 +186,56 @@ var _ = Describe("Prometheus scrape token", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
+		It("recreates the ServiceMonitor when deleted out of band", func(ctx context.Context) {
+			clk := testclock.NewFakeClock(time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC))
+			fake := &fakeTokenCreator{
+				token:     "envtest-scrape-token",
+				expiresAt: clk.Now().Add(time.Hour),
+			}
+			startManagerWithTokenCreator(fake, clk)
+
+			buildService := testBuildServiceWithComponentMetrics(testutil.DefaultComponentMetricsConfig())
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+
+			smNN := types.NamespacedName{
+				Name:      "build-service",
+				Namespace: buildServiceNamespace,
+			}
+			smGVK := schema.GroupVersionKind{
+				Group:   "monitoring.coreos.com",
+				Version: "v1",
+				Kind:    "ServiceMonitor",
+			}
+			Eventually(func(g Gomega) {
+				sm := &unstructured.Unstructured{}
+				sm.SetGroupVersionKind(smGVK)
+				g.Expect(k8sClient.Get(ctx, smNN, sm)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			sm := &unstructured.Unstructured{}
+			sm.SetGroupVersionKind(smGVK)
+			sm.SetNamespace(smNN.Namespace)
+			sm.SetName(smNN.Name)
+			Expect(k8sClient.Delete(ctx, sm)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				recreated := &unstructured.Unstructured{}
+				recreated.SetGroupVersionKind(smGVK)
+				g.Expect(k8sClient.Get(ctx, smNN, recreated)).To(Succeed())
+				endpoints, found, err := unstructured.NestedSlice(recreated.Object, "spec", "endpoints")
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(found).To(BeTrue())
+				g.Expect(endpoints).NotTo(BeEmpty())
+				ep, ok := endpoints[0].(map[string]interface{})
+				g.Expect(ok).To(BeTrue())
+				secretRef, found, err := unstructured.NestedMap(ep, "bearerTokenSecret")
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(found).To(BeTrue())
+				g.Expect(secretRef["name"]).To(Equal(kubernetes.ScrapeTokenSecretName))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
 		It("refreshes the scrape token after the rotation threshold", func(ctx context.Context) {
 			clk := testclock.NewFakeClock(time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC))
 			fake := &fakeTokenCreator{
