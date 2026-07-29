@@ -644,7 +644,7 @@ spec:
             secretKeyRef:
               key: cookie-secret
               name: oauth2-proxy-cookie-secret
-        image: quay.io/konflux-ci/oauth2-proxy@sha256:4240af5b9e0d80f6f135ad968e7cafe8dd234dcb354117dad69164bd26ce6419
+        image: quay.io/konflux-ci/oauth2-proxy@sha256:92fed0177f943280194d5e95e4986c4a5ee3e5da85552cbc5a394c283fe40e5d
         name: oauth2-proxy
         ports:
         - containerPort: 6000
@@ -666,7 +666,7 @@ spec:
         - -R
         - /opt/app-root/src/.
         - /mnt/static-content/
-        image: quay.io/konflux-ci/konflux-ui@sha256:3f45bbdb0c651269597999cf930ec8304a9bbe031e5816ac58923f9b545a7495
+        image: quay.io/konflux-ci/konflux-ui@sha256:58e204e5aa600b8f49540608772deb96c7b3e91d545e97cd676c1a84a2d153e5
         name: copy-static-content
         resources:
           limits:
@@ -684,7 +684,7 @@ spec:
       - command:
         - sh
         - /var/run/scripts/konflux-ci.dev/generate-proxy-config.sh
-        image: quay.io/konflux-ci/konflux-ui@sha256:3f45bbdb0c651269597999cf930ec8304a9bbe031e5816ac58923f9b545a7495
+        image: quay.io/konflux-ci/konflux-ui@sha256:58e204e5aa600b8f49540608772deb96c7b3e91d545e97cd676c1a84a2d153e5
         name: generate-proxy-config
         resources:
           limits:

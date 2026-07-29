@@ -164,14 +164,19 @@ the Secret verifies again. For other not-ready reasons (`metrics-ca-empty`,
 `metrics-server-cert-empty`, `leaf-ca-mismatch`) the Secret object exists and
 CA references resolve, so retain runs normally.
 
-Annotation-only "resync" patches on the ServiceMonitor are **not** used. Deferred
-apply is what prevents SM-before-Secret `InvalidConfiguration` rejection; once the
-SM is accepted, per-reconcile re-apply (and normal Secret remint/reissue) is
-sufficient for scrape continuity when the token or metrics TLS Secret changes.
-OpenShift UWM prometheus-operator still often lacks cross-namespace Secret watches,
-but that does not require annotation nudges when create ordering is correct.
+Annotation-only "resync" patches on the ServiceMonitor nudge OpenShift UWM
+prometheus-operator to re-evaluate scrape config after the scrape token is
+reminted or metrics TLS CA material changes. Deferred apply still prevents
+SM-before-Secret `InvalidConfiguration` rejection; identical SM SSA alone does
+**not** enqueue UWM when only Secret data changes, so
+`ResyncOperandServiceMonitor` merge-patches `metrics-scrape-resync*` annotations
+(`token-minted` / `token-refreshed` / `secret-sync` / `ca-sync` / `settle-retry`).
+After token mint/refresh, `metrics-scrape-resync-settle` holds an RFC3339 deadline
+(`now` + 15s); early Secret-watch reconciles requeue the remaining delay and only
+issue `settle-retry` once that deadline elapses.
 
 Implementation: `operator/internal/common/scrape_token.go`,
+`operator/pkg/kubernetes/servicemonitor_resync.go`,
 `operator/pkg/kubernetes/metrics_tls.go`, wired from build-service,
 image-controller, release-service, and integration-service reconcilers and the
 operator `ScrapeTokenRotator`.
@@ -183,14 +188,33 @@ operator `ScrapeTokenRotator`.
 `SecretReader` (`mgr.GetAPIReader()`) so cert-manager updates are not missed due to
 cache lag.
 
-Operator logs (verbosity 1 unless noted):
+Operator logs:
 
+- `Deferring operand ServiceMonitor apply` — V(2); logged each reconcile
+  when deferred apply is active. Silent at default verbosity.
 - `metrics scrape deferred ServiceMonitor apply` — first SM create at Info;
-  steady-state re-apply at V(1)
-- `metrics scrape deferred ServiceMonitor waiting for TLS chain` — Info while metrics TLS
-  are missing or not yet verifying (`tls.crt`/`ca.crt` empty or mismatched). Leaf/CA
-  rotation is owned by cert-manager; the operator only waits and re-applies the SM
+  steady-state re-apply (SM already exists) at V(2). Silent at default
+  verbosity once the SM is created.
+- `metrics scrape deferred ServiceMonitor waiting for TLS chain` — V(1)
+  while metrics TLS are missing or not yet verifying (`tls.crt`/`ca.crt`
+  empty or mismatched). Visible at `-v=1` (debug). Leaf/CA rotation is
+  owned by cert-manager; the operator only waits and re-applies the SM
   when the Secret verifies again.
+- `retaining existing ServiceMonitor while waiting for metrics TLS chain`
+  — V(2); logged when an SM is re-applied during TLS wait to prevent
+  orphan cleanup from deleting it. Silent at default verbosity.
+- `skipping ServiceMonitor retain while metrics-server-cert is absent` —
+  Info; logged when metrics-server-cert is missing and retain is skipped
+  so orphan cleanup removes the stale SM.
+- `metrics scrape resync` — Info when annotation-only SM nudge runs
+  (`token-minted`, `token-refreshed`, `secret-sync`, `ca-sync`,
+  `settle-retry`). Emitted on remint / Secret or CA RV change, not on
+  steady-state reconciles.
+
+Steady-state reconciles at default verbosity produce no metrics scrape log
+lines when the ServiceMonitor exists and TLS is ready (no remint/resync).
+Use `-v=1` to see TLS-wait messages, and `-v=2` to see per-reconcile
+deferral and re-apply details.
 
 ### OpenShift UWM integration tests
 
@@ -201,8 +225,8 @@ On OpenShift optional e2e (`konflux-e2e-v420-optional`, `konflux-e2e-v420-arm64-
 The suite verifies:
 
 - UWM Prometheus is ready in `openshift-user-workload-monitoring`
-- Operand scrape contract (ServiceMonitor spec, token Secret, absence of
-  `metrics-scrape-resync` annotations) for scrape-token targets
+- Operand scrape contract (ServiceMonitor spec, token Secret, presence of
+  `metrics-scrape-resync` annotations after token mint) for scrape-token targets
   (`konflux-operator`, `build-service`, `image-controller`, `release-service`,
   `integration-service`)
 - `up==1` in UWM Prometheus for scrape-token targets (`metrics-uwm`) and legacy interim
@@ -427,4 +451,4 @@ steps (creating `monitoring/` kustomization, rebuilding embedded manifests via
 | OpenShift UWM tests | `test/go-tests/metricsopenshift/` + `test/go-tests/pkg/metricsopenshift/` (via `scripts/operator-e2e/openshift/run-metrics-openshift-tests.sh`, optional OCP e2e in `test/e2e/run-e2e.sh`) |
 | Deferred SM apply + scrape token | `operator/internal/common/scrape_token.go`, `operand_servicemonitor.go` |
 | Metrics TLS readiness | `operator/pkg/kubernetes/metrics_tls.go` |
-| Unused SM annotation helpers | `operator/pkg/kubernetes/servicemonitor_resync.go` (no-op; contract tests assert annotations absent) |
+| SM annotation resync | `operator/pkg/kubernetes/servicemonitor_resync.go` (UWM nudge on token/CA change) |

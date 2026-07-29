@@ -74,9 +74,9 @@ type KonfluxEnterpriseContractReconciler struct {
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxenterprisecontracts/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxenterprisecontracts/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=list
-// +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;patch
-// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;patch
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings;clusterroles,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings;clusterroles,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,resourceNames=public-ec-cm;public-ecp,verbs=bind
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=enterprisecontract-configmap-viewer-role;enterprisecontractpolicy-viewer-role,verbs=bind;escalate
 // +kubebuilder:rbac:groups=appstudio.redhat.com,resources=enterprisecontractpolicies,verbs=get;list;watch;create;update;patch;delete

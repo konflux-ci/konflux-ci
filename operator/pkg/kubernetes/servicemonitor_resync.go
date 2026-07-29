@@ -21,38 +21,47 @@ import (
 	"fmt"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/clock"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
-	// ServiceMonitorResyncAnnotation is a historical annotation key. Operand reconcilers
-	// do not write it; OpenShift contract tests assert it is absent.
+	// ServiceMonitorResyncAnnotation records the last time the operand reconciler
+	// nudged user-workload prometheus-operator to re-process a ServiceMonitor.
+	// See operator/docs/component-monitoring.md (resync nudges).
 	ServiceMonitorResyncAnnotation = "konflux.konflux-ci.dev/metrics-scrape-resync"
-	// ServiceMonitorResyncReasonAnnotation is unused (see ServiceMonitorResyncAnnotation).
+	// ServiceMonitorResyncReasonAnnotation records why the last resync nudge ran.
 	ServiceMonitorResyncReasonAnnotation = "konflux.konflux-ci.dev/metrics-scrape-resync-reason"
-	// ServiceMonitorResyncSecretRVAnnotation is unused (see ServiceMonitorResyncAnnotation).
+	// ServiceMonitorResyncSecretRVAnnotation records the scrape-token Secret
+	// resourceVersion last seen when the SM was nudged.
 	//nolint:gosec // G101: annotation key, not a credential
 	ServiceMonitorResyncSecretRVAnnotation = "konflux.konflux-ci.dev/metrics-scrape-resync-secret-rv"
-	// ServiceMonitorResyncCARVAnnotation is unused (see ServiceMonitorResyncAnnotation).
+	// ServiceMonitorResyncCARVAnnotation records the metrics-ca Secret resourceVersion
+	// last seen when the SM was nudged (so UWM refreshes tls-assets on CA change).
 	//nolint:gosec // G101: annotation key, not a credential
 	ServiceMonitorResyncCARVAnnotation = "konflux.konflux-ci.dev/metrics-scrape-resync-ca-rv"
-	// ServiceMonitorResyncSettleAnnotation is unused (see ServiceMonitorResyncAnnotation).
+	// ServiceMonitorResyncSettleAnnotation marks a pending delayed settle nudge.
+	// Value is the RFC3339 UTC deadline after which settle-retry may run. Legacy
+	// value "pending" (no deadline) is treated as already due.
 	ServiceMonitorResyncSettleAnnotation = "konflux.konflux-ci.dev/metrics-scrape-resync-settle"
 
-	// Historical reason string constants retained for callers/tests.
+	// ServiceMonitor resync reason values (also logged and echoed in e2e artifacts).
 	ServiceMonitorResyncReasonTokenMinted    = "token-minted"
 	ServiceMonitorResyncReasonTokenRefreshed = "token-refreshed"
 	ServiceMonitorResyncReasonSecretSync     = "secret-sync"
 	ServiceMonitorResyncReasonCASync         = "ca-sync"
 	ServiceMonitorResyncReasonSettleRetry    = "settle-retry"
 
-	// DefaultServiceMonitorResyncSettleDelay is unused; settle-retry requeues are not used.
+	// DefaultServiceMonitorResyncSettleDelay waits before a settle-retry SM patch.
 	DefaultServiceMonitorResyncSettleDelay = 15 * time.Second
 
-	serviceMonitorResyncSettlePending = "pending"
+	// serviceMonitorResyncSettlePendingLegacy is the pre-deadline settle marker.
+	serviceMonitorResyncSettlePendingLegacy = "pending"
 )
 
 var serviceMonitorGVK = schema.GroupVersionKind{
@@ -61,31 +70,39 @@ var serviceMonitorGVK = schema.GroupVersionKind{
 	Kind:    "ServiceMonitor",
 }
 
-// ServiceMonitorResyncOptions configures a call to ResyncOperandServiceMonitor.
+// ServiceMonitorResyncOptions configures an operand ServiceMonitor resync patch.
 //
-// Annotation nudges are not applied; the options type and reason constants remain for
-// call-site compatibility and for e2e evidence helpers that assert annotations are absent.
+// Resync patches are annotation-only nudges so prometheus-operator re-evaluates the SM
+// after the scrape token is readable. Callers in ReconcilePrometheusScrapeToken set
+// Reason and SecretResourceVersion; MarkSettlePending/ClearSettlePending coordinate the
+// settle-retry requeue so secret-sync does not race ahead of settle-retry.
 type ServiceMonitorResyncOptions struct {
-	// Force is retained for call-site compatibility; ResyncOperandServiceMonitor ignores it.
+	// Force patches even when a prior resync annotation exists.
 	Force bool
-	// Reason is retained for call-site compatibility; no annotation is written.
+	// Reason is stored in ServiceMonitorResyncReasonAnnotation (token-minted, token-refreshed,
+	// settle-retry, secret-sync, ca-sync).
 	Reason string
-	// SecretResourceVersion is retained for call-site compatibility.
+	// SecretResourceVersion is stored in ServiceMonitorResyncSecretRVAnnotation.
 	SecretResourceVersion string
-	// CAResourceVersion is retained for call-site compatibility.
+	// CAResourceVersion is stored in ServiceMonitorResyncCARVAnnotation.
 	CAResourceVersion string
-	// MarkSettlePending is retained for call-site compatibility.
+	// MarkSettlePending sets metrics-scrape-resync-settle to now+settle delay (RFC3339
+	// deadline) until settle-retry clears it.
 	MarkSettlePending bool
-	// ClearSettlePending is retained for call-site compatibility.
+	// ClearSettlePending removes the settle-pending annotation (settle-retry path).
 	ClearSettlePending bool
 	Clock              clock.Clock
 }
 
-// ResyncOperandServiceMonitor previously patched ServiceMonitor annotations to nudge
-// OpenShift UWM prometheus-operator. It is intentionally a no-op: deferred ServiceMonitor
-// apply prevents SM-before-Secret rejection, and idempotent SM re-apply on reconcile covers
-// scrape continuity when the token or metrics TLS Secret changes. Callers may still invoke
-// it; no annotations are written.
+// ResyncOperandServiceMonitor patches operand ServiceMonitor annotations so prometheus-operator
+// re-evaluates scrape configuration.
+//
+// On OpenShift UWM, prometheus-operator can reject a ServiceMonitor when bearerTokenSecret is
+// not visible at evaluation time and may not recover when the Secret appears later. A merge
+// patch on resync annotations triggers re-processing without changing scrape spec.
+//
+// No-op when the ServiceMonitor CRD is absent or the object is not found. When Force is
+// false and a resync annotation already exists, skips unless MarkSettlePending is set.
 func ResyncOperandServiceMonitor(
 	ctx context.Context,
 	c client.Client,
@@ -95,21 +112,111 @@ func ResyncOperandServiceMonitor(
 	if namespace == "" || name == "" {
 		return fmt.Errorf("serviceMonitor namespace and name are required")
 	}
-	_ = c
-	_ = ctx
-	_ = opts
+	clk := opts.Clock
+	if clk == nil {
+		clk = clock.RealClock{}
+	}
+
+	existing := &unstructured.Unstructured{}
+	existing.SetGroupVersionKind(serviceMonitorGVK)
+	err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, existing)
+	if meta.IsNoMatchError(err) {
+		return nil
+	}
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("get ServiceMonitor %s/%s: %w", namespace, name, err)
+	}
+
+	if !opts.Force && !opts.MarkSettlePending && hasServiceMonitorResyncAnnotation(existing) {
+		return nil
+	}
+
+	resyncAt := clk.Now().UTC().Format(time.RFC3339)
+	patch := existing.DeepCopy()
+	annotations := patch.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	annotations[ServiceMonitorResyncAnnotation] = resyncAt
+	if opts.Reason != "" {
+		annotations[ServiceMonitorResyncReasonAnnotation] = opts.Reason
+	}
+	if opts.SecretResourceVersion != "" {
+		annotations[ServiceMonitorResyncSecretRVAnnotation] = opts.SecretResourceVersion
+	}
+	if opts.CAResourceVersion != "" {
+		annotations[ServiceMonitorResyncCARVAnnotation] = opts.CAResourceVersion
+	}
+	if opts.MarkSettlePending {
+		deadline := clk.Now().UTC().Add(DefaultServiceMonitorResyncSettleDelay)
+		annotations[ServiceMonitorResyncSettleAnnotation] = deadline.Format(time.RFC3339)
+	}
+	if opts.ClearSettlePending {
+		delete(annotations, ServiceMonitorResyncSettleAnnotation)
+	}
+	patch.SetAnnotations(annotations)
+
+	if err := c.Patch(ctx, patch, client.MergeFrom(existing)); err != nil {
+		if meta.IsNoMatchError(err) {
+			return nil
+		}
+		return fmt.Errorf("patch ServiceMonitor %s/%s: %w", namespace, name, err)
+	}
+
+	logf.FromContext(ctx).Info(
+		"metrics scrape resync",
+		"namespace", namespace,
+		"servicemonitor", name,
+		"reason", opts.Reason,
+		"secretResourceVersion", opts.SecretResourceVersion,
+		"caResourceVersion", opts.CAResourceVersion,
+		"resyncAt", resyncAt,
+	)
 	return nil
 }
 
-// ServiceMonitorResyncSettlePending reports whether a historical settle-pending annotation
-// is present. Operand reconcilers do not set it.
+func hasServiceMonitorResyncAnnotation(sm *unstructured.Unstructured) bool {
+	if sm == nil {
+		return false
+	}
+	annotations := sm.GetAnnotations()
+	return annotations != nil && annotations[ServiceMonitorResyncAnnotation] != ""
+}
+
+// ServiceMonitorResyncSettlePending reports whether a delayed settle-retry nudge is pending.
+// While pending, ReconcilePrometheusScrapeToken blocks secret-sync resyncs until the
+// settle deadline elapses (see ServiceMonitorResyncSettleRemaining).
 func ServiceMonitorResyncSettlePending(sm *unstructured.Unstructured) bool {
 	if sm == nil {
 		return false
 	}
 	annotations := sm.GetAnnotations()
-	return annotations != nil &&
-		annotations[ServiceMonitorResyncSettleAnnotation] == serviceMonitorResyncSettlePending
+	return annotations != nil && annotations[ServiceMonitorResyncSettleAnnotation] != ""
+}
+
+// ServiceMonitorResyncSettleRemaining returns how long until settle-retry may run.
+// Zero means the settle nudge is due (or no settle is pending). Early Secret-watch
+// reconciles must requeue this duration instead of clearing the settle marker.
+func ServiceMonitorResyncSettleRemaining(sm *unstructured.Unstructured, now time.Time) time.Duration {
+	if !ServiceMonitorResyncSettlePending(sm) {
+		return 0
+	}
+	value := sm.GetAnnotations()[ServiceMonitorResyncSettleAnnotation]
+	if value == "" || value == serviceMonitorResyncSettlePendingLegacy {
+		// Legacy "pending" (or empty) has no deadline; treat as already due.
+		return 0
+	}
+	deadline, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return 0
+	}
+	if !now.Before(deadline) {
+		return 0
+	}
+	return deadline.Sub(now)
 }
 
 // ServiceMonitorResyncSecretRV returns the secret resourceVersion recorded on the SM.
