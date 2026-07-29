@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -1500,9 +1501,288 @@ func TestClient_CleanupOrphans_WithoutOwnershipConfig(t *testing.T) {
 	g.Expect(errors.IsNotFound(err)).To(BeTrue(), "ConfigMap should be deleted - no ownership config means no owner check")
 }
 
+func TestSnapshotDesiredContainers(t *testing.T) {
+	t.Run("returns snapshot for Deployment", func(t *testing.T) {
+		g := NewWithT(t)
+		dep := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{Name: "app"},
+							{Name: "sidecar"},
+						},
+						InitContainers: []corev1.Container{
+							{Name: "init"},
+						},
+					},
+				},
+			},
+		}
+		snap := snapshotDesiredContainers(dep)
+		g.Expect(snap).NotTo(BeNil())
+		g.Expect(snap.containers.Has("app")).To(BeTrue())
+		g.Expect(snap.containers.Has("sidecar")).To(BeTrue())
+		g.Expect(snap.initContainers.Has("init")).To(BeTrue())
+	})
+
+	t.Run("returns snapshot for StatefulSet", func(t *testing.T) {
+		g := NewWithT(t)
+		ss := &appsv1.StatefulSet{
+			Spec: appsv1.StatefulSetSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{Name: "db"},
+						},
+					},
+				},
+			},
+		}
+		snap := snapshotDesiredContainers(ss)
+		g.Expect(snap).NotTo(BeNil())
+		g.Expect(snap.containers.Has("db")).To(BeTrue())
+	})
+
+	t.Run("returns snapshot for DaemonSet", func(t *testing.T) {
+		g := NewWithT(t)
+		ds := &appsv1.DaemonSet{
+			Spec: appsv1.DaemonSetSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{Name: "agent"},
+						},
+					},
+				},
+			},
+		}
+		snap := snapshotDesiredContainers(ds)
+		g.Expect(snap).NotTo(BeNil())
+		g.Expect(snap.containers.Has("agent")).To(BeTrue())
+	})
+
+	t.Run("returns nil for ConfigMap", func(t *testing.T) {
+		g := NewWithT(t)
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: testNamespace},
+		}
+		g.Expect(snapshotDesiredContainers(cm)).To(BeNil())
+	})
+}
+
+func TestFilterContainers(t *testing.T) {
+	t.Run("keeps desired containers and identifies stale ones", func(t *testing.T) {
+		g := NewWithT(t)
+		containers := []corev1.Container{
+			{Name: "app", Image: "app:v1"},
+			{Name: "nginx", Image: "nginx:latest"},
+			{Name: "sidecar", Image: "sidecar:v1"},
+		}
+		desired := sets.New("app", "sidecar")
+
+		clean, stale := filterContainers(containers, desired)
+
+		g.Expect(clean).To(HaveLen(2))
+		g.Expect(clean[0].Name).To(Equal("app"))
+		g.Expect(clean[1].Name).To(Equal("sidecar"))
+		g.Expect(stale).To(ConsistOf("nginx"))
+	})
+
+	t.Run("returns no stale when all containers are desired", func(t *testing.T) {
+		g := NewWithT(t)
+		containers := []corev1.Container{
+			{Name: "app"},
+			{Name: "sidecar"},
+		}
+		desired := sets.New("app", "sidecar")
+
+		clean, stale := filterContainers(containers, desired)
+
+		g.Expect(clean).To(HaveLen(2))
+		g.Expect(stale).To(BeEmpty())
+	})
+
+	t.Run("handles empty container list", func(t *testing.T) {
+		g := NewWithT(t)
+		desired := sets.New("app")
+
+		clean, stale := filterContainers(nil, desired)
+
+		g.Expect(clean).To(BeEmpty())
+		g.Expect(stale).To(BeEmpty())
+	})
+}
+
+func TestRemoveStaleContainers_Deployment(t *testing.T) {
+	g := NewWithT(t)
+	ctx := context.Background()
+
+	scheme := setupScheme(g)
+	// Pre-create a Deployment with a stale container
+	dep := &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "Deployment"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "proxy",
+			Namespace: testNamespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "proxy"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "proxy"}},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "reverse-proxy", Image: "caddy:latest"},
+						{Name: "oauth2-proxy", Image: "oauth2-proxy:latest"},
+						{Name: "nginx", Image: "nginx:latest"}, // stale
+					},
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(dep).Build()
+
+	// Desired state does not include "nginx"
+	desired := &containerSnapshot{
+		containers:     sets.New("reverse-proxy", "oauth2-proxy"),
+		initContainers: sets.New[string](),
+	}
+
+	err := removeStaleContainers(ctx, fakeClient, dep, desired)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Verify stale container was removed from the server
+	var fetched appsv1.Deployment
+	err = fakeClient.Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: "proxy"}, &fetched)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(fetched.Spec.Template.Spec.Containers).To(HaveLen(2))
+	containerNames := sets.New[string]()
+	for _, c := range fetched.Spec.Template.Spec.Containers {
+		containerNames.Insert(c.Name)
+	}
+	g.Expect(containerNames.Has("reverse-proxy")).To(BeTrue())
+	g.Expect(containerNames.Has("oauth2-proxy")).To(BeTrue())
+	g.Expect(containerNames.Has("nginx")).To(BeFalse(), "stale nginx container should have been removed")
+}
+
+func TestRemoveStaleContainers_NoOp(t *testing.T) {
+	g := NewWithT(t)
+	ctx := context.Background()
+
+	scheme := setupScheme(g)
+	dep := &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "Deployment"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "proxy",
+			Namespace: testNamespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "proxy"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "proxy"}},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "reverse-proxy", Image: "caddy:latest"},
+						{Name: "oauth2-proxy", Image: "oauth2-proxy:latest"},
+					},
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(dep).Build()
+
+	// All containers are desired — should be a no-op
+	desired := &containerSnapshot{
+		containers:     sets.New("reverse-proxy", "oauth2-proxy"),
+		initContainers: sets.New[string](),
+	}
+
+	err := removeStaleContainers(ctx, fakeClient, dep, desired)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Verify nothing changed
+	var fetched appsv1.Deployment
+	err = fakeClient.Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: "proxy"}, &fetched)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(fetched.Spec.Template.Spec.Containers).To(HaveLen(2))
+}
+
+func TestRemoveStaleContainers_NonDeploymentSkipped(t *testing.T) {
+	g := NewWithT(t)
+	ctx := context.Background()
+
+	scheme := setupScheme(g)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: testNamespace},
+	}
+
+	// Should be a no-op for non-pod-template resources
+	desired := &containerSnapshot{
+		containers:     sets.New("app"),
+		initContainers: sets.New[string](),
+	}
+
+	err := removeStaleContainers(ctx, fakeClient, cm, desired)
+	g.Expect(err).NotTo(HaveOccurred())
+}
+
+func TestRemoveStaleContainers_StatefulSet(t *testing.T) {
+	g := NewWithT(t)
+	ctx := context.Background()
+
+	scheme := setupScheme(g)
+	ss := &appsv1.StatefulSet{
+		TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "StatefulSet"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "db",
+			Namespace: testNamespace,
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "db"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "db"}},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "postgres", Image: "postgres:16"},
+						{Name: "old-exporter", Image: "exporter:old"}, // stale
+					},
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ss).Build()
+
+	desired := &containerSnapshot{
+		containers:     sets.New("postgres"),
+		initContainers: sets.New[string](),
+	}
+
+	err := removeStaleContainers(ctx, fakeClient, ss, desired)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	var fetched appsv1.StatefulSet
+	err = fakeClient.Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: "db"}, &fetched)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(fetched.Spec.Template.Spec.Containers).To(HaveLen(1))
+	g.Expect(fetched.Spec.Template.Spec.Containers[0].Name).To(Equal("postgres"))
+}
+
 func setupScheme(g *WithT) *runtime.Scheme {
 	scheme := runtime.NewScheme()
 	err := corev1.AddToScheme(scheme)
+	g.Expect(err).NotTo(HaveOccurred())
+	err = appsv1.AddToScheme(scheme)
 	g.Expect(err).NotTo(HaveOccurred())
 	err = apiextensionsv1.AddToScheme(scheme)
 	g.Expect(err).NotTo(HaveOccurred())

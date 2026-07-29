@@ -58,18 +58,22 @@ package tracking
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -199,16 +203,36 @@ func (c *Client) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts
 // ApplyObject applies an object using server-side apply and tracks it.
 // This is the primary method for reconcilers - it uses Patch with kubernetes.SSAPatch
 // to perform server-side apply and automatically tracks the resource.
+//
+// For resources with pod templates (Deployment, StatefulSet, DaemonSet), ApplyObject
+// also reconciles stale container entries that SSA's merge-by-name semantics may
+// preserve. SSA merges the containers list by name, so renamed or removed containers
+// accumulate as separate entries rather than replacing the old ones. After SSA,
+// ApplyObject compares the server's merged container list against the desired set
+// and removes stale entries via a follow-up patch. This is a no-op (zero extra API
+// calls) when the server's container list already matches the desired state.
 func (c *Client) ApplyObject(
 	ctx context.Context,
 	obj client.Object,
 	fieldManager string,
 	opts ...client.PatchOption,
 ) error {
+	// Snapshot desired container names before SSA merges the server state.
+	desired := snapshotDesiredContainers(obj)
+
 	patchOpts := append([]client.PatchOption{client.FieldOwner(fieldManager), client.ForceOwnership}, opts...)
 	if err := c.Client.Patch(ctx, obj, kubernetes.SSAPatch, patchOpts...); err != nil {
 		return err
 	}
+
+	// Remove stale containers that SSA preserved via merge-by-name but that are
+	// not in the desired state.
+	if desired != nil {
+		if err := removeStaleContainers(ctx, c.Client, obj, desired); err != nil {
+			return err
+		}
+	}
+
 	c.track(obj)
 	return nil
 }
@@ -506,6 +530,122 @@ func (c *Client) cleanupOrphansForGVK(
 func IsNoKindMatchError(err error) bool {
 	var noKindErr *meta.NoKindMatchError
 	return errors.As(err, &noKindErr)
+}
+
+// containerSnapshot holds the desired container and init container names for a
+// resource with a pod template. Used to detect stale containers after SSA.
+type containerSnapshot struct {
+	containers     sets.Set[string]
+	initContainers sets.Set[string]
+}
+
+// snapshotDesiredContainers extracts the desired container names from resources
+// that have a pod template spec (Deployment, StatefulSet, DaemonSet). Returns nil
+// for other resource types — callers should skip container reconciliation when nil.
+func snapshotDesiredContainers(obj client.Object) *containerSnapshot {
+	switch o := obj.(type) {
+	case *appsv1.Deployment:
+		return &containerSnapshot{
+			containers:     containerNamesSet(o.Spec.Template.Spec.Containers),
+			initContainers: containerNamesSet(o.Spec.Template.Spec.InitContainers),
+		}
+	case *appsv1.StatefulSet:
+		return &containerSnapshot{
+			containers:     containerNamesSet(o.Spec.Template.Spec.Containers),
+			initContainers: containerNamesSet(o.Spec.Template.Spec.InitContainers),
+		}
+	case *appsv1.DaemonSet:
+		return &containerSnapshot{
+			containers:     containerNamesSet(o.Spec.Template.Spec.Containers),
+			initContainers: containerNamesSet(o.Spec.Template.Spec.InitContainers),
+		}
+	default:
+		return nil
+	}
+}
+
+// containerNamesSet returns a set of container names from a container list.
+func containerNamesSet(containers []corev1.Container) sets.Set[string] {
+	names := sets.New[string]()
+	for _, c := range containers {
+		names.Insert(c.Name)
+	}
+	return names
+}
+
+// removeStaleContainers compares the server-merged state of a resource against
+// the desired container names and removes any containers that SSA's merge-by-name
+// semantics preserved. This handles container renames (e.g., nginx → reverse-proxy)
+// where SSA adds the new container but keeps the old one because it treats each
+// name as a separate list entry.
+//
+// Uses JSON Merge Patch (RFC 7386) to replace the container lists entirely,
+// which requires only the "patch" RBAC verb (no "update" needed).
+//
+// Returns nil without issuing an API call when no stale containers are found.
+func removeStaleContainers(ctx context.Context, c client.Client, obj client.Object, desired *containerSnapshot) error {
+	log := logf.FromContext(ctx)
+
+	var containers, initContainers []corev1.Container
+
+	switch o := obj.(type) {
+	case *appsv1.Deployment:
+		containers = o.Spec.Template.Spec.Containers
+		initContainers = o.Spec.Template.Spec.InitContainers
+	case *appsv1.StatefulSet:
+		containers = o.Spec.Template.Spec.Containers
+		initContainers = o.Spec.Template.Spec.InitContainers
+	case *appsv1.DaemonSet:
+		containers = o.Spec.Template.Spec.Containers
+		initContainers = o.Spec.Template.Spec.InitContainers
+	default:
+		return nil
+	}
+
+	clean, staleNames := filterContainers(containers, desired.containers)
+	cleanInit, staleInitNames := filterContainers(initContainers, desired.initContainers)
+
+	if len(staleNames) == 0 && len(staleInitNames) == 0 {
+		return nil
+	}
+
+	log.Info("Removing stale containers after SSA merge",
+		"resource", obj.GetName(),
+		"kind", obj.GetObjectKind().GroupVersionKind().Kind,
+		"staleContainers", staleNames,
+		"staleInitContainers", staleInitNames,
+	)
+
+	// Use JSON Merge Patch to replace the container lists. Unlike strategic merge
+	// patch (which merges by container name), JSON Merge Patch replaces arrays
+	// entirely, allowing stale entries to be removed.
+	patchData, err := json.Marshal(map[string]any{
+		"spec": map[string]any{
+			"template": map[string]any{
+				"spec": map[string]any{
+					"containers":     clean,
+					"initContainers": cleanInit,
+				},
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to marshal container cleanup patch: %w", err)
+	}
+	return c.Patch(ctx, obj, client.RawPatch(types.MergePatchType, patchData))
+}
+
+// filterContainers splits a container list into desired and stale containers.
+func filterContainers(containers []corev1.Container, desired sets.Set[string]) (clean []corev1.Container, staleNames []string) {
+	clean = make([]corev1.Container, 0, len(desired))
+	for i := range containers {
+		if desired.Has(containers[i].Name) {
+			clean = append(clean, containers[i])
+		} else {
+			staleNames = append(staleNames, containers[i].Name)
+		}
+	}
+	return clean, staleNames
 }
 
 // GetKind returns the Kind of a client.Object.

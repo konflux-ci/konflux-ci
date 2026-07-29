@@ -328,19 +328,11 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 			continue
 		}
 
-		// Track desired container names before SSA may merge stale entries.
-		// SSA uses container name as the merge key, so renamed containers
-		// (e.g., nginx → reverse-proxy) are added alongside old entries
-		// rather than replacing them.
-		var desiredContainers, desiredInitContainers sets.Set[string]
-
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
 			if err := applyUIDeploymentCustomizations(deployment, ui, r.ClusterInfo, dexConfigMapName, segmentSecretName, endpoint); err != nil {
 				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
 			}
-			desiredContainers = containerNames(deployment.Spec.Template.Spec.Containers)
-			desiredInitContainers = containerNames(deployment.Spec.Template.Spec.InitContainers)
 		}
 
 		// Apply customizations for services
@@ -357,76 +349,8 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 			return fmt.Errorf("failed to apply object %s/%s (%s): %w",
 				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), err)
 		}
-
-		// After SSA apply, remove stale containers that SSA's merge-by-name
-		// semantics preserved. This handles container renames (e.g., nginx →
-		// reverse-proxy) where SSA adds the new name but keeps the old one.
-		if deployment, ok := obj.(*appsv1.Deployment); ok {
-			if err := removeStaleContainers(ctx, r.Client, deployment, desiredContainers, desiredInitContainers); err != nil {
-				return fmt.Errorf("failed to remove stale containers from deployment %s: %w", deployment.Name, err)
-			}
-		}
 	}
 	return nil
-}
-
-// containerNames returns a set of container names from a container list.
-func containerNames(containers []corev1.Container) sets.Set[string] {
-	names := sets.New[string]()
-	for _, c := range containers {
-		names.Insert(c.Name)
-	}
-	return names
-}
-
-// removeStaleContainers removes containers from a deployment that are not in
-// the desired sets. SSA merges the containers list by name (the merge key for
-// spec.template.spec.containers), so renamed containers accumulate as separate
-// entries rather than replacing the old ones. This can happen during operator
-// upgrades when upstream manifests rename a container (e.g., nginx →
-// reverse-proxy) and the previous container was not owned by the current SSA
-// field manager. After the SSA apply, the deployment object contains the
-// server's merged state; this function filters out containers whose names are
-// not in the desired set and issues a standard update to correct the drift.
-func removeStaleContainers(ctx context.Context, c client.Client, deployment *appsv1.Deployment, desiredContainers, desiredInitContainers sets.Set[string]) error {
-	log := logf.FromContext(ctx)
-
-	// Identify stale containers not in the desired set
-	var staleNames []string
-	clean := make([]corev1.Container, 0, len(desiredContainers))
-	for i := range deployment.Spec.Template.Spec.Containers {
-		name := deployment.Spec.Template.Spec.Containers[i].Name
-		if desiredContainers.Has(name) {
-			clean = append(clean, deployment.Spec.Template.Spec.Containers[i])
-		} else {
-			staleNames = append(staleNames, name)
-		}
-	}
-
-	var staleInitNames []string
-	cleanInit := make([]corev1.Container, 0, len(desiredInitContainers))
-	for i := range deployment.Spec.Template.Spec.InitContainers {
-		name := deployment.Spec.Template.Spec.InitContainers[i].Name
-		if desiredInitContainers.Has(name) {
-			cleanInit = append(cleanInit, deployment.Spec.Template.Spec.InitContainers[i])
-		} else {
-			staleInitNames = append(staleInitNames, name)
-		}
-	}
-
-	if len(staleNames) == 0 && len(staleInitNames) == 0 {
-		return nil
-	}
-
-	log.Info("Removing stale containers from deployment",
-		"deployment", deployment.Name,
-		"staleContainers", staleNames,
-		"staleInitContainers", staleInitNames,
-	)
-
-	deployment.Spec.Template.Spec.Containers = clean
-	deployment.Spec.Template.Spec.InitContainers = cleanInit
-	return c.Update(ctx, deployment)
 }
 
 // applyUIDeploymentCustomizations applies user-defined customizations to UI deployments.
