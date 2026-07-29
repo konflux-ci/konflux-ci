@@ -41,6 +41,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/common"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/segmentbridge"
@@ -827,6 +828,9 @@ func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// to avoid informer startup failures when the CRD is absent.
 	if r.ClusterInfo != nil && r.ClusterInfo.IsOpenShift() {
 		b = b.Owns(&consolev1.ConsoleLink{})
+	}
+	if sm, ok := common.OperandServiceMonitorWatchObjectIfInstalled(mgr.GetRESTMapper()); ok {
+		b = b.Owns(sm)
 	}
 
 	return b.Complete(r)

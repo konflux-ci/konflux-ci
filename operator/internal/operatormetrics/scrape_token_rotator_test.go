@@ -24,6 +24,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -121,6 +122,66 @@ func TestScrapeTokenRotator_ReconcileWithoutKonfluxCR(t *testing.T) {
 	}
 	if creator.calls != 1 {
 		t.Fatalf("expected token mint without Konflux CR, got %d calls", creator.calls)
+	}
+}
+
+func TestScrapeTokenRotator_ReconcileRecreatesDeletedServiceMonitor(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	creator := &fakeTokenCreator{token: "operator-scrape-token", expiresAt: now.Add(time.Hour)}
+	c := testClientWithMetricsTLS(t)
+	clk := testclock.NewFakeClock(now)
+	rotator := &ScrapeTokenRotator{
+		Client:       c,
+		Clock:        clk,
+		TokenCreator: creator,
+		Namespace:    OperatorNamespace,
+	}
+
+	if _, err := rotator.reconcile(ctx, OperatorNamespace); err != nil {
+		t.Fatalf("initial reconcile: %v", err)
+	}
+
+	smKey := types.NamespacedName{
+		Name:      operatorServiceMonitorName,
+		Namespace: OperatorNamespace,
+	}
+	sm := &unstructured.Unstructured{}
+	sm.SetGroupVersionKind(serviceMonitorGVK)
+	if err := c.Get(ctx, smKey, sm); err != nil {
+		t.Fatalf("get ServiceMonitor after create: %v", err)
+	}
+	if err := c.Delete(ctx, sm); err != nil {
+		t.Fatalf("delete ServiceMonitor: %v", err)
+	}
+	if err := c.Get(ctx, smKey, sm); !apierrors.IsNotFound(err) {
+		t.Fatalf("expected ServiceMonitor deleted, got err=%v", err)
+	}
+
+	// Advance past the post-mint settle window so reconcile re-applies the SM
+	// on the next rotator tick (periodic recovery path for operator SM drift).
+	clk.Step(kubernetes.DefaultServiceMonitorResyncSettleDelay + time.Second)
+	if _, err := rotator.reconcile(ctx, OperatorNamespace); err != nil {
+		t.Fatalf("reconcile after ServiceMonitor delete: %v", err)
+	}
+
+	recreated := &unstructured.Unstructured{}
+	recreated.SetGroupVersionKind(serviceMonitorGVK)
+	if err := c.Get(ctx, smKey, recreated); err != nil {
+		t.Fatalf("expected ServiceMonitor recreated by rotator reconcile: %v", err)
+	}
+	endpoints, found, err := unstructured.NestedSlice(recreated.Object, "spec", "endpoints")
+	if err != nil || !found || len(endpoints) != 1 {
+		t.Fatalf("unexpected endpoints after recreate: found=%v err=%v len=%d", found, err, len(endpoints))
+	}
+	endpoint, ok := endpoints[0].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected endpoint map after recreate")
+	}
+	tokenSecret, ok := endpoint["bearerTokenSecret"].(map[string]interface{})
+	if !ok || tokenSecret["name"] != kubernetes.ScrapeTokenSecretName {
+		t.Fatalf("unexpected bearer token secret after recreate: %#v", endpoint["bearerTokenSecret"])
 	}
 }
 

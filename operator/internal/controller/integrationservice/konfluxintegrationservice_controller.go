@@ -428,6 +428,9 @@ func (r *KonfluxIntegrationServiceReconciler) SetupWithManager(mgr ctrl.Manager)
 			&corev1.Secret{},
 			builder.WithPredicates(predicate.PrometheusScrapeTokenSecretPredicate),
 		)
+		if sm, ok := common.OperandServiceMonitorWatchObjectIfInstalled(mgr.GetRESTMapper()); ok {
+			controllerBuilder = controllerBuilder.Owns(sm)
+		}
 		// metrics-server-cert is created by cert-manager (not CR ownerRefs).
 		controllerBuilder = controllerBuilder.Watches(
 			&corev1.Secret{},

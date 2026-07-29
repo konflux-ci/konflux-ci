@@ -17,7 +17,10 @@ limitations under the License.
 package common
 
 import (
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 )
@@ -35,4 +38,30 @@ func OperandServiceMonitorFromObjects(objects []client.Object, namespace, name s
 		}
 	}
 	return nil, false
+}
+
+// OperandServiceMonitorWatchObjectIfInstalled returns an unstructured ServiceMonitor
+// watch object when the CRD is discoverable in mapper. Controllers can call Owns()
+// with the returned object to reconcile promptly on out-of-band ServiceMonitor
+// delete/mutate without requiring a hard startup dependency on the optional
+// ServiceMonitor CRD. Pass mgr.GetRESTMapper() from SetupWithManager.
+func OperandServiceMonitorWatchObjectIfInstalled(mapper meta.RESTMapper) (*unstructured.Unstructured, bool) {
+	if mapper == nil {
+		return nil, false
+	}
+	// RESTMapper discovery is backed by the API server discovery endpoints.
+	// Use RESTMapping here to gate watch registration on runtime CRD availability
+	// without wiring a dedicated discovery client into each controller.
+	if _, err := mapper.RESTMapping(operandServiceMonitorGVK.GroupKind(), operandServiceMonitorGVK.Version); err != nil {
+		// NoMatch means the optional ServiceMonitor CRD is absent — expected.
+		// Other errors (discovery/RBAC) still skip the watch, but log so setup
+		// failures are visible rather than silent permanent omission.
+		if !meta.IsNoMatchError(err) {
+			logf.Log.Error(err, "failed to resolve ServiceMonitor REST mapping; skipping watch registration")
+		}
+		return nil, false
+	}
+	sm := &unstructured.Unstructured{}
+	sm.SetGroupVersionKind(operandServiceMonitorGVK)
+	return sm, true
 }
