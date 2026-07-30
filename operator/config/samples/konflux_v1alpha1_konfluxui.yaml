@@ -42,9 +42,10 @@ spec:
       kubearchive:
         enabled: true
         # hostname: "kubearchive-api-server.product-kubearchive.svc.cluster.local"
-      watson:
-        enabled: false
-        # hostname: "api.us-east.assistant.watson.cloud.ibm.com"  # optional override
+      watson: {}
+        # To enable Watson chatbot, set:
+        # enabled: true
+        # hostname: "api.us-east.assistant.watson.cloud.ibm.com"
         # secretName: "watson-config"  # Secret with API_KEY; required when enabled
     reverseProxy:
       resources:
