@@ -12,6 +12,30 @@ metadata:
   namespace: segment-bridge
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/name: segment-bridge
+  name: segment-bridge-cursor
+  namespace: segment-bridge
+rules:
+- apiGroups:
+  - ""
+  resourceNames:
+  - segment-bridge-cursor
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
@@ -62,6 +86,22 @@ rules:
   - list
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/name: segment-bridge
+  name: segment-bridge-cursor
+  namespace: segment-bridge
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: segment-bridge-cursor
+subjects:
+- kind: ServiceAccount
+  name: segment-bridge
+  namespace: segment-bridge
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   labels:
@@ -94,7 +134,7 @@ spec:
             - secretRef:
                 name: segment-bridge-config
                 optional: true
-            image: quay.io/konflux-ci/segment-bridge:54e18306724a2d734b7d7dba8543144c50e18bd5
+            image: quay.io/konflux-ci/segment-bridge:1ee29b0993fde169425fd829dffb977a0408b242
             imagePullPolicy: IfNotPresent
             name: segment-bridge
             resources:
