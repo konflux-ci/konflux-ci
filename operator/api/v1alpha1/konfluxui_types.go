@@ -104,7 +104,9 @@ type ProxyEndpointsSpec struct {
 // EndpointSpec configures an optional in-cluster backend endpoint.
 type EndpointSpec struct {
 	// Enabled controls whether this endpoint is active.
-	Enabled bool `json:"enabled"`
+	// +optional
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
 	// Hostname overrides the default backend service address.
 	// +optional
 	Hostname string `json:"hostname,omitempty"`
@@ -113,7 +115,9 @@ type EndpointSpec struct {
 // WatsonEndpointSpec configures the Watson chatbot endpoint.
 type WatsonEndpointSpec struct {
 	// Enabled controls whether the Watson chatbot endpoint is active.
-	Enabled bool `json:"enabled"`
+	// +optional
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
 	// Hostname overrides the Watson API host.
 	// Defaults to api.us-east.assistant.watson.cloud.ibm.com.
 	// +optional

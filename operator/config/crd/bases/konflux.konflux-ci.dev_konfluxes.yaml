@@ -3422,6 +3422,7 @@ spec:
                                   When enabled, requests to /api/k8s/plugins/kite/ are proxied to the Kite backend.
                                 properties:
                                   enabled:
+                                    default: false
                                     description: Enabled controls whether this endpoint
                                       is active.
                                     type: boolean
@@ -3429,8 +3430,6 @@ spec:
                                     description: Hostname overrides the default backend
                                       service address.
                                     type: string
-                                required:
-                                - enabled
                                 type: object
                               kubearchive:
                                 description: |-
@@ -3438,6 +3437,7 @@ spec:
                                   When enabled, requests to /api/k8s/plugins/kubearchive/ are proxied to the KubeArchive backend.
                                 properties:
                                   enabled:
+                                    default: false
                                     description: Enabled controls whether this endpoint
                                       is active.
                                     type: boolean
@@ -3445,8 +3445,6 @@ spec:
                                     description: Hostname overrides the default backend
                                       service address.
                                     type: string
-                                required:
-                                - enabled
                                 type: object
                               watson:
                                 description: |-
@@ -3454,6 +3452,7 @@ spec:
                                   When enabled, requests to /api/chatbot/ are proxied to the IBM Watson Assistant API.
                                 properties:
                                   enabled:
+                                    default: false
                                     description: Enabled controls whether the Watson
                                       chatbot endpoint is active.
                                     type: boolean
@@ -3470,8 +3469,6 @@ spec:
                                       value (e.g. base64("apikey:<your-api-key>")).
                                     minLength: 1
                                     type: string
-                                required:
-                                - enabled
                                 type: object
                             type: object
                           oauth2Proxy:
