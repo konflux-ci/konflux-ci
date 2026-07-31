@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -36,10 +37,23 @@ const (
 // KonfluxSegmentBridgeSpec defines the desired state of KonfluxSegmentBridge.
 type KonfluxSegmentBridgeSpec struct {
 	// SegmentKey is the write key used to authenticate with the Segment API.
-	// When not specified, no telemetry data is sent. Provide your own Segment
-	// write key to enable telemetry.
+	// When not specified, no telemetry data is sent unless SegmentKeySecretRef
+	// is set. Provide your own Segment write key to enable telemetry.
+	// SegmentKey takes precedence over SegmentKeySecretRef when both are set,
+	// which is intended for local/self-deployed Konflux instances where an
+	// inline override is convenient. SegmentKeySecretRef is intended for
+	// Vault-backed (or otherwise externally-managed) staging/production
+	// environments where the key should not be stored in the CR itself.
 	// +optional
 	SegmentKey string `json:"segmentKey,omitempty"`
+
+	// SegmentKeySecretRef references a Secret key holding the Segment write
+	// key. Used when the write key is managed externally (e.g. Vault-backed
+	// secret injection) instead of being set inline via SegmentKey. Ignored
+	// when SegmentKey is set. The referenced Secret must exist in the
+	// segment-bridge namespace.
+	// +optional
+	SegmentKeySecretRef *corev1.SecretKeySelector `json:"segmentKeySecretRef,omitempty"`
 
 	// SegmentAPIURL is the base URL of the Segment API endpoint, without "/batch".
 	// The operator appends "/batch" to produce the SEGMENT_BATCH_API env var.
@@ -70,6 +84,14 @@ func (s *KonfluxSegmentBridgeSpec) GetSegmentKey() string {
 		return ""
 	}
 	return s.SegmentKey
+}
+
+// GetSegmentKeySecretRef returns the configured SegmentKeySecretRef, or nil if unset.
+func (s *KonfluxSegmentBridgeSpec) GetSegmentKeySecretRef() *corev1.SecretKeySelector {
+	if s == nil {
+		return nil
+	}
+	return s.SegmentKeySecretRef
 }
 
 // GetSegmentAPIURL returns the configured Segment API base URL (without "/batch"),

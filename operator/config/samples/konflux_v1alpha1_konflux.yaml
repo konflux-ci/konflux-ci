@@ -186,8 +186,18 @@ spec:
   #   # Defaults to false if not specified.
   #   enabled: true
   #   spec:
-  #     # segmentKey is the Segment write key (required for telemetry to send data)
+  #     # segmentKey is the Segment write key (required for telemetry to send data).
+  #     # Intended for local/self-deployed Konflux instances. Takes precedence over
+  #     # segmentKeySecretRef when both are set.
   #     # segmentKey: "your-write-key"
+  #
+  #     # segmentKeySecretRef reads the write key from a Secret instead of storing it
+  #     # inline. Intended for Vault-backed (or otherwise externally-managed) staging/
+  #     # production environments. The referenced Secret must exist in the
+  #     # segment-bridge namespace.
+  #     # segmentKeySecretRef:
+  #     #   name: vault-segment-key
+  #     #   key: writeKey
   #
   #     # segmentAPIURL is the base URL without "/batch". The operator appends "/batch".
   #     # Defaults to "https://api.segment.io/v1" if not specified.

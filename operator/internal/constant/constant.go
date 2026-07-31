@@ -30,4 +30,8 @@ const (
 	ConditionTypeCertManagerAvailable = "CertManagerAvailable"
 	// CertManagerGroup is the API group for cert-manager resources
 	CertManagerGroup = "cert-manager.io"
+	// SegmentBridgeNamespace is the namespace that hosts the segment-bridge
+	// CronJob and its config Secret, and where any Secret referenced by
+	// spec.segmentKeySecretRef (on KonfluxSegmentBridge) is expected to live.
+	SegmentBridgeNamespace = "segment-bridge"
 )

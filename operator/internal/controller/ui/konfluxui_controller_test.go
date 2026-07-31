@@ -1900,6 +1900,33 @@ var _ = Describe("KonfluxUI Controller", func() {
 			return bridge
 		}
 
+		// createExternalSegmentKeySecret creates a Vault-backed write-key Secret in the
+		// segment-bridge namespace, creating the namespace if needed.
+		createExternalSegmentKeySecret := func(ctx context.Context, name, key, value string) {
+			Eventually(func(g Gomega) {
+				ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: constant.SegmentBridgeNamespace}}
+				g.Expect(client.IgnoreAlreadyExists(k8sClient.Create(ctx, ns))).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			existing := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: constant.SegmentBridgeNamespace},
+			}
+			if err := k8sClient.Delete(ctx, existing); err == nil {
+				Eventually(func(g Gomega) {
+					g.Expect(errors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(existing), existing))).To(BeTrue())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			} else {
+				Expect(client.IgnoreNotFound(err)).NotTo(HaveOccurred())
+			}
+
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: constant.SegmentBridgeNamespace},
+				Data:       map[string][]byte{key: []byte(value)},
+			}
+			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, secret)
+		}
+
 		It("Should not create segment secret when KonfluxSegmentBridge CR does not exist", func(ctx context.Context) {
 			startManager(nil)
 			createUI(ctx)
@@ -2018,6 +2045,72 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 			Eventually(func(g Gomega) {
 				g.Expect(listSegmentSecrets(ctx)).To(BeEmpty())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("Should create segment secret with write key resolved from segmentKeySecretRef", func(ctx context.Context) {
+			createExternalSegmentKeySecret(ctx, "vault-segment-key", "writeKey", "vault-write-key")
+
+			bridge := createBridgeCR(ctx)
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: segmentbridge.CRName}, bridge)).To(Succeed())
+			bridge.Spec.SegmentKeySecretRef = &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "vault-segment-key"},
+				Key:                  "writeKey",
+			}
+			Expect(k8sClient.Update(ctx, bridge)).To(Succeed())
+
+			startManager(nil)
+			createUI(ctx)
+
+			name := expectedSecretName("vault-write-key", konfluxv1alpha1.DefaultSegmentAPIURL)
+			Eventually(func(g Gomega) {
+				secret := &corev1.Secret{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: name, Namespace: uiNamespace,
+				}, secret)).To(Succeed())
+				g.Expect(string(secret.Data[segmentKeyWriteKey])).To(Equal("vault-write-key"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("Should propagate rotated write keys from segmentKeySecretRef into a new hashed secret", func(ctx context.Context) {
+			createExternalSegmentKeySecret(ctx, "vault-segment-key", "writeKey", "initial-vault-key")
+
+			bridge := createBridgeCR(ctx)
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: segmentbridge.CRName}, bridge)).To(Succeed())
+			bridge.Spec.SegmentKeySecretRef = &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "vault-segment-key"},
+				Key:                  "writeKey",
+			}
+			Expect(k8sClient.Update(ctx, bridge)).To(Succeed())
+
+			startManager(nil)
+			createUI(ctx)
+
+			initialName := expectedSecretName("initial-vault-key", konfluxv1alpha1.DefaultSegmentAPIURL)
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: initialName, Namespace: uiNamespace,
+				}, &corev1.Secret{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("rotating the external Secret")
+			externalSecret := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: "vault-segment-key", Namespace: constant.SegmentBridgeNamespace,
+			}, externalSecret)).To(Succeed())
+			externalSecret.Data["writeKey"] = []byte("rotated-vault-key")
+			Expect(k8sClient.Update(ctx, externalSecret)).To(Succeed())
+
+			updatedName := expectedSecretName("rotated-vault-key", konfluxv1alpha1.DefaultSegmentAPIURL)
+			Expect(updatedName).NotTo(Equal(initialName))
+
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: updatedName, Namespace: uiNamespace,
+				}, &corev1.Secret{})).To(Succeed())
+				g.Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
+					Name: initialName, Namespace: uiNamespace,
+				}, &corev1.Secret{}))).To(BeTrue(), "old segment secret should be deleted")
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 

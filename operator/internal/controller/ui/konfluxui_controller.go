@@ -39,6 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	crpredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/common"
@@ -769,8 +770,18 @@ func (r *KonfluxUIReconciler) reconcileSegmentSecret(ctx context.Context, tc *tr
 		return "", nil
 	}
 
-	// Resolve the write key (CR spec → empty)
-	segmentKey, source := segment.ResolveWriteKey(segmentBridge.Spec.GetSegmentKey())
+	// Resolve the write key. segmentKeySecretRef is ignored when segmentKey is set,
+	// so the Secret lookup is skipped entirely in that case (see segment.ResolveWriteKey).
+	var secretKey string
+	if segmentBridge.Spec.GetSegmentKey() == "" {
+		var err error
+		secretKey, err = segment.ResolveWriteKeySecretRef(ctx, r.Client, constant.SegmentBridgeNamespace, segmentBridge.Spec.GetSegmentKeySecretRef())
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve segmentKeySecretRef: %w", err)
+		}
+	}
+
+	segmentKey, source := segment.ResolveWriteKey(segmentBridge.Spec.GetSegmentKey(), secretKey)
 	if !segment.LogWriteKeyResolution(log, segmentKey, source) {
 		return "", nil
 	}
@@ -800,6 +811,27 @@ func (r *KonfluxUIReconciler) mapSegmentBridgeToUI(_ context.Context, _ client.O
 	return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: CRName}}}
 }
 
+// mapSegmentKeySecretToUI maps external Segment write-key Secret changes to the
+// singleton KonfluxUI reconcile request so rotated keys propagate into the UI.
+func (r *KonfluxUIReconciler) mapSegmentKeySecretToUI(ctx context.Context, obj client.Object) []ctrl.Request {
+	secret, ok := obj.(*corev1.Secret)
+	if !ok || secret.GetNamespace() != constant.SegmentBridgeNamespace {
+		return nil
+	}
+
+	sb := &konfluxv1alpha1.KonfluxSegmentBridge{}
+	if err := r.Get(ctx, client.ObjectKey{Name: segmentbridge.CRName}, sb); err != nil {
+		return nil
+	}
+
+	ref := sb.Spec.GetSegmentKeySecretRef()
+	if ref == nil || ref.Name != secret.GetName() {
+		return nil
+	}
+
+	return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: CRName}}}
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	b := ctrl.NewControllerManagedBy(mgr).
@@ -821,7 +853,14 @@ func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// Watch KonfluxSegmentBridge CR so Segment config changes trigger a UI reconcile
 		Watches(&konfluxv1alpha1.KonfluxSegmentBridge{},
 			handler.EnqueueRequestsFromMapFunc(r.mapSegmentBridgeToUI),
-			builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate))
+			builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(r.mapSegmentKeySecretToUI),
+			builder.WithPredicates(
+				crpredicate.NewPredicateFuncs(func(o client.Object) bool {
+					return o.GetNamespace() == constant.SegmentBridgeNamespace
+				}),
+			))
 
 	// ConsoleLink CRD only exists on OpenShift; skip watch on non-OpenShift clusters
 	// to avoid informer startup failures when the CRD is absent.

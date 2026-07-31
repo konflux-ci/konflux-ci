@@ -279,9 +279,42 @@ spec:
               segmentKey:
                 description: |-
                   SegmentKey is the write key used to authenticate with the Segment API.
-                  When not specified, no telemetry data is sent. Provide your own Segment
-                  write key to enable telemetry.
+                  When not specified, no telemetry data is sent unless SegmentKeySecretRef
+                  is set. Provide your own Segment write key to enable telemetry.
+                  SegmentKey takes precedence over SegmentKeySecretRef when both are set,
+                  which is intended for local/self-deployed Konflux instances where an
+                  inline override is convenient. SegmentKeySecretRef is intended for
+                  Vault-backed (or otherwise externally-managed) staging/production
+                  environments where the key should not be stored in the CR itself.
                 type: string
+              segmentKeySecretRef:
+                description: |-
+                  SegmentKeySecretRef references a Secret key holding the Segment write
+                  key. Used when the write key is managed externally (e.g. Vault-backed
+                  secret injection) instead of being set inline via SegmentKey. Ignored
+                  when SegmentKey is set. The referenced Secret must exist in the
+                  segment-bridge namespace.
+                properties:
+                  key:
+                    description: The key of the secret to select from.  Must be a
+                      valid secret key.
+                    type: string
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                  optional:
+                    description: Specify whether the Secret or its key must be defined
+                    type: boolean
+                required:
+                - key
+                type: object
+                x-kubernetes-map-type: atomic
               tektonLimit:
                 description: |-
                   TektonLimit sets the maximum number of PipelineRun records fetched per CronJob run.

@@ -31,7 +31,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	crpredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
@@ -52,7 +54,9 @@ const (
 	// crKind is used in error messages to identify this CR type.
 	crKind = "KonfluxSegmentBridge"
 
-	segmentBridgeNamespace  = "segment-bridge"
+	// segmentBridgeNamespace is a local alias for constant.SegmentBridgeNamespace,
+	// used throughout this package (including tests) for brevity.
+	segmentBridgeNamespace  = constant.SegmentBridgeNamespace
 	segmentBridgeSecretName = "segment-bridge-config"
 
 	// cronJobName is the name of the segment-bridge CronJob resource.
@@ -202,14 +206,24 @@ func (r *KonfluxSegmentBridgeReconciler) tektonResultsAPIAddr() string {
 // endpoint), SEGMENT_WRITE_KEY, and SEGMENT_BATCH_API.
 //
 // Key resolution precedence:
-//  1. CR inline spec.segmentKey (admin override)
-//  2. Empty -- Secret is still created so the CronJob can reach the Results API;
+//  1. CR inline spec.segmentKey (explicit override, e.g. local/self-deployed Konflux)
+//  2. spec.segmentKeySecretRef (Vault-backed secret, e.g. staging/production)
+//  3. Empty -- Secret is still created so the CronJob can reach the Results API;
 //     the segment-bridge scripts handle the missing key gracefully by skipping the
 //     upload step.
 func (r *KonfluxSegmentBridgeReconciler) reconcileSegmentBridgeSecret(ctx context.Context, tc *tracking.Client, spec *konfluxv1alpha1.KonfluxSegmentBridgeSpec) error {
 	log := logf.FromContext(ctx)
 
-	segmentKey, source := segment.ResolveWriteKey(spec.GetSegmentKey())
+	var secretKey string
+	if spec.GetSegmentKey() == "" {
+		var err error
+		secretKey, err = segment.ResolveWriteKeySecretRef(ctx, r.Client, segmentBridgeNamespace, spec.GetSegmentKeySecretRef())
+		if err != nil {
+			return fmt.Errorf("failed to resolve segmentKeySecretRef: %w", err)
+		}
+	}
+
+	segmentKey, source := segment.ResolveWriteKey(spec.GetSegmentKey(), secretKey)
 	segment.LogWriteKeyResolution(log, segmentKey, source)
 
 	batchURL, err := url.JoinPath(spec.GetSegmentAPIURL(), "batch")
@@ -243,6 +257,30 @@ func (r *KonfluxSegmentBridgeReconciler) reconcileSegmentBridgeSecret(ctx contex
 	return nil
 }
 
+// mapSegmentKeySecretToSegmentBridge maps external Segment write-key Secret
+// changes to the singleton KonfluxSegmentBridge reconcile request.
+func (r *KonfluxSegmentBridgeReconciler) mapSegmentKeySecretToSegmentBridge(
+	ctx context.Context,
+	obj client.Object,
+) []ctrl.Request {
+	secret, ok := obj.(*corev1.Secret)
+	if !ok || secret.GetNamespace() != segmentBridgeNamespace {
+		return nil
+	}
+
+	sb := &konfluxv1alpha1.KonfluxSegmentBridge{}
+	if err := r.Get(ctx, client.ObjectKey{Name: CRName}, sb); err != nil {
+		return nil
+	}
+
+	ref := sb.Spec.GetSegmentKeySecretRef()
+	if ref == nil || ref.Name != secret.GetName() {
+		return nil
+	}
+
+	return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: CRName}}}
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxSegmentBridgeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
@@ -254,5 +292,12 @@ func (r *KonfluxSegmentBridgeReconciler) SetupWithManager(mgr ctrl.Manager) erro
 		Owns(&batchv1.CronJob{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&rbacv1.ClusterRole{}).
 		Owns(&rbacv1.ClusterRoleBinding{}).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(r.mapSegmentKeySecretToSegmentBridge),
+			builder.WithPredicates(
+				crpredicate.NewPredicateFuncs(func(o client.Object) bool {
+					return o.GetNamespace() == segmentBridgeNamespace
+				}),
+			)).
 		Complete(r)
 }
