@@ -12,7 +12,7 @@ CERT_MANAGER_CHART_VERSION="1.21.0"
 # renovate: datasource=helm depName=jetstack/trust-manager versioning=semver
 TRUST_MANAGER_CHART_VERSION="0.24.0"
 # renovate: datasource=github-releases depName=prometheus-operator/prometheus-operator versioning=semver
-PROMETHEUS_OPERATOR_VERSION="0.92.1"
+PROMETHEUS_OPERATOR_VERSION="0.93.0"
 
 cert="${CERT_MANAGER_CHART_VERSION}"
 trust="${TRUST_MANAGER_CHART_VERSION}"
