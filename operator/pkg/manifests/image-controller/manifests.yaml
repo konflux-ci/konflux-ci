@@ -572,6 +572,7 @@ rules:
   - update
 - apiGroups:
   - appstudio.redhat.com
+  - konflux-ci.dev
   resources:
   - components
   verbs:
@@ -1299,7 +1300,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/konflux-ci/image-controller:8d315e60b80b877cf5225dc1f9bae087700adbfe
+        image: quay.io/konflux-ci/image-controller:9987b0820b7b7ae49797ca76d44cd6fc501c13e2
         livenessProbe:
           httpGet:
             path: /healthz
