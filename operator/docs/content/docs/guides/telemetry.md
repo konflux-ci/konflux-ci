@@ -14,9 +14,26 @@ Telemetry is **disabled by default** and must be explicitly enabled in your
 
 ## Enabling telemetry
 
-Set `spec.telemetry.enabled` to `true` and provide a Segment write key in
-`spec.telemetry.spec.segmentKey`. The operator does not ship a default key —
-without one, the CronJob may still run but no events are uploaded to Segment.
+Set `spec.telemetry.enabled` to `true` and provide a Segment write key. The
+operator does not ship a default key — without one, the CronJob may still run
+but no events are uploaded to Segment. There are two ways to provide the key:
+
+- **Inline (`spec.telemetry.spec.segmentKey`)** — the write key is stored
+  directly in the `Konflux` CR. This is the simplest option and is well
+  suited to local or self-deployed Konflux instances where the key doesn't
+  need to be managed by external secret tooling.
+- **Secret reference (`spec.telemetry.spec.segmentKeySecretRef`)** — the
+  write key is read from a Secret key at reconcile time instead of being
+  stored in the CR. This is intended for staging/production environments
+  where the key is Vault-backed (or otherwise injected/rotated by external
+  tooling) and should not be persisted in the CR itself.
+
+When both are set, `segmentKey` takes precedence over `segmentKeySecretRef` —
+in that case `segmentKeySecretRef` is ignored entirely (it is not even
+resolved), so a stale or invalid Secret reference has no effect as long as
+`segmentKey` is set.
+
+### Inline write key
 
 ```yaml
 apiVersion: konflux.konflux-ci.dev/v1alpha1
@@ -29,6 +46,41 @@ spec:
     spec:
       segmentKey: "your-write-key"
 ```
+
+### Secret-referenced write key
+
+Create the Secret in the `segment-bridge` namespace ahead of time (e.g. via
+Vault injection or another external mechanism):
+
+```bash
+kubectl create secret generic vault-segment-key \
+  --namespace segment-bridge \
+  --from-literal=writeKey="your-write-key"
+```
+
+Then reference it from the `Konflux` CR instead of setting `segmentKey`:
+
+```yaml
+apiVersion: konflux.konflux-ci.dev/v1alpha1
+kind: Konflux
+metadata:
+  name: konflux
+spec:
+  telemetry:
+    enabled: true
+    spec:
+      segmentKeySecretRef:
+        name: vault-segment-key
+        key: writeKey
+        # optional: true   # set to true to allow a missing Secret/key without failing reconciliation
+```
+
+The referenced Secret follows the standard Kubernetes `SecretKeySelector`
+shape (`name`, `key`, and an optional `optional` flag). This ref is only
+resolved when `segmentKey` is unset (see above). If the Secret or key
+doesn't exist and `optional` is not set to `true`, the operator surfaces a
+`False` `Ready` condition on the `KonfluxSegmentBridge` CR with reason
+`SecretCreationFailed` until the Secret becomes available.
 
 Apply the change:
 
@@ -198,7 +250,7 @@ outcomes) and component/namespace identifiers in hashed form.
 ## Accessing telemetry data
 
 Events are routed to the Segment workspace that owns the write key configured
-in `spec.telemetry.spec.segmentKey`.
+via `spec.telemetry.spec.segmentKey` or `spec.telemetry.spec.segmentKeySecretRef`.
 
 To view incoming events, log in to [app.segment.com](https://app.segment.com)
 with the account that owns the write key and open the source's **Debugger**

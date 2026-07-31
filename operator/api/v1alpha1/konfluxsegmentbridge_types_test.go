@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 )
 
 func TestSanitizeSegmentHost(t *testing.T) {
@@ -125,5 +126,29 @@ func TestGetSegmentKey(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := &KonfluxSegmentBridgeSpec{SegmentKey: "my-write-key"}
 		g.Expect(spec.GetSegmentKey()).To(gomega.Equal("my-write-key"))
+	})
+}
+
+func TestGetSegmentKeySecretRef(t *testing.T) {
+	t.Run("nil spec returns nil", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		var spec *KonfluxSegmentBridgeSpec
+		g.Expect(spec.GetSegmentKeySecretRef()).To(gomega.BeNil())
+	})
+
+	t.Run("unset ref returns nil", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := &KonfluxSegmentBridgeSpec{}
+		g.Expect(spec.GetSegmentKeySecretRef()).To(gomega.BeNil())
+	})
+
+	t.Run("set ref is returned", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ref := &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "my-secret"},
+			Key:                  "writeKey",
+		}
+		spec := &KonfluxSegmentBridgeSpec{SegmentKeySecretRef: ref}
+		g.Expect(spec.GetSegmentKeySecretRef()).To(gomega.Equal(ref))
 	})
 }

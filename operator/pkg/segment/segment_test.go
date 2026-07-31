@@ -17,23 +17,52 @@ limitations under the License.
 package segment
 
 import (
+	"context"
 	"testing"
 
 	"github.com/go-logr/logr"
 	"github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func testScheme(t *testing.T) *runtime.Scheme {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add corev1 to scheme: %v", err)
+	}
+	return scheme
+}
 
 func TestResolveWriteKey(t *testing.T) {
 	t.Run("returns the CR key and source when the CR key is set", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		key, source := ResolveWriteKey("cr-key")
+		key, source := ResolveWriteKey("cr-key", "")
 		g.Expect(key).To(gomega.Equal("cr-key"))
 		g.Expect(source).To(gomega.Equal("cr"))
 	})
 
-	t.Run("returns empty key and source when the CR key is not set", func(t *testing.T) {
+	t.Run("CR key takes precedence over the secret key when both are set", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		key, source := ResolveWriteKey("")
+		key, source := ResolveWriteKey("cr-key", "secret-key")
+		g.Expect(key).To(gomega.Equal("cr-key"))
+		g.Expect(source).To(gomega.Equal("cr"))
+	})
+
+	t.Run("returns the secret key and source when the CR key is not set", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		key, source := ResolveWriteKey("", "secret-key")
+		g.Expect(key).To(gomega.Equal("secret-key"))
+		g.Expect(source).To(gomega.Equal("secret"))
+	})
+
+	t.Run("returns empty key and source when neither the CR key nor the secret key is set", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		key, source := ResolveWriteKey("", "")
 		g.Expect(key).To(gomega.BeEmpty())
 		g.Expect(source).To(gomega.BeEmpty())
 	})
@@ -50,5 +79,92 @@ func TestLogWriteKeyResolution(t *testing.T) {
 	t.Run("returns true when the key is present", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		g.Expect(LogWriteKeyResolution(log, "some-key", "cr")).To(gomega.BeTrue())
+	})
+}
+
+func TestResolveWriteKeySecretRef(t *testing.T) {
+	ctx := context.Background()
+	namespace := "segment-bridge"
+
+	t.Run("returns empty string when ref is nil", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+		key, err := ResolveWriteKeySecretRef(ctx, c, namespace, nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(key).To(gomega.BeEmpty())
+	})
+
+	t.Run("returns the key when the Secret exists", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "vault-key", Namespace: namespace},
+			Data:       map[string][]byte{"writeKey": []byte("secret-value")},
+		}
+		c := fake.NewClientBuilder().WithScheme(testScheme(t)).WithObjects(secret).Build()
+		ref := &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "vault-key"},
+			Key:                  "writeKey",
+		}
+		key, err := ResolveWriteKeySecretRef(ctx, c, namespace, ref)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(key).To(gomega.Equal("secret-value"))
+	})
+
+	t.Run("returns empty string when optional Secret is missing", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+		ref := &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "missing"},
+			Key:                  "writeKey",
+			Optional:             ptr.To(true),
+		}
+		key, err := ResolveWriteKeySecretRef(ctx, c, namespace, ref)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(key).To(gomega.BeEmpty())
+	})
+
+	t.Run("returns empty string when optional key is missing", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "vault-key", Namespace: namespace},
+			Data:       map[string][]byte{"otherKey": []byte("value")},
+		}
+		c := fake.NewClientBuilder().WithScheme(testScheme(t)).WithObjects(secret).Build()
+		ref := &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "vault-key"},
+			Key:                  "writeKey",
+			Optional:             ptr.To(true),
+		}
+		key, err := ResolveWriteKeySecretRef(ctx, c, namespace, ref)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(key).To(gomega.BeEmpty())
+	})
+
+	t.Run("returns error when required Secret is missing", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+		ref := &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "missing"},
+			Key:                  "writeKey",
+		}
+		_, err := ResolveWriteKeySecretRef(ctx, c, namespace, ref)
+		g.Expect(err).To(gomega.HaveOccurred())
+		g.Expect(err.Error()).To(gomega.ContainSubstring("failed to get Secret"))
+	})
+
+	t.Run("returns error when required key is missing", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "vault-key", Namespace: namespace},
+			Data:       map[string][]byte{"otherKey": []byte("value")},
+		}
+		c := fake.NewClientBuilder().WithScheme(testScheme(t)).WithObjects(secret).Build()
+		ref := &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "vault-key"},
+			Key:                  "writeKey",
+		}
+		_, err := ResolveWriteKeySecretRef(ctx, c, namespace, ref)
+		g.Expect(err).To(gomega.HaveOccurred())
+		g.Expect(err.Error()).To(gomega.ContainSubstring(`key "writeKey" not found`))
 	})
 }

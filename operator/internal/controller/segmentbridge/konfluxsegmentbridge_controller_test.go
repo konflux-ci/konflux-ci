@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/version"
+	"k8s.io/utils/ptr"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
@@ -277,6 +278,155 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 					g.Expect(string(data["SEGMENT_BATCH_API"])).To(Equal(
 						konfluxv1alpha1.DefaultSegmentAPIURL + "/batch"))
 					g.Expect(string(data["TEKTON_RESULTS_API_ADDR"])).To(Equal(tektonResultsAPIAddrK8s))
+				})
+			})
+		})
+
+		Context("with segmentKeySecretRef", func() {
+			BeforeEach(func() { startManager(nil) })
+
+			// createExternalSecret creates a Secret in the segment-bridge namespace holding
+			// the write key referenced by segmentKeySecretRef, mimicking a Vault-backed secret
+			// injected by external tooling. The segment-bridge namespace is created by the
+			// controller's manifests, so callers must wait for it to exist (e.g. via createCR
+			// followed by waitForSecret/Eventually on another owned resource) before calling this.
+			createExternalSecret := func(ctx context.Context, name, key, value string) {
+				secret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: segmentBridgeNamespace},
+					Data:       map[string][]byte{key: []byte(value)},
+				}
+				Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+				DeferCleanup(testutil.DeleteAndWait, k8sClient, secret)
+			}
+
+			It("should resolve the write key from the referenced Secret when segmentKey is unset", func(ctx context.Context) {
+				createCR(ctx)
+				waitForSecret(ctx, func(g Gomega, data map[string][]byte) {})
+				createExternalSecret(ctx, "vault-segment-key", "writeKey", "vault-write-key")
+
+				resource := &konfluxv1alpha1.KonfluxSegmentBridge{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, resource)).To(Succeed())
+				resource.Spec.SegmentKeySecretRef = &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "vault-segment-key"},
+					Key:                  "writeKey",
+				}
+				Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+
+				waitForSecret(ctx, func(g Gomega, data map[string][]byte) {
+					g.Expect(string(data["SEGMENT_WRITE_KEY"])).To(Equal("vault-write-key"))
+				})
+			})
+
+			It("should prefer the inline segmentKey over segmentKeySecretRef when both are set", func(ctx context.Context) {
+				createCR(ctx)
+				waitForSecret(ctx, func(g Gomega, data map[string][]byte) {})
+				createExternalSecret(ctx, "vault-segment-key-2", "writeKey", "vault-write-key")
+
+				resource := &konfluxv1alpha1.KonfluxSegmentBridge{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, resource)).To(Succeed())
+				resource.Spec.SegmentKey = "inline-write-key"
+				resource.Spec.SegmentKeySecretRef = &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "vault-segment-key-2"},
+					Key:                  "writeKey",
+				}
+				Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+
+				waitForSecret(ctx, func(g Gomega, data map[string][]byte) {
+					g.Expect(string(data["SEGMENT_WRITE_KEY"])).To(Equal("inline-write-key"))
+				})
+			})
+
+			It("should treat a missing optional Secret as no key configured", func(ctx context.Context) {
+				createCR(ctx)
+
+				resource := &konfluxv1alpha1.KonfluxSegmentBridge{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, resource)).To(Succeed())
+				resource.Spec.SegmentKeySecretRef = &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "does-not-exist"},
+					Key:                  "writeKey",
+					Optional:             ptr.To(true),
+				}
+				Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+
+				waitForSecret(ctx, func(g Gomega, data map[string][]byte) {
+					g.Expect(string(data["SEGMENT_WRITE_KEY"])).To(BeEmpty())
+				})
+			})
+
+			It("should short-circuit secret resolution and stay Ready when segmentKey is set alongside an unresolvable required ref", func(ctx context.Context) {
+				createCR(ctx)
+				waitForSecret(ctx, func(g Gomega, data map[string][]byte) {})
+
+				resource := &konfluxv1alpha1.KonfluxSegmentBridge{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, resource)).To(Succeed())
+				resource.Spec.SegmentKey = "inline-write-key"
+				resource.Spec.SegmentKeySecretRef = &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "does-not-exist"},
+					Key:                  "writeKey",
+				}
+				Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+
+				waitForSecret(ctx, func(g Gomega, data map[string][]byte) {
+					g.Expect(string(data["SEGMENT_WRITE_KEY"])).To(Equal("inline-write-key"))
+				})
+
+				Eventually(func(g Gomega) {
+					cr := &konfluxv1alpha1.KonfluxSegmentBridge{}
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, cr)).To(Succeed())
+					cond := apimeta.FindStatusCondition(cr.GetConditions(), condition.TypeReady)
+					g.Expect(cond).NotTo(BeNil())
+					g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			})
+
+			It("should set the Ready condition to False when a required Secret is missing", func(ctx context.Context) {
+				createCR(ctx)
+
+				resource := &konfluxv1alpha1.KonfluxSegmentBridge{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, resource)).To(Succeed())
+				resource.Spec.SegmentKeySecretRef = &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "does-not-exist"},
+					Key:                  "writeKey",
+				}
+				Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					cr := &konfluxv1alpha1.KonfluxSegmentBridge{}
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, cr)).To(Succeed())
+					cond := apimeta.FindStatusCondition(cr.GetConditions(), condition.TypeReady)
+					g.Expect(cond).NotTo(BeNil())
+					g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+					g.Expect(cond.Reason).To(Equal(condition.ReasonSecretCreationFailed))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			})
+
+			It("should propagate rotated write keys from the referenced Secret", func(ctx context.Context) {
+				createCR(ctx)
+				waitForSecret(ctx, func(g Gomega, data map[string][]byte) {})
+				createExternalSecret(ctx, "vault-segment-key", "writeKey", "initial-vault-key")
+
+				resource := &konfluxv1alpha1.KonfluxSegmentBridge{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, resource)).To(Succeed())
+				resource.Spec.SegmentKeySecretRef = &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "vault-segment-key"},
+					Key:                  "writeKey",
+				}
+				Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+
+				waitForSecret(ctx, func(g Gomega, data map[string][]byte) {
+					g.Expect(string(data["SEGMENT_WRITE_KEY"])).To(Equal("initial-vault-key"))
+				})
+
+				By("rotating the external Secret")
+				externalSecret := &corev1.Secret{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: "vault-segment-key", Namespace: segmentBridgeNamespace,
+				}, externalSecret)).To(Succeed())
+				externalSecret.Data["writeKey"] = []byte("rotated-vault-key")
+				Expect(k8sClient.Update(ctx, externalSecret)).To(Succeed())
+
+				waitForSecret(ctx, func(g Gomega, data map[string][]byte) {
+					g.Expect(string(data["SEGMENT_WRITE_KEY"])).To(Equal("rotated-vault-key"))
 				})
 			})
 		})
