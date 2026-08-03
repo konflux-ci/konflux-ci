@@ -300,6 +300,14 @@ spec:
                 items:
                   type: string
                 type: array
+              allowedGitResolverURLs:
+                description: |-
+                  AllowedGitResolverURLs is the list of git resolver URLs allowed for pipeline references.
+                  When non-empty and the resolver is "git", only requests with a URL matching one of these
+                  entries will be allowed. When empty, all git resolver URLs are permitted.
+                items:
+                  type: string
+                type: array
               debug:
                 description: Debug sets the operator to run in debug mode. In this
                   mode, PipelineRuns and PVCs will not be removed
