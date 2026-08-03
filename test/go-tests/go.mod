@@ -7,7 +7,7 @@ require (
 	github.com/codeready-toolchain/api v0.0.0-20260731065234-734640c901d2
 	github.com/conforma/crds/api v0.1.11
 	github.com/devfile/library/v2 v2.4.0
-	github.com/docker/cli v29.7.0+incompatible
+	github.com/docker/cli v29.7.1+incompatible
 	github.com/gofri/go-github-ratelimit/v2 v2.0.2
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v89 v89.0.0
