@@ -49,6 +49,7 @@ import (
 	crdhandler "github.com/konflux-ci/konflux-ci/operator/internal/controller/handler"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/ui"
 	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
@@ -110,6 +111,7 @@ type KonfluxIntegrationServiceReconciler struct {
 	client.Client
 	Scheme       *runtime.Scheme
 	ObjectStore  *manifests.ObjectStore
+	ClusterInfo  *clusterinfo.Info
 	TokenCreator kubernetes.TokenCreator
 	// SecretReader loads metrics TLS Secrets; prefer mgr.GetAPIReader() to avoid stale cache.
 	SecretReader        client.Reader
@@ -177,7 +179,20 @@ func (r *KonfluxIntegrationServiceReconciler) Reconcile(ctx context.Context, req
 		log.Info("Found console URL from KonfluxUI", "url", consoleURL)
 	}
 
-	// Apply all embedded manifests
+	// Ensure the integration-service namespace exists before creating resources in it.
+	if err := common.EnsureNamespaceExists(ctx, r.ObjectStore, manifests.Integration, integrationServiceNamespace, tc); err != nil {
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonNamespaceCreationFailed, "ensure namespace exists")
+	}
+
+	// On OpenShift, create the trusted-ca ConfigMap with the injection label so
+	// the cluster network operator populates it with the cluster CA bundle.
+	// This runs before applyManifests so the ConfigMap is present when Deployments
+	// that mount it are applied.
+	if err := common.EnsureTrustedCAConfigMap(ctx, integrationServiceNamespace, tc, r.ClusterInfo); err != nil {
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonConfigMapFailed, "ensure trusted-ca ConfigMap")
+	}
+
+	// Apply all embedded manifests (namespace is already ensured above).
 	if err := r.applyManifests(ctx, tc, integrationService, consoleURL); err != nil {
 		return errHandler.HandleApplyError(ctx, err)
 	}

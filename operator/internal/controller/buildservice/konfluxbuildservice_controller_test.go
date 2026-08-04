@@ -178,6 +178,95 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		})
 	})
 
+	Context("OpenShift trusted-ca ConfigMap", func() {
+		var buildService *konfluxv1alpha1.KonfluxBuildService
+
+		trustedCAExists := func() bool {
+			cm := &corev1.ConfigMap{}
+			return k8sClient.Get(ctx, types.NamespacedName{
+				Name:      "trusted-ca",
+				Namespace: buildServiceNamespace,
+			}, cm) == nil
+		}
+
+		trustedCAHasInjectionLabel := func(g Gomega) {
+			cm := &corev1.ConfigMap{}
+			g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      "trusted-ca",
+				Namespace: buildServiceNamespace,
+			}, cm)).To(Succeed())
+			g.Expect(cm.Labels).To(HaveKeyWithValue(
+				"config.openshift.io/inject-trusted-cabundle", "true"))
+		}
+
+		BeforeEach(func() {
+			buildService = newBuildServiceCR()
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+		})
+
+		AfterEach(func() {
+			testutil.DeleteAndWait(ctx, k8sClient, buildService)
+			testutil.DeleteAndWait(ctx, k8sClient, &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "trusted-ca", Namespace: buildServiceNamespace},
+			})
+		})
+
+		It("Should create trusted-ca ConfigMap with injection label when running on OpenShift", func() {
+			openShiftClusterInfo, err := clusterinfo.DetectWithClient(&buildServiceMockDiscoveryClient{
+				resources: map[string]*metav1.APIResourceList{
+					"config.openshift.io/v1": {
+						APIResources: []metav1.APIResource{{Kind: "ClusterVersion"}},
+					},
+				},
+				serverVersion: &version.Info{GitVersion: "v1.29.0"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			startManagerWithClusterInfo(openShiftClusterInfo)
+
+			By("verifying the trusted-ca ConfigMap was created with the injection label")
+			Eventually(trustedCAHasInjectionLabel).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("Should NOT create trusted-ca ConfigMap when NOT running on OpenShift", func() {
+			defaultClusterInfo, err := clusterinfo.DetectWithClient(&buildServiceMockDiscoveryClient{
+				resources:     map[string]*metav1.APIResourceList{},
+				serverVersion: &version.Info{GitVersion: "v1.29.0"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			startManagerWithClusterInfo(defaultClusterInfo)
+
+			By("waiting for the controller to apply manifests and create the build-service Deployment")
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      buildControllerManagerDeploymentName,
+					Namespace: buildServiceNamespace,
+				}, dep)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying no trusted-ca ConfigMap was created")
+			Expect(trustedCAExists()).To(BeFalse())
+		})
+
+		It("Should NOT create trusted-ca ConfigMap when ClusterInfo is nil", func() {
+			startManagerWithClusterInfo(nil)
+
+			By("waiting for the controller to apply manifests and create the build-service Deployment")
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      buildControllerManagerDeploymentName,
+					Namespace: buildServiceNamespace,
+				}, dep)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying no trusted-ca ConfigMap was created")
+			Expect(trustedCAExists()).To(BeFalse())
+		})
+	})
+
 	Context("PipelineConfig", func() {
 		var configMapNN types.NamespacedName
 
