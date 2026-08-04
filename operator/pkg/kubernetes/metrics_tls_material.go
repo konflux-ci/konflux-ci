@@ -48,7 +48,7 @@ func NewSelfSignedMetricsTLSMaterial() (caPEM, leafPEM []byte, err error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("create CA cert: %w", err)
 	}
-	caPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
+	caPEM = pem.EncodeToMemory(&pem.Block{Type: pemBlockTypeCertificate, Bytes: caDER})
 
 	leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -71,6 +71,6 @@ func NewSelfSignedMetricsTLSMaterial() (caPEM, leafPEM []byte, err error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("create leaf cert: %w", err)
 	}
-	leafPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: leafDER})
+	leafPEM = pem.EncodeToMemory(&pem.Block{Type: pemBlockTypeCertificate, Bytes: leafDER})
 	return caPEM, leafPEM, nil
 }

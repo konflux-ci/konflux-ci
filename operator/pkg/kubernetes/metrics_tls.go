@@ -38,6 +38,8 @@ const (
 	// MetricsCASecretName is the Secret ServiceMonitors trust via tlsConfig.ca (key ca.crt).
 	// Single-Secret pattern: same name as MetricsServerCertSecretName.
 	MetricsCASecretName = MetricsServerCertSecretName
+	// pemBlockTypeCertificate is the standard PEM block type for X.509 certificates.
+	pemBlockTypeCertificate = "CERTIFICATE"
 	// MetricsCACertKey is the CA certificate key used by ServiceMonitor tlsConfig.ca and
 	// EvaluateMetricsScrapeTLS.
 	MetricsCACertKey = "ca.crt"
@@ -175,7 +177,7 @@ func parseFirstCertPEM(pemBytes []byte) (*x509.Certificate, error) {
 		if block == nil {
 			return nil, fmt.Errorf("no CERTIFICATE PEM block")
 		}
-		if block.Type != "CERTIFICATE" {
+		if block.Type != pemBlockTypeCertificate {
 			continue
 		}
 		return x509.ParseCertificate(block.Bytes)

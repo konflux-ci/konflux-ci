@@ -60,37 +60,45 @@ const (
 	crKind = "Konflux"
 )
 
+var (
+	// Optional sub-CRs shared by cleanup and cluster-scoped allow-list tables.
+	imageControllerGVK  = konfluxv1alpha1.GroupVersion.WithKind("KonfluxImageController")
+	internalRegistryGVK = konfluxv1alpha1.GroupVersion.WithKind("KonfluxInternalRegistry")
+	defaultTenantGVK    = konfluxv1alpha1.GroupVersion.WithKind("KonfluxDefaultTenant")
+	segmentBridgeGVK    = konfluxv1alpha1.GroupVersion.WithKind("KonfluxSegmentBridge")
+)
+
 // konfluxCleanupGVKs defines which sub-CR types should be cleaned up when they are
 // no longer part of the desired state. Only optional/conditional sub-CRs are listed here.
 // Always-applied sub-CRs don't need cleanup (they're always tracked and never become orphans).
 var konfluxCleanupGVKs = []schema.GroupVersionKind{
 	// KonfluxImageController is optional - only created when spec.imageController.enabled is true
-	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxImageController"},
+	imageControllerGVK,
 	// KonfluxInternalRegistry is optional - only created when spec.internalRegistry.enabled is true
-	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxInternalRegistry"},
+	internalRegistryGVK,
 	// KonfluxDefaultTenant is optional - only created when spec.defaultTenant.enabled is true (default)
-	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxDefaultTenant"},
+	defaultTenantGVK,
 	// KonfluxSegmentBridge is optional - only created when spec.segmentBridge.enabled is true
-	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxSegmentBridge"},
+	segmentBridgeGVK,
 }
 
 // konfluxClusterScopedAllowList restricts which cluster-scoped sub-CRs can be deleted
 // during orphan cleanup. Only conditionally-created sub-CRs need to be listed here.
 var konfluxClusterScopedAllowList = tracking.ClusterScopedAllowList{
 	// KonfluxImageController is optional - only created when spec.imageController.enabled is true
-	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxImageController"}: sets.New(
+	imageControllerGVK: sets.New(
 		"konflux-image-controller",
 	),
 	// KonfluxInternalRegistry is optional - only created when spec.internalRegistry.enabled is true
-	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxInternalRegistry"}: sets.New(
+	internalRegistryGVK: sets.New(
 		"konflux-internal-registry",
 	),
 	// KonfluxDefaultTenant is optional - only created when spec.defaultTenant.enabled is true (default)
-	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxDefaultTenant"}: sets.New(
+	defaultTenantGVK: sets.New(
 		"konflux-default-tenant",
 	),
 	// KonfluxSegmentBridge is optional - only created when spec.segmentBridge.enabled is true
-	{Group: konfluxv1alpha1.GroupVersion.Group, Version: konfluxv1alpha1.GroupVersion.Version, Kind: "KonfluxSegmentBridge"}: sets.New(
+	segmentBridgeGVK: sets.New(
 		"konflux-segment-bridge",
 	),
 }

@@ -23,6 +23,12 @@ linters:
     - unused
     - gosec
   settings:
+    goconst:
+      ignore-tests: true
+      # Env flag values and URL schemes are clearer as literals than named consts.
+      ignore-string-values:
+        - "^true$"
+        - "^https$"
     revive:
       rules:
         - name: comment-spacings

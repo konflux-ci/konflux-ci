@@ -92,7 +92,7 @@ func EnsureMetricsReaderBinding(
 			},
 			RoleRef: rbacv1.RoleRef{
 				APIGroup: rbacv1.GroupName,
-				Kind:     "ClusterRole",
+				Kind:     clusterRoleGVK.Kind,
 				Name:     clusterRoleName,
 			},
 			Subjects: subjects,

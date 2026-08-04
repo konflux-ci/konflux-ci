@@ -46,13 +46,18 @@ const (
 	crKind = "KonfluxCertManager"
 )
 
+var (
+	clusterIssuerGVK = certmanagerv1.SchemeGroupVersion.WithKind("ClusterIssuer")
+	certificateGVK   = certmanagerv1.SchemeGroupVersion.WithKind("Certificate")
+)
+
 // CertManagerCleanupGVKs defines which resource types should be cleaned up when they are
 // no longer part of the desired state. When createClusterIssuer is false, cert-manager
 // resources will be automatically deleted because they weren't applied during the reconcile
 // but have the owner label.
 var CertManagerCleanupGVKs = []schema.GroupVersionKind{
-	{Group: "cert-manager.io", Version: "v1", Kind: "ClusterIssuer"},
-	{Group: "cert-manager.io", Version: "v1", Kind: "Certificate"},
+	clusterIssuerGVK,
+	certificateGVK,
 }
 
 // CertManagerClusterScopedAllowList restricts which cluster-scoped resources can be deleted
@@ -62,7 +67,7 @@ var CertManagerCleanupGVKs = []schema.GroupVersionKind{
 // Resources that are always applied don't need protection (they're always tracked).
 var CertManagerClusterScopedAllowList = tracking.ClusterScopedAllowList{
 	// ClusterIssuers are only created when spec.createClusterIssuer is true
-	{Group: "cert-manager.io", Version: "v1", Kind: "ClusterIssuer"}: sets.New(
+	clusterIssuerGVK: sets.New(
 		"konflux-bootstrap-issuer",
 		"konflux-issuer",
 		// Legacy names (pre-rename) kept so orphan cleanup deletes them on
