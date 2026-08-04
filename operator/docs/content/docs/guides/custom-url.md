@@ -20,7 +20,7 @@ creating or managing an Ingress resource.
 
 ## Configuration
 
-Set `ingress.enabled: false` and `ingress.host` to your desired hostname in the
+Set `ingress.enabled: false` and `ingress.fqdn` to your desired hostname in the
 Konflux CR:
 
 ```yaml
@@ -33,7 +33,7 @@ spec:
     spec:
       ingress:
         enabled: false
-        host: konflux.example.com
+        fqdn: konflux.example.com
 ```
 
 With this configuration:
@@ -41,10 +41,18 @@ With this configuration:
 - **`ingress.enabled: false`** — the operator will **not** create an Ingress
   resource. You are responsible for routing traffic to the `proxy` service in the
   `konflux-ui` namespace.
-- **`ingress.host`** — the operator configures oauth2-proxy, dex, and all
+- **`ingress.fqdn`** — the operator configures oauth2-proxy, dex, and all
   related components to use this hostname for OIDC redirect URLs, issuer URLs,
   and allowed redirect domains. This ensures authentication flows work correctly
-  with your custom URL.
+  with your custom URL. An optional `:port` suffix (for example
+  `konflux.example.com:8443`) is supported in this endpoint-only mode. Do **not**
+  include `:port` when ingress is effectively enabled (explicit `true`, or unset on
+  OpenShift): reconcile fails with `Ready=False` / `InvalidIngressFQDN`, because a
+  managed Ingress host cannot include a port while auth URLs would keep it.
+
+On OpenShift, you can set `ingress.hostname` to a short DNS label instead (for
+example `konflux-ui`); the operator composes it with the cluster ingress domain
+as `<hostname>.<apps-domain>`. `fqdn` wins if both are set.
 
 ## Routing to the Backend
 

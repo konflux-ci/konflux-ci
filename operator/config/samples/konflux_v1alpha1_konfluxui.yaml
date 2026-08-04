@@ -12,7 +12,9 @@ spec:
   ingress:
     enabled: true
     ingressClassName: "nginx"
-    host: "konflux-ui.example.com"
+    fqdn: "konflux-ui.example.com"
+    # Or on OpenShift, set a short label instead of the full name:
+    # hostname: konflux-ui
     annotations:
       cert-manager.io/cluster-issuer: "letsencrypt-prod"
       nginx.ingress.kubernetes.io/ssl-redirect: "true"

@@ -53,6 +53,10 @@ const (
 	// ReasonEndpointDeterminationFailed indicates that endpoint URL determination failed.
 	ReasonEndpointDeterminationFailed = "EndpointDeterminationFailed"
 
+	// ReasonInvalidIngressFQDN indicates ingress.fqdn includes a :port while ingress is
+	// effectively enabled (managed Ingress cannot carry a port in its host rule).
+	ReasonInvalidIngressFQDN = "InvalidIngressFQDN"
+
 	// ReasonConfigMapFailed indicates that ConfigMap reconciliation failed.
 	ReasonConfigMapFailed = "ConfigMapFailed"
 

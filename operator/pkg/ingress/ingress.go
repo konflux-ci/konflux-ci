@@ -20,6 +20,7 @@ package ingress
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 
@@ -29,9 +30,17 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
+)
+
+// ErrFQDNPortWithManagedIngress is returned when ingress.fqdn includes a :port
+// suffix while ingress is effectively enabled. Managed Ingress rules omit ports,
+// so auth redirects / ConsoleLink would disagree with the Ingress host.
+var ErrFQDNPortWithManagedIngress = errors.New(
+	"ingress.fqdn must not include a port when ingress is enabled; remove :port or set ingress.enabled=false",
 )
 
 const (
@@ -195,12 +204,19 @@ func GetOpenShiftIngressDomain(ctx context.Context, c client.Client) (string, er
 }
 
 // DetermineEndpointURL determines the endpoint URL for the UI based on ingress configuration.
-// If host is explicitly specified, use that host regardless of whether ingress is enabled.
-// This allows users who manage their own external routing (e.g., Gateway API, hardware LB)
-// to configure the endpoint without the operator managing an Ingress resource.
-// If ingress is enabled on OpenShift without a host, use the default OpenShift ingress domain.
-// Otherwise, use the default localhost configuration.
-// The namespace parameter is used for generating the OpenShift hostname convention.
+//
+// Resolution order:
+//  1. FQDN set → use as the UI endpoint host. Optional :port is allowed only when ingress
+//     is not effectively enabled; otherwise returns ErrFQDNPortWithManagedIngress. If
+//     Hostname is also set, FQDN wins and a warning is logged.
+//  2. Hostname set (FQDN empty) on OpenShift → compose <hostname>.<cluster-ingress-domain>
+//     (no -<namespace> infix). Domain lookup failure fails reconcile.
+//  3. Hostname set (FQDN empty) off OpenShift → ignore Hostname, log a warning, fall through.
+//  4. Neither set (or Hostname ignored) → OpenShift + ingress effectively enabled uses
+//     konflux-ui-<namespace>.<domain>; otherwise localhost:9443.
+//
+// FQDN and Hostname always define the UI endpoint URL independently of whether ingress is
+// enabled, so users managing their own external routing can still configure auth redirects.
 // Returns a *url.URL with Scheme set to "https" and Host set appropriately.
 func DetermineEndpointURL(
 	ctx context.Context,
@@ -209,23 +225,45 @@ func DetermineEndpointURL(
 	namespace string,
 	clusterInfo *clusterinfo.Info,
 ) (*url.URL, error) {
+	log := logf.FromContext(ctx)
 	ingressSpec := ui.Spec.GetIngress()
+	isOnOpenShift := clusterInfo != nil && clusterInfo.IsOpenShift()
+	// Effectively enabled: explicit true, or unset (nil) on OpenShift.
+	ingressEnabled := ptr.Deref(ingressSpec.Enabled, isOnOpenShift)
 
-	// If host is explicitly specified, always use it (no port for TLS on 443).
-	// This takes priority over the ingress-enabled check so that users who manage
-	// their own routing can set a hostname without the operator creating an Ingress.
-	if ingressSpec.Host != "" {
-		return &url.URL{
+	// FQDN takes precedence over Hostname and over the ingress-enabled check.
+	if ingressSpec.FQDN != "" {
+		if ingressSpec.Hostname != "" {
+			log.Info("Both ingress.fqdn and ingress.hostname are set; using fqdn and ignoring hostname",
+				"fqdn", ingressSpec.FQDN, "hostname", ingressSpec.Hostname)
+		}
+		endpoint := &url.URL{
 			Scheme: "https",
-			Host:   ingressSpec.Host,
-		}, nil
+			Host:   ingressSpec.FQDN,
+		}
+		if endpoint.Port() != "" && ingressEnabled {
+			return nil, ErrFQDNPortWithManagedIngress
+		}
+		return endpoint, nil
 	}
 
-	// Determine if ingress is effectively enabled:
-	// - Explicitly enabled (true), OR
-	// - Unset (nil) AND on OpenShift (defaults to true on OpenShift)
-	isOnOpenShift := clusterInfo != nil && clusterInfo.IsOpenShift()
-	ingressEnabled := ptr.Deref(ingressSpec.Enabled, isOnOpenShift)
+	// Short hostname label: compose with cluster ingress domain on OpenShift only.
+	if ingressSpec.Hostname != "" {
+		if isOnOpenShift {
+			domain, err := GetOpenShiftIngressDomain(ctx, c)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get OpenShift ingress domain: %w", err)
+			}
+			return &url.URL{
+				Scheme: "https",
+				Host:   fmt.Sprintf("%s.%s", ingressSpec.Hostname, domain),
+			}, nil
+		}
+		log.Info(
+			"ingress.hostname ignored off OpenShift; using defaults (set ingress.fqdn instead)",
+			"hostname", ingressSpec.Hostname,
+		)
+	}
 
 	// If ingress is not enabled, use defaults
 	if !ingressEnabled {
@@ -236,7 +274,7 @@ func DetermineEndpointURL(
 	}
 
 	// If on OpenShift, try to get the default ingress domain
-	if clusterInfo != nil && clusterInfo.IsOpenShift() {
+	if isOnOpenShift {
 		domain, err := GetOpenShiftIngressDomain(ctx, c)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get OpenShift ingress domain: %w", err)

@@ -24,6 +24,7 @@ import (
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	configv1 "github.com/openshift/api/config/v1"
 	consolev1 "github.com/openshift/api/console/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -420,7 +421,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			refreshUI(ctx)
 			ui.Spec.Ingress = &konfluxv1alpha1.IngressSpec{
 				Enabled: ptr.To(true),
-				Host:    host,
+				FQDN:    host,
 			}
 			ExpectWithOffset(1, k8sClient.Update(ctx, ui)).To(Succeed())
 		}
@@ -521,7 +522,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 			By("updating to new hostname")
 			refreshUI(ctx)
-			ui.Spec.Ingress.Host = "updated.example.com"
+			ui.Spec.Ingress.FQDN = "updated.example.com"
 			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
 
 			Eventually(func(g Gomega) {
@@ -576,6 +577,162 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 	})
 
+	Context("OpenShift ingress hostname resolution via Reconcile", Serial, func() {
+		const clusterDomain = "apps.cluster.example.com"
+
+		var openShiftClusterInfo *clusterinfo.Info
+
+		BeforeEach(func(ctx context.Context) {
+			By("building OpenShift cluster info")
+			var err error
+			openShiftClusterInfo, err = clusterinfo.DetectWithClient(&mockDiscoveryClient{
+				resources: map[string]*metav1.APIResourceList{
+					"config.openshift.io/v1": {
+						APIResources: []metav1.APIResource{{Kind: "ClusterVersion"}},
+					},
+				},
+				serverVersion: &version.Info{GitVersion: "v1.29.0"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("seeding OpenShift Ingress cluster domain")
+			ingressConfig := &configv1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+				Spec: configv1.IngressSpec{
+					Domain: clusterDomain,
+				},
+			}
+			Expect(k8sClient.Create(ctx, ingressConfig)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ingressConfig)
+
+			By("pre-cleaning Ingress and ConsoleLink")
+			_ = k8sClient.Delete(ctx, &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{
+				Name: ingress.IngressName, Namespace: uiNamespace,
+			}})
+			_ = k8sClient.Delete(ctx, &consolev1.ConsoleLink{ObjectMeta: metav1.ObjectMeta{
+				Name: consolelink.ConsoleLinkName,
+			}})
+
+			startManager(openShiftClusterInfo)
+		})
+
+		createUI := func(ctx context.Context, ingressSpec *konfluxv1alpha1.IngressSpec) {
+			ui := &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxUISpec{
+					KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+						Ingress: ingressSpec,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, ui,
+				&consolev1.ConsoleLink{ObjectMeta: metav1.ObjectMeta{Name: consolelink.ConsoleLinkName}},
+				&networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{
+					Name: ingress.IngressName, Namespace: uiNamespace,
+				}},
+			)
+		}
+
+		It("Should compose hostname with the cluster ingress domain", func(ctx context.Context) {
+			wantHost := "konflux-ui." + clusterDomain
+			createUI(ctx, &konfluxv1alpha1.IngressSpec{
+				Enabled:  ptr.To(true),
+				Hostname: "konflux-ui",
+			})
+
+			Eventually(func(g Gomega) {
+				updatedUI := &konfluxv1alpha1.KonfluxUI{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updatedUI)).To(Succeed())
+				g.Expect(updatedUI.Status.Ingress).NotTo(BeNil())
+				g.Expect(updatedUI.Status.Ingress.Hostname).To(Equal(wantHost))
+				g.Expect(updatedUI.Status.Ingress.URL).To(Equal("https://" + wantHost))
+
+				ing := &networkingv1.Ingress{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: ingress.IngressName, Namespace: uiNamespace,
+				}, ing)).To(Succeed())
+				g.Expect(ing.Spec.Rules[0].Host).To(Equal(wantHost))
+
+				cl := &consolev1.ConsoleLink{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: consolelink.ConsoleLinkName,
+				}, cl)).To(Succeed())
+				g.Expect(cl.Spec.Href).To(Equal("https://" + wantHost))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("Should use the default OpenShift hostname when fqdn and hostname are unset", func(ctx context.Context) {
+			wantHost := ingress.IngressName + "-" + uiNamespace + "." + clusterDomain
+			createUI(ctx, &konfluxv1alpha1.IngressSpec{
+				Enabled: ptr.To(true),
+			})
+
+			Eventually(func(g Gomega) {
+				updatedUI := &konfluxv1alpha1.KonfluxUI{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updatedUI)).To(Succeed())
+				g.Expect(updatedUI.Status.Ingress).NotTo(BeNil())
+				g.Expect(updatedUI.Status.Ingress.Hostname).To(Equal(wantHost))
+				g.Expect(updatedUI.Status.Ingress.URL).To(Equal("https://" + wantHost))
+
+				ing := &networkingv1.Ingress{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: ingress.IngressName, Namespace: uiNamespace,
+				}, ing)).To(Succeed())
+				g.Expect(ing.Spec.Rules[0].Host).To(Equal(wantHost))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("Should prefer fqdn over hostname when both are set", func(ctx context.Context) {
+			createUI(ctx, &konfluxv1alpha1.IngressSpec{
+				Enabled:  ptr.To(true),
+				FQDN:     "fqdn.example.com",
+				Hostname: "ignored-label",
+			})
+
+			Eventually(func(g Gomega) {
+				updatedUI := &konfluxv1alpha1.KonfluxUI{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updatedUI)).To(Succeed())
+				g.Expect(updatedUI.Status.Ingress).NotTo(BeNil())
+				g.Expect(updatedUI.Status.Ingress.Hostname).To(Equal("fqdn.example.com"))
+				g.Expect(updatedUI.Status.Ingress.URL).To(Equal("https://fqdn.example.com"))
+
+				ing := &networkingv1.Ingress{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: ingress.IngressName, Namespace: uiNamespace,
+				}, ing)).To(Succeed())
+				g.Expect(ing.Spec.Rules[0].Host).To(Equal("fqdn.example.com"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("Should compose hostname for the endpoint without creating Ingress when disabled", func(ctx context.Context) {
+			wantHost := "konflux-ui." + clusterDomain
+			createUI(ctx, &konfluxv1alpha1.IngressSpec{
+				Enabled:  ptr.To(false),
+				Hostname: "konflux-ui",
+			})
+
+			Eventually(func(g Gomega) {
+				updatedUI := &konfluxv1alpha1.KonfluxUI{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updatedUI)).To(Succeed())
+				g.Expect(updatedUI.Status.Ingress).NotTo(BeNil())
+				g.Expect(updatedUI.Status.Ingress.Enabled).To(BeFalse())
+				g.Expect(updatedUI.Status.Ingress.Hostname).To(Equal(wantHost))
+				g.Expect(updatedUI.Status.Ingress.URL).To(Equal("https://" + wantHost))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("waiting for reconcile to settle")
+			waitForReconcile(ctx)
+
+			Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
+				Name: ingress.IngressName, Namespace: uiNamespace,
+			}, &networkingv1.Ingress{}))).To(BeTrue())
+			Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
+				Name: consolelink.ConsoleLinkName,
+			}, &consolev1.ConsoleLink{}))).To(BeTrue())
+		})
+	})
+
 	Context("OpenShift OAuth reconciliation via Reconcile", Serial, func() {
 		var openShiftClusterInfo *clusterinfo.Info
 		var defaultClusterInfo *clusterinfo.Info
@@ -613,7 +770,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 					KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
 						Ingress: &konfluxv1alpha1.IngressSpec{
 							Enabled: ptr.To(true),
-							Host:    "openshift-test.example.com",
+							FQDN:    "openshift-test.example.com",
 						},
 					},
 				},
@@ -930,7 +1087,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 					KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
 						Ingress: &konfluxv1alpha1.IngressSpec{
 							Enabled: ptr.To(true),
-							Host:    "consolelink-test.example.com",
+							FQDN:    "consolelink-test.example.com",
 						},
 					},
 				},
@@ -1040,7 +1197,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 			By("updating the hostname")
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, ui)).To(Succeed())
-			ui.Spec.Ingress.Host = "updated-consolelink.example.com"
+			ui.Spec.Ingress.FQDN = "updated-consolelink.example.com"
 			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
 
 			Eventually(func(g Gomega) {
@@ -1753,7 +1910,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 					KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
 						Ingress: &konfluxv1alpha1.IngressSpec{
 							Enabled: ptr.To(true),
-							Host:    "drift-test.example.com",
+							FQDN:    "drift-test.example.com",
 						},
 					},
 				},
@@ -1811,7 +1968,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 					KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
 						Ingress: &konfluxv1alpha1.IngressSpec{
 							Enabled: ptr.To(true),
-							Host:    "consolelink-drift.example.com",
+							FQDN:    "consolelink-drift.example.com",
 						},
 					},
 				},

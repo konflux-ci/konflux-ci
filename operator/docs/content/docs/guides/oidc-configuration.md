@@ -49,8 +49,9 @@ https://<your-konflux-hostname>/idp/callback
 ```
 
 Dex is not exposed at a separate hostname — it runs behind the Konflux proxy at the `/idp/`
-path of your Konflux UI URL. The operator derives this URL automatically from `ingress.host`
-(or the OpenShift default ingress domain if not explicitly set).
+path of your Konflux UI URL. The operator derives this URL automatically from `ingress.fqdn`
+(or `ingress.hostname` composed with the OpenShift ingress domain, or the OpenShift
+default ingress naming if neither is set).
 
 Once created, note the **Client ID** and generate a **Client Secret** — you will need both in the next step.
 
