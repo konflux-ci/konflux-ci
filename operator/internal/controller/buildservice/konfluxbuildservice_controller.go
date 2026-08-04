@@ -181,6 +181,12 @@ func (r *KonfluxBuildServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		return errHandler.HandleWithReason(ctx, err, condition.ReasonNamespaceCreationFailed, "ensure namespace exists")
 	}
 
+	// On OpenShift, create the trusted-ca ConfigMap with the injection label so
+	// the cluster network operator populates it with the cluster CA bundle.
+	if err := common.EnsureTrustedCAConfigMap(ctx, webhookConfigNamespace, tc, r.ClusterInfo); err != nil {
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonConfigMapFailed, "ensure trusted-ca ConfigMap")
+	}
+
 	// Reconcile webhook config ConfigMap.
 	// Must happen before applyManifests so the hashed ConfigMap name is available for the volume reference.
 	webhookConfigMapName, err := r.reconcileWebhookConfig(ctx, buildService)

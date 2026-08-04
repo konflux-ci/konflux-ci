@@ -367,6 +367,7 @@ func main() {
 		Client:              mgr.GetClient(),
 		Scheme:              mgr.GetScheme(),
 		ObjectStore:         objectStore,
+		ClusterInfo:         clusterInfo,
 		TokenCreator:        tokenCreator,
 		SecretReader:        mgr.GetAPIReader(),
 		TokenRotationEvents: integrationServiceRotation,

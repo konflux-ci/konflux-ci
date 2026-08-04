@@ -35,10 +35,12 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/version"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -1497,3 +1499,127 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 		})
 	})
 })
+
+var _ = Describe("KonfluxIntegrationService Controller - OpenShift trusted-ca", func() {
+	startManagerWithClusterInfo := func(clusterInfo *clusterinfo.Info) {
+		mgrCtx, mgrCancel := context.WithCancel(testEnv.Ctx)
+		mgr := testutil.NewTestManager(testEnv)
+		Expect((&KonfluxIntegrationServiceReconciler{
+			Client:      mgr.GetClient(),
+			Scheme:      mgr.GetScheme(),
+			ObjectStore: objectStore,
+			ClusterInfo: clusterInfo,
+		}).SetupWithManager(mgr)).To(Succeed())
+		waitForStop := testutil.StartManagerWithContext(mgrCtx, mgr)
+		DeferCleanup(func() {
+			mgrCancel()
+			waitForStop()
+		})
+	}
+
+	var integrationService *konfluxv1alpha1.KonfluxIntegrationService
+
+	trustedCAExists := func() bool {
+		cm := &corev1.ConfigMap{}
+		return k8sClient.Get(ctx, types.NamespacedName{
+			Name:      "trusted-ca",
+			Namespace: integrationServiceNamespace,
+		}, cm) == nil
+	}
+
+	trustedCAHasInjectionLabel := func(g Gomega) {
+		cm := &corev1.ConfigMap{}
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name:      "trusted-ca",
+			Namespace: integrationServiceNamespace,
+		}, cm)).To(Succeed())
+		g.Expect(cm.Labels).To(HaveKeyWithValue(
+			"config.openshift.io/inject-trusted-cabundle", "true"))
+	}
+
+	BeforeEach(func() {
+		integrationService = &konfluxv1alpha1.KonfluxIntegrationService{
+			ObjectMeta: metav1.ObjectMeta{Name: CRName},
+		}
+		Expect(k8sClient.Create(ctx, integrationService)).To(Succeed())
+	})
+
+	AfterEach(func() {
+		testutil.DeleteAndWait(ctx, k8sClient, integrationService)
+		testutil.DeleteAndWait(ctx, k8sClient, &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "trusted-ca", Namespace: integrationServiceNamespace},
+		})
+	})
+
+	It("Should create trusted-ca ConfigMap with injection label when running on OpenShift", func() {
+		openShiftClusterInfo, err := clusterinfo.DetectWithClient(&integrationServiceMockDiscoveryClient{
+			resources: map[string]*metav1.APIResourceList{
+				"config.openshift.io/v1": {
+					APIResources: []metav1.APIResource{{Kind: "ClusterVersion"}},
+				},
+			},
+			serverVersion: &version.Info{GitVersion: "v1.29.0"},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		startManagerWithClusterInfo(openShiftClusterInfo)
+
+		By("verifying the trusted-ca ConfigMap was created with the injection label")
+		Eventually(trustedCAHasInjectionLabel).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+	})
+
+	It("Should NOT create trusted-ca ConfigMap when NOT running on OpenShift", func() {
+		defaultClusterInfo, err := clusterinfo.DetectWithClient(&integrationServiceMockDiscoveryClient{
+			resources:     map[string]*metav1.APIResourceList{},
+			serverVersion: &version.Info{GitVersion: "v1.29.0"},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		startManagerWithClusterInfo(defaultClusterInfo)
+
+		By("waiting for the controller to apply manifests and create the Deployment")
+		Eventually(func(g Gomega) {
+			dep := &appsv1.Deployment{}
+			g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      controllerManagerDeploymentName,
+				Namespace: integrationServiceNamespace,
+			}, dep)).To(Succeed())
+		}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+		By("verifying no trusted-ca ConfigMap was created")
+		Expect(trustedCAExists()).To(BeFalse())
+	})
+
+	It("Should NOT create trusted-ca ConfigMap when ClusterInfo is nil", func() {
+		startManagerWithClusterInfo(nil)
+
+		By("waiting for the controller to apply manifests and create the Deployment")
+		Eventually(func(g Gomega) {
+			dep := &appsv1.Deployment{}
+			g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      controllerManagerDeploymentName,
+				Namespace: integrationServiceNamespace,
+			}, dep)).To(Succeed())
+		}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+		By("verifying no trusted-ca ConfigMap was created")
+		Expect(trustedCAExists()).To(BeFalse())
+	})
+})
+
+// integrationServiceMockDiscoveryClient implements clusterinfo.DiscoveryClient for testing.
+type integrationServiceMockDiscoveryClient struct {
+	resources     map[string]*metav1.APIResourceList
+	serverVersion *version.Info
+}
+
+func (m *integrationServiceMockDiscoveryClient) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
+	if r, ok := m.resources[groupVersion]; ok {
+		return r, nil
+	}
+	return nil, errors.NewNotFound(schema.GroupResource{Group: groupVersion}, "")
+}
+
+func (m *integrationServiceMockDiscoveryClient) ServerVersion() (*version.Info, error) {
+	return m.serverVersion, nil
+}
