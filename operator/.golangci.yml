@@ -23,6 +23,8 @@ linters:
     - unused
     - gosec
   settings:
+    goconst:
+      ignore-tests: true
     revive:
       rules:
         - name: comment-spacings
@@ -35,8 +37,12 @@ linters:
         path: api/*
       - linters:
           - dupl
+          - goconst
           - lll
         path: internal/*
+      - linters:
+          - goconst
+        path: pkg/*
       - linters:
           - gosec
         text: "G101:"
