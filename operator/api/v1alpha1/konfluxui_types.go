@@ -46,13 +46,30 @@ type IngressSpec struct {
 	// IngressClassName specifies which IngressClass to use for the ingress.
 	// +optional
 	IngressClassName *string `json:"ingressClassName,omitempty"`
-	// Host is the hostname used as the endpoint for configuring oauth2-proxy, dex, and related components.
-	// When set, this hostname is always used regardless of whether ingress is enabled,
+	// FQDN is the full public DNS name used as the UI endpoint for configuring oauth2-proxy,
+	// dex, and related components.
+	// An optional :port suffix (e.g. "ui.example.com:8443") is supported only for
+	// endpoint-only / user-managed routing when ingress is not effectively enabled.
+	// Including a port while ingress is enabled (explicit true, or unset on OpenShift)
+	// fails reconcile with Ready=False (reason InvalidIngressFQDN), because Ingress host
+	// rules omit ports while auth redirect URLs and ConsoleLink would keep the port.
+	// When set, this value is always used regardless of whether ingress is enabled,
 	// allowing users who manage their own external routing (e.g., Gateway API, hardware LB)
 	// to configure the endpoint without the operator managing an Ingress resource.
-	// On OpenShift, if empty, the default ingress domain and naming convention will be used.
+	// Takes precedence over Hostname when both are set.
 	// +optional
-	Host string `json:"host,omitempty"`
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?$`
+	FQDN string `json:"fqdn,omitempty"`
+	// Hostname is a short DNS label composed with the cluster ingress domain on OpenShift
+	// as "{hostname}.{cluster-ingress-domain}" (no namespace infix).
+	// Ignored when FQDN is set. Off OpenShift, Hostname is ignored and a warning is logged.
+	// When both FQDN and Hostname are empty on OpenShift with ingress enabled, the operator
+	// falls back to "konflux-ui-{namespace}.{domain}".
+	// +optional
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	Hostname string `json:"hostname,omitempty"`
 	// Annotations to add to the ingress resource.
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`

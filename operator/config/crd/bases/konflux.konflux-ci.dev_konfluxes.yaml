@@ -3408,13 +3408,31 @@ spec:
                               When nil (unset), defaults to true on OpenShift, false otherwise.
                             nullable: true
                             type: boolean
-                          host:
+                          fqdn:
                             description: |-
-                              Host is the hostname used as the endpoint for configuring oauth2-proxy, dex, and related components.
-                              When set, this hostname is always used regardless of whether ingress is enabled,
+                              FQDN is the full public DNS name used as the UI endpoint for configuring oauth2-proxy,
+                              dex, and related components.
+                              An optional :port suffix (e.g. "ui.example.com:8443") is supported only for
+                              endpoint-only / user-managed routing when ingress is not effectively enabled.
+                              Including a port while ingress is enabled (explicit true, or unset on OpenShift)
+                              fails reconcile with Ready=False (reason InvalidIngressFQDN), because Ingress host
+                              rules omit ports while auth redirect URLs and ConsoleLink would keep the port.
+                              When set, this value is always used regardless of whether ingress is enabled,
                               allowing users who manage their own external routing (e.g., Gateway API, hardware LB)
                               to configure the endpoint without the operator managing an Ingress resource.
-                              On OpenShift, if empty, the default ingress domain and naming convention will be used.
+                              Takes precedence over Hostname when both are set.
+                            minLength: 1
+                            pattern: ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?$
+                            type: string
+                          hostname:
+                            description: |-
+                              Hostname is a short DNS label composed with the cluster ingress domain on OpenShift
+                              as "{hostname}.{cluster-ingress-domain}" (no namespace infix).
+                              Ignored when FQDN is set. Off OpenShift, Hostname is ignored and a warning is logged.
+                              When both FQDN and Hostname are empty on OpenShift with ingress enabled, the operator
+                              falls back to "konflux-ui-{namespace}.{domain}".
+                            maxLength: 63
+                            pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                             type: string
                           ingressClassName:
                             description: IngressClassName specifies which IngressClass

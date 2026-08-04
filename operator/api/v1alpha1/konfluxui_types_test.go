@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	"maps"
+	"regexp"
 	"testing"
 
 	"github.com/onsi/gomega"
@@ -151,4 +152,62 @@ func TestKonfluxUIConfigSpec_Accessors(t *testing.T) {
 	g.Expect(cfg.GetNodePortService()).To(gomega.BeNil())
 	g.Expect(cfg.GetProxy()).To(gomega.Equal(ProxyDeploymentSpec{Replicas: 1}))
 	g.Expect(cfg.GetDex()).To(gomega.Equal(DexDeploymentSpec{Replicas: 1}))
+}
+
+// Patterns must stay in sync with +kubebuilder:validation:Pattern on IngressSpec.
+var (
+	ingressFQDNPattern     = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?$`)
+	ingressHostnamePattern = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
+)
+
+func TestIngressSpecValidationPatterns(t *testing.T) {
+	t.Parallel()
+
+	t.Run("fqdn accepts host and optional port", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		for _, value := range []string{
+			"konflux.example.com",
+			"ui.example.com:8443",
+			"localhost",
+			"a",
+		} {
+			g.Expect(ingressFQDNPattern.MatchString(value)).To(gomega.BeTrue(), "fqdn %q", value)
+		}
+	})
+
+	t.Run("fqdn rejects empty and invalid values", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		for _, value := range []string{
+			"",
+			"-bad.example.com",
+			"example.com:",
+			"example.com:port",
+		} {
+			g.Expect(ingressFQDNPattern.MatchString(value)).To(gomega.BeFalse(), "fqdn %q", value)
+		}
+	})
+
+	t.Run("hostname accepts a single DNS label", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		for _, value := range []string{
+			"konflux-ui",
+			"a",
+			"ui1",
+		} {
+			g.Expect(ingressHostnamePattern.MatchString(value)).To(gomega.BeTrue(), "hostname %q", value)
+		}
+	})
+
+	t.Run("hostname rejects dotted or uppercase names", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		for _, value := range []string{
+			"bad.dotted.name",
+			"Konflux-UI",
+			"-leading",
+			"trailing-",
+			"",
+		} {
+			g.Expect(ingressHostnamePattern.MatchString(value)).To(gomega.BeFalse(), "hostname %q", value)
+		}
+	})
 }

@@ -287,7 +287,7 @@ func TestBuildForUI(t *testing.T) {
 				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
 					Ingress: &konfluxv1alpha1.IngressSpec{
 						Enabled: ptr.To(true),
-						Host:    "explicit.host.com",
+						FQDN:    "explicit.host.com",
 					},
 				},
 			},
@@ -399,7 +399,7 @@ func TestDetermineEndpointURL(t *testing.T) {
 		g.Expect(endpoint.Port()).To(gomega.Equal(DefaultProxyPort))
 	})
 
-	t.Run("returns explicit host when ingress is disabled but host is specified", func(t *testing.T) {
+	t.Run("returns explicit fqdn when ingress is disabled but fqdn is specified", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
 		ui := &konfluxv1alpha1.KonfluxUI{
@@ -407,13 +407,13 @@ func TestDetermineEndpointURL(t *testing.T) {
 				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
 					Ingress: &konfluxv1alpha1.IngressSpec{
 						Enabled: ptr.To(false),
-						Host:    "my-custom-host.example.com",
+						FQDN:    "my-custom-host.example.com",
 					},
 				},
 			},
 		}
 
-		// Even with ingress disabled, explicit host should be honored
+		// Even with ingress disabled, explicit fqdn should be honored
 		// (e.g., user managing their own Gateway API or external routing)
 		endpoint, err := DetermineEndpointURL(
 			context.Background(), nil, ui, "konflux-ui", nil)
@@ -424,7 +424,7 @@ func TestDetermineEndpointURL(t *testing.T) {
 		g.Expect(endpoint.String()).To(gomega.Equal("https://my-custom-host.example.com"))
 	})
 
-	t.Run("returns explicit host when ingress is enabled with host specified", func(t *testing.T) {
+	t.Run("returns explicit fqdn when ingress is enabled with fqdn specified", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
 		ui := &konfluxv1alpha1.KonfluxUI{
@@ -432,7 +432,7 @@ func TestDetermineEndpointURL(t *testing.T) {
 				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
 					Ingress: &konfluxv1alpha1.IngressSpec{
 						Enabled: ptr.To(true),
-						Host:    "my-custom-host.example.com",
+						FQDN:    "my-custom-host.example.com",
 					},
 				},
 			},
@@ -447,7 +447,30 @@ func TestDetermineEndpointURL(t *testing.T) {
 		g.Expect(endpoint.String()).To(gomega.Equal("https://my-custom-host.example.com"))
 	})
 
-	t.Run("returns explicit host on OpenShift instead of generating hostname", func(t *testing.T) {
+	t.Run("returns explicit fqdn with optional port", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		ui := &konfluxv1alpha1.KonfluxUI{
+			Spec: konfluxv1alpha1.KonfluxUISpec{
+				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled: ptr.To(false),
+						FQDN:    "my-custom-host.example.com:8443",
+					},
+				},
+			},
+		}
+
+		endpoint, err := DetermineEndpointURL(
+			context.Background(), nil, ui, "konflux-ui", nil)
+
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(endpoint.Hostname()).To(gomega.Equal("my-custom-host.example.com"))
+		g.Expect(endpoint.Port()).To(gomega.Equal("8443"))
+		g.Expect(endpoint.String()).To(gomega.Equal("https://my-custom-host.example.com:8443"))
+	})
+
+	t.Run("rejects fqdn with port when ingress is explicitly enabled", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
 		ui := &konfluxv1alpha1.KonfluxUI{
@@ -455,7 +478,66 @@ func TestDetermineEndpointURL(t *testing.T) {
 				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
 					Ingress: &konfluxv1alpha1.IngressSpec{
 						Enabled: ptr.To(true),
-						Host:    "my-custom-host.example.com",
+						FQDN:    "my-custom-host.example.com:8443",
+					},
+				},
+			},
+		}
+
+		_, err := DetermineEndpointURL(
+			context.Background(), nil, ui, "konflux-ui", nil)
+
+		g.Expect(err).To(gomega.MatchError(ErrFQDNPortWithManagedIngress))
+	})
+
+	t.Run("rejects fqdn with port when ingress enabled defaults true on OpenShift", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		ui := &konfluxv1alpha1.KonfluxUI{
+			Spec: konfluxv1alpha1.KonfluxUISpec{
+				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						FQDN: "my-custom-host.example.com:8443",
+					},
+				},
+			},
+		}
+
+		_, err := DetermineEndpointURL(
+			context.Background(), nil, ui, "konflux-ui", createOpenShiftClusterInfo())
+
+		g.Expect(err).To(gomega.MatchError(ErrFQDNPortWithManagedIngress))
+	})
+
+	t.Run("allows fqdn with port when ingress enabled is unset off OpenShift", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		ui := &konfluxv1alpha1.KonfluxUI{
+			Spec: konfluxv1alpha1.KonfluxUISpec{
+				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						FQDN: "my-custom-host.example.com:8443",
+					},
+				},
+			},
+		}
+
+		endpoint, err := DetermineEndpointURL(
+			context.Background(), nil, ui, "konflux-ui", createNonOpenShiftClusterInfo())
+
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(endpoint.String()).To(gomega.Equal("https://my-custom-host.example.com:8443"))
+	})
+
+	t.Run("returns explicit fqdn on OpenShift instead of generating hostname", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		ui := &konfluxv1alpha1.KonfluxUI{
+			Spec: konfluxv1alpha1.KonfluxUISpec{
+				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled: ptr.To(true),
+						FQDN:    "my-custom-host.example.com",
 					},
 				},
 			},
@@ -463,7 +545,7 @@ func TestDetermineEndpointURL(t *testing.T) {
 
 		openShiftClusterInfo := createOpenShiftClusterInfo()
 
-		// Even on OpenShift, explicit host should take priority over auto-generated hostname
+		// Even on OpenShift, explicit fqdn should take priority over auto-generated hostname
 		endpoint, err := DetermineEndpointURL(
 			context.Background(), nil, ui, "konflux-ui", openShiftClusterInfo)
 
@@ -473,7 +555,153 @@ func TestDetermineEndpointURL(t *testing.T) {
 		g.Expect(endpoint.String()).To(gomega.Equal("https://my-custom-host.example.com"))
 	})
 
-	t.Run("generates OpenShift hostname when ingress enabled without host on OpenShift", func(t *testing.T) {
+	t.Run("prefers fqdn over hostname when both are set", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		ui := &konfluxv1alpha1.KonfluxUI{
+			Spec: konfluxv1alpha1.KonfluxUISpec{
+				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled:  ptr.To(true),
+						FQDN:     "fqdn.example.com",
+						Hostname: "ignored-label",
+					},
+				},
+			},
+		}
+
+		openShiftClusterInfo := createOpenShiftClusterInfo()
+
+		endpoint, err := DetermineEndpointURL(
+			context.Background(), nil, ui, "konflux-ui", openShiftClusterInfo)
+
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(endpoint.Hostname()).To(gomega.Equal("fqdn.example.com"))
+		g.Expect(endpoint.String()).To(gomega.Equal("https://fqdn.example.com"))
+	})
+
+	t.Run("composes hostname with OpenShift ingress domain", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		ui := &konfluxv1alpha1.KonfluxUI{
+			Spec: konfluxv1alpha1.KonfluxUISpec{
+				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled:  ptr.To(true),
+						Hostname: "konflux-ui",
+					},
+				},
+			},
+		}
+
+		ingressConfig := &unstructured.Unstructured{}
+		ingressConfig.SetGroupVersionKind(openshiftIngressGVK())
+		ingressConfig.SetName("cluster")
+		_ = unstructured.SetNestedField(ingressConfig.Object, "apps.cluster.example.com", "spec", "domain")
+
+		scheme := runtime.NewScheme()
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(ingressConfig).
+			Build()
+
+		openShiftClusterInfo := createOpenShiftClusterInfo()
+
+		endpoint, err := DetermineEndpointURL(
+			context.Background(), fakeClient, ui, "konflux-ui", openShiftClusterInfo)
+
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		// Composed form has no -<namespace> infix
+		g.Expect(endpoint.Hostname()).To(gomega.Equal("konflux-ui.apps.cluster.example.com"))
+		g.Expect(endpoint.Port()).To(gomega.Equal(""))
+	})
+
+	t.Run("composes hostname on OpenShift even when ingress is disabled", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		ui := &konfluxv1alpha1.KonfluxUI{
+			Spec: konfluxv1alpha1.KonfluxUISpec{
+				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled:  ptr.To(false),
+						Hostname: "konflux-ui",
+					},
+				},
+			},
+		}
+
+		ingressConfig := &unstructured.Unstructured{}
+		ingressConfig.SetGroupVersionKind(openshiftIngressGVK())
+		ingressConfig.SetName("cluster")
+		_ = unstructured.SetNestedField(ingressConfig.Object, "apps.cluster.example.com", "spec", "domain")
+
+		scheme := runtime.NewScheme()
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(ingressConfig).
+			Build()
+
+		openShiftClusterInfo := createOpenShiftClusterInfo()
+
+		endpoint, err := DetermineEndpointURL(
+			context.Background(), fakeClient, ui, "konflux-ui", openShiftClusterInfo)
+
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(endpoint.Hostname()).To(gomega.Equal("konflux-ui.apps.cluster.example.com"))
+	})
+
+	t.Run("ignores hostname off OpenShift and uses defaults", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		ui := &konfluxv1alpha1.KonfluxUI{
+			Spec: konfluxv1alpha1.KonfluxUISpec{
+				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Enabled:  ptr.To(true),
+						Hostname: "konflux-ui",
+					},
+				},
+			},
+		}
+
+		nonOpenShiftClusterInfo := createNonOpenShiftClusterInfo()
+
+		endpoint, err := DetermineEndpointURL(
+			context.Background(), nil, ui, "konflux-ui", nonOpenShiftClusterInfo)
+
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(endpoint.Hostname()).To(gomega.Equal(DefaultProxyHostname))
+		g.Expect(endpoint.Port()).To(gomega.Equal(DefaultProxyPort))
+	})
+
+	t.Run("returns error when hostname set on OpenShift but domain fetch fails", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		ui := &konfluxv1alpha1.KonfluxUI{
+			Spec: konfluxv1alpha1.KonfluxUISpec{
+				KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+					Ingress: &konfluxv1alpha1.IngressSpec{
+						Hostname: "konflux-ui",
+					},
+				},
+			},
+		}
+
+		scheme := runtime.NewScheme()
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			Build()
+
+		openShiftClusterInfo := createOpenShiftClusterInfo()
+
+		_, err := DetermineEndpointURL(
+			context.Background(), fakeClient, ui, "konflux-ui", openShiftClusterInfo)
+
+		g.Expect(err).To(gomega.HaveOccurred())
+		g.Expect(err.Error()).To(gomega.ContainSubstring("failed to get OpenShift ingress domain"))
+	})
+
+	t.Run("generates OpenShift hostname when ingress enabled without fqdn or hostname on OpenShift", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
 		ui := &konfluxv1alpha1.KonfluxUI{
@@ -507,7 +735,7 @@ func TestDetermineEndpointURL(t *testing.T) {
 		g.Expect(endpoint.Port()).To(gomega.Equal(""))
 	})
 
-	t.Run("returns defaults when not on OpenShift and no host specified", func(t *testing.T) {
+	t.Run("returns defaults when not on OpenShift and no fqdn specified", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
 		ui := &konfluxv1alpha1.KonfluxUI{

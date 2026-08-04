@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/url"
 
@@ -210,7 +211,11 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Determine the endpoint URL for ingress, dex, and oauth2-proxy configuration
 	endpoint, err := ingress.DetermineEndpointURL(ctx, r.Client, ui, uiNamespace, r.ClusterInfo)
 	if err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonEndpointDeterminationFailed, "determine endpoint URL")
+		reason := condition.ReasonEndpointDeterminationFailed
+		if errors.Is(err, ingress.ErrFQDNPortWithManagedIngress) {
+			reason = condition.ReasonInvalidIngressFQDN
+		}
+		return errHandler.HandleWithReason(ctx, err, reason, "determine endpoint URL")
 	}
 	log.Info("Determined endpoint for KonfluxUI", "url", endpoint.String())
 
