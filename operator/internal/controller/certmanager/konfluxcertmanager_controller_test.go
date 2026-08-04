@@ -46,12 +46,6 @@ const (
 	caSecretName         = "konflux-ca-secret"
 )
 
-// clusterIssuerGVK is the GVK for cert-manager ClusterIssuer resources.
-var clusterIssuerGVK = schema.GroupVersionKind{Group: "cert-manager.io", Version: "v1", Kind: "ClusterIssuer"}
-
-// certificateGVK is the GVK for cert-manager Certificate resources.
-var certificateGVK = schema.GroupVersionKind{Group: "cert-manager.io", Version: "v1", Kind: "Certificate"}
-
 // newClusterIssuer returns an unstructured object suitable for k8sClient.Get calls.
 func newClusterIssuer(name string) *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{}

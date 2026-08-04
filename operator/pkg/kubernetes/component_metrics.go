@@ -26,14 +26,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+var (
+	secretGVK             = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"}
+	serviceAccountGVK     = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ServiceAccount"}
+	clusterRoleGVK        = rbacv1.SchemeGroupVersion.WithKind("ClusterRole")
+	clusterRoleBindingGVK = rbacv1.SchemeGroupVersion.WithKind("ClusterRoleBinding")
+)
+
 // ComponentMetricsOrphanCleanupGVKs lists GVKs for interim metrics scrape resources that
 // may be skipped during apply or superseded across operator releases.
 var ComponentMetricsOrphanCleanupGVKs = []schema.GroupVersionKind{
-	{Group: "monitoring.coreos.com", Version: "v1", Kind: "ServiceMonitor"},
-	{Group: "", Version: "v1", Kind: "Secret"},
-	{Group: "", Version: "v1", Kind: "ServiceAccount"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"},
-	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"},
+	serviceMonitorGVK,
+	secretGVK,
+	serviceAccountGVK,
+	clusterRoleGVK,
+	clusterRoleBindingGVK,
 }
 
 // IsComponentMetricsServiceMonitor reports whether obj is the operand ServiceMonitor
@@ -45,7 +52,7 @@ func IsComponentMetricsServiceMonitor(obj client.Object) bool {
 		return false
 	}
 	gvk := objectGroupVersionKind(obj)
-	return gvk.Group == "monitoring.coreos.com" && gvk.Kind == "ServiceMonitor"
+	return gvk.Group == serviceMonitorGVK.Group && gvk.Kind == serviceMonitorGVK.Kind
 }
 
 // IsComponentMetricsScrapeResource reports whether obj is part of the component metrics
@@ -62,20 +69,20 @@ func IsComponentMetricsScrapeResource(obj client.Object) bool {
 	name := obj.GetName()
 
 	switch gvk.Group {
-	case "monitoring.coreos.com":
-		return gvk.Kind == "ServiceMonitor"
+	case serviceMonitorGVK.Group:
+		return gvk.Kind == serviceMonitorGVK.Kind
 	case rbacv1.SchemeGroupVersion.Group:
 		switch gvk.Kind {
-		case "ClusterRole":
+		case clusterRoleGVK.Kind:
 			return strings.HasSuffix(name, MetricsReaderNameSuffix)
-		case "ClusterRoleBinding":
+		case clusterRoleBindingGVK.Kind:
 			return strings.HasPrefix(name, "prometheus-") && strings.HasSuffix(name, MetricsReaderNameSuffix)
 		}
 	case "":
 		switch gvk.Kind {
-		case "ServiceAccount":
+		case serviceAccountGVK.Kind:
 			return isMetricsReaderServiceAccountName(name)
-		case "Secret":
+		case secretGVK.Kind:
 			if name == ScrapeTokenSecretName {
 				return true
 			}
@@ -112,13 +119,13 @@ func objectGroupVersionKind(obj client.Object) schema.GroupVersionKind {
 	}
 	switch o := obj.(type) {
 	case *rbacv1.ClusterRole:
-		return rbacv1.SchemeGroupVersion.WithKind("ClusterRole")
+		return clusterRoleGVK
 	case *rbacv1.ClusterRoleBinding:
-		return rbacv1.SchemeGroupVersion.WithKind("ClusterRoleBinding")
+		return clusterRoleBindingGVK
 	case *corev1.ServiceAccount:
-		return schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ServiceAccount"}
+		return serviceAccountGVK
 	case *corev1.Secret:
-		return schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"}
+		return secretGVK
 	case *unstructured.Unstructured:
 		return o.GroupVersionKind()
 	default:

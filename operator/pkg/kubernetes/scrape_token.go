@@ -271,8 +271,8 @@ func EnsurePrometheusScrapeToken(ctx context.Context, in EnsureScrapeTokenInput)
 
 	secret := &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Secret",
+			APIVersion: secretGVK.GroupVersion().String(),
+			Kind:       secretGVK.Kind,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ScrapeTokenSecretName,
@@ -373,8 +373,8 @@ func ensureSecretTypeMeta(secret *corev1.Secret) {
 	}
 	if secret.APIVersion == "" && secret.Kind == "" {
 		secret.TypeMeta = metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Secret",
+			APIVersion: secretGVK.GroupVersion().String(),
+			Kind:       secretGVK.Kind,
 		}
 	}
 }

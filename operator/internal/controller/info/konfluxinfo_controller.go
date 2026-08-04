@@ -107,6 +107,11 @@ const (
 	ClusterConfigKeyTektonChainsIdentity = "tektonChainsIdentity"
 )
 
+var (
+	configMapGVK        = corev1.SchemeGroupVersion.WithKind("ConfigMap")
+	rbacClusterRoleKind = rbacv1.SchemeGroupVersion.WithKind("ClusterRole").Kind
+)
+
 // ClusterConfigDiscoverer is an interface for discovering cluster configuration values.
 // Implementations can detect values from the cluster environment, service discovery,
 // or other sources. Used for dependency injection in tests and production.
@@ -433,8 +438,8 @@ func (r *KonfluxInfoReconciler) reconcileInfoConfigMap(ctx context.Context, tc *
 
 	configMap := &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "ConfigMap",
+			APIVersion: configMapGVK.GroupVersion().String(),
+			Kind:       configMapGVK.Kind,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      infoConfigMapName,
@@ -464,8 +469,8 @@ func (r *KonfluxInfoReconciler) reconcileBannerConfigMap(ctx context.Context, tc
 
 	configMap := &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "ConfigMap",
+			APIVersion: configMapGVK.GroupVersion().String(),
+			Kind:       configMapGVK.Kind,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      bannerConfigMapName,
@@ -499,8 +504,8 @@ func (r *KonfluxInfoReconciler) reconcileClusterConfigConfigMap(ctx context.Cont
 
 	configMap := &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "ConfigMap",
+			APIVersion: configMapGVK.GroupVersion().String(),
+			Kind:       configMapGVK.Kind,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      clusterConfigMapName,
@@ -560,8 +565,8 @@ func convertRBACRoles(roles []konfluxv1alpha1.RBACRole) []rbacRoleJSON {
 			DisplayName: displayName,
 			Description: role.Description,
 			RoleRef: roleRefJSON{
-				APIGroup: "rbac.authorization.k8s.io",
-				Kind:     "ClusterRole",
+				APIGroup: rbacv1.GroupName,
+				Kind:     rbacClusterRoleKind,
 				Name:     role.Name,
 			},
 		}
@@ -576,8 +581,8 @@ func getDefaultRBACRoles() []rbacRoleJSON {
 			DisplayName: "admin",
 			Description: "Full access to Konflux resources including secrets",
 			RoleRef: roleRefJSON{
-				APIGroup: "rbac.authorization.k8s.io",
-				Kind:     "ClusterRole",
+				APIGroup: rbacv1.GroupName,
+				Kind:     rbacClusterRoleKind,
 				Name:     "konflux-admin-user-actions",
 			},
 		},
@@ -585,8 +590,8 @@ func getDefaultRBACRoles() []rbacRoleJSON {
 			DisplayName: "maintainer",
 			Description: "Partial access to Konflux resources without access to secrets",
 			RoleRef: roleRefJSON{
-				APIGroup: "rbac.authorization.k8s.io",
-				Kind:     "ClusterRole",
+				APIGroup: rbacv1.GroupName,
+				Kind:     rbacClusterRoleKind,
 				Name:     "konflux-maintainer-user-actions",
 			},
 		},
@@ -594,8 +599,8 @@ func getDefaultRBACRoles() []rbacRoleJSON {
 			DisplayName: "contributor",
 			Description: "View access to Konflux resources without access to secrets",
 			RoleRef: roleRefJSON{
-				APIGroup: "rbac.authorization.k8s.io",
-				Kind:     "ClusterRole",
+				APIGroup: rbacv1.GroupName,
+				Kind:     rbacClusterRoleKind,
 				Name:     "konflux-contributor-user-actions",
 			},
 		},
