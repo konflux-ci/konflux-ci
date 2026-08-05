@@ -1,0 +1,65 @@
+---
+# Minimal read (+ optional job trigger) for e2e validation of segment-bridge.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/name: segment-bridge
+  name: segment-bridge-e2e-validation
+  namespace: segment-bridge
+rules:
+- apiGroups:
+  - batch
+  resources:
+  - cronjobs
+  - jobs
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  - configmaps
+  - events
+  - pods
+  - pods/log
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - external-secrets.io
+  resources:
+  - externalsecrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - roles
+  - rolebindings
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/name: segment-bridge
+  name: segment-bridge-e2e-validation
+  namespace: segment-bridge
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: segment-bridge-e2e-validation
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: User
+  name: oamsalem
