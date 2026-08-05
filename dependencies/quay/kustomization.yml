@@ -11,6 +11,6 @@ images:
   - name: quay.io/projectquay/quay
     newTag: "3.18.0"
   - name: quay.io/sclorg/postgresql-15-c9s
-    newTag: "20260729"
+    newTag: "20260805"
   - name: quay.io/sclorg/redis-7-c9s
     newTag: "20250108"
