@@ -1859,7 +1859,7 @@ spec:
         - --leader-elector-retry-period=5s
         command:
         - /manager
-        image: quay.io/konflux-ci/integration-service:1de67a8758a6fd7757bc5225cedf095c0f34621f
+        image: quay.io/konflux-ci/integration-service:2ae28781df30fcf99e591c77b0651f6ed75bb7c7
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1943,7 +1943,7 @@ spec:
             - --zap-log-level=debug
             - --pr-snapshots-to-keep=70
             - --non-pr-snapshots-to-keep=640
-            image: quay.io/konflux-ci/integration-service:1de67a8758a6fd7757bc5225cedf095c0f34621f
+            image: quay.io/konflux-ci/integration-service:2ae28781df30fcf99e591c77b0651f6ed75bb7c7
             imagePullPolicy: Always
             name: test-gc
             resources:
