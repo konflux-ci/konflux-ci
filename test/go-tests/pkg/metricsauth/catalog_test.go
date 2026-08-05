@@ -32,6 +32,7 @@ func TestDefaultCatalog_TargetGroups(t *testing.T) {
 	assert.Equal(t, "https", byID["release-service"].Scheme)
 	assert.True(t, byID["konflux-ui-proxy"].UWMUpCheck)
 	assert.Empty(t, byID["konflux-ui-proxy"].ScrapeTokenSecret)
+	assert.Equal(t, []string{"caddy_http_request_duration_seconds"}, byID["konflux-ui-proxy"].BodyMustMatchAny)
 
 	assert.False(t, byID["konflux-operator"].TLSInsecureSkipVerifyForScrape())
 	assert.Equal(t, MetricsCASecretName, byID["konflux-operator"].MetricsCASecret)
