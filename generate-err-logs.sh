@@ -181,6 +181,10 @@ generate_logs() {
         echo "--- KonfluxImageController CR ---"
         kubectl get konfluximagecontroller -A -o yaml 2>&1 || echo "No KonfluxImageController CR found"
         echo ""
+
+        echo "--- KonfluxNamespaceLister CR ---"
+        kubectl get konfluxnamespacelister konflux-namespace-lister -o yaml 2>&1 || echo "No KonfluxNamespaceLister CR found"
+        echo ""
     } > "$logs_dir/konflux-crs-status.log"
 
     local namespaces
@@ -225,6 +229,10 @@ generate_logs() {
     kubectl get configmaps --all-namespaces -o json > "$artifacts_dir/configmaps.json" || true
     kubectl get deployments --all-namespaces -o json > "$artifacts_dir/deployments.json" || true
     kubectl get services --all-namespaces -o json > "$artifacts_dir/services.json" || true
+    # Endpoints (and EndpointSlices when available) help diagnose Service dial timeouts
+    # (e.g. proxy → namespace-lister ClusterIP i/o timeout).
+    kubectl get endpoints --all-namespaces -o json > "$artifacts_dir/endpoints.json" || true
+    kubectl get endpointslices --all-namespaces -o json > "$artifacts_dir/endpointslices.json" || true
 
     # Konflux resources
     kubectl get applications.appstudio.redhat.com --all-namespaces -o json > "$artifacts_dir/applications.json" || true
@@ -243,7 +251,7 @@ generate_logs() {
     kubectl get repositories.pipelinesascode.tekton.dev --all-namespaces -o json > "$artifacts_dir/repositories.json" || true
 
     # Pod logs from key namespaces (system services + test namespaces)
-    for ns in build-service integration-service release-service application-service tekton-pipelines openshift-pipelines konflux-ui default-tenant default-managed-tenant; do
+    for ns in build-service integration-service release-service application-service tekton-pipelines openshift-pipelines konflux-ui namespace-lister default-tenant default-managed-tenant; do
         for pod in $(kubectl get pods -n "$ns" -o name 2>/dev/null); do
             podname="${pod//pod\//}"
             kubectl logs -n "$ns" "$pod" --all-containers --ignore-errors > "$artifacts_dir/pods/${ns}_${podname}.log" 2>&1 || true
