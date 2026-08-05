@@ -160,8 +160,10 @@ metadata:
 ---
 apiVersion: v1
 data:
-  Caddyfile: "{\n\tauto_https off\n\tadmin off\n\torder inject_cached_vars before
-    reverse_proxy\n\tfile_watcher {\n\t\tcache kube_token /var/run/secrets/konflux-ci.dev/serviceaccount/token\n\t\tcache
+  Caddyfile: "{\n\tauto_https off\n\tadmin off\n\t# Enable HTTP middleware metrics
+    (scraped via :2112 /metrics).\n\t# Do not add per_host — Host labels are unbounded
+    on this catch-all :9443 site.\n\tmetrics\n\torder inject_cached_vars before reverse_proxy\n\tfile_watcher
+    {\n\t\tcache kube_token /var/run/secrets/konflux-ci.dev/serviceaccount/token\n\t\tcache
     backend_token /var/run/secrets/konflux-ci.dev/backend/token\n\t\tcache watson_auth
     /mnt/watson-config/API_KEY {\n\t\t\tdefault \"\"\n\t\t}\n\t\twatch /var/run/secrets/kubernetes.io/serviceaccount\n\t\twatch
     /mnt/cluster-ca\n\t\twatch /mnt/service-ca\n\t\twatch /mnt/serving-cert\n\t}\n}\n\n#
@@ -211,7 +213,7 @@ data:
     {path} /index.html\n\t\tfile_server\n\t}\n}\n"
 kind: ConfigMap
 metadata:
-  name: proxy-caddyfile-567h9kth9f
+  name: proxy-caddyfile-45hm8d8b52
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -746,7 +748,7 @@ spec:
           items:
           - key: Caddyfile
             path: Caddyfile
-          name: proxy-caddyfile-567h9kth9f
+          name: proxy-caddyfile-45hm8d8b52
         name: proxy-caddyfile
       - configMap:
           defaultMode: 420

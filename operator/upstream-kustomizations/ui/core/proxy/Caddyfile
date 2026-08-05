@@ -1,6 +1,9 @@
 {
 	auto_https off
 	admin off
+	# Enable HTTP middleware metrics (scraped via :2112 /metrics).
+	# Do not add per_host — Host labels are unbounded on this catch-all :9443 site.
+	metrics
 	order inject_cached_vars before reverse_proxy
 	file_watcher {
 		cache kube_token /var/run/secrets/konflux-ci.dev/serviceaccount/token

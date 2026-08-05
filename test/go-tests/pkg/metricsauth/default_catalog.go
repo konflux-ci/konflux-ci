@@ -110,7 +110,9 @@ func DefaultCatalog() (*Catalog, error) {
 					Path:                     "/metrics",
 					MetricsReaderClusterRole: "konflux-ui-proxy-metrics-reader",
 					UWMUpCheck:               true,
-					BodyMustMatchAny:         []string{"caddy_"},
+					// Require the HTTP duration family used by UI error-rate recording rules
+					// (caddy_http_request_duration_seconds_count with code=...).
+					BodyMustMatchAny: []string{"caddy_http_request_duration_seconds"},
 				},
 			},
 		}
