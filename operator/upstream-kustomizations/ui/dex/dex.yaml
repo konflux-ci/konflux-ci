@@ -53,7 +53,7 @@ spec:
     spec:
       serviceAccountName: dex # This is created below
       containers:
-      - image: quay.io/konflux-ci/dex:latest
+      - image: registry.access.redhat.com/hi/dex
         name: dex
         command: ["/usr/local/bin/run-dex.sh"]
         securityContext:

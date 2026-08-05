@@ -4,9 +4,9 @@ resources:
 - dex.yaml
 
 images:
-  - name: quay.io/konflux-ci/dex
-    newName: quay.io/konflux-ci/dex
-    digest: sha256:56615352df8bc19f9b3b1efe40e8dd18f43ae4e34329ba30e0d19f4e3b40f9f5
+  - name: registry.access.redhat.com/hi/dex
+    newName: registry.access.redhat.com/hi/dex
+    digest: sha256:7c762322e011b3bfcf08e753844af10cf57d8cbf9c7bb21b2cb4fef9cc2f33c6
 
 configMapGenerator:
 - files:
