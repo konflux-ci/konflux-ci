@@ -21,6 +21,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	prometheustestutil "github.com/prometheus/client_golang/prometheus/testutil"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -48,6 +49,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/segmentbridge"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 	uictrl "github.com/konflux-ci/konflux-ci/operator/internal/controller/ui"
+	"github.com/konflux-ci/konflux-ci/operator/internal/operatormetrics"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 )
 
@@ -841,6 +843,60 @@ var _ = Describe("Konflux Controller", func() {
 				ec := &konfluxv1alpha1.KonfluxEnterpriseContract{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: enterprisecontract.CRName}, ec)).To(Succeed())
 				g.Expect(ec.Spec.SkipPolicies).To(BeFalse())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
+	Context("konflux_up metric", func() {
+		const resourceName = "konflux"
+
+		It("should set konflux_up to 0 when the Konflux CR is deleted", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			// Create the CR and wait for reconcile to settle.
+			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: resourceName}}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)).NotTo(BeNil())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			// Re-seed gauge to 1 AFTER reconcile settled (defer already set it to 0
+			// because Ready=False without sub-controllers). This ensures that only the
+			// NotFound path can flip the gauge back to 0.
+			operatormetrics.SetKonfluxUp(true)
+			Expect(prometheustestutil.ToFloat64(operatormetrics.KonfluxUpGauge())).To(Equal(float64(1)))
+
+			Expect(k8sClient.Delete(ctx, cr)).To(Succeed())
+
+			Eventually(func() float64 {
+				return prometheustestutil.ToFloat64(operatormetrics.KonfluxUpGauge())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Equal(float64(0)))
+		})
+
+		It("should update konflux_up after a successful reconcile", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: resourceName}}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			// After reconcile completes, the gauge should be set (0 because sub-controllers
+			// are not running so Ready will not be True, but the metric is actively updated).
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)).NotTo(BeNil())
+				// Gauge must reflect the current Ready state.
+				val := prometheustestutil.ToFloat64(operatormetrics.KonfluxUpGauge())
+				if updated.IsReady() {
+					g.Expect(val).To(Equal(float64(1)))
+				} else {
+					g.Expect(val).To(Equal(float64(0)))
+				}
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})

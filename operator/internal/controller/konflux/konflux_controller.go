@@ -20,6 +20,7 @@ import (
 	"context"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -47,6 +48,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/releaseservice"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/segmentbridge"
 	uictrl "github.com/konflux-ci/konflux-ci/operator/internal/controller/ui"
+	"github.com/konflux-ci/konflux-ci/operator/internal/operatormetrics"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
@@ -166,8 +168,14 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Fetch the Konflux instance
 	konflux := &konfluxv1alpha1.Konflux{}
 	if err := r.Get(ctx, req.NamespacedName, konflux); err != nil {
+		if apierrors.IsNotFound(err) {
+			operatormetrics.SetKonfluxUp(false)
+		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+
+	// Update health metric on every exit path based on the final Ready condition.
+	defer func() { operatormetrics.SetKonfluxUp(konflux.IsReady()) }()
 
 	log.Info("Reconciling Konflux", "name", konflux.Name)
 
