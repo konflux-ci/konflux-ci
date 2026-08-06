@@ -1,6 +1,15 @@
 codecov:
   require_ci_to_pass: false
 
+ignore:
+  - ".agents/**"
+  - ".claude/**"
+  - ".cursor/**"
+  - "skills/**"
+  - "docs/**"
+  - "*.md"
+  - "*.toml"
+
 coverage:
   status:
     project:
