@@ -119,6 +119,9 @@ func TestDesiredOperatorServiceMonitorSpec(t *testing.T) {
 	if endpoint["scheme"] != "https" {
 		t.Fatalf("unexpected scheme: %#v", endpoint["scheme"])
 	}
+	if endpoint["honorLabels"] != true {
+		t.Fatalf("expected honorLabels true, got %#v", endpoint["honorLabels"])
+	}
 	tlsConfig, ok := endpoint["tlsConfig"].(map[string]interface{})
 	if !ok {
 		t.Fatal("expected tlsConfig map")
