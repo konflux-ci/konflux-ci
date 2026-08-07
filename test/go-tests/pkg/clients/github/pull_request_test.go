@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	gogithub "github.com/google/go-github/v89/github"
+	gogithub "github.com/google/go-github/v90/github"
 )
 
 func TestIsMergeInProgress(t *testing.T) {
