@@ -7,7 +7,7 @@ import (
 
 	"github.com/gofri/go-github-ratelimit/v2/github_ratelimit"
 	"github.com/gofri/go-github-ratelimit/v2/github_ratelimit/github_secondary_ratelimit"
-	"github.com/google/go-github/v89/github"
+	"github.com/google/go-github/v90/github"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/utils"
 	"golang.org/x/oauth2"
 )
