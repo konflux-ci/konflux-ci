@@ -45,6 +45,10 @@ Want to see it in action? You can have a full Konflux instance running on a loca
 cluster in just a few minutes — no cloud account, no complex setup.
 Jump into the [Local Deployment Guide](https://konflux-ci.dev/konflux-ci/docs/installation/install-local/) and start building!
 
+## Usage
+
+See the [User Docs](https://konflux-ci.dev/docs/).
+
 ## Key Features
 
 | | Feature | Description |
