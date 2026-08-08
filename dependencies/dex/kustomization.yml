@@ -7,9 +7,9 @@ resources:
 namespace: dex
 
 images:
-  - name: ghcr.io/dexidp/dex
-    newName: ghcr.io/dexidp/dex
-    newTag: v2.45.1
+  - name: registry.access.redhat.com/hi/dex
+    newName: registry.access.redhat.com/hi/dex
+    digest: sha256:7c762322e011b3bfcf08e753844af10cf57d8cbf9c7bb21b2cb4fef9cc2f33c6
 
 configMapGenerator:
   - name: dex
