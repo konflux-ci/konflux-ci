@@ -54,9 +54,10 @@ func desiredOperatorServiceMonitor(namespace string) *unstructured.Unstructured 
 					"key":  kubernetes.ScrapeTokenSecretKey,
 					"name": kubernetes.ScrapeTokenSecretName,
 				},
-				"path":   "/metrics",
-				"port":   "https",
-				"scheme": "https",
+				"honorLabels": true,
+				"path":        "/metrics",
+				"port":        "https",
+				"scheme":      "https",
 				"tlsConfig": map[string]interface{}{
 					"insecureSkipVerify": false,
 					"serverName":         fmt.Sprintf("%s.%s.svc", OperatorMetricsServiceName, namespace),

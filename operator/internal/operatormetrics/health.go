@@ -23,7 +23,11 @@ import (
 
 var konfluxUp = prometheus.NewGauge(prometheus.GaugeOpts{
 	Name: "konflux_up",
-	Help: "Whether the Konflux platform is ready (1) or not (0). Aggregated from all component sub-CR readiness conditions.",
+	Help: "Whether the Konflux operator is ready (1) or not (0). Aggregated from all component sub-CR readiness conditions.",
+	ConstLabels: prometheus.Labels{
+		"service": "konflux-operator",
+		"check":   "operator-ready",
+	},
 })
 
 func init() {
