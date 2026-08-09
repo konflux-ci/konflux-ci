@@ -19,23 +19,6 @@ func (c *Client) ListRepoWebhooks(ctx context.Context, repository string) ([]*gi
 	return hooks, err
 }
 
-func (c *Client) CreateWebhook(repository, url string) (int64, error) {
-	newWebhook := &github.Hook{
-		Events: []string{"push"},
-		Config: &github.HookConfig{
-			ContentType: github.String("json"),
-			InsecureSSL: github.String("0"),
-			URL:         github.String(url),
-		},
-	}
-
-	hook, _, err := c.client.Repositories.CreateHook(context.Background(), c.organization, repository, newWebhook)
-	if err != nil {
-		return 0, fmt.Errorf("error when creating a webhook: %v", err)
-	}
-	return hook.GetID(), err
-}
-
 func (c *Client) DeleteWebhook(ctx context.Context, repository string, ID int64) error {
 	_, err := c.client.Repositories.DeleteHook(ctx, c.organization, repository, ID)
 	if err != nil {

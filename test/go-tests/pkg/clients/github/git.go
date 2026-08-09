@@ -63,7 +63,3 @@ func (c *Client) ExistsRef(repository, branchName string) (bool, error) {
 	}
 	return true, nil
 }
-
-func (c *Client) UpdateGithubOrg(githubOrg string) {
-	c.organization = githubOrg
-}
