@@ -458,10 +458,38 @@ steps (creating `monitoring/` kustomization, rebuilding embedded manifests via
 
 | Topic | Location |
 |-------|----------|
-| Operator self-metrics | `internal/operatormetrics/` (`scrape_token_rotator.go`, `scrape_wiring.go`) |
+| Operator self-metrics | `internal/operatormetrics/` (`scrape_token_rotator.go`, `scrape_wiring.go`, `health.go`) |
 | Embedded manifests | `operator/pkg/manifests/<component>/manifests.yaml` |
 | Cluster integration tests | `test/go-tests/metricsintegration/` + `test/go-tests/pkg/metricsauth.DefaultCatalog()` (via `scripts/operator-e2e/run-metrics-integration-tests.sh`, hooked in `test/e2e/run-e2e.sh`) |
 | OpenShift UWM tests | `test/go-tests/metricsopenshift/` + `test/go-tests/pkg/metricsopenshift/` (via `scripts/operator-e2e/openshift/run-metrics-openshift-tests.sh`, optional OCP e2e in `test/e2e/run-e2e.sh`) |
 | Deferred SM apply + scrape token | `operator/internal/common/scrape_token.go`, `operand_servicemonitor.go` |
 | Metrics TLS readiness | `operator/pkg/kubernetes/metrics_tls.go` |
 | SM annotation resync | `operator/pkg/kubernetes/servicemonitor_resync.go` (UWM nudge on token/CA change) |
+
+## `konflux_up` ecosystem labels
+
+The `konflux_up` metric is a standardized binary gauge (0 = down, 1 = up) used
+across all Konflux services to report availability. It enables unified alerting
+and dashboards across the fleet.
+
+**Required labels** for any `konflux_up` metric:
+
+| Label | Description | Example |
+|-------|-------------|---------|
+| `service` | Component name (must be unique across all `konflux_up` emitters) | `konflux-operator`|
+| `check` | What aspect of availability is being verified | `konflux-ready`|
+
+**Implementation in the operator:**
+
+The operator emits `konflux_up` with `ConstLabels` in `internal/operatormetrics/health.go`.
+Because `ConstLabels` produce a metric-side `service` label that collides with the
+Prometheus target label of the same name, the operator's ServiceMonitor sets
+`honorLabels: true` (in `scrape_wiring.go`) to preserve the metric's labels.
+
+**Adding new `konflux_up` signals:**
+
+When adding a new availability metric to the operator or any component:
+
+1. Use the metric name `konflux_up` with unique `service` + `check` label values
+2. If using `ConstLabels` that collide with target labels, set `honorLabels: true`
+   on the ServiceMonitor endpoint

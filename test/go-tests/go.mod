@@ -7,15 +7,15 @@ require (
 	github.com/codeready-toolchain/api v0.0.0-20260731065234-734640c901d2
 	github.com/conforma/crds/api v0.1.11
 	github.com/devfile/library/v2 v2.4.0
-	github.com/docker/cli v29.7.1+incompatible
+	github.com/docker/cli v29.7.2+incompatible
 	github.com/gofri/go-github-ratelimit/v2 v2.0.2
-	github.com/google/go-containerregistry v0.21.8
-	github.com/google/go-github/v89 v89.0.0
+	github.com/google/go-containerregistry v0.21.9
+	github.com/google/go-github/v90 v90.0.0
 	github.com/h2non/gock v1.2.0
 	github.com/konflux-ci/application-api v0.0.0-20260727123715-2999a91451c6
 	github.com/konflux-ci/build-service v0.0.0-20240611083846-2dee6cfe6fe4
-	github.com/konflux-ci/image-controller v0.0.0-20260727155048-8d315e60b80b
-	github.com/konflux-ci/integration-service v0.0.0-20260730134200-51561ceb6d9b
+	github.com/konflux-ci/image-controller v0.0.0-20260803133345-065a438ce526
+	github.com/konflux-ci/integration-service v0.0.0-20260805103208-2ae28781df30
 	github.com/konflux-ci/konflux-ci/operator v0.0.0
 	github.com/konflux-ci/operator-toolkit v0.0.0-20260312101100-d4e398191a68
 	github.com/konflux-ci/release-service v0.0.0-20260723073125-f1110fb9672c

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-github/v89/github"
+	"github.com/google/go-github/v90/github"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/utils"
 )
 
@@ -62,8 +62,4 @@ func (c *Client) ExistsRef(repository, branchName string) (bool, error) {
 		}
 	}
 	return true, nil
-}
-
-func (c *Client) UpdateGithubOrg(githubOrg string) {
-	c.organization = githubOrg
 }
