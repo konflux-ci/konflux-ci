@@ -6,7 +6,7 @@ ignore:
   - ".claude/**"
   - ".cursor/**"
   - "skills/**"
-  - "docs/**"
+  - "operator/docs/**"
   - "*.md"
   - "*.toml"
 
