@@ -35,7 +35,7 @@ jobs:
         working-directory: operator
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -89,7 +89,7 @@ jobs:
           echo "Using version: ${VERSION}"
 
       - name: Setup Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
         with:
           go-version-file: operator/go.mod
 
@@ -118,7 +118,7 @@ jobs:
       # 2) The token has workflow scope, required when the release target commit touches workflow files.
       - name: Generate GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3
         with:
           app-id: ${{ secrets.UPDATE_BOT_APP_ID }}
           private-key: ${{ secrets.UPDATE_BOT_PRIVATE_KEY }}
