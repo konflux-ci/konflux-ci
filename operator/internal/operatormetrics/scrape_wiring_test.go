@@ -119,8 +119,32 @@ func TestDesiredOperatorServiceMonitorSpec(t *testing.T) {
 	if endpoint["scheme"] != "https" {
 		t.Fatalf("unexpected scheme: %#v", endpoint["scheme"])
 	}
-	if endpoint["honorLabels"] != true {
-		t.Fatalf("expected honorLabels true, got %#v", endpoint["honorLabels"])
+	if _, hasHonorLabels := endpoint["honorLabels"]; hasHonorLabels {
+		t.Fatal("honorLabels should not be set (conflicts with metricRelabelings)")
+	}
+	relabelings, ok := endpoint["metricRelabelings"].([]interface{})
+	if !ok || len(relabelings) < 1 {
+		t.Fatal("expected metricRelabelings with at least one rule")
+	}
+	rule, ok := relabelings[0].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected relabeling rule map")
+	}
+	srcLabels, ok := rule["sourceLabels"].([]interface{})
+	if !ok || len(srcLabels) != 1 || srcLabels[0] != "exported_service" {
+		t.Fatalf("unexpected sourceLabels: %#v", rule["sourceLabels"])
+	}
+	if rule["targetLabel"] != "service" {
+		t.Fatalf("unexpected targetLabel: %#v", rule["targetLabel"])
+	}
+	if rule["regex"] != "(.+)" {
+		t.Fatalf("regex must use a capture group for $1 replacement, got %#v", rule["regex"])
+	}
+	if rule["replacement"] != "$1" {
+		t.Fatalf("unexpected replacement: %#v", rule["replacement"])
+	}
+	if rule["action"] != "replace" {
+		t.Fatalf("unexpected action: %#v", rule["action"])
 	}
 	tlsConfig, ok := endpoint["tlsConfig"].(map[string]interface{})
 	if !ok {
