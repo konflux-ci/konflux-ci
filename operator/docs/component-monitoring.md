@@ -483,13 +483,18 @@ and dashboards across the fleet.
 
 The operator emits `konflux_up` with `ConstLabels` in `internal/operatormetrics/health.go`.
 Because `ConstLabels` produce a metric-side `service` label that collides with the
-Prometheus target label of the same name, the operator's ServiceMonitor sets
-`honorLabels: true` (in `scrape_wiring.go`) to preserve the metric's labels.
+Prometheus target label of the same name, Prometheus renames the metric label to
+`exported_service`. The operator's ServiceMonitor uses a `metricRelabelings` rule
+(in `scrape_wiring.go`) to copy `exported_service` back into `service` after
+scrape-time collision resolution. `honorLabels: true` is **not** used because
+in some environments the monitoring stack overrides it, and combining it with
+`metricRelabelings` would reverse the intended behavior on clusters that respect it.
 
 **Adding new `konflux_up` signals:**
 
 When adding a new availability metric to the operator or any component:
 
 1. Use the metric name `konflux_up` with unique `service` + `check` label values
-2. If using `ConstLabels` that collide with target labels, set `honorLabels: true`
-   on the ServiceMonitor endpoint
+2. If using `ConstLabels` that collide with target labels, add a `metricRelabelings`
+   rule to copy the `exported_<label>` back into `<label>` — do not rely on
+   `honorLabels: true` as it may be overridden by external policies

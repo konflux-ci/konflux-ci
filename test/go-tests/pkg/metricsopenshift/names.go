@@ -38,6 +38,24 @@ func UpPromQL(target metricsauth.Target) string {
 	)
 }
 
+// KonfluxUpPromQL returns a PromQL expression that matches the konflux_up gauge with
+// the ecosystem service label. This catches metricRelabelings failures where the
+// service ConstLabel is renamed to exported_service by Prometheus.
+func KonfluxUpPromQL() string {
+	return `konflux_up{service="konflux-operator"}`
+}
+
+// BroadKonfluxUpPromQL returns a relaxed konflux_up query without label filters,
+// for debugging label mismatches.
+func BroadKonfluxUpPromQL() string {
+	return `konflux_up`
+}
+
+// AllOperatorSeriesPromQL returns all time series scraped from the operator namespace.
+func AllOperatorSeriesPromQL() string {
+	return `{namespace="konflux-operator"}`
+}
+
 // BroadUpPromQL returns a relaxed up query for debugging label mismatches in UWM.
 func BroadUpPromQL(target metricsauth.Target) string {
 	return fmt.Sprintf(`up{namespace=%q}`, target.Namespace)
