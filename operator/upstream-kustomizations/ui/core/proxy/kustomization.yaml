@@ -19,7 +19,7 @@ images:
 - digest: sha256:5dfed1e937e55f3a428220302b7ea23e2402539c9d380b4fa9f74a515a0962fb
   name: registry.access.redhat.com/hi/oauth2-proxy
   newName: registry.access.redhat.com/hi/oauth2-proxy
-- digest: sha256:e7eff3558c8bd444765020e672d13b4f96ad13609a0279c82959fca89ba15105
+- digest: sha256:d6806f0acc03e9337ee0f3ae738b23cf67a35073424468bc495dac6ce3726ae1
   name: quay.io/konflux-ci/reverse-proxy
   newName: quay.io/konflux-ci/reverse-proxy
 kind: Kustomization
