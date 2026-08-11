@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/coder/websocket v1.8.15
-	github.com/codeready-toolchain/api v0.0.0-20260731065234-734640c901d2
+	github.com/codeready-toolchain/api v0.0.0-20260807111559-e29da2fc346c
 	github.com/conforma/crds/api v0.1.11
 	github.com/devfile/library/v2 v2.4.0
 	github.com/docker/cli v29.7.2+incompatible
