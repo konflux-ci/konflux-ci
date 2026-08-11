@@ -152,7 +152,7 @@ spec:
         set -euo pipefail
         exec bash scripts/operator-e2e/tekton-copy-shared-tools.sh
     - name: deploy-prep
-      image: registry.access.redhat.com/ubi10/go-toolset@sha256:1f675b8824165404cbea41068342f9f8f6d47bfeccd6020bf8f9842876623d5b
+      image: registry.access.redhat.com/ubi10/go-toolset@sha256:cc3a002ecdb1b7e6e0e2988333b257eb97cfce84dbdfc98f4e02297c9190c4e1
       workingDir: /mnt/konflux-ci/repo
       env:
         - name: GITHUB_APP_ID
@@ -229,7 +229,7 @@ spec:
           cpu: "2"
           memory: "8Gi"
       workingDir: /mnt/konflux-ci/repo
-      image: registry.access.redhat.com/ubi10/go-toolset@sha256:1f675b8824165404cbea41068342f9f8f6d47bfeccd6020bf8f9842876623d5b
+      image: registry.access.redhat.com/ubi10/go-toolset@sha256:cc3a002ecdb1b7e6e0e2988333b257eb97cfce84dbdfc98f4e02297c9190c4e1
       env:
         - name: E2E_KONFLUX_CR_PATH
           value: $(params.konflux-cr-relative-path)
