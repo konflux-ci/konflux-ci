@@ -1129,14 +1129,59 @@ func TestAppendEndpointOverlays(t *testing.T) {
 	t.Run("disabled endpoints are skipped", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		endpoints := &konfluxv1alpha1.ProxyEndpointsSpec{
-			Kite:        &konfluxv1alpha1.EndpointSpec{Enabled: false},
-			KubeArchive: &konfluxv1alpha1.EndpointSpec{Enabled: false},
-			Watson:      &konfluxv1alpha1.WatsonEndpointSpec{Enabled: false},
+			TektonResults: &konfluxv1alpha1.EndpointSpec{Enabled: false},
+			Kite:          &konfluxv1alpha1.EndpointSpec{Enabled: false},
+			KubeArchive:   &konfluxv1alpha1.EndpointSpec{Enabled: false},
+			Watson:        &konfluxv1alpha1.WatsonEndpointSpec{Enabled: false},
 		}
 		initOpts, podOpts, err := appendEndpointOverlays(endpoints, nil, nil)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(initOpts).To(gomega.BeNil())
 		g.Expect(podOpts).To(gomega.BeNil())
+	})
+
+	t.Run("tektonResults enabled with hostname sets TEKTON_RESULTS_HOSTNAME", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		endpoints := &konfluxv1alpha1.ProxyEndpointsSpec{
+			TektonResults: &konfluxv1alpha1.EndpointSpec{
+				Enabled:  true,
+				Hostname: "tekton-results-api.custom-ns.svc.cluster.local",
+			},
+		}
+
+		initOpts, _, err := appendEndpointOverlays(endpoints, nil, nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		c := applyContainerOpts(initOpts)
+		envMap := envToMap(c.Env)
+
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("TEKTON_RESULTS_HOSTNAME", "tekton-results-api.custom-ns.svc.cluster.local"))
+	})
+
+	t.Run("tektonResults enabled without hostname does not set TEKTON_RESULTS_HOSTNAME", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		endpoints := &konfluxv1alpha1.ProxyEndpointsSpec{
+			TektonResults: &konfluxv1alpha1.EndpointSpec{
+				Enabled: true,
+			},
+		}
+
+		initOpts, _, err := appendEndpointOverlays(endpoints, nil, nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		c := applyContainerOpts(initOpts)
+		envMap := envToMap(c.Env)
+		g.Expect(envMap).NotTo(gomega.HaveKey("TEKTON_RESULTS_HOSTNAME"),
+			"no TEKTON_RESULTS_HOSTNAME should be set when hostname is empty")
+	})
+
+	t.Run("tektonResults disabled is skipped", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		endpoints := &konfluxv1alpha1.ProxyEndpointsSpec{
+			TektonResults: &konfluxv1alpha1.EndpointSpec{Enabled: false},
+		}
+
+		initOpts, _, err := appendEndpointOverlays(endpoints, nil, nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(initOpts).To(gomega.BeNil())
 	})
 
 	t.Run("kite enabled sets env vars on init container", func(t *testing.T) {
@@ -1256,9 +1301,10 @@ func TestAppendEndpointOverlays(t *testing.T) {
 	t.Run("all endpoints enabled together", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		endpoints := &konfluxv1alpha1.ProxyEndpointsSpec{
-			Kite:        &konfluxv1alpha1.EndpointSpec{Enabled: true},
-			KubeArchive: &konfluxv1alpha1.EndpointSpec{Enabled: true, Hostname: "ka.ns.svc.cluster.local"},
-			Watson:      &konfluxv1alpha1.WatsonEndpointSpec{Enabled: true, SecretName: "watson-secret"},
+			TektonResults: &konfluxv1alpha1.EndpointSpec{Enabled: true, Hostname: "results.custom.svc.cluster.local"},
+			Kite:          &konfluxv1alpha1.EndpointSpec{Enabled: true},
+			KubeArchive:   &konfluxv1alpha1.EndpointSpec{Enabled: true, Hostname: "ka.ns.svc.cluster.local"},
+			Watson:        &konfluxv1alpha1.WatsonEndpointSpec{Enabled: true, SecretName: "watson-secret"},
 		}
 
 		initOpts, podOpts, err := appendEndpointOverlays(endpoints, nil, nil)
@@ -1266,6 +1312,7 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		c := applyContainerOpts(initOpts)
 		envMap := envToMap(c.Env)
 
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("TEKTON_RESULTS_HOSTNAME", "results.custom.svc.cluster.local"))
 		g.Expect(envMap).To(gomega.HaveKeyWithValue("KITE_ENABLED", "true"))
 		g.Expect(envMap).To(gomega.HaveKeyWithValue("KUBEARCHIVE_ENABLED", "true"))
 		g.Expect(envMap).To(gomega.HaveKeyWithValue("KUBEARCHIVE_HOSTNAME", "ka.ns.svc.cluster.local"))
@@ -1305,6 +1352,29 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		g.Expect(initContainer).NotTo(gomega.BeNil())
 		envMap := envToMap(initContainer.Env)
 		g.Expect(envMap).To(gomega.HaveKeyWithValue("WATSON_ENABLED", "true"))
+	})
+
+	t.Run("tektonResults enabled sets env on init container in deployment", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := &konfluxv1alpha1.ProxyDeploymentSpec{
+			Endpoints: &konfluxv1alpha1.ProxyEndpointsSpec{
+				TektonResults: &konfluxv1alpha1.EndpointSpec{
+					Enabled:  true,
+					Hostname: "results.my-ns.svc.cluster.local",
+				},
+			},
+		}
+
+		deployment := getUIDeployment(t, proxyDeploymentName)
+		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		err = overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		initContainer := testutil.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
+		g.Expect(initContainer).NotTo(gomega.BeNil())
+		envMap := envToMap(initContainer.Env)
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("TEKTON_RESULTS_HOSTNAME", "results.my-ns.svc.cluster.local"))
 	})
 
 	t.Run("kite enabled sets env on init container in deployment", func(t *testing.T) {

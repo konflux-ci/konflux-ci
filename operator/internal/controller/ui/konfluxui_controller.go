@@ -544,6 +544,12 @@ func appendEndpointOverlays(
 		return initOpts, podOpts, nil
 	}
 
+	if endpoints.TektonResults != nil && endpoints.TektonResults.Enabled {
+		initOpts = append(initOpts,
+			customization.WithOptionalEnvOverride("TEKTON_RESULTS_HOSTNAME", endpoints.TektonResults.Hostname),
+		)
+	}
+
 	if endpoints.Kite != nil && endpoints.Kite.Enabled {
 		initOpts = append(initOpts,
 			customization.WithEnv(corev1.EnvVar{Name: "KITE_ENABLED", Value: "true"}),

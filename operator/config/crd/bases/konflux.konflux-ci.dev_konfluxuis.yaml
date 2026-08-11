@@ -561,6 +561,23 @@ spec:
                               address.
                             type: string
                         type: object
+                      tektonResults:
+                        description: |-
+                          TektonResults configures the Tekton Results plugin endpoint.
+                          When enabled, the hostname is passed to the init container via TEKTON_RESULTS_HOSTNAME,
+                          bypassing DNS probing. When not configured, the init container discovers the Results
+                          API via DNS with retry.
+                        properties:
+                          enabled:
+                            default: false
+                            description: Enabled controls whether this endpoint is
+                              active.
+                            type: boolean
+                          hostname:
+                            description: Hostname overrides the default backend service
+                              address.
+                            type: string
+                        type: object
                       watson:
                         description: |-
                           Watson enables the Watson chatbot endpoint.
