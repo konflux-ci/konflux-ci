@@ -24,9 +24,10 @@ jobs:
             operator/**
             .github/workflows/operator-verify-generated-files.yml
             .github/scripts/operator-verify-generated-files.sh
+            .github/scripts/operator-verify-olm-bundle.sh
 
   verify-generated:
-    name: Verify Generated CRDs, RBAC, and Code
+    name: Verify Generated CRDs, RBAC, Code, and OLM Bundle
     runs-on: ubuntu-latest
     needs: check-changes
     if: needs.check-changes.outputs.operator == 'true'
@@ -46,3 +47,7 @@ jobs:
       - name: Check for changes in generated files
         working-directory: ${{ github.workspace }}
         run: ./.github/scripts/operator-verify-generated-files.sh
+
+      - name: Verify OLM bundle metrics-server-cert wiring
+        working-directory: ${{ github.workspace }}
+        run: ./.github/scripts/operator-verify-olm-bundle.sh

@@ -1,0 +1,56 @@
+# Install-time metrics TLS for kustomize/Argo (Kind, local, rings).
+# Not used by config/manifests (OLM): OLM cannot apply cert-manager CRs, and a
+# required metrics-server-cert mount would block DeployableByOLM.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+- certmanager
+
+patches:
+- path: cert_metrics_manager_patch.yaml
+  target:
+    kind: Deployment
+    name: konflux-operator-controller-manager
+    namespace: konflux-operator
+
+# Certificate dnsNames from the metrics Service identity (already namePrefixed by
+# operator-rbac before this component runs at config/default).
+# ServiceMonitor TLS (ca/serverName) is set at runtime in internal/operatormetrics/scrape_wiring.go.
+replacements:
+- source:
+    kind: Service
+    version: v1
+    name: konflux-operator-controller-manager-metrics-service
+    fieldPath: metadata.name
+  targets:
+    - select:
+        kind: Certificate
+        group: cert-manager.io
+        version: v1
+        name: konflux-operator-metrics-certs
+      fieldPaths:
+        - spec.dnsNames.0
+        - spec.dnsNames.1
+      options:
+        delimiter: '.'
+        index: 0
+        create: true
+- source:
+    kind: Service
+    version: v1
+    name: konflux-operator-controller-manager-metrics-service
+    fieldPath: metadata.namespace
+  targets:
+    - select:
+        kind: Certificate
+        group: cert-manager.io
+        version: v1
+        name: konflux-operator-metrics-certs
+      fieldPaths:
+        - spec.dnsNames.0
+        - spec.dnsNames.1
+      options:
+        delimiter: '.'
+        index: 1
+        create: true

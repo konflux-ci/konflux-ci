@@ -101,7 +101,9 @@ that set `bearerTokenFile` (`ArbitraryFSAccessThroughSMs`). Konflux uses
 Operator self-metrics reference: `internal/operatormetrics/scrape_wiring.go` and
 `ScrapeTokenRotator` in `cmd/main.go` (ServiceMonitor created at runtime when the
 ServiceMonitor CRD is installed). Metrics TLS certificates are issued via
-`operator/config/certmanager/` and mounted with `cert_metrics_manager_patch.yaml`.
+`operator/config/certmanager/` and mounted with `cert_metrics_manager_patch.yaml`
+from the `config/default/manager-metrics-certs` component (kustomize/Argo installs
+only; omitted from the OLM bundle).
 
 ## Shipped today (operator scrape token)
 
@@ -259,7 +261,7 @@ only when `--metrics-bind-address` is not `0` (metrics server enabled).
 | Scrape Secret | `ScrapeTokenRotator` in `cmd/main.go` mints and rotates `prometheus-scrape-token` |
 | Scraper CRB | Operand reconciler binds `metrics-scraper` in the operand namespace; operator rotator does the same in `konflux-operator` |
 | Rotation | `ScrapeTokenRotator` adaptive timer (`DefaultScrapeTokenRotationInterval`, same as operand broadcaster) plus early wake on scrape-wiring Secret events (`metrics-server-cert`, scrape token); freshness check skips mint when token is still valid |
-| Server TLS (cert-manager) | **Required** for verified scrape — `config/certmanager/` is included from default `operator-rbac` kustomization; metrics TLS Secrets gate ServiceMonitor apply |
+| Server TLS (cert-manager) | **Required** for verified scrape — `config/certmanager/` is included via the `manager-metrics-certs` component on `config/default` (not OLM); metrics TLS Secrets gate ServiceMonitor apply |
 
 Cluster integration tests scrape via the operator-managed `prometheus-scrape-token` Secret.
 

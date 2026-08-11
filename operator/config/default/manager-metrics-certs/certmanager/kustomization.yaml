@@ -1,0 +1,7 @@
+# Nested build so Certificate/Issuer get the same namespace/namePrefix as operator-rbac
+# without applying that prefix to the rest of config/default via the Component.
+namespace: konflux-operator
+namePrefix: konflux-operator-
+
+resources:
+- ../../../certmanager
