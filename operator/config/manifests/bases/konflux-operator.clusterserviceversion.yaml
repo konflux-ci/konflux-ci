@@ -7,7 +7,6 @@ metadata:
     categories: Integration & Delivery, Security, Developer Tools
     containerImage: REPLACE_IMAGE
     description: Cloud native software factory focused on software supply chain security
-    olm.operatorNamespace: konflux-operator
     olm.suggested-namespace: konflux-operator
     repository: https://github.com/konflux-ci/konflux-ci
     support: Konflux Community

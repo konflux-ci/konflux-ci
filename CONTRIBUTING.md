@@ -207,6 +207,21 @@ Workflow `.github/workflows/operator-test-e2e.yaml` runs both suites when
 operator-related changes are detected: first integration (`go test .`), then E2E
 (env set from secrets, then the same `go test` command).
 
+Workflow `.github/workflows/operator-olm-kind-smoke.yaml` exercises a live OLM
+install path when `operator/**` or the smoke script/workflow changes: it builds a
+dedicated Kind cluster, installs OLM, runs `operator-sdk run bundle` from
+`.github/scripts/operator-olm-kind-smoke.sh`, and asserts the CSV reaches
+`Succeeded` and the manager pod becomes Ready without a required
+`metrics-server-cert` mount. The install namespace defaults to
+`konflux-operator-olm-smoke` (not `olm.suggested-namespace`) so bundle metadata
+bugs that break preflight's suffixed install namespace are caught. Static bundle
+checks run in **operator-verify-generated-files** via
+`.github/scripts/operator-verify-olm-bundle.sh` (metrics-server-cert wiring).
+
+`KIND_VERSION` and `KUBECTL_VERSION` in both OLM smoke and operator E2E
+workflows are Renovate-tracked (see `renovate.json` custom managers for
+`kubernetes-sigs/kind` and `kubernetes/kubernetes`).
+
 ## OpenShift CI Periodic Tests
 
 In addition to GitHub Actions, the repository has periodic E2E tests running on
@@ -222,8 +237,9 @@ ARM64 integration tests run on GitHub-hosted ARM runners and validate that:
 - The operator builds correctly for ARM64 architecture
 - All dependencies and services work on ARM64
 - Integration test suite passes on ARM64
+- OLM bundle install smoke passes on ARM64 (`operator-olm-kind-smoke`)
 
-The ARM64 workflow uses architecture-specific binaries:
+The ARM64 workflows use architecture-specific binaries:
 - kind: `kind-linux-arm64`
 - kubectl: `bin/linux/arm64/kubectl`
 
