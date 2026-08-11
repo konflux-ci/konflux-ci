@@ -100,6 +100,7 @@ PRs trigger the following workflows:
 - **`operator-lint`** — golangci-lint
 - **`operator-verify-generated-files`** — ensures CRDs/RBAC/deepcopy are up to date
 - **`operator-test-e2e`** — full operator e2e (fork PRs require `/allow <commit-sha>`)
+- **`operator-olm-kind-smoke`** — Kind + OLM install via `operator-sdk run bundle` (ARM64; installs into a non-default namespace to match preflight)
 - **`kube-linter`** — lints rendered kustomize manifests
 - **`check-toc`** — validates markdown TOC (excludes `operator/docs/`, `.cursor/*`, `skills/*`)
 - **`differential-shellcheck`** — ShellCheck on changed shell scripts
