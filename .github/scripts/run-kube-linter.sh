@@ -48,9 +48,16 @@ fi
 $OPERATOR_SDK generate kustomize manifests -q --interactive=false
 cd ..
 
-# Build kustomizations (excluding operator/upstream-kustomizations)
+# Build kustomizations (excluding operator/upstream-kustomizations).
+# Skip kustomize Components: they are not standalone roots (replacements/patches
+# expect parent resources). They are applied when building their parent, e.g.
+# config/default includes manager-metrics-certs.
 find . \( -name "kustomization.yaml" -o -name "kustomization.yml" \) \
   ! -path "*/operator/upstream-kustomizations/*" | while read -r file; do
+  if grep -qE '^kind:[[:space:]]*Component[[:space:]]*$' "$file"; then
+    echo "  Skipping kustomize Component $file"
+    continue
+  fi
   dir=$(dirname "$file")
   dir=${dir#./}
   output_file=$(echo "out-$dir" | tr "/" "-")
