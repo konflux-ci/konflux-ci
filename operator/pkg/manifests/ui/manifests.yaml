@@ -646,7 +646,7 @@ spec:
             secretKeyRef:
               key: cookie-secret
               name: oauth2-proxy-cookie-secret
-        image: registry.access.redhat.com/hi/oauth2-proxy@sha256:4169ca2a51cab4e72069348f7dcd280e5b3d051ae25b2f5bda14dd78e7d0ab4d
+        image: registry.access.redhat.com/hi/oauth2-proxy@sha256:1eba4f2644f94491f6b529abf8a4c8e356022183d4447a6ae708d6e99f329595
         name: oauth2-proxy
         ports:
         - containerPort: 6000
