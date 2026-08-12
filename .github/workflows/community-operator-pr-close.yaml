@@ -1,0 +1,36 @@
+name: Community Operator PR — close
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Community operators PR number (e.g., 10746)'
+        required: true
+        type: string
+      comment:
+        description: 'Optional comment to leave when closing'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  close-pr:
+    name: Close Community Operator PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+
+      - name: Close Community Operator PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.KONFLUX_CI_BOT_PAT }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          CLOSE_COMMENT: ${{ inputs.comment }}
+        run: |
+          if [ -n "${CLOSE_COMMENT}" ]; then
+            .github/scripts/close-community-operator-pr.sh "${PR_NUMBER}" --comment "${CLOSE_COMMENT}"
+          else
+            .github/scripts/close-community-operator-pr.sh "${PR_NUMBER}"
+          fi
