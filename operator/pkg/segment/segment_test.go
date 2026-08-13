@@ -82,6 +82,36 @@ func TestLogWriteKeyResolution(t *testing.T) {
 	})
 }
 
+func TestExtractURLHostAndPath(t *testing.T) {
+	t.Run("strips https scheme from the default Segment API URL", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		g.Expect(ExtractURLHostAndPath("https://api.segment.io/v1")).To(gomega.Equal("api.segment.io/v1"))
+	})
+
+	t.Run("strips https scheme from a custom proxy URL, preserving host and path", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		g.Expect(ExtractURLHostAndPath("https://console.redhat.com/connections/api/v1")).
+			To(gomega.Equal("console.redhat.com/connections/api/v1"))
+	})
+
+	t.Run("returns input unchanged when it cannot be parsed", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		g.Expect(ExtractURLHostAndPath("://not a url")).To(gomega.Equal("://not a url"))
+	})
+
+	t.Run("returns input unchanged when there is no host", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		g.Expect(ExtractURLHostAndPath("api.segment.io/v1")).To(gomega.Equal("api.segment.io/v1"))
+	})
+
+	t.Run("preserves percent-escaped reserved characters in the path", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		result := ExtractURLHostAndPath("https://example.com/a%2Fb")
+		g.Expect(result).To(gomega.Equal("example.com/a%2Fb"))
+		g.Expect(result).NotTo(gomega.Equal("example.com/a/b"))
+	})
+}
+
 func TestResolveWriteKeySecretRef(t *testing.T) {
 	ctx := context.Background()
 	namespace := "segment-bridge"
