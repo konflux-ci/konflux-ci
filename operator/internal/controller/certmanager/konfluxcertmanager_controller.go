@@ -19,6 +19,7 @@ package certmanager
 import (
 	"context"
 	"fmt"
+	"time"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -143,8 +144,11 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	// Apply trust-manager Bundle if distributeClusterCABundle is effectively enabled.
 	// Platform-aware default: true on non-OpenShift (Kind/upstream), false on OpenShift.
+	var requeueForTrustManager bool
 	if certManager.Spec.ShouldDistributeClusterCABundle(isOpenShift) {
-		if err := r.applyTrustBundle(ctx, tc); err != nil {
+		var err error
+		requeueForTrustManager, err = r.applyTrustBundle(ctx, tc)
+		if err != nil {
 			return errHandler.HandleApplyError(ctx, err)
 		}
 	} else {
@@ -174,6 +178,14 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	log.Info("Successfully reconciled KonfluxCertManager")
+
+	// If trust-manager CRD was not installed but distribution is enabled,
+	// requeue so the Bundle is applied once trust-manager becomes available.
+	if requeueForTrustManager {
+		log.Info("Requeuing to retry trust-manager Bundle application when CRD becomes available")
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -201,34 +213,37 @@ func (r *KonfluxCertManagerReconciler) applyPKIManifests(ctx context.Context, tc
 
 // applyTrustBundle applies only the trust-manager Bundle resources from the cert-manager
 // component manifests. If the trust-manager CRD is not installed, the error is logged
-// and skipped — the Bundle will be applied once trust-manager becomes available.
-func (r *KonfluxCertManagerReconciler) applyTrustBundle(ctx context.Context, tc *tracking.Client) error {
+// and skipped — the caller should requeue to retry once trust-manager becomes available.
+// Returns true if any Bundle was skipped due to a missing CRD.
+func (r *KonfluxCertManagerReconciler) applyTrustBundle(ctx context.Context, tc *tracking.Client) (bool, error) {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.CertManager)
 	if err != nil {
-		return fmt.Errorf("failed to get parsed manifests for CertManager: %w", err)
+		return false, fmt.Errorf("failed to get parsed manifests for CertManager: %w", err)
 	}
 
+	crdMissing := false
 	for _, obj := range objects {
 		if obj.GetObjectKind().GroupVersionKind() != bundleGVK {
 			continue
 		}
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
 			// Skip if the trust-manager CRD is not installed.
-			// The Bundle will be applied once trust-manager becomes available.
+			// The reconciler will requeue to retry once trust-manager becomes available.
 			if tracking.IsNoKindMatchError(err) {
-				log.Info("Skipping trust-manager Bundle: CRD not installed",
+				log.Info("Skipping trust-manager Bundle: CRD not installed — will requeue",
 					"name", obj.GetName(),
 					"apiVersion", bundleGVK.GroupVersion().String(),
 				)
+				crdMissing = true
 				continue
 			}
-			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
+			return false, fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
 				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), manifests.CertManager, err)
 		}
 	}
-	return nil
+	return crdMissing, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

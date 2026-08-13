@@ -422,7 +422,13 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 		// startManagerWithPlatform creates a per-test manager with the given platform and
 		// registers a DeferCleanup to stop it when the test ends.
 		startManagerWithPlatform := func(isOpenShift bool) {
-			info, err := clusterinfo.DetectWithClient(&mockDiscoveryClient{isOpenShift: isOpenShift})
+			resources := map[string]*metav1.APIResourceList{}
+			if isOpenShift {
+				resources["config.openshift.io/v1"] = &metav1.APIResourceList{
+					APIResources: []metav1.APIResource{{Kind: "ClusterVersion"}},
+				}
+			}
+			info, err := clusterinfo.DetectWithClient(&mockDiscoveryClient{resources: resources})
 			Expect(err).NotTo(HaveOccurred())
 
 			mgr := testutil.NewTestManager(testEnv)
@@ -604,25 +610,27 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 })
 
 // mockDiscoveryClient implements clusterinfo.DiscoveryClient for testing platform-aware defaults.
+// Follows the resources map pattern used across the codebase (buildservice, ingress, etc.).
 type mockDiscoveryClient struct {
-	isOpenShift bool
+	resources map[string]*metav1.APIResourceList
 }
 
 func (m *mockDiscoveryClient) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
-	if groupVersion == "config.openshift.io/v1" {
-		if m.isOpenShift {
-			return &metav1.APIResourceList{
-				GroupVersion: "config.openshift.io/v1",
-				APIResources: []metav1.APIResource{
-					{Kind: "ClusterVersion"},
-				},
-			}, nil
-		}
-		return nil, apierrors.NewNotFound(schema.GroupResource{Group: groupVersion}, "")
+	if rl, ok := m.resources[groupVersion]; ok {
+		return rl, nil
 	}
 	return nil, apierrors.NewNotFound(schema.GroupResource{Group: groupVersion}, "")
 }
 
 func (m *mockDiscoveryClient) ServerVersion() (*version.Info, error) {
 	return &version.Info{GitVersion: "v1.30.0"}, nil
+}
+
+// newNonOpenShiftClusterInfo returns a ClusterInfo that reports a non-OpenShift platform.
+func newNonOpenShiftClusterInfo() *clusterinfo.Info {
+	info, err := clusterinfo.DetectWithClient(&mockDiscoveryClient{
+		resources: map[string]*metav1.APIResourceList{},
+	})
+	Expect(err).NotTo(HaveOccurred())
+	return info
 }

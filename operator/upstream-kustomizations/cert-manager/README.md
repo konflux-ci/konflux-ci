@@ -204,8 +204,11 @@ The UI namespace has two trust domains:
 ## Operator management
 
 The `KonfluxCertManager` controller (reconciling the `KonfluxCertManager` CR)
-manages the bootstrap resources in this directory. When
-`spec.createClusterIssuer` is true (the default), it applies
+manages the bootstrap resources in this directory.
+
+### `spec.createClusterIssuer` (default: `true`)
+
+When `spec.createClusterIssuer` is true (the default), it applies
 `konflux-bootstrap-issuer`, `konflux-ca` Certificate, and `konflux-issuer`
 ClusterIssuer. Component controllers then apply their own leaf Certificates
 (and any namespace Issuers they need, e.g. UI or webhook self-signed). Operand
@@ -213,3 +216,25 @@ ClusterIssuer. Component controllers then apply their own leaf Certificates
 metrics Issuer. The operator manager metrics Issuer+Certificate are install
 manifests in `operator/config/certmanager/`, not reconciled by
 `KonfluxCertManager`.
+
+### `spec.distributeClusterCABundle` (platform-aware default)
+
+Controls whether the operator applies the trust-manager `Bundle` resource
+(`trusted-ca`) that populates cluster-wide `trusted-ca` ConfigMaps via
+trust-manager. The Bundle references the cluster CA (`konflux-ca-secret`) and
+system default CAs, making them available to Tekton git resolver, builds, and
+other consumers that need to verify TLS certificates issued by the cluster CA.
+
+Platform-aware defaults when the field is unset (`nil`):
+
+| Platform | Default | Rationale |
+|----------|---------|-----------|
+| Non-OpenShift (Kind, upstream) | `true` | trust-manager Bundle needed for Tekton git resolution and similar consumers |
+| OpenShift | `false` | Native per-namespace CA injection handles trust distribution |
+
+Set `spec.distributeClusterCABundle: true` on OpenShift to opt in, or
+`spec.distributeClusterCABundle: false` on non-OpenShift to opt out.
+
+If trust-manager is not yet installed when the controller reconciles, the
+Bundle apply is skipped and the controller requeues to retry once the
+trust-manager CRD becomes available.
