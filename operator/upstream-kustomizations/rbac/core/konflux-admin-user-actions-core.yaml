@@ -29,6 +29,20 @@ rules:
       - update
       - patch
       - delete
+      - deletecollection
+    apiGroups:
+      - konflux-ci.dev
+    resources:
+      - components
+      - imagerepositories
+  - verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
     apiGroups:
       - appstudio.redhat.com
     resources:

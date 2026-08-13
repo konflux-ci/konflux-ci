@@ -24,6 +24,18 @@ rules:
       - get
       - list
       - watch
+      - create
+      - update
+      - patch
+    apiGroups:
+      - konflux-ci.dev
+    resources:
+      - components
+      - imagerepositories
+  - verbs:
+      - get
+      - list
+      - watch
     apiGroups:
       - tekton.dev
     resources:

@@ -21,6 +21,15 @@ rules:
       - list
       - watch
     apiGroups:
+      - konflux-ci.dev
+    resources:
+      - components
+      - imagerepositories
+  - verbs:
+      - get
+      - list
+      - watch
+    apiGroups:
       - appstudio.redhat.com
     resources:
       - snapshots
