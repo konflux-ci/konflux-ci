@@ -508,6 +508,7 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, runtimeConfig 
 	if endpointErr != nil {
 		return nil, endpointErr
 	}
+	initContainerOpts = appendTektonResultsOverlays(spec.TektonResults, initContainerOpts)
 
 	// Append user overrides after system options
 	reverseProxyOpts = append(reverseProxyOpts, customization.FromContainerSpec(spec.ReverseProxy))
@@ -571,6 +572,21 @@ func appendEndpointOverlays(
 	}
 
 	return initOpts, podOpts, nil
+}
+
+// appendTektonResultsOverlays configures the core Tekton Results proxy route.
+func appendTektonResultsOverlays(
+	tektonResults *konfluxv1alpha1.TektonResultsSpec,
+	initOpts []customization.ContainerOption,
+) []customization.ContainerOption {
+	if tektonResults == nil {
+		return initOpts
+	}
+	// WithEnvOverride (not WithOptionalEnvOverride) so an empty hostname clears the
+	// override; generate-proxy-config.sh treats an unset/empty value as DNS discovery.
+	return append(initOpts,
+		customization.WithEnvOverride("TEKTON_RESULTS_HOSTNAME", tektonResults.Hostname),
+	)
 }
 
 // runtimeConfigOverlays returns RUNTIME_* env var options for the

@@ -96,10 +96,24 @@ type ProxyDeploymentSpec struct {
 	// OAuth2Proxy defines customizations for the oauth2-proxy container.
 	// +optional
 	OAuth2Proxy *ContainerSpec `json:"oauth2Proxy,omitempty"`
-	// Endpoints configures optional backend services that the proxy routes to.
-	// Each endpoint can be independently enabled and customized.
+	// TektonResults configures the Tekton Results API backend for the UI proxy.
+	// Unlike endpoints below, Results is a core platform backend: it is enabled by
+	// default (DNS discovery at proxy init) and is not gated by an enabled flag.
+	// +optional
+	TektonResults *TektonResultsSpec `json:"tektonResults,omitempty"`
+	// Endpoints configures optional plugin backends that the proxy routes to.
+	// Each endpoint must be explicitly enabled.
 	// +optional
 	Endpoints *ProxyEndpointsSpec `json:"endpoints,omitempty"`
+}
+
+// TektonResultsSpec configures the Tekton Results proxy route.
+type TektonResultsSpec struct {
+	// Hostname overrides DNS discovery for the Results API service.
+	// When tektonResults is present with an empty hostname, the override is
+	// cleared so DNS discovery is used again.
+	// +optional
+	Hostname string `json:"hostname,omitempty"`
 }
 
 // ProxyEndpointsSpec configures optional backend endpoints proxied by the UI reverse proxy.
