@@ -2376,6 +2376,96 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 	})
 
+	Context("TektonResults endpoint reconciliation via Reconcile", Serial, func() {
+		const tektonResultsHostname = "tekton-results-api-service.openshift-pipelines.svc.cluster.local"
+
+		getProxyInitEnv := func(g Gomega, dep *appsv1.Deployment) map[string]string {
+			var initContainer *corev1.Container
+			for i := range dep.Spec.Template.Spec.InitContainers {
+				if dep.Spec.Template.Spec.InitContainers[i].Name == generateProxyConfigContainerName {
+					initContainer = &dep.Spec.Template.Spec.InitContainers[i]
+					break
+				}
+			}
+			g.Expect(initContainer).NotTo(BeNil())
+			envMap := make(map[string]string, len(initContainer.Env))
+			for _, e := range initContainer.Env {
+				envMap[e.Name] = e.Value
+			}
+			return envMap
+		}
+
+		BeforeEach(func() {
+			startManager(nil)
+		})
+
+		It("Should set TEKTON_RESULTS_HOSTNAME on generate-proxy-config init container", func(ctx context.Context) {
+			ui := &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxUISpec{
+					KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+						Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
+							TektonResults: &konfluxv1alpha1.TektonResultsSpec{
+								Hostname: tektonResultsHostname,
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: proxyDeploymentName, Namespace: uiNamespace,
+				}, dep)).To(Succeed())
+				g.Expect(getProxyInitEnv(g, dep)).To(HaveKeyWithValue("TEKTON_RESULTS_HOSTNAME", tektonResultsHostname))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("Should clear TEKTON_RESULTS_HOSTNAME when tektonResults hostname is cleared", func(ctx context.Context) {
+			ui := &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxUISpec{
+					KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+						Proxy: &konfluxv1alpha1.ProxyDeploymentSpec{
+							TektonResults: &konfluxv1alpha1.TektonResultsSpec{
+								Hostname: tektonResultsHostname,
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: proxyDeploymentName, Namespace: uiNamespace,
+				}, dep)).To(Succeed())
+				g.Expect(getProxyInitEnv(g, dep)).To(HaveKey("TEKTON_RESULTS_HOSTNAME"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("clearing tektonResults hostname in the KonfluxUI CR")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.KonfluxUI{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
+				updated.Spec.Proxy.TektonResults.Hostname = ""
+				g.Expect(k8sClient.Update(ctx, updated)).To(Succeed())
+			}).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: proxyDeploymentName, Namespace: uiNamespace,
+				}, dep)).To(Succeed())
+				g.Expect(getProxyInitEnv(g, dep)).To(HaveKeyWithValue("TEKTON_RESULTS_HOSTNAME", ""))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
 	Context("Component metrics gating via Reconcile", Serial, func() {
 		serviceMonitorGVK := schema.GroupVersionKind{
 			Group:   "monitoring.coreos.com",

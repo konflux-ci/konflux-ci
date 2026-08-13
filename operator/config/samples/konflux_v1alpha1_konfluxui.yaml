@@ -36,7 +36,11 @@ spec:
   # Proxy deployment configuration
   proxy:
     replicas: 3
-    # Optional backend endpoints proxied by the UI reverse proxy
+    # Core Tekton Results backend (enabled by default via DNS discovery at proxy init).
+    # Set hostname to pin the Results API service and avoid init-time DNS probing.
+    # tektonResults:
+    #   hostname: tekton-results-api-service.openshift-pipelines.svc.cluster.local
+    # Optional plugin endpoints proxied by the UI reverse proxy
     endpoints:
       kite:
         enabled: true

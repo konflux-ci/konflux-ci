@@ -3485,8 +3485,8 @@ spec:
                         properties:
                           endpoints:
                             description: |-
-                              Endpoints configures optional backend services that the proxy routes to.
-                              Each endpoint can be independently enabled and customized.
+                              Endpoints configures optional plugin backends that the proxy routes to.
+                              Each endpoint must be explicitly enabled.
                             properties:
                               kite:
                                 description: |-
@@ -4011,6 +4011,19 @@ spec:
                                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                                     type: object
                                 type: object
+                            type: object
+                          tektonResults:
+                            description: |-
+                              TektonResults configures the Tekton Results API backend for the UI proxy.
+                              Unlike endpoints below, Results is a core platform backend: it is enabled by
+                              default (DNS discovery at proxy init) and is not gated by an enabled flag.
+                            properties:
+                              hostname:
+                                description: |-
+                                  Hostname overrides DNS discovery for the Results API service.
+                                  When tektonResults is present with an empty hostname, the override is
+                                  cleared so DNS discovery is used again.
+                                type: string
                             type: object
                         type: object
                       runtimeConfig:
