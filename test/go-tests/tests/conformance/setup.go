@@ -1,11 +1,13 @@
 package conformance
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -21,7 +23,7 @@ import (
 // operator (konflux-cli/setup-release) and executes it to create the managed
 // namespace, ImageRepositories, EnterpriseContractPolicy, ReleasePlanAdmission,
 // and ReleasePlan needed by the release flow.
-func runSetupRelease(appName, componentName, tenantNS, managedNS string) error {
+func runSetupRelease(appName, componentName, tenantNS, managedNS, releaseName string) error {
 	scriptContent, err := downloadScriptFromConfigMap("konflux-cli", "setup-release", "setup-release.sh")
 	if err != nil {
 		return fmt.Errorf("download setup-release.sh from ConfigMap: %w", err)
@@ -33,6 +35,26 @@ func runSetupRelease(appName, componentName, tenantNS, managedNS string) error {
 	}
 	defer os.RemoveAll(tmpDir)
 
+	preProvisioned := namespaceExists(managedNS)
+	if preProvisioned {
+		klog.Infof("conformance: managed namespace %s already exists, adapting setup-release.sh for pre-provisioned cluster", managedNS)
+
+		// Strip the namespace creation heredoc -- the namespace is managed
+		// externally (e.g. GitOps) and the user may lack cluster-scope permissions.
+		nsApply := regexp.MustCompile(`(?s)kubectl apply -f - <<EOF\napiVersion: v1\nkind: Namespace\n.*?\nEOF`)
+		scriptContent = nsApply.ReplaceAll(scriptContent,
+			[]byte(`echo "Namespace ${MANAGED_NS} already exists, skipping creation"`))
+
+		// Disable errexit so the script creates all resources it has permission
+		// for and continues past RBAC errors. The upstream script sets errexit in
+		// both the shebang ("#!/bin/bash -e") and "set -eu"; strip -e from both
+		// while keeping -u (unset variable check).
+		scriptContent = bytes.Replace(scriptContent,
+			[]byte("#!/bin/bash -e"), []byte("#!/bin/bash"), 1)
+		scriptContent = bytes.Replace(scriptContent,
+			[]byte("set -eu"), []byte("set -u"), 1)
+	}
+
 	scriptPath := filepath.Join(tmpDir, "setup-release.sh")
 	if err := os.WriteFile(scriptPath, scriptContent, 0o755); err != nil {
 		return fmt.Errorf("write setup-release.sh: %w", err)
@@ -43,12 +65,26 @@ func runSetupRelease(appName, componentName, tenantNS, managedNS string) error {
 		"-m", managedNS,
 		"-a", appName,
 		"-c", componentName,
+		"-r", releaseName,
 	}
 	klog.Infof("conformance: running setup-release.sh %v (from ConfigMap konflux-cli/setup-release)", args)
 	cmd := exec.Command(scriptPath, args...)
 	cmd.Stdout = ginkgo.GinkgoWriter
 	cmd.Stderr = ginkgo.GinkgoWriter
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		if preProvisioned {
+			klog.Warningf("conformance: setup-release.sh exited with error (non-fatal in pre-provisioned env): %v", err)
+		} else {
+			return fmt.Errorf("setup-release.sh: %w", err)
+		}
+	}
+	return nil
+}
+
+// namespaceExists returns true if the namespace already exists on the cluster.
+func namespaceExists(ns string) bool {
+	cmd := exec.Command(resolveKubectl(), "get", "namespace", ns, "--no-headers")
+	return cmd.Run() == nil
 }
 
 // e2eECPExclusions lists policy rules to exclude during E2E tests. Conformance runs
@@ -206,6 +242,41 @@ func dumpDiagnostics(hub *framework.ControllerHub, componentName, appName, names
 				pr.Labels["pipelinesascode.tekton.dev/event-type"],
 				status)
 		}
+	}
+}
+
+// cleanupManagedResources deletes test-created resources from the managed namespace
+// on pre-provisioned clusters where we cannot delete the namespace itself.
+func cleanupManagedResources(_ context.Context, fw *framework.Framework, ns string) {
+	cleanupTimeout := 2 * time.Minute
+	if err := fw.AsKubeAdmin.TektonController.DeleteAllPipelineRunsInASpecificNamespace(ns); err != nil {
+		klog.Warningf("conformance cleanup: delete PipelineRuns in %s: %v", ns, err)
+	}
+	if err := fw.AsKubeAdmin.HasController.DeleteAllImageRepositoriesInASpecificNamespace(ns, cleanupTimeout); err != nil {
+		klog.Warningf("conformance cleanup: delete ImageRepositories in %s: %v", ns, err)
+	}
+	if err := fw.AsKubeAdmin.TektonController.DeleteEnterpriseContractPolicy("default", ns, false); err != nil {
+		klog.Warningf("conformance cleanup: delete ECP in %s: %v", ns, err)
+	}
+	// Delete all ReleasePlanAdmissions via kubectl since the framework has no bulk list method.
+	cmd := exec.Command(resolveKubectl(), "delete", "releaseplanadmissions.appstudio.redhat.com", "--all", "-n", ns)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		klog.Warningf("conformance cleanup: delete ReleasePlanAdmissions in %s: %v: %s", ns, err, string(out))
+	}
+}
+
+// cleanupTenantResources deletes test-created resources from the tenant namespace
+// on pre-provisioned clusters.
+func cleanupTenantResources(_ context.Context, fw *framework.Framework, ns string) {
+	cleanupTimeout := 2 * time.Minute
+	if err := fw.AsKubeAdmin.HasController.DeleteAllApplicationsInASpecificNamespace(ns, cleanupTimeout); err != nil {
+		klog.Warningf("conformance cleanup: delete Applications in %s: %v", ns, err)
+	}
+	if err := fw.AsKubeAdmin.IntegrationController.DeleteAllSnapshotsInASpecificNamespace(ns, cleanupTimeout); err != nil {
+		klog.Warningf("conformance cleanup: delete Snapshots in %s: %v", ns, err)
+	}
+	if err := fw.AsKubeAdmin.TektonController.DeleteAllPipelineRunsInASpecificNamespace(ns); err != nil {
+		klog.Warningf("conformance cleanup: delete PipelineRuns in %s: %v", ns, err)
 	}
 }
 

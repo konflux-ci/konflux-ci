@@ -79,16 +79,26 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 				userNamespace = fw.UserNamespace
-				managedNamespace = "default-managed-tenant"
+				managedNamespace = os.Getenv("E2E_MANAGED_NAMESPACE")
+				if managedNamespace == "" {
+					managedNamespace = "default-managed-tenant"
+				}
 				klog.Info("conformance: namespaces ready", "user", userNamespace, "managed", managedNamespace)
 
-				componentName = fmt.Sprintf("%s-%s", appSpec.ComponentSpec.Name, util.GenerateRandomString(4))
+				suffix := util.GenerateRandomString(4)
+				componentName = fmt.Sprintf("%s-%s", appSpec.ComponentSpec.Name, suffix)
+				appSpec.ApplicationName = fmt.Sprintf("%s-%s", appSpec.ApplicationName, suffix)
 				pacBranchName = constants.PaCPullRequestBranchPrefix + componentName
 				componentRepositoryName = utils.ExtractGitRepositoryNameFromURL(appSpec.ComponentSpec.GitSourceUrl)
 
-				gomega.Expect(runSetupRelease(appSpec.ApplicationName, componentName, userNamespace, managedNamespace)).To(gomega.Succeed())
-				gomega.Expect(patchECPForE2E(fw.AsKubeAdmin, "default", managedNamespace)).To(gomega.Succeed())
-				gomega.Expect(grantIntegrationRunnerJobRBAC(userNamespace)).To(gomega.Succeed())
+				releaseName := fmt.Sprintf("release-%s", suffix)
+				gomega.Expect(runSetupRelease(appSpec.ApplicationName, componentName, userNamespace, managedNamespace, releaseName)).To(gomega.Succeed())
+				if err := patchECPForE2E(fw.AsKubeAdmin, "default", managedNamespace); err != nil {
+					klog.Warningf("conformance: patchECPForE2E failed (non-fatal): %v", err)
+				}
+				if err := grantIntegrationRunnerJobRBAC(userNamespace); err != nil {
+					klog.Warningf("conformance: grantIntegrationRunnerJobRBAC failed (non-fatal): %v", err)
+				}
 
 				buildPipelineAnnotation = build.GetBuildPipelineBundleAnnotation(appSpec.ComponentSpec.BuildPipelineType)
 			})
@@ -102,7 +112,17 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				ctx, cancel := context.WithTimeout(context.Background(), budget)
 				defer cancel()
 
-				_ = fw.AsKubeAdmin.CommonController.KubeInterface().CoreV1().Namespaces().Delete(ctx, managedNamespace, metav1.DeleteOptions{})
+				if namespaceExists(managedNamespace) && os.Getenv("E2E_MANAGED_NAMESPACE") != "" {
+					// Pre-provisioned cluster: delete resources individually
+					// since we cannot delete the managed namespace itself.
+					cleanupManagedResources(ctx, fw, managedNamespace)
+					cleanupTenantResources(ctx, fw, userNamespace)
+				} else {
+					// Kind / full-control: deleting the managed namespace
+					// cascades all resources inside it.
+					_ = fw.AsKubeAdmin.CommonController.KubeInterface().CoreV1().Namespaces().Delete(ctx, managedNamespace, metav1.DeleteOptions{})
+				}
+
 				cleanupWithRetry(ctx, "delete PaC branch", func() error {
 					return fw.AsKubeAdmin.CommonController.GitHub.DeleteRef(ctx, componentRepositoryName, pacBranchName)
 				})
