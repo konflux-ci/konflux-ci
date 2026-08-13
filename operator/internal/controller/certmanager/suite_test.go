@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
@@ -40,6 +41,13 @@ func TestCertManager(t *testing.T) {
 	RunSpecs(t, "CertManager Controller Suite")
 }
 
+// newNonOpenShiftClusterInfo returns a ClusterInfo that reports a non-OpenShift platform.
+func newNonOpenShiftClusterInfo() *clusterinfo.Info {
+	info, err := clusterinfo.DetectWithClient(&mockDiscoveryClient{isOpenShift: false})
+	Expect(err).NotTo(HaveOccurred())
+	return info
+}
+
 var _ = BeforeSuite(func() {
 	testEnv = testutil.SetupTestEnv("../../..")
 	ctx = testEnv.Ctx
@@ -51,6 +59,7 @@ var _ = BeforeSuite(func() {
 		Client:      mgr.GetClient(),
 		Scheme:      mgr.GetScheme(),
 		ObjectStore: objectStore,
+		ClusterInfo: newNonOpenShiftClusterInfo(),
 	}).SetupWithManager(mgr)).To(Succeed())
 	testutil.StartManager(testEnv, mgr)
 })

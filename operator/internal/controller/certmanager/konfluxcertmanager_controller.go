@@ -33,6 +33,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
@@ -49,15 +50,18 @@ const (
 var (
 	clusterIssuerGVK = certmanagerv1.SchemeGroupVersion.WithKind("ClusterIssuer")
 	certificateGVK   = certmanagerv1.SchemeGroupVersion.WithKind("Certificate")
+	bundleGVK        = schema.GroupVersionKind{Group: "trust.cert-manager.io", Version: "v1alpha1", Kind: "Bundle"}
 )
 
 // CertManagerCleanupGVKs defines which resource types should be cleaned up when they are
 // no longer part of the desired state. When createClusterIssuer is false, cert-manager
 // resources will be automatically deleted because they weren't applied during the reconcile
-// but have the owner label.
+// but have the owner label. The trust-manager Bundle is also cleaned up when
+// distributeClusterCABundle is disabled.
 var CertManagerCleanupGVKs = []schema.GroupVersionKind{
 	clusterIssuerGVK,
 	certificateGVK,
+	bundleGVK,
 }
 
 // CertManagerClusterScopedAllowList restricts which cluster-scoped resources can be deleted
@@ -76,6 +80,10 @@ var CertManagerClusterScopedAllowList = tracking.ClusterScopedAllowList{
 		"self-signed-cluster-issuer",
 		"ca-issuer",
 	),
+	// Bundle is only created when distributeClusterCABundle is effectively true
+	bundleGVK: sets.New(
+		"trusted-ca",
+	),
 }
 
 // KonfluxCertManagerReconciler reconciles a KonfluxCertManager object
@@ -83,6 +91,7 @@ type KonfluxCertManagerReconciler struct {
 	client.Client
 	Scheme      *runtime.Scheme
 	ObjectStore *manifests.ObjectStore
+	ClusterInfo *clusterinfo.Info
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxcertmanagers,verbs=get;list;watch;create;update;patch;delete
@@ -90,6 +99,7 @@ type KonfluxCertManagerReconciler struct {
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxcertmanagers/finalizers,verbs=update
 // +kubebuilder:rbac:groups=cert-manager.io,resources=clusterissuers,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=trust.cert-manager.io,resources=bundles,verbs=get;list;watch;create;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -118,15 +128,29 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 		FieldManager:      FieldManager,
 	})
 
-	// Apply manifests only if createClusterIssuer is enabled (defaults to true).
+	isOpenShift := r.ClusterInfo.IsOpenShift()
+
+	// Apply PKI manifests only if createClusterIssuer is enabled (defaults to true).
 	// The cert-manager namespace must already exist (created by whoever installs cert-manager);
 	// if it does not, applyManifests will fail and the error is reported via the status.
 	if certManager.Spec.ShouldCreateClusterIssuer() {
-		if err := r.applyManifests(ctx, tc); err != nil {
+		if err := r.applyPKIManifests(ctx, tc); err != nil {
 			return errHandler.HandleApplyError(ctx, err)
 		}
 	} else {
-		log.Info("Skipping manifest application - createClusterIssuer is false")
+		log.Info("Skipping PKI manifest application - createClusterIssuer is false")
+	}
+
+	// Apply trust-manager Bundle if distributeClusterCABundle is effectively enabled.
+	// Platform-aware default: true on non-OpenShift (Kind/upstream), false on OpenShift.
+	if certManager.Spec.ShouldDistributeClusterCABundle(isOpenShift) {
+		if err := r.applyTrustBundle(ctx, tc); err != nil {
+			return errHandler.HandleApplyError(ctx, err)
+		}
+	} else {
+		log.Info("Skipping trust-manager Bundle - distributeClusterCABundle is disabled",
+			"isOpenShift", isOpenShift,
+			"explicitValue", certManager.Spec.DistributeClusterCABundle)
 	}
 
 	// Cleanup orphaned resources - delete any resources with our owner label
@@ -153,16 +177,53 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	return ctrl.Result{}, nil
 }
 
-// applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
-// Manifests are parsed once and cached; deep copies are used during reconciliation.
-func (r *KonfluxCertManagerReconciler) applyManifests(ctx context.Context, tc *tracking.Client) error {
+// applyPKIManifests loads and applies PKI manifests (ClusterIssuers, Certificates) to the
+// cluster using the tracking client. Trust-manager Bundle resources are skipped here —
+// they are handled separately by applyTrustBundle based on the distributeClusterCABundle field.
+func (r *KonfluxCertManagerReconciler) applyPKIManifests(ctx context.Context, tc *tracking.Client) error {
 	objects, err := r.ObjectStore.GetForComponent(manifests.CertManager)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for CertManager: %w", err)
 	}
 
 	for _, obj := range objects {
+		// Skip Bundle resources — they are applied by applyTrustBundle
+		if obj.GetObjectKind().GroupVersionKind() == bundleGVK {
+			continue
+		}
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
+			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
+				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), manifests.CertManager, err)
+		}
+	}
+	return nil
+}
+
+// applyTrustBundle applies only the trust-manager Bundle resources from the cert-manager
+// component manifests. If the trust-manager CRD is not installed, the error is logged
+// and skipped — the Bundle will be applied once trust-manager becomes available.
+func (r *KonfluxCertManagerReconciler) applyTrustBundle(ctx context.Context, tc *tracking.Client) error {
+	log := logf.FromContext(ctx)
+
+	objects, err := r.ObjectStore.GetForComponent(manifests.CertManager)
+	if err != nil {
+		return fmt.Errorf("failed to get parsed manifests for CertManager: %w", err)
+	}
+
+	for _, obj := range objects {
+		if obj.GetObjectKind().GroupVersionKind() != bundleGVK {
+			continue
+		}
+		if err := tc.ApplyOwned(ctx, obj); err != nil {
+			// Skip if the trust-manager CRD is not installed.
+			// The Bundle will be applied once trust-manager becomes available.
+			if tracking.IsNoKindMatchError(err) {
+				log.Info("Skipping trust-manager Bundle: CRD not installed",
+					"name", obj.GetName(),
+					"apiVersion", bundleGVK.GroupVersion().String(),
+				)
+				continue
+			}
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
 				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), manifests.CertManager, err)
 		}
