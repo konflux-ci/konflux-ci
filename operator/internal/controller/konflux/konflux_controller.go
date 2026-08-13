@@ -21,6 +21,7 @@ import (
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -411,6 +412,10 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Check cert-manager availability, set CertManagerAvailable condition, and override Ready if missing.
 	certManagerResult := r.checkCertManagerAvailability(ctx, konflux)
 
+	// Forward ClusterCABundleDistributed from the KonfluxCertManager sub-CR to the
+	// parent Konflux CR, and override Ready if distribution is enabled but not satisfied.
+	caBundleResult := r.forwardClusterCABundleCondition(certManager, konflux)
+
 	// Update the status subresource with all collected conditions
 	if err := r.Status().Update(ctx, konflux); err != nil {
 		log.Error(err, "Failed to update Konflux status")
@@ -419,9 +424,13 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	log.Info("Successfully reconciled Konflux")
 
-	// Requeue when cert-manager check failed (transient error) or cert-manager is missing,
-	// so we periodically re-run the check and status self-heals when cert-manager is installed.
-	return certManagerResult, nil
+	// Requeue when cert-manager check or CA bundle check needs retrying.
+	// Pick the shorter requeue interval for faster convergence.
+	result := certManagerResult
+	if caBundleResult.RequeueAfter > 0 && (result.RequeueAfter == 0 || caBundleResult.RequeueAfter < result.RequeueAfter) {
+		result = caBundleResult
+	}
+	return result, nil
 }
 
 // checkCertManagerAvailability checks if cert-manager CRDs are installed, sets the
@@ -474,6 +483,44 @@ func (r *KonfluxReconciler) checkCertManagerAvailability(
 		},
 	})
 	return result
+}
+
+// forwardClusterCABundleCondition reads the ClusterCABundleDistributed condition from the
+// KonfluxCertManager sub-CR and forwards it to the parent Konflux CR. If distribution is
+// enabled but the Bundle has not been applied (condition is False), Ready is overridden
+// to False — mirroring the CertManagerAvailable pattern.
+func (r *KonfluxReconciler) forwardClusterCABundleCondition(
+	certManagerCR *konfluxv1alpha1.KonfluxCertManager,
+	konflux *konfluxv1alpha1.Konflux,
+) ctrl.Result {
+	subCRCond := apimeta.FindStatusCondition(certManagerCR.GetConditions(), constant.ConditionTypeClusterCABundleDistributed)
+	if subCRCond == nil {
+		// Sub-CR hasn't set the condition yet (first reconcile or race condition).
+		// Skip — the next reconcile will pick it up.
+		return ctrl.Result{}
+	}
+
+	// Forward the condition to the parent Konflux CR as a top-level condition.
+	condition.SetCondition(konflux, metav1.Condition{
+		Type:    constant.ConditionTypeClusterCABundleDistributed,
+		Status:  subCRCond.Status,
+		Reason:  subCRCond.Reason,
+		Message: subCRCond.Message,
+	})
+
+	// Override Ready to False when distribution is enabled but not satisfied.
+	condition.OverrideReadyIfDependencyFalse(konflux, []condition.DependencyOverride{
+		{
+			ConditionType: constant.ConditionTypeClusterCABundleDistributed,
+			Reason:        condition.ReasonBundleNotDistributed,
+			Message:       "trust-manager Bundle not yet applied; cluster-wide CA trust distribution is not ready.",
+		},
+	})
+
+	if subCRCond.Status == metav1.ConditionFalse {
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}
+	}
+	return ctrl.Result{}
 }
 
 // applyKonfluxBuildService creates or updates the KonfluxBuildService CR.

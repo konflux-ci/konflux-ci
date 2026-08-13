@@ -22,6 +22,7 @@ import (
 	"time"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -171,6 +172,11 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return errHandler.HandleStatusUpdateError(ctx, err)
 	}
 
+	// Set ClusterCABundleDistributed condition.
+	// This condition is informational on the sub-CR; the Konflux parent controller
+	// forwards it to the parent CR and uses it to gate Konflux Ready.
+	r.setClusterCABundleCondition(certManager, isOpenShift, requeueForTrustManager)
+
 	// Update status
 	if err := r.Status().Update(ctx, certManager); err != nil {
 		log.Error(err, "Failed to update status")
@@ -244,6 +250,56 @@ func (r *KonfluxCertManagerReconciler) applyTrustBundle(ctx context.Context, tc 
 		}
 	}
 	return crdMissing, nil
+}
+
+// setClusterCABundleCondition sets the ClusterCABundleDistributed condition on the
+// KonfluxCertManager sub-CR. The condition is informational at the sub-CR level —
+// the Konflux parent controller forwards it to the parent CR and gates Konflux Ready.
+//
+// When distribution is enabled and the Bundle is applied: True.
+// When distribution is enabled but the CRD is missing: False (parent gates Ready).
+// When distribution is disabled: True with an opt-out reason.
+func (r *KonfluxCertManagerReconciler) setClusterCABundleCondition(
+	certManager *konfluxv1alpha1.KonfluxCertManager,
+	isOpenShift bool,
+	crdMissing bool,
+) {
+	shouldDistribute := certManager.Spec.ShouldDistributeClusterCABundle(isOpenShift)
+
+	if shouldDistribute {
+		if crdMissing {
+			condition.SetCondition(certManager, metav1.Condition{
+				Type:    constant.ConditionTypeClusterCABundleDistributed,
+				Status:  metav1.ConditionFalse,
+				Reason:  condition.ReasonBundleNotDistributed,
+				Message: "trust-manager Bundle not yet applied; trust-manager CRD is not installed. The operator will retry.",
+			})
+		} else {
+			condition.SetCondition(certManager, metav1.Condition{
+				Type:    constant.ConditionTypeClusterCABundleDistributed,
+				Status:  metav1.ConditionTrue,
+				Reason:  condition.ReasonBundleDistributed,
+				Message: "trust-manager Bundle applied; cluster-wide trusted-ca ConfigMaps are managed.",
+			})
+		}
+		return
+	}
+
+	// Distribution is disabled — set True with opt-out reason.
+	var message string
+	if certManager.Spec.DistributeClusterCABundle != nil && !*certManager.Spec.DistributeClusterCABundle {
+		message = "Cluster CA bundle distribution is disabled (distributeClusterCABundle=false). The operator will not apply a trust-manager Bundle."
+	} else if isOpenShift {
+		message = "Cluster CA bundle distribution is not enabled (OpenShift default). Per-namespace trusted CA injection is used instead of a trust-manager Bundle."
+	} else {
+		message = "Cluster CA bundle distribution is disabled."
+	}
+	condition.SetCondition(certManager, metav1.Condition{
+		Type:    constant.ConditionTypeClusterCABundleDistributed,
+		Status:  metav1.ConditionTrue,
+		Reason:  condition.ReasonBundleDistributionDisabled,
+		Message: message,
+	})
 }
 
 // SetupWithManager sets up the controller with the Manager.

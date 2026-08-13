@@ -477,18 +477,21 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
 				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
 
-				By("waiting for Ready=True")
+				By("waiting for Ready=True and ClusterCABundleDistributed=False")
 				Eventually(func(g Gomega) {
 					updated := &konfluxv1alpha1.KonfluxCertManager{}
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
 					readyCond := meta.FindStatusCondition(updated.Status.Conditions, condition.TypeReady)
 					g.Expect(readyCond).NotTo(BeNil())
 					g.Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
-				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
-				By("verifying trust-manager Bundle was applied (will fail apply due to missing CRD, but PKI should succeed)")
-				// Note: trust-manager CRD is not installed in envtest, so the Bundle
-				// apply is skipped with a log. The reconciler should still reach Ready=True.
+					// Distribution defaults to true on non-OpenShift, but trust-manager CRD
+					// is not installed in envtest → condition False (parent gates Konflux Ready).
+					caBundleCond := meta.FindStatusCondition(updated.Status.Conditions, constant.ConditionTypeClusterCABundleDistributed)
+					g.Expect(caBundleCond).NotTo(BeNil())
+					g.Expect(caBundleCond.Status).To(Equal(metav1.ConditionFalse))
+					g.Expect(caBundleCond.Reason).To(Equal(condition.ReasonBundleNotDistributed))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 			})
 		})
 
@@ -509,13 +512,20 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
 				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
 
-				By("waiting for Ready=True")
+				By("waiting for Ready=True and ClusterCABundleDistributed=True (disabled)")
 				Eventually(func(g Gomega) {
 					updated := &konfluxv1alpha1.KonfluxCertManager{}
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
 					readyCond := meta.FindStatusCondition(updated.Status.Conditions, condition.TypeReady)
 					g.Expect(readyCond).NotTo(BeNil())
 					g.Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
+
+					// Distribution defaults to false on OpenShift → condition True (opt-out).
+					caBundleCond := meta.FindStatusCondition(updated.Status.Conditions, constant.ConditionTypeClusterCABundleDistributed)
+					g.Expect(caBundleCond).NotTo(BeNil())
+					g.Expect(caBundleCond.Status).To(Equal(metav1.ConditionTrue))
+					g.Expect(caBundleCond.Reason).To(Equal(condition.ReasonBundleDistributionDisabled))
+					g.Expect(caBundleCond.Message).To(ContainSubstring("OpenShift default"))
 				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 			})
 		})
@@ -540,13 +550,19 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
 				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
 
-				By("waiting for Ready=True (Bundle CRD not installed so apply is skipped)")
+				By("waiting for Ready=True and ClusterCABundleDistributed=False (CRD missing)")
 				Eventually(func(g Gomega) {
 					updated := &konfluxv1alpha1.KonfluxCertManager{}
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
 					readyCond := meta.FindStatusCondition(updated.Status.Conditions, condition.TypeReady)
 					g.Expect(readyCond).NotTo(BeNil())
 					g.Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
+
+					// Explicitly enabled but trust-manager CRD not installed → condition False.
+					caBundleCond := meta.FindStatusCondition(updated.Status.Conditions, constant.ConditionTypeClusterCABundleDistributed)
+					g.Expect(caBundleCond).NotTo(BeNil())
+					g.Expect(caBundleCond.Status).To(Equal(metav1.ConditionFalse))
+					g.Expect(caBundleCond.Reason).To(Equal(condition.ReasonBundleNotDistributed))
 				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 			})
 		})
@@ -571,13 +587,20 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
 				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
 
-				By("waiting for Ready=True")
+				By("waiting for Ready=True and ClusterCABundleDistributed=True (disabled)")
 				Eventually(func(g Gomega) {
 					updated := &konfluxv1alpha1.KonfluxCertManager{}
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
 					readyCond := meta.FindStatusCondition(updated.Status.Conditions, condition.TypeReady)
 					g.Expect(readyCond).NotTo(BeNil())
 					g.Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
+
+					// Explicitly disabled → condition True (opt-out).
+					caBundleCond := meta.FindStatusCondition(updated.Status.Conditions, constant.ConditionTypeClusterCABundleDistributed)
+					g.Expect(caBundleCond).NotTo(BeNil())
+					g.Expect(caBundleCond.Status).To(Equal(metav1.ConditionTrue))
+					g.Expect(caBundleCond.Reason).To(Equal(condition.ReasonBundleDistributionDisabled))
+					g.Expect(caBundleCond.Message).To(ContainSubstring("distributeClusterCABundle=false"))
 				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 			})
 		})
