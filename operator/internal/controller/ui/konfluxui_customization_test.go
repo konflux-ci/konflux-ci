@@ -1326,6 +1326,118 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		envMap := envToMap(initContainer.Env)
 		g.Expect(envMap).To(gomega.HaveKeyWithValue("KITE_ENABLED", "true"))
 	})
+
+	t.Run("tektonResults with hostname sets TEKTON_RESULTS_HOSTNAME on init container", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		tektonResults := &konfluxv1alpha1.TektonResultsSpec{
+			Hostname: "tekton-results-api-service.openshift-pipelines.svc.cluster.local",
+		}
+
+		initOpts := appendTektonResultsOverlays(tektonResults, nil)
+		c := applyContainerOpts(initOpts)
+		envMap := envToMap(c.Env)
+
+		g.Expect(envMap).To(gomega.HaveKeyWithValue(
+			"TEKTON_RESULTS_HOSTNAME",
+			"tekton-results-api-service.openshift-pipelines.svc.cluster.local",
+		))
+	})
+
+	t.Run("tektonResults with empty hostname clears TEKTON_RESULTS_HOSTNAME", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		withHostname := &konfluxv1alpha1.TektonResultsSpec{
+			Hostname: "tekton-results-api-service.tekton-pipelines.svc.cluster.local",
+		}
+		cleared := &konfluxv1alpha1.TektonResultsSpec{}
+
+		initOpts := appendTektonResultsOverlays(withHostname, nil)
+		c := applyContainerOpts(initOpts)
+		g.Expect(envToMap(c.Env)).To(gomega.HaveKeyWithValue(
+			"TEKTON_RESULTS_HOSTNAME",
+			"tekton-results-api-service.tekton-pipelines.svc.cluster.local",
+		))
+
+		clearOpts := appendTektonResultsOverlays(cleared, nil)
+		for _, opt := range clearOpts {
+			opt(c, customization.DeploymentContext{})
+		}
+		g.Expect(envToMap(c.Env)).To(gomega.HaveKeyWithValue("TEKTON_RESULTS_HOSTNAME", ""))
+	})
+
+	t.Run("nil tektonResults leaves TEKTON_RESULTS_HOSTNAME unchanged", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		c := &corev1.Container{
+			Env: []corev1.EnvVar{
+				{Name: "TEKTON_RESULTS_HOSTNAME", Value: "stale.example.svc.cluster.local"},
+			},
+		}
+
+		initOpts, _, err := appendEndpointOverlays(&konfluxv1alpha1.ProxyEndpointsSpec{
+			Kite: &konfluxv1alpha1.EndpointSpec{Enabled: true},
+		}, nil, nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		for _, opt := range initOpts {
+			opt(c, customization.DeploymentContext{})
+		}
+
+		g.Expect(envToMap(c.Env)).To(gomega.HaveKeyWithValue(
+			"TEKTON_RESULTS_HOSTNAME", "stale.example.svc.cluster.local",
+		))
+	})
+
+	t.Run("tektonResults hostname applied to proxy deployment init container", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := &konfluxv1alpha1.ProxyDeploymentSpec{
+			TektonResults: &konfluxv1alpha1.TektonResultsSpec{
+				Hostname: "tekton-results-api-service.tekton-pipelines.svc.cluster.local",
+			},
+		}
+
+		deployment := getUIDeployment(t, proxyDeploymentName)
+		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		err = overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		initContainer := testutil.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
+		g.Expect(initContainer).NotTo(gomega.BeNil())
+		envMap := envToMap(initContainer.Env)
+		g.Expect(envMap).To(gomega.HaveKeyWithValue(
+			"TEKTON_RESULTS_HOSTNAME",
+			"tekton-results-api-service.tekton-pipelines.svc.cluster.local",
+		))
+	})
+
+	t.Run("clearing tektonResults hostname resets TEKTON_RESULTS_HOSTNAME on deployment", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		withHostname := &konfluxv1alpha1.ProxyDeploymentSpec{
+			TektonResults: &konfluxv1alpha1.TektonResultsSpec{
+				Hostname: "tekton-results-api-service.tekton-pipelines.svc.cluster.local",
+			},
+		}
+		cleared := &konfluxv1alpha1.ProxyDeploymentSpec{
+			TektonResults: &konfluxv1alpha1.TektonResultsSpec{},
+		}
+
+		deployment := getUIDeployment(t, proxyDeploymentName)
+		oauthOpts := buildOAuth2ProxyOptions(testEndpoint, false)
+
+		overlay, err := buildProxyOverlay(withHostname, nil, "", false, oauthOpts...)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(overlay.ApplyToDeployment(deployment)).To(gomega.Succeed())
+
+		initContainer := testutil.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
+		g.Expect(initContainer).NotTo(gomega.BeNil())
+		g.Expect(envToMap(initContainer.Env)).To(gomega.HaveKey("TEKTON_RESULTS_HOSTNAME"))
+
+		overlay, err = buildProxyOverlay(cleared, nil, "", false, oauthOpts...)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(overlay.ApplyToDeployment(deployment)).To(gomega.Succeed())
+
+		initContainer = testutil.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
+		g.Expect(initContainer).NotTo(gomega.BeNil())
+		g.Expect(envToMap(initContainer.Env)).To(gomega.HaveKeyWithValue("TEKTON_RESULTS_HOSTNAME", ""))
+	})
 }
 
 func TestAppendRuntimeConfigOverlays(t *testing.T) {
