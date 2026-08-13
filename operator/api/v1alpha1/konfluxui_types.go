@@ -104,6 +104,12 @@ type ProxyDeploymentSpec struct {
 
 // ProxyEndpointsSpec configures optional backend endpoints proxied by the UI reverse proxy.
 type ProxyEndpointsSpec struct {
+	// TektonResults configures the Tekton Results plugin endpoint.
+	// When enabled, the hostname is passed to the init container via TEKTON_RESULTS_HOSTNAME,
+	// bypassing DNS probing. When not configured, the init container discovers the Results
+	// API via DNS with retry.
+	// +optional
+	TektonResults *EndpointSpec `json:"tektonResults,omitempty"`
 	// Kite enables the Kite plugin endpoint.
 	// When enabled, requests to /api/k8s/plugins/kite/ are proxied to the Kite backend.
 	// +optional

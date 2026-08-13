@@ -241,8 +241,11 @@ Backend services (Tekton Results, KubeArchive, etc.) are added via
    import /mnt/caddy-snippets/*.caddy
    ```
 
-4. If a backend is not available (DNS resolution fails), its snippet is
-   simply not generated and Caddy starts without that route.
+4. If a backend is not available after retries (DNS resolution fails), its
+   snippet is simply not generated and Caddy starts without that route.
+   Tekton Results discovery retries with exponential backoff for up to
+   `TEKTON_RESULTS_RETRY_TIMEOUT` seconds (default 30) to tolerate late
+   service startup.
 
 To add a new backend:
 

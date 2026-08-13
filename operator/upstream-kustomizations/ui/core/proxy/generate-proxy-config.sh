@@ -33,14 +33,47 @@ resolve_tekton_results() {
   return 1
 }
 
-# Process tekton-results template
+# Process tekton-results template.
+# Retry DNS resolution with exponential backoff so that late-starting
+# Tekton Results services are discovered without a proxy pod restart.
+# TEKTON_RESULTS_RETRY_TIMEOUT controls the total retry window (default 30s).
 if [ -f "${TEMPLATES_DIR}/tekton-results.caddy" ]; then
-  if hostname=$(resolve_tekton_results); then
+  retry_timeout="${TEKTON_RESULTS_RETRY_TIMEOUT:-30}"
+  elapsed=0
+  delay=1
+  hostname=""
+
+  while true; do
+    if hostname=$(resolve_tekton_results); then
+      break
+    fi
+
+    if [ "${elapsed}" -ge "${retry_timeout}" ]; then
+      break
+    fi
+
+    # Cap delay so we don't overshoot the timeout
+    remaining=$((retry_timeout - elapsed))
+    if [ "${delay}" -gt "${remaining}" ]; then
+      delay="${remaining}"
+    fi
+
+    log "tekton-results not yet available, retrying in ${delay}s (${elapsed}/${retry_timeout}s elapsed)"
+    sleep "${delay}"
+    elapsed=$((elapsed + delay))
+    # Exponential backoff: 1, 2, 4, 8, capped at 10
+    delay=$((delay * 2))
+    if [ "${delay}" -gt 10 ]; then
+      delay=10
+    fi
+  done
+
+  if [ -n "${hostname}" ]; then
     log "tekton-results resolved to ${hostname}"
     sed "s/__TEKTON_RESULTS_HOSTNAME__/${hostname}/" \
       "${TEMPLATES_DIR}/tekton-results.caddy" > "${SNIPPETS_DIR}/tekton-results.caddy"
   else
-    log "tekton-results not available, skipping"
+    log "tekton-results not available after ${retry_timeout}s, skipping"
   fi
 fi
 
