@@ -42,6 +42,20 @@ rules:
   - delete
   - deletecollection
 - apiGroups:
+  - konflux-ci.dev
+  resources:
+  - components
+  - imagerepositories
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+  - deletecollection
+- apiGroups:
   - appstudio.redhat.com
   resources:
   - snapshots
@@ -235,6 +249,15 @@ rules:
   - list
   - watch
 - apiGroups:
+  - konflux-ci.dev
+  resources:
+  - components
+  - imagerepositories
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - appstudio.redhat.com
   resources:
   - snapshots
@@ -367,6 +390,18 @@ rules:
   - components
   - imagerepositories
   - snapshots
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+- apiGroups:
+  - konflux-ci.dev
+  resources:
+  - components
+  - imagerepositories
   verbs:
   - get
   - list
@@ -528,6 +563,15 @@ rules:
   - appstudio.redhat.com
   resources:
   - applications
+  - components
+  - imagerepositories
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - konflux-ci.dev
+  resources:
   - components
   - imagerepositories
   verbs:
