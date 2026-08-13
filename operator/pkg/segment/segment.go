@@ -19,6 +19,7 @@ package segment
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -88,6 +89,34 @@ func ResolveWriteKeySecretRef(
 		)
 	}
 	return string(value), nil
+}
+
+// StripURLScheme removes the scheme (e.g. "https://") from rawURL, returning
+// only the host and path (e.g. "api.segment.io/v1").
+//
+// KonfluxSegmentBridgeSpec.GetSegmentAPIURL() always returns a full URL with
+// an "https://" scheme (enforced by CRD validation), because the CronJob's
+// Go HTTP client needs the full URL to build SEGMENT_BATCH_API. The browser
+// Segment SDK (analytics-next) is a different consumer of the same
+// configured host: it takes a bare "apiHost" (no scheme) and a separate
+// "protocol" setting, then concatenates them itself
+// (`${protocol}://${apiHost}`). Passing the full URL as apiHost therefore
+// produces a malformed "https://https://..." address that fails silently
+// in the browser before any network request is attempted.
+//
+// This helper must only be applied where the value is destined for the
+// browser SDK (the segment-bridge-config Secret's "url" key, served at
+// /segment/url). It must NOT be applied to the CronJob's SEGMENT_BATCH_API
+// construction, which correctly needs the scheme intact.
+//
+// If rawURL fails to parse, it is returned unchanged so callers fail loudly
+// downstream rather than silently losing data.
+func StripURLScheme(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Host == "" {
+		return rawURL
+	}
+	return u.Host + u.Path
 }
 
 // LogWriteKeyResolution logs how the Segment write key was resolved.

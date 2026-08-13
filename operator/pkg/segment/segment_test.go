@@ -82,6 +82,29 @@ func TestLogWriteKeyResolution(t *testing.T) {
 	})
 }
 
+func TestStripURLScheme(t *testing.T) {
+	t.Run("strips https scheme from the default Segment API URL", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		g.Expect(StripURLScheme("https://api.segment.io/v1")).To(gomega.Equal("api.segment.io/v1"))
+	})
+
+	t.Run("strips https scheme from a custom proxy URL, preserving host and path", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		g.Expect(StripURLScheme("https://console.redhat.com/connections/api/v1")).
+			To(gomega.Equal("console.redhat.com/connections/api/v1"))
+	})
+
+	t.Run("returns input unchanged when it cannot be parsed", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		g.Expect(StripURLScheme("://not a url")).To(gomega.Equal("://not a url"))
+	})
+
+	t.Run("returns input unchanged when there is no host", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		g.Expect(StripURLScheme("api.segment.io/v1")).To(gomega.Equal("api.segment.io/v1"))
+	})
+}
+
 func TestResolveWriteKeySecretRef(t *testing.T) {
 	ctx := context.Background()
 	namespace := "segment-bridge"

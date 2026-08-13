@@ -791,7 +791,12 @@ func (r *KonfluxUIReconciler) reconcileSegmentSecret(ctx context.Context, tc *tr
 		return "", nil
 	}
 
-	apiURL := segmentBridge.Spec.GetSegmentAPIURL()
+	// The browser Segment SDK (analytics-next) expects a bare "apiHost" with
+	// no scheme -- it builds the request URL itself as `${protocol}://${apiHost}`.
+	// GetSegmentAPIURL() always returns a full "https://..." URL (required by
+	// the CronJob's SEGMENT_BATCH_API), so strip the scheme here for this
+	// browser-facing consumer only. See segment.StripURLScheme for details.
+	apiURL := segment.StripURLScheme(segmentBridge.Spec.GetSegmentAPIURL())
 
 	// Create the content-hashed Secret and apply it via the tracking client
 	secret := hashedsecret.Build(

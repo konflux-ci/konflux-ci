@@ -49,6 +49,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/hashedsecret"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/ingress"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/segment"
 )
 
 const (
@@ -2006,10 +2007,13 @@ var _ = Describe("KonfluxUI Controller", func() {
 
 	Context("Segment Secret reconciliation via Reconcile", Serial, func() {
 		// expectedSecretName computes the hashed secret name for a given write key and API URL.
+		// apiURL is the full CR-style URL (with scheme); it is stripped down to a bare
+		// host+path here to match what the controller actually stores for the
+		// browser-facing Secret (see segment.StripURLScheme).
 		expectedSecretName := func(writeKey, apiURL string) string {
 			return hashedsecret.Build(segmentSecretBaseName, uiNamespace, map[string]string{
 				segmentKeyWriteKey: writeKey,
-				segmentKeyAPIURL:   apiURL,
+				segmentKeyAPIURL:   segment.StripURLScheme(apiURL),
 			}).Name
 		}
 
@@ -2122,7 +2126,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 					Name: name, Namespace: uiNamespace,
 				}, secret)).To(Succeed())
 				g.Expect(string(secret.Data[segmentKeyWriteKey])).To(Equal("test-write-key"))
-				g.Expect(string(secret.Data[segmentKeyAPIURL])).To(Equal(konfluxv1alpha1.DefaultSegmentAPIURL))
+				g.Expect(string(secret.Data[segmentKeyAPIURL])).To(Equal(segment.StripURLScheme(konfluxv1alpha1.DefaultSegmentAPIURL)))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
@@ -2143,7 +2147,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 					Name: name, Namespace: uiNamespace,
 				}, secret)).To(Succeed())
 				g.Expect(string(secret.Data[segmentKeyWriteKey])).To(Equal("test-write-key"))
-				g.Expect(string(secret.Data[segmentKeyAPIURL])).To(Equal("https://console.redhat.com/connections/api/v1"))
+				g.Expect(string(secret.Data[segmentKeyAPIURL])).To(Equal("console.redhat.com/connections/api/v1"))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
