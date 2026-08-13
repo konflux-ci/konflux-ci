@@ -14,7 +14,7 @@ configMapGenerator:
   - name: ec-defaults
     namespace: enterprise-contract-service
     literals:
-      - verify_ec_task_bundle=quay.io/conforma/tekton-task:latest@sha256:e097724eb48295d640d245591576273dc33e2d3e70248f2cc241684f35d47dbf
+      - verify_ec_task_bundle=quay.io/conforma/tekton-task:latest@sha256:4fecfbff530f37b888172b63f12c9901e8c5f529f684902c1b1f1059fb174e9b
       - verify_ec_task_git_url=https://github.com/conforma/cli.git
       - verify_ec_task_git_revision=0250ec50382270294955ee4baab5d910f685b74f
       - verify_ec_task_git_pathInRepo=tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml
