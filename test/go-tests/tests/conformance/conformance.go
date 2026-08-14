@@ -101,6 +101,8 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 					if err := grantIntegrationRunnerJobRBAC(fw.AsKubeAdmin, userNamespace); err != nil {
 						klog.Warningf("conformance: grantIntegrationRunnerJobRBAC failed (non-fatal in pre-provisioned env): %v", err)
 					}
+					verifyECPPatched(fw.AsKubeAdmin, "default", managedNamespace)
+					verifyPreProvisionedRBAC(fw.AsKubeAdmin, userNamespace)
 					gomega.Expect(verifyReleasePrerequisites(fw.AsKubeAdmin, managedNamespace)).To(gomega.Succeed())
 				} else {
 					gomega.Expect(patchECPForE2E(fw.AsKubeAdmin, "default", managedNamespace)).To(gomega.Succeed())
@@ -111,7 +113,11 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 			})
 
 			ginkgo.AfterAll(func() {
-				if strings.EqualFold(os.Getenv("E2E_SKIP_CLEANUP"), "true") || ginkgo.CurrentSpecReport().Failed() || strings.Contains(ginkgo.GinkgoLabelFilter(), upstreamKonfluxTestLabel) {
+				skipCleanup := strings.EqualFold(os.Getenv("E2E_SKIP_CLEANUP"), "true") || ginkgo.CurrentSpecReport().Failed()
+				if !isPreProvisioned() {
+					skipCleanup = skipCleanup || strings.Contains(ginkgo.GinkgoLabelFilter(), upstreamKonfluxTestLabel)
+				}
+				if skipCleanup {
 					return
 				}
 				klog.Info("conformance: cleaning up")
@@ -120,8 +126,7 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				defer cancel()
 
 				if isPreProvisioned() {
-					cleanupManagedResources(fw, managedNamespace)
-					cleanupTenantResources(fw, userNamespace)
+					cleanupTenantResources(ctx, fw, userNamespace)
 				} else {
 					if err := fw.AsKubeAdmin.CommonController.KubeInterface().CoreV1().Namespaces().Delete(ctx, managedNamespace, metav1.DeleteOptions{}); err != nil {
 						klog.Warningf("conformance cleanup: delete managed namespace %s: %v", managedNamespace, err)
@@ -137,6 +142,15 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				cleanupWithRetry(ctx, "cleanup webhooks", func() error {
 					return build.CleanupWebhooks(ctx, fw, componentRepositoryName)
 				})
+
+				if isPreProvisioned() {
+					// The release PipelineRun is created asynchronously by the
+					// release-service and may not exist until ~50s after the
+					// last spec finishes. Wait so the sweep catches it.
+					klog.Info("conformance: waiting for late-arriving release PipelineRuns")
+					time.Sleep(15 * time.Second)
+					cleanupManagedResources(ctx, fw, managedNamespace)
+				}
 			})
 
 			// --- Application & Component Setup ---
