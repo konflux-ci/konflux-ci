@@ -423,4 +423,4 @@ spec:
     - github.com/konflux-ci/konflux-operator-trusted-sources//data?ref=8eaa4f44c2bf67e6e2b20c5777b0d73e978c632b
     name: Default
     policy:
-    - oci::quay.io/conforma/release-policy:latest@sha256:f7c5997c273af6f3f3e0c8cb1b34ee44a796e2649df4303c6f121ae774db3dee
+    - oci::quay.io/conforma/release-policy:latest@sha256:a4884114c40819068c5371603601c66aedbfb7e533c15817af3c3d1f7b50d2bc
