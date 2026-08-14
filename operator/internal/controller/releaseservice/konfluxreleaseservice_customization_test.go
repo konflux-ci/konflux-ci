@@ -367,7 +367,7 @@ func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
 
 		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
 		g.Expect(rscSpec).NotTo(gomega.BeNil())
-		g.Expect(rscSpec["debug"]).To(gomega.BeTrue())
+		g.Expect(rscSpec[rscFieldDebug]).To(gomega.BeTrue())
 	})
 
 	t.Run("sets debug to false when spec.Debug is false", func(t *testing.T) {
@@ -384,7 +384,7 @@ func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
 
 		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
 		g.Expect(rscSpec).NotTo(gomega.BeNil())
-		g.Expect(rscSpec["debug"]).To(gomega.BeFalse())
+		g.Expect(rscSpec[rscFieldDebug]).To(gomega.BeFalse())
 	})
 
 	t.Run("sets EmptyDirOverrides when provided", func(t *testing.T) {
@@ -412,19 +412,19 @@ func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
 
 		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
 		g.Expect(rscSpec).NotTo(gomega.BeNil())
-		overrides, ok := rscSpec["EmptyDirOverrides"].([]interface{})
+		overrides, ok := rscSpec[rscFieldEmptyDirOverrides].([]interface{})
 		g.Expect(ok).To(gomega.BeTrue())
 		g.Expect(overrides).To(gomega.HaveLen(2))
 
 		first, _ := overrides[0].(map[string]interface{})
-		g.Expect(first["url"]).To(gomega.Equal(".*"))
-		g.Expect(first["revision"]).To(gomega.Equal(".*"))
-		g.Expect(first["pathInRepo"]).To(gomega.Equal("pipelines/managed/fbc-release/fbc-release.yaml"))
+		g.Expect(first[rscFieldURL]).To(gomega.Equal(".*"))
+		g.Expect(first[rscFieldRevision]).To(gomega.Equal(".*"))
+		g.Expect(first[rscFieldPathInRepo]).To(gomega.Equal("pipelines/managed/fbc-release/fbc-release.yaml"))
 
 		second, _ := overrides[1].(map[string]interface{})
-		g.Expect(second["url"]).To(gomega.Equal("https://github.com/example/repo"))
-		g.Expect(second["revision"]).To(gomega.Equal("main"))
-		g.Expect(second["pathInRepo"]).To(gomega.Equal("pipelines/test.yaml"))
+		g.Expect(second[rscFieldURL]).To(gomega.Equal("https://github.com/example/repo"))
+		g.Expect(second[rscFieldRevision]).To(gomega.Equal("main"))
+		g.Expect(second[rscFieldPathInRepo]).To(gomega.Equal("pipelines/test.yaml"))
 	})
 
 	t.Run("removes EmptyDirOverrides when not provided", func(t *testing.T) {
@@ -432,9 +432,9 @@ func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
 		rsc := getReleaseServiceConfig(t)
 		// First set some overrides
 		rsc.Object["spec"] = map[string]interface{}{
-			"debug": false,
-			"EmptyDirOverrides": []interface{}{
-				map[string]interface{}{"url": ".*", "revision": ".*", "pathInRepo": "test.yaml"},
+			rscFieldDebug: false,
+			rscFieldEmptyDirOverrides: []interface{}{
+				map[string]interface{}{rscFieldURL: ".*", rscFieldRevision: ".*", rscFieldPathInRepo: "test.yaml"},
 			},
 		}
 
@@ -449,7 +449,7 @@ func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
 
 		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
 		g.Expect(rscSpec).NotTo(gomega.BeNil())
-		_, exists := rscSpec["EmptyDirOverrides"]
+		_, exists := rscSpec[rscFieldEmptyDirOverrides]
 		g.Expect(exists).To(gomega.BeFalse())
 	})
 
@@ -474,8 +474,8 @@ func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
 
 		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
 		g.Expect(rscSpec).NotTo(gomega.BeNil())
-		g.Expect(rscSpec["debug"]).To(gomega.BeTrue())
-		overrides, ok := rscSpec["EmptyDirOverrides"].([]interface{})
+		g.Expect(rscSpec[rscFieldDebug]).To(gomega.BeTrue())
+		overrides, ok := rscSpec[rscFieldEmptyDirOverrides].([]interface{})
 		g.Expect(ok).To(gomega.BeTrue())
 		g.Expect(overrides).To(gomega.HaveLen(1))
 	})
@@ -490,8 +490,8 @@ func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
 
 		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
 		g.Expect(rscSpec).NotTo(gomega.BeNil())
-		g.Expect(rscSpec["debug"]).To(gomega.BeFalse())
-		_, exists := rscSpec["EmptyDirOverrides"]
+		g.Expect(rscSpec[rscFieldDebug]).To(gomega.BeFalse())
+		_, exists := rscSpec[rscFieldEmptyDirOverrides]
 		g.Expect(exists).To(gomega.BeFalse())
 	})
 
@@ -520,8 +520,8 @@ func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
 
 		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
 		g.Expect(rscSpec).NotTo(gomega.BeNil())
-		g.Expect(rscSpec["debug"]).To(gomega.BeTrue())
-		overrides, ok := rscSpec["EmptyDirOverrides"].([]interface{})
+		g.Expect(rscSpec[rscFieldDebug]).To(gomega.BeTrue())
+		overrides, ok := rscSpec[rscFieldEmptyDirOverrides].([]interface{})
 		g.Expect(ok).To(gomega.BeTrue())
 		g.Expect(overrides).To(gomega.HaveLen(1))
 	})
