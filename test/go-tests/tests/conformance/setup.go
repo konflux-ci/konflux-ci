@@ -1,7 +1,6 @@
 package conformance
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -13,11 +12,24 @@ import (
 
 	ecp "github.com/conforma/crds/api/v1alpha1"
 	buildcontrollers "github.com/konflux-ci/build-service/controllers"
+	releaseApi "github.com/konflux-ci/release-service/api/v1alpha1"
 
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/framework"
 	ginkgo "github.com/onsi/ginkgo/v2"
+	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
+	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// isPreProvisioned returns true when the suite is targeting a pre-provisioned
+// (e.g. staging) cluster where the managed namespace is externally managed.
+// The single source of truth is the E2E_MANAGED_NAMESPACE env var.
+func isPreProvisioned() bool {
+	return os.Getenv("E2E_MANAGED_NAMESPACE") != ""
+}
 
 // runSetupRelease downloads setup-release.sh from the ConfigMap shipped by the
 // operator (konflux-cli/setup-release) and executes it to create the managed
@@ -35,9 +47,11 @@ func runSetupRelease(appName, componentName, tenantNS, managedNS, releaseName st
 	}
 	defer os.RemoveAll(tmpDir)
 
-	preProvisioned := namespaceExists(managedNS)
+	preProvisioned := isPreProvisioned()
 	if preProvisioned {
-		klog.Infof("conformance: managed namespace %s already exists, adapting setup-release.sh for pre-provisioned cluster", managedNS)
+		klog.Infof("conformance: managed namespace %s is pre-provisioned (E2E_MANAGED_NAMESPACE set), adapting setup-release.sh", managedNS)
+
+		origLen := len(scriptContent)
 
 		// Strip the namespace creation heredoc -- the namespace is managed
 		// externally (e.g. GitOps) and the user may lack cluster-scope permissions.
@@ -45,14 +59,21 @@ func runSetupRelease(appName, componentName, tenantNS, managedNS, releaseName st
 		scriptContent = nsApply.ReplaceAll(scriptContent,
 			[]byte(`echo "Namespace ${MANAGED_NS} already exists, skipping creation"`))
 
-		// Disable errexit so the script creates all resources it has permission
-		// for and continues past RBAC errors. The upstream script sets errexit in
-		// both the shebang ("#!/bin/bash -e") and "set -eu"; strip -e from both
-		// while keeping -u (unset variable check).
-		scriptContent = bytes.Replace(scriptContent,
-			[]byte("#!/bin/bash -e"), []byte("#!/bin/bash"), 1)
-		scriptContent = bytes.Replace(scriptContent,
-			[]byte("set -eu"), []byte("set -u"), 1)
+		// Wrap only the RoleBinding creation commands with || true so the script
+		// continues past RBAC errors that are expected in pre-provisioned clusters
+		// (where RBAC is managed by GitOps). Keep errexit active for all other
+		// commands so real failures surface immediately.
+		rbRe := regexp.MustCompile(`(?m)(kubectl apply -f - <<EOF\napiVersion: rbac\.authorization\.k8s\.io/v1\nkind: RoleBinding)`)
+		scriptContent = rbRe.ReplaceAll(scriptContent,
+			[]byte("kubectl apply -f - <<EOF || true\napiVersion: rbac.authorization.k8s.io/v1\nkind: RoleBinding"))
+
+		ssoRe := regexp.MustCompile("(\\{.data.\\$SSO_ACCOUNT\\}\")" + `\)`)
+		scriptContent = ssoRe.ReplaceAll(scriptContent,
+			[]byte("${1} 2>/dev/null || true)"))
+
+		if len(scriptContent) == origLen {
+			klog.Warningf("conformance: regex adaptations did not modify setup-release.sh; upstream script format may have changed")
+		}
 	}
 
 	scriptPath := filepath.Join(tmpDir, "setup-release.sh")
@@ -79,12 +100,6 @@ func runSetupRelease(appName, componentName, tenantNS, managedNS, releaseName st
 		}
 	}
 	return nil
-}
-
-// namespaceExists returns true if the namespace already exists on the cluster.
-func namespaceExists(ns string) bool {
-	cmd := exec.Command(resolveKubectl(), "get", "namespace", ns, "--no-headers")
-	return cmd.Run() == nil
 }
 
 // e2eECPExclusions lists policy rules to exclude during E2E tests. Conformance runs
@@ -166,46 +181,82 @@ func downloadScriptFromConfigMap(namespace, configMapName, key string) ([]byte, 
 
 // grantIntegrationRunnerJobRBAC creates a Role + RoleBinding so that the
 // konflux-integration-runner SA can manage Jobs and Pods in the tenant namespace.
-// TODO: remove once the integration test pipeline no longer creates/deletes Jobs
-// directly and instead runs the image via a Tekton task.
-func grantIntegrationRunnerJobRBAC(namespace string) error {
-	manifest := fmt.Sprintf(`
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: integration-runner-jobs
-  namespace: %[1]s
-rules:
-- apiGroups: [""]
-  resources: [pods]
-  verbs: [get, list, watch, delete]
-- apiGroups: [""]
-  resources: [pods/log]
-  verbs: [get, list]
-- apiGroups: [batch]
-  resources: [jobs]
-  verbs: [create, delete, get, list, watch]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: integration-runner-jobs
-  namespace: %[1]s
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: integration-runner-jobs
-subjects:
-- kind: ServiceAccount
-  name: konflux-integration-runner
-  namespace: %[1]s
-`, namespace)
+func grantIntegrationRunnerJobRBAC(hub *framework.ControllerHub, namespace string) error {
+	ctx := context.Background()
+	client := hub.CommonController.KubeRest()
 
-	cmd := exec.Command(resolveKubectl(), "apply", "-f", "-")
-	cmd.Stdin = strings.NewReader(manifest)
-	cmd.Stdout = ginkgo.GinkgoWriter
-	cmd.Stderr = ginkgo.GinkgoWriter
-	return cmd.Run()
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "integration-runner-jobs",
+			Namespace: namespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get", "list", "watch", "delete"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods/log"},
+				Verbs:     []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{"batch"},
+				Resources: []string{"jobs"},
+				Verbs:     []string{"create", "delete", "get", "list", "watch"},
+			},
+		},
+	}
+
+	existing := &rbacv1.Role{}
+	err := client.Get(ctx, crclient.ObjectKeyFromObject(role), existing)
+	if err != nil {
+		if !k8sErrors.IsNotFound(err) {
+			return fmt.Errorf("get Role %s/%s: %w", namespace, role.Name, err)
+		}
+		if err := client.Create(ctx, role); err != nil {
+			return fmt.Errorf("create Role %s/%s: %w", namespace, role.Name, err)
+		}
+	} else {
+		existing.Rules = role.Rules
+		if err := client.Update(ctx, existing); err != nil {
+			return fmt.Errorf("update Role %s/%s: %w", namespace, role.Name, err)
+		}
+	}
+
+	rb := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "integration-runner-jobs",
+			Namespace: namespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     "integration-runner-jobs",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "konflux-integration-runner",
+				Namespace: namespace,
+			},
+		},
+	}
+
+	existingRB := &rbacv1.RoleBinding{}
+	err = client.Get(ctx, crclient.ObjectKeyFromObject(rb), existingRB)
+	if err != nil {
+		if !k8sErrors.IsNotFound(err) {
+			return fmt.Errorf("get RoleBinding %s/%s: %w", namespace, rb.Name, err)
+		}
+		if err := client.Create(ctx, rb); err != nil {
+			return fmt.Errorf("create RoleBinding %s/%s: %w", namespace, rb.Name, err)
+		}
+	}
+	// RoleBinding roleRef is immutable; if it already exists with the right roleRef, no update needed.
+
+	return nil
 }
 
 // dumpDiagnostics logs component build status, application status, PaC repository state,
@@ -247,37 +298,80 @@ func dumpDiagnostics(hub *framework.ControllerHub, componentName, appName, names
 
 // cleanupManagedResources deletes test-created resources from the managed namespace
 // on pre-provisioned clusters where we cannot delete the namespace itself.
-func cleanupManagedResources(_ context.Context, fw *framework.Framework, ns string) {
-	cleanupTimeout := 2 * time.Minute
+func cleanupManagedResources(fw *framework.Framework, ns string) {
+	client := fw.AsKubeAdmin.CommonController.KubeRest()
+	ctx := context.Background()
+
 	if err := fw.AsKubeAdmin.TektonController.DeleteAllPipelineRunsInASpecificNamespace(ns); err != nil {
 		klog.Warningf("conformance cleanup: delete PipelineRuns in %s: %v", ns, err)
 	}
-	if err := fw.AsKubeAdmin.HasController.DeleteAllImageRepositoriesInASpecificNamespace(ns, cleanupTimeout); err != nil {
+	if err := fw.AsKubeAdmin.HasController.DeleteAllImageRepositoriesInASpecificNamespace(ns, cleanupResourceTimeout); err != nil {
 		klog.Warningf("conformance cleanup: delete ImageRepositories in %s: %v", ns, err)
 	}
 	if err := fw.AsKubeAdmin.TektonController.DeleteEnterpriseContractPolicy("default", ns, false); err != nil {
 		klog.Warningf("conformance cleanup: delete ECP in %s: %v", ns, err)
 	}
-	// Delete all ReleasePlanAdmissions via kubectl since the framework has no bulk list method.
-	cmd := exec.Command(resolveKubectl(), "delete", "releaseplanadmissions.appstudio.redhat.com", "--all", "-n", ns)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		klog.Warningf("conformance cleanup: delete ReleasePlanAdmissions in %s: %v: %s", ns, err, string(out))
+	if err := client.DeleteAllOf(ctx, &releaseApi.ReleasePlanAdmission{}, crclient.InNamespace(ns)); err != nil {
+		klog.Warningf("conformance cleanup: delete ReleasePlanAdmissions in %s: %v", ns, err)
 	}
 }
 
 // cleanupTenantResources deletes test-created resources from the tenant namespace
 // on pre-provisioned clusters.
-func cleanupTenantResources(_ context.Context, fw *framework.Framework, ns string) {
-	cleanupTimeout := 2 * time.Minute
-	if err := fw.AsKubeAdmin.HasController.DeleteAllApplicationsInASpecificNamespace(ns, cleanupTimeout); err != nil {
+func cleanupTenantResources(fw *framework.Framework, ns string) {
+	client := fw.AsKubeAdmin.CommonController.KubeRest()
+	ctx := context.Background()
+
+	if err := fw.AsKubeAdmin.HasController.DeleteAllApplicationsInASpecificNamespace(ns, cleanupResourceTimeout); err != nil {
 		klog.Warningf("conformance cleanup: delete Applications in %s: %v", ns, err)
 	}
-	if err := fw.AsKubeAdmin.IntegrationController.DeleteAllSnapshotsInASpecificNamespace(ns, cleanupTimeout); err != nil {
+	if err := fw.AsKubeAdmin.IntegrationController.DeleteAllSnapshotsInASpecificNamespace(ns, cleanupResourceTimeout); err != nil {
 		klog.Warningf("conformance cleanup: delete Snapshots in %s: %v", ns, err)
 	}
 	if err := fw.AsKubeAdmin.TektonController.DeleteAllPipelineRunsInASpecificNamespace(ns); err != nil {
 		klog.Warningf("conformance cleanup: delete PipelineRuns in %s: %v", ns, err)
 	}
+	if err := client.DeleteAllOf(ctx, &releaseApi.ReleasePlan{}, crclient.InNamespace(ns)); err != nil {
+		klog.Warningf("conformance cleanup: delete ReleasePlans in %s: %v", ns, err)
+	}
+	if err := client.DeleteAllOf(ctx, &releaseApi.Release{}, crclient.InNamespace(ns)); err != nil {
+		klog.Warningf("conformance cleanup: delete Releases in %s: %v", ns, err)
+	}
+}
+
+// verifyReleasePrerequisites checks that the critical resources created by
+// setup-release.sh actually exist. This catches silent failures in
+// pre-provisioned mode where some script commands may fail non-fatally.
+func verifyReleasePrerequisites(hub *framework.ControllerHub, managedNS string) error {
+	ctx := context.Background()
+	client := hub.CommonController.KubeRest()
+
+	// Verify ECP exists in managed namespace.
+	ecpList := &ecp.EnterpriseContractPolicyList{}
+	if err := client.List(ctx, ecpList, crclient.InNamespace(managedNS)); err != nil {
+		return fmt.Errorf("list ECPs in %s: %w", managedNS, err)
+	}
+	if len(ecpList.Items) == 0 {
+		return fmt.Errorf("no EnterpriseContractPolicy found in %s; setup-release.sh may have failed", managedNS)
+	}
+
+	// Verify at least one ReleasePlanAdmission exists.
+	rpaList := &releaseApi.ReleasePlanAdmissionList{}
+	if err := client.List(ctx, rpaList, crclient.InNamespace(managedNS)); err != nil {
+		return fmt.Errorf("list ReleasePlanAdmissions in %s: %w", managedNS, err)
+	}
+	if len(rpaList.Items) == 0 {
+		return fmt.Errorf("no ReleasePlanAdmission found in %s; setup-release.sh may have failed", managedNS)
+	}
+
+	// Verify the managed namespace ServiceAccount exists.
+	sa := &corev1.ServiceAccount{}
+	saKey := crclient.ObjectKey{Namespace: managedNS, Name: "release-pipeline"}
+	if err := client.Get(ctx, saKey, sa); err != nil {
+		klog.Warningf("conformance: release-pipeline ServiceAccount not found in %s (may be externally managed): %v", managedNS, err)
+	}
+
+	return nil
 }
 
 // cleanupWithRetry runs fn until it returns nil, ctx is done, or a 30s per-step retry budget elapses.

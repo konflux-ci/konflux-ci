@@ -93,11 +93,18 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 
 				releaseName := fmt.Sprintf("release-%s", suffix)
 				gomega.Expect(runSetupRelease(appSpec.ApplicationName, componentName, userNamespace, managedNamespace, releaseName)).To(gomega.Succeed())
-				if err := patchECPForE2E(fw.AsKubeAdmin, "default", managedNamespace); err != nil {
-					klog.Warningf("conformance: patchECPForE2E failed (non-fatal): %v", err)
-				}
-				if err := grantIntegrationRunnerJobRBAC(userNamespace); err != nil {
-					klog.Warningf("conformance: grantIntegrationRunnerJobRBAC failed (non-fatal): %v", err)
+				preProvisioned := isPreProvisioned()
+				if preProvisioned {
+					if err := patchECPForE2E(fw.AsKubeAdmin, "default", managedNamespace); err != nil {
+						klog.Warningf("conformance: patchECPForE2E failed (non-fatal in pre-provisioned env): %v", err)
+					}
+					if err := grantIntegrationRunnerJobRBAC(fw.AsKubeAdmin, userNamespace); err != nil {
+						klog.Warningf("conformance: grantIntegrationRunnerJobRBAC failed (non-fatal in pre-provisioned env): %v", err)
+					}
+					gomega.Expect(verifyReleasePrerequisites(fw.AsKubeAdmin, managedNamespace)).To(gomega.Succeed())
+				} else {
+					gomega.Expect(patchECPForE2E(fw.AsKubeAdmin, "default", managedNamespace)).To(gomega.Succeed())
+					gomega.Expect(grantIntegrationRunnerJobRBAC(fw.AsKubeAdmin, userNamespace)).To(gomega.Succeed())
 				}
 
 				buildPipelineAnnotation = build.GetBuildPipelineBundleAnnotation(appSpec.ComponentSpec.BuildPipelineType)
@@ -112,15 +119,13 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				ctx, cancel := context.WithTimeout(context.Background(), budget)
 				defer cancel()
 
-				if namespaceExists(managedNamespace) && os.Getenv("E2E_MANAGED_NAMESPACE") != "" {
-					// Pre-provisioned cluster: delete resources individually
-					// since we cannot delete the managed namespace itself.
-					cleanupManagedResources(ctx, fw, managedNamespace)
-					cleanupTenantResources(ctx, fw, userNamespace)
+				if isPreProvisioned() {
+					cleanupManagedResources(fw, managedNamespace)
+					cleanupTenantResources(fw, userNamespace)
 				} else {
-					// Kind / full-control: deleting the managed namespace
-					// cascades all resources inside it.
-					_ = fw.AsKubeAdmin.CommonController.KubeInterface().CoreV1().Namespaces().Delete(ctx, managedNamespace, metav1.DeleteOptions{})
+					if err := fw.AsKubeAdmin.CommonController.KubeInterface().CoreV1().Namespaces().Delete(ctx, managedNamespace, metav1.DeleteOptions{}); err != nil {
+						klog.Warningf("conformance cleanup: delete managed namespace %s: %v", managedNamespace, err)
+					}
 				}
 
 				cleanupWithRetry(ctx, "delete PaC branch", func() error {
