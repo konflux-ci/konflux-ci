@@ -1031,7 +1031,7 @@ spec:
                   - from
                   - to
                   type: object
-                maxItems: 256
+                maxItems: 360
                 type: array
             type: object
             x-kubernetes-validations:
@@ -1859,7 +1859,7 @@ spec:
         - --leader-elector-retry-period=5s
         command:
         - /manager
-        image: quay.io/konflux-ci/integration-service:c74fb04c9c00c7f85824a54ec64f7c7cbf1ea1d5
+        image: quay.io/konflux-ci/integration-service:2db971488b15ae57a5ce66c89e64f4229c84152b
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1943,7 +1943,7 @@ spec:
             - --zap-log-level=debug
             - --pr-snapshots-to-keep=70
             - --non-pr-snapshots-to-keep=640
-            image: quay.io/konflux-ci/integration-service:c74fb04c9c00c7f85824a54ec64f7c7cbf1ea1d5
+            image: quay.io/konflux-ci/integration-service:2db971488b15ae57a5ce66c89e64f4229c84152b
             imagePullPolicy: Always
             name: test-gc
             resources:
