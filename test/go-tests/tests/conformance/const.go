@@ -16,10 +16,6 @@ const (
 	// (Go duration string, e.g. 90s, 2m).
 	conformanceCleanupMaxDuration = 2 * time.Minute
 
-	// cleanupResourceTimeout is used by per-resource cleanup functions when
-	// framework methods require a wait budget.
-	cleanupResourceTimeout = 2 * time.Minute
-
 	// Intervals — keep these high enough to avoid GitHub API rate limits
 	// when multiple concurrent test runs share the same GitHub App.
 	defaultPollingInterval  = time.Second * 10
