@@ -28,7 +28,7 @@ require (
 	github.com/openshift/client-go v0.0.0-20260728123811-92b24dd0dd1f
 	github.com/openshift/library-go v0.0.0-20260730085458-26e4f3728f73
 	github.com/redhat-appstudio/jvm-build-service v0.0.0-20250301023318-b47170d413c5
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.0
 	github.com/tektoncd/cli v0.45.0
 	github.com/tektoncd/pipeline v1.13.1
 	github.com/xanzy/go-gitlab v0.114.0
