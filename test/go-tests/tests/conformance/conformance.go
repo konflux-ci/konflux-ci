@@ -29,6 +29,7 @@ import (
 	e2eConfig "github.com/konflux-ci/konflux-ci/test/go-tests/tests/conformance/config"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
+	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // conformanceCleanupBudget returns the max wall time to wait for AfterAll cleanup.
@@ -61,7 +62,7 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 
 	fw := &framework.Framework{}
 	var buildPipelineAnnotation map[string]string
-	var componentNewBaseBranch, gitRevision, componentRepositoryName, componentName string
+	var componentNewBaseBranch, gitRevision, componentRepositoryName, componentName, releaseName string
 
 	for _, appSpec := range e2eConfig.UpstreamAppSpecs {
 		appSpec := appSpec
@@ -85,27 +86,41 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				}
 				klog.Info("conformance: namespaces ready", "user", userNamespace, "managed", managedNamespace)
 
-				suffix := util.GenerateRandomString(4)
-				componentName = fmt.Sprintf("%s-%s", appSpec.ComponentSpec.Name, suffix)
-				appSpec.ApplicationName = fmt.Sprintf("%s-%s", appSpec.ApplicationName, suffix)
-				pacBranchName = constants.PaCPullRequestBranchPrefix + componentName
-				componentRepositoryName = utils.ExtractGitRepositoryNameFromURL(appSpec.ComponentSpec.GitSourceUrl)
+			suffix := util.GenerateRandomString(4)
+			componentName = fmt.Sprintf("%s-%s", appSpec.ComponentSpec.Name, suffix)
+			appSpec.ApplicationName = fmt.Sprintf("%s-%s", appSpec.ApplicationName, suffix)
+			pacBranchName = constants.PaCPullRequestBranchPrefix + componentName
+			componentRepositoryName = utils.ExtractGitRepositoryNameFromURL(appSpec.ComponentSpec.GitSourceUrl)
 
-				releaseName := fmt.Sprintf("release-%s", suffix)
-				gomega.Expect(runSetupRelease(appSpec.ApplicationName, componentName, userNamespace, managedNamespace, releaseName)).To(gomega.Succeed())
+			if isPreProvisioned() {
+				pruneDanglingSASecrets(context.Background(), fw.AsKubeAdmin.CommonController.KubeRest(), managedNamespace)
+			}
+
+			releaseName = fmt.Sprintf("release-%s", suffix)
+			gomega.Expect(runSetupRelease(appSpec.ApplicationName, componentName, userNamespace, managedNamespace, releaseName)).To(gomega.Succeed())
 				preProvisioned := isPreProvisioned()
+				ecpName := "default"
 				if preProvisioned {
-					if err := patchECPForE2E(fw.AsKubeAdmin, "default", managedNamespace); err != nil {
+					ecpName = "ecp-" + strings.TrimPrefix(releaseName, "release-")
+					client := fw.AsKubeAdmin.CommonController.KubeRest()
+					taSuffix := strings.TrimPrefix(releaseName, "release-")
+					runIRNames := []string{componentName, "trusted-artifacts-" + taSuffix}
+					if err := ensureSASecret(context.Background(), client, managedNamespace, runIRNames); err != nil {
+						klog.Warningf("conformance: ensureSASecret failed (non-fatal): %v", err)
+					}
+					if err := patchECPForE2E(fw.AsKubeAdmin, ecpName, managedNamespace); err != nil {
 						klog.Warningf("conformance: patchECPForE2E failed (non-fatal in pre-provisioned env): %v", err)
 					}
 					if err := grantIntegrationRunnerJobRBAC(fw.AsKubeAdmin, userNamespace); err != nil {
 						klog.Warningf("conformance: grantIntegrationRunnerJobRBAC failed (non-fatal in pre-provisioned env): %v", err)
 					}
-					verifyECPPatched(fw.AsKubeAdmin, "default", managedNamespace)
-					verifyPreProvisionedRBAC(fw.AsKubeAdmin, userNamespace)
+					gomega.Expect(verifyECPPatched(fw.AsKubeAdmin, ecpName, managedNamespace)).To(gomega.Succeed())
+					if err := verifyPreProvisionedRBAC(fw.AsKubeAdmin, userNamespace); err != nil {
+						klog.Warningf("conformance: pre-provisioned RBAC check failed (non-fatal, tests may still pass): %v", err)
+					}
 					gomega.Expect(verifyReleasePrerequisites(fw.AsKubeAdmin, managedNamespace)).To(gomega.Succeed())
 				} else {
-					gomega.Expect(patchECPForE2E(fw.AsKubeAdmin, "default", managedNamespace)).To(gomega.Succeed())
+					gomega.Expect(patchECPForE2E(fw.AsKubeAdmin, ecpName, managedNamespace)).To(gomega.Succeed())
 					gomega.Expect(grantIntegrationRunnerJobRBAC(fw.AsKubeAdmin, userNamespace)).To(gomega.Succeed())
 				}
 
@@ -113,9 +128,9 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 			})
 
 			ginkgo.AfterAll(func() {
-				skipCleanup := strings.EqualFold(os.Getenv("E2E_SKIP_CLEANUP"), "true") || ginkgo.CurrentSpecReport().Failed()
+				skipCleanup := strings.EqualFold(os.Getenv("E2E_SKIP_CLEANUP"), "true")
 				if !isPreProvisioned() {
-					skipCleanup = skipCleanup || strings.Contains(ginkgo.GinkgoLabelFilter(), upstreamKonfluxTestLabel)
+					skipCleanup = skipCleanup || ginkgo.CurrentSpecReport().Failed() || strings.Contains(ginkgo.GinkgoLabelFilter(), upstreamKonfluxTestLabel)
 				}
 				if skipCleanup {
 					return
@@ -126,7 +141,7 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				defer cancel()
 
 				if isPreProvisioned() {
-					cleanupTenantResources(ctx, fw, userNamespace)
+					cleanupTenantResources(ctx, fw, userNamespace, appSpec.ApplicationName, componentName, releaseName)
 				} else {
 					if err := fw.AsKubeAdmin.CommonController.KubeInterface().CoreV1().Namespaces().Delete(ctx, managedNamespace, metav1.DeleteOptions{}); err != nil {
 						klog.Warningf("conformance cleanup: delete managed namespace %s: %v", managedNamespace, err)
@@ -143,13 +158,23 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 					return build.CleanupWebhooks(ctx, fw, componentRepositoryName)
 				})
 
-				if isPreProvisioned() {
-					// The release PipelineRun is created asynchronously by the
-					// release-service and may not exist until ~50s after the
-					// last spec finishes. Wait so the sweep catches it.
-					klog.Info("conformance: waiting for late-arriving release PipelineRuns")
-					time.Sleep(15 * time.Second)
-					cleanupManagedResources(ctx, fw, managedNamespace)
+			if isPreProvisioned() {
+				// The release PipelineRun is created asynchronously by the
+				// release-service and may not exist until ~50s after the
+				// last spec finishes. Poll until it appears, then sweep.
+				// This is non-fatal: if the test failed before reaching the
+				// release stage, no PipelineRun will ever appear and that's fine.
+				client := fw.AsKubeAdmin.CommonController.KubeRest()
+				appLabel := crclient.MatchingLabels{"appstudio.openshift.io/application": appSpec.ApplicationName}
+				pollDeadline := time.Now().Add(60 * time.Second)
+				for time.Now().Before(pollDeadline) {
+					prList := &tektonapi.PipelineRunList{}
+					if err := client.List(ctx, prList, crclient.InNamespace(managedNamespace), appLabel); err == nil && len(prList.Items) > 0 {
+						break
+					}
+					time.Sleep(5 * time.Second)
+				}
+				cleanupManagedResources(ctx, fw, managedNamespace, appSpec.ApplicationName, componentName, releaseName)
 				}
 			})
 

@@ -13,6 +13,7 @@ import (
 	ecp "github.com/conforma/crds/api/v1alpha1"
 	appstudioApi "github.com/konflux-ci/application-api/api/v1alpha1"
 	buildcontrollers "github.com/konflux-ci/build-service/controllers"
+	imagecontroller "github.com/konflux-ci/image-controller/api/v1alpha1"
 	integrationv1beta2 "github.com/konflux-ci/integration-service/api/v1beta2"
 	releaseApi "github.com/konflux-ci/release-service/api/v1alpha1"
 	pipelinev1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
@@ -32,6 +33,39 @@ import (
 // The single source of truth is the E2E_MANAGED_NAMESPACE env var.
 func isPreProvisioned() bool {
 	return os.Getenv("E2E_MANAGED_NAMESPACE") != ""
+}
+
+// pruneDanglingSASecrets removes references to non-existent Secrets from
+// the release-pipeline ServiceAccount. This is always safe to call, even
+// during concurrent runs, because it only removes references that point
+// to Secrets that have already been deleted.
+func pruneDanglingSASecrets(ctx context.Context, client crclient.Client, managedNS string) {
+	sa := &corev1.ServiceAccount{}
+	saKey := crclient.ObjectKey{Namespace: managedNS, Name: "release-pipeline"}
+	if err := client.Get(ctx, saKey, sa); err != nil {
+		if !k8sErrors.IsNotFound(err) {
+			klog.Warningf("conformance pre-run: get SA: %v", err)
+		}
+		return
+	}
+	pruned := make([]corev1.ObjectReference, 0, len(sa.Secrets))
+	for _, ref := range sa.Secrets {
+		secret := &corev1.Secret{}
+		sKey := crclient.ObjectKey{Namespace: managedNS, Name: ref.Name}
+		if err := client.Get(ctx, sKey, secret); err != nil {
+			if k8sErrors.IsNotFound(err) {
+				klog.Infof("conformance pre-run: pruning dangling secret ref %q from SA", ref.Name)
+				continue
+			}
+		}
+		pruned = append(pruned, ref)
+	}
+	if len(pruned) != len(sa.Secrets) {
+		sa.Secrets = pruned
+		if err := client.Update(ctx, sa); err != nil {
+			klog.Warningf("conformance pre-run: update SA after pruning: %v", err)
+		}
+	}
 }
 
 // runSetupRelease downloads setup-release.sh from the ConfigMap shipped by the
@@ -55,38 +89,72 @@ func runSetupRelease(appName, componentName, tenantNS, managedNS, releaseName st
 	if preProvisioned {
 		klog.Infof("conformance: managed namespace %s is pre-provisioned (E2E_MANAGED_NAMESPACE set), adapting setup-release.sh", managedNS)
 
+		// Give per-run names to shared resources so concurrent test runs
+		// don't clobber each other. Each run owns its own resources and
+		// cleans them up independently.
+		taSuffix := strings.TrimPrefix(releaseName, "release-")
+
+		taName := "trusted-artifacts-" + taSuffix
+		scriptContent = []byte(strings.ReplaceAll(string(scriptContent), "trusted-artifacts", taName))
+		klog.Infof("conformance: renamed trusted-artifacts -> %s for run isolation", taName)
+
+		ecpName := "ecp-" + taSuffix
+		oldJQ := `.metadata.namespace = "'"${MANAGED_NS}"'"'`
+		newJQ := `.metadata.namespace = "'"${MANAGED_NS}"'" | .metadata.name = "` + ecpName + `"'`
+		scriptContent = []byte(strings.Replace(string(scriptContent), oldJQ, newJQ, 1))
+		// Point the ReleasePlanAdmission at the per-run ECP.
+		scriptContent = []byte(strings.Replace(string(scriptContent), "policy: ${CONFORMA_POLICY}", "policy: "+ecpName, 1))
+		klog.Infof("conformance: renamed ECP -> %s for run isolation", ecpName)
+
 		type scriptPatch struct {
-			name string
-			re   *regexp.Regexp
-			repl []byte
+			name          string
+			re            *regexp.Regexp
+			repl          []byte
+			expectedCount int // 0 means "any number > 0"
 		}
 		patches := []scriptPatch{
 			{
-				name: "namespace-creation",
-				re:   regexp.MustCompile(`(?s)kubectl apply -f - <<EOF\napiVersion: v1\nkind: Namespace\n.*?\nEOF`),
-				repl: []byte(`echo "Namespace ${MANAGED_NS} already exists, skipping creation"`),
+				name:          "namespace-creation",
+				re:            regexp.MustCompile(`(?s)kubectl apply -f - <<EOF\napiVersion: v1\nkind: Namespace\n.*?\nEOF`),
+				repl:          []byte(`echo "Namespace ${MANAGED_NS} already exists, skipping creation"`),
+				expectedCount: 1,
 			},
 			{
 				// The || true must go on the kubectl line (after <<EOF), NOT after the
 				// closing EOF marker -- placing it after EOF breaks the heredoc terminator.
-				name: "rolebinding-non-fatal",
-				re:   regexp.MustCompile(`(?m)(kubectl apply -f - <<EOF\napiVersion: rbac\.authorization\.k8s\.io/v1\nkind: RoleBinding)`),
-				repl: []byte("kubectl apply -f - <<EOF || true\napiVersion: rbac.authorization.k8s.io/v1\nkind: RoleBinding"),
+				name:          "rolebinding-non-fatal",
+				re:            regexp.MustCompile(`(?m)(kubectl apply -f - <<EOF\napiVersion: rbac\.authorization\.k8s\.io/v1\nkind: RoleBinding)`),
+				repl:          []byte("kubectl apply -f - <<EOF || true\napiVersion: rbac.authorization.k8s.io/v1\nkind: RoleBinding"),
+				expectedCount: 2,
 			},
 			{
 				// SSO secret fetch may return Forbidden; the script already handles
 				// empty SSO_TOKEN but set -e kills it on the kubectl error.
-				name: "sso-secret-non-fatal",
-				re:   regexp.MustCompile("(\\{.data.\\$SSO_ACCOUNT\\}\")" + `\)`),
-				repl: []byte("${1} 2>/dev/null || true)"),
+				name:          "sso-secret-non-fatal",
+				re:            regexp.MustCompile("(\\{.data.\\$SSO_ACCOUNT\\}\")" + `\)`),
+				repl:          []byte("${1} 2>/dev/null || true)"),
+				expectedCount: 1,
+			},
+			{
+				// Skip SA creation -- in pre-provisioned mode the SA is managed
+				// externally. Per-component push secrets are linked in Go via
+				// ensureSASecret to avoid overwriting secrets from concurrent runs.
+				name:          "skip-sa-creation",
+				re:            regexp.MustCompile(`(?s)kubectl apply -f - <<EOF\napiVersion: v1\nkind: ServiceAccount\n.*?\nEOF`),
+				repl:          []byte(`echo "ServiceAccount release-pipeline is pre-provisioned, skipping creation"`),
+				expectedCount: 1,
 			},
 		}
 		for _, p := range patches {
-			before := len(scriptContent)
-			scriptContent = p.re.ReplaceAll(scriptContent, p.repl)
-			if len(scriptContent) == before {
+			matches := p.re.FindAllIndex(scriptContent, -1)
+			if len(matches) == 0 {
 				klog.Warningf("conformance: regex patch %q did not match setup-release.sh; upstream script format may have changed", p.name)
+				continue
 			}
+			if p.expectedCount > 0 && len(matches) != p.expectedCount {
+				klog.Warningf("conformance: regex patch %q matched %d times (expected %d); upstream script may have changed", p.name, len(matches), p.expectedCount)
+			}
+			scriptContent = p.re.ReplaceAll(scriptContent, p.repl)
 		}
 	}
 
@@ -114,6 +182,117 @@ func runSetupRelease(appName, componentName, tenantNS, managedNS, releaseName st
 		}
 	}
 	return nil
+}
+
+// ensureSASecret reads the push-secret names from this run's ImageRepositories
+// and appends them to the release-pipeline ServiceAccount's secrets list.
+// This is safe for concurrent test runs because it appends (never replaces) secrets,
+// preventing one run from overwriting another run's credentials.
+func ensureSASecret(ctx context.Context, client crclient.Client, managedNS string, irNames []string) error {
+	secretNames := make([]string, 0, len(irNames))
+
+	for _, irName := range irNames {
+		ir := &imagecontroller.ImageRepository{}
+		key := crclient.ObjectKey{Namespace: managedNS, Name: irName}
+		if err := client.Get(ctx, key, ir); err != nil {
+			klog.Warningf("conformance: get ImageRepository %s/%s: %v", managedNS, irName, err)
+			continue
+		}
+		if name := ir.Status.Credentials.PushSecretName; name != "" {
+			secretNames = append(secretNames, name)
+		}
+	}
+
+	if len(secretNames) == 0 {
+		return fmt.Errorf("no push-secret names found in ImageRepository status for %v", irNames)
+	}
+
+	sa := &corev1.ServiceAccount{}
+	saKey := crclient.ObjectKey{Namespace: managedNS, Name: "release-pipeline"}
+	if err := client.Get(ctx, saKey, sa); err != nil {
+		return fmt.Errorf("get release-pipeline SA in %s: %w", managedNS, err)
+	}
+
+	// Prune dangling references -- secrets that no longer exist in the
+	// namespace (left over from runs whose cleanup predated this fix).
+	pruned := make([]corev1.ObjectReference, 0, len(sa.Secrets))
+	for _, ref := range sa.Secrets {
+		secret := &corev1.Secret{}
+		sKey := crclient.ObjectKey{Namespace: managedNS, Name: ref.Name}
+		if err := client.Get(ctx, sKey, secret); err != nil {
+			if k8sErrors.IsNotFound(err) {
+				klog.Infof("conformance: pruning dangling secret ref %q from release-pipeline SA", ref.Name)
+				continue
+			}
+		}
+		pruned = append(pruned, ref)
+	}
+	sa.Secrets = pruned
+
+	existing := make(map[string]bool, len(sa.Secrets))
+	for _, ref := range sa.Secrets {
+		existing[ref.Name] = true
+	}
+
+	for _, name := range secretNames {
+		if !existing[name] {
+			sa.Secrets = append(sa.Secrets, corev1.ObjectReference{Name: name})
+			klog.Infof("conformance: appending secret %q to release-pipeline SA in %s", name, managedNS)
+		}
+	}
+
+	if err := client.Update(ctx, sa); err != nil {
+		return fmt.Errorf("update release-pipeline SA in %s: %w", managedNS, err)
+	}
+	return nil
+}
+
+// removeSASecrets reads the push-secret names from this run's ImageRepositories
+// and removes only those references from the release-pipeline SA, leaving
+// secrets belonging to other concurrent runs intact.
+func removeSASecrets(ctx context.Context, client crclient.Client, managedNS string, irNames []string) {
+	toRemove := make(map[string]bool)
+
+	for _, irName := range irNames {
+		ir := &imagecontroller.ImageRepository{}
+		key := crclient.ObjectKey{Namespace: managedNS, Name: irName}
+		if err := client.Get(ctx, key, ir); err != nil {
+			if !k8sErrors.IsNotFound(err) {
+				klog.Warningf("conformance cleanup: get ImageRepository %s/%s for SA secret removal: %v", managedNS, irName, err)
+			}
+			continue
+		}
+		if name := ir.Status.Credentials.PushSecretName; name != "" {
+			toRemove[name] = true
+		}
+	}
+
+	if len(toRemove) == 0 {
+		return
+	}
+
+	sa := &corev1.ServiceAccount{}
+	saKey := crclient.ObjectKey{Namespace: managedNS, Name: "release-pipeline"}
+	if err := client.Get(ctx, saKey, sa); err != nil {
+		klog.Warningf("conformance cleanup: get release-pipeline SA for secret removal: %v", err)
+		return
+	}
+
+	filtered := make([]corev1.ObjectReference, 0, len(sa.Secrets))
+	for _, ref := range sa.Secrets {
+		if !toRemove[ref.Name] {
+			filtered = append(filtered, ref)
+		} else {
+			klog.Infof("conformance cleanup: removing secret %q from release-pipeline SA in %s", ref.Name, managedNS)
+		}
+	}
+
+	if len(filtered) != len(sa.Secrets) {
+		sa.Secrets = filtered
+		if err := client.Update(ctx, sa); err != nil {
+			klog.Warningf("conformance cleanup: update release-pipeline SA after secret removal: %v", err)
+		}
+	}
 }
 
 // e2eECPExclusions lists policy rules to exclude during E2E tests. Conformance runs
@@ -330,11 +509,17 @@ func dumpDiagnostics(hub *framework.ControllerHub, componentName, appName, names
 
 // cleanupManagedResources deletes test-created resources from the managed namespace
 // on pre-provisioned clusters where we cannot delete the namespace itself.
-func cleanupManagedResources(ctx context.Context, fw *framework.Framework, ns string) {
+// appName scopes the cleanup to resources belonging to this test run's application,
+// avoiding interference with concurrent test executions in the same namespace.
+// componentName identifies this run's ImageRepositories so that only their push
+// secrets are removed from the release-pipeline SA.
+func cleanupManagedResources(ctx context.Context, fw *framework.Framework, ns, appName, componentName, releaseName string) {
 	client := fw.AsKubeAdmin.CommonController.KubeRest()
 
+	appLabel := crclient.MatchingLabels{"appstudio.openshift.io/application": appName}
+
 	prList := &pipelinev1.PipelineRunList{}
-	if err := client.List(ctx, prList, crclient.InNamespace(ns)); err != nil {
+	if err := client.List(ctx, prList, crclient.InNamespace(ns), appLabel); err != nil {
 		klog.Warningf("conformance cleanup: list PipelineRuns in %s: %v", ns, err)
 	} else {
 		for i := range prList.Items {
@@ -350,33 +535,69 @@ func cleanupManagedResources(ctx context.Context, fw *framework.Framework, ns st
 			}
 		}
 	}
-	if err := fw.AsKubeAdmin.HasController.DeleteAllImageRepositoriesInASpecificNamespace(ns, cleanupResourceTimeout); err != nil {
-		klog.Warningf("conformance cleanup: delete ImageRepositories in %s: %v", ns, err)
-	}
-	if err := fw.AsKubeAdmin.TektonController.DeleteEnterpriseContractPolicy("default", ns, false); err != nil {
-		klog.Warningf("conformance cleanup: delete ECP in %s: %v", ns, err)
-	}
-	rpaList := &releaseApi.ReleasePlanAdmissionList{}
-	if err := client.List(ctx, rpaList, crclient.InNamespace(ns)); err != nil {
-		klog.Warningf("conformance cleanup: list ReleasePlanAdmissions in %s: %v", ns, err)
-	} else {
-		for i := range rpaList.Items {
-			if err := client.Delete(ctx, &rpaList.Items[i]); err != nil {
-				klog.Warningf("conformance cleanup: delete ReleasePlanAdmission %s/%s: %v", ns, rpaList.Items[i].Name, err)
+	// Build the per-run list of ImageRepository names.
+	taSuffix := strings.TrimPrefix(releaseName, "release-")
+	taIRName := "trusted-artifacts-" + taSuffix
+	irNames := []string{componentName, taIRName}
+
+	// Remove this run's push secrets from the SA before deleting ImageRepositories,
+	// since we need to read the secret names from ImageRepository status.
+	removeSASecrets(ctx, client, ns, irNames)
+	// Delete only this run's ImageRepositories, not other runs'.
+	for _, irName := range irNames {
+		ir := &imagecontroller.ImageRepository{}
+		irKey := crclient.ObjectKey{Namespace: ns, Name: irName}
+		if err := client.Get(ctx, irKey, ir); err != nil {
+			if !k8sErrors.IsNotFound(err) {
+				klog.Warningf("conformance cleanup: get ImageRepository %s/%s: %v", ns, irName, err)
 			}
+		} else {
+			if err := client.Delete(ctx, ir); err != nil {
+				klog.Warningf("conformance cleanup: delete ImageRepository %s/%s: %v", ns, irName, err)
+			}
+		}
+	}
+	ecpName := "ecp-" + strings.TrimPrefix(releaseName, "release-")
+	if err := fw.AsKubeAdmin.TektonController.DeleteEnterpriseContractPolicy(ecpName, ns, false); err != nil {
+		klog.Warningf("conformance cleanup: delete ECP %s in %s: %v", ecpName, ns, err)
+	}
+	rpa := &releaseApi.ReleasePlanAdmission{}
+	rpaKey := crclient.ObjectKey{Namespace: ns, Name: releaseName}
+	if err := client.Get(ctx, rpaKey, rpa); err != nil {
+		if !k8sErrors.IsNotFound(err) {
+			klog.Warningf("conformance cleanup: get ReleasePlanAdmission %s/%s: %v", ns, releaseName, err)
+		}
+	} else {
+		if err := client.Delete(ctx, rpa); err != nil {
+			klog.Warningf("conformance cleanup: delete ReleasePlanAdmission %s/%s: %v", ns, releaseName, err)
 		}
 	}
 }
 
-// cleanupTenantResources deletes test-created resources from the tenant namespace
-func cleanupTenantResources(ctx context.Context, fw *framework.Framework, ns string) {
+// cleanupTenantResources deletes test-created resources from the tenant namespace.
+// appName scopes the cleanup to resources belonging to this test run's application,
+// avoiding interference with concurrent test executions in the same namespace.
+// componentName is used to delete the per-component ImageRepository.
+// releaseName is used to delete the ReleasePlan by name as a fallback, since
+// setup-release.sh does not add the appstudio.openshift.io/application label.
+func cleanupTenantResources(ctx context.Context, fw *framework.Framework, ns, appName, componentName, releaseName string) {
 	client := fw.AsKubeAdmin.CommonController.KubeRest()
 
-	if err := fw.AsKubeAdmin.HasController.DeleteAllApplicationsInASpecificNamespace(ns, cleanupResourceTimeout); err != nil {
-		klog.Warningf("conformance cleanup: delete Applications in %s: %v", ns, err)
+	appLabel := crclient.MatchingLabels{"appstudio.openshift.io/application": appName}
+
+	app := &appstudioApi.Application{}
+	appKey := crclient.ObjectKey{Namespace: ns, Name: appName}
+	if err := client.Get(ctx, appKey, app); err != nil {
+		if !k8sErrors.IsNotFound(err) {
+			klog.Warningf("conformance cleanup: get Application %s/%s: %v", ns, appName, err)
+		}
+	} else {
+		if err := client.Delete(ctx, app); err != nil {
+			klog.Warningf("conformance cleanup: delete Application %s/%s: %v", ns, appName, err)
+		}
 	}
 	itsList := &integrationv1beta2.IntegrationTestScenarioList{}
-	if err := client.List(ctx, itsList, crclient.InNamespace(ns)); err != nil {
+	if err := client.List(ctx, itsList, crclient.InNamespace(ns), appLabel); err != nil {
 		klog.Warningf("conformance cleanup: list IntegrationTestScenarios in %s: %v", ns, err)
 	} else {
 		for i := range itsList.Items {
@@ -386,7 +607,7 @@ func cleanupTenantResources(ctx context.Context, fw *framework.Framework, ns str
 		}
 	}
 	snapList := &appstudioApi.SnapshotList{}
-	if err := client.List(ctx, snapList, crclient.InNamespace(ns)); err != nil {
+	if err := client.List(ctx, snapList, crclient.InNamespace(ns), appLabel); err != nil {
 		klog.Warningf("conformance cleanup: list Snapshots in %s: %v", ns, err)
 	} else {
 		for i := range snapList.Items {
@@ -395,11 +616,18 @@ func cleanupTenantResources(ctx context.Context, fw *framework.Framework, ns str
 			}
 		}
 	}
-	if err := fw.AsKubeAdmin.TektonController.DeleteAllPipelineRunsInASpecificNamespace(ns); err != nil {
-		klog.Warningf("conformance cleanup: delete PipelineRuns in %s: %v", ns, err)
+	prList := &pipelinev1.PipelineRunList{}
+	if err := client.List(ctx, prList, crclient.InNamespace(ns), appLabel); err != nil {
+		klog.Warningf("conformance cleanup: list PipelineRuns in %s: %v", ns, err)
+	} else {
+		for i := range prList.Items {
+			if err := client.Delete(ctx, &prList.Items[i]); err != nil {
+				klog.Warningf("conformance cleanup: delete PipelineRun %s/%s: %v", ns, prList.Items[i].Name, err)
+			}
+		}
 	}
 	rpList := &releaseApi.ReleasePlanList{}
-	if err := client.List(ctx, rpList, crclient.InNamespace(ns)); err != nil {
+	if err := client.List(ctx, rpList, crclient.InNamespace(ns), appLabel); err != nil {
 		klog.Warningf("conformance cleanup: list ReleasePlans in %s: %v", ns, err)
 	} else {
 		for i := range rpList.Items {
@@ -408,14 +636,52 @@ func cleanupTenantResources(ctx context.Context, fw *framework.Framework, ns str
 			}
 		}
 	}
+	// Fallback: delete ReleasePlan by name since setup-release.sh does not add
+	// the appstudio.openshift.io/application label.
+	rp := &releaseApi.ReleasePlan{}
+	rpKey := crclient.ObjectKey{Namespace: ns, Name: releaseName}
+	if err := client.Get(ctx, rpKey, rp); err != nil {
+		if !k8sErrors.IsNotFound(err) {
+			klog.Warningf("conformance cleanup: get ReleasePlan %s/%s: %v", ns, releaseName, err)
+		}
+	} else {
+		if err := client.Delete(ctx, rp); err != nil {
+			klog.Warningf("conformance cleanup: delete ReleasePlan %s/%s: %v", ns, releaseName, err)
+		}
+	}
 	relList := &releaseApi.ReleaseList{}
-	if err := client.List(ctx, relList, crclient.InNamespace(ns)); err != nil {
+	if err := client.List(ctx, relList, crclient.InNamespace(ns), appLabel); err != nil {
 		klog.Warningf("conformance cleanup: list Releases in %s: %v", ns, err)
 	} else {
 		for i := range relList.Items {
 			if err := client.Delete(ctx, &relList.Items[i]); err != nil {
 				klog.Warningf("conformance cleanup: delete Release %s/%s: %v", ns, relList.Items[i].Name, err)
 			}
+		}
+	}
+	// Delete the Component (Application deletion does not cascade).
+	comp := &appstudioApi.Component{}
+	compKey := crclient.ObjectKey{Namespace: ns, Name: componentName}
+	if err := client.Get(ctx, compKey, comp); err != nil {
+		if !k8sErrors.IsNotFound(err) {
+			klog.Warningf("conformance cleanup: get Component %s/%s: %v", ns, componentName, err)
+		}
+	} else {
+		if err := client.Delete(ctx, comp); err != nil {
+			klog.Warningf("conformance cleanup: delete Component %s/%s: %v", ns, componentName, err)
+		}
+	}
+	// Delete this run's ImageRepository from the tenant namespace (auto-created
+	// by image-controller when the Component was created).
+	ir := &imagecontroller.ImageRepository{}
+	irKey := crclient.ObjectKey{Namespace: ns, Name: componentName}
+	if err := client.Get(ctx, irKey, ir); err != nil {
+		if !k8sErrors.IsNotFound(err) {
+			klog.Warningf("conformance cleanup: get ImageRepository %s/%s: %v", ns, componentName, err)
+		}
+	} else {
+		if err := client.Delete(ctx, ir); err != nil {
+			klog.Warningf("conformance cleanup: delete ImageRepository %s/%s: %v", ns, componentName, err)
 		}
 	}
 }
@@ -459,28 +725,29 @@ func verifyReleasePrerequisites(hub *framework.ControllerHub, managedNS string) 
 // verifyPreProvisionedRBAC checks that the integration-runner Role and RoleBinding
 // exist in the tenant namespace. In pre-provisioned environments, these are
 // managed by GitOps and grantIntegrationRunnerJobRBAC may fail to create them.
-func verifyPreProvisionedRBAC(hub *framework.ControllerHub, tenantNS string) {
+func verifyPreProvisionedRBAC(hub *framework.ControllerHub, tenantNS string) error {
 	ctx := context.Background()
 	client := hub.CommonController.KubeRest()
 
 	role := &rbacv1.Role{}
 	if err := client.Get(ctx, crclient.ObjectKey{Namespace: tenantNS, Name: "integration-runner-jobs"}, role); err != nil {
-		klog.Warningf("conformance: integration-runner-jobs Role not found in %s; integration tests may fail: %v", tenantNS, err)
+		return fmt.Errorf("integration-runner-jobs Role not found in %s; integration tests will fail: %w", tenantNS, err)
 	}
 
 	rb := &rbacv1.RoleBinding{}
 	if err := client.Get(ctx, crclient.ObjectKey{Namespace: tenantNS, Name: "integration-runner-jobs"}, rb); err != nil {
-		klog.Warningf("conformance: integration-runner-jobs RoleBinding not found in %s; integration tests may fail: %v", tenantNS, err)
+		return fmt.Errorf("integration-runner-jobs RoleBinding not found in %s; integration tests will fail: %w", tenantNS, err)
 	}
+	return nil
 }
 
 // verifyECPPatched checks that the ECP in the managed namespace has the expected
-// E2E exclusions applied.
-func verifyECPPatched(hub *framework.ControllerHub, policyName, managedNS string) {
+// E2E exclusions applied. Returns an error if any exclusion is missing, which
+// gives a clear setup failure instead of an opaque downstream policy violation.
+func verifyECPPatched(hub *framework.ControllerHub, policyName, managedNS string) error {
 	policy, err := hub.TektonController.GetEnterpriseContractPolicy(policyName, managedNS)
 	if err != nil {
-		klog.Warningf("conformance: could not verify ECP patch in %s/%s: %v", managedNS, policyName, err)
-		return
+		return fmt.Errorf("could not verify ECP patch in %s/%s: %w", managedNS, policyName, err)
 	}
 	for _, src := range policy.Spec.Sources {
 		if src.Config == nil {
@@ -490,13 +757,17 @@ func verifyECPPatched(hub *framework.ControllerHub, policyName, managedNS string
 		for _, e := range src.Config.Exclude {
 			seen[e] = true
 		}
+		var missing []string
 		for _, e := range e2eECPExclusions {
 			if !seen[e] {
-				klog.Warningf("conformance: ECP %s/%s is missing expected exclusion %q; EC validation may fail", managedNS, policyName, e)
-				return
+				missing = append(missing, e)
 			}
 		}
+		if len(missing) > 0 {
+			return fmt.Errorf("ECP %s/%s is missing required exclusions %v; EC validation will fail", managedNS, policyName, missing)
+		}
 	}
+	return nil
 }
 
 // cleanupWithRetry runs fn until it returns nil, ctx is done, or a 30s per-step retry budget elapses.
