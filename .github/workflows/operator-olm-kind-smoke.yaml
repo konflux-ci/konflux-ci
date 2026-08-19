@@ -1,0 +1,83 @@
+name: Operator OLM Kind Smoke
+
+# Live OLM install via operator-sdk run bundle on a dedicated Kind cluster.
+# Asserts the manager becomes Ready without depending on Secret metrics-server-cert.
+# See: https://github.com/konflux-ci/konflux-ci/issues/8791
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  merge_group:
+    types: [checks_requested]
+
+jobs:
+  check-changes:
+    name: Check for relevant changes
+    runs-on: ubuntu-slim
+    outputs:
+      operator: ${{ steps.changed-files.outputs.any_changed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          fetch-depth: 0
+      - name: Check for changes
+        uses: tj-actions/changed-files@24d32ffd492484c1d75e0c0b894501ddb9d30d62  # v47
+        id: changed-files
+        with:
+          files: |
+            operator/**
+            .github/workflows/operator-olm-kind-smoke.yaml
+            .github/scripts/operator-olm-kind-smoke.sh
+
+  olm-kind-smoke:
+    name: Kind OLM smoke (ARM64)
+    runs-on: ubuntu-24.04-arm
+    needs: check-changes
+    if: needs.check-changes.outputs.operator == 'true'
+    env:
+      # renovate: datasource=github-releases depName=kubernetes-sigs/kind
+      KIND_VERSION: "0.32.0"
+      # renovate: datasource=github-releases depName=kubernetes/kubernetes
+      KUBECTL_VERSION: "1.36.3"
+      # Match operator-test-e2e arm64 matrix binary names.
+      ARCH: arm64
+      KIND_BINARY: kind-linux-arm64
+      KUBECTL_ARCH: arm64
+      CLUSTER_NAME: konflux-olm-smoke
+      REG_NAME: konflux-olm-smoke-registry
+      REG_PORT: "5005"
+      KEEP_CLUSTER: "false"
+      BUILD_MANAGER: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+
+      - name: Disable AppArmor
+        # works around a change in ubuntu 24.04 that restricts Linux namespace access
+        # for unprivileged users
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+        with:
+          go-version-file: operator/go.mod
+          cache-dependency-path: operator/go.sum
+
+      - name: Install kind (${{ env.ARCH }})
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/v${KIND_VERSION}/${KIND_BINARY}
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+
+      - name: Install kubectl (${{ env.ARCH }})
+        run: |
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${KUBECTL_ARCH}/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/kubectl
+
+      - name: Verify kind installation
+        run: kind version
+
+      - name: Run Kind OLM smoke
+        run: ./.github/scripts/operator-olm-kind-smoke.sh
