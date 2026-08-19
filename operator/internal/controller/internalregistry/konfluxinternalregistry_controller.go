@@ -90,7 +90,6 @@ type KonfluxInternalRegistryReconciler struct {
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;patch;delete
-// +kubebuilder:rbac:groups=trust.cert-manager.io,resources=bundles,verbs=get;list;watch;create;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -154,8 +153,6 @@ func (r *KonfluxInternalRegistryReconciler) Reconcile(ctx context.Context, req c
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
 func (r *KonfluxInternalRegistryReconciler) applyManifests(ctx context.Context, tc *tracking.Client) error {
-	log := logf.FromContext(ctx)
-
 	objects, err := r.ObjectStore.GetForComponent(manifests.Registry)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for Registry: %w", err)
@@ -164,23 +161,6 @@ func (r *KonfluxInternalRegistryReconciler) applyManifests(ctx context.Context, 
 	for _, obj := range objects {
 		// Apply with ownership - automatically sets labels, owner reference, and tracks
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
-			// Only skip if it's specifically a "CRD not installed" error for trust-manager (Bundle).
-			// This prevents masking real reconciliation failures like RBAC denials,
-			// validation errors, or resource conflicts.
-			// Note: cert-manager errors should propagate (CRDs are installed in test environment).
-			if tracking.IsNoKindMatchError(err) {
-				gvk := obj.GetObjectKind().GroupVersionKind()
-				// Only ignore trust-manager (Bundle) errors, not cert-manager errors
-				if gvk.Group == "trust.cert-manager.io" {
-					log.Info("Skipping resource: CRD not installed (test environment)",
-						"kind", gvk.Kind,
-						"apiVersion", gvk.GroupVersion().String(),
-						"namespace", obj.GetNamespace(),
-						"name", obj.GetName(),
-					)
-					continue
-				}
-			}
 			return fmt.Errorf("failed to apply object %s/%s (%s) from %s: %w",
 				obj.GetNamespace(), obj.GetName(), tracking.GetKind(obj), manifests.Registry, err)
 		}
@@ -199,10 +179,6 @@ func (r *KonfluxInternalRegistryReconciler) SetupWithManager(mgr ctrl.Manager) e
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
 		Owns(&certmanagerv1.Certificate{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
-		// NOTE: trust-manager Bundle (trust.cert-manager.io/v1alpha1) is not owned here
-		// because trust-manager's Go module pulls controller-runtime/k8s.io versions
-		// incompatible with this operator. The Bundle is still applied via manifests
-		// but changes to it won't trigger reconciliation.
 		Complete(r)
 }
 

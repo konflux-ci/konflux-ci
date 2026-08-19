@@ -23,18 +23,20 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
 
@@ -167,9 +169,9 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 
 				By("verifying no ClusterIssuers were created")
 				err := k8sClient.Get(ctx, types.NamespacedName{Name: bootstrapIssuerName}, newClusterIssuer(bootstrapIssuerName))
-				Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
+				Expect(apierrors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
 				err = k8sClient.Get(ctx, types.NamespacedName{Name: issuerName}, newClusterIssuer(issuerName))
-				Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
+				Expect(apierrors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
 			})
 		})
 
@@ -412,6 +414,198 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 
 	})
 
+	Context("DistributeClusterCABundle defaulting", func() {
+		// These tests use per-test managers to control ClusterInfo (OpenShift vs non-OpenShift).
+		// The suite-level manager from BeforeSuite is not OpenShift, so these tests
+		// register their own reconciler with the desired ClusterInfo.
+
+		// startManagerWithPlatform creates a per-test manager with the given platform and
+		// registers a DeferCleanup to stop it when the test ends.
+		startManagerWithPlatform := func(isOpenShift bool) {
+			resources := map[string]*metav1.APIResourceList{}
+			if isOpenShift {
+				resources["config.openshift.io/v1"] = &metav1.APIResourceList{
+					APIResources: []metav1.APIResource{{Kind: "ClusterVersion"}},
+				}
+			}
+			info, err := clusterinfo.DetectWithClient(&mockDiscoveryClient{resources: resources})
+			Expect(err).NotTo(HaveOccurred())
+
+			mgr := testutil.NewTestManager(testEnv)
+			Expect((&KonfluxCertManagerReconciler{
+				Client:      mgr.GetClient(),
+				Scheme:      mgr.GetScheme(),
+				ObjectStore: objectStore,
+				ClusterInfo: info,
+			}).SetupWithManager(mgr)).To(Succeed())
+			mgrCtx, cancel := context.WithCancel(testEnv.Ctx)
+			waitForStop := testutil.StartManagerWithContext(mgrCtx, mgr)
+			DeferCleanup(func() {
+				cancel()
+				waitForStop()
+			})
+		}
+
+		BeforeEach(func() {
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: certManagerNamespace}}
+			Expect(client.IgnoreAlreadyExists(k8sClient.Create(ctx, ns))).To(Succeed())
+		})
+
+		// certManagerChildren lists all cluster-scoped/namespaced children.
+		certManagerChildren := func() []client.Object {
+			return []client.Object{
+				newClusterIssuer(bootstrapIssuerName),
+				newClusterIssuer(issuerName),
+				newCertificate(certificateName, certManagerNamespace),
+			}
+		}
+
+		Context("unset on non-OpenShift (Kind/upstream)", func() {
+			BeforeEach(func() {
+				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxCertManager{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				})
+			})
+
+			It("should default to applying the trust-manager Bundle", func(ctx context.Context) {
+				startManagerWithPlatform(false)
+
+				cm := &konfluxv1alpha1.KonfluxCertManager{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+					// DistributeClusterCABundle is nil — should default to true on non-OpenShift
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
+
+				By("waiting for Ready=True and ClusterCABundleDistributed=False")
+				Eventually(func(g Gomega) {
+					updated := &konfluxv1alpha1.KonfluxCertManager{}
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
+					readyCond := meta.FindStatusCondition(updated.Status.Conditions, condition.TypeReady)
+					g.Expect(readyCond).NotTo(BeNil())
+					g.Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
+
+					// Distribution defaults to true on non-OpenShift, but trust-manager CRD
+					// is not installed in envtest → condition False (parent gates Konflux Ready).
+					caBundleCond := meta.FindStatusCondition(updated.Status.Conditions, constant.ConditionTypeClusterCABundleDistributed)
+					g.Expect(caBundleCond).NotTo(BeNil())
+					g.Expect(caBundleCond.Status).To(Equal(metav1.ConditionFalse))
+					g.Expect(caBundleCond.Reason).To(Equal(condition.ReasonBundleNotDistributed))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			})
+		})
+
+		Context("unset on OpenShift", func() {
+			BeforeEach(func() {
+				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxCertManager{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				})
+			})
+
+			It("should default to skipping the trust-manager Bundle", func(ctx context.Context) {
+				startManagerWithPlatform(true)
+
+				cm := &konfluxv1alpha1.KonfluxCertManager{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+					// DistributeClusterCABundle is nil — should default to false on OpenShift
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
+
+				By("waiting for Ready=True and ClusterCABundleDistributed=True (disabled)")
+				Eventually(func(g Gomega) {
+					updated := &konfluxv1alpha1.KonfluxCertManager{}
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
+					readyCond := meta.FindStatusCondition(updated.Status.Conditions, condition.TypeReady)
+					g.Expect(readyCond).NotTo(BeNil())
+					g.Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
+
+					// Distribution defaults to false on OpenShift → condition True (opt-out).
+					caBundleCond := meta.FindStatusCondition(updated.Status.Conditions, constant.ConditionTypeClusterCABundleDistributed)
+					g.Expect(caBundleCond).NotTo(BeNil())
+					g.Expect(caBundleCond.Status).To(Equal(metav1.ConditionTrue))
+					g.Expect(caBundleCond.Reason).To(Equal(condition.ReasonBundleDistributionDisabled))
+					g.Expect(caBundleCond.Message).To(ContainSubstring("OpenShift default"))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			})
+		})
+
+		Context("explicit true on OpenShift", func() {
+			BeforeEach(func() {
+				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxCertManager{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				})
+			})
+
+			It("should apply the trust-manager Bundle when explicitly enabled", func(ctx context.Context) {
+				startManagerWithPlatform(true)
+
+				enabled := true
+				cm := &konfluxv1alpha1.KonfluxCertManager{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+					Spec: konfluxv1alpha1.KonfluxCertManagerSpec{
+						DistributeClusterCABundle: &enabled,
+					},
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
+
+				By("waiting for Ready=True and ClusterCABundleDistributed=False (CRD missing)")
+				Eventually(func(g Gomega) {
+					updated := &konfluxv1alpha1.KonfluxCertManager{}
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
+					readyCond := meta.FindStatusCondition(updated.Status.Conditions, condition.TypeReady)
+					g.Expect(readyCond).NotTo(BeNil())
+					g.Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
+
+					// Explicitly enabled but trust-manager CRD not installed → condition False.
+					caBundleCond := meta.FindStatusCondition(updated.Status.Conditions, constant.ConditionTypeClusterCABundleDistributed)
+					g.Expect(caBundleCond).NotTo(BeNil())
+					g.Expect(caBundleCond.Status).To(Equal(metav1.ConditionFalse))
+					g.Expect(caBundleCond.Reason).To(Equal(condition.ReasonBundleNotDistributed))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			})
+		})
+
+		Context("explicit false on non-OpenShift", func() {
+			BeforeEach(func() {
+				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxCertManager{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				})
+			})
+
+			It("should skip the trust-manager Bundle when explicitly disabled", func(ctx context.Context) {
+				startManagerWithPlatform(false)
+
+				disabled := false
+				cm := &konfluxv1alpha1.KonfluxCertManager{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+					Spec: konfluxv1alpha1.KonfluxCertManagerSpec{
+						DistributeClusterCABundle: &disabled,
+					},
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
+
+				By("waiting for Ready=True and ClusterCABundleDistributed=True (disabled)")
+				Eventually(func(g Gomega) {
+					updated := &konfluxv1alpha1.KonfluxCertManager{}
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
+					readyCond := meta.FindStatusCondition(updated.Status.Conditions, condition.TypeReady)
+					g.Expect(readyCond).NotTo(BeNil())
+					g.Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
+
+					// Explicitly disabled → condition True (opt-out).
+					caBundleCond := meta.FindStatusCondition(updated.Status.Conditions, constant.ConditionTypeClusterCABundleDistributed)
+					g.Expect(caBundleCond).NotTo(BeNil())
+					g.Expect(caBundleCond.Status).To(Equal(metav1.ConditionTrue))
+					g.Expect(caBundleCond.Reason).To(Equal(condition.ReasonBundleDistributionDisabled))
+					g.Expect(caBundleCond.Message).To(ContainSubstring("distributeClusterCABundle=false"))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			})
+		})
+	})
+
 	Context("tracking.IsNoKindMatchError helper function", func() {
 		It("should correctly identify NoKindMatchError", func() {
 			noKindErr := &meta.NoKindMatchError{
@@ -437,3 +631,29 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 		})
 	})
 })
+
+// mockDiscoveryClient implements clusterinfo.DiscoveryClient for testing platform-aware defaults.
+// Follows the resources map pattern used across the codebase (buildservice, ingress, etc.).
+type mockDiscoveryClient struct {
+	resources map[string]*metav1.APIResourceList
+}
+
+func (m *mockDiscoveryClient) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
+	if rl, ok := m.resources[groupVersion]; ok {
+		return rl, nil
+	}
+	return nil, apierrors.NewNotFound(schema.GroupResource{Group: groupVersion}, "")
+}
+
+func (m *mockDiscoveryClient) ServerVersion() (*version.Info, error) {
+	return &version.Info{GitVersion: "v1.30.0"}, nil
+}
+
+// newNonOpenShiftClusterInfo returns a ClusterInfo that reports a non-OpenShift platform.
+func newNonOpenShiftClusterInfo() *clusterinfo.Info {
+	info, err := clusterinfo.DetectWithClient(&mockDiscoveryClient{
+		resources: map[string]*metav1.APIResourceList{},
+	})
+	Expect(err).NotTo(HaveOccurred())
+	return info
+}

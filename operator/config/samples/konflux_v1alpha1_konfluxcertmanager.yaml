@@ -11,3 +11,6 @@ spec:
   # CreateClusterIssuer controls whether cluster issuer resources are created
   # Defaults to true if not specified
   createClusterIssuer: true
+  # DistributeClusterCABundle controls whether the trust-manager Bundle is applied.
+  # Platform-aware default: true on non-OpenShift (Kind/upstream), false on OpenShift.
+  # distributeClusterCABundle: true

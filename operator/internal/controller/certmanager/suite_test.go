@@ -51,6 +51,7 @@ var _ = BeforeSuite(func() {
 		Client:      mgr.GetClient(),
 		Scheme:      mgr.GetScheme(),
 		ObjectStore: objectStore,
+		ClusterInfo: newNonOpenShiftClusterInfo(),
 	}).SetupWithManager(mgr)).To(Succeed())
 	testutil.StartManager(testEnv, mgr)
 })
