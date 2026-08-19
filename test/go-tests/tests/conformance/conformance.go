@@ -169,6 +169,14 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 					appLabel := crclient.MatchingLabels{"appstudio.openshift.io/application": appName}
 					pollDeadline := time.Now().Add(60 * time.Second)
 					for time.Now().Before(pollDeadline) {
+						select {
+						case <-ctx.Done():
+							klog.Warningf("conformance cleanup: context cancelled while waiting for release PipelineRun")
+						default:
+						}
+						if ctx.Err() != nil {
+							break
+						}
 						prList := &tektonapi.PipelineRunList{}
 						if err := client.List(ctx, prList, crclient.InNamespace(managedNamespace), appLabel); err == nil && len(prList.Items) > 0 {
 							break

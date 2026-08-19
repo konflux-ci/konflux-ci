@@ -57,6 +57,7 @@ func pruneDanglingSASecrets(ctx context.Context, client crclient.Client, managed
 				klog.Infof("conformance pre-run: pruning dangling secret ref %q from SA", ref.Name)
 				continue
 			}
+			klog.Warningf("conformance pre-run: check secret %q existence: %v", ref.Name, err)
 		}
 		pruned = append(pruned, ref)
 	}
@@ -213,42 +214,51 @@ func ensureSASecret(ctx context.Context, client crclient.Client, managedNS strin
 		return fmt.Errorf("no push-secret names found in ImageRepository status for %v", irNames)
 	}
 
-	sa := &corev1.ServiceAccount{}
-	saKey := crclient.ObjectKey{Namespace: managedNS, Name: "release-pipeline"}
-	if err := client.Get(ctx, saKey, sa); err != nil {
-		return fmt.Errorf("get release-pipeline SA in %s: %w", managedNS, err)
-	}
+	const maxRetries = 3
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		sa := &corev1.ServiceAccount{}
+		saKey := crclient.ObjectKey{Namespace: managedNS, Name: "release-pipeline"}
+		if err := client.Get(ctx, saKey, sa); err != nil {
+			return fmt.Errorf("get release-pipeline SA in %s: %w", managedNS, err)
+		}
 
-	// Prune dangling references -- secrets that no longer exist in the
-	// namespace (left over from runs whose cleanup predated this fix).
-	pruned := make([]corev1.ObjectReference, 0, len(sa.Secrets))
-	for _, ref := range sa.Secrets {
-		secret := &corev1.Secret{}
-		sKey := crclient.ObjectKey{Namespace: managedNS, Name: ref.Name}
-		if err := client.Get(ctx, sKey, secret); err != nil {
-			if k8sErrors.IsNotFound(err) {
-				klog.Infof("conformance: pruning dangling secret ref %q from release-pipeline SA", ref.Name)
-				continue
+		// Prune dangling references -- secrets that no longer exist in the
+		// namespace (left over from runs whose cleanup predated this fix).
+		pruned := make([]corev1.ObjectReference, 0, len(sa.Secrets))
+		for _, ref := range sa.Secrets {
+			secret := &corev1.Secret{}
+			sKey := crclient.ObjectKey{Namespace: managedNS, Name: ref.Name}
+			if err := client.Get(ctx, sKey, secret); err != nil {
+				if k8sErrors.IsNotFound(err) {
+					klog.Infof("conformance: pruning dangling secret ref %q from release-pipeline SA", ref.Name)
+					continue
+				}
+				klog.Warningf("conformance: check secret %q existence: %v", ref.Name, err)
+			}
+			pruned = append(pruned, ref)
+		}
+		sa.Secrets = pruned
+
+		existing := make(map[string]bool, len(sa.Secrets))
+		for _, ref := range sa.Secrets {
+			existing[ref.Name] = true
+		}
+
+		for _, name := range secretNames {
+			if !existing[name] {
+				sa.Secrets = append(sa.Secrets, corev1.ObjectReference{Name: name})
+				klog.Infof("conformance: appending secret %q to release-pipeline SA in %s", name, managedNS)
 			}
 		}
-		pruned = append(pruned, ref)
-	}
-	sa.Secrets = pruned
 
-	existing := make(map[string]bool, len(sa.Secrets))
-	for _, ref := range sa.Secrets {
-		existing[ref.Name] = true
-	}
-
-	for _, name := range secretNames {
-		if !existing[name] {
-			sa.Secrets = append(sa.Secrets, corev1.ObjectReference{Name: name})
-			klog.Infof("conformance: appending secret %q to release-pipeline SA in %s", name, managedNS)
+		if err := client.Update(ctx, sa); err != nil {
+			if k8sErrors.IsConflict(err) && attempt < maxRetries-1 {
+				klog.Warningf("conformance: SA update conflict (attempt %d/%d), retrying", attempt+1, maxRetries)
+				continue
+			}
+			return fmt.Errorf("update release-pipeline SA in %s: %w", managedNS, err)
 		}
-	}
-
-	if err := client.Update(ctx, sa); err != nil {
-		return fmt.Errorf("update release-pipeline SA in %s: %w", managedNS, err)
+		return nil
 	}
 	return nil
 }
@@ -296,7 +306,11 @@ func removeSASecrets(ctx context.Context, client crclient.Client, managedNS stri
 	if len(filtered) != len(sa.Secrets) {
 		sa.Secrets = filtered
 		if err := client.Update(ctx, sa); err != nil {
-			klog.Warningf("conformance cleanup: update release-pipeline SA after secret removal: %v", err)
+			if k8sErrors.IsConflict(err) {
+				klog.Warningf("conformance cleanup: SA update conflict during secret removal, will be cleaned up by next run's pruneDanglingSASecrets")
+			} else {
+				klog.Warningf("conformance cleanup: update release-pipeline SA after secret removal: %v", err)
+			}
 		}
 	}
 }
