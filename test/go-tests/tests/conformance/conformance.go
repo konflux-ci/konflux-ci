@@ -85,9 +85,9 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				if managedNamespace == "" {
 					managedNamespace = "default-managed-tenant"
 				}
-				klog.Info("conformance: namespaces ready", "user", userNamespace, "managed", managedNamespace)
+				klog.Infof("conformance: namespaces ready user=%s managed=%s", userNamespace, managedNamespace)
 
-					suffix := util.GenerateRandomString(4)
+				suffix := util.GenerateRandomString(4)
 				componentName = fmt.Sprintf("%s-%s", appSpec.ComponentSpec.Name, suffix)
 				appName = fmt.Sprintf("%s-%s", appSpec.ApplicationName, suffix)
 				pacBranchName = constants.PaCPullRequestBranchPrefix + componentName
@@ -102,9 +102,9 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				preProvisioned := isPreProvisioned()
 				ecpName := "default"
 				if preProvisioned {
-					ecpName = "ecp-" + strings.TrimPrefix(releaseName, "release-")
-					client := fw.AsKubeAdmin.CommonController.KubeRest()
 					taSuffix := strings.TrimPrefix(releaseName, "release-")
+					ecpName = "ecp-" + taSuffix
+					client := fw.AsKubeAdmin.CommonController.KubeRest()
 					runIRNames := []string{componentName, "trusted-artifacts-" + taSuffix}
 					if err := ensureSASecret(context.Background(), client, managedNamespace, runIRNames); err != nil {
 						klog.Warningf("conformance: ensureSASecret failed (non-fatal): %v", err)
@@ -159,7 +159,7 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 					return build.CleanupWebhooks(ctx, fw, componentRepositoryName)
 				})
 
-					if isPreProvisioned() {
+				if isPreProvisioned() {
 					// The release PipelineRun is created asynchronously by the
 					// release-service and may not exist until ~50s after the
 					// last spec finishes. Poll until it appears, then sweep.

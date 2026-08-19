@@ -95,7 +95,13 @@ func runSetupRelease(appName, componentName, tenantNS, managedNS, releaseName st
 		taSuffix := strings.TrimPrefix(releaseName, "release-")
 
 		taName := "trusted-artifacts-" + taSuffix
-		scriptContent = []byte(strings.ReplaceAll(string(scriptContent), "trusted-artifacts", taName))
+		s := string(scriptContent)
+		// Replace only the resource-defining contexts, not comments or log lines.
+		s = strings.ReplaceAll(s, `name: trusted-artifacts`, `name: `+taName)
+		s = strings.ReplaceAll(s, `/trusted-artifacts`, `/`+taName)
+		s = strings.ReplaceAll(s, `("trusted-artifacts"`, `("`+taName+`"`)
+		s = strings.ReplaceAll(s, `imagerepository trusted-artifacts`, `imagerepository `+taName)
+		scriptContent = []byte(s)
 		klog.Infof("conformance: renamed trusted-artifacts -> %s for run isolation", taName)
 
 		ecpName := "ecp-" + taSuffix
@@ -749,10 +755,12 @@ func verifyECPPatched(hub *framework.ControllerHub, policyName, managedNS string
 	if err != nil {
 		return fmt.Errorf("could not verify ECP patch in %s/%s: %w", managedNS, policyName, err)
 	}
+	verified := false
 	for _, src := range policy.Spec.Sources {
 		if src.Config == nil {
 			continue
 		}
+		verified = true
 		seen := make(map[string]bool, len(src.Config.Exclude))
 		for _, e := range src.Config.Exclude {
 			seen[e] = true
@@ -766,6 +774,9 @@ func verifyECPPatched(hub *framework.ControllerHub, policyName, managedNS string
 		if len(missing) > 0 {
 			return fmt.Errorf("ECP %s/%s is missing required exclusions %v; EC validation will fail", managedNS, policyName, missing)
 		}
+	}
+	if !verified {
+		return fmt.Errorf("ECP %s/%s has no sources with Config; patchECPForE2E may have failed", managedNS, policyName)
 	}
 	return nil
 }
