@@ -1,6 +1,6 @@
 module github.com/konflux-ci/konflux-ci/test/go-tests
 
-go 1.26.0
+go 1.26.5
 
 require (
 	github.com/coder/websocket v1.8.15
@@ -23,14 +23,14 @@ require (
 	github.com/onsi/ginkgo/v2 v2.32.0
 	github.com/onsi/gomega v1.42.1
 	github.com/opencontainers/image-spec v1.1.1
-	github.com/openshift-pipelines/pipelines-as-code v0.48.0
+	github.com/openshift-pipelines/pipelines-as-code v0.50.0
 	github.com/openshift/api v0.0.0-20260728120005-8ba0b25b0f29
 	github.com/openshift/client-go v0.0.0-20260728123811-92b24dd0dd1f
 	github.com/openshift/library-go v0.0.0-20260730085458-26e4f3728f73
 	github.com/redhat-appstudio/jvm-build-service v0.0.0-20250301023318-b47170d413c5
 	github.com/stretchr/testify v1.12.0
 	github.com/tektoncd/cli v0.45.0
-	github.com/tektoncd/pipeline v1.13.1
+	github.com/tektoncd/pipeline v1.15.0
 	github.com/xanzy/go-gitlab v0.114.0
 	golang.org/x/oauth2 v0.36.0
 	k8s.io/api v0.36.3
@@ -148,7 +148,7 @@ require (
 	github.com/klauspost/compress v1.19.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
-	github.com/mattn/go-isatty v0.0.22 // indirect
+	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/moby/spdystream v0.5.1 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
@@ -201,7 +201,7 @@ require (
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260729162451-8efbd57d26e0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260729162451-8efbd57d26e0 // indirect
-	google.golang.org/grpc v1.82.1 // indirect
+	google.golang.org/grpc v1.83.0 // indirect
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
@@ -214,7 +214,7 @@ require (
 	k8s.io/streaming v0.36.3 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
-	sigs.k8s.io/structured-merge-diff/v6 v6.4.1 // indirect
+	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
 )
 
 replace github.com/expr-lang/expr => github.com/expr-lang/expr v1.17.8
