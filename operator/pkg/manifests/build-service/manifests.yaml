@@ -5,6 +5,9 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: build-service
     control-plane: controller-manager
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/warn: restricted
   name: build-service
 ---
 apiVersion: v1
@@ -219,9 +222,13 @@ rules:
   - watch
 - apiGroups:
   - rbac.authorization.k8s.io
+  resourceNames:
+  - appstudio-pipelines-runner
+  - konflux-build-pipelines-runner
   resources:
   - clusterroles
   verbs:
+  - bind
   - get
 - apiGroups:
   - rbac.authorization.k8s.io
@@ -444,7 +451,7 @@ spec:
         - -webhook-config-path=/mnt/webhook-config.json
         command:
         - /manager
-        image: quay.io/konflux-ci/build-service:7e1a8b2cf9c580a3f3a111c75be36cd739166d5a
+        image: quay.io/konflux-ci/build-service:ccde63aa02e867419cafa0ee6bb3d972ca6ce42f
         livenessProbe:
           httpGet:
             path: /healthz
