@@ -146,6 +146,7 @@ skip/review rules, pre-label heuristics, and `ready-for-merge` behavior, apply
 - **Interface minimality** — Reconciler structs should depend on the narrowest type needed. If a reconciler only consumes events from a broadcaster, accept a `<-chan event.TypedGenericEvent[client.Object]`, not the broadcaster itself. Wire via `Subscribe()` in `main.go`.
 - **Component monitoring** — see the controller wiring checklist in [`operator/docs/component-monitoring.md`](operator/docs/component-monitoring.md#controller-wiring-checklist).
 - **Informer cache staleness** — After writing to the API server, do not immediately read the same object via cached `client.Get` — the informer cache may not have caught up. Use write-path return values or carry state forward in reconcile result structs.
+- **Per-test scheme isolation** — Tests using controller-runtime's `fake.NewClientBuilder()` in combination with `t.Parallel()` (or Ginkgo parallel nodes) must provide an explicit per-test scheme via `WithScheme(runtime.NewScheme())` rather than relying on the global `scheme.Scheme` default. Without this, the fake client's `Get` path may concurrently register GVKs on the shared scheme map, causing fatal `concurrent map writes` panics. See `metrics_reader_binding_test.go` and `servicemonitor_resync_test.go` for the established pattern.
 
 ## Skills
 
