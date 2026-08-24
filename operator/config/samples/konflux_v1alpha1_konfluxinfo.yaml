@@ -143,3 +143,5 @@ spec:
       packageRegistryProxyGomodUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/go-proxy"
       packageRegistryProxyPipUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/pypi-proxy/simple"
       packageRegistryProxyPnpmUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/npm-proxy"
+      packageRegistryProxyBundlerUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/rubygems-proxy"
+      packageRegistryProxyCargoUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/cargo-proxy"
