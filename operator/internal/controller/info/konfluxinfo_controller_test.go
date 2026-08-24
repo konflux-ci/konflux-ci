@@ -183,18 +183,52 @@ var _ = Describe("KonfluxInfo Controller", func() {
 			Expect(err.Error()).To(ContainSubstring("must not contain credentials"))
 		})
 
+		It("should reject packageRegistryProxyBundlerUrl containing credentials", func(ctx context.Context) {
+			cr := &konfluxv1alpha1.KonfluxInfo{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxInfoSpec{
+					ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+						Data: &konfluxv1alpha1.ClusterConfigData{
+							PackageRegistryProxyBundlerURL: "https://user:pass@rubygems.example.com",
+						},
+					},
+				},
+			}
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("must not contain credentials"))
+		})
+
+		It("should reject packageRegistryProxyCargoUrl containing credentials", func(ctx context.Context) {
+			cr := &konfluxv1alpha1.KonfluxInfo{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxInfoSpec{
+					ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+						Data: &konfluxv1alpha1.ClusterConfigData{
+							PackageRegistryProxyCargoURL: "https://user:pass@crates.example.com",
+						},
+					},
+				},
+			}
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("must not contain credentials"))
+		})
+
 		It("should allow proxy URLs without credentials", func(ctx context.Context) {
 			cr := &konfluxv1alpha1.KonfluxInfo{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
 				Spec: konfluxv1alpha1.KonfluxInfoSpec{
 					ClusterConfig: &konfluxv1alpha1.ClusterConfig{
 						Data: &konfluxv1alpha1.ClusterConfigData{
-							HTTPProxy:                    "squid.caching.svc.cluster.local:3128",
-							PackageRegistryProxyNpmURL:   "https://npm-proxy.internal.svc:8080",
-							PackageRegistryProxyYarnURL:  "https://yarn-proxy.internal.svc:8080",
-							PackageRegistryProxyGomodURL: "https://go-proxy.internal.svc:8080",
-							PackageRegistryProxyPipURL:   "https://pypi-proxy.internal.svc:8080",
-							PackageRegistryProxyPnpmURL:  "https://pnpm-proxy.internal.svc:8080",
+							HTTPProxy:                      "squid.caching.svc.cluster.local:3128",
+							PackageRegistryProxyNpmURL:     "https://npm-proxy.internal.svc:8080",
+							PackageRegistryProxyYarnURL:    "https://yarn-proxy.internal.svc:8080",
+							PackageRegistryProxyGomodURL:   "https://go-proxy.internal.svc:8080",
+							PackageRegistryProxyPipURL:     "https://pypi-proxy.internal.svc:8080",
+							PackageRegistryProxyPnpmURL:    "https://pnpm-proxy.internal.svc:8080",
+							PackageRegistryProxyBundlerURL: "https://rubygems-proxy.internal.svc:8080",
+							PackageRegistryProxyCargoURL:   "https://cargo-proxy.internal.svc:8080",
 						},
 					},
 				},
