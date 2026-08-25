@@ -77,7 +77,7 @@ documentation improvements, or code contributions — every bit helps.
 - Join us on [Slack](https://join.slack.com/t/konflux-ci/shared_invite/zt-3g36o0a4x-Dmsy25XEGuBV79S7kd04CA) to chat with the community
 - Check out our [open issues](https://github.com/konflux-ci/konflux-ci/issues) for ways to contribute
 - [Report a bug or request a feature](https://github.com/konflux-ci/konflux-ci/issues/new)
-- Found a security vulnerability? Please report it privately via [GitHub's security advisories](https://github.com/konflux-ci/konflux-ci/security/advisories/new)
+- Found a security vulnerability? Please follow the instructions for [Reporting a Security Vulnerability or Incident for Konflux](https://github.com/konflux-ci/.github/blob/main/SECURITY.md)
 
 ## Release Process
 
