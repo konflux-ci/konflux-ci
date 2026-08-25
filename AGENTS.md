@@ -56,6 +56,21 @@ All targets run from the `operator/` directory:
 
 After changing APIs or RBAC annotations, run `make manifests generate` from `operator/`. CI enforces this via the `operator-verify-generated-files` workflow — PRs will fail if generated files are stale.
 
+## Single-file verification
+
+After a small Go change, lint and vet the **package you edited** (not the whole repo). Run from `operator/` (repo root has no `go.mod`).
+
+1. Read the pinned golangci-lint version from `operator/.golangci-lint-version`.
+2. If `operator/bin/` has no `golangci-lint-<that version>` binary, run `make golangci-lint` from `operator/`.
+3. Run `./bin/golangci-lint-<version> run <package-dir>/` and `go vet <package-dir>/`.
+
+Example (replace the package path with the one you changed):
+
+```bash
+./bin/golangci-lint run ./internal/controller/konflux/
+go vet ./internal/controller/konflux/
+```
+
 ## Code Style
 
 - Shell: `set -euo pipefail`, quote variables. Scripts that run on the user's host (deployment scripts, CLI helpers, and scripts stored in ConfigMaps that users fetch and run locally) must be compatible with both Linux and macOS — avoid GNU-only flags, prefer POSIX-compatible constructs, and test with both GNU and BSD coreutils (e.g. `sed`, `date`, `readlink`)
