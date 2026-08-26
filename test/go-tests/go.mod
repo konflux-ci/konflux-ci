@@ -13,7 +13,7 @@ require (
 	github.com/google/go-github/v90 v90.0.0
 	github.com/h2non/gock v1.2.0
 	github.com/konflux-ci/application-api v0.0.0-20260727123715-2999a91451c6
-	github.com/konflux-ci/build-service v0.0.0-20240611083846-2dee6cfe6fe4
+	github.com/konflux-ci/build-service v0.0.0-20260821125916-ccde63aa02e8
 	github.com/konflux-ci/image-controller v0.0.0-20260803133345-065a438ce526
 	github.com/konflux-ci/integration-service v0.0.0-20260814144132-2db971488b15
 	github.com/konflux-ci/konflux-ci/operator v0.0.0
