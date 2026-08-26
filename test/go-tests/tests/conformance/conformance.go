@@ -29,6 +29,7 @@ import (
 	e2eConfig "github.com/konflux-ci/konflux-ci/test/go-tests/tests/conformance/config"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
+	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // conformanceCleanupBudget returns the max wall time to wait for AfterAll cleanup.
@@ -61,7 +62,9 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 
 	fw := &framework.Framework{}
 	var buildPipelineAnnotation map[string]string
-	var componentNewBaseBranch, gitRevision, componentRepositoryName, componentName string
+	var appName string
+	var componentNewBaseBranch, gitRevision, componentRepositoryName, componentName, releaseName string
+	var releaseRes setupReleaseResult
 
 	for _, appSpec := range e2eConfig.UpstreamAppSpecs {
 		appSpec := appSpec
@@ -79,22 +82,65 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 				userNamespace = fw.UserNamespace
-				managedNamespace = "default-managed-tenant"
-				klog.Info("conformance: namespaces ready", "user", userNamespace, "managed", managedNamespace)
+				managedNamespace = os.Getenv("E2E_MANAGED_NAMESPACE")
+				if managedNamespace == "" {
+					managedNamespace = "default-managed-tenant"
+				}
+				klog.Infof("conformance: namespaces ready user=%s managed=%s", userNamespace, managedNamespace)
 
-				componentName = fmt.Sprintf("%s-%s", appSpec.ComponentSpec.Name, util.GenerateRandomString(4))
+				suffix := util.GenerateRandomString(4)
+				componentName = fmt.Sprintf("%s-%s", appSpec.ComponentSpec.Name, suffix)
+				appName = fmt.Sprintf("%s-%s", appSpec.ApplicationName, suffix)
 				pacBranchName = constants.PaCPullRequestBranchPrefix + componentName
 				componentRepositoryName = utils.ExtractGitRepositoryNameFromURL(appSpec.ComponentSpec.GitSourceUrl)
 
-				gomega.Expect(runSetupRelease(appSpec.ApplicationName, componentName, userNamespace, managedNamespace)).To(gomega.Succeed())
-				gomega.Expect(patchECPForE2E(fw.AsKubeAdmin, "default", managedNamespace)).To(gomega.Succeed())
-				gomega.Expect(grantIntegrationRunnerJobRBAC(userNamespace)).To(gomega.Succeed())
+				if isPreProvisioned() {
+					client := fw.AsKubeAdmin.CommonController.KubeRest()
+					pruneDanglingSASecrets(context.Background(), client, managedNamespace)
+					gomega.Expect(ensureReleasePipelineSA(context.Background(), client, managedNamespace)).To(gomega.Succeed())
+				}
+
+				releaseName = fmt.Sprintf("release-%s", suffix)
+				var setupErr error
+				releaseRes, setupErr = runSetupRelease(appName, componentName, userNamespace, managedNamespace, releaseName)
+				gomega.Expect(setupErr).NotTo(gomega.HaveOccurred())
+				preProvisioned := isPreProvisioned()
+				if preProvisioned {
+					// Pre-provisioned setup uses intentionally mixed error handling:
+					// mutations (ensureSASecret, patchECP, grantRBAC) are non-fatal
+					// warnings because the cluster may already be partially configured,
+					// while verifications (verifyECPPatched, verifyReleasePrerequisites)
+					// are fatal Expects because tests cannot succeed without them.
+					client := fw.AsKubeAdmin.CommonController.KubeRest()
+					runIRNames := []string{componentName, releaseRes.TrustedArtifactsIR}
+					if err := ensureSASecret(context.Background(), client, managedNamespace, runIRNames); err != nil {
+						klog.Warningf("conformance: ensureSASecret failed (non-fatal): %v", err)
+					}
+					if err := patchECPForE2E(fw.AsKubeAdmin, releaseRes.ECPName, managedNamespace); err != nil {
+						klog.Warningf("conformance: patchECPForE2E failed (non-fatal in pre-provisioned env): %v", err)
+					}
+					if err := grantIntegrationRunnerJobRBAC(fw.AsKubeAdmin, userNamespace); err != nil {
+						klog.Warningf("conformance: grantIntegrationRunnerJobRBAC failed (non-fatal in pre-provisioned env): %v", err)
+					}
+					gomega.Expect(verifyECPPatched(fw.AsKubeAdmin, releaseRes.ECPName, managedNamespace)).To(gomega.Succeed())
+					if err := verifyPreProvisionedRBAC(fw.AsKubeAdmin, userNamespace); err != nil {
+						klog.Warningf("conformance: pre-provisioned RBAC check failed (non-fatal, tests may still pass): %v", err)
+					}
+					gomega.Expect(verifyReleasePrerequisites(fw.AsKubeAdmin, managedNamespace)).To(gomega.Succeed())
+				} else {
+					gomega.Expect(patchECPForE2E(fw.AsKubeAdmin, releaseRes.ECPName, managedNamespace)).To(gomega.Succeed())
+					gomega.Expect(grantIntegrationRunnerJobRBAC(fw.AsKubeAdmin, userNamespace)).To(gomega.Succeed())
+				}
 
 				buildPipelineAnnotation = build.GetBuildPipelineBundleAnnotation(appSpec.ComponentSpec.BuildPipelineType)
 			})
 
 			ginkgo.AfterAll(func() {
-				if strings.EqualFold(os.Getenv("E2E_SKIP_CLEANUP"), "true") || ginkgo.CurrentSpecReport().Failed() || strings.Contains(ginkgo.GinkgoLabelFilter(), upstreamKonfluxTestLabel) {
+				skipCleanup := strings.EqualFold(os.Getenv("E2E_SKIP_CLEANUP"), "true")
+				if !isPreProvisioned() {
+					skipCleanup = skipCleanup || ginkgo.CurrentSpecReport().Failed() || strings.Contains(ginkgo.GinkgoLabelFilter(), upstreamKonfluxTestLabel)
+				}
+				if skipCleanup {
 					return
 				}
 				klog.Info("conformance: cleaning up")
@@ -102,7 +148,14 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				ctx, cancel := context.WithTimeout(context.Background(), budget)
 				defer cancel()
 
-				_ = fw.AsKubeAdmin.CommonController.KubeInterface().CoreV1().Namespaces().Delete(ctx, managedNamespace, metav1.DeleteOptions{})
+				if isPreProvisioned() {
+					cleanupTenantResources(ctx, fw, userNamespace, appName, componentName, releaseName)
+				} else {
+					if err := fw.AsKubeAdmin.CommonController.KubeInterface().CoreV1().Namespaces().Delete(ctx, managedNamespace, metav1.DeleteOptions{}); err != nil {
+						klog.Warningf("conformance cleanup: delete managed namespace %s: %v", managedNamespace, err)
+					}
+				}
+
 				cleanupWithRetry(ctx, "delete PaC branch", func() error {
 					return fw.AsKubeAdmin.CommonController.GitHub.DeleteRef(ctx, componentRepositoryName, pacBranchName)
 				})
@@ -112,14 +165,37 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				cleanupWithRetry(ctx, "cleanup webhooks", func() error {
 					return build.CleanupWebhooks(ctx, fw, componentRepositoryName)
 				})
+
+				if isPreProvisioned() {
+					// The release PipelineRun is created asynchronously by the
+					// release-service and may not exist until ~50s after the
+					// last spec finishes. Poll until it appears, then sweep.
+					// This is non-fatal: if the test failed before reaching the
+					// release stage, no PipelineRun will ever appear and that's fine.
+					client := fw.AsKubeAdmin.CommonController.KubeRest()
+					appLabel := crclient.MatchingLabels{"appstudio.openshift.io/application": appName}
+					pollDeadline := time.Now().Add(60 * time.Second)
+					for time.Now().Before(pollDeadline) {
+						if ctx.Err() != nil {
+							klog.Warningf("conformance cleanup: context cancelled while waiting for release PipelineRun")
+							break
+						}
+						prList := &tektonapi.PipelineRunList{}
+						if err := client.List(ctx, prList, crclient.InNamespace(managedNamespace), appLabel); err == nil && len(prList.Items) > 0 {
+							break
+						}
+						time.Sleep(5 * time.Second)
+					}
+					cleanupManagedResources(ctx, fw, managedNamespace, appName, componentName, releaseName, releaseRes)
+				}
 			})
 
 			// --- Application & Component Setup ---
 
 			ginkgo.It("creates an application", ginkgo.Label(devEnvTestLabel, upstreamKonfluxTestLabel), func() {
-				createdApplication, createErr := fw.AsKubeAdmin.HasController.CreateApplication(appSpec.ApplicationName, userNamespace)
+				createdApplication, createErr := fw.AsKubeAdmin.HasController.CreateApplication(appName, userNamespace)
 				gomega.Expect(createErr).NotTo(gomega.HaveOccurred())
-				gomega.Expect(createdApplication.Spec.DisplayName).To(gomega.Equal(appSpec.ApplicationName))
+				gomega.Expect(createdApplication.Spec.DisplayName).To(gomega.Equal(appName))
 				gomega.Expect(createdApplication.Namespace).To(gomega.Equal(userNamespace))
 			})
 
@@ -127,7 +203,7 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				its := appSpec.ComponentSpec.IntegrationTestScenario
 				gomega.Eventually(func() error {
 					var createErr error
-					integrationTestScenario, createErr = fw.AsKubeAdmin.IntegrationController.CreateIntegrationTestScenario("", appSpec.ApplicationName, userNamespace, its.GitURL, its.GitRevision, its.TestPath, "", []string{})
+					integrationTestScenario, createErr = fw.AsKubeAdmin.IntegrationController.CreateIntegrationTestScenario("", appName, userNamespace, its.GitURL, its.GitRevision, its.TestPath, "", []string{})
 					return createErr
 				}, time.Minute*2, time.Second*5).Should(gomega.Succeed(), "timed out creating IntegrationTestScenario")
 			})
@@ -142,7 +218,7 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 			ginkgo.It(fmt.Sprintf("creates component %s (private: %t) from git source %s", appSpec.ComponentSpec.Name, appSpec.ComponentSpec.Private, appSpec.ComponentSpec.GitSourceUrl), ginkgo.Label(devEnvTestLabel, upstreamKonfluxTestLabel), func() {
 				componentObj := appservice.ComponentSpec{
 					ComponentName: componentName,
-					Application:   appSpec.ApplicationName,
+					Application:   appName,
 					Source: appservice.ComponentSource{
 						ComponentSourceUnion: appservice.ComponentSourceUnion{
 							GitSource: &appservice.GitSource{
@@ -154,7 +230,7 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 						},
 					},
 				}
-				component, err = fw.AsKubeAdmin.HasController.CreateComponentCheckImageRepository(componentObj, userNamespace, "", "", appSpec.ApplicationName, false, utils.MergeMaps(constants.ComponentPaCRequestAnnotation, buildPipelineAnnotation))
+				component, err = fw.AsKubeAdmin.HasController.CreateComponentCheckImageRepository(componentObj, userNamespace, "", "", appName, false, utils.MergeMaps(constants.ComponentPaCRequestAnnotation, buildPipelineAnnotation))
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 			})
 
@@ -175,14 +251,14 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 								return nil
 							}
 						}
-						dumpDiagnostics(fw.AsKubeAdmin, component.GetName(), appSpec.ApplicationName, userNamespace)
+						dumpDiagnostics(fw.AsKubeAdmin, component.GetName(), appName, userNamespace)
 						return fmt.Errorf("PaC branch %s not found among %d PRs", pacBranchName, len(prs))
 					}, pullRequestCreationTimeout, defaultPollingInterval).Should(gomega.Succeed(), "timed out waiting for PaC PR")
 
 					gomega.Eventually(func() error {
-						pipelineRun, err = fw.AsKubeAdmin.HasController.GetComponentPipelineRun(component.GetName(), appSpec.ApplicationName, userNamespace, prSHA)
+						pipelineRun, err = fw.AsKubeAdmin.HasController.GetComponentPipelineRun(component.GetName(), appName, userNamespace, prSHA)
 						if err != nil {
-							dumpDiagnostics(fw.AsKubeAdmin, component.GetName(), appSpec.ApplicationName, userNamespace)
+							dumpDiagnostics(fw.AsKubeAdmin, component.GetName(), appName, userNamespace)
 							return err
 						}
 						return fw.AsKubeAdmin.TektonController.DeletePipelineRun(pipelineRun.Name, pipelineRun.Namespace)
@@ -217,9 +293,9 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 					headSHA = mergeResult.GetSHA()
 
 					gomega.Eventually(func() error {
-						pipelineRun, err = fw.AsKubeAdmin.HasController.GetComponentPipelineRun(component.GetName(), appSpec.ApplicationName, userNamespace, headSHA)
+						pipelineRun, err = fw.AsKubeAdmin.HasController.GetComponentPipelineRun(component.GetName(), appName, userNamespace, headSHA)
 						if err != nil {
-							dumpDiagnostics(fw.AsKubeAdmin, component.GetName(), appSpec.ApplicationName, userNamespace)
+							dumpDiagnostics(fw.AsKubeAdmin, component.GetName(), appName, userNamespace)
 							return err
 						}
 						if !pipelineRun.HasStarted() {
@@ -247,7 +323,7 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 
 			ginkgo.When("Build PipelineRun completes successfully", func() {
 				ginkgo.It("should validate Tekton TaskRun test results successfully", func() {
-					pipelineRun, err = fw.AsKubeAdmin.HasController.GetComponentPipelineRun(component.GetName(), appSpec.ApplicationName, userNamespace, headSHA)
+					pipelineRun, err = fw.AsKubeAdmin.HasController.GetComponentPipelineRun(component.GetName(), appName, userNamespace, headSHA)
 					gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 					err = build.ValidateBuildPipelineTestResults(pipelineRun, fw.AsKubeAdmin.CommonController.KubeRest(), false)
 					gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -255,7 +331,7 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 
 				ginkgo.It("should validate that the build pipelineRun is signed", ginkgo.Label(upstreamKonfluxTestLabel), func() {
 					gomega.Eventually(func() error {
-						pipelineRun, err = fw.AsKubeAdmin.HasController.GetComponentPipelineRun(component.GetName(), appSpec.ApplicationName, userNamespace, headSHA)
+						pipelineRun, err = fw.AsKubeAdmin.HasController.GetComponentPipelineRun(component.GetName(), appName, userNamespace, headSHA)
 						if err != nil {
 							return err
 						}
@@ -276,7 +352,7 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				ginkgo.It("should validate that the build pipelineRun is annotated with the name of the Snapshot", ginkgo.Label(upstreamKonfluxTestLabel), func() {
 					gomega.Eventually(func() error {
 						var getErr error
-						pipelineRun, getErr = fw.AsKubeAdmin.HasController.GetComponentPipelineRun(component.GetName(), appSpec.ApplicationName, userNamespace, headSHA)
+						pipelineRun, getErr = fw.AsKubeAdmin.HasController.GetComponentPipelineRun(component.GetName(), appName, userNamespace, headSHA)
 						if getErr != nil {
 							return getErr
 						}
@@ -293,7 +369,7 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 					gomega.Eventually(func() error {
 						testPipelinerun, err = fw.AsKubeAdmin.IntegrationController.GetIntegrationPipelineRun(integrationTestScenario.Name, snapshot.Name, userNamespace)
 						if err != nil {
-							dumpDiagnostics(fw.AsKubeAdmin, component.GetName(), appSpec.ApplicationName, userNamespace)
+							dumpDiagnostics(fw.AsKubeAdmin, component.GetName(), appName, userNamespace)
 							return err
 						}
 						if !testPipelinerun.HasStarted() {
@@ -413,9 +489,9 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 					gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 					gomega.Eventually(func() error {
-						testPipelinerun, err = fw.AsKubeAdmin.HasController.GetComponentPipelineRunWithType(component.GetName(), appSpec.ApplicationName, userNamespace, "build", "", "incoming")
+						testPipelinerun, err = fw.AsKubeAdmin.HasController.GetComponentPipelineRunWithType(component.GetName(), appName, userNamespace, "build", "", "incoming")
 						if err != nil {
-							dumpDiagnostics(fw.AsKubeAdmin, component.GetName(), appSpec.ApplicationName, userNamespace)
+							dumpDiagnostics(fw.AsKubeAdmin, component.GetName(), appName, userNamespace)
 							return err
 						}
 						if !testPipelinerun.HasStarted() {
@@ -431,7 +507,7 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 					gomega.Expect(testPipelinerun.Labels["pipelinesascode.tekton.dev/event-type"]).To(gomega.Equal("incoming"))
 					gomega.Expect(testPipelinerun.Labels["pipelines.appstudio.openshift.io/type"]).To(gomega.Equal("build"))
 					gomega.Expect(testPipelinerun.Labels["appstudio.openshift.io/component"]).To(gomega.Equal(component.GetName()))
-					gomega.Expect(testPipelinerun.Labels["appstudio.openshift.io/application"]).To(gomega.Equal(appSpec.ApplicationName))
+					gomega.Expect(testPipelinerun.Labels["appstudio.openshift.io/application"]).To(gomega.Equal(appName))
 				})
 
 				ginkgo.It("should have a source commit SHA label", func() {
