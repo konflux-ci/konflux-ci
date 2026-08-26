@@ -64,9 +64,8 @@ spec:
       kind: KonfluxIntegrationService
       name: konfluxintegrationservices.konflux.konflux-ci.dev
       version: v1alpha1
-    - description: |-
-        KonfluxInternalRegistry is the Schema for the konfluxinternalregistries API.
-        Enabling the internal registry requires trust-manager to be deployed for Certificate and Bundle resources.
+    - description: KonfluxInternalRegistry is the Schema for the konfluxinternalregistries
+        API.
       displayName: Konflux Internal Registry
       kind: KonfluxInternalRegistry
       name: konfluxinternalregistries.konflux.konflux-ci.dev

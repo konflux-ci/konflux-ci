@@ -17,9 +17,8 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: |-
-          KonfluxInternalRegistry is the Schema for the konfluxinternalregistries API.
-          Enabling the internal registry requires trust-manager to be deployed for Certificate and Bundle resources.
+        description: KonfluxInternalRegistry is the Schema for the konfluxinternalregistries
+          API.
         properties:
           apiVersion:
             description: |-

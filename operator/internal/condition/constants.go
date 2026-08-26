@@ -80,4 +80,15 @@ const (
 
 	// ReasonCertManagerInstalled indicates that cert-manager CRDs are installed.
 	ReasonCertManagerInstalled = "CertManagerInstalled"
+
+	// ReasonBundleDistributed indicates that the trust-manager Bundle was applied successfully.
+	ReasonBundleDistributed = "BundleDistributed"
+
+	// ReasonBundleNotDistributed indicates that the trust-manager Bundle has not been applied
+	// (e.g. because the trust-manager CRD is not yet installed).
+	ReasonBundleNotDistributed = "BundleNotDistributed"
+
+	// ReasonBundleDistributionDisabled indicates that cluster CA bundle distribution is
+	// intentionally disabled (either explicitly or via platform default).
+	ReasonBundleDistributionDisabled = "BundleDistributionDisabled"
 )
