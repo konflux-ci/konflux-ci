@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Generates cert-manager and trust-manager manifests under dependencies/ using Helm.
-# Also extracts cert-manager CRDs into operator/test/crds/cert-manager/ for envtest.
+# Also extracts cert-manager and trust-manager CRDs into operator/test/crds/ for envtest.
 # Downloads the prometheus-operator ServiceMonitor CRD into operator/test/crds/prometheus/
 # and dependencies/prometheus-operator-crds/.
 # Intended for local use and for the Update Third-Party Manifests workflow.
@@ -84,6 +84,11 @@ helm template trust-manager jetstack/trust-manager \
   --set 'defaultPackage.resources.limits.memory=250Mi' \
   > dependencies/trust-manager/trust-manager.yaml
 
+# Extract trust-manager CRDs for envtest (only CustomResourceDefinition documents)
+TRUST_CRD_DIR="operator/test/crds/trust-manager"
+mkdir -p "$TRUST_CRD_DIR"
+yq 'select(.kind == "CustomResourceDefinition")' dependencies/trust-manager/trust-manager.yaml > "$TRUST_CRD_DIR/trust-manager.crds.yaml"
+
 # prometheus-operator ServiceMonitor CRD (Kind envtest + deploy-deps prerequisite)
 PROM_TAG="${PROMETHEUS_OPERATOR_VERSION#v}"
 PROM_CRD_URL="https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v${PROM_TAG}/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml"
@@ -104,4 +109,5 @@ cp -f "$PROM_ENVTEST_CRD" "$PROM_DEPS_CRD"
 echo "Generated dependencies/cert-manager/cert-manager.yaml (cert-manager $CERT_MANAGER_VERSION)"
 echo "Generated $CRD_DIR/cert-manager.crds.yaml (extracted CRDs for envtest)"
 echo "Generated dependencies/trust-manager/trust-manager.yaml (trust-manager $TRUST_MANAGER_VERSION)"
+echo "Generated $TRUST_CRD_DIR/trust-manager.crds.yaml (extracted CRDs for envtest)"
 echo "Generated $PROM_ENVTEST_CRD (prometheus-operator ServiceMonitor CRD $PROMETHEUS_OPERATOR_VERSION)"

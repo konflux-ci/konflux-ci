@@ -42,7 +42,6 @@ type KonfluxInternalRegistryStatus struct {
 // +kubebuilder:validation:XValidation:rule="self.metadata.name == 'konflux-internal-registry'",message="KonfluxInternalRegistry CR must be named 'konflux-internal-registry'. Only one instance is allowed per cluster."
 
 // KonfluxInternalRegistry is the Schema for the konfluxinternalregistries API.
-// Enabling the internal registry requires trust-manager to be deployed for Certificate and Bundle resources.
 type KonfluxInternalRegistry struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

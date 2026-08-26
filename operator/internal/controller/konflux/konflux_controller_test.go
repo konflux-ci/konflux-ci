@@ -643,6 +643,91 @@ var _ = Describe("Konflux Controller", func() {
 		})
 	})
 
+	Context("CertManager spec forwarding", func() {
+		const resourceName = "konflux"
+
+		It("should forward spec.certManager.distributeClusterCABundle to KonfluxCertManager", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			enabled := true
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					CertManager: &konfluxv1alpha1.CertManagerConfig{
+						DistributeClusterCABundle: &enabled,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			Eventually(func(g Gomega) {
+				cm := &konfluxv1alpha1.KonfluxCertManager{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: certmanager.CRName}, cm)).To(Succeed())
+				g.Expect(cm.Spec.DistributeClusterCABundle).NotTo(BeNil())
+				g.Expect(*cm.Spec.DistributeClusterCABundle).To(BeTrue())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should forward spec.certManager.distributeClusterCABundle=false to KonfluxCertManager", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			disabled := false
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					CertManager: &konfluxv1alpha1.CertManagerConfig{
+						DistributeClusterCABundle: &disabled,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			Eventually(func(g Gomega) {
+				cm := &konfluxv1alpha1.KonfluxCertManager{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: certmanager.CRName}, cm)).To(Succeed())
+				g.Expect(cm.Spec.DistributeClusterCABundle).NotTo(BeNil())
+				g.Expect(*cm.Spec.DistributeClusterCABundle).To(BeFalse())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should forward nil distributeClusterCABundle when certManager config is omitted", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			Eventually(func(g Gomega) {
+				cm := &konfluxv1alpha1.KonfluxCertManager{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: certmanager.CRName}, cm)).To(Succeed())
+				g.Expect(cm.Spec.DistributeClusterCABundle).To(BeNil(), "distributeClusterCABundle should be nil when certManager config is omitted")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should forward nil distributeClusterCABundle when field is omitted within certManager config", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					CertManager: &konfluxv1alpha1.CertManagerConfig{},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			Eventually(func(g Gomega) {
+				cm := &konfluxv1alpha1.KonfluxCertManager{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: certmanager.CRName}, cm)).To(Succeed())
+				g.Expect(cm.Spec.DistributeClusterCABundle).To(BeNil(), "distributeClusterCABundle should be nil when field is omitted")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
 	Context("ComponentMetrics propagation", func() {
 		const resourceName = "konflux"
 

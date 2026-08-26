@@ -118,6 +118,7 @@ func SetupTestEnv(basePath string) *TestEnv {
 		CRDDirectoryPaths: []string{
 			filepath.Join(basePath, "config", "crd", "bases"),
 			filepath.Join(basePath, "test", "crds", "cert-manager"),
+			filepath.Join(basePath, "test", "crds", "trust-manager"),
 			filepath.Join(basePath, "test", "crds", "prometheus"),
 			filepath.Join(basePath, "test", "crds", "enterprise-contract"),
 			filepath.Join(basePath, "test", "crds", "release"),
