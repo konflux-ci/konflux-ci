@@ -51,3 +51,21 @@ They run against an upstream Konflux instance deployed via scripts in the [konfl
 ### Configuration
 
 The test scenarios are defined in [scenarios.go](./config/scenarios.go). Update `UpstreamAppSpecs` to test your own component/repository.
+
+#### Pre-provisioned (staging) mode
+
+By default the conformance tests create and tear down their own namespaces on a
+local Kind cluster. To run against a pre-provisioned cluster (e.g. staging) where
+namespaces are managed externally:
+
+| Environment Variable | Purpose |
+|---|---|
+| `E2E_APPLICATIONS_NAMESPACE` | Tenant namespace (e.g. `conformance-tenant`) |
+| `E2E_MANAGED_NAMESPACE` | Managed namespace for release resources (e.g. `conformance-managed-tenant`). **Setting this enables pre-provisioned mode.** |
+
+When `E2E_MANAGED_NAMESPACE` is set:
+- Setup adapts `setup-release.sh` to tolerate pre-existing namespaces and RBAC
+- Cleanup deletes only test-created resources (filtered by application label) instead of deleting the namespace
+- `verifyECPPatched`, `verifyPreProvisionedRBAC`, and `verifyReleasePrerequisites` assert that the environment is correctly configured before tests run
+
+See `test/e2e/e2e.env.template` for full environment variable documentation.

@@ -14,12 +14,12 @@ var UpstreamAppSpecs = []ApplicationSpec{
 		Skip:            false,
 		ComponentSpec: ComponentSpec{
 			Name:              "konflux-ci-upstream",
-			GitSourceUrl:      fmt.Sprintf("https://github.com/%s/%s", utils.GetEnv(constants.GITHUB_E2E_ORGANIZATION_ENV, constants.DefaultGitHubE2EOrganization), "testrepo"),
+			GitSourceUrl:      fmt.Sprintf("https://github.com/%s/%s", utils.GetEnv(constants.GITHUB_E2E_ORGANIZATION_ENV, constants.DefaultGitHubE2EOrganization), utils.GetEnv(constants.GITHUB_E2E_REPO_ENV, constants.DefaultIntegrationSRepo)),
 			GitSourceRevision: "878eb2976b97946f577a8dbb0cc391d5370efbbb",
 			DockerFilePath:    "Dockerfile",
 			BuildPipelineType: constants.DockerBuildOciTAMin,
 			IntegrationTestScenario: IntegrationTestScenarioSpec{
-				GitURL:      fmt.Sprintf("https://github.com/%s/%s", utils.GetEnv(constants.GITHUB_E2E_ORGANIZATION_ENV, constants.DefaultGitHubE2EOrganization), "testrepo"),
+				GitURL:      fmt.Sprintf("https://github.com/%s/%s", utils.GetEnv(constants.GITHUB_E2E_ORGANIZATION_ENV, constants.DefaultGitHubE2EOrganization), utils.GetEnv(constants.GITHUB_E2E_ITS_REPO_ENV, constants.DefaultIntegrationSRepo)),
 				GitRevision: "7ab8dd0157209308324be243d98301d8be3ae295",
 				TestPath:    "integration-tests/testrepo-integration.yaml",
 			},

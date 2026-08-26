@@ -112,12 +112,6 @@ func ValidateBuildPipelineTestResults(pipelineRun *pipeline.PipelineRun, c crcli
 
 		resultsToValidate := []string{constants.TektonTaskTestOutputName}
 
-		switch taskName {
-		case "tpa-scan":
-			resultsToValidate = append(resultsToValidate, "SCAN_OUTPUT")
-			resultsToValidate = append(resultsToValidate, "REPORTS")
-		}
-
 		if err := validateTaskRunResult(imageURL, results, resultsToValidate, taskName); err != nil {
 			return err
 		}

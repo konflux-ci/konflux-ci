@@ -7,8 +7,15 @@ type BuildPipelineType string
 const (
 	GITHUB_TOKEN_ENV            string = "GITHUB_TOKEN"            // #nosec
 	GITHUB_E2E_ORGANIZATION_ENV string = "MY_GITHUB_ORG"           // #nosec
+	GITHUB_E2E_REPO_ENV         string = "E2E_REPO"               // #nosec
+	GITHUB_E2E_ITS_REPO_ENV     string = "E2E_ITS_REPO"           // #nosec
 	DefaultGitHubE2EOrganization string = "konflux-ci"
 	QUAY_E2E_ORGANIZATION_ENV   string = "QUAY_E2E_ORGANIZATION"   // #nosec
+
+	// DefaultIntegrationSRepo is the public repo used by the IntegrationTestScenario git resolver.
+	// If changed to a private repo, a secret must be created in the namespace and token/tokenKey
+	// params added to the resolver — see Konflux docs on accessing private repos in ITS.
+	DefaultIntegrationSRepo string = "testrepo"
 
 	TEKTON_CHAINS_NS string = "openshift-pipelines" // #nosec
 
