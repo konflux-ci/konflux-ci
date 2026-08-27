@@ -222,10 +222,64 @@ jobs:
           tool-cache: false
           docker-images: false
 
-      - name: Clone the code
+      # Security: split checkout for fork PRs (repository_dispatch from /allow).
+      # Trusted code (scripts/, test/e2e/, generate-err-logs.sh, operator/Makefile,
+      # operator/Containerfile) comes from the default branch so fork authors cannot
+      # modify code that executes with secrets.  Only operator source, dependencies/,
+      # test/go-tests/, and kind-config.yaml are overlaid from the fork SHA.
+      # Do not consolidate these steps or widen the overlay paths.
+      #
+      # Intentionally fork-controlled (code under test):
+      #   operator/api/, internal/, cmd/, pkg/, config/, go.mod, go.sum
+      #   test/go-tests/, dependencies/, kind-config.yaml
+      # Accepted residual risks:
+      #   - dependencies/ kustomizations are applied by trusted scripts; a fork
+      #     could inject hostile resources, but exploitation requires a visible
+      #     manifest change that passes maintainer review + /allow approval.
+      #   - Go test code (test/go-tests/) inherits GH_TOKEN; the test framework
+      #     needs it to function.
+      #   - operator/config/ is read by make deploy; fork PRs test config changes.
+      - name: Clone the code (same-repo / merge queue)
+        if: github.event_name != 'repository_dispatch'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           ref: ${{ steps.set-ref.outputs.ref }}
+
+      - name: Clone trusted base (fork dispatch)
+        if: github.event_name == 'repository_dispatch'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+
+      - name: Overlay fork sources (fork dispatch)
+        if: github.event_name == 'repository_dispatch'
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          pr_number="${{ github.event.client_payload.pr_number }}"
+          fork_sha="${{ steps.set-ref.outputs.ref }}"
+          if ! [[ "${pr_number}" =~ ^[0-9]+$ ]]; then
+            echo "::error::Invalid pr_number: ${pr_number}"
+            exit 1
+          fi
+          git fetch origin "refs/pull/${pr_number}/head"
+          fetched_sha="$(git rev-parse FETCH_HEAD)"
+          if [[ "${fetched_sha}" != "${fork_sha}" ]]; then
+            echo "::error::SHA mismatch: dispatched ${fork_sha}, PR head is now ${fetched_sha}"
+            exit 1
+          fi
+          # Clear overlay paths so fork deletions are faithfully reproduced.
+          rm -rf operator/ dependencies/ test/go-tests/
+          rm -f kind-config.yaml
+
+          # Restore overlay paths that exist at the fork SHA.
+          # Individual checkouts so a fully-deleted directory does not block others.
+          for path in operator dependencies test/go-tests kind-config.yaml; do
+            git checkout "${fork_sha}" -- "$path" 2>/dev/null || \
+              echo "::notice::${path} absent at fork SHA (deleted or never existed)"
+          done
+
+          # Restore files that execute with secrets (make targets run inside the
+          # deploy-local.sh step which has GITHUB_PRIVATE_KEY, QUAY_TOKEN, etc.).
+          git checkout HEAD -- operator/Makefile operator/Containerfile
 
       - name: Disable AppArmor
         # works around a change in ubuntu 24.04 that restricts Linux namespace access
