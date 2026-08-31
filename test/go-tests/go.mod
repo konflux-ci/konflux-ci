@@ -21,7 +21,7 @@ require (
 	github.com/konflux-ci/release-service v0.0.0-20260827132247-55646fffcc3b
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/onsi/ginkgo/v2 v2.32.1
-	github.com/onsi/gomega v1.42.1
+	github.com/onsi/gomega v1.43.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/openshift-pipelines/pipelines-as-code v0.48.0
 	github.com/openshift/api v0.0.0-20260728120005-8ba0b25b0f29
