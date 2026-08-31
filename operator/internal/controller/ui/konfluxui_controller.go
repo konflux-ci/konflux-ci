@@ -484,8 +484,7 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, runtimeConfig 
 	}
 
 	// Build init container options for runtime config and optional proxy endpoints.
-	var initContainerOpts []customization.ContainerOption
-	initContainerOpts = appendRuntimeConfigOverlays(runtimeConfig, initContainerOpts)
+	initContainerOpts := runtimeConfigOverlays(runtimeConfig)
 
 	if spec == nil {
 		if len(initContainerOpts) > 0 {
@@ -574,22 +573,22 @@ func appendEndpointOverlays(
 	return initOpts, podOpts, nil
 }
 
-// appendRuntimeConfigOverlays adds RUNTIME_* env vars to the generate-proxy-config
-// init container for each configured runtime config field. The env vars are read
-// by generate-proxy-config.sh to produce runtime-config.js.
-func appendRuntimeConfigOverlays(
+// runtimeConfigOverlays returns RUNTIME_* env var options for the
+// generate-proxy-config init container. The env vars are read by
+// generate-proxy-config.sh to produce runtime-config.js.
+func runtimeConfigOverlays(
 	runtimeConfig *konfluxv1alpha1.RuntimeConfigSpec,
-	initOpts []customization.ContainerOption,
 ) []customization.ContainerOption {
 	if runtimeConfig == nil {
-		return initOpts
+		return nil
 	}
+	var opts []customization.ContainerOption
 	for key, value := range runtimeConfig.All {
-		initOpts = append(initOpts, customization.WithEnv(corev1.EnvVar{
+		opts = append(opts, customization.WithEnv(corev1.EnvVar{
 			Name: key, Value: value,
 		}))
 	}
-	return initOpts
+	return opts
 }
 
 // buildOAuth2ProxyOptions builds the container options for oauth2-proxy configuration.
