@@ -152,7 +152,11 @@ Helm-rendered **cert-manager** and **trust-manager** manifests under
 updates alongside the scheduled update workflow. Upstream-derived envtest CRDs
 (e.g., enterprise-contract, release) are extracted from
 `operator/pkg/manifests/` by `rebuild-upstream-manifests.sh` into
-`operator/test/crds/`; CI also verifies these stay in sync.
+`operator/test/crds/`; CI also verifies these stay in sync. OpenShift
+envtest CRDs under `operator/test/crds/openshift/` are extracted from the
+pinned `github.com/openshift/api` module by
+`.github/scripts/update-openshift-test-crds.sh`; CI verifies these stay in
+sync when `operator/go.mod` changes.
 
 When **MintMaker** or **Renovate** opens a PR that only bumps digests or chart
 versions, a **companion PR** may be opened automatically

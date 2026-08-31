@@ -124,6 +124,7 @@ bash "${REPO_ROOT}/operator/pkg/manifests/rebuild-upstream-manifests.sh" "${REPO
 
 export CERT_MANAGER_VERSION TRUST_MANAGER_VERSION PROMETHEUS_OPERATOR_VERSION
 bash "${REPO_ROOT}/.github/scripts/update-third-party-manifests.sh" "${REPO_ROOT}"
+bash "${REPO_ROOT}/.github/scripts/update-openshift-test-crds.sh" "${REPO_ROOT}"
 
 git add \
   operator/pkg/manifests \
