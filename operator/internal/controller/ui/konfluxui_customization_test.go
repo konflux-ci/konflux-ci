@@ -1328,16 +1328,16 @@ func TestAppendEndpointOverlays(t *testing.T) {
 	})
 }
 
-func TestAppendRuntimeConfigOverlays(t *testing.T) {
-	t.Run("nil runtimeConfig returns unchanged slice", func(t *testing.T) {
+func TestRuntimeConfigOverlays(t *testing.T) {
+	t.Run("nil runtimeConfig returns nil", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		initOpts := appendRuntimeConfigOverlays(nil, nil)
+		initOpts := runtimeConfigOverlays(nil)
 		g.Expect(initOpts).To(gomega.BeNil())
 	})
 
-	t.Run("empty runtimeConfig returns unchanged slice", func(t *testing.T) {
+	t.Run("empty runtimeConfig returns empty slice", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		initOpts := appendRuntimeConfigOverlays(&konfluxv1alpha1.RuntimeConfigSpec{}, nil)
+		initOpts := runtimeConfigOverlays(&konfluxv1alpha1.RuntimeConfigSpec{})
 		g.Expect(initOpts).To(gomega.BeEmpty())
 	})
 
@@ -1348,7 +1348,7 @@ func TestAppendRuntimeConfigOverlays(t *testing.T) {
 				Enabled: ptr.To(false),
 			},
 		}
-		initOpts := appendRuntimeConfigOverlays(rc, nil)
+		initOpts := runtimeConfigOverlays(rc)
 		c := applyContainerOpts(initOpts)
 		envMap := envToMap(c.Env)
 		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_CHAT_BOT_ENABLED", "false"))
@@ -1365,7 +1365,7 @@ func TestAppendRuntimeConfigOverlays(t *testing.T) {
 				SampleRateErrors: "1.0",
 			},
 		}
-		initOpts := appendRuntimeConfigOverlays(rc, nil)
+		initOpts := runtimeConfigOverlays(rc)
 		c := applyContainerOpts(initOpts)
 		envMap := envToMap(c.Env)
 		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_MONITORING_ENABLED", "true"))
@@ -1383,7 +1383,7 @@ func TestAppendRuntimeConfigOverlays(t *testing.T) {
 				DSN:     "https://dsn@sentry.io/1",
 			},
 		}
-		initOpts := appendRuntimeConfigOverlays(rc, nil)
+		initOpts := runtimeConfigOverlays(rc)
 		c := applyContainerOpts(initOpts)
 		envMap := envToMap(c.Env)
 		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_MONITORING_ENABLED", "true"))
@@ -1405,7 +1405,7 @@ func TestAppendRuntimeConfigOverlays(t *testing.T) {
 				SampleRateErrors: "0.5",
 			},
 		}
-		initOpts := appendRuntimeConfigOverlays(rc, nil)
+		initOpts := runtimeConfigOverlays(rc)
 		c := applyContainerOpts(initOpts)
 		envMap := envToMap(c.Env)
 		g.Expect(envMap).To(gomega.HaveLen(6))
