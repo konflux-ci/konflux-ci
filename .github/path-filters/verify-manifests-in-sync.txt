@@ -5,6 +5,10 @@ operator/test/crds/cert-manager/**
 operator/test/crds/prometheus/**
 operator/test/crds/enterprise-contract/**
 operator/test/crds/release/**
+operator/test/crds/openshift/**
+operator/go.mod
+operator/go.sum
+.github/scripts/update-openshift-test-crds.sh
 .github/workflows/verify-manifests-in-sync.yaml
 .github/path-filters/verify-manifests-in-sync.txt
 .github/scripts/verify-manifests-in-sync.sh

@@ -18,9 +18,7 @@ package controller
 
 import (
 	"context"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -86,8 +84,7 @@ var _ = BeforeSuite(func() {
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{
 			filepath.Join("..", "..", "config", "crd", "bases"),
-			filepath.Join(getGoModuleDir("github.com/openshift/api"), "console", "v1", "zz_generated.crd-manifests"),
-			filepath.Join(getGoModuleDir("github.com/openshift/api"), "security", "v1", "zz_generated.crd-manifests"),
+			filepath.Join("..", "..", "test", "crds", "openshift"),
 		},
 		ErrorIfCRDPathMissing: true,
 	}
@@ -113,15 +110,3 @@ var _ = AfterSuite(func() {
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 })
-
-// getGoModuleDir returns the directory path of a Go module in the module cache.
-// This is used to reference CRD files from external modules like github.com/openshift/api.
-func getGoModuleDir(modulePath string) string {
-	cmd := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", modulePath) //nolint:gosec // modulePath is developer-provided at compile time
-	output, err := cmd.Output()
-	if err != nil {
-		logf.Log.Error(err, "Failed to get Go module directory", "module", modulePath)
-		return ""
-	}
-	return strings.TrimSpace(string(output))
-}

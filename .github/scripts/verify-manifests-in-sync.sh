@@ -88,6 +88,23 @@ else
   echo "  OK third-party manifests"
 fi
 
+echo "== Verifying OpenShift envtest CRDs =="
+bash "${REPO_ROOT}/.github/scripts/update-openshift-test-crds.sh" "${REPO_ROOT}"
+
+openshift_paths=(
+  "operator/test/crds/openshift/clusterversions.config.openshift.io.yaml"
+  "operator/test/crds/openshift/ingresses.config.openshift.io.yaml"
+  "operator/test/crds/openshift/consolelinks.console.openshift.io.yaml"
+  "operator/test/crds/openshift/securitycontextconstraints.security.openshift.io.yaml"
+)
+if ! git diff --exit-code -- "${openshift_paths[@]}" 2>/dev/null; then
+  echo "❌ OpenShift envtest CRD drift (regenerate with update-openshift-test-crds.sh and commit)." >&2
+  git --no-pager diff -- "${openshift_paths[@]}" >&2 || true
+  fail=true
+else
+  echo "  OK OpenShift envtest CRDs"
+fi
+
 if [[ "${fail}" == true ]]; then
   echo "" >&2
   echo "FAIL: One or more generated manifests are out of sync." >&2

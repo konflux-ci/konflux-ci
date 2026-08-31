@@ -2,7 +2,8 @@ name: Renovate manifest companion PR
 
 # When dependency automation (Renovate, MintMaker, etc.) updates upstream pins or
 # bumps third-party versions in .github/scripts/export-third-party-chart-env.sh,
-# open/update a bot branch and PR with regenerated manifests (do not push to the bot's PR branch).
+# or bumps github.com/openshift/api in operator/go.mod, open/update a bot branch and
+# PR with regenerated manifests (do not push to the bot's PR branch).
 # kustomize, helm, and yq are expected on PATH (ubuntu-latest image).
 
 on:
@@ -13,6 +14,9 @@ on:
       - "operator/upstream-kustomizations/**"
       # MintMaker/Renovate bump Helm chart semvers here (see renovate.json customManagers).
       - ".github/scripts/export-third-party-chart-env.sh"
+      # MintMaker/Renovate bump github.com/openshift/api (envtest CRDs derived from go.mod).
+      - "operator/go.mod"
+      - "operator/go.sum"
 
 concurrency:
   group: renovate-manifest-companion-${{ github.event.pull_request.number }}
@@ -70,11 +74,13 @@ jobs:
               # operator/upstream-kustomizations/registry for quay.io/konflux-ci/zot digests.
               dependencies/registry/kustomization.yml) ;;
               .github/scripts/export-third-party-chart-env.sh) ;;
+              operator/go.mod) ;;
+              operator/go.sum) ;;
               *) disallowed+=("$file") ;;
             esac
           done
           if ((${#disallowed[@]})); then
-            echo "::error::Refusing to run: PR changes files outside the manifest companion allowlist (operator/upstream-kustomizations/*, dependencies/registry/*, .github/scripts/export-third-party-chart-env.sh)."
+            echo "::error::Refusing to run: PR changes files outside the manifest companion allowlist (operator/upstream-kustomizations/*, dependencies/registry/*, .github/scripts/export-third-party-chart-env.sh, operator/go.mod, operator/go.sum)."
             printf '%s\n' "${disallowed[@]}" | sed 's/^/  - /' >&2
             exit 1
           fi
