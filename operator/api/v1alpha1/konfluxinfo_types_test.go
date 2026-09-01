@@ -30,33 +30,35 @@ func TestClusterConfigData_All(t *testing.T) {
 
 		noProxy := ".cluster.local,169.254.169.254"
 		data := ClusterConfigData{
-			DefaultOIDCIssuer:            "https://oidc.example.com",
-			EnableKeylessSigning:         ptr.To(true),
-			FulcioInternalUrl:            "https://fulcio-internal.example.com",
-			FulcioExternalUrl:            "https://fulcio-external.example.com",
-			RekorInternalUrl:             "https://rekor-internal.example.com",
-			RekorExternalUrl:             "https://rekor-external.example.com",
-			TufInternalUrl:               "https://tuf-internal.example.com",
-			TufExternalUrl:               "https://tuf-external.example.com",
-			TrustifyServerInternalUrl:    "https://trustify-internal.example.com",
-			TrustifyServerExternalUrl:    "https://trustify-external.example.com",
-			BuildIdentityRegexp:          "^https://konflux\\.dev/build/.*$",
-			TrustifyOIDCIssuerUrl:        "https://keycloak-external/realm/foobar",
-			TektonChainsIdentity:         "https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/tekton-chains-controller",
-			AllowCacheProxy:              ptr.To(true),
-			HTTPProxy:                    "squid.caching.svc.cluster.local:3128",
-			NoProxy:                      &noProxy,
-			AllowPackageRegistryProxy:    ptr.To(true),
-			PackageRegistryProxyNpmURL:   "https://npm-proxy.example.com",
-			PackageRegistryProxyYarnURL:  "https://yarn-proxy.example.com",
-			PackageRegistryProxyGomodURL: "https://gomod-proxy.example.com",
-			PackageRegistryProxyPipURL:   "https://pip-proxy.example.com",
-			PackageRegistryProxyPnpmURL:  "https://pnpm-proxy.example.com",
+			DefaultOIDCIssuer:              "https://oidc.example.com",
+			EnableKeylessSigning:           ptr.To(true),
+			FulcioInternalUrl:              "https://fulcio-internal.example.com",
+			FulcioExternalUrl:              "https://fulcio-external.example.com",
+			RekorInternalUrl:               "https://rekor-internal.example.com",
+			RekorExternalUrl:               "https://rekor-external.example.com",
+			TufInternalUrl:                 "https://tuf-internal.example.com",
+			TufExternalUrl:                 "https://tuf-external.example.com",
+			TrustifyServerInternalUrl:      "https://trustify-internal.example.com",
+			TrustifyServerExternalUrl:      "https://trustify-external.example.com",
+			BuildIdentityRegexp:            "^https://konflux\\.dev/build/.*$",
+			TrustifyOIDCIssuerUrl:          "https://keycloak-external/realm/foobar",
+			TektonChainsIdentity:           "https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/tekton-chains-controller",
+			AllowCacheProxy:                ptr.To(true),
+			HTTPProxy:                      "squid.caching.svc.cluster.local:3128",
+			NoProxy:                        &noProxy,
+			AllowPackageRegistryProxy:      ptr.To(true),
+			PackageRegistryProxyNpmURL:     "https://npm-proxy.example.com",
+			PackageRegistryProxyYarnURL:    "https://yarn-proxy.example.com",
+			PackageRegistryProxyGomodURL:   "https://gomod-proxy.example.com",
+			PackageRegistryProxyPipURL:     "https://pip-proxy.example.com",
+			PackageRegistryProxyPnpmURL:    "https://pnpm-proxy.example.com",
+			PackageRegistryProxyBundlerURL: "https://bundler-proxy.example.com",
+			PackageRegistryProxyCargoURL:   "https://cargo-proxy.example.com",
 		}
 
 		collected := maps.Collect(data.All)
 
-		g.Expect(collected).To(gomega.HaveLen(22))
+		g.Expect(collected).To(gomega.HaveLen(24))
 		g.Expect(collected["defaultOIDCIssuer"]).To(gomega.Equal("https://oidc.example.com"))
 		g.Expect(collected["enableKeylessSigning"]).To(gomega.Equal("true"))
 		g.Expect(collected["fulcioInternalUrl"]).To(gomega.Equal("https://fulcio-internal.example.com"))
@@ -79,6 +81,8 @@ func TestClusterConfigData_All(t *testing.T) {
 		g.Expect(collected[ClusterConfigKeyPackageRegistryProxyGomodURL]).To(gomega.Equal("https://gomod-proxy.example.com"))
 		g.Expect(collected[ClusterConfigKeyPackageRegistryProxyPipURL]).To(gomega.Equal("https://pip-proxy.example.com"))
 		g.Expect(collected[ClusterConfigKeyPackageRegistryProxyPnpmURL]).To(gomega.Equal("https://pnpm-proxy.example.com"))
+		g.Expect(collected[ClusterConfigKeyPackageRegistryProxyBundlerURL]).To(gomega.Equal("https://bundler-proxy.example.com"))
+		g.Expect(collected[ClusterConfigKeyPackageRegistryProxyCargoURL]).To(gomega.Equal("https://cargo-proxy.example.com"))
 	})
 
 	t.Run("should not yield empty fields", func(t *testing.T) {
@@ -122,28 +126,30 @@ func TestClusterConfigData_All(t *testing.T) {
 
 		noProxy := ""
 		data := ClusterConfigData{
-			DefaultOIDCIssuer:            "https://oidc.example.com",
-			EnableKeylessSigning:         ptr.To(true),
-			FulcioInternalUrl:            "https://fulcio-internal.example.com",
-			FulcioExternalUrl:            "https://fulcio-external.example.com",
-			RekorInternalUrl:             "https://rekor-internal.example.com",
-			RekorExternalUrl:             "https://rekor-external.example.com",
-			TufInternalUrl:               "https://tuf-internal.example.com",
-			TufExternalUrl:               "https://tuf-external.example.com",
-			TrustifyServerInternalUrl:    "https://trustify-internal.example.com",
-			TrustifyServerExternalUrl:    "https://trustify-external.example.com",
-			BuildIdentityRegexp:          "^https://konflux\\.dev/build/.*$",
-			TrustifyOIDCIssuerUrl:        "https://keycloak-external/realm/foobar",
-			TektonChainsIdentity:         "https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/tekton-chains-controller",
-			AllowCacheProxy:              ptr.To(true),
-			HTTPProxy:                    "squid:3128",
-			NoProxy:                      &noProxy,
-			AllowPackageRegistryProxy:    ptr.To(true),
-			PackageRegistryProxyNpmURL:   "https://npm-proxy.example.com",
-			PackageRegistryProxyYarnURL:  "https://yarn-proxy.example.com",
-			PackageRegistryProxyGomodURL: "https://gomod-proxy.example.com",
-			PackageRegistryProxyPipURL:   "https://pip-proxy.example.com",
-			PackageRegistryProxyPnpmURL:  "https://pnpm-proxy.example.com",
+			DefaultOIDCIssuer:              "https://oidc.example.com",
+			EnableKeylessSigning:           ptr.To(true),
+			FulcioInternalUrl:              "https://fulcio-internal.example.com",
+			FulcioExternalUrl:              "https://fulcio-external.example.com",
+			RekorInternalUrl:               "https://rekor-internal.example.com",
+			RekorExternalUrl:               "https://rekor-external.example.com",
+			TufInternalUrl:                 "https://tuf-internal.example.com",
+			TufExternalUrl:                 "https://tuf-external.example.com",
+			TrustifyServerInternalUrl:      "https://trustify-internal.example.com",
+			TrustifyServerExternalUrl:      "https://trustify-external.example.com",
+			BuildIdentityRegexp:            "^https://konflux\\.dev/build/.*$",
+			TrustifyOIDCIssuerUrl:          "https://keycloak-external/realm/foobar",
+			TektonChainsIdentity:           "https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/tekton-chains-controller",
+			AllowCacheProxy:                ptr.To(true),
+			HTTPProxy:                      "squid:3128",
+			NoProxy:                        &noProxy,
+			AllowPackageRegistryProxy:      ptr.To(true),
+			PackageRegistryProxyNpmURL:     "https://npm-proxy.example.com",
+			PackageRegistryProxyYarnURL:    "https://yarn-proxy.example.com",
+			PackageRegistryProxyGomodURL:   "https://gomod-proxy.example.com",
+			PackageRegistryProxyPipURL:     "https://pip-proxy.example.com",
+			PackageRegistryProxyPnpmURL:    "https://pnpm-proxy.example.com",
+			PackageRegistryProxyBundlerURL: "https://bundler-proxy.example.com",
+			PackageRegistryProxyCargoURL:   "https://cargo-proxy.example.com",
 		}
 
 		var yielded []string
@@ -162,28 +168,30 @@ func TestClusterConfigData_All(t *testing.T) {
 
 		noProxy := ""
 		data := ClusterConfigData{
-			DefaultOIDCIssuer:            "oidc",
-			EnableKeylessSigning:         ptr.To(true),
-			FulcioInternalUrl:            "fulcio-int",
-			FulcioExternalUrl:            "fulcio-ext",
-			RekorInternalUrl:             "rekor-int",
-			RekorExternalUrl:             "rekor-ext",
-			TufInternalUrl:               "tuf-int",
-			TufExternalUrl:               "tuf-ext",
-			TrustifyServerInternalUrl:    "trustify-int",
-			TrustifyServerExternalUrl:    "trustify-ext",
-			BuildIdentityRegexp:          "regexp",
-			TrustifyOIDCIssuerUrl:        "trustify-oidc",
-			TektonChainsIdentity:         "chains-identity",
-			AllowCacheProxy:              ptr.To(true),
-			HTTPProxy:                    "proxy:3128",
-			NoProxy:                      &noProxy,
-			AllowPackageRegistryProxy:    ptr.To(true),
-			PackageRegistryProxyNpmURL:   "npm",
-			PackageRegistryProxyYarnURL:  "yarn",
-			PackageRegistryProxyGomodURL: "gomod",
-			PackageRegistryProxyPipURL:   "pip",
-			PackageRegistryProxyPnpmURL:  "pnpm",
+			DefaultOIDCIssuer:              "oidc",
+			EnableKeylessSigning:           ptr.To(true),
+			FulcioInternalUrl:              "fulcio-int",
+			FulcioExternalUrl:              "fulcio-ext",
+			RekorInternalUrl:               "rekor-int",
+			RekorExternalUrl:               "rekor-ext",
+			TufInternalUrl:                 "tuf-int",
+			TufExternalUrl:                 "tuf-ext",
+			TrustifyServerInternalUrl:      "trustify-int",
+			TrustifyServerExternalUrl:      "trustify-ext",
+			BuildIdentityRegexp:            "regexp",
+			TrustifyOIDCIssuerUrl:          "trustify-oidc",
+			TektonChainsIdentity:           "chains-identity",
+			AllowCacheProxy:                ptr.To(true),
+			HTTPProxy:                      "proxy:3128",
+			NoProxy:                        &noProxy,
+			AllowPackageRegistryProxy:      ptr.To(true),
+			PackageRegistryProxyNpmURL:     "npm",
+			PackageRegistryProxyYarnURL:    "yarn",
+			PackageRegistryProxyGomodURL:   "gomod",
+			PackageRegistryProxyPipURL:     "pip",
+			PackageRegistryProxyPnpmURL:    "pnpm",
+			PackageRegistryProxyBundlerURL: "bundler",
+			PackageRegistryProxyCargoURL:   "cargo",
 		}
 
 		// Count total fields
@@ -192,7 +200,7 @@ func TestClusterConfigData_All(t *testing.T) {
 			totalFields++
 			return true
 		})
-		g.Expect(totalFields).To(gomega.Equal(22))
+		g.Expect(totalFields).To(gomega.Equal(24))
 
 		// Verify early termination works at every position
 		for stopAt := 1; stopAt <= totalFields; stopAt++ {
@@ -210,28 +218,30 @@ func TestClusterConfigData_All(t *testing.T) {
 
 		noProxy := ""
 		data := ClusterConfigData{
-			DefaultOIDCIssuer:            "oidc",
-			EnableKeylessSigning:         ptr.To(false),
-			FulcioInternalUrl:            "fulcio-internal",
-			FulcioExternalUrl:            "fulcio-external",
-			RekorInternalUrl:             "rekor-internal",
-			RekorExternalUrl:             "rekor-external",
-			TufInternalUrl:               "tuf-internal",
-			TufExternalUrl:               "tuf-external",
-			TrustifyServerInternalUrl:    "trustify-internal",
-			TrustifyServerExternalUrl:    "trustify-external",
-			BuildIdentityRegexp:          "^https://konflux\\.dev/build/.*$",
-			TrustifyOIDCIssuerUrl:        "https://keycloak-external/realm/foobar",
-			TektonChainsIdentity:         "https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/tekton-chains-controller",
-			AllowCacheProxy:              ptr.To(true),
-			HTTPProxy:                    "proxy:3128",
-			NoProxy:                      &noProxy,
-			AllowPackageRegistryProxy:    ptr.To(false),
-			PackageRegistryProxyNpmURL:   "https://npm-proxy.example.com",
-			PackageRegistryProxyYarnURL:  "https://yarn-proxy.example.com",
-			PackageRegistryProxyGomodURL: "https://gomod-proxy.example.com",
-			PackageRegistryProxyPipURL:   "https://pip-proxy.example.com",
-			PackageRegistryProxyPnpmURL:  "https://pnpm-proxy.example.com",
+			DefaultOIDCIssuer:              "oidc",
+			EnableKeylessSigning:           ptr.To(false),
+			FulcioInternalUrl:              "fulcio-internal",
+			FulcioExternalUrl:              "fulcio-external",
+			RekorInternalUrl:               "rekor-internal",
+			RekorExternalUrl:               "rekor-external",
+			TufInternalUrl:                 "tuf-internal",
+			TufExternalUrl:                 "tuf-external",
+			TrustifyServerInternalUrl:      "trustify-internal",
+			TrustifyServerExternalUrl:      "trustify-external",
+			BuildIdentityRegexp:            "^https://konflux\\.dev/build/.*$",
+			TrustifyOIDCIssuerUrl:          "https://keycloak-external/realm/foobar",
+			TektonChainsIdentity:           "https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/tekton-chains-controller",
+			AllowCacheProxy:                ptr.To(true),
+			HTTPProxy:                      "proxy:3128",
+			NoProxy:                        &noProxy,
+			AllowPackageRegistryProxy:      ptr.To(false),
+			PackageRegistryProxyNpmURL:     "https://npm-proxy.example.com",
+			PackageRegistryProxyYarnURL:    "https://yarn-proxy.example.com",
+			PackageRegistryProxyGomodURL:   "https://gomod-proxy.example.com",
+			PackageRegistryProxyPipURL:     "https://pip-proxy.example.com",
+			PackageRegistryProxyPnpmURL:    "https://pnpm-proxy.example.com",
+			PackageRegistryProxyBundlerURL: "https://bundler-proxy.example.com",
+			PackageRegistryProxyCargoURL:   "https://cargo-proxy.example.com",
 		}
 
 		var keys []string
@@ -263,6 +273,8 @@ func TestClusterConfigData_All(t *testing.T) {
 			ClusterConfigKeyPackageRegistryProxyGomodURL,
 			ClusterConfigKeyPackageRegistryProxyPipURL,
 			ClusterConfigKeyPackageRegistryProxyPnpmURL,
+			ClusterConfigKeyPackageRegistryProxyBundlerURL,
+			ClusterConfigKeyPackageRegistryProxyCargoURL,
 		}
 
 		g.Expect(keys).To(gomega.Equal(expectedOrder))

@@ -1296,15 +1296,17 @@ func TestKonfluxInfoClusterConfig(t *testing.T) {
 			Spec: konfluxv1alpha1.KonfluxInfoSpec{
 				ClusterConfig: &konfluxv1alpha1.ClusterConfig{
 					Data: &konfluxv1alpha1.ClusterConfigData{
-						AllowCacheProxy:              &allowCache,
-						HTTPProxy:                    "squid.caching.svc.cluster.local:3128",
-						NoProxy:                      &noProxy,
-						AllowPackageRegistryProxy:    &allowPkgRegistry,
-						PackageRegistryProxyNpmURL:   "https://artifact-registry-proxy.caching.svc.cluster.local/repository/npm-proxy",
-						PackageRegistryProxyYarnURL:  "https://artifact-registry-proxy.caching.svc.cluster.local/repository/yarn-proxy",
-						PackageRegistryProxyGomodURL: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/go-proxy",
-						PackageRegistryProxyPipURL:   "https://artifact-registry-proxy.caching.svc.cluster.local/repository/pypi-proxy/simple",
-						PackageRegistryProxyPnpmURL:  "https://artifact-registry-proxy.caching.svc.cluster.local/repository/pnpm-proxy",
+						AllowCacheProxy:                &allowCache,
+						HTTPProxy:                      "squid.caching.svc.cluster.local:3128",
+						NoProxy:                        &noProxy,
+						AllowPackageRegistryProxy:      &allowPkgRegistry,
+						PackageRegistryProxyNpmURL:     "https://artifact-registry-proxy.caching.svc.cluster.local/repository/npm-proxy",
+						PackageRegistryProxyYarnURL:    "https://artifact-registry-proxy.caching.svc.cluster.local/repository/yarn-proxy",
+						PackageRegistryProxyGomodURL:   "https://artifact-registry-proxy.caching.svc.cluster.local/repository/go-proxy",
+						PackageRegistryProxyPipURL:     "https://artifact-registry-proxy.caching.svc.cluster.local/repository/pypi-proxy/simple",
+						PackageRegistryProxyPnpmURL:    "https://artifact-registry-proxy.caching.svc.cluster.local/repository/pnpm-proxy",
+						PackageRegistryProxyBundlerURL: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/rubygems-proxy",
+						PackageRegistryProxyCargoURL:   "https://artifact-registry-proxy.caching.svc.cluster.local/repository/cargo-proxy",
 					},
 				},
 			},
@@ -1341,6 +1343,8 @@ func TestKonfluxInfoClusterConfig(t *testing.T) {
 		g.Expect(clusterConfigMap.Data).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyGomodURL, "https://artifact-registry-proxy.caching.svc.cluster.local/repository/go-proxy"))
 		g.Expect(clusterConfigMap.Data).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyPipURL, "https://artifact-registry-proxy.caching.svc.cluster.local/repository/pypi-proxy/simple"))
 		g.Expect(clusterConfigMap.Data).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyPnpmURL, "https://artifact-registry-proxy.caching.svc.cluster.local/repository/pnpm-proxy"))
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyBundlerURL, "https://artifact-registry-proxy.caching.svc.cluster.local/repository/rubygems-proxy"))
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyCargoURL, "https://artifact-registry-proxy.caching.svc.cluster.local/repository/cargo-proxy"))
 	})
 
 	t.Run("should omit proxy keys from cluster-config ConfigMap when fields are nil/empty", func(t *testing.T) {
@@ -1391,6 +1395,8 @@ func TestKonfluxInfoClusterConfig(t *testing.T) {
 		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyGomodURL))
 		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyPipURL))
 		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyPnpmURL))
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyBundlerURL))
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyCargoURL))
 	})
 
 	t.Run("should write allow-cache-proxy as false when explicitly set to false", func(t *testing.T) {
@@ -1446,15 +1452,17 @@ func TestClusterConfigDataProxyFieldsIterator(t *testing.T) {
 		noProxy := ""
 
 		data := konfluxv1alpha1.ClusterConfigData{
-			AllowCacheProxy:              &allowCache,
-			HTTPProxy:                    "squid.caching.svc.cluster.local:3128",
-			NoProxy:                      &noProxy,
-			AllowPackageRegistryProxy:    &allowPkgRegistry,
-			PackageRegistryProxyNpmURL:   "https://npm-proxy.example.com",
-			PackageRegistryProxyYarnURL:  "https://yarn-proxy.example.com",
-			PackageRegistryProxyGomodURL: "https://gomod-proxy.example.com",
-			PackageRegistryProxyPipURL:   "https://pip-proxy.example.com",
-			PackageRegistryProxyPnpmURL:  "https://pnpm-proxy.example.com",
+			AllowCacheProxy:                &allowCache,
+			HTTPProxy:                      "squid.caching.svc.cluster.local:3128",
+			NoProxy:                        &noProxy,
+			AllowPackageRegistryProxy:      &allowPkgRegistry,
+			PackageRegistryProxyNpmURL:     "https://npm-proxy.example.com",
+			PackageRegistryProxyYarnURL:    "https://yarn-proxy.example.com",
+			PackageRegistryProxyGomodURL:   "https://gomod-proxy.example.com",
+			PackageRegistryProxyPipURL:     "https://pip-proxy.example.com",
+			PackageRegistryProxyPnpmURL:    "https://pnpm-proxy.example.com",
+			PackageRegistryProxyBundlerURL: "https://bundler-proxy.example.com",
+			PackageRegistryProxyCargoURL:   "https://cargo-proxy.example.com",
 		}
 
 		collected := make(map[string]string)
@@ -1471,6 +1479,8 @@ func TestClusterConfigDataProxyFieldsIterator(t *testing.T) {
 		g.Expect(collected).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyGomodURL, "https://gomod-proxy.example.com"))
 		g.Expect(collected).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyPipURL, "https://pip-proxy.example.com"))
 		g.Expect(collected).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyPnpmURL, "https://pnpm-proxy.example.com"))
+		g.Expect(collected).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyBundlerURL, "https://bundler-proxy.example.com"))
+		g.Expect(collected).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyCargoURL, "https://cargo-proxy.example.com"))
 	})
 
 	t.Run("should not yield proxy keys when fields are nil/empty", func(t *testing.T) {
@@ -1495,6 +1505,8 @@ func TestClusterConfigDataProxyFieldsIterator(t *testing.T) {
 		g.Expect(collected).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyGomodURL))
 		g.Expect(collected).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyPipURL))
 		g.Expect(collected).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyPnpmURL))
+		g.Expect(collected).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyBundlerURL))
+		g.Expect(collected).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyCargoURL))
 	})
 
 	t.Run("should yield false for *bool set to false", func(t *testing.T) {
