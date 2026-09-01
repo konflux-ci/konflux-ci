@@ -100,6 +100,16 @@ func NewAdminKubernetesClient() (*CustomClient, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// When running inside a pod with a projected SA token, the transport
+	// may re-read the token file and override the static BearerToken from
+	// the kubeconfig. Clear BearerTokenFile so the static token is always
+	// used, preventing "failed to get server groups" errors when the
+	// projected token's audience doesn't match.
+	if adminKubeconfig.BearerToken != "" {
+		adminKubeconfig.BearerTokenFile = ""
+	}
+
 	clientSets, err := createClientSetsFromConfig(adminKubeconfig)
 	if err != nil {
 		return nil, err
