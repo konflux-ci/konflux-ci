@@ -11,7 +11,7 @@ images:
     newTag: v0.32.0
   - name: quay.io/konflux-ci/smee-sidecar
     newName: quay.io/konflux-ci/smee-sidecar
-    newTag: latest@sha256:e3145da2778e4784af5352545c961001a6a9065e10d1e48231868df168e99978
+    newTag: latest@sha256:581ba5468e2f9adb3f78ef45fa262305face191b9018fa1e4d09369c04cb9ad5
 
 patches:
   - path: smee-channel-id.yaml
