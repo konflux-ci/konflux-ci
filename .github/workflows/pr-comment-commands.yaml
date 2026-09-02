@@ -44,6 +44,7 @@ jobs:
             });
             const headSha = pr.data.head.sha;
 
+            // another comment
             // 3. Validate: must be present, hex-only, 7–40 chars (rejects branch names/tags).
             if (!providedSha) {
               await github.rest.issues.createComment({
@@ -82,7 +83,7 @@ jobs:
               return;
             }
 
-            // 4. Provided SHA must exactly match the current PR HEAD.
+            // 4. Provided SHA must exactly match the current PR HEAD....
             if (headSha.toLowerCase() !== providedSha.toLowerCase()) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
