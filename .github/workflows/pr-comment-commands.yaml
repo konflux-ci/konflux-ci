@@ -44,7 +44,8 @@ jobs:
             });
             const headSha = pr.data.head.sha;
 
-            // 3. Validate: must be present, hex-only, 7–40 chars (rejects branch names/tags).
+            // 3. Validate: must be present and a full 40-char hex SHA (rejects branch names,
+            //    tags, and abbreviated SHAs whose short prefixes are collision-feasible).
             if (!providedSha) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
@@ -64,8 +65,6 @@ jobs:
               return;
             }
 
-            // Full 40-char hex SHA required: rejects branches, tags, and abbreviated SHAs
-            // (short prefixes are collision-feasible and could match a different commit).
             if (!/^[0-9a-f]{40}$/i.test(providedSha)) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,

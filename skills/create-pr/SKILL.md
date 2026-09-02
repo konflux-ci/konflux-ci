@@ -68,4 +68,4 @@ From `CONTRIBUTING.md`:
 
 **CI not running on fork PR:** Normal - wait for `/allow <commit-sha>` from maintainer.
 
-**E2E failed after /allow:** Code changed after `/allow`. Maintainer must re-review and `/allow <commit-sha>` again.
+**E2E failed after /allow <commit-sha>:** Code changed after `/allow <commit-sha>`. Maintainer must re-review and `/allow <commit-sha>` again.
