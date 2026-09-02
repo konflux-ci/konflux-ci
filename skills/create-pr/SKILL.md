@@ -10,11 +10,13 @@ description: Create pull requests for konflux-ci repository. Explains CI behavio
 | PR Source | E2E Tests | Trigger |
 |-----------|-----------|---------|
 | Same-repo branch | Automatic | Push |
-| Fork | Manual | Org member comments `/allow` |
+| Fork | Manual | Org member comments `/allow <commit-sha>` |
 
-Fork PRs cannot access secrets. The `/allow` command:
-1. Verifies code hasn't changed since comment (TOCTOU check)
-2. Triggers E2E via `repository_dispatch`
+Fork PRs cannot access secrets. The `/allow <commit-sha>` command:
+1. Verifies the provided SHA is a valid commit hash (not a branch/tag)
+2. Verifies the SHA matches the current PR HEAD (prevents approving stale code)
+3. Verifies code hasn't changed since comment (TOCTOU check)
+4. Triggers E2E via `repository_dispatch`
 
 See `.github/workflows/operator-test-e2e.yaml` (check-prerequisites job) and `.github/workflows/pr-comment-commands.yaml`.
 
@@ -29,7 +31,7 @@ gh repo view konflux-ci/konflux-ci --json viewerPermission --jq '.viewerPermissi
 ```
 
 If user has write access → push to `upstream` (CI runs automatically)
-If user does NOT have write access → push to fork (needs `/allow`)
+If user does NOT have write access → push to fork (needs `/allow <commit-sha>`)
 
 ## Workflow
 
@@ -43,7 +45,7 @@ gh pr create --repo konflux-ci/konflux-ci
 **Without write access (fork):**
 1. Fork and clone
 2. Push to fork, open PR against `konflux-ci/konflux-ci`
-3. Wait for maintainer `/allow`
+3. Wait for maintainer `/allow <commit-sha>`
 
 ## Pre-PR Checklist
 
@@ -64,6 +66,6 @@ From `CONTRIBUTING.md`:
 
 ## Troubleshooting
 
-**CI not running on fork PR:** Normal - wait for `/allow` from maintainer.
+**CI not running on fork PR:** Normal - wait for `/allow <commit-sha>` from maintainer.
 
-**E2E failed after /allow:** Code changed after `/allow`. Maintainer must re-review and `/allow` again.
+**E2E failed after /allow:** Code changed after `/allow`. Maintainer must re-review and `/allow <commit-sha>` again.
