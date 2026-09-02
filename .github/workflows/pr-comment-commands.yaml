@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write   # required for repos.createDispatchEvent
-      pull-requests: read
+      pull-requests: write  # post error/guidance comments on fork PRs
       checks: read      # list check suites for ref (when GitHub first saw this SHA)
       issues: write     # for reactions and posting error comments
     if: |
