@@ -6,7 +6,7 @@ resources:
 images:
   - name: quay.io/konflux-ci/dex
     newName: quay.io/konflux-ci/dex
-    digest: sha256:5f5452d496ea5e45eae644b920c3cdf3018eeb8e3d79b2b671eb70b4aa6e4089
+    digest: sha256:9b5eedcbb5fcab8daf629a8fab927b4e78e6525f4f193ddc1e154692896fc7e2
 
 configMapGenerator:
 - files:
