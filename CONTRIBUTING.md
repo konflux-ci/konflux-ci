@@ -181,7 +181,7 @@ Maintainers can add the `skip-image-verify` label and re-run the manifest
 companion workflow to bypass image verification.
 
 **Operator E2E Tests** does not run when labels alone change (only on new
-commits, reopen, merge queue, or maintainer `/allow` on fork PRs). After you add
+commits, reopen, merge queue, or maintainer `/allow <commit-sha>` on fork PRs). After you add
 `force-run-e2e`, start CI manually—for example re-run **Operator E2E Tests** from
 the PR Checks or Actions UI, or push a new commit to the PR branch.
 

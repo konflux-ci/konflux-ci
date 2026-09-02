@@ -99,7 +99,7 @@ PRs trigger the following workflows:
 - **`operator-test`** — `go mod tidy -diff` + `make test`, uploads coverage
 - **`operator-lint`** — golangci-lint
 - **`operator-verify-generated-files`** — ensures CRDs/RBAC/deepcopy are up to date
-- **`operator-test-e2e`** — full operator e2e (fork PRs require `/allow`)
+- **`operator-test-e2e`** — full operator e2e (fork PRs require `/allow <commit-sha>`)
 - **`kube-linter`** — lints rendered kustomize manifests
 - **`check-toc`** — validates markdown TOC (excludes `operator/docs/`, `.cursor/*`, `skills/*`)
 - **`differential-shellcheck`** — ShellCheck on changed shell scripts
@@ -113,7 +113,7 @@ PRs trigger the following workflows:
 - **`.tekton` task/pipeline edits:** `pipeline.yaml` tasks `deploy-konflux-its` and `konflux-e2e-tests-its` hardcode `taskRef.revision: main`. To verify changes, temporarily point both at the PR’s git ref, run operator E2E, then restore `main` before merge (see `.tekton/pipelines/operator-e2e/README.md`).
 - **`integrations/` changes:** Scripts in `integrations/` manage platform integrations (sigstore signing stack, quay integration for image-controller). E2E tests do not exercise these scripts, so CI coverage does not validate changes here. When reviewing version bumps or script changes, recommend manual verification on a local cluster before merge.
 - **Same-repo branches preferred**: E2E tests run automatically
-- **Fork PRs**: Require maintainer `/allow` comment to trigger tests
+- **Fork PRs**: Require maintainer `/allow <commit-sha>` comment to trigger tests
 - Run kube-linter before submitting
 - Update TOC if markdown structure changed
 - Run `make manifests generate` if API or RBAC annotations changed
@@ -156,7 +156,7 @@ Detailed guides live in `skills/` — each subdirectory contains a `SKILL.md` wi
 | [ginkgo-testing](skills/ginkgo-testing/SKILL.md) | Writing or reviewing Ginkgo tests — cleanup patterns, soft assertions |
 | [go-toolchain-upgrade](skills/go-toolchain-upgrade/SKILL.md) | `go.mod`/`go.sum`, Go pins, or `go.mod requires go` CI failures |
 | [pr-review](skills/pr-review/SKILL.md) | Reviewing human-authored PRs — upstream/downstream hygiene and related checks |
-| [create-pr](skills/create-pr/SKILL.md) | Opening PRs, fork `/allow` behavior |
+| [create-pr](skills/create-pr/SKILL.md) | Opening PRs, fork `/allow <commit-sha>` behavior |
 | [debug-e2e-tests](skills/debug-e2e-tests/SKILL.md) | Triaging or investigating failed e2e / OpenShift CI runs |
 | [update-upstream-deps](skills/update-upstream-deps/SKILL.md) | Bumping upstream SHAs or editing `upstream-kustomizations/` (triggers manifest rebuild) |
 | [companion-pr-review](skills/companion-pr-review/SKILL.md) | MintMaker/Renovate parent or companion PRs — what to skip vs review lightly |

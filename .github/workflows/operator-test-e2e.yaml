@@ -20,12 +20,12 @@ jobs:
           github.event.pull_request.head.repo.full_name != github.repository
         run: |
           set -euo pipefail
-          echo "❌ Fork PR: heavy jobs do not run on push (no secrets). Comment /allow to trigger tests." >&2
+          echo "❌ Fork PR: heavy jobs do not run on push (no secrets). Comment /allow <commit-sha> to trigger tests." >&2
           {
             echo "### Fork PR"
             echo ""
             echo "Tests are not run automatically from forks."
-            echo "**Action Required:** A maintainer must comment \`/allow\` on this PR to trigger tests."
+            echo "**Action Required:** A maintainer must comment \`/allow <commit-sha>\` on this PR to trigger tests."
           } >>"${GITHUB_STEP_SUMMARY}"
           exit 1
 

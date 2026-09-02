@@ -1,8 +1,11 @@
-# For fork PRs only: org members trigger E2E runs by commenting /allow on the PR.
+# For fork PRs only: org members trigger E2E runs by commenting /allow <commit-sha> on the PR.
 # (Same-repo PRs from collaborators run CI automatically via pull_request_target.)
 #
-# Flow: Maintainer comments /allow → we verify the head SHA was seen by GitHub before
-# the comment (TOCTOU using check suite created_at; server-side, not spoofable), then dispatch "e2e".
+# Flow: Maintainer comments "/allow <commit-sha>" → we verify the provided SHA matches
+# the current PR HEAD (prevents approving stale code), verify the SHA was seen by GitHub
+# before the comment (TOCTOU using check suite created_at; server-side, not spoofable),
+# then dispatch "e2e".  Requiring the SHA forces the maintainer to identify the exact
+# revision they reviewed before granting secret access to fork code.
 
 name: PR Comment Commands
 
@@ -29,17 +32,79 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9
         with:
           script: |
-            // 1. Fetch PR to get the current HEAD SHA
+            // 1. Parse the commit SHA from the comment body ("/allow <commit-sha>").
+            const parts = context.payload.comment.body.trim().split(/\s+/);
+            const providedSha = parts.length >= 2 ? parts[1] : '';
+
+            // 2. Fetch PR to get the current HEAD SHA.
             const pr = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: context.issue.number
             });
-
             const headSha = pr.data.head.sha;
-            console.log(`Checking SHA: ${headSha}`);
 
-            // 2. When did GitHub first see this SHA? Use check suite created_at (server-side, not spoofable).
+            // 3. Validate: must be present, hex-only, 7–40 chars (rejects branch names/tags).
+            if (!providedSha) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: [
+                  "⚠️ **Missing commit SHA.** Usage: `/allow <commit-sha>`",
+                  "",
+                  "Copy the full commit SHA from the PR's **Commits** tab and include it:",
+                  "```",
+                  `/allow ${headSha}`,
+                  "```",
+                  "This ensures you are approving a specific, reviewed revision."
+                ].join("\n")
+              });
+              core.setFailed("No commit SHA provided.");
+              return;
+            }
+
+            // Full 40-char hex SHA required: rejects branches, tags, and abbreviated SHAs
+            // (short prefixes are collision-feasible and could match a different commit).
+            if (!/^[0-9a-f]{40}$/i.test(providedSha)) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: [
+                  `⚠️ **Invalid commit SHA.** \`${providedSha}\` is not a full 40-character commit SHA.`,
+                  "",
+                  "Copy the **full** commit SHA from the PR's **Commits** tab.",
+                  "Abbreviated SHAs, branch names, and tags are not accepted."
+                ].join("\n")
+              });
+              core.setFailed("Invalid ref format — must be a full 40-character hex commit SHA.");
+              return;
+            }
+
+            // 4. Provided SHA must exactly match the current PR HEAD.
+            if (headSha.toLowerCase() !== providedSha.toLowerCase()) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: [
+                  "⚠️ **SHA mismatch.** The commit you approved is not the current PR head.",
+                  "",
+                  `You provided: \`${providedSha}\``,
+                  `Current HEAD: \`${headSha}\``,
+                  "",
+                  "The PR may have been updated since you last reviewed it.",
+                  "Please review the latest changes and comment `/allow` again with the new SHA."
+                ].join("\n")
+              });
+              core.setFailed("Provided SHA does not match current PR HEAD.");
+              return;
+            }
+
+            console.log(`SHA verified: provided=${providedSha}, HEAD=${headSha}`);
+
+            // 5. TOCTOU: ensure the SHA was seen by GitHub before the /allow comment.
             const { data: suitesData } = await github.rest.checks.listSuitesForRef({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -58,19 +123,17 @@ jobs:
             const commentTime = new Date(context.payload.comment.created_at);
             console.log(`Comment: ${commentTime.toISOString()}, SHA first seen: ${shaFirstSeenAt.toISOString()}`);
 
-            // 3. If SHA appeared after the comment, abort. Small buffer for server clock skew only.
             if (shaFirstSeenAt > new Date(commentTime.getTime() + 2000)) {
-              const message = [
-                "⚠️ **Security Halt:** The code revision is newer than your `/allow` command.",
-                "",
-                "To prevent testing unreviewed code, this run has been aborted.",
-                "Please review the new changes and comment `/allow` again."
-              ].join("\n");
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
-                body: message
+                body: [
+                  "⚠️ **Security Halt:** The code revision is newer than your `/allow` command.",
+                  "",
+                  "To prevent testing unreviewed code, this run has been aborted.",
+                  "Please review the new changes and comment `/allow <commit-sha>` again with the updated SHA."
+                ].join("\n")
               });
               core.setFailed("Aborting: TOCTOU (SHA is newer than comment).");
               return;
