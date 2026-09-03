@@ -102,6 +102,14 @@ spec:
       type: string
       default: 'false'
       description: When "true", omit the build history (history timestamps, layer metadata, etc.) from the resulting image.
+    - name: additional-output-repo
+      type: string
+      default: ""
+      description: >-
+        Optional second registry repo (no tag) to promote the built multi-arch image to,
+        e.g. quay.io/konflux-ci/my-component. Pushed as both ":<revision>" and ":latest".
+        Empty (default) skips promotion. Requires the pipeline's ServiceAccount to already
+        have push credentials for this repo (attached out-of-band, not managed by this file).
   results:
     - description: ""
       name: IMAGE_URL
@@ -264,6 +272,45 @@ spec:
           - name: kind
             value: task
         resolver: bundles
+    - name: promote-image
+      params:
+        - name: SOURCE_IMAGE
+          value: $(tasks.build-image-index.results.IMAGE_URL)@$(tasks.build-image-index.results.IMAGE_DIGEST)
+        - name: DEST_REPO
+          value: $(params.additional-output-repo)
+        - name: REVISION
+          value: $(params.revision)
+      runAfter:
+        - build-image-index
+      when:
+        - input: $(params.additional-output-repo)
+          operator: notin
+          values:
+            - ""
+      taskSpec:
+        params:
+          - name: SOURCE_IMAGE
+            type: string
+          - name: DEST_REPO
+            type: string
+          - name: REVISION
+            type: string
+        steps:
+          - name: skopeo-copy
+            image: quay.io/skopeo/stable@sha256:0d85390eabf4e9247ca4d4d2eaa7c956bbffd17f3342d458b072cd7270c9da93
+            env:
+              - name: SOURCE_IMAGE
+                value: $(params.SOURCE_IMAGE)
+              - name: DEST_REPO
+                value: $(params.DEST_REPO)
+              - name: REVISION
+                value: $(params.REVISION)
+            script: |
+              #!/bin/sh
+              set -eu
+              echo "Promoting ${SOURCE_IMAGE} -> ${DEST_REPO}:${REVISION} and ${DEST_REPO}:latest"
+              skopeo copy --all "docker://${SOURCE_IMAGE}" "docker://${DEST_REPO}:${REVISION}"
+              skopeo copy --all "docker://${SOURCE_IMAGE}" "docker://${DEST_REPO}:latest"
     - name: build-source-image
       params:
         - name: BINARY_IMAGE
