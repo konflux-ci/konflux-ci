@@ -277,13 +277,7 @@ func pipelineRunHasTransientFailure(pr *pipeline.PipelineRun, c client.Client) b
 	if cond == nil {
 		return false
 	}
-	reason := cond.Reason
-	return reason == "TaskRunImagePullFailed" ||
-		reason == "CouldntGetPipeline" ||
-		reason == "CouldntGetTask" ||
-		strings.Contains(cond.Message, "TaskRunImagePullFailed") ||
-		strings.Contains(cond.Message, "unexpected EOF") ||
-		strings.Contains(cond.Message, "resolution took longer than global timeout")
+	return tekton.IsTransientPipelineRunFailure(cond.Reason, cond.Message)
 }
 
 // WaitForReleasePipelineToBeFinishedWithRetry waits for the managed release
