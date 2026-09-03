@@ -127,6 +127,13 @@ spec:
         Optional extra arguments appended to conformance go test after fixed Ginkgo flags
         (e.g. -ginkgo.focus=Name).
       default: ""
+    - name: conformance-image
+      type: string
+      description: >-
+        Optional conformance test image reference. When set, the e2e conformance step runs
+        the pre-built image as a Kubernetes pod with credentials injected, instead of
+        compiling from source.
+      default: ""
     - name: catalog-url
       type: string
       default: https://github.com/konflux-ci/tekton-integration-catalog.git
@@ -306,6 +313,8 @@ spec:
           value: $(params.integration-go-test-extra-args)
         - name: conformance-go-test-extra-args
           value: $(params.conformance-go-test-extra-args)
+        - name: conformance-image
+          value: $(params.conformance-image)
     - name: konflux-e2e-tests-its
       runAfter:
         - deploy-konflux-its
@@ -337,6 +346,8 @@ spec:
           value: $(params.integration-go-test-extra-args)
         - name: conformance-go-test-extra-args
           value: $(params.conformance-go-test-extra-args)
+        - name: conformance-image
+          value: $(params.conformance-image)
   finally:
     - name: deprovision-kind-cluster
       taskRef:
