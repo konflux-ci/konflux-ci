@@ -176,16 +176,16 @@ data:
     \ labels:\n    config.openshift.io/inject-trusted-cabundle: \"true\"\ndata: {}\nEOF\nfi\n\n#
     Step 3: Copy EnterpriseContractPolicy from enterprise-contract-service namespace\necho
     \"\U0001F4DC Copying EnterpriseContractPolicy '${CONFORMA_POLICY}' from enterprise-contract-service
-    namespace...\"\nkubectl get enterprisecontractpolicy \"${CONFORMA_POLICY}\" -n
-    enterprise-contract-service -o json \\\n    | jq 'del(.metadata.resourceVersion,
-    .metadata.uid, .metadata.creationTimestamp, .metadata.generation, .metadata.managedFields,
-    .metadata.ownerReferences, .status) | .metadata.namespace = \"'\"${MANAGED_NS}\"'\"'
-    \\\n    | kubectl apply -f -\n\n# Step 4: Create RoleBinding for authenticated
-    users\necho \"\U0001F517 Creating RoleBinding for authenticated users...\"\nkubectl
-    apply -f - <<EOF\napiVersion: rbac.authorization.k8s.io/v1\nkind: RoleBinding\nmetadata:\n
-    \ name: authenticated-konflux-viewer\n  namespace: ${MANAGED_NS}\nroleRef:\n  apiGroup:
-    rbac.authorization.k8s.io\n  kind: ClusterRole\n  name: konflux-viewer-user-actions\nsubjects:\n
-    \ - kind: Group\n    name: system:authenticated\n    apiGroup: rbac.authorization.k8s.io\nEOF\n\n#
+    namespace...\"\nCONFORMA_POLICY_SPEC=$(kubectl get enterprisecontractpolicy \"${CONFORMA_POLICY}\"
+    -n enterprise-contract-service \\\n    -o jsonpath='{.spec}')\nkubectl apply -f
+    - <<EOF\napiVersion: appstudio.redhat.com/v1alpha1\nkind: EnterpriseContractPolicy\nmetadata:\n
+    \ name: ${CONFORMA_POLICY}\n  namespace: ${MANAGED_NS}\nspec: ${CONFORMA_POLICY_SPEC}\nEOF\n\n#
+    Step 4: Create RoleBinding for authenticated users\necho \"\U0001F517 Creating
+    RoleBinding for authenticated users...\"\nkubectl apply -f - <<EOF\napiVersion:
+    rbac.authorization.k8s.io/v1\nkind: RoleBinding\nmetadata:\n  name: authenticated-konflux-viewer\n
+    \ namespace: ${MANAGED_NS}\nroleRef:\n  apiGroup: rbac.authorization.k8s.io\n
+    \ kind: ClusterRole\n  name: konflux-viewer-user-actions\nsubjects:\n  - kind:
+    Group\n    name: system:authenticated\n    apiGroup: rbac.authorization.k8s.io\nEOF\n\n#
     Step 5: Create ImageRepository for trusted-artifacts\necho \"\U0001F5BC️  Creating
     ImageRepository for trusted-artifacts...\"\nkubectl apply -f - <<EOF\napiVersion:
     appstudio.redhat.com/v1alpha1\nkind: ImageRepository\nmetadata:\n  name: trusted-artifacts\n

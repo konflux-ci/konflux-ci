@@ -218,9 +218,16 @@ fi
 
 # Step 3: Copy EnterpriseContractPolicy from enterprise-contract-service namespace
 echo "📜 Copying EnterpriseContractPolicy '${CONFORMA_POLICY}' from enterprise-contract-service namespace..."
-kubectl get enterprisecontractpolicy "${CONFORMA_POLICY}" -n enterprise-contract-service -o json \
-    | jq 'del(.metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp, .metadata.generation, .metadata.managedFields, .metadata.ownerReferences, .status) | .metadata.namespace = "'"${MANAGED_NS}"'"' \
-    | kubectl apply -f -
+CONFORMA_POLICY_SPEC=$(kubectl get enterprisecontractpolicy "${CONFORMA_POLICY}" -n enterprise-contract-service \
+    -o jsonpath='{.spec}')
+kubectl apply -f - <<EOF
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: EnterpriseContractPolicy
+metadata:
+  name: ${CONFORMA_POLICY}
+  namespace: ${MANAGED_NS}
+spec: ${CONFORMA_POLICY_SPEC}
+EOF
 
 # Step 4: Create RoleBinding for authenticated users
 echo "🔗 Creating RoleBinding for authenticated users..."

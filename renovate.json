@@ -366,6 +366,17 @@
       "versioningTemplate": "semver"
     },
     {
+      "description": "Track quay.io/skopeo/stable digest used by build-pipeline's promote-image task",
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "fileMatch": ["^\\.tekton/build-pipeline\\.yaml$"],
+      "matchStrings": [
+        "image: (?<depName>quay\\.io/skopeo/stable)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "currentValueTemplate": "latest"
+    },
+    {
       "description": "Track sigstore scaffold Helm chart version in install script",
       "customType": "regex",
       "fileMatch": ["integrations/sigstore/install\\.sh$"],
