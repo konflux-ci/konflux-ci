@@ -1,0 +1,58 @@
+# Build the conformance test binary.
+#
+# The test module uses a replace directive (../../operator), so the Docker
+# context MUST be the repository root — not test/go-tests/ alone.
+#
+# Build:  podman build -f test/go-tests/Containerfile -t conformance-tests .
+FROM registry.access.redhat.com/ubi10/go-toolset@sha256:e059478002805a3056b69ae5b3916969b85ec4eee007eed5661c6293d0f5fb82 AS builder
+ARG TARGETOS
+ARG TARGETARCH
+
+ENV GOTOOLCHAIN=auto
+# ubi10/go-toolset defaults to UID 1001 which lacks write access to /src.
+USER root
+WORKDIR /src
+
+# Cache module downloads: copy go.mod/go.sum for both modules first.
+COPY --chmod=644 operator/go.mod operator/go.sum operator/
+COPY --chmod=644 test/go-tests/go.mod test/go-tests/go.sum test/go-tests/
+
+WORKDIR /src/test/go-tests
+RUN go mod download
+
+# Copy the source trees needed for compilation.
+WORKDIR /src
+COPY --chmod=755 operator/ operator/
+COPY --chmod=755 test/go-tests/ test/go-tests/
+
+# Compile the Ginkgo test binary.
+WORKDIR /src/test/go-tests
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+    go test -mod=mod -c -o /tmp/conformance.test ./tests/conformance
+
+# CLI tools — copied from task-runner to avoid internet downloads.
+FROM quay.io/konflux-ci/task-runner@sha256:e272c1e1c60a4ecc72ff9c8d65bc48da534de6f1ce0d5aba79db3ac532d11c35 AS tools
+
+# -------------------------------------------------------------------
+# Runtime image — ubi10-minimal, no Go toolchain, no source code.
+# -------------------------------------------------------------------
+FROM registry.access.redhat.com/ubi10/ubi-minimal@sha256:d801168f5e8b108586c27a4fd5c92e3c1e8d061084383713926e2ca61b8b6c64
+
+COPY --from=tools /usr/local/bin/oc /usr/local/bin/oc
+COPY --from=tools /usr/local/bin/kubectl /usr/local/bin/kubectl
+COPY --from=builder /tmp/conformance.test /usr/local/bin/conformance.test
+
+USER 65532:65532
+
+LABEL name="Konflux Conformance Tests"
+LABEL summary="Pre-compiled Ginkgo conformance test binary with oc/kubectl"
+LABEL description="Pre-compiled Ginkgo test binary for Konflux conformance verification"
+LABEL io.k8s.description="Pre-compiled conformance test binary for Konflux conformance verification"
+LABEL io.k8s.display-name="konflux-conformance-tests"
+LABEL vendor="Red Hat, Inc."
+LABEL distribution-scope="public"
+LABEL url="https://github.com/konflux-ci/konflux-ci/test/go-tests"
+LABEL maintainer="Konflux CI"
+LABEL com.redhat.component="konflux-conformance-tests"
+
+ENTRYPOINT ["/usr/local/bin/conformance.test"]

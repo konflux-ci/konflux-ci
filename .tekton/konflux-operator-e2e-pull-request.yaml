@@ -49,6 +49,12 @@ spec:
       value: konflux-mapt-us-east-1
     - name: release-ta-oci-storage
       value: ""
+    # Built by conformance-tests-on-pull-request (same PR event, parallel PipelineRun).
+    # The e2e pipeline reaches the conformance step after ~20 min (Kind provision + deploy),
+    # which exceeds the conformance image build time. If the image build fails or is
+    # cancelled, the conformance step will fail on image pull.
+    - name: conformance-image
+      value: quay.io/redhat-user-workloads/konflux-vanguard-tenant/conformance-tests:on-pr-{{revision}}
   pipelineRef:
     resolver: git
     params:

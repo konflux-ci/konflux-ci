@@ -13,6 +13,7 @@ Main components:
 - `operator/docs/` — Project documentation (Hugo site, source content in `operator/docs/content/`)
 - `dependencies/` — Extra cluster layers (cert-manager, dex, quay, registry, tekton, admission-policies)
 - `integrations/` — Auxiliary scripts (sigstore, quay image-controller)
+- `.tekton/` — Pipelines-as-Code PipelineRun definitions for Konflux CI builds
 - `test/go-tests/` — Platform conformance tests
 - `scripts/` — Local development helpers
 

@@ -12,6 +12,7 @@ Runs Konflux E2E test phases against an already deployed Konflux instance.
 - `release-ta-oci-storage` (default: empty): optional OCI location passed to conformance trusted-artifacts flow.
 - `integration-go-test-extra-args` (default: empty): optional space-separated flags appended to `go test . ./pkg/...`.
 - `conformance-go-test-extra-args` (default: empty): optional space-separated flags appended to conformance `go test` after `-ginkgo.junit-report=...` (e.g. `-ginkgo.focus=...`).
+- `conformance-image` (default: empty): optional conformance test image reference. When set, the conformance step runs the pre-built image as a Kubernetes pod with credentials injected, instead of compiling from source. Used to validate the conformance image as part of CI.
 
 These map to env vars `E2E_INTEGRATION_GO_TEST_EXTRA_ARGS` and `E2E_CONFORMANCE_GO_TEST_EXTRA_ARGS` on the `run-tests` step. The helper scripts expand them **unquoted** so each token becomes a separate `go test` argument (Shellcheck SC2086 is intentionally disabled there).
 
