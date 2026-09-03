@@ -49,6 +49,9 @@ spec:
       value: konflux-mapt-us-east-1
     - name: release-ta-oci-storage
       value: ""
+    # Built in parallel by conformance-tests-on-pull-request
+    - name: conformance-image
+      value: quay.io/redhat-user-workloads/konflux-vanguard-tenant/conformance-tests:on-pr-{{revision}}
   pipelineRef:
     resolver: git
     params:

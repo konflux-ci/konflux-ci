@@ -119,9 +119,6 @@ func runSetupRelease(appName, componentName, tenantNS, managedNS, releaseName st
 
 		ecpName := "ecp-" + taSuffix
 		result.ECPName = ecpName
-		oldJQ := `.metadata.namespace = "'"${MANAGED_NS}"'"'`
-		newJQ := `.metadata.namespace = "'"${MANAGED_NS}"'" | .metadata.name = "` + ecpName + `"'`
-		scriptContent = []byte(strings.Replace(string(scriptContent), oldJQ, newJQ, 1))
 		// Point the ReleasePlanAdmission at the per-run ECP.
 		scriptContent = []byte(strings.Replace(string(scriptContent), "policy: ${CONFORMA_POLICY}", "policy: "+ecpName, 1))
 		klog.Infof("conformance: renamed ECP -> %s for run isolation", ecpName)
@@ -130,9 +127,20 @@ func runSetupRelease(appName, componentName, tenantNS, managedNS, releaseName st
 			name          string
 			re            *regexp.Regexp
 			repl          []byte
-			expectedCount int // 0 means "any number > 0"
+			expectedCount int  // 0 means "any number > 0"
+			fatal         bool // return error if pattern not found
 		}
 		patches := []scriptPatch{
+			{
+			// Rename the ECP in the heredoc so the managed-namespace copy matches
+			// the name the ReleasePlanAdmission points at.  fatal=true: a no-op here
+			// silently breaks the release run.
+				name:          "ecp-rename",
+				re:            regexp.MustCompile(`(?m)^  name: \$\{CONFORMA_POLICY\}$`),
+				repl:          []byte("  name: " + ecpName),
+				expectedCount: 1,
+				fatal:         true,
+			},
 			{
 				name:          "namespace-creation",
 				re:            regexp.MustCompile(`(?s)kubectl apply -f - <<EOF\napiVersion: v1\nkind: Namespace\n.*?\nEOF`),
@@ -169,6 +177,9 @@ func runSetupRelease(appName, componentName, tenantNS, managedNS, releaseName st
 		for _, p := range patches {
 			matches := p.re.FindAllIndex(scriptContent, -1)
 			if len(matches) == 0 {
+				if p.fatal {
+					return result, fmt.Errorf("conformance: required patch %q did not match setup-release.sh; upstream script format may have changed", p.name)
+				}
 				klog.Warningf("conformance: regex patch %q did not match setup-release.sh; upstream script format may have changed", p.name)
 				continue
 			}
