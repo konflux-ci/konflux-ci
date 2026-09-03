@@ -1,0 +1,54 @@
+# Build the conformance test binary.
+#
+# The test module uses a replace directive (../../operator), so the Docker
+# context MUST be the repository root — not test/go-tests/ alone.
+#
+# Build:  podman build -f test/go-tests/Containerfile -t conformance-tests .
+FROM registry.access.redhat.com/ubi9/go-toolset:1.26 AS builder
+
+ENV GOTOOLCHAIN=auto
+USER root
+WORKDIR /src
+
+# Cache module downloads: copy go.mod/go.sum for both modules first.
+COPY operator/go.mod operator/go.sum operator/
+COPY test/go-tests/go.mod test/go-tests/go.sum test/go-tests/
+
+WORKDIR /src/test/go-tests
+RUN go mod download
+
+# Copy the source trees needed for compilation.
+WORKDIR /src
+COPY operator/ operator/
+COPY test/go-tests/ test/go-tests/
+
+# Compile the Ginkgo test binary.
+WORKDIR /src/test/go-tests
+RUN CGO_ENABLED=0 go test -mod=mod -c -o /tmp/conformance.test ./tests/conformance/...
+
+# -------------------------------------------------------------------
+# Runtime image — no Go toolchain, no source code.
+# -------------------------------------------------------------------
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
+
+RUN microdnf install -y tar gzip && \
+    curl -sSL "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz" \
+      | tar xz -C /usr/local/bin oc kubectl && \
+    chmod +x /usr/local/bin/oc /usr/local/bin/kubectl && \
+    curl -sSL "https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64" \
+      -o /usr/local/bin/jq && chmod +x /usr/local/bin/jq && \
+    microdnf clean all
+
+COPY --from=builder /tmp/conformance.test /usr/local/bin/conformance.test
+
+USER 65532:65532
+
+LABEL name="Konflux Conformance Tests"
+LABEL description="Pre-compiled Ginkgo test binary for Konflux conformance verification"
+LABEL io.k8s.description="Pre-compiled conformance test binary for Kargo verification"
+LABEL io.k8s.display-name="konflux-conformance-tests"
+LABEL vendor="Red Hat, Inc."
+LABEL distribution-scope="public"
+LABEL url="https://github.com/konflux-ci/konflux-ci/test/go-tests"
+
+ENTRYPOINT ["conformance.test"]
