@@ -313,32 +313,27 @@ spec:
           values:
             - "false"
     - name: roxctl-scan
-      matrix:
-        params:
-        - name: image-platform
-          value:
-          - $(params.build-platforms)
       params:
-      - name: image-digest
-        value: $(tasks.build-image-index.results.IMAGE_DIGEST)
-      - name: image-url
-        value: $(tasks.build-image-index.results.IMAGE_URL)
+        - name: image-digest
+          value: $(tasks.build-image-index.results.IMAGE_DIGEST)
+        - name: image-url
+          value: $(tasks.build-image-index.results.IMAGE_URL)
       runAfter:
-      - build-image-index
+        - build-image-index
       taskRef:
         params:
-        - name: name
-          value: roxctl-scan
-        - name: bundle
-          value: quay.io/konflux-ci/tekton-catalog/task-roxctl-scan:0.1@sha256:97e2b2cdca9110fdc8a93ba585a1a1a743f989f2fd85f4073f6e5ea9ad2ce828
-        - name: kind
-          value: task
+          - name: name
+            value: roxctl-scan
+          - name: bundle
+            value: quay.io/konflux-ci/tekton-catalog/task-roxctl-scan:0.1@sha256:97e2b2cdca9110fdc8a93ba585a1a1a743f989f2fd85f4073f6e5ea9ad2ce828
+          - name: kind
+            value: task
         resolver: bundles
       when:
-      - input: $(params.skip-checks)
-        operator: in
-        values:
-        - "false"
+        - input: $(params.skip-checks)
+          operator: in
+          values:
+            - "false"
     - name: ecosystem-cert-preflight-checks
       matrix:
         params:
