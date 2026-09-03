@@ -300,6 +300,22 @@ func HasPipelineRunFailed(pr *pipeline.PipelineRun) bool {
 	return pr.IsDone() && pr.GetStatusCondition().GetCondition(apis.ConditionSucceeded).IsFalse()
 }
 
+// IsTransientPipelineRunFailure checks whether a PipelineRun failure reason or message
+// indicates a transient error worth retrying. Transient failures include:
+//   - CouldntGetTask — task-level resolver timeout (SRVKP-2749)
+//   - CouldntGetPipeline — pipeline-level resolver timeout (e.g. git resolver
+//     exceeding Tekton's global resolution timeout)
+//   - TaskRunImagePullFailed — image-pull flakes (RHTAPBUGS-985, tektoncd/pipeline#7184)
+//   - "unexpected EOF" or "resolution took longer than global timeout" in the condition message
+func IsTransientPipelineRunFailure(reason, message string) bool {
+	return reason == "CouldntGetTask" ||
+		reason == "CouldntGetPipeline" ||
+		reason == "TaskRunImagePullFailed" ||
+		strings.Contains(message, "TaskRunImagePullFailed") ||
+		strings.Contains(message, "unexpected EOF") ||
+		strings.Contains(message, "resolution took longer than global timeout")
+}
+
 func GetFailedPipelineRunDetails(c crclient.Client, pipelineRun *pipeline.PipelineRun) (*FailedPipelineRunDetails, error) {
 	d := &FailedPipelineRunDetails{}
 	var condText string

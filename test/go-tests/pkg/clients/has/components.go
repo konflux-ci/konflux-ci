@@ -13,6 +13,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/constants"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/logs"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/utils"
+	tektonUtils "github.com/konflux-ci/konflux-ci/test/go-tests/pkg/utils/tekton"
 	imagecontroller "github.com/konflux-ci/image-controller/api/v1alpha1"
 	ginkgo "github.com/onsi/ginkgo/v2"
 	pipeline "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
@@ -677,16 +678,8 @@ func (h *Controller) UpdateComponent(component *appservice.Component) error {
 }
 
 // buildPipelineRunIsTransient checks whether a build PipelineRun failure
-// reason indicates a transient error worth retrying. Transient failures:
-//   - CouldntGetTask — task-level resolver timeout (SRVKP-2749)
-//   - CouldntGetPipeline — pipeline-level resolver timeout (e.g. git
-//     resolver exceeding Tekton's global resolution timeout)
-//   - TaskRunImagePullFailed — image-pull flakes (RHTAPBUGS-985)
-//   - "resolution took longer than global timeout" in the condition
-//     message — fallback when Tekton uses a generic reason
+// reason indicates a transient error worth retrying by delegating to the shared
+// tektonUtils.IsTransientPipelineRunFailure helper.
 func buildPipelineRunIsTransient(reason, message string) bool {
-	return reason == "CouldntGetTask" ||
-		reason == "CouldntGetPipeline" ||
-		reason == "TaskRunImagePullFailed" ||
-		strings.Contains(message, "resolution took longer than global timeout")
+	return tektonUtils.IsTransientPipelineRunFailure(reason, message)
 }
