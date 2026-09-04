@@ -246,7 +246,9 @@ if [[ "${ENABLE_REGISTRY_PORT}" -eq 1 ]]; then
     fi
 else
     echo "Registry port binding is disabled. Removing registry port mapping..."
-    sed -i.bak '/# Registry/,+3d' "${KIND_CONFIG}" && rm "${KIND_CONFIG}.bak"
+    # sed range deletion (/,+3d) is not reliably portable; use awk to drop the Registry block
+    awk '/# Registry/ { skip = 3; next } skip > 0 { skip--; next } { print }' \
+        "${KIND_CONFIG}" > "${KIND_CONFIG}.tmp" && mv "${KIND_CONFIG}.tmp" "${KIND_CONFIG}"
 fi
 
 # Setup persistent containerd image cache if enabled
