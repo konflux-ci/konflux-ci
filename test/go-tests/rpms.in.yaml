@@ -1,0 +1,9 @@
+contentOrigin:
+  repofiles:
+    - ./redhat.repo
+
+packages:
+  - openshift-clients
+
+arches:
+  - x86_64
