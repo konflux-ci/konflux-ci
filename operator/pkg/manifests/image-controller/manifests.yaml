@@ -312,6 +312,8 @@ spec:
                           type: string
                         url:
                           description: Webhook is the URL to send notifications to.
+                          maxLength: 2048
+                          pattern: ^https://.*$
                           type: string
                       type: object
                     event:
@@ -539,10 +541,8 @@ rules:
   - create
   - delete
   - get
-  - list
   - patch
   - update
-  - watch
 - apiGroups:
   - ""
   resources:
@@ -703,7 +703,6 @@ data:
     import itertools
     import json
     import logging
-    import os
     import re
     import time
 
@@ -990,7 +989,13 @@ data:
 
 
     def main():
-        token = os.getenv("QUAY_TOKEN")
+        token_file = "/secrets/image-pruner/quaytoken"
+        try:
+            with open(token_file, "r") as f:
+                token = f.read().strip()
+        except FileNotFoundError:
+            raise ValueError(f"Token file {token_file} not found!")
+
         if not token:
             raise ValueError("The token required for access to Quay API is missing!")
 
@@ -1012,7 +1017,7 @@ data:
         main()
 kind: ConfigMap
 metadata:
-  name: image-controller-image-pruner-configmap-hgm7kmgb6k
+  name: image-controller-image-pruner-configmap-hkhm2g67d6
   namespace: image-controller
 ---
 apiVersion: v1
@@ -1229,7 +1234,13 @@ data:
 
 
     def main():
-        token = os.getenv("QUAY_TOKEN")
+        token_file = "/secrets/quaytoken/quaytoken"
+        try:
+            with open(token_file, "r") as f:
+                token = f.read().strip()
+        except FileNotFoundError:
+            raise ValueError(f"Token file {token_file} not found!")
+
         if not token:
             raise ValueError("The token required for access to Quay API is missing!")
 
@@ -1250,7 +1261,7 @@ data:
         main()
 kind: ConfigMap
 metadata:
-  name: image-controller-notification-resetter-configmap-tfm9h79698
+  name: image-controller-notification-resetter-configmap-2ch7bftc6k
   namespace: image-controller
 ---
 apiVersion: v1
@@ -1300,7 +1311,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/konflux-ci/image-controller:1ea7dc0cc5ad4e106ffaa5e421c15c2266763d42
+        image: quay.io/konflux-ci/image-controller:65b644b9b875ef76df6889c269cf19468e6faefa
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1380,14 +1391,9 @@ spec:
           - command:
             - /bin/bash
             - -c
-            - python /image-pruner/prune_images.py --namespace $(NAMESPACE)
+            - python /image-pruner/prune_images.py --namespace $(QUAY_ORG)
             env:
-            - name: QUAY_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  key: quaytoken
-                  name: image-pruner-token
-            - name: NAMESPACE
+            - name: QUAY_ORG
               valueFrom:
                 secretKeyRef:
                   key: organization
@@ -1403,16 +1409,25 @@ spec:
                 cpu: 150m
                 memory: 128Mi
             securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
               readOnlyRootFilesystem: true
             volumeMounts:
             - mountPath: /image-pruner
               name: image-pruner-volume
+            - mountPath: /secrets/image-pruner
+              name: image-pruner-token
+              readOnly: true
           restartPolicy: OnFailure
           securityContext:
             runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
           volumes:
           - configMap:
-              name: image-controller-image-pruner-configmap-hgm7kmgb6k
+              name: image-controller-image-pruner-configmap-hkhm2g67d6
             name: image-pruner-volume
           - name: image-pruner-token
             secret:
@@ -1434,19 +1449,14 @@ spec:
           - command:
             - /bin/bash
             - -c
-            - python /notification-resetter/reset_notifications.py --namespace $(QUAY_NAMESPACE)
+            - python /notification-resetter/reset_notifications.py --namespace $(QUAY_ORG)
             env:
-            - name: QUAY_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  key: quaytoken
-                  name: quaytoken
-            - name: QUAY_NAMESPACE
+            - name: QUAY_ORG
               valueFrom:
                 secretKeyRef:
                   key: organization
                   name: quaytoken
-            image: registry.redhat.io/rhel9/python-312:9.5-1739797362
+            image: registry.access.redhat.com/ubi9/python-314:9.8-1787079087@sha256:194df4e35e0e5467e1b57266f4d61f821e1b1f567135f074d23066d3604ae653
             imagePullPolicy: IfNotPresent
             name: notification-resetter
             resources:
@@ -1457,16 +1467,25 @@ spec:
                 cpu: 150m
                 memory: 128Mi
             securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
               readOnlyRootFilesystem: true
             volumeMounts:
             - mountPath: /notification-resetter
               name: notification-resetter-volume
+            - mountPath: /secrets/quaytoken
+              name: quaytoken
+              readOnly: true
           restartPolicy: OnFailure
           securityContext:
             runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
           volumes:
           - configMap:
-              name: image-controller-notification-resetter-configmap-tfm9h79698
+              name: image-controller-notification-resetter-configmap-2ch7bftc6k
             name: notification-resetter-volume
           - name: quaytoken
             secret:
@@ -1516,3 +1535,26 @@ spec:
   selector:
     matchLabels:
       control-plane: controller-manager
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: image-controller
+  name: image-controller-allow-metrics-traffic
+  namespace: image-controller
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          metrics: enabled
+    ports:
+    - port: 8443
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      control-plane: controller-manager
+  policyTypes:
+  - Ingress
