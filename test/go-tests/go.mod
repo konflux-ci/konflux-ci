@@ -31,7 +31,6 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/tektoncd/cli v0.45.0
 	github.com/tektoncd/pipeline v1.13.1
-	github.com/xanzy/go-gitlab v0.114.0
 	golang.org/x/oauth2 v0.36.0
 	k8s.io/api v0.37.0
 	k8s.io/apimachinery v0.37.0
@@ -171,6 +170,7 @@ require (
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
+	github.com/xanzy/go-gitlab v0.114.0 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel v1.45.0 // indirect
