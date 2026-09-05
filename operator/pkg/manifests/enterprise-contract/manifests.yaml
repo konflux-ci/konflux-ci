@@ -389,9 +389,9 @@ subjects:
 apiVersion: v1
 data:
   verify_conforma_task_ta_git_pathInRepo: tasks/verify-conforma-konflux-ta/0.1/verify-conforma-konflux-ta.yaml
-  verify_ec_task_bundle: quay.io/conforma/tekton-task:latest@sha256:dbb691e67404f90058a055f3ed0cc505214f6fd2bf292f41db92911738a150d0
+  verify_ec_task_bundle: quay.io/conforma/tekton-task:latest@sha256:7eae0b9d15b20ec95fc0bd942dcaad02a7129df3b85c38b37b806ecd4b1e1130
   verify_ec_task_git_pathInRepo: tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml
-  verify_ec_task_git_revision: 047e1aef6b58305e72ad61faf1241498f297f247
+  verify_ec_task_git_revision: b9f26b5ced2e6b591e95584d6a9a0b1ab880c011
   verify_ec_task_git_url: https://github.com/conforma/cli.git
 kind: ConfigMap
 metadata:
@@ -423,4 +423,4 @@ spec:
     - github.com/konflux-ci/konflux-operator-trusted-sources//data?ref=8eaa4f44c2bf67e6e2b20c5777b0d73e978c632b
     name: Default
     policy:
-    - oci::quay.io/conforma/release-policy:latest@sha256:733a391c2d2caf0543ddde46a0e18e792e854bfb0abc8069dbda8d46f2cd6d6b
+    - oci::quay.io/conforma/release-policy:latest@sha256:10de4ff888f9d054baeaa15c528ff74118bfd3c99ed0e5fc0ac24e72e83e01dc

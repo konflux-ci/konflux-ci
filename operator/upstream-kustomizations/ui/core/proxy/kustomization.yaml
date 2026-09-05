@@ -13,13 +13,13 @@ configMapGenerator:
   - generate-proxy-config.sh
   name: proxy-generate-config
 images:
-- digest: sha256:85f2821a6128cb55f9c95d142929a4d2be667cc0afd7a633c9594f2876179343
+- digest: sha256:8cb88eca04ace51ed8ede1275b831f912e8e2ecf7caffca9039d0b6dd40e60a0
   name: quay.io/konflux-ci/konflux-ui
   newName: quay.io/konflux-ci/konflux-ui
-- digest: sha256:6d3baee143d76b1992546707ccb1d82efe3af3e68cc23b8cf0bb79f083a47239
+- digest: sha256:a891f8bdb8b3bc65d9d0b48d3946f05849a207ffb7e0569e55a5a6fa50c72b38
   name: registry.access.redhat.com/hi/oauth2-proxy
   newName: registry.access.redhat.com/hi/oauth2-proxy
-- digest: sha256:d3aff0dfea19edb38a46935eca20506c9534d2875cdd48a131167fde6a402d8f
+- digest: sha256:ccfcbab6f328be242b90cb2ec005682f1b0aa452ce6b12ba9aba665136b6caf3
   name: quay.io/konflux-ci/reverse-proxy
   newName: quay.io/konflux-ci/reverse-proxy
 kind: Kustomization

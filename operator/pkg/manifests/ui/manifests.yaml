@@ -458,7 +458,7 @@ spec:
             secretKeyRef:
               key: client-secret
               name: oauth2-proxy-client-secret
-        image: quay.io/konflux-ci/dex@sha256:9b5eedcbb5fcab8daf629a8fab927b4e78e6525f4f193ddc1e154692896fc7e2
+        image: quay.io/konflux-ci/dex@sha256:f8d7a917e36e1f4cb5b11f4e4a448d2784d3cf3737fe6df0dc2245ff0da76edb
         livenessProbe:
           httpGet:
             path: /healthz/ready
@@ -562,7 +562,7 @@ spec:
         - /etc/caddy/Caddyfile
         - --adapter
         - caddyfile
-        image: quay.io/konflux-ci/reverse-proxy@sha256:d3aff0dfea19edb38a46935eca20506c9534d2875cdd48a131167fde6a402d8f
+        image: quay.io/konflux-ci/reverse-proxy@sha256:ccfcbab6f328be242b90cb2ec005682f1b0aa452ce6b12ba9aba665136b6caf3
         livenessProbe:
           failureThreshold: 3
           httpGet:
@@ -646,7 +646,7 @@ spec:
             secretKeyRef:
               key: cookie-secret
               name: oauth2-proxy-cookie-secret
-        image: registry.access.redhat.com/hi/oauth2-proxy@sha256:6d3baee143d76b1992546707ccb1d82efe3af3e68cc23b8cf0bb79f083a47239
+        image: registry.access.redhat.com/hi/oauth2-proxy@sha256:a891f8bdb8b3bc65d9d0b48d3946f05849a207ffb7e0569e55a5a6fa50c72b38
         name: oauth2-proxy
         ports:
         - containerPort: 6000
@@ -668,7 +668,7 @@ spec:
         - -R
         - /opt/app-root/src/.
         - /mnt/static-content/
-        image: quay.io/konflux-ci/konflux-ui@sha256:85f2821a6128cb55f9c95d142929a4d2be667cc0afd7a633c9594f2876179343
+        image: quay.io/konflux-ci/konflux-ui@sha256:8cb88eca04ace51ed8ede1275b831f912e8e2ecf7caffca9039d0b6dd40e60a0
         name: copy-static-content
         resources:
           limits:
@@ -686,7 +686,7 @@ spec:
       - command:
         - sh
         - /var/run/scripts/konflux-ci.dev/generate-proxy-config.sh
-        image: quay.io/konflux-ci/konflux-ui@sha256:85f2821a6128cb55f9c95d142929a4d2be667cc0afd7a633c9594f2876179343
+        image: quay.io/konflux-ci/konflux-ui@sha256:8cb88eca04ace51ed8ede1275b831f912e8e2ecf7caffca9039d0b6dd40e60a0
         name: generate-proxy-config
         resources:
           limits:
