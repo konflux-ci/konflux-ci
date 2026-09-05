@@ -123,3 +123,70 @@ func TestGetFailedPipelineRunDetails(t *testing.T) {
 		})
 	}
 }
+
+func TestIsTransientPipelineRunFailure(t *testing.T) {
+	tests := []struct {
+		name     string
+		reason   string
+		message  string
+		expected bool
+	}{
+		{
+			name:     "CouldntGetTask reason",
+			reason:   "CouldntGetTask",
+			expected: true,
+		},
+		{
+			name:     "CouldntGetPipeline reason",
+			reason:   "CouldntGetPipeline",
+			message:  "Error retrieving pipeline for pipelinerun: resolver failed",
+			expected: true,
+		},
+		{
+			name:     "TaskRunImagePullFailed reason",
+			reason:   "TaskRunImagePullFailed",
+			expected: true,
+		},
+		{
+			name:     "TaskRunImagePullFailed in message",
+			reason:   "Failed",
+			message:  "task failed: TaskRunImagePullFailed",
+			expected: true,
+		},
+		{
+			name:     "unexpected EOF in message",
+			reason:   "Failed",
+			message:  "connection error: unexpected EOF",
+			expected: true,
+		},
+		{
+			name:     "resolution timeout in message",
+			reason:   "Failed",
+			message:  "resolution took longer than global timeout of 1m0s",
+			expected: true,
+		},
+		{
+			name:     "generic Failed reason is not transient",
+			reason:   "Failed",
+			message:  "task X failed with exit code 1",
+			expected: false,
+		},
+		{
+			name:     "empty reason is not transient",
+			reason:   "",
+			expected: false,
+		},
+		{
+			name:     "Succeeded is not transient",
+			reason:   "Succeeded",
+			expected: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := IsTransientPipelineRunFailure(tc.reason, tc.message)
+			assert.Equal(t, tc.expected, got)
+		})
+	}
+}

@@ -32,6 +32,18 @@ func TestBuildPipelineRunIsTransient(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "unexpected EOF in message is transient",
+			reason:   "Failed",
+			message:  "connection error: unexpected EOF",
+			expected: true,
+		},
+		{
+			name:     "TaskRunImagePullFailed in message is transient",
+			reason:   "Failed",
+			message:  "task failed: TaskRunImagePullFailed",
+			expected: true,
+		},
+		{
 			name:     "generic Failed reason is not transient",
 			reason:   "Failed",
 			message:  "task X failed with exit code 1",
