@@ -28,6 +28,9 @@ const (
 	ConditionTypeReady = "Ready"
 	// ConditionTypeCertManagerAvailable is the condition type for cert-manager availability
 	ConditionTypeCertManagerAvailable = "CertManagerAvailable"
+	// ConditionTypeClusterCABundleDistributed is the condition type for trust-manager
+	// Bundle distribution status. Set on the Konflux CR (forwarded from KonfluxCertManager).
+	ConditionTypeClusterCABundleDistributed = "ClusterCABundleDistributed"
 	// CertManagerGroup is the API group for cert-manager resources
 	CertManagerGroup = "cert-manager.io"
 	// SegmentBridgeNamespace is the namespace that hosts the segment-bridge

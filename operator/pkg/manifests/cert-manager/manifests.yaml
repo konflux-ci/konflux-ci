@@ -30,3 +30,18 @@ metadata:
   name: konflux-bootstrap-issuer
 spec:
   selfSigned: {}
+---
+apiVersion: trust.cert-manager.io/v1alpha1
+kind: Bundle
+metadata:
+  name: trusted-ca
+spec:
+  sources:
+  - useDefaultCAs: true
+  - secret:
+      key: ca.crt
+      name: konflux-ca-secret
+  target:
+    configMap:
+      key: ca-bundle.crt
+    namespaceSelector: {}

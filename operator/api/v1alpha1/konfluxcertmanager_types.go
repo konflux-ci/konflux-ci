@@ -30,6 +30,15 @@ type KonfluxCertManagerSpec struct {
 	// The cluster-Issuer will be used for generating certificates for the Konflux components
 	// +optional
 	CreateClusterIssuer *bool `json:"createClusterIssuer,omitempty"`
+
+	// DistributeClusterCABundle controls whether the operator applies the
+	// trust-manager Bundle that populates cluster-wide trusted-ca ConfigMaps.
+	// When nil, the effective default is platform-aware:
+	//   - OpenShift: false (native per-namespace CA injection is used instead)
+	//   - Non-OpenShift (Kind, upstream): true (trust-manager Bundle needed
+	//     for Tekton git resolver and similar consumers)
+	// +optional
+	DistributeClusterCABundle *bool `json:"distributeClusterCABundle,omitempty"`
 }
 
 // KonfluxCertManagerStatus defines the observed state of KonfluxCertManager.
@@ -80,4 +89,16 @@ func (k *KonfluxCertManagerSpec) ShouldCreateClusterIssuer() bool {
 		return true
 	}
 	return *k.CreateClusterIssuer
+}
+
+// ShouldDistributeClusterCABundle returns whether the trust-manager Bundle
+// should be applied. When the field is nil the default is platform-aware:
+// false on OpenShift (native CA injection), true otherwise (Kind/upstream).
+func (k *KonfluxCertManagerSpec) ShouldDistributeClusterCABundle(isOpenShift bool) bool {
+	if k.DistributeClusterCABundle != nil {
+		return *k.DistributeClusterCABundle
+	}
+	// Platform-aware default: OpenShift has native CA injection,
+	// non-OpenShift clusters need the trust-manager Bundle.
+	return !isOpenShift
 }

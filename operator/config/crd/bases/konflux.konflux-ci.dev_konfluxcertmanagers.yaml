@@ -47,6 +47,15 @@ spec:
                   Defaults to true if not specified.
                   The cluster-Issuer will be used for generating certificates for the Konflux components
                 type: boolean
+              distributeClusterCABundle:
+                description: |-
+                  DistributeClusterCABundle controls whether the operator applies the
+                  trust-manager Bundle that populates cluster-wide trusted-ca ConfigMaps.
+                  When nil, the effective default is platform-aware:
+                    - OpenShift: false (native per-namespace CA injection is used instead)
+                    - Non-OpenShift (Kind, upstream): true (trust-manager Bundle needed
+                      for Tekton git resolver and similar consumers)
+                type: boolean
             type: object
           status:
             description: KonfluxCertManagerStatus defines the observed state of KonfluxCertManager.

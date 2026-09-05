@@ -166,6 +166,15 @@ type CertManagerConfig struct {
 	// Defaults to true if not specified.
 	// +optional
 	CreateClusterIssuer *bool `json:"createClusterIssuer,omitempty"`
+
+	// DistributeClusterCABundle controls whether the operator applies the
+	// trust-manager Bundle that populates cluster-wide trusted-ca ConfigMaps.
+	// When nil, the effective default is platform-aware:
+	//   - OpenShift: false (native per-namespace CA injection is used instead)
+	//   - Non-OpenShift (Kind, upstream): true (trust-manager Bundle needed
+	//     for Tekton git resolver and similar consumers)
+	// +optional
+	DistributeClusterCABundle *bool `json:"distributeClusterCABundle,omitempty"`
 }
 
 // InternalRegistryConfig defines the configuration for the internal registry component.
