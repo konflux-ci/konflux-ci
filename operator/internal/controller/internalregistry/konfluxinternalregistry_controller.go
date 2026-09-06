@@ -27,6 +27,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -41,6 +43,33 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
+
+var trustBundleGVK = schema.GroupVersionKind{
+	Group:   "trust.cert-manager.io",
+	Version: "v1alpha1",
+	Kind:    "Bundle",
+}
+
+// trustBundleWatchObjectIfInstalled returns an unstructured Bundle watch object
+// when the trust-manager Bundle CRD is discoverable in mapper.
+// This avoids a hard Go module dependency on github.com/cert-manager/trust-manager
+// (which has incompatible controller-runtime/k8s.io dependency trees) while still
+// allowing the controller to watch and reconcile its owned trust-manager Bundle.
+// Pass mgr.GetRESTMapper() from SetupWithManager.
+func trustBundleWatchObjectIfInstalled(mapper meta.RESTMapper) (*unstructured.Unstructured, bool) {
+	if mapper == nil {
+		return nil, false
+	}
+	if _, err := mapper.RESTMapping(trustBundleGVK.GroupKind(), trustBundleGVK.Version); err != nil {
+		if !meta.IsNoMatchError(err) {
+			logf.Log.Error(err, "failed to resolve trust-manager Bundle REST mapping; skipping watch registration")
+		}
+		return nil, false
+	}
+	bundle := &unstructured.Unstructured{}
+	bundle.SetGroupVersionKind(trustBundleGVK)
+	return bundle, true
+}
 
 const (
 	// CRName is the singleton name for the KonfluxInternalRegistry CR.
@@ -190,7 +219,7 @@ func (r *KonfluxInternalRegistryReconciler) applyManifests(ctx context.Context, 
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxInternalRegistryReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	b := ctrl.NewControllerManagedBy(mgr).
 		For(&konfluxv1alpha1.KonfluxInternalRegistry{}).
 		Named("konfluxinternalregistry").
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(predicate.DeploymentReadinessPredicate)).
@@ -198,12 +227,13 @@ func (r *KonfluxInternalRegistryReconciler) SetupWithManager(mgr ctrl.Manager) e
 		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
-		Owns(&certmanagerv1.Certificate{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
-		// NOTE: trust-manager Bundle (trust.cert-manager.io/v1alpha1) is not owned here
-		// because trust-manager's Go module pulls controller-runtime/k8s.io versions
-		// incompatible with this operator. The Bundle is still applied via manifests
-		// but changes to it won't trigger reconciliation.
-		Complete(r)
+		Owns(&certmanagerv1.Certificate{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate))
+
+	if bundle, ok := trustBundleWatchObjectIfInstalled(mgr.GetRESTMapper()); ok {
+		b = b.Owns(bundle, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate))
+	}
+
+	return b.Complete(r)
 }
 
 // ensureRegistryCredentials keeps Zot htpasswd credentials and the client dockerconfig

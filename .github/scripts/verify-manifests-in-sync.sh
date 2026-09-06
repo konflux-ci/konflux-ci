@@ -77,6 +77,7 @@ third_paths=(
   "dependencies/cert-manager/cert-manager.yaml"
   "dependencies/trust-manager/trust-manager.yaml"
   "operator/test/crds/cert-manager/cert-manager.crds.yaml"
+  "operator/test/crds/trust-manager/trust-manager.crds.yaml"
   "operator/test/crds/prometheus/servicemonitors.monitoring.coreos.com.yaml"
   "dependencies/prometheus-operator-crds/servicemonitors.monitoring.coreos.com.yaml"
 )

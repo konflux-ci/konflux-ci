@@ -83,7 +83,7 @@ var (
 // (e.g., "..", "..", ".." for internal/controller/buildservice/).
 //
 // Vendored envtest CRDs:
-//   - cert-manager, prometheus: .github/scripts/update-third-party-manifests.sh
+//   - cert-manager, trust-manager, prometheus: .github/scripts/update-third-party-manifests.sh
 //   - enterprise-contract, release: rebuild-upstream-manifests.sh / verify-manifests-in-sync.sh
 //   - openshift: .github/scripts/update-openshift-test-crds.sh (pinned github.com/openshift/api)
 func SetupTestEnv(basePath string) *TestEnv {
@@ -118,6 +118,7 @@ func SetupTestEnv(basePath string) *TestEnv {
 		CRDDirectoryPaths: []string{
 			filepath.Join(basePath, "config", "crd", "bases"),
 			filepath.Join(basePath, "test", "crds", "cert-manager"),
+			filepath.Join(basePath, "test", "crds", "trust-manager"),
 			filepath.Join(basePath, "test", "crds", "prometheus"),
 			filepath.Join(basePath, "test", "crds", "enterprise-contract"),
 			filepath.Join(basePath, "test", "crds", "release"),
