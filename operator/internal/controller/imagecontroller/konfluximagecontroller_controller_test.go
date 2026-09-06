@@ -18,6 +18,7 @@ package imagecontroller
 
 import (
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -38,7 +39,7 @@ import (
 
 const (
 	metricsServiceName            = "image-controller-controller-manager-metrics-service"
-	prunerConfigMapName           = "image-controller-image-pruner-configmap-hgm7kmgb6k"
+	imagePrunerVolumeName         = "image-pruner-volume"
 	leaderElectionRoleName        = "image-controller-leader-election-role"
 	leaderElectionRoleBindingName = "image-controller-leader-election-rolebinding"
 	managerClusterRoleName        = "image-controller-manager-role"
@@ -79,6 +80,30 @@ func newImageControllerCR() *konfluxv1alpha1.KonfluxImageController {
 			testutil.DefaultComponentMetricsConfig(),
 		),
 	}
+}
+
+// prunerConfigMapNameFromManifests returns the content-hashed ConfigMap name referenced
+// by the image-pruner CronJob in the embedded ImageController manifests.
+func prunerConfigMapNameFromManifests(store *manifests.ObjectStore) (string, error) {
+	objects, err := store.GetForComponent(manifests.ImageController)
+	if err != nil {
+		return "", err
+	}
+
+	for _, obj := range objects {
+		cj, ok := obj.(*batchv1.CronJob)
+		if !ok || cj.Name != imagePrunerCronJobName {
+			continue
+		}
+		for _, vol := range cj.Spec.JobTemplate.Spec.Template.Spec.Volumes {
+			if vol.Name == imagePrunerVolumeName && vol.ConfigMap != nil && vol.ConfigMap.Name != "" {
+				return vol.ConfigMap.Name, nil
+			}
+		}
+		return "", fmt.Errorf("volume %q not found in CronJob %q", imagePrunerVolumeName, imagePrunerCronJobName)
+	}
+
+	return "", fmt.Errorf("CronJob %q not found in ImageController manifests", imagePrunerCronJobName)
 }
 
 var _ = Describe("KonfluxImageController Controller", func() {
@@ -246,6 +271,9 @@ var _ = Describe("KonfluxImageController Controller", func() {
 			imageController := newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
+
+			prunerConfigMapName, err := prunerConfigMapNameFromManifests(objectStore)
+			Expect(err).NotTo(HaveOccurred())
 
 			cmNN := types.NamespacedName{
 				Name:      prunerConfigMapName,
@@ -620,6 +648,9 @@ var _ = Describe("KonfluxImageController Controller", func() {
 			imageController := newImageControllerCR()
 			Expect(k8sClient.Create(ctx, imageController)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, imageController)
+
+			prunerConfigMapName, err := prunerConfigMapNameFromManifests(objectStore)
+			Expect(err).NotTo(HaveOccurred())
 
 			cmNN := types.NamespacedName{
 				Name:      prunerConfigMapName,
