@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	buildcontrollers "github.com/konflux-ci/build-service/controllers"
+	buildexport "github.com/konflux-ci/build-service/export"
 
 	"github.com/devfile/library/v2/pkg/util"
 	"github.com/google/go-github/v91/github"
@@ -31,6 +31,9 @@ import (
 	"k8s.io/klog/v2"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// buildRequestTriggerPaCBuildAnnotationValue matches build-service's internal trigger value.
+const buildRequestTriggerPaCBuildAnnotationValue = "trigger-pac-build"
 
 // conformanceCleanupBudget returns the max wall time to wait for AfterAll cleanup.
 // Set E2E_CLEANUP_TIMEOUT to a Go duration (e.g. 90s, 1m30s); invalid or empty values use the default.
@@ -266,7 +269,7 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				})
 
 				ginkgo.It("verifies component build status", func() {
-					var buildStatus *buildcontrollers.BuildStatus
+					var buildStatus *buildexport.BuildStatus
 					timeout = time.Minute * 5
 					interval = defaultPollingInterval
 					gomega.Eventually(func() (bool, error) {
@@ -274,7 +277,7 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 						if getErr != nil {
 							return false, getErr
 						}
-						if err := json.Unmarshal([]byte(comp.Annotations[buildcontrollers.BuildStatusAnnotationName]), &buildStatus); err != nil {
+						if err := json.Unmarshal([]byte(comp.Annotations[buildexport.BuildStatusAnnotationName]), &buildStatus); err != nil {
 							return false, err
 						}
 						if buildStatus.PaC == nil {
@@ -485,7 +488,7 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 
 			ginkgo.When("push pipelinerun is retriggered", func() {
 				ginkgo.It("should trigger a new PipelineRun via annotation", func() {
-					err = fw.AsKubeAdmin.HasController.SetComponentAnnotation(component.GetName(), buildcontrollers.BuildRequestAnnotationName, buildcontrollers.BuildRequestTriggerPaCBuildAnnotationValue, userNamespace)
+					err = fw.AsKubeAdmin.HasController.SetComponentAnnotation(component.GetName(), buildexport.BuildRequestAnnotationName, buildRequestTriggerPaCBuildAnnotationValue, userNamespace)
 					gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 					gomega.Eventually(func() error {
@@ -549,7 +552,7 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 						if cErr != nil {
 							return "error"
 						}
-						return c.Annotations[buildcontrollers.BuildRequestAnnotationName]
+						return c.Annotations[buildexport.BuildRequestAnnotationName]
 					}, time.Minute*2, defaultPollingInterval).Should(gomega.BeEmpty(),
 						"build request annotation should be cleared after retrigger")
 				})

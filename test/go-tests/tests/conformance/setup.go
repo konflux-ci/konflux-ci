@@ -12,7 +12,7 @@ import (
 
 	ecp "github.com/conforma/crds/api/v1alpha1"
 	appstudioApi "github.com/konflux-ci/application-api/api/v1alpha1"
-	buildcontrollers "github.com/konflux-ci/build-service/controllers"
+	buildexport "github.com/konflux-ci/build-service/export"
 	imagecontroller "github.com/konflux-ci/image-controller/api/v1alpha1"
 	integrationv1beta2 "github.com/konflux-ci/integration-service/api/v1beta2"
 	releaseApi "github.com/konflux-ci/release-service/api/v1alpha1"
@@ -541,7 +541,7 @@ func dumpDiagnostics(hub *framework.ControllerHub, componentName, appName, names
 		klog.Errorf("diagnostic: could not re-fetch Component %s/%s: %v", namespace, componentName, err)
 	} else {
 		msgs, _ := hub.HasController.GetComponentConditionStatusMessages(comp.GetName(), namespace)
-		buildAnnot := comp.Annotations[buildcontrollers.BuildStatusAnnotationName]
+		buildAnnot := comp.Annotations[buildexport.BuildStatusAnnotationName]
 		klog.Infof("diagnostic: Component %s/%s conditions=%v build-status=%q", namespace, comp.GetName(), msgs, buildAnnot)
 	}
 
