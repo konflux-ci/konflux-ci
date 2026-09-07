@@ -44,33 +44,6 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
 
-var trustBundleGVK = schema.GroupVersionKind{
-	Group:   "trust.cert-manager.io",
-	Version: "v1alpha1",
-	Kind:    "Bundle",
-}
-
-// trustBundleWatchObjectIfInstalled returns an unstructured Bundle watch object
-// when the trust-manager Bundle CRD is discoverable in mapper.
-// This avoids a hard Go module dependency on github.com/cert-manager/trust-manager
-// (which has incompatible controller-runtime/k8s.io dependency trees) while still
-// allowing the controller to watch and reconcile its owned trust-manager Bundle.
-// Pass mgr.GetRESTMapper() from SetupWithManager.
-func trustBundleWatchObjectIfInstalled(mapper meta.RESTMapper) (*unstructured.Unstructured, bool) {
-	if mapper == nil {
-		return nil, false
-	}
-	if _, err := mapper.RESTMapping(trustBundleGVK.GroupKind(), trustBundleGVK.Version); err != nil {
-		if !meta.IsNoMatchError(err) {
-			logf.Log.Error(err, "failed to resolve trust-manager Bundle REST mapping; skipping watch registration")
-		}
-		return nil, false
-	}
-	bundle := &unstructured.Unstructured{}
-	bundle.SetGroupVersionKind(trustBundleGVK)
-	return bundle, true
-}
-
 const (
 	// CRName is the singleton name for the KonfluxInternalRegistry CR.
 	CRName = "konflux-internal-registry"
@@ -89,6 +62,12 @@ const (
 	// crKind is used in error messages to identify this CR type.
 	crKind = "KonfluxInternalRegistry"
 )
+
+var trustBundleGVK = schema.GroupVersionKind{
+	Group:   "trust.cert-manager.io",
+	Version: "v1alpha1",
+	Kind:    "Bundle",
+}
 
 // InternalRegistryCleanupGVKs defines which resource types should be cleaned up when they are
 // no longer part of the desired state.
@@ -234,6 +213,27 @@ func (r *KonfluxInternalRegistryReconciler) SetupWithManager(mgr ctrl.Manager) e
 	}
 
 	return b.Complete(r)
+}
+
+// trustBundleWatchObjectIfInstalled returns an unstructured Bundle watch object
+// when the trust-manager Bundle CRD is discoverable in mapper.
+// This avoids a hard Go module dependency on github.com/cert-manager/trust-manager
+// (which has incompatible controller-runtime/k8s.io dependency trees) while still
+// allowing the controller to watch and reconcile its owned trust-manager Bundle.
+// Pass mgr.GetRESTMapper() from SetupWithManager.
+func trustBundleWatchObjectIfInstalled(mapper meta.RESTMapper) (*unstructured.Unstructured, bool) {
+	if mapper == nil {
+		return nil, false
+	}
+	if _, err := mapper.RESTMapping(trustBundleGVK.GroupKind(), trustBundleGVK.Version); err != nil {
+		if !meta.IsNoMatchError(err) {
+			logf.Log.Error(err, "failed to resolve trust-manager Bundle REST mapping; skipping watch registration")
+		}
+		return nil, false
+	}
+	bundle := &unstructured.Unstructured{}
+	bundle.SetGroupVersionKind(trustBundleGVK)
+	return bundle, true
 }
 
 // ensureRegistryCredentials keeps Zot htpasswd credentials and the client dockerconfig

@@ -678,9 +678,7 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, unrelated)).To(Succeed())
-			DeferCleanup(func(cleanupCtx context.Context) {
-				_ = k8sClient.Delete(cleanupCtx, unrelated)
-			})
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, unrelated)
 
 			By("modifying the unrelated Bundle")
 			Eventually(func(g Gomega) {
@@ -741,7 +739,19 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 	})
 
 	Context("Controller Setup without trust-manager CRD", func() {
-		It("successfully configures controller without panic or error", func() {
+		It("successfully configures controller without Bundle watch when CRD is absent", func() {
+			// Use a REST mapper that has no registered GVKs.
+			// This simulates a cluster where the trust-manager CRD is not installed,
+			// so trustBundleWatchObjectIfInstalled must return (nil, false) and
+			// SetupWithManager must succeed without registering the Bundle Owns() watch.
+			emptyMapper := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
+			bundle, ok := trustBundleWatchObjectIfInstalled(emptyMapper)
+			Expect(ok).To(BeFalse(), "emptyMapper should not find the Bundle GVK")
+			Expect(bundle).To(BeNil())
+
+			// Verify the manager wiring path via testutil.NewTestManager (connected to
+			// the shared testEnv, which does have the CRD), but drive the CRD-absent
+			// discovery through the empty mapper directly to confirm no panic/error.
 			mgr := testutil.NewTestManager(testEnv)
 			reconciler := &KonfluxInternalRegistryReconciler{
 				Client:      mgr.GetClient(),
