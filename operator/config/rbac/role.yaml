@@ -702,11 +702,18 @@ rules:
   - securitycontextconstraints
   verbs:
   - create
+  - list
+  - watch
+- apiGroups:
+  - security.openshift.io
+  resourceNames:
+  - appstudio-pipelines-scc
+  resources:
+  - securitycontextconstraints
+  verbs:
   - delete
   - get
-  - list
   - patch
-  - watch
 - apiGroups:
   - trust.cert-manager.io
   resources:
