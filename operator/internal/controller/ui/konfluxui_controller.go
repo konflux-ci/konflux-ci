@@ -170,8 +170,6 @@ type KonfluxUIReconciler struct {
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates;issuers,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=config.openshift.io,resources=ingresses,verbs=get
 // +kubebuilder:rbac:groups=dex.coreos.com,resources=*,verbs=*
-// +kubebuilder:rbac:groups=core,resources=users;groups,verbs=impersonate
-// +kubebuilder:rbac:groups=authorization.k8s.io,resources=localsubjectaccessreviews,verbs=create
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
