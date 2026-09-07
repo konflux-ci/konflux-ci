@@ -28,6 +28,12 @@ patches:
       kind: ClusterRole
       name: build-service-metrics-reader
     path: remove-metrics-reader-cluster-role.yaml
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: NetworkPolicy
+      name: build-service-allow-metrics-traffic
+    path: remove-network-policy.yaml
   - patch: |
       - op: add
         path: /metadata/annotations/ignore-check.kube-linter.io~1liveness-port
