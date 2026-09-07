@@ -10,9 +10,10 @@ description: >-
 
 ## Overview
 
-When MintMaker/Renovate bumps pins under `operator/upstream-kustomizations/`
-or `.github/scripts/export-third-party-chart-env.sh`, a **parent PR** opens
-with pin-only changes. A separate workflow
+When MintMaker/Renovate bumps pins under `operator/upstream-kustomizations/`,
+`.github/scripts/export-third-party-chart-env.sh`, or shared dependencies in
+`operator/go.mod` / `operator/go.sum`, a **parent PR** opens with pin-only
+changes. A separate workflow
 (`.github/workflows/renovate-manifest-companion.yaml`) asynchronously opens a
 **companion PR** that adds regenerated manifests.
 
@@ -43,6 +44,10 @@ Skip review and retro when **both**:
    - `operator/upstream-kustomizations/**`
    - `.github/scripts/export-third-party-chart-env.sh`
    - `dependencies/registry/kustomization.yml` (registry digest bumps only)
+   - `operator/go.mod` / `operator/go.sum` (OpenShift envtest CRDs from
+     `github.com/openshift/api`)
+   - `test/go-tests/go.mod` / `test/go-tests/go.sum` (sidecar when Renovate
+     bumps a shared dependency in both Go modules)
 
 Apply this **even before** `deps-only` / `superseded-by-companion` labels land.
 Do not run full review, do not approve, do not add `ready-for-merge`.
@@ -54,8 +59,7 @@ the table above instead.
 
 **Not companion-eligible** (review normally):
 
-- Changes to `test/go-tests/go.mod`, `operator/docs/go.mod`, `operator/go.mod`
-- Non-allowlist paths
+- Changes to `operator/docs/go.mod` or other non-allowlist paths
 - Human-authored PRs touching upstream kustomizations
 
 ## Check companion workflow state before commenting
