@@ -27,13 +27,6 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - groups
-  - users
-  verbs:
-  - impersonate
-- apiGroups:
-  - ""
-  resources:
   - namespaces
   - serviceaccounts
   - services
@@ -116,12 +109,6 @@ rules:
   - list
   - patch
   - watch
-- apiGroups:
-  - authorization.k8s.io
-  resources:
-  - localsubjectaccessreviews
-  verbs:
-  - create
 - apiGroups:
   - batch
   resources:
