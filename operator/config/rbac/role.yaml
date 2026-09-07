@@ -301,18 +301,6 @@ rules:
   - watch
 - apiGroups:
   - rbac.authorization.k8s.io
-  resources:
-  - clusterrolebindings
-  verbs:
-  - bind
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - watch
-- apiGroups:
-  - rbac.authorization.k8s.io
   resourceNames:
   - build-pipeline-runner-rolebinding
   - build-service-manager-rolebinding
@@ -404,11 +392,13 @@ rules:
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
+  - clusterrolebindings
   - clusterroles
+  - rolebindings
+  - roles
   verbs:
   - create
   - delete
-  - escalate
   - get
   - list
   - patch
@@ -441,6 +431,7 @@ rules:
   - rbac.authorization.k8s.io
   resourceNames:
   - enterprisecontract-configmap-viewer-role
+  - enterprisecontractpolicy-editor-role
   - enterprisecontractpolicy-viewer-role
   resources:
   - clusterroles
@@ -463,12 +454,18 @@ rules:
 - apiGroups:
   - rbac.authorization.k8s.io
   resourceNames:
+  - integration-service-componentgroup-admin-role
+  - integration-service-componentgroup-editor-role
+  - integration-service-componentgroup-viewer-role
   - integration-service-integrationtestscenario-admin-role
   - integration-service-integrationtestscenario-editor-role
   - integration-service-integrationtestscenario-viewer-role
   - integration-service-manager-role
   - integration-service-metrics-auth-role
   - integration-service-metrics-reader
+  - integration-service-nudgeconfig-admin-role
+  - integration-service-nudgeconfig-editor-role
+  - integration-service-nudgeconfig-viewer-role
   - integration-service-snapshot-garbage-collector
   - integration-service-tekton-editor-role
   - konflux-integration-runner
@@ -476,6 +473,26 @@ rules:
   - clusterroles
   verbs:
   - bind
+  - escalate
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - konflux-admin-user-actions-batch
+  - konflux-admin-user-actions-core
+  - konflux-admin-user-actions-extra
+  - konflux-builder-bot-actions
+  - konflux-contributor-user-actions-core
+  - konflux-contributor-user-actions-extra
+  - konflux-kueue-visibility
+  - konflux-maintainer-user-actions-core
+  - konflux-maintainer-user-actions-extra
+  - konflux-releaser-bot-actions
+  - konflux-self-access-reviewer
+  - konflux-viewer-user-actions-core
+  - konflux-viewer-user-actions-extra
+  resources:
+  - clusterroles
+  verbs:
   - escalate
 - apiGroups:
   - rbac.authorization.k8s.io
@@ -597,18 +614,6 @@ rules:
   - rolebindings
   verbs:
   - bind
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - rolebindings
-  - roles
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - watch
 - apiGroups:
   - rbac.authorization.k8s.io
   resourceNames:
