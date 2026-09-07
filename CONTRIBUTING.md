@@ -158,12 +158,17 @@ pinned `github.com/openshift/api` module by
 `.github/scripts/update-openshift-test-crds.sh`; CI verifies these stay in
 sync when `operator/go.mod` changes.
 
-When **MintMaker** or **Renovate** opens a PR that only bumps digests or chart
-versions, a **companion PR** may be opened automatically
+When **MintMaker** or **Renovate** opens a PR that only bumps pins in the
+companion allowlist, a **companion PR** may be opened automatically
 (`.github/workflows/renovate-manifest-companion.yaml`) that includes the matching
-rendered output. **Prefer merging the companion PR** (or a single PR that
-includes both pins and regenerated files) so `main` never carries mismatched
-pins and manifests.
+rendered output. Triggers include upstream kustomization digests,
+`.github/scripts/export-third-party-chart-env.sh`, and `operator/go.mod` /
+`operator/go.sum` (for OpenShift envtest CRDs derived from
+`github.com/openshift/api`). The workflow also permits `test/go-tests/go.mod` and
+`test/go-tests/go.sum` in the same PR when Renovate bumps a shared dependency in
+both Go modules; those files do not affect manifest regeneration. **Prefer merging
+the companion PR** (or a single PR that includes both pins and regenerated files)
+so `main` never carries mismatched pins and manifests.
 
 When verify fails on a **pull request**, CI cancels in-progress or queued
 **Operator E2E Tests** runs for the same commit (with retries, so runs queued
