@@ -416,8 +416,10 @@ steps (creating `monitoring/` kustomization, rebuilding embedded manifests via
 **RBAC:**
 
 6. Add the new `<component>-metrics-reader` ClusterRole to the
-   `bind;escalate` kubebuilder RBAC annotation on the component controller.
-   For HTTPS operands on the scrape-token model, also ensure
+   `bind;escalate` kubebuilder RBAC annotation on the component controller,
+   scoped with `resourceNames` to every embedded ClusterRole the reconciler
+   applies (manager-role contract tests enforce this). For HTTPS operands on
+   the scrape-token model, also ensure
    `prometheus-<component>-metrics-reader` ClusterRoleBinding has `bind`
    verb so the operator can bind the `metrics-scraper` ServiceAccount
 7. Add a ServiceMonitor RBAC marker with all required verbs:

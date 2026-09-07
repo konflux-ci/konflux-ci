@@ -67,10 +67,11 @@ After changing APIs or RBAC annotations, run `make manifests generate` from `ope
 
 ## Testing
 
-**Two distinct test suites:**
+**Multiple test suites:**
 
 1. **Platform conformance** (`test/go-tests/tests/conformance/`) — end-to-end tests against a deployed Konflux instance, run via `test/e2e/run-e2e.sh`. Uses Ginkgo/Gomega with a shared `Framework` in `test/go-tests/pkg/framework/`.
 2. **Operator unit/integration** (`operator/`) — controller tests using controller-runtime **envtest** (no real cluster needed). Shared test utilities in `operator/internal/controller/testutil/`. Run via `make test` from `operator/`.
+3. **Manager-role RBAC contract** (`operator/internal/rbac/`) — unit tests against generated `operator/config/rbac/role.yaml` that forbid unscoped `escalate`/`bind` on `clusterroles` and unscoped `bind` on `clusterrolebindings`, require `escalate` for all embedded component ClusterRoles, and ensure every named `escalate`/`bind` target is known. Run via `go test ./internal/rbac/` from `operator/` (also included in `make test`).
 
 **Mixed styles by design:** The codebase uses Ginkgo/Gomega, `testing.T`+Gomega (`gomega.NewWithT`), testify, and plain `testing.T` table tests across different packages. This is intentional — follow the locality rule from Code Style above rather than converting to a single framework.
 
