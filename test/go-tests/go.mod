@@ -9,7 +9,7 @@ require (
 	github.com/devfile/library/v2 v2.4.0
 	github.com/docker/cli v29.8.0+incompatible
 	github.com/gofri/go-github-ratelimit/v2 v2.0.2
-	github.com/google/go-containerregistry v0.22.0
+	github.com/google/go-containerregistry v0.22.1
 	github.com/google/go-github/v91 v91.0.0
 	github.com/h2non/gock v1.2.0
 	github.com/konflux-ci/application-api v0.0.0-20260727123715-2999a91451c6
