@@ -29,3 +29,9 @@ patches:
       kind: CronJob
       name: image-controller-image-pruner-cronjob
     path: replace-pruner-image.yaml
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: NetworkPolicy
+      name: image-controller-allow-metrics-traffic
+    path: remove-network-policy.yaml

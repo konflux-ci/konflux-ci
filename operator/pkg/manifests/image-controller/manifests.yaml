@@ -1535,26 +1535,3 @@ spec:
   selector:
     matchLabels:
       control-plane: controller-manager
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: image-controller
-  name: image-controller-allow-metrics-traffic
-  namespace: image-controller
-spec:
-  ingress:
-  - from:
-    - namespaceSelector:
-        matchLabels:
-          metrics: enabled
-    ports:
-    - port: 8443
-      protocol: TCP
-  podSelector:
-    matchLabels:
-      control-plane: controller-manager
-  policyTypes:
-  - Ingress
