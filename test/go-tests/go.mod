@@ -26,7 +26,7 @@ require (
 	github.com/openshift-pipelines/pipelines-as-code v0.48.0
 	github.com/openshift/api v0.0.0-20260805215214-cfb63858e9d7
 	github.com/openshift/client-go v0.0.0-20260806041845-b74fb348f1e7
-	github.com/openshift/library-go v0.0.0-20260827165743-93f90ac5198f
+	github.com/openshift/library-go v0.0.0-20260904093542-946ee696bcb5
 	github.com/redhat-appstudio/jvm-build-service v0.0.0-20250301023318-b47170d413c5
 	github.com/stretchr/testify v1.12.1
 	github.com/tektoncd/cli v0.45.0
