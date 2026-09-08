@@ -62,16 +62,53 @@ rules:
   - create
 - apiGroups:
   - admissionregistration.k8s.io
+  resourceNames:
+  - integration-service-mutating-webhook-configuration
+  resources:
+  - mutatingwebhookconfigurations
+  verbs:
+  - delete
+  - get
+  - patch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resourceNames:
+  - release-service-mutating-webhook-configuration
+  resources:
+  - mutatingwebhookconfigurations
+  verbs:
+  - delete
+  - get
+  - patch
+- apiGroups:
+  - admissionregistration.k8s.io
   resources:
   - mutatingwebhookconfigurations
   - validatingwebhookconfigurations
   verbs:
   - create
+  - list
+  - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resourceNames:
+  - integration-service-validating-webhook-configuration
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
   - delete
   - get
-  - list
   - patch
-  - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resourceNames:
+  - release-service-validating-webhook-configuration
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - delete
+  - get
+  - patch
 - apiGroups:
   - apiextensions.k8s.io
   resources:
