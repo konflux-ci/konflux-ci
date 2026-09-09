@@ -63,6 +63,7 @@ The Tekton Task sets optional env vars from pipeline params (empty by default). 
 |--------|------------------------|-------------|
 | `E2E_INTEGRATION_GO_TEST_EXTRA_ARGS` | `integration-go-test-extra-args` | `go test . ./pkg/...` |
 | `E2E_CONFORMANCE_GO_TEST_EXTRA_ARGS` | `conformance-go-test-extra-args` | `go test ./tests/conformance ...` (after fixed Ginkgo flags) |
+| `E2E_CONFORMANCE_IMAGE` | `conformance-image` | When set, runs the pre-built conformance image as a pod instead of `go test` from source. |
 
 **Local / ad hoc** (from repo root, same semantics as the Task):
 
@@ -81,7 +82,7 @@ Use **one token per flag** where possible (e.g. `-ginkgo.skip=Flaky`). Values wi
 | Script | Purpose |
 |--------|---------|
 | `prepare-conformance-env.sh` | Exports `CUSTOM_DOCKER_BUILD_OCI_TA_MIN_PIPELINE_BUNDLE` from `operator/pkg/manifests/build-service/manifests.yaml` (same pin as GitHub Actions E2E). |
-| `run-conformance-tests.sh` | Runs conformance tests. Requires `GH_ORG`, `GH_TOKEN` (conformance clears `QUAY_TOKEN` for the test run). |
+| `run-conformance-tests.sh` | Runs conformance tests. Two modes: **source** (default, `go test`) and **image** (`CONFORMANCE_IMAGE` set — runs the pre-built conformance container as a pod with kubeconfig and credentials injected). Requires `GH_ORG`, `GH_TOKEN` (conformance clears `QUAY_TOKEN` for the test run). |
 | `tekton-fetch-kubeconfig.sh` | **Tekton:** decodes kubeconfig from Secret into `/mnt/e2e-shared/kubeconfig`. Args: `SECRET_NAME` `[KEY]`. Env: `POD_NAMESPACE`. |
 | `tekton-copy-shared-tools.sh` | **Tekton:** copies `kubectl`, `yq`, `jq` into `/mnt/e2e-shared/bin` and **`jq`’s shared libraries** (`libjq`, `libonig`) into `/mnt/e2e-shared/lib` for `ubi10/go-toolset` steps. |
 | `tekton-resolve-konflux-cr.sh` | **Tekton:** resolves optional ConfigMap env (`E2E_KONFLUX_CR_YAML`) or `E2E_KONFLUX_CR_PATH` to an absolute CR file path (stdout). |

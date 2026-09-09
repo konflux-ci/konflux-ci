@@ -32,6 +32,7 @@ The current conformance suite is written for that model: it exercises deployed s
 - `release-ta-oci-storage` (default: empty): optional OCI ref for conformance trusted-artifacts flow.
 - `integration-go-test-extra-args` (default: empty): optional space-separated extra flags appended to integration `go test . ./pkg/...` (e.g. `-run=TestFoo -count=1`).
 - `conformance-go-test-extra-args` (default: empty): optional space-separated extra flags appended to conformance `go test` after the fixed Ginkgo options (e.g. `-ginkgo.focus=Subsuite`), same idea as `./test/e2e/run-e2e.sh` forwarding `"$@"`.
+- `conformance-image` (default: empty): optional conformance test image reference. When set, the conformance step runs the pre-built image as a pod (with kubeconfig and credentials injected) instead of compiling from source. The PAC PipelineRun sets this to the PR-built image to validate the conformance image as part of e2e. Timing note: the conformance image build fires in parallel with e2e, but Kind provisioning + Konflux deploy (~20 min) provides sufficient lead time for the image to be available.
 - `catalog-url` (default: `https://github.com/konflux-ci/tekton-integration-catalog.git`): integration catalog repository.
 - `catalog-revision` (default: pinned commit SHA): `tekton-integration-catalog` ref for catalog tasks; override to move to a different commit.
 
