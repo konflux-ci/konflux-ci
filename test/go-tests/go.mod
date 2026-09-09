@@ -32,7 +32,7 @@ require (
 	github.com/tektoncd/cli v0.45.0
 	github.com/tektoncd/pipeline v1.13.1
 	github.com/xanzy/go-gitlab v0.114.0
-	golang.org/x/oauth2 v0.36.0
+	golang.org/x/oauth2 v0.37.0
 	k8s.io/api v0.37.0
 	k8s.io/apimachinery v0.37.0
 	k8s.io/client-go v11.0.0+incompatible
