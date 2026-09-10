@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -100,6 +101,14 @@ func TestIsComponentMetricsScrapeResource(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "build-pipeline-config", Namespace: "build-service"},
 	})).To(BeFalse())
 
+	g.Expect(IsComponentMetricsScrapeResource(&networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "namespace-lister-allow-metrics-traffic", Namespace: "namespace-lister"},
+	})).To(BeTrue())
+
+	g.Expect(IsComponentMetricsScrapeResource(&networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "namespace-lister-allow-from-konfluxui", Namespace: "namespace-lister"},
+	})).To(BeFalse())
+
 	g.Expect(IsComponentMetricsScrapeResource(&unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "v1",
@@ -142,6 +151,9 @@ func TestIsComponentMetricsScrapeResource(t *testing.T) {
 
 	g.Expect(ComponentMetricsOrphanCleanupGVKs).To(ContainElement(
 		schema.GroupVersionKind{Group: "monitoring.coreos.com", Version: "v1", Kind: "ServiceMonitor"},
+	))
+	g.Expect(ComponentMetricsOrphanCleanupGVKs).To(ContainElement(
+		schema.GroupVersionKind{Group: "networking.k8s.io", Version: "v1", Kind: "NetworkPolicy"},
 	))
 }
 
