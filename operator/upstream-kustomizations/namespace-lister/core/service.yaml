@@ -3,6 +3,8 @@ kind: Service
 metadata:
   name: namespace-lister
   namespace: namespace-lister
+  labels:
+    apps: namespace-lister
 spec:
   selector:
     apps: namespace-lister
@@ -11,3 +13,6 @@ spec:
   - name: http
     targetPort: 8080
     port: 8080
+  - name: metrics
+    targetPort: 9100
+    port: 9100

@@ -36,7 +36,6 @@ import (
 )
 
 const (
-	namespaceListerNamespace            = "namespace-lister"
 	authorizerClusterRoleName           = "namespace-lister-authorizer"
 	networkPolicyAllowFromKonfluxUIName = "namespace-lister-allow-from-konfluxui"
 	networkPolicyAllowToAPIServerName   = "namespace-lister-allow-to-apiserver"

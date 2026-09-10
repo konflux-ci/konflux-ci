@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- namespace.yaml
+- rbac.yaml
+- certificate.yaml
+- deployment.yaml
+- service.yaml
+- network_policy_allow_to_apiserver.yaml
+- network_policy_allow_from_konfluxui.yaml
+patches:
+- path: ./patches/with_header_auth_user.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: namespace-lister
+    namespace: namespace-lister
+- path: ./patches/with_header_auth_groups.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: namespace-lister
+    namespace: namespace-lister

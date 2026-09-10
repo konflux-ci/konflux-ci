@@ -6,6 +6,12 @@ metadata:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
+  name: metrics-scraper
+  namespace: namespace-lister
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
   name: namespace-lister
   namespace: namespace-lister
 ---
@@ -35,6 +41,30 @@ rules:
   - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: namespace-lister-metrics-reader
+rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: namespace-lister-auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- apiGroup: ""
+  kind: ServiceAccount
+  name: namespace-lister
+  namespace: namespace-lister
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: namespace-lister-authorizer
@@ -48,9 +78,23 @@ subjects:
   name: namespace-lister
   namespace: namespace-lister
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  annotations:
+    konflux.konflux-ci.dev/metrics-scraper-binding: "true"
+  name: prometheus-namespace-lister-metrics-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: namespace-lister-metrics-reader
+subjects: []
+---
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    apps: namespace-lister
   name: namespace-lister
   namespace: namespace-lister
 spec:
@@ -58,6 +102,9 @@ spec:
   - name: http
     port: 8080
     targetPort: 8080
+  - name: metrics
+    port: 9100
+    targetPort: 9100
   selector:
     apps: namespace-lister
   type: ClusterIP
@@ -87,6 +134,8 @@ spec:
         - -enable-tls
         - -cert-path=/var/tls/tls.crt
         - -key-path=/var/tls/tls.key
+        - -enable-metrics
+        - -metrics-address=:9100
         env:
         - name: CACHE_NAMESPACE_LABELSELECTOR
           value: konflux-ci.dev/type=tenant
@@ -105,6 +154,8 @@ spec:
         ports:
         - containerPort: 8080
           name: http
+        - containerPort: 9100
+          name: metrics
         readinessProbe:
           httpGet:
             path: /readyz
@@ -157,6 +208,31 @@ spec:
     name: konflux-issuer
   secretName: namespace-lister-tls
 ---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: namespace-lister
+  namespace: namespace-lister
+spec:
+  endpoints:
+  - bearerTokenSecret:
+      key: token
+      name: prometheus-scrape-token
+    interval: 15s
+    path: /metrics
+    port: metrics
+    scheme: https
+    tlsConfig:
+      ca:
+        secret:
+          key: ca.crt
+          name: namespace-lister-tls
+      insecureSkipVerify: false
+      serverName: namespace-lister.namespace-lister.svc
+  selector:
+    matchLabels:
+      apps: namespace-lister
+---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -173,6 +249,26 @@ spec:
           app: proxy
     ports:
     - port: 8080
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      apps: namespace-lister
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: namespace-lister-allow-metrics-traffic
+  namespace: namespace-lister
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: openshift-user-workload-monitoring
+    ports:
+    - port: 9100
       protocol: TCP
   podSelector:
     matchLabels:

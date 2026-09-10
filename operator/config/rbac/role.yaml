@@ -394,7 +394,9 @@ rules:
 - apiGroups:
   - rbac.authorization.k8s.io
   resourceNames:
+  - namespace-lister-auth-delegator
   - namespace-lister-authorizer
+  - prometheus-namespace-lister-metrics-reader
   resources:
   - clusterrolebindings
   verbs:
@@ -560,6 +562,7 @@ rules:
   - rbac.authorization.k8s.io
   resourceNames:
   - namespace-lister-authorizer
+  - namespace-lister-metrics-reader
   resources:
   - clusterroles
   verbs:
