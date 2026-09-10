@@ -72,6 +72,54 @@ func metricsTLSSecret(ns, rv string, caPEM, leafPEM []byte) *corev1.Secret {
 	}
 }
 
+func operandTLSSecret(name, ns, rv string, caPEM, leafPEM []byte) *corev1.Secret {
+	secret := metricsTLSSecret(ns, rv, caPEM, leafPEM)
+	secret.Name = name
+	return secret
+}
+
+func TestMetricsTLSSecretName(t *testing.T) {
+	if got := metricsTLSSecretName(MetricsScrapeTLSInput{}); got != MetricsServerCertSecretName {
+		t.Fatalf("default secret name: got %q want %q", got, MetricsServerCertSecretName)
+	}
+	if got := metricsTLSSecretName(MetricsScrapeTLSInput{SecretName: "operand-tls"}); got != "operand-tls" {
+		t.Fatalf("custom secret name: got %q", got)
+	}
+}
+
+func TestEvaluateMetricsScrapeTLS_CustomSecretName(t *testing.T) {
+	ctx := context.Background()
+	caPEM, leafPEM := mustMetricsTLSMaterial(t)
+	const customSecret = "operand-tls"
+	c := fake.NewClientBuilder().WithScheme(testMetricsTLSScheme(t)).WithObjects(
+		operandTLSSecret(customSecret, testMetricsTLSNamespace, "rv-custom", caPEM, leafPEM),
+	).Build()
+
+	result, err := EvaluateMetricsScrapeTLS(ctx, MetricsScrapeTLSInput{
+		Client:     c,
+		Namespace:  testMetricsTLSNamespace,
+		SecretName: customSecret,
+	})
+	if err != nil {
+		t.Fatalf("evaluate: %v", err)
+	}
+	if !result.Ready {
+		t.Fatalf("expected ready with custom secret, reason=%q", result.Reason)
+	}
+
+	missingDefault, err := EvaluateMetricsScrapeTLS(ctx, MetricsScrapeTLSInput{
+		Client:    c,
+		Namespace: testMetricsTLSNamespace,
+	})
+	if err != nil {
+		t.Fatalf("evaluate default name: %v", err)
+	}
+	if missingDefault.Ready || missingDefault.Reason != MetricsTLSReasonCertMissing {
+		t.Fatalf("default name should miss metrics-server-cert: ready=%v reason=%q",
+			missingDefault.Ready, missingDefault.Reason)
+	}
+}
+
 func TestEvaluateMetricsScrapeTLS_Ready(t *testing.T) {
 	ctx := context.Background()
 	caPEM, leafPEM := mustMetricsTLSMaterial(t)
@@ -226,6 +274,20 @@ func TestVerifyCertPEMSignedByCA(t *testing.T) {
 func TestParseFirstCertPEM_NoBlock(t *testing.T) {
 	if _, err := parseFirstCertPEM(nil); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestResolveMetricsTLSSecretName(t *testing.T) {
+	t.Parallel()
+	if got := ResolveMetricsTLSSecretName(""); got != MetricsServerCertSecretName {
+		t.Fatalf("empty name: got %q want %q", got, MetricsServerCertSecretName)
+	}
+	const custom = "operand-tls"
+	if got := ResolveMetricsTLSSecretName(custom); got != custom {
+		t.Fatalf("custom name: got %q want %q", got, custom)
+	}
+	if got := ResolveMetricsTLSSecretName(MetricsServerCertSecretName); got != MetricsServerCertSecretName {
+		t.Fatalf("explicit default: got %q want %q", got, MetricsServerCertSecretName)
 	}
 }
 
