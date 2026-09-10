@@ -336,13 +336,19 @@ func IsPrometheusScrapeTokenSecret(obj client.Object) bool {
 		obj.GetNamespace() != ""
 }
 
-// IsMetricsTLSSecret reports whether obj is the metrics TLS Secret used for verified
-// Prometheus scrape wiring (konflux-issuer leaf Secret with tls.crt + ca.crt).
-func IsMetricsTLSSecret(obj client.Object) bool {
+// IsMetricsTLSSecretNamed reports whether obj is the named metrics TLS Secret used for
+// verified Prometheus scrape wiring.
+func IsMetricsTLSSecretNamed(obj client.Object, secretName string) bool {
 	if obj == nil || obj.GetNamespace() == "" {
 		return false
 	}
-	return obj.GetName() == MetricsServerCertSecretName
+	return obj.GetName() == ResolveMetricsTLSSecretName(secretName)
+}
+
+// IsMetricsTLSSecret reports whether obj is the metrics TLS Secret used for verified
+// Prometheus scrape wiring (konflux-issuer leaf Secret with tls.crt + ca.crt).
+func IsMetricsTLSSecret(obj client.Object) bool {
+	return IsMetricsTLSSecretNamed(obj, MetricsServerCertSecretName)
 }
 
 // IsMetricsScrapeWiringSecret reports whether obj is a Secret that should wake scrape

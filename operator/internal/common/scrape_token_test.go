@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
@@ -61,6 +63,37 @@ func (f *fakeTokenCreator) CreateScraperToken(
 	}
 	f.scraper = scraper
 	return f.token, f.expiresAt, nil
+}
+
+type logCapture struct {
+	infos []logRecord
+}
+
+type logRecord struct {
+	msg string
+	kv  []any
+}
+
+func (l *logCapture) Init(logr.RuntimeInfo) {}
+func (l *logCapture) Enabled(int) bool      { return true }
+func (l *logCapture) Info(_ int, msg string, kv ...any) {
+	l.infos = append(l.infos, logRecord{msg: msg, kv: kv})
+}
+func (l *logCapture) Error(_ error, msg string, kv ...any) {
+	l.infos = append(l.infos, logRecord{msg: msg, kv: kv})
+}
+func (l *logCapture) WithName(string) logr.LogSink   { return l }
+func (l *logCapture) WithValues(...any) logr.LogSink { return l }
+
+func logValue(kv []any, key string) string {
+	for i := 0; i+1 < len(kv); i += 2 {
+		if k, ok := kv[i].(string); ok && k == key {
+			if v, ok := kv[i+1].(string); ok {
+				return v
+			}
+		}
+	}
+	return ""
 }
 
 func metricsTLSObjects(t *testing.T) []client.Object {
@@ -1288,6 +1321,169 @@ func TestReconcilePrometheusScrapeToken_SkipsRetainWhenCertMissing(t *testing.T)
 	}
 	if result.RequeueAfter != kubernetes.DefaultMetricsTLSRequeue {
 		t.Fatalf("requeue: got %v want %v", result.RequeueAfter, kubernetes.DefaultMetricsTLSRequeue)
+	}
+}
+
+func TestReconcilePrometheusScrapeToken_UsesCustomMetricsTLSSecretName(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
+	const customSecret = "operand-tls"
+
+	caPEM, leafPEM, err := kubernetes.NewSelfSignedMetricsTLSMaterial()
+	if err != nil {
+		t.Fatalf("tls material: %v", err)
+	}
+	custom := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      customSecret,
+			Namespace: testBuildServiceNamespace,
+		},
+		Data: map[string][]byte{
+			kubernetes.MetricsCACertKey:            caPEM,
+			kubernetes.MetricsServerCertTLSCertKey: leafPEM,
+		},
+	}
+
+	c := fake.NewClientBuilder().WithObjects(custom).Build()
+	smApplyCalls := 0
+	_, err = ReconcilePrometheusScrapeToken(ctx, ScrapeTokenReconcilerConfig{
+		Client:               c,
+		Clock:                testclock.NewFakeClock(now),
+		TokenCreator:         &fakeTokenCreator{token: "tok", expiresAt: now.Add(time.Hour)},
+		Scraper:              kubernetes.OperandMetricsScraperSA(testBuildServiceNamespace),
+		OperandNamespace:     testBuildServiceNamespace,
+		ServiceMonitorName:   testBuildServiceNamespace,
+		MetricsTLSSecretName: customSecret,
+		Apply: func(applyCtx context.Context, secret *corev1.Secret) error {
+			return c.Create(applyCtx, secret)
+		},
+		ApplyServiceMonitor: func(context.Context) error {
+			smApplyCalls++
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if smApplyCalls != 1 {
+		t.Fatalf("ApplyServiceMonitor calls: got %d want 1 when custom TLS secret is ready", smApplyCalls)
+	}
+
+	// Default metrics-server-cert name must not satisfy TLS when only the operand Secret exists.
+	c = fake.NewClientBuilder().WithObjects(custom).Build()
+	_, err = ReconcilePrometheusScrapeToken(ctx, ScrapeTokenReconcilerConfig{
+		Client:             c,
+		Clock:              testclock.NewFakeClock(now),
+		TokenCreator:       &fakeTokenCreator{token: "tok", expiresAt: now.Add(time.Hour)},
+		Scraper:            kubernetes.OperandMetricsScraperSA(testBuildServiceNamespace),
+		OperandNamespace:   testBuildServiceNamespace,
+		ServiceMonitorName: testBuildServiceNamespace,
+		Apply: func(applyCtx context.Context, secret *corev1.Secret) error {
+			return c.Create(applyCtx, secret)
+		},
+		ApplyServiceMonitor: func(context.Context) error {
+			t.Fatal("ServiceMonitor apply must not run while default metrics TLS secret is missing")
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("reconcile without custom secret name: %v", err)
+	}
+}
+
+func TestReconcilePrometheusScrapeToken_DoesNotFallBackToDefaultCertWhenCustomNameSet(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
+	const customSecret = "operand-tls"
+
+	sm := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{}}}
+	sm.SetGroupVersionKind(operandServiceMonitorGVK)
+	sm.SetNamespace(testBuildServiceNamespace)
+	sm.SetName(testBuildServiceNamespace)
+
+	// metrics-server-cert is present but the configured operand TLS Secret is missing.
+	c := clientWithMetricsTLS(t, sm)
+	smApplyCalls := 0
+	result, err := ReconcilePrometheusScrapeToken(ctx, ScrapeTokenReconcilerConfig{
+		Client:               c,
+		Clock:                testclock.NewFakeClock(now),
+		TokenCreator:         &fakeTokenCreator{token: "tok", expiresAt: now.Add(time.Hour)},
+		Scraper:              kubernetes.OperandMetricsScraperSA(testBuildServiceNamespace),
+		OperandNamespace:     testBuildServiceNamespace,
+		ServiceMonitorName:   testBuildServiceNamespace,
+		MetricsTLSSecretName: customSecret,
+		Apply: func(applyCtx context.Context, secret *corev1.Secret) error {
+			return c.Create(applyCtx, secret)
+		},
+		ApplyServiceMonitor: func(context.Context) error {
+			smApplyCalls++
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if smApplyCalls != 0 {
+		t.Fatalf(
+			"ApplyServiceMonitor calls: got %d want 0 when custom TLS secret is missing despite default cert",
+			smApplyCalls,
+		)
+	}
+	if result.RequeueAfter != kubernetes.DefaultMetricsTLSRequeue {
+		t.Fatalf("requeue: got %v want %v", result.RequeueAfter, kubernetes.DefaultMetricsTLSRequeue)
+	}
+}
+
+func TestReconcilePrometheusScrapeToken_SkipRetainLogUsesConfiguredSecretName(t *testing.T) {
+	const customSecret = "operand-tls"
+	capture := &logCapture{}
+	ctx := logf.IntoContext(context.Background(), logr.New(capture))
+	now := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
+
+	sm := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{}}}
+	sm.SetGroupVersionKind(operandServiceMonitorGVK)
+	sm.SetNamespace(testBuildServiceNamespace)
+	sm.SetName(testBuildServiceNamespace)
+
+	c := fake.NewClientBuilder().WithObjects(sm).Build()
+	_, err := ReconcilePrometheusScrapeToken(ctx, ScrapeTokenReconcilerConfig{
+		Client:               c,
+		Clock:                testclock.NewFakeClock(now),
+		TokenCreator:         &fakeTokenCreator{token: "tok", expiresAt: now.Add(time.Hour)},
+		Scraper:              kubernetes.OperandMetricsScraperSA(testBuildServiceNamespace),
+		OperandNamespace:     testBuildServiceNamespace,
+		ServiceMonitorName:   testBuildServiceNamespace,
+		MetricsTLSSecretName: customSecret,
+		Apply: func(applyCtx context.Context, secret *corev1.Secret) error {
+			return c.Create(applyCtx, secret)
+		},
+		ApplyServiceMonitor: func(context.Context) error {
+			t.Fatal("retain must be skipped when custom TLS secret is absent")
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	var skipLog *logRecord
+	for i := range capture.infos {
+		if strings.Contains(capture.infos[i].msg, "skipping ServiceMonitor retain") {
+			skipLog = &capture.infos[i]
+			break
+		}
+	}
+	if skipLog == nil {
+		t.Fatal("expected skip-retain log message")
+	}
+	if strings.Contains(skipLog.msg, kubernetes.MetricsServerCertSecretName) {
+		t.Fatalf("log message must not hardcode %q: %q", kubernetes.MetricsServerCertSecretName, skipLog.msg)
+	}
+	if !strings.Contains(skipLog.msg, "metrics TLS secret is absent") {
+		t.Fatalf("unexpected log message: %q", skipLog.msg)
+	}
+	if got := logValue(skipLog.kv, "secret"); got != customSecret {
+		t.Fatalf("log secret field: got %q want %q", got, customSecret)
 	}
 }
 
