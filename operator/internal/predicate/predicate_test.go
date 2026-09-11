@@ -488,3 +488,42 @@ func TestMetricsTLSSecretPredicate(t *testing.T) {
 		}},
 	})).To(gomega.BeTrue())
 }
+
+func TestMetricsTLSSecretNamedPredicate(t *testing.T) {
+	g := gomega.NewWithT(t)
+	const custom = "operand-tls"
+	pred := MetricsTLSSecretNamedPredicate(custom)
+
+	g.Expect(pred.Create(event.CreateEvent{
+		Object: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name:      kubernetes.MetricsServerCertSecretName,
+			Namespace: "operand-ns",
+		}},
+	})).To(gomega.BeFalse())
+	g.Expect(pred.Create(event.CreateEvent{
+		Object: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name:      custom,
+			Namespace: "operand-ns",
+		}},
+	})).To(gomega.BeTrue())
+	g.Expect(pred.Update(event.UpdateEvent{
+		ObjectNew: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name:      custom,
+			Namespace: "operand-ns",
+		}},
+	})).To(gomega.BeTrue())
+
+	defaultPred := MetricsTLSSecretNamedPredicate("")
+	g.Expect(defaultPred.Create(event.CreateEvent{
+		Object: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name:      kubernetes.MetricsServerCertSecretName,
+			Namespace: "operand-ns",
+		}},
+	})).To(gomega.BeTrue())
+	g.Expect(defaultPred.Create(event.CreateEvent{
+		Object: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name:      custom,
+			Namespace: "operand-ns",
+		}},
+	})).To(gomega.BeFalse(), "empty config name must not watch custom secrets")
+}

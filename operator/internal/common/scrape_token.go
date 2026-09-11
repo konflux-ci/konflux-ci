@@ -59,6 +59,9 @@ type ScrapeTokenReconcilerConfig struct {
 	// updates (and SM presence) are visible without waiting on the informer cache.
 	// When nil, Client is used.
 	SecretReader client.Reader
+	// MetricsTLSSecretName is the operand TLS Secret verified before deferred ServiceMonitor
+	// apply. When empty, defaults to metrics-server-cert (controller operands).
+	MetricsTLSSecretName string
 }
 
 // DeferredSMApplyResult captures operand ServiceMonitor state from deferred apply without
@@ -115,16 +118,17 @@ func ReconcilePrometheusScrapeToken(ctx context.Context, cfg ScrapeTokenReconcil
 		return reconcile.Result{}, err
 	}
 	if wait != nil {
-		// Retain an existing SM for orphan cleanup unless the metrics-server-cert Secret
+		// Retain an existing SM for orphan cleanup unless the configured metrics TLS Secret
 		// is absent. When it is missing, skip retain so orphan cleanup drops the stale SM
 		// (whose tlsConfig.ca references the absent Secret); deferred apply recreates the
 		// SM once the Secret verifies again. For other not-ready reasons (empty, mismatch)
 		// the Secret object still exists and CA refs resolve, so retain is safe.
 		if tlsResult.Reason == kubernetes.MetricsTLSReasonCertMissing {
 			logf.FromContext(ctx).Info(
-				"skipping ServiceMonitor retain while metrics-server-cert is absent",
+				"skipping ServiceMonitor retain while metrics TLS secret is absent",
 				"namespace", cfg.OperandNamespace,
 				"servicemonitor", cfg.ServiceMonitorName,
+				"secret", kubernetes.ResolveMetricsTLSSecretName(cfg.MetricsTLSSecretName),
 			)
 		} else {
 			if retainErr := retainOperandServiceMonitorIfPresent(ctx, cfg); retainErr != nil {
@@ -181,9 +185,10 @@ func ensureMetricsTLSReadyForServiceMonitor(
 	cfg ScrapeTokenReconcilerConfig,
 ) (kubernetes.MetricsScrapeTLSResult, *reconcile.Result, error) {
 	tlsResult, err := kubernetes.ReconcileMetricsScrapeTLS(ctx, kubernetes.MetricsScrapeTLSInput{
-		Client:    cfg.Client,
-		Reader:    cfg.SecretReader,
-		Namespace: cfg.OperandNamespace,
+		Client:     cfg.Client,
+		Reader:     cfg.SecretReader,
+		Namespace:  cfg.OperandNamespace,
+		SecretName: cfg.MetricsTLSSecretName,
 	})
 	if err != nil {
 		return kubernetes.MetricsScrapeTLSResult{}, nil, fmt.Errorf("reconcile metrics scrape TLS: %w", err)
