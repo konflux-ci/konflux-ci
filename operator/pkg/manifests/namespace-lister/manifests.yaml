@@ -94,7 +94,7 @@ spec:
           value: X-User
         - name: AUTH_GROUPS_HEADER
           value: X-Group
-        image: quay.io/konflux-ci/namespace-lister@sha256:351a8f0624021691196edf4aa450eb268529651a3dac25f231014ffe47e14197
+        image: quay.io/konflux-ci/namespace-lister@sha256:a0cbed549497e67050d48c569c0d6447393694945d35cf414ce46d2306420360
         livenessProbe:
           httpGet:
             path: /healthz
