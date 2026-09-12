@@ -8,6 +8,7 @@ Contributing Guidelines
 - [Editing Markdown Files](#editing-markdown-files)
 - [Using KubeLinter](#using-kubelinter)
 - [Operator Development](#operator-development)
+  * [Unstructured field names for upstream CRs](#unstructured-field-names-for-upstream-crs)
 - [CI/CD and Testing](#cicd-and-testing)
   * [Writing tests](#writing-tests)
   * [Operator rendered manifests](#operator-rendered-manifests)
@@ -124,6 +125,23 @@ Example for a locally built operator:
 ```bash
 OPERATOR_INSTALL_METHOD=build ./scripts/deploy-local.sh
 ```
+
+## Unstructured field names for upstream CRs
+
+When a controller manipulates an upstream Custom Resource via `unstructured.Unstructured`
+(rather than a typed Go struct), the field names used in the unstructured map must match
+the **upstream CRD schema's** casing exactly, not the casing of the operator's own `json`
+struct tags. For example, `KonfluxReleaseServiceSpec.EmptyDirOverrides` uses the Go/JSON
+tag `emptyDirOverrides` (camelCase, by Go convention), but the upstream `ReleaseServiceConfig`
+CRD names the same field `EmptyDirOverrides` (PascalCase). Writing to the unstructured object
+must use the upstream's `EmptyDirOverrides`, even though it looks inconsistent with the
+operator's own struct tag. This is intentional, not a typo.
+
+Prefer defining a named string constant for each such unstructured field name (e.g.
+`const releaseServiceConfigOverridesField = "EmptyDirOverrides"`) instead of inline string
+literals, so the mapping is searchable, reviewable, and has a single place to update if the
+upstream schema changes. `verify-manifests-in-sync.sh` (see below) already partially guards
+against upstream CRD schema drift, but does not replace the need for these constants.
 
 # CI/CD and Testing
 
