@@ -15,7 +15,7 @@ require (
 	github.com/konflux-ci/application-api v0.0.0-20260727123715-2999a91451c6
 	github.com/konflux-ci/build-service v0.0.0-20260902135154-0be399c54c4e
 	github.com/konflux-ci/image-controller v0.0.0-20260902123452-65b644b9b875
-	github.com/konflux-ci/integration-service v0.0.0-20260903080330-ef6599a2515d
+	github.com/konflux-ci/integration-service v0.0.0-20260908121035-278281fdf582
 	github.com/konflux-ci/konflux-ci/operator v0.0.0
 	github.com/konflux-ci/operator-toolkit v0.0.0-20260312101100-d4e398191a68
 	github.com/konflux-ci/release-service v0.0.0-20260827132247-55646fffcc3b
