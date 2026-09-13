@@ -73,7 +73,7 @@ spec:
       containers:
       - args:
         - /etc/zot/config.json
-        image: quay.io/konflux-ci/zot@sha256:92cb058816f30d14d3b64d85f8ddd6c4c681fbf9263af04085cd520c0bc7db42
+        image: quay.io/konflux-ci/zot@sha256:fda7ae7a07e3cded9b31f01b79cfcf6c4ab8b9526026e3af170904d63370a569
         livenessProbe:
           initialDelaySeconds: 15
           periodSeconds: 20
@@ -136,18 +136,3 @@ spec:
   subject:
     organizations:
     - konflux
----
-apiVersion: trust.cert-manager.io/v1alpha1
-kind: Bundle
-metadata:
-  name: trusted-ca
-spec:
-  sources:
-  - useDefaultCAs: true
-  - secret:
-      key: ca.crt
-      name: konflux-ca-secret
-  target:
-    configMap:
-      key: ca-bundle.crt
-    namespaceSelector: {}

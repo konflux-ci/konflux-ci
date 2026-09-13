@@ -276,38 +276,70 @@ func CopySubCRStatus(
 	}
 }
 
+// statusConfig holds optional configuration for UpdateComponentStatuses.
+type statusConfig struct {
+	extraConditions []metav1.Condition
+}
+
+// StatusOption configures optional behavior for UpdateComponentStatuses.
+type StatusOption func(*statusConfig)
+
+// WithExtraConditions sets additional non-deployment conditions on the CR before
+// stale-condition cleanup runs. The condition types are automatically preserved
+// by the cleanup predicate, so their LastTransitionTime remains stable across
+// reconcile loops.
+func WithExtraConditions(conditions ...metav1.Condition) StatusOption {
+	return func(cfg *statusConfig) {
+		cfg.extraConditions = append(cfg.extraConditions, conditions...)
+	}
+}
+
 // UpdateComponentStatuses is a generic helper that checks the status of all owned Deployments
 // and updates the CR's status conditions in memory. It can be used by any controller that manages
 // deployments and implements ConditionAccessor.
+//
+// Use WithExtraConditions to set additional non-deployment conditions (e.g.,
+// ClusterCABundleDistributed) that should be preserved across reconcile loops.
 //
 // This function only modifies the CR object in memory. The caller is responsible for persisting
 // the status update to the Kubernetes API (e.g., via k8sClient.Status().Update()).
 // This allows the caller to batch multiple status changes and perform a single update,
 // avoiding conflicts when multiple changes occur during a reconcile loop.
-//
-// Parameters:
-//   - ctx: The context for the operation
-//   - k8sClient: The Kubernetes client for listing deployments
-//   - cr: The custom resource that implements ConditionAccessor (e.g., KonfluxBuildService, KonfluxIntegrationService)
 func UpdateComponentStatuses(
 	ctx context.Context,
 	k8sClient client.Client,
 	cr konfluxv1alpha1.ConditionAccessor,
+	opts ...StatusOption,
 ) error {
-	// List all deployments owned by this CR instance
+	cfg := &statusConfig{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
+	// List all deployments owned by this CR and set per-deployment conditions
 	deploymentList := &appsv1.DeploymentList{}
 	if err := k8sClient.List(ctx, deploymentList, client.MatchingLabels{
 		constant.KonfluxOwnerLabel: cr.GetName(),
 	}); err != nil {
 		return fmt.Errorf("failed to list owned deployments: %w", err)
 	}
-
-	// Set conditions for each deployment and get summary
 	summary := SetDeploymentConditions(cr, deploymentList.Items)
 
-	// Remove conditions for deployments that no longer exist
+	// Set any extra conditions provided by the caller
+	for _, cond := range cfg.extraConditions {
+		SetCondition(cr, cond)
+	}
+
+	// Build a set of extra condition types to preserve during cleanup
+	extraTypes := make(map[string]bool, len(cfg.extraConditions))
+	for _, cond := range cfg.extraConditions {
+		extraTypes[cond.Type] = true
+	}
+
+	// Remove conditions for deployments that no longer exist,
+	// preserving Ready, deployment conditions, and any extra condition types
 	CleanupStaleConditions(cr, func(cond metav1.Condition) bool {
-		return cond.Type == TypeReady || summary.SeenConditionTypes[cond.Type]
+		return cond.Type == TypeReady || summary.SeenConditionTypes[cond.Type] || extraTypes[cond.Type]
 	})
 
 	// Set the overall Ready condition

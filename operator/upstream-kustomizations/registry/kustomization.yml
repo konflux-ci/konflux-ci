@@ -4,10 +4,9 @@ kind: Kustomization
 resources:
   - registry.yaml
   - certificate.yaml
-  - trust-bundle.yaml
   - zot-config.yaml
 
 images:
   - name: quay.io/konflux-ci/zot
     newName: quay.io/konflux-ci/zot
-    digest: sha256:92cb058816f30d14d3b64d85f8ddd6c4c681fbf9263af04085cd520c0bc7db42
+    digest: sha256:fda7ae7a07e3cded9b31f01b79cfcf6c4ab8b9526026e3af170904d63370a569

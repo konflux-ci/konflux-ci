@@ -442,6 +442,17 @@ spec:
                       CreateClusterIssuer controls whether cluster issuer resources are created.
                       Defaults to true if not specified.
                     type: boolean
+                  distributeClusterCABundle:
+                    description: |-
+                      DistributeClusterCABundle controls whether the operator applies the
+                      trust-manager Bundle that populates cluster-wide trusted-ca ConfigMaps.
+                      When nil, the effective default is platform-aware:
+                        - OpenShift: false (native per-namespace CA injection is used instead)
+                        - Non-OpenShift (Kind, upstream): true (trust-manager Bundle needed
+                          for Tekton git resolver and similar consumers)
+                      Set explicitly to override the platform detection.
+                      Copied to the KonfluxCertManager CR by the operator.
+                    type: boolean
                 type: object
               componentMetrics:
                 description: |-
@@ -2136,7 +2147,6 @@ spec:
                 description: |-
                   InternalRegistry configures the internal registry component.
                   The runtime configuration is copied to the KonfluxInternalRegistry CR by the operator.
-                  Enabling internal registry requires trust-manager to be deployed.
                 properties:
                   enabled:
                     description: |-

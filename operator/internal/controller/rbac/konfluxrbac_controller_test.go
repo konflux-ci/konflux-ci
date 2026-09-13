@@ -30,43 +30,28 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	operatorrbac "github.com/konflux-ci/konflux-ci/operator/internal/rbac"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
 const (
-	adminBatchClusterRole       = "konflux-admin-user-actions-batch"
-	adminCoreClusterRole        = "konflux-admin-user-actions-core"
-	adminExtraClusterRole       = "konflux-admin-user-actions-extra"
-	builderBotClusterRole       = "konflux-builder-bot-actions"
-	contributorCoreClusterRole  = "konflux-contributor-user-actions-core"
-	contributorExtraClusterRole = "konflux-contributor-user-actions-extra"
-	kueueVisibilityClusterRole  = "konflux-kueue-visibility"
-	maintainerCoreClusterRole   = "konflux-maintainer-user-actions-core"
-	maintainerExtraClusterRole  = "konflux-maintainer-user-actions-extra"
-	releaserBotClusterRole      = "konflux-releaser-bot-actions"
-	selfAccessClusterRole       = "konflux-self-access-reviewer"
-	viewerCoreClusterRole       = "konflux-viewer-user-actions-core"
-	viewerExtraClusterRole      = "konflux-viewer-user-actions-extra"
+	adminBatchClusterRole      = "konflux-admin-user-actions-batch"
+	adminCoreClusterRole       = "konflux-admin-user-actions-core"
+	kueueVisibilityClusterRole = "konflux-kueue-visibility"
+	releaserBotClusterRole     = "konflux-releaser-bot-actions"
+	selfAccessClusterRole      = "konflux-self-access-reviewer"
 )
 
 // rbacClusterScopedChildren returns all cluster-scoped resources that the reconciler creates.
 // envtest has no garbage collector, so these must be explicitly cleaned up after each test.
 func rbacClusterScopedChildren() []client.Object {
-	return []client.Object{
-		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: adminBatchClusterRole}},
-		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: adminCoreClusterRole}},
-		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: adminExtraClusterRole}},
-		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: builderBotClusterRole}},
-		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: contributorCoreClusterRole}},
-		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: contributorExtraClusterRole}},
-		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: kueueVisibilityClusterRole}},
-		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: maintainerCoreClusterRole}},
-		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: maintainerExtraClusterRole}},
-		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: releaserBotClusterRole}},
-		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: selfAccessClusterRole}},
-		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: viewerCoreClusterRole}},
-		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: viewerExtraClusterRole}},
+	names, err := operatorrbac.EmbeddedClusterRoles(manifests.RBAC)
+	Expect(err).NotTo(HaveOccurred())
+	children := make([]client.Object, 0, len(names))
+	for _, name := range names {
+		children = append(children, &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: name}})
 	}
+	return children
 }
 
 var _ = Describe("KonfluxRBAC Controller", func() {
@@ -88,8 +73,8 @@ var _ = Describe("KonfluxRBAC Controller", func() {
 
 			By("verifying representative ClusterRoles were created")
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: adminBatchClusterRole}, &rbacv1.ClusterRole{})).To(Succeed())
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: builderBotClusterRole}, &rbacv1.ClusterRole{})).To(Succeed())
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: releaserBotClusterRole}, &rbacv1.ClusterRole{})).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: selfAccessClusterRole}, &rbacv1.ClusterRole{})).To(Succeed())
 		})
 	})
 

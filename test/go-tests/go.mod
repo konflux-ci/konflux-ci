@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/coder/websocket v1.8.15
 	github.com/codeready-toolchain/api v0.0.0-20260807111559-e29da2fc346c
-	github.com/conforma/crds/api v0.1.15
+	github.com/conforma/crds/api v0.1.16
 	github.com/devfile/library/v2 v2.4.0
 	github.com/docker/cli v29.8.0+incompatible
 	github.com/gofri/go-github-ratelimit/v2 v2.0.2
@@ -15,12 +15,12 @@ require (
 	github.com/konflux-ci/application-api v0.0.0-20260727123715-2999a91451c6
 	github.com/konflux-ci/build-service v0.0.0-20260902135154-0be399c54c4e
 	github.com/konflux-ci/image-controller v0.0.0-20260902123452-65b644b9b875
-	github.com/konflux-ci/integration-service v0.0.0-20260903080330-ef6599a2515d
+	github.com/konflux-ci/integration-service v0.0.0-20260908121035-278281fdf582
 	github.com/konflux-ci/konflux-ci/operator v0.0.0
 	github.com/konflux-ci/operator-toolkit v0.0.0-20260312101100-d4e398191a68
 	github.com/konflux-ci/release-service v0.0.0-20260827132247-55646fffcc3b
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/onsi/ginkgo/v2 v2.32.1
+	github.com/onsi/ginkgo/v2 v2.32.2
 	github.com/onsi/gomega v1.43.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/openshift-pipelines/pipelines-as-code v0.48.0
@@ -32,7 +32,7 @@ require (
 	github.com/tektoncd/cli v0.45.0
 	github.com/tektoncd/pipeline v1.13.1
 	github.com/xanzy/go-gitlab v0.114.0
-	golang.org/x/oauth2 v0.36.0
+	golang.org/x/oauth2 v0.37.0
 	k8s.io/api v0.37.0
 	k8s.io/apimachinery v0.37.0
 	k8s.io/client-go v11.0.0+incompatible
@@ -201,7 +201,7 @@ require (
 	golang.org/x/exp v0.0.0-20260727155853-b88d891fe743 // indirect
 	golang.org/x/mod v0.39.0 // indirect
 	golang.org/x/net v0.58.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/text v0.41.0 // indirect

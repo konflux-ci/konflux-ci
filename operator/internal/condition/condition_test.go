@@ -17,14 +17,19 @@ limitations under the License.
 package condition
 
 import (
+	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 )
 
 var _ = Describe("Conditions Helper Functions", func() {
@@ -757,6 +762,172 @@ var _ = Describe("Conditions Helper Functions", func() {
 			Expect(apimeta.FindStatusCondition(parent.GetConditions(), "build-service.old-deployment")).To(BeNil())
 			// other-component.Ready should still exist
 			Expect(apimeta.FindStatusCondition(parent.GetConditions(), "other-component.Ready")).NotTo(BeNil())
+		})
+	})
+
+	Describe("UpdateComponentStatuses with WithExtraConditions", func() {
+		var (
+			testCR *konfluxv1alpha1.KonfluxCertManager
+			scheme *runtime.Scheme
+		)
+
+		BeforeEach(func() {
+			scheme = runtime.NewScheme()
+			Expect(appsv1.AddToScheme(scheme)).To(Succeed())
+			Expect(konfluxv1alpha1.AddToScheme(scheme)).To(Succeed())
+
+			testCR = &konfluxv1alpha1.KonfluxCertManager{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-cert-manager",
+					Generation: 1,
+				},
+			}
+		})
+
+		It("should set extra conditions on the CR", func() {
+			cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+			extraCond := metav1.Condition{
+				Type:    constant.ConditionTypeClusterCABundleDistributed,
+				Status:  metav1.ConditionTrue,
+				Reason:  ReasonBundleDistributed,
+				Message: "Trust-manager Bundle applied successfully",
+			}
+
+			err := UpdateComponentStatuses(context.Background(), cl, testCR, WithExtraConditions(extraCond))
+			Expect(err).NotTo(HaveOccurred())
+
+			cond := apimeta.FindStatusCondition(testCR.GetConditions(), constant.ConditionTypeClusterCABundleDistributed)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+			Expect(cond.Reason).To(Equal(ReasonBundleDistributed))
+		})
+
+		It("should preserve extra conditions across stale-condition cleanup", func() {
+			cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+			// Pre-set a stale condition that should be cleaned up
+			testCR.Status.Conditions = []metav1.Condition{
+				{
+					Type:               "old-namespace/old-deployment",
+					Status:             metav1.ConditionTrue,
+					Reason:             "DeploymentReady",
+					LastTransitionTime: metav1.Now(),
+				},
+			}
+
+			extraCond := metav1.Condition{
+				Type:    constant.ConditionTypeClusterCABundleDistributed,
+				Status:  metav1.ConditionFalse,
+				Reason:  ReasonBundleDistributionDisabled,
+				Message: "Distribution is disabled by configuration",
+			}
+
+			err := UpdateComponentStatuses(context.Background(), cl, testCR, WithExtraConditions(extraCond))
+			Expect(err).NotTo(HaveOccurred())
+
+			// Extra condition should be preserved
+			bundleCond := apimeta.FindStatusCondition(testCR.GetConditions(), constant.ConditionTypeClusterCABundleDistributed)
+			Expect(bundleCond).NotTo(BeNil())
+			Expect(bundleCond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(bundleCond.Reason).To(Equal(ReasonBundleDistributionDisabled))
+
+			// Stale deployment condition should be removed
+			staleCond := apimeta.FindStatusCondition(testCR.GetConditions(), "old-namespace/old-deployment")
+			Expect(staleCond).To(BeNil(), "stale deployment condition should be cleaned up")
+
+			// Ready condition should be set
+			readyCond := apimeta.FindStatusCondition(testCR.GetConditions(), TypeReady)
+			Expect(readyCond).NotTo(BeNil())
+		})
+
+		It("should preserve LastTransitionTime of extra conditions when status is unchanged", func() {
+			cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+			originalTime := metav1.NewTime(metav1.Now().Add(-1 * 60 * 60 * 1000000000))
+
+			// Pre-set the extra condition with an old timestamp
+			testCR.Status.Conditions = []metav1.Condition{
+				{
+					Type:               constant.ConditionTypeClusterCABundleDistributed,
+					Status:             metav1.ConditionTrue,
+					Reason:             ReasonBundleDistributed,
+					Message:            "Trust-manager Bundle applied successfully",
+					LastTransitionTime: originalTime,
+					ObservedGeneration: 1,
+				},
+			}
+
+			// Call with the same status (True -> True)
+			extraCond := metav1.Condition{
+				Type:    constant.ConditionTypeClusterCABundleDistributed,
+				Status:  metav1.ConditionTrue,
+				Reason:  ReasonBundleDistributed,
+				Message: "Trust-manager Bundle applied successfully",
+			}
+
+			err := UpdateComponentStatuses(context.Background(), cl, testCR, WithExtraConditions(extraCond))
+			Expect(err).NotTo(HaveOccurred())
+
+			cond := apimeta.FindStatusCondition(testCR.GetConditions(), constant.ConditionTypeClusterCABundleDistributed)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+			Expect(cond.LastTransitionTime).To(Equal(originalTime),
+				"LastTransitionTime should be preserved when status hasn't changed")
+		})
+
+		It("should work with no extra conditions (backward compatibility)", func() {
+			cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+			err := UpdateComponentStatuses(context.Background(), cl, testCR)
+			Expect(err).NotTo(HaveOccurred())
+
+			readyCond := apimeta.FindStatusCondition(testCR.GetConditions(), TypeReady)
+			Expect(readyCond).NotTo(BeNil())
+			Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
+			Expect(readyCond.Message).To(Equal("Component ready (no deployments to track)"))
+		})
+
+		It("should handle extra conditions alongside real deployments", func() {
+			deployment := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-deployment",
+					Namespace: "cert-manager",
+					Labels:    map[string]string{constant.KonfluxOwnerLabel: "test-cert-manager"},
+				},
+				Status: appsv1.DeploymentStatus{
+					Replicas:        1,
+					ReadyReplicas:   1,
+					UpdatedReplicas: 1,
+				},
+			}
+			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(deployment).Build()
+
+			extraCond := metav1.Condition{
+				Type:    constant.ConditionTypeClusterCABundleDistributed,
+				Status:  metav1.ConditionTrue,
+				Reason:  ReasonBundleDistributed,
+				Message: "Bundle applied",
+			}
+
+			err := UpdateComponentStatuses(context.Background(), cl, testCR, WithExtraConditions(extraCond))
+			Expect(err).NotTo(HaveOccurred())
+
+			// Deployment condition should be set
+			deployCond := apimeta.FindStatusCondition(testCR.GetConditions(), "cert-manager/test-deployment")
+			Expect(deployCond).NotTo(BeNil())
+			Expect(deployCond.Status).To(Equal(metav1.ConditionTrue))
+
+			// Extra condition should be set
+			bundleCond := apimeta.FindStatusCondition(testCR.GetConditions(), constant.ConditionTypeClusterCABundleDistributed)
+			Expect(bundleCond).NotTo(BeNil())
+			Expect(bundleCond.Status).To(Equal(metav1.ConditionTrue))
+
+			// Ready should be true (deployment ready)
+			readyCond := apimeta.FindStatusCondition(testCR.GetConditions(), TypeReady)
+			Expect(readyCond).NotTo(BeNil())
+			Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
+			Expect(readyCond.Message).To(Equal("All 1 deployments are ready"))
 		})
 	})
 })

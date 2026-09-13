@@ -22,9 +22,14 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
@@ -45,15 +50,70 @@ var _ = BeforeSuite(func() {
 	ctx = testEnv.Ctx
 	k8sClient = testEnv.K8sClient
 	objectStore = testEnv.ObjectStore
+})
 
+// startManager creates a per-test manager with the given ClusterInfo
+// and registers a DeferCleanup to cancel it after the test.
+// A per-test manager is required because each test may wire the reconciler with a different
+// ClusterInfo (e.g. OpenShift vs vanilla Kubernetes).
+func startManager(clusterInfo *clusterinfo.Info) {
 	mgr := testutil.NewTestManager(testEnv)
 	Expect((&KonfluxCertManagerReconciler{
 		Client:      mgr.GetClient(),
 		Scheme:      mgr.GetScheme(),
 		ObjectStore: objectStore,
+		ClusterInfo: clusterInfo,
 	}).SetupWithManager(mgr)).To(Succeed())
-	testutil.StartManager(testEnv, mgr)
-})
+	mgrCtx, cancel := context.WithCancel(testEnv.Ctx)
+	waitForStop := testutil.StartManagerWithContext(mgrCtx, mgr)
+	DeferCleanup(func() {
+		cancel()
+		waitForStop()
+	})
+}
+
+// createNonOpenShiftClusterInfo returns a ClusterInfo that reports a non-OpenShift cluster.
+// This means distributeClusterCABundle defaults to true (the Bundle will be attempted).
+func createNonOpenShiftClusterInfo() *clusterinfo.Info {
+	ci, _ := clusterinfo.DetectWithClient(&mockDiscoveryClient{
+		resources:     map[string]*metav1.APIResourceList{},
+		serverVersion: &version.Info{GitVersion: "v1.30.0"},
+	})
+	return ci
+}
+
+// createOpenShiftClusterInfo returns a ClusterInfo that reports an OpenShift cluster.
+// This means distributeClusterCABundle defaults to false (native CA injection is used).
+func createOpenShiftClusterInfo() *clusterinfo.Info {
+	ci, _ := clusterinfo.DetectWithClient(&mockDiscoveryClient{
+		resources: map[string]*metav1.APIResourceList{
+			"config.openshift.io/v1": {
+				APIResources: []metav1.APIResource{
+					{Kind: "ClusterVersion"},
+					{Kind: "Infrastructure"},
+				},
+			},
+		},
+		serverVersion: &version.Info{GitVersion: "v4.16.0"},
+	})
+	return ci
+}
+
+type mockDiscoveryClient struct {
+	resources     map[string]*metav1.APIResourceList
+	serverVersion *version.Info
+}
+
+func (m *mockDiscoveryClient) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
+	if r, ok := m.resources[groupVersion]; ok {
+		return r, nil
+	}
+	return nil, errors.NewNotFound(schema.GroupResource{Group: groupVersion}, "")
+}
+
+func (m *mockDiscoveryClient) ServerVersion() (*version.Info, error) {
+	return m.serverVersion, nil
+}
 
 var _ = AfterSuite(func() {
 	testutil.TeardownTestEnv(testEnv)

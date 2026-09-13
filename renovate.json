@@ -51,6 +51,12 @@
       "matchDatasources": ["helm"],
       "matchPackageNames": ["scaffold"],
       "additionalBranchPrefix": "integrations/"
+    },
+    {
+      "description": "Propagate operator go.mod updates to test/go-tests via local replace",
+      "matchManagers": ["gomod"],
+      "matchPaths": ["operator/**"],
+      "postUpdateOptions": ["gomodTidyAll"]
     }
   ],
   "gomod": {

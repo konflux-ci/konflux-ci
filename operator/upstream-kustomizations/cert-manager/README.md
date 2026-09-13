@@ -213,3 +213,12 @@ ClusterIssuer. Component controllers then apply their own leaf Certificates
 metrics Issuer. The operator manager metrics Issuer+Certificate are install
 manifests in `operator/config/certmanager/`, not reconciled by
 `KonfluxCertManager`.
+
+When `spec.distributeClusterCABundle` is true, the controller also applies the
+trust-manager `Bundle` resource (`trust-bundle.yaml`) which distributes the
+cluster CA to `trusted-ca` ConfigMaps consumed by Tekton pipelines. This field
+defaults to **true** on non-OpenShift clusters (Kind, generic K8s) and **false**
+on OpenShift (where the platform injects trusted CA bundles natively). The
+controller reports a `ClusterCABundleDistributed` status condition reflecting
+whether the Bundle was applied, disabled, or could not be applied because the
+trust-manager CRD is not installed.

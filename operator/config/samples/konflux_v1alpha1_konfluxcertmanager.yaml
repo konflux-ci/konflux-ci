@@ -8,6 +8,12 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: konflux-cert-manager
 spec:
-  # CreateClusterIssuer controls whether cluster issuer resources are created
-  # Defaults to true if not specified
+  # CreateClusterIssuer controls whether cluster issuer resources are created.
+  # Defaults to true if not specified.
   createClusterIssuer: true
+  # DistributeClusterCABundle controls whether the trust-manager Bundle is
+  # applied to populate cluster-wide trusted-ca ConfigMaps.
+  # Platform-aware default when omitted:
+  #   OpenShift: false (native per-namespace CA injection)
+  #   Non-OpenShift (Kind, upstream): true (trust-manager Bundle required)
+  # distributeClusterCABundle: true

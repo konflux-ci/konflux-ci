@@ -18,7 +18,6 @@ package internalregistry
 
 import (
 	"context"
-	"fmt"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	. "github.com/onsi/ginkgo/v2"
@@ -27,14 +26,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
-	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
 
 const internalRegistryNamespace = "kind-registry"
@@ -484,28 +481,4 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 		})
 	})
 
-	Context("tracking.IsNoKindMatchError helper function", func() {
-		It("should correctly identify NoKindMatchError", func() {
-			noKindErr := &meta.NoKindMatchError{
-				GroupKind: schema.GroupKind{Group: "cert-manager.io", Kind: "Certificate"},
-			}
-			Expect(tracking.IsNoKindMatchError(noKindErr)).To(BeTrue())
-
-			otherErr := fmt.Errorf("some other error")
-			Expect(tracking.IsNoKindMatchError(otherErr)).To(BeFalse())
-		})
-
-		It("should return false for wrapped errors that are not NoKindMatchError", func() {
-			wrappedErr := fmt.Errorf("wrapped: %w", fmt.Errorf("inner error"))
-			Expect(tracking.IsNoKindMatchError(wrappedErr)).To(BeFalse())
-		})
-
-		It("should return true for wrapped NoKindMatchError", func() {
-			noKindErr := &meta.NoKindMatchError{
-				GroupKind: schema.GroupKind{Group: "trust.cert-manager.io", Kind: "Bundle"},
-			}
-			wrappedErr := fmt.Errorf("failed to list resources: %w", noKindErr)
-			Expect(tracking.IsNoKindMatchError(wrappedErr)).To(BeTrue())
-		})
-	})
 })

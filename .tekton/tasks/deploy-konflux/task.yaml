@@ -110,7 +110,7 @@ spec:
             optional: true
   steps:
     - name: clone-repository
-      image: quay.io/konflux-ci/task-runner:v3@sha256:e272c1e1c60a4ecc72ff9c8d65bc48da534de6f1ce0d5aba79db3ac532d11c35
+      image: quay.io/konflux-ci/task-runner:v3@sha256:ba5789d2bc04146431e492083c67b86de26d5b17891dc27f67db850a397b66d3
       env:
         - name: GIT_URL
           value: $(params.git-url)
@@ -132,7 +132,7 @@ spec:
         git -C "${REPO_ROOT}" fetch --depth "${GIT_DEPTH}" origin "${GIT_REVISION}"
         git -C "${REPO_ROOT}" checkout -q FETCH_HEAD
     - name: fetch-kubeconfig
-      image: quay.io/konflux-ci/task-runner:v3@sha256:e272c1e1c60a4ecc72ff9c8d65bc48da534de6f1ce0d5aba79db3ac532d11c35
+      image: quay.io/konflux-ci/task-runner:v3@sha256:ba5789d2bc04146431e492083c67b86de26d5b17891dc27f67db850a397b66d3
       workingDir: /mnt/konflux-ci/repo
       env:
         - name: POD_NAMESPACE
@@ -145,14 +145,14 @@ spec:
         cd /mnt/konflux-ci/repo
         exec bash scripts/operator-e2e/tekton-fetch-kubeconfig.sh "$(params.cluster-access-secret)" "$(params.kubeconfig-secret-key)"
     - name: copy-shared-tools
-      image: quay.io/konflux-ci/task-runner:v3@sha256:e272c1e1c60a4ecc72ff9c8d65bc48da534de6f1ce0d5aba79db3ac532d11c35
+      image: quay.io/konflux-ci/task-runner:v3@sha256:ba5789d2bc04146431e492083c67b86de26d5b17891dc27f67db850a397b66d3
       workingDir: /mnt/konflux-ci/repo
       script: |
         #!/bin/bash
         set -euo pipefail
         exec bash scripts/operator-e2e/tekton-copy-shared-tools.sh
     - name: deploy-prep
-      image: registry.access.redhat.com/ubi10/go-toolset@sha256:be70aa468168f1ecd46e56d5f362e697243bcf9d3a2d98819597e43471a5d0e4
+      image: registry.access.redhat.com/ubi10/go-toolset@sha256:de00e16138966f9fed6bca2d22d28f6cc0d50b26ef6977398e2d8980d80be75f
       workingDir: /mnt/konflux-ci/repo
       env:
         - name: GITHUB_APP_ID
@@ -197,7 +197,7 @@ spec:
           E2E_KONFLUX_READY_TIMEOUT="$(params.konflux-ready-timeout)" \
           bash scripts/operator-e2e/tekton-deploy-prep.sh /mnt/konflux-ci/repo
     - name: push-operator-pkg-manifests-oci
-      image: quay.io/konflux-ci/task-runner:v3@sha256:e272c1e1c60a4ecc72ff9c8d65bc48da534de6f1ce0d5aba79db3ac532d11c35
+      image: quay.io/konflux-ci/task-runner:v3@sha256:ba5789d2bc04146431e492083c67b86de26d5b17891dc27f67db850a397b66d3
       workingDir: /mnt/konflux-ci/repo
       volumeMounts:
         - name: repo
@@ -229,7 +229,7 @@ spec:
           cpu: "2"
           memory: "8Gi"
       workingDir: /mnt/konflux-ci/repo
-      image: registry.access.redhat.com/ubi10/go-toolset@sha256:be70aa468168f1ecd46e56d5f362e697243bcf9d3a2d98819597e43471a5d0e4
+      image: registry.access.redhat.com/ubi10/go-toolset@sha256:de00e16138966f9fed6bca2d22d28f6cc0d50b26ef6977398e2d8980d80be75f
       env:
         - name: E2E_KONFLUX_CR_PATH
           value: $(params.konflux-cr-relative-path)

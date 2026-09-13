@@ -67,8 +67,8 @@ type KonfluxRBACReconciler struct {
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxrbacs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxrbacs/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=list
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=get;list;watch;create;patch;delete;escalate
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=bind
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=konflux-admin-user-actions-batch;konflux-admin-user-actions-core;konflux-admin-user-actions-extra;konflux-builder-bot-actions;konflux-contributor-user-actions-core;konflux-contributor-user-actions-extra;konflux-kueue-visibility;konflux-maintainer-user-actions-core;konflux-maintainer-user-actions-extra;konflux-releaser-bot-actions;konflux-self-access-reviewer;konflux-viewer-user-actions-core;konflux-viewer-user-actions-extra,verbs=escalate
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

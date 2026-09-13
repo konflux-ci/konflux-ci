@@ -56,6 +56,21 @@ All targets run from the `operator/` directory:
 
 After changing APIs or RBAC annotations, run `make manifests generate` from `operator/`. CI enforces this via the `operator-verify-generated-files` workflow — PRs will fail if generated files are stale.
 
+## Single-file verification
+
+After a small Go change, lint and vet the **package you edited** (not the whole repo). Run from `operator/` (repo root has no `go.mod`).
+
+1. Read the pinned golangci-lint version from `operator/.golangci-lint-version`.
+2. If `operator/bin/` has no `golangci-lint-<that version>` binary, run `make golangci-lint` from `operator/`.
+3. Run `./bin/golangci-lint-<version> run <package-dir>/` and `go vet <package-dir>/`.
+
+Example (replace the package path with the one you changed):
+
+```bash
+./bin/golangci-lint run ./internal/controller/konflux/
+go vet ./internal/controller/konflux/
+```
+
 ## Code Style
 
 - Shell: `set -euo pipefail`, quote variables. Scripts that run on the user's host (deployment scripts, CLI helpers, and scripts stored in ConfigMaps that users fetch and run locally) must be compatible with both Linux and macOS — avoid GNU-only flags, prefer POSIX-compatible constructs, and test with both GNU and BSD coreutils (e.g. `sed`, `date`, `readlink`)
@@ -67,10 +82,11 @@ After changing APIs or RBAC annotations, run `make manifests generate` from `ope
 
 ## Testing
 
-**Two distinct test suites:**
+**Multiple test suites:**
 
 1. **Platform conformance** (`test/go-tests/tests/conformance/`) — end-to-end tests against a deployed Konflux instance, run via `test/e2e/run-e2e.sh`. Uses Ginkgo/Gomega with a shared `Framework` in `test/go-tests/pkg/framework/`.
 2. **Operator unit/integration** (`operator/`) — controller tests using controller-runtime **envtest** (no real cluster needed). Shared test utilities in `operator/internal/controller/testutil/`. Run via `make test` from `operator/`.
+3. **Manager-role RBAC contract** (`operator/internal/rbac/`) — unit tests against generated `operator/config/rbac/role.yaml` that forbid unscoped `escalate`/`bind` on `clusterroles` and unscoped `bind` on `clusterrolebindings`, require `escalate` for all embedded component ClusterRoles, and ensure every named `escalate`/`bind` target is known. Run via `go test ./internal/rbac/` from `operator/` (also included in `make test`).
 
 **Mixed styles by design:** The codebase uses Ginkgo/Gomega, `testing.T`+Gomega (`gomega.NewWithT`), testify, and plain `testing.T` table tests across different packages. This is intentional — follow the locality rule from Code Style above rather than converting to a single framework.
 

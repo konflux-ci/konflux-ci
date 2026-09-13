@@ -72,7 +72,6 @@ type KonfluxSpec struct {
 
 	// InternalRegistry configures the internal registry component.
 	// The runtime configuration is copied to the KonfluxInternalRegistry CR by the operator.
-	// Enabling internal registry requires trust-manager to be deployed.
 	// +optional
 	InternalRegistry *InternalRegistryConfig `json:"internalRegistry,omitempty"`
 
@@ -166,10 +165,20 @@ type CertManagerConfig struct {
 	// Defaults to true if not specified.
 	// +optional
 	CreateClusterIssuer *bool `json:"createClusterIssuer,omitempty"`
+
+	// DistributeClusterCABundle controls whether the operator applies the
+	// trust-manager Bundle that populates cluster-wide trusted-ca ConfigMaps.
+	// When nil, the effective default is platform-aware:
+	//   - OpenShift: false (native per-namespace CA injection is used instead)
+	//   - Non-OpenShift (Kind, upstream): true (trust-manager Bundle needed
+	//     for Tekton git resolver and similar consumers)
+	// Set explicitly to override the platform detection.
+	// Copied to the KonfluxCertManager CR by the operator.
+	// +optional
+	DistributeClusterCABundle *bool `json:"distributeClusterCABundle,omitempty"`
 }
 
 // InternalRegistryConfig defines the configuration for the internal registry component.
-// Enabling internal registry requires trust-manager to be deployed.
 type InternalRegistryConfig struct {
 	// Enabled controls whether internal registry resources are deployed.
 	// Defaults to false if not specified.
