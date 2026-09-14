@@ -59,6 +59,20 @@ type KonfluxBuildServiceConfigSpec struct {
 	// +optional
 	WebhookURLs map[string]string `json:"webhookURLs,omitempty"`
 
+	// TrustedCA retargets the baked-in extra-file CA mount to a ConfigMap in
+	// the build-service namespace. Additional CAs are added at
+	// /etc/ssl/certs/ca-custom-bundle.crt; the image trust store is not
+	// replaced.
+	//
+	// When omitted, the volume stays optional and points at ConfigMap
+	// trusted-ca / key ca-bundle.crt (platform-injected on OpenShift).
+	//
+	// When set, the volume uses spec.name and spec.key with optional: false
+	// so the pod will not start until the ConfigMap exists. The mount path
+	// is unchanged.
+	// +optional
+	TrustedCA *TrustedCAConfigMap `json:"trustedCA,omitempty"`
+
 	// PipelineConfig controls the contents of the build-pipeline-config ConfigMap.
 	// The operator always manages this ConfigMap; use this field to customize which
 	// pipelines are included.

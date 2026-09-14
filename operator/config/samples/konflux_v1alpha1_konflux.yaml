@@ -112,6 +112,9 @@ spec:
             limits:
               cpu: 30m
               memory: 128Mi
+      # trustedCA:  # Point the extra-file CA mount at a different ConfigMap (optional)
+      #   name: custom-ca-bundle
+      #   key: tls.pem
       # pipelineConfig:
       #   # removeDefaults: true  # Discard all operator-provided default pipelines
       #   pipelines:

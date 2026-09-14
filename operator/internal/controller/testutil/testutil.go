@@ -28,7 +28,6 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:staticcheck // dot imports are standard for Ginkgo tests
 	. "github.com/onsi/gomega"    //nolint:staticcheck // dot imports are standard for Gomega matchers
 
-	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -193,16 +192,6 @@ func GetTestObjectStore(t *testing.T) *manifests.ObjectStore {
 		t.Fatalf("failed to create ObjectStore: %v", sharedObjectStoreErr)
 	}
 	return sharedObjectStore
-}
-
-// FindContainer returns a pointer to the container with the given name, or nil if not found.
-func FindContainer(containers []corev1.Container, name string) *corev1.Container {
-	for i := range containers {
-		if containers[i].Name == name {
-			return &containers[i]
-		}
-	}
-	return nil
 }
 
 // NewTestManager creates a controller-runtime manager suitable for use in envtest suites.
