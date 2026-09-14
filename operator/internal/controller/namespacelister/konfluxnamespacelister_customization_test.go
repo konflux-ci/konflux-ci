@@ -61,7 +61,7 @@ func TestLogLevelWithRealManifest(t *testing.T) {
 	t.Run("field set to info injects LOG_LEVEL=0 into real manifest", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		deployment := getNamespaceListerDeployment(t)
-		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+		spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 			LogLevel: konfluxv1alpha1.LogLevelInfo,
 		}
 		err := applyNamespaceListerCustomizations(deployment, spec)
@@ -85,7 +85,7 @@ func TestLogLevelWithRealManifest(t *testing.T) {
 			t.Run(string(level), func(t *testing.T) {
 				g := gomega.NewWithT(t)
 				deployment := getNamespaceListerDeployment(t)
-				spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+				spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 					LogLevel: level,
 				}
 				err := applyNamespaceListerCustomizations(deployment, spec)
@@ -103,7 +103,7 @@ func TestLogLevelWithRealManifest(t *testing.T) {
 	t.Run("field omitted leaves env var absent in real manifest", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		deployment := getNamespaceListerDeployment(t)
-		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{}
+		spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{}
 		err := applyNamespaceListerCustomizations(deployment, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -116,7 +116,7 @@ func TestLogLevelWithRealManifest(t *testing.T) {
 	t.Run("field overrides same var set via ContainerSpec.Env on real manifest", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		deployment := getNamespaceListerDeployment(t)
-		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+		spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 			LogLevel: konfluxv1alpha1.LogLevelDebug,
 			NamespaceLister: &konfluxv1alpha1.NamespaceListerDeploymentSpec{
 				NamespaceLister: &konfluxv1alpha1.ContainerSpec{
@@ -150,7 +150,7 @@ func TestCacheResyncPeriodWithRealManifest(t *testing.T) {
 	t.Run("field set injects env var into real manifest", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		deployment := getNamespaceListerDeployment(t)
-		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+		spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 			CacheResyncPeriod: "10m",
 		}
 		err := applyNamespaceListerCustomizations(deployment, spec)
@@ -166,7 +166,7 @@ func TestCacheResyncPeriodWithRealManifest(t *testing.T) {
 	t.Run("field omitted leaves env var absent in real manifest", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		deployment := getNamespaceListerDeployment(t)
-		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{}
+		spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{}
 		err := applyNamespaceListerCustomizations(deployment, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -179,7 +179,7 @@ func TestCacheResyncPeriodWithRealManifest(t *testing.T) {
 	t.Run("field overrides same var set via ContainerSpec.Env on real manifest", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		deployment := getNamespaceListerDeployment(t)
-		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+		spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 			CacheResyncPeriod: "5m",
 			NamespaceLister: &konfluxv1alpha1.NamespaceListerDeploymentSpec{
 				NamespaceLister: &konfluxv1alpha1.ContainerSpec{
@@ -202,7 +202,7 @@ func TestCacheResyncPeriodWithRealManifest(t *testing.T) {
 	t.Run("ContainerSpec.Env passes through when field omitted on real manifest", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		deployment := getNamespaceListerDeployment(t)
-		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+		spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 			NamespaceLister: &konfluxv1alpha1.NamespaceListerDeploymentSpec{
 				NamespaceLister: &konfluxv1alpha1.ContainerSpec{
 					Env: []corev1.EnvVar{

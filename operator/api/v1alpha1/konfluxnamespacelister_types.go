@@ -31,8 +31,8 @@ type NamespaceListerDeploymentSpec struct {
 	NamespaceLister *ContainerSpec `json:"namespaceLister,omitempty"`
 }
 
-// KonfluxNamespaceListerSpec defines the desired state of KonfluxNamespaceLister.
-type KonfluxNamespaceListerSpec struct {
+// KonfluxNamespaceListerConfigSpec defines user-configurable namespace-lister settings on the Konflux CR.
+type KonfluxNamespaceListerConfigSpec struct {
 	// NamespaceLister defines customizations for the namespace-lister deployment.
 	// +optional
 	NamespaceLister *NamespaceListerDeploymentSpec `json:"namespaceLister,omitempty"`
@@ -51,6 +51,16 @@ type KonfluxNamespaceListerSpec struct {
 	// When omitted, the namespace-lister defaults to error level.
 	// +optional
 	LogLevel LogLevel `json:"logLevel,omitempty"`
+}
+
+// KonfluxNamespaceListerSpec defines the desired state of KonfluxNamespaceLister.
+type KonfluxNamespaceListerSpec struct {
+	KonfluxNamespaceListerConfigSpec `json:",inline"`
+
+	// ComponentMetrics controls Prometheus scrape resources for this component.
+	// Set by the Konflux reconciler from spec.componentMetrics on the Konflux CR.
+	// +optional
+	ComponentMetrics *ComponentMetricsConfig `json:"componentMetrics,omitempty"`
 }
 
 // KonfluxNamespaceListerStatus defines the observed state of KonfluxNamespaceLister.

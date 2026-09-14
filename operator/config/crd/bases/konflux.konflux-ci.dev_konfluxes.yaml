@@ -2160,7 +2160,8 @@ spec:
                   The runtime configuration is copied to the KonfluxNamespaceLister CR by the operator.
                 properties:
                   spec:
-                    description: Spec configures the namespace-lister component.
+                    description: Spec configures the namespace-lister component (excludes
+                      componentMetrics; see spec.componentMetrics).
                     properties:
                       cacheResyncPeriod:
                         description: |-

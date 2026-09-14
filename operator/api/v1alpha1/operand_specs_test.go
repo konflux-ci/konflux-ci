@@ -81,6 +81,21 @@ func TestNewKonfluxReleaseServiceSpec(t *testing.T) {
 	g.Expect(spec.KonfluxReleaseServiceConfigSpec).To(gomega.Equal(cfg))
 }
 
+func TestNewKonfluxNamespaceListerSpec(t *testing.T) {
+	t.Parallel()
+	g := gomega.NewWithT(t)
+
+	cfg := KonfluxNamespaceListerConfigSpec{
+		LogLevel: LogLevelInfo,
+	}
+	metrics := &ComponentMetricsConfig{Enabled: ptr.To(false)}
+
+	spec := NewKonfluxNamespaceListerSpec(cfg, metrics)
+	g.Expect(spec.LogLevel).To(gomega.Equal(LogLevelInfo))
+	g.Expect(spec.ComponentMetrics).To(gomega.Equal(metrics))
+	g.Expect(spec.KonfluxNamespaceListerConfigSpec).To(gomega.Equal(cfg))
+}
+
 func TestNewKonfluxUISpec(t *testing.T) {
 	t.Parallel()
 	g := gomega.NewWithT(t)
