@@ -51,6 +51,11 @@ type KonfluxNamespaceListerSpec struct {
 	// When omitted, the namespace-lister defaults to error level.
 	// +optional
 	LogLevel LogLevel `json:"logLevel,omitempty"`
+
+	// ComponentMetrics controls Prometheus scrape resources for namespace-lister.
+	// Forwarded from Konflux.spec.componentMetrics when unset on this CR.
+	// +optional
+	ComponentMetrics *ComponentMetricsConfig `json:"componentMetrics,omitempty"`
 }
 
 // KonfluxNamespaceListerStatus defines the observed state of KonfluxNamespaceLister.

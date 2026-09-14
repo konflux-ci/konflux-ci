@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - v1_serviceaccount_metrics-scraper.yaml
+  - rbac.authorization.k8s.io_v1_clusterrole_namespace-lister-metrics-reader.yaml
+  - rbac.authorization.k8s.io_v1_clusterrolebinding_prometheus-namespace-lister-metrics-reader.yaml
+  - network_policy_allow_metrics_traffic.yaml
+  - monitoring.coreos.com_v1_servicemonitor_namespace-lister.yaml

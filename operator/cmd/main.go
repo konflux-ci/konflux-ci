@@ -325,6 +325,7 @@ func main() {
 	imageControllerRotation := tokenRotation.Subscribe()
 	releaseServiceRotation := tokenRotation.Subscribe()
 	integrationServiceRotation := tokenRotation.Subscribe()
+	namespaceListerRotation := tokenRotation.Subscribe()
 	if err := mgr.Add(tokenRotation); err != nil {
 		setupLog.Error(err, "unable to add scrape token rotation broadcaster")
 		os.Exit(1)
@@ -404,9 +405,12 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&namespacelister.KonfluxNamespaceListerReconciler{
-		Client:      mgr.GetClient(),
-		Scheme:      mgr.GetScheme(),
-		ObjectStore: objectStore,
+		Client:              mgr.GetClient(),
+		Scheme:              mgr.GetScheme(),
+		ObjectStore:         objectStore,
+		TokenCreator:        tokenCreator,
+		TokenRotationEvents: namespaceListerRotation,
+		SecretReader:        mgr.GetAPIReader(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxNamespaceLister")
 		os.Exit(1)

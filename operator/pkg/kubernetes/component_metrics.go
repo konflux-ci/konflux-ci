@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -29,14 +30,20 @@ import (
 var (
 	secretGVK             = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"}
 	serviceAccountGVK     = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ServiceAccount"}
+	networkPolicyGVK      = networkingv1.SchemeGroupVersion.WithKind("NetworkPolicy")
 	clusterRoleGVK        = rbacv1.SchemeGroupVersion.WithKind("ClusterRole")
 	clusterRoleBindingGVK = rbacv1.SchemeGroupVersion.WithKind("ClusterRoleBinding")
 )
+
+// ComponentMetricsAllowTrafficNetworkPolicySuffix names operand NetworkPolicies that permit
+// OpenShift user-workload Prometheus scrape ingress (see namespace-lister monitoring/).
+const ComponentMetricsAllowTrafficNetworkPolicySuffix = "-allow-metrics-traffic"
 
 // ComponentMetricsOrphanCleanupGVKs lists GVKs for interim metrics scrape resources that
 // may be skipped during apply or superseded across operator releases.
 var ComponentMetricsOrphanCleanupGVKs = []schema.GroupVersionKind{
 	serviceMonitorGVK,
+	networkPolicyGVK,
 	secretGVK,
 	serviceAccountGVK,
 	clusterRoleGVK,
@@ -71,6 +78,8 @@ func IsComponentMetricsScrapeResource(obj client.Object) bool {
 	switch gvk.Group {
 	case serviceMonitorGVK.Group:
 		return gvk.Kind == serviceMonitorGVK.Kind
+	case networkingv1.SchemeGroupVersion.Group:
+		return gvk.Kind == networkPolicyGVK.Kind && isComponentMetricsAllowTrafficNetworkPolicyName(name)
 	case rbacv1.SchemeGroupVersion.Group:
 		switch gvk.Kind {
 		case clusterRoleGVK.Kind:
@@ -126,6 +135,8 @@ func objectGroupVersionKind(obj client.Object) schema.GroupVersionKind {
 		return serviceAccountGVK
 	case *corev1.Secret:
 		return secretGVK
+	case *networkingv1.NetworkPolicy:
+		return networkPolicyGVK
 	case *unstructured.Unstructured:
 		return o.GroupVersionKind()
 	default:
@@ -135,4 +146,8 @@ func objectGroupVersionKind(obj client.Object) schema.GroupVersionKind {
 
 func isMetricsReaderServiceAccountName(name string) bool {
 	return name == LegacyMetricsReaderServiceAccountName || strings.HasSuffix(name, MetricsReaderNameSuffix)
+}
+
+func isComponentMetricsAllowTrafficNetworkPolicyName(name string) bool {
+	return strings.HasSuffix(name, ComponentMetricsAllowTrafficNetworkPolicySuffix)
 }

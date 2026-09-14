@@ -18,6 +18,11 @@ var prometheusBodyMatchers = []string{
 	"go_gc_",
 }
 
+var namespaceListerBodyMatchers = []string{
+	"namespace_lister_",
+	"go_gc_",
+}
+
 // DefaultCatalog returns the built-in scrape targets for cluster integration tests.
 func DefaultCatalog() (*Catalog, error) {
 	defaultCatalogOnce.Do(func() {
@@ -98,6 +103,21 @@ func DefaultCatalog() (*Catalog, error) {
 					MetricsReaderClusterRole: "image-controller-metrics-reader",
 					ScrapeTokenSecret:        kubernetes.ScrapeTokenSecretName,
 					BodyMustMatchAny:         prometheusBodyMatchers,
+				},
+				{
+					ID:                       "namespace-lister",
+					Group:                    TargetGroupComponent,
+					Namespace:                "namespace-lister",
+					Service:                  "namespace-lister",
+					Scheme:                   "https",
+					PortName:                 "metrics",
+					Port:                     9100,
+					Path:                     "/metrics",
+					TLSInsecureSkipVerify:    &insecureSkipVerify,
+					MetricsCASecret:          "namespace-lister-tls",
+					MetricsReaderClusterRole: "namespace-lister-metrics-reader",
+					ScrapeTokenSecret:        kubernetes.ScrapeTokenSecretName,
+					BodyMustMatchAny:         namespaceListerBodyMatchers,
 				},
 				{
 					ID:                       "konflux-ui-proxy",
