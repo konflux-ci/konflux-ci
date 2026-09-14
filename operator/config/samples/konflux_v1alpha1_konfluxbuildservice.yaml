@@ -23,6 +23,9 @@ spec:
   # webhookURLs:  # Map repository URL prefixes to external webhook URLs (e.g. Smee proxies)
   #   https://github.com: "https://smee.example.com/github-hook"
   #   https://gitlab.com: "https://smee.example.com/gitlab-hook"
+  # trustedCA:  # Mount a CA bundle at the image default trust path (optional)
+  #   name: custom-ca-bundle
+  #   key: tls.pem
   # pipelineConfig:
   #   # removeDefaults: true  # Discard all operator-provided default pipelines
   #   pipelines:

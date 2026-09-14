@@ -26,6 +26,7 @@ import (
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
@@ -52,7 +53,7 @@ func TestApplySegmentBridgeCronJobCustomizations(t *testing.T) {
 		spec := konfluxv1alpha1.KonfluxSegmentBridgeSpec{}
 
 		cj := getSegmentBridgeCronJob(t)
-		container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, cronJobContainerName)
+		container := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, cronJobContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		originalLimits := container.Resources.Limits.Cpu().String()
 		originalEnvFrom := container.EnvFrom
@@ -60,7 +61,7 @@ func TestApplySegmentBridgeCronJobCustomizations(t *testing.T) {
 		err := applySegmentBridgeCronJobCustomizations(cj, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		container = testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, cronJobContainerName)
+		container = kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, cronJobContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		g.Expect(container.Resources.Limits.Cpu().String()).To(gomega.Equal(originalLimits))
 		g.Expect(container.EnvFrom).To(gomega.Equal(originalEnvFrom))
@@ -87,7 +88,7 @@ func TestApplySegmentBridgeCronJobCustomizations(t *testing.T) {
 		err := applySegmentBridgeCronJobCustomizations(cj, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, cronJobContainerName)
+		container := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, cronJobContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		g.Expect(container.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
 		g.Expect(container.Resources.Limits.Memory().String()).To(gomega.Equal("1Gi"))
@@ -106,7 +107,7 @@ func TestApplySegmentBridgeCronJobCustomizations(t *testing.T) {
 		}
 
 		cj := getSegmentBridgeCronJob(t)
-		container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, cronJobContainerName)
+		container := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, cronJobContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		originalEnvFrom := container.EnvFrom
 		g.Expect(originalEnvFrom).NotTo(gomega.BeEmpty(), "test fixture must have an envFrom Secret reference")
@@ -114,7 +115,7 @@ func TestApplySegmentBridgeCronJobCustomizations(t *testing.T) {
 		err := applySegmentBridgeCronJobCustomizations(cj, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		container = testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, cronJobContainerName)
+		container = kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, cronJobContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		g.Expect(container.Env).To(gomega.ContainElement(
 			corev1.EnvVar{Name: "HTTP_PROXY", Value: "http://proxy.example.com:3128"}))
@@ -131,7 +132,7 @@ func TestApplySegmentBridgeCronJobCustomizations(t *testing.T) {
 		}
 
 		cj := getSegmentBridgeCronJob(t)
-		container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, cronJobContainerName)
+		container := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, cronJobContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		container.Name = "renamed-container"
 
@@ -158,7 +159,7 @@ func TestApplySegmentBridgeCronJobCustomizations(t *testing.T) {
 		err := applySegmentBridgeCronJobCustomizations(cj, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, cronJobContainerName)
+		container := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, cronJobContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		g.Expect(container.Env).To(gomega.ContainElement(
 			corev1.EnvVar{Name: "SEGMENT_WRITE_KEY", Value: "attacker-supplied-value"}))

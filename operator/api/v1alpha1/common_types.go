@@ -58,6 +58,32 @@ const (
 	ZapEncoderArg = "--zap-encoder"
 )
 
+// TrustedCAConfigMap references a ConfigMap that contains a PEM CA bundle.
+// The ConfigMap must exist in the component's namespace.
+//
+// This type is intentionally defined in common_types.go for reuse across
+// component specs (e.g. image-controller, integration-service) that have
+// similar CA mount patterns. When adding trustedCA support to another
+// component, embed a *TrustedCAConfigMap field in its config spec and apply
+// the mount in that component's deployment overlay. Name and Key are validated
+// by the CRD schema; the overlay must also reject keys whose filepath.Base
+// does not equal the key (path separators, "." and ".."), matching the
+// build-service applyTrustedCAMount check.
+type TrustedCAConfigMap struct {
+	// Name is the name of the ConfigMap containing the CA bundle.
+	// Must be a valid Kubernetes DNS-1123 subdomain (same rules as ConfigMap names).
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
+	Name string `json:"name"`
+	// Key is the key within the ConfigMap that contains the CA bundle in PEM format.
+	// Must be a valid ConfigMap key: alphanumeric characters, '-', '_' or '.', max 253 chars.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[-._a-zA-Z0-9]+$`
+	Key string `json:"key"`
+}
+
 // ControllerManagerDeploymentSpec defines customizations for the controller-manager deployment.
 type ControllerManagerDeploymentSpec struct {
 	// Replicas is the number of replicas for the controller-manager deployment.

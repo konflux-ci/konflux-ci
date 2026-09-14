@@ -398,6 +398,40 @@ spec:
                     is being removed
                   rule: '!has(self.defaultPipelineName) || !self.pipelines.exists(p,
                     p.name == self.defaultPipelineName && has(p.removed) && p.removed)'
+              trustedCA:
+                description: |-
+                  TrustedCA mounts a CA bundle from a ConfigMap at the runtime default trust
+                  path used by the build-service image
+                  (/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem).
+
+                  When omitted, the controller leaves the embedded extra-file mount unchanged
+                  and does not overlay the image trust store. Platforms that inject additional
+                  CAs into the cluster trust store continue to use that injection.
+
+                  When set, the referenced ConfigMap replaces the image trust store at that
+                  path. The ConfigMap must exist in the build-service namespace and should
+                  contain a full PEM bundle (platform CAs plus any extras).
+                properties:
+                  key:
+                    description: |-
+                      Key is the key within the ConfigMap that contains the CA bundle in PEM format.
+                      Must be a valid ConfigMap key: alphanumeric characters, '-', '_' or '.', max 253 chars.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[-._a-zA-Z0-9]+$
+                    type: string
+                  name:
+                    description: |-
+                      Name is the name of the ConfigMap containing the CA bundle.
+                      Must be a valid Kubernetes DNS-1123 subdomain (same rules as ConfigMap names).
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                    type: string
+                required:
+                - key
+                - name
+                type: object
               webhookURLs:
                 additionalProperties:
                   type: string
