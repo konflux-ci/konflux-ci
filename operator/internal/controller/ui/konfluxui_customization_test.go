@@ -33,6 +33,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/oauth2proxy"
 )
@@ -110,7 +111,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
+		container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		assertNoConflictingEnvVars(g, container)
 		assertOAuth2ProxyEnvVarsSet(g, container)
@@ -127,7 +128,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
+		container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		assertNoConflictingEnvVars(g, container)
 		assertOAuth2ProxyEnvVarsSet(g, container)
@@ -144,13 +145,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Verify CA bundle volume exists (Projected volume for rotation support)
-		var caVolume *corev1.Volume
-		for i := range deployment.Spec.Template.Spec.Volumes {
-			if deployment.Spec.Template.Spec.Volumes[i].Name == oauth2proxy.CABundleVolumeName {
-				caVolume = &deployment.Spec.Template.Spec.Volumes[i]
-				break
-			}
-		}
+		caVolume := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, oauth2proxy.CABundleVolumeName)
 		g.Expect(caVolume).NotTo(gomega.BeNil(), "ca-bundle volume should exist")
 		g.Expect(caVolume.Projected).NotTo(gomega.BeNil(), "ca-bundle volume should be a Projected volume")
 		g.Expect(caVolume.Projected.Sources).To(gomega.HaveLen(1))
@@ -161,16 +156,10 @@ func TestBuildProxyOverlay(t *testing.T) {
 		g.Expect(caVolume.Projected.Sources[0].Secret.Items[0].Path).To(gomega.Equal(oauth2proxy.CABundleFilename))
 
 		// Verify CA bundle mount in oauth2-proxy container
-		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
+		container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 
-		var caMount *corev1.VolumeMount
-		for i := range container.VolumeMounts {
-			if container.VolumeMounts[i].Name == oauth2proxy.CABundleVolumeName {
-				caMount = &container.VolumeMounts[i]
-				break
-			}
-		}
+		caMount := kubernetes.FindVolumeMount(container.VolumeMounts, oauth2proxy.CABundleVolumeName)
 		g.Expect(caMount).NotTo(gomega.BeNil(), "ca-bundle mount should exist")
 		g.Expect(caMount.MountPath).To(gomega.Equal(oauth2proxy.CABundleMountDir))
 		g.Expect(caMount.SubPath).To(gomega.Equal(""), "subPath should be empty to enable automatic rotation")
@@ -200,7 +189,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		rpContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
 		g.Expect(rpContainer).NotTo(gomega.BeNil())
 		g.Expect(rpContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
 		g.Expect(rpContainer.Resources.Limits.Memory().String()).To(gomega.Equal("256Mi"))
@@ -227,7 +216,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
+		container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		g.Expect(container.Resources.Limits.Cpu().String()).To(gomega.Equal("200m"))
 		g.Expect(container.Resources.Limits.Memory().String()).To(gomega.Equal("128Mi"))
@@ -261,11 +250,11 @@ func TestBuildProxyOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		rpContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
 		g.Expect(rpContainer).NotTo(gomega.BeNil())
 		g.Expect(rpContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
 
-		oauth2Container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
+		oauth2Container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
 		g.Expect(oauth2Container).NotTo(gomega.BeNil())
 		g.Expect(oauth2Container.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
 
@@ -286,7 +275,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		rpContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
 		g.Expect(rpContainer).NotTo(gomega.BeNil(), "reverse-proxy container must exist in proxy deployment")
 		originalImage := rpContainer.Image
 
@@ -295,7 +284,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		rpContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		rpContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
 		g.Expect(rpContainer).NotTo(gomega.BeNil())
 		g.Expect(rpContainer.Image).To(gomega.Equal(originalImage))
 	})
@@ -435,7 +424,7 @@ func TestBuildDexOverlay(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		dexContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, dexContainerName)
+		dexContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, dexContainerName)
 		g.Expect(dexContainer).NotTo(gomega.BeNil())
 		g.Expect(dexContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("300m"))
 		g.Expect(dexContainer.Resources.Limits.Memory().String()).To(gomega.Equal("512Mi"))
@@ -456,7 +445,7 @@ func TestBuildDexOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, dexDeploymentName)
-		dexContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, dexContainerName)
+		dexContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, dexContainerName)
 		g.Expect(dexContainer).NotTo(gomega.BeNil(), "dex container must exist in dex deployment")
 		originalImage := dexContainer.Image
 		originalArgs := dexContainer.Args
@@ -465,7 +454,7 @@ func TestBuildDexOverlay(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		dexContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, dexContainerName)
+		dexContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, dexContainerName)
 		g.Expect(dexContainer).NotTo(gomega.BeNil())
 		g.Expect(dexContainer.Image).To(gomega.Equal(originalImage))
 		g.Expect(dexContainer.Args).To(gomega.Equal(originalArgs))
@@ -480,13 +469,7 @@ func TestBuildDexOverlay(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Find the dex volume and verify ConfigMap name was updated
-		var dexVolume *corev1.Volume
-		for i := range deployment.Spec.Template.Spec.Volumes {
-			if deployment.Spec.Template.Spec.Volumes[i].Name == dexConfigMapVolumeName {
-				dexVolume = &deployment.Spec.Template.Spec.Volumes[i]
-				break
-			}
-		}
+		dexVolume := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, dexConfigMapVolumeName)
 		g.Expect(dexVolume).NotTo(gomega.BeNil(), "dex volume must exist")
 		g.Expect(dexVolume.ConfigMap).NotTo(gomega.BeNil())
 		g.Expect(dexVolume.ConfigMap.Name).To(gomega.Equal("dex-newconfig-xyz789"))
@@ -608,7 +591,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		rpContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
 		g.Expect(rpContainer).NotTo(gomega.BeNil())
 		g.Expect(rpContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
 	})
@@ -633,7 +616,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		dexContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, dexContainerName)
+		dexContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, dexContainerName)
 		g.Expect(dexContainer).NotTo(gomega.BeNil())
 		g.Expect(dexContainer.Resources.Limits.Memory().String()).To(gomega.Equal("512Mi"))
 	})
@@ -687,7 +670,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
-		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		rpContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
 		g.Expect(rpContainer).NotTo(gomega.BeNil())
 	})
 
@@ -704,7 +687,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
-		dexContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, dexContainerName)
+		dexContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, dexContainerName)
 		g.Expect(dexContainer).NotTo(gomega.BeNil())
 	})
 
@@ -816,7 +799,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g.Expect(*deployment.Spec.Replicas).To(gomega.Equal(int32(5)))
 
 		// Check container resources
-		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		rpContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
 		g.Expect(rpContainer).NotTo(gomega.BeNil())
 		g.Expect(rpContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("2"))
 	})
@@ -830,13 +813,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Find the dex volume and verify ConfigMap name was updated
-		var dexVolume *corev1.Volume
-		for i := range deployment.Spec.Template.Spec.Volumes {
-			if deployment.Spec.Template.Spec.Volumes[i].Name == dexConfigMapVolumeName {
-				dexVolume = &deployment.Spec.Template.Spec.Volumes[i]
-				break
-			}
-		}
+		dexVolume := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, dexConfigMapVolumeName)
 		g.Expect(dexVolume).NotTo(gomega.BeNil(), "dex volume must exist")
 		g.Expect(dexVolume.ConfigMap).NotTo(gomega.BeNil())
 		g.Expect(dexVolume.ConfigMap.Name).To(gomega.Equal("dex-custom-config-abc"))
@@ -852,13 +829,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Find the segment-bridge-config volume and verify Secret name was updated
-		var segmentVolume *corev1.Volume
-		for i := range deployment.Spec.Template.Spec.Volumes {
-			if deployment.Spec.Template.Spec.Volumes[i].Name == segmentSecretVolume {
-				segmentVolume = &deployment.Spec.Template.Spec.Volumes[i]
-				break
-			}
-		}
+		segmentVolume := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, segmentSecretVolume)
 		g.Expect(segmentVolume).NotTo(gomega.BeNil(), "segment-bridge-config volume must exist")
 		g.Expect(segmentVolume.Secret).NotTo(gomega.BeNil())
 		g.Expect(segmentVolume.Secret.SecretName).To(gomega.Equal(hashedSecretName))
@@ -871,25 +842,16 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		deployment := getUIDeployment(t, proxyDeploymentName)
 
 		// Get the original secret name
-		var originalSecretName string
-		for _, vol := range deployment.Spec.Template.Spec.Volumes {
-			if vol.Name == segmentSecretVolume && vol.Secret != nil {
-				originalSecretName = vol.Secret.SecretName
-				break
-			}
-		}
+		origVol := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, segmentSecretVolume)
+		g.Expect(origVol).NotTo(gomega.BeNil())
+		g.Expect(origVol.Secret).NotTo(gomega.BeNil())
+		originalSecretName := origVol.Secret.SecretName
 
 		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Volume should retain its original secret name
-		var segmentVolume *corev1.Volume
-		for i := range deployment.Spec.Template.Spec.Volumes {
-			if deployment.Spec.Template.Spec.Volumes[i].Name == segmentSecretVolume {
-				segmentVolume = &deployment.Spec.Template.Spec.Volumes[i]
-				break
-			}
-		}
+		segmentVolume := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, segmentSecretVolume)
 		g.Expect(segmentVolume).NotTo(gomega.BeNil(), "segment-bridge-config volume must exist")
 		g.Expect(segmentVolume.Secret).NotTo(gomega.BeNil())
 		g.Expect(segmentVolume.Secret.SecretName).To(gomega.Equal(originalSecretName))
@@ -904,7 +866,7 @@ func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
 
 		// Get deployment and set existing requests
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		rpContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
 		g.Expect(rpContainer).NotTo(gomega.BeNil(), "reverse-proxy container must exist")
 		rpContainer.Resources.Requests = corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("50m"),
@@ -928,7 +890,7 @@ func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
 		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		rpContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		rpContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
 		g.Expect(rpContainer).NotTo(gomega.BeNil())
 		g.Expect(rpContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
 		g.Expect(rpContainer.Resources.Requests.Cpu().String()).To(gomega.Equal("50m"))
@@ -940,7 +902,7 @@ func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
 
 		// Get deployment and set existing limits
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		rpContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
 		g.Expect(rpContainer).NotTo(gomega.BeNil(), "reverse-proxy container must exist")
 		rpContainer.Resources.Limits = corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("1"),
@@ -964,7 +926,7 @@ func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
 		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		rpContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		rpContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
 		g.Expect(rpContainer).NotTo(gomega.BeNil())
 		g.Expect(rpContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
 		g.Expect(rpContainer.Resources.Limits.Memory().String()).To(gomega.Equal("512Mi"))
@@ -978,14 +940,14 @@ func TestProxyDeploymentTokenHotReload(t *testing.T) {
 
 	t.Run("no config-refresh sidecar container", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		container := testutil.FindContainer(spec.Containers, "config-refresh")
+		container := kubernetes.FindContainer(spec.Containers, "config-refresh")
 		g.Expect(container).To(gomega.BeNil(),
 			"config-refresh sidecar must not exist — token/cert refresh is handled by Caddy plugins")
 	})
 
 	t.Run("reverse-proxy container mounts token volumes", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		container := testutil.FindContainer(spec.Containers, "reverse-proxy")
+		container := kubernetes.FindContainer(spec.Containers, "reverse-proxy")
 		g.Expect(container).NotTo(gomega.BeNil())
 		mountNames := make([]string, 0, len(container.VolumeMounts))
 		for _, m := range container.VolumeMounts {
@@ -999,13 +961,7 @@ func TestProxyDeploymentTokenHotReload(t *testing.T) {
 
 	t.Run("projected service account token volume exists with short TTL", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		var tokenVolume *corev1.Volume
-		for i := range spec.Volumes {
-			if spec.Volumes[i].Name == "kube-api-token" {
-				tokenVolume = &spec.Volumes[i]
-				break
-			}
-		}
+		tokenVolume := kubernetes.FindVolume(spec.Volumes, "kube-api-token")
 		g.Expect(tokenVolume).NotTo(gomega.BeNil(), "kube-api-token projected volume must exist")
 		g.Expect(tokenVolume.Projected).NotTo(gomega.BeNil())
 		g.Expect(tokenVolume.Projected.Sources).NotTo(gomega.BeEmpty())
@@ -1070,7 +1026,7 @@ func TestProxyDeploymentRunAsUser(t *testing.T) {
 		err := applyUIDeploymentCustomizations(deployment, ui, newDefaultInfo(t), testConfigMapName, "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		rpContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
 		g.Expect(rpContainer).NotTo(gomega.BeNil())
 		g.Expect(rpContainer.SecurityContext).NotTo(gomega.BeNil())
 		g.Expect(rpContainer.SecurityContext.RunAsUser).NotTo(gomega.BeNil())
@@ -1085,7 +1041,7 @@ func TestProxyDeploymentRunAsUser(t *testing.T) {
 		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		rpContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
 		g.Expect(rpContainer).NotTo(gomega.BeNil())
 		g.Expect(rpContainer.SecurityContext).NotTo(gomega.BeNil())
 		g.Expect(rpContainer.SecurityContext.RunAsUser).NotTo(gomega.BeNil())
@@ -1100,7 +1056,7 @@ func TestProxyDeploymentRunAsUser(t *testing.T) {
 		err := applyUIDeploymentCustomizations(deployment, ui, newOpenShiftInfo(t), testConfigMapName, "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		rpContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
+		rpContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
 		g.Expect(rpContainer).NotTo(gomega.BeNil())
 		if rpContainer.SecurityContext != nil {
 			g.Expect(rpContainer.SecurityContext.RunAsUser).To(gomega.BeNil(),
@@ -1290,18 +1246,12 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		var watsonVolume *corev1.Volume
-		for i := range deployment.Spec.Template.Spec.Volumes {
-			if deployment.Spec.Template.Spec.Volumes[i].Name == watsonConfigVolumeName {
-				watsonVolume = &deployment.Spec.Template.Spec.Volumes[i]
-				break
-			}
-		}
+		watsonVolume := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, watsonConfigVolumeName)
 		g.Expect(watsonVolume).NotTo(gomega.BeNil(), "watson-config volume must exist")
 		g.Expect(watsonVolume.Secret).NotTo(gomega.BeNil())
 		g.Expect(watsonVolume.Secret.SecretName).To(gomega.Equal("my-watson-creds"))
 
-		initContainer := testutil.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
+		initContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
 		g.Expect(initContainer).NotTo(gomega.BeNil())
 		envMap := envToMap(initContainer.Env)
 		g.Expect(envMap).To(gomega.HaveKeyWithValue("WATSON_ENABLED", "true"))
@@ -1321,7 +1271,7 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		initContainer := testutil.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
+		initContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
 		g.Expect(initContainer).NotTo(gomega.BeNil())
 		envMap := envToMap(initContainer.Env)
 		g.Expect(envMap).To(gomega.HaveKeyWithValue("KITE_ENABLED", "true"))
@@ -1396,7 +1346,7 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		initContainer := testutil.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
+		initContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
 		g.Expect(initContainer).NotTo(gomega.BeNil())
 		envMap := envToMap(initContainer.Env)
 		g.Expect(envMap).To(gomega.HaveKeyWithValue(
@@ -1423,7 +1373,7 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(overlay.ApplyToDeployment(deployment)).To(gomega.Succeed())
 
-		initContainer := testutil.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
+		initContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
 		g.Expect(initContainer).NotTo(gomega.BeNil())
 		g.Expect(envToMap(initContainer.Env)).To(gomega.HaveKey("TEKTON_RESULTS_HOSTNAME"))
 
@@ -1431,7 +1381,7 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(overlay.ApplyToDeployment(deployment)).To(gomega.Succeed())
 
-		initContainer = testutil.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
+		initContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
 		g.Expect(initContainer).NotTo(gomega.BeNil())
 		g.Expect(envToMap(initContainer.Env)).To(gomega.HaveKeyWithValue("TEKTON_RESULTS_HOSTNAME", ""))
 	})
@@ -1539,7 +1489,7 @@ func TestRuntimeConfigOverlays(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		initContainer := testutil.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
+		initContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
 		g.Expect(initContainer).NotTo(gomega.BeNil())
 		envMap := envToMap(initContainer.Env)
 		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_CHAT_BOT_ENABLED", "false"))
@@ -1563,7 +1513,7 @@ func TestRuntimeConfigOverlays(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		initContainer := testutil.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
+		initContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
 		g.Expect(initContainer).NotTo(gomega.BeNil())
 		envMap := envToMap(initContainer.Env)
 		g.Expect(envMap).To(gomega.HaveKeyWithValue("RUNTIME_CHAT_BOT_ENABLED", "true"))

@@ -17,6 +17,8 @@ limitations under the License.
 package buildservice
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/onsi/gomega"
@@ -25,13 +27,23 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/version"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/common"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/contenthash"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/hashedconfigmap"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
@@ -110,7 +122,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
 		g.Expect(managerContainer.Resources.Limits.Memory().String()).To(gomega.Equal("256Mi"))
@@ -133,7 +145,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		}
 
 		deployment := getBuildServiceDeployment(t)
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil(), "manager container must exist in controller-manager deployment")
 		originalImage := managerContainer.Image
 
@@ -141,7 +153,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Image).To(gomega.Equal(originalImage))
 	})
@@ -153,7 +165,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		}
 
 		deployment := getBuildServiceDeployment(t)
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		baseArgCount := len(managerContainer.Args)
 
@@ -161,7 +173,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Args).To(gomega.HaveLen(baseArgCount + 1))
 		g.Expect(managerContainer.Args).To(gomega.ContainElement(konfluxv1alpha1.ZapEncoderArg + "=" + string(konfluxv1alpha1.LogEncoderConsole)))
@@ -178,7 +190,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Args).To(gomega.ContainElement(konfluxv1alpha1.ZapEncoderArg + "=" + string(konfluxv1alpha1.LogEncoderJSON)))
 	})
@@ -188,7 +200,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{}
 
 		deployment := getBuildServiceDeployment(t)
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		baseArgs := make([]string, len(managerContainer.Args))
 		copy(baseArgs, managerContainer.Args)
@@ -197,7 +209,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Args).To(gomega.Equal(baseArgs))
 	})
@@ -218,7 +230,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		}
 
 		deployment := getBuildServiceDeployment(t)
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		baseArgs := make([]string, len(managerContainer.Args))
 		copy(baseArgs, managerContainer.Args)
@@ -227,7 +239,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		for _, arg := range baseArgs {
 			g.Expect(managerContainer.Args).To(gomega.ContainElement(arg))
@@ -243,7 +255,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		}
 
 		deployment := getBuildServiceDeployment(t)
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		managerContainer.Args = append(managerContainer.Args, konfluxv1alpha1.ZapEncoderArg+"="+string(konfluxv1alpha1.LogEncoderJSON))
 
@@ -251,7 +263,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Args).To(gomega.ContainElement(konfluxv1alpha1.ZapEncoderArg + "=" + string(konfluxv1alpha1.LogEncoderConsole)))
 		g.Expect(managerContainer.Args).NotTo(gomega.ContainElement(konfluxv1alpha1.ZapEncoderArg + "=" + string(konfluxv1alpha1.LogEncoderJSON)))
@@ -268,7 +280,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		val, found := findEnvValue(managerContainer.Env, "PAC_WEBHOOK_INSECURE_SSL")
 		g.Expect(found).To(gomega.BeTrue())
@@ -284,7 +296,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		_, found := findEnvValue(managerContainer.Env, "PAC_WEBHOOK_INSECURE_SSL")
 		g.Expect(found).To(gomega.BeFalse())
@@ -301,7 +313,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		_, found := findEnvValue(managerContainer.Env, "PAC_WEBHOOK_INSECURE_SSL")
 		g.Expect(found).To(gomega.BeFalse(), "explicit false should remove the env var entirely")
@@ -328,7 +340,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		val, found := findEnvValue(managerContainer.Env, "PAC_WEBHOOK_INSECURE_SSL")
 		g.Expect(found).To(gomega.BeTrue())
@@ -355,7 +367,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		val, found := findEnvValue(managerContainer.Env, "PAC_WEBHOOK_INSECURE_SSL")
 		g.Expect(found).To(gomega.BeTrue())
@@ -380,7 +392,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		_, found := findEnvValue(managerContainer.Env, "PAC_WEBHOOK_INSECURE_SSL")
 		g.Expect(found).To(gomega.BeFalse(), "explicit false should remove env var even if set in manager.env")
@@ -403,7 +415,7 @@ func TestBuildBuildControllerManagerOverlay(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		val, found := findEnvValue(managerContainer.Env, "PAC_WEBHOOK_INSECURE_SSL")
 		g.Expect(found).To(gomega.BeTrue())
@@ -430,7 +442,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
 	})
@@ -480,7 +492,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 	})
 
@@ -566,7 +578,7 @@ func TestApplyBuildServiceDeploymentCustomizations(t *testing.T) {
 		g.Expect(*deployment.Spec.Replicas).To(gomega.Equal(int32(5)))
 
 		// Check container resources
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("2"))
 	})
@@ -620,7 +632,7 @@ func TestApplyBuildServiceDeploymentCustomizations_PaCWebhookURL(t *testing.T) {
 		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newDefaultClusterInfo(t), "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		pacURL, found := findPaCWebhookURLEnvValue(managerContainer.Env)
@@ -636,7 +648,7 @@ func TestApplyBuildServiceDeploymentCustomizations_PaCWebhookURL(t *testing.T) {
 		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newOpenShiftClusterInfo(t), "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		_, found := findPaCWebhookURLEnvValue(managerContainer.Env)
@@ -660,7 +672,7 @@ func TestApplyBuildServiceDeploymentCustomizations_PaCWebhookURL(t *testing.T) {
 		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newDefaultClusterInfo(t), "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		pacURL, found := findPaCWebhookURLEnvValue(managerContainer.Env)
@@ -685,7 +697,7 @@ func TestApplyBuildServiceDeploymentCustomizations_PaCWebhookURL(t *testing.T) {
 		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newOpenShiftClusterInfo(t), "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		pacURL, found := findPaCWebhookURLEnvValue(managerContainer.Env)
@@ -701,7 +713,7 @@ func TestApplyBuildServiceDeploymentCustomizations_PaCWebhookURL(t *testing.T) {
 		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		pacURL, found := findPaCWebhookURLEnvValue(managerContainer.Env)
 		g.Expect(found).To(gomega.BeTrue(), "nil ClusterInfo should be treated as non-OpenShift")
 		g.Expect(pacURL).To(gomega.Equal(pacWebhookURLNonOpenShift))
@@ -717,7 +729,7 @@ func TestApplyBuildServiceDeploymentCustomizations_PaCNamespace(t *testing.T) {
 		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newDefaultClusterInfo(t), "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		val, found := findEnvValue(managerContainer.Env, pacNamespaceEnvName)
@@ -733,7 +745,7 @@ func TestApplyBuildServiceDeploymentCustomizations_PaCNamespace(t *testing.T) {
 		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newOpenShiftClusterInfo(t), "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		_, found := findEnvValue(managerContainer.Env, pacNamespaceEnvName)
@@ -751,14 +763,10 @@ func TestApplyBuildServiceDeploymentCustomizations_WebhookConfig(t *testing.T) {
 		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, configMapName)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		var volFound bool
-		for _, vol := range deployment.Spec.Template.Spec.Volumes {
-			if vol.Name == webhookConfigVolName && vol.ConfigMap != nil && vol.ConfigMap.Name == configMapName {
-				volFound = true
-				break
-			}
-		}
-		g.Expect(volFound).To(gomega.BeTrue(), "webhook-config volume should reference the hashed ConfigMap")
+		vol := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, webhookConfigVolName)
+		g.Expect(vol).NotTo(gomega.BeNil(), "webhook-config volume should exist")
+		g.Expect(vol.ConfigMap).NotTo(gomega.BeNil())
+		g.Expect(vol.ConfigMap.Name).To(gomega.Equal(configMapName), "webhook-config volume should reference the hashed ConfigMap")
 	})
 
 	t.Run("keeps placeholder name when webhook config is empty", func(t *testing.T) {
@@ -770,18 +778,13 @@ func TestApplyBuildServiceDeploymentCustomizations_WebhookConfig(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Volume should exist from the manifest with the placeholder name
-		var volFound bool
-		for _, vol := range deployment.Spec.Template.Spec.Volumes {
-			if vol.Name == webhookConfigVolName && vol.ConfigMap != nil {
-				g.Expect(vol.ConfigMap.Name).To(gomega.Equal(webhookConfigBaseName),
-					"volume should keep the placeholder ConfigMap name")
-				g.Expect(*vol.ConfigMap.Optional).To(gomega.BeTrue(),
-					"volume should be optional so the pod starts without a ConfigMap")
-				volFound = true
-				break
-			}
-		}
-		g.Expect(volFound).To(gomega.BeTrue(), "webhook-config volume should be present from manifest")
+		vol := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, webhookConfigVolName)
+		g.Expect(vol).NotTo(gomega.BeNil(), "webhook-config volume should exist")
+		g.Expect(vol.ConfigMap).NotTo(gomega.BeNil())
+		g.Expect(vol.ConfigMap.Name).To(gomega.Equal(webhookConfigBaseName),
+			"volume should keep the placeholder ConfigMap name")
+		g.Expect(*vol.ConfigMap.Optional).To(gomega.BeTrue(),
+			"volume should be optional so the pod starts without a ConfigMap")
 	})
 
 	t.Run("different hashed names produce different volume references", func(t *testing.T) {
@@ -803,19 +806,12 @@ func TestApplyBuildServiceDeploymentCustomizations_WebhookConfig(t *testing.T) {
 		err = applyBuildServiceDeploymentCustomizations(deployment2, spec, nil, name2)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		var vol1Name, vol2Name string
-		for _, vol := range deployment1.Spec.Template.Spec.Volumes {
-			if vol.Name == webhookConfigVolName {
-				vol1Name = vol.ConfigMap.Name
-			}
-		}
-		for _, vol := range deployment2.Spec.Template.Spec.Volumes {
-			if vol.Name == webhookConfigVolName {
-				vol2Name = vol.ConfigMap.Name
-			}
-		}
-		g.Expect(vol1Name).To(gomega.Equal(name1))
-		g.Expect(vol2Name).To(gomega.Equal(name2))
+		vol1 := kubernetes.FindVolume(deployment1.Spec.Template.Spec.Volumes, webhookConfigVolName)
+		g.Expect(vol1).NotTo(gomega.BeNil())
+		vol2 := kubernetes.FindVolume(deployment2.Spec.Template.Spec.Volumes, webhookConfigVolName)
+		g.Expect(vol2).NotTo(gomega.BeNil())
+		g.Expect(vol1.ConfigMap.Name).To(gomega.Equal(name1))
+		g.Expect(vol2.ConfigMap.Name).To(gomega.Equal(name2))
 	})
 
 	t.Run("re-applying with new hashed name does not duplicate volumes", func(t *testing.T) {
@@ -859,17 +855,13 @@ func TestApplyBuildServiceDeploymentCustomizations_WebhookConfig(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Volume should reference the hashed ConfigMap
-		var volFound bool
-		for _, vol := range deployment.Spec.Template.Spec.Volumes {
-			if vol.Name == webhookConfigVolName && vol.ConfigMap != nil && vol.ConfigMap.Name == configMapName {
-				volFound = true
-				break
-			}
-		}
-		g.Expect(volFound).To(gomega.BeTrue(), "webhook-config volume should reference the hashed ConfigMap")
+		vol := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, webhookConfigVolName)
+		g.Expect(vol).NotTo(gomega.BeNil(), "webhook-config volume should exist")
+		g.Expect(vol.ConfigMap).NotTo(gomega.BeNil())
+		g.Expect(vol.ConfigMap.Name).To(gomega.Equal(configMapName), "webhook-config volume should reference the hashed ConfigMap")
 
 		// PAC_WEBHOOK_URL should NOT be set on OpenShift
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		_, found := findPaCWebhookURLEnvValue(managerContainer.Env)
 		g.Expect(found).To(gomega.BeFalse())
@@ -888,7 +880,7 @@ func TestApplyBuildServiceDeploymentCustomizations_WebhookConfig(t *testing.T) {
 		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newDefaultClusterInfo(t), configMapName)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		_, found := findPaCWebhookURLEnvValue(managerContainer.Env)
@@ -916,7 +908,7 @@ func TestApplyBuildServiceDeploymentCustomizations_WebhookConfig(t *testing.T) {
 		err := applyBuildServiceDeploymentCustomizations(deployment, spec, newDefaultClusterInfo(t), configMapName)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		// User-specified PAC_WEBHOOK_URL is set even when webhookURLs are configured
@@ -925,14 +917,10 @@ func TestApplyBuildServiceDeploymentCustomizations_WebhookConfig(t *testing.T) {
 		g.Expect(pacURL).To(gomega.Equal(customURL))
 
 		// Webhook config volume should reference the hashed ConfigMap
-		var volFound bool
-		for _, vol := range deployment.Spec.Template.Spec.Volumes {
-			if vol.Name == webhookConfigVolName && vol.ConfigMap != nil && vol.ConfigMap.Name == configMapName {
-				volFound = true
-				break
-			}
-		}
-		g.Expect(volFound).To(gomega.BeTrue())
+		vol := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, webhookConfigVolName)
+		g.Expect(vol).NotTo(gomega.BeNil())
+		g.Expect(vol.ConfigMap).NotTo(gomega.BeNil())
+		g.Expect(vol.ConfigMap.Name).To(gomega.Equal(configMapName))
 	})
 }
 
@@ -942,7 +930,7 @@ func TestApplyBuildServiceDeploymentCustomizations_ResourceMerging(t *testing.T)
 
 		// Get deployment and set existing requests
 		deployment := getBuildServiceDeployment(t)
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil(), "manager container must exist")
 		managerContainer.Resources.Requests = corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("50m"),
@@ -964,7 +952,7 @@ func TestApplyBuildServiceDeploymentCustomizations_ResourceMerging(t *testing.T)
 		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
 		g.Expect(managerContainer.Resources.Requests.Cpu().String()).To(gomega.Equal("50m"))
@@ -976,7 +964,7 @@ func TestApplyBuildServiceDeploymentCustomizations_ResourceMerging(t *testing.T)
 
 		// Get deployment and set existing limits
 		deployment := getBuildServiceDeployment(t)
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil(), "manager container must exist")
 		managerContainer.Resources.Limits = corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("1"),
@@ -998,11 +986,642 @@ func TestApplyBuildServiceDeploymentCustomizations_ResourceMerging(t *testing.T)
 		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		managerContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
 		g.Expect(managerContainer.Resources.Limits.Memory().String()).To(gomega.Equal("512Mi"))
 		g.Expect(managerContainer.Resources.Requests.Cpu().String()).To(gomega.Equal("100m"))
+	})
+}
+
+func TestApplyTrustedCAMount(t *testing.T) {
+	findTrustedCAVolume := func(deployment *appsv1.Deployment) *corev1.Volume {
+		t.Helper()
+		return kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, trustedCAVolumeName)
+	}
+	findTrustedCAMount := func(deployment *appsv1.Deployment) *corev1.VolumeMount {
+		t.Helper()
+		manager := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		if manager == nil {
+			return nil
+		}
+		return kubernetes.FindVolumeMount(manager.VolumeMounts, trustedCAVolumeName)
+	}
+
+	t.Run("omitted trustedCA leaves the extra-file mount unchanged", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		deployment := getBuildServiceDeployment(t)
+		err := applyBuildServiceDeploymentCustomizations(deployment, konfluxv1alpha1.KonfluxBuildServiceConfigSpec{}, nil, "")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		mount := findTrustedCAMount(deployment)
+		g.Expect(mount).NotTo(gomega.BeNil())
+		g.Expect(mount.MountPath).To(gomega.Equal(trustedCADefaultFileMountPath))
+		g.Expect(mount.SubPath).To(gomega.Equal(trustedCADefaultFileVolumePath))
+
+		vol := findTrustedCAVolume(deployment)
+		g.Expect(vol).NotTo(gomega.BeNil())
+		g.Expect(vol.ConfigMap).NotTo(gomega.BeNil())
+		g.Expect(vol.ConfigMap.Name).To(gomega.Equal(common.TrustedCAConfigMapName))
+		g.Expect(vol.ConfigMap.Optional).NotTo(gomega.BeNil())
+		g.Expect(*vol.ConfigMap.Optional).To(gomega.BeTrue())
+		g.Expect(vol.ConfigMap.Items).To(gomega.ConsistOf(corev1.KeyToPath{
+			Key:  trustedCADefaultFileVolumePath,
+			Path: trustedCADefaultFileVolumePath,
+		}))
+	})
+
+	t.Run("trustedCA retargets the volume ConfigMap and keeps the extra-file mount", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
+			TrustedCA: &konfluxv1alpha1.TrustedCAConfigMap{
+				Name: "custom-ca-bundle",
+				Key:  "tls.pem",
+			},
+		}
+
+		deployment := getBuildServiceDeployment(t)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		mount := findTrustedCAMount(deployment)
+		g.Expect(mount).NotTo(gomega.BeNil())
+		g.Expect(mount.MountPath).To(gomega.Equal(trustedCADefaultFileMountPath))
+		g.Expect(mount.SubPath).To(gomega.Equal(trustedCADefaultFileVolumePath))
+		g.Expect(mount.ReadOnly).To(gomega.BeTrue())
+
+		vol := findTrustedCAVolume(deployment)
+		g.Expect(vol).NotTo(gomega.BeNil())
+		g.Expect(vol.ConfigMap).NotTo(gomega.BeNil())
+		g.Expect(vol.ConfigMap.Name).To(gomega.Equal(spec.TrustedCA.Name))
+		g.Expect(vol.ConfigMap.Optional).NotTo(gomega.BeNil())
+		g.Expect(*vol.ConfigMap.Optional).To(gomega.BeFalse())
+		g.Expect(vol.ConfigMap.Items).To(gomega.ConsistOf(corev1.KeyToPath{
+			Key:  spec.TrustedCA.Key,
+			Path: trustedCADefaultFileVolumePath,
+		}))
+		g.Expect(deployment.Spec.Template.Annotations).NotTo(gomega.HaveKey(trustedCAHashAnnotation))
+	})
+
+	t.Run("trustedCA stamps a content-hash annotation on the pod template", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
+			TrustedCA: &konfluxv1alpha1.TrustedCAConfigMap{
+				Name: "custom-ca-bundle",
+				Key:  "tls.pem",
+			},
+		}
+		hash := contenthash.String("-----BEGIN CERTIFICATE-----\nnew\n-----END CERTIFICATE-----\n")
+
+		deployment := getBuildServiceDeployment(t)
+		err := applyBuildServiceDeploymentCustomizationsWithHash(deployment, spec, nil, "", hash)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(deployment.Spec.Template.Annotations).To(gomega.HaveKeyWithValue(trustedCAHashAnnotation, hash))
+	})
+
+	t.Run("empty content hash omits the annotation on a never-stamped apply", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
+			TrustedCA: &konfluxv1alpha1.TrustedCAConfigMap{
+				Name: "custom-ca-bundle",
+				Key:  "tls.pem",
+			},
+		}
+
+		deployment := getBuildServiceDeployment(t)
+		if deployment.Spec.Template.Annotations == nil {
+			deployment.Spec.Template.Annotations = map[string]string{}
+		}
+		deployment.Spec.Template.Annotations[trustedCAHashAnnotation] = "stale-hash"
+
+		err := applyBuildServiceDeploymentCustomizationsWithHash(deployment, spec, nil, "", "")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(deployment.Spec.Template.Annotations).NotTo(gomega.HaveKey(trustedCAHashAnnotation))
+	})
+
+	t.Run("omitted trustedCA removes a leftover content-hash annotation", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		deployment := getBuildServiceDeployment(t)
+		if deployment.Spec.Template.Annotations == nil {
+			deployment.Spec.Template.Annotations = map[string]string{}
+		}
+		deployment.Spec.Template.Annotations[trustedCAHashAnnotation] = "stale-hash"
+
+		err := applyBuildServiceDeploymentCustomizations(deployment, konfluxv1alpha1.KonfluxBuildServiceConfigSpec{}, nil, "")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(deployment.Spec.Template.Annotations).NotTo(gomega.HaveKey(trustedCAHashAnnotation))
+	})
+
+	t.Run("trustedCA retargets even when ConfigMap name is the default", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
+			TrustedCA: &konfluxv1alpha1.TrustedCAConfigMap{
+				Name: common.TrustedCAConfigMapName,
+				Key:  "ca-bundle.crt",
+			},
+		}
+
+		deployment := getBuildServiceDeployment(t)
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		mount := findTrustedCAMount(deployment)
+		g.Expect(mount).NotTo(gomega.BeNil())
+		g.Expect(mount.MountPath).To(gomega.Equal(trustedCADefaultFileMountPath))
+		g.Expect(mount.SubPath).To(gomega.Equal(trustedCADefaultFileVolumePath))
+
+		vol := findTrustedCAVolume(deployment)
+		g.Expect(vol).NotTo(gomega.BeNil())
+		g.Expect(vol.ConfigMap).NotTo(gomega.BeNil())
+		g.Expect(vol.ConfigMap.Name).To(gomega.Equal(spec.TrustedCA.Name))
+		g.Expect(vol.ConfigMap.Optional).NotTo(gomega.BeNil())
+		g.Expect(*vol.ConfigMap.Optional).To(gomega.BeFalse())
+		g.Expect(vol.ConfigMap.Items).To(gomega.ConsistOf(corev1.KeyToPath{
+			Key:  spec.TrustedCA.Key,
+			Path: trustedCADefaultFileVolumePath,
+		}))
+	})
+
+	t.Run("preserves other volumes when trustedCA is set", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
+			TrustedCA: &konfluxv1alpha1.TrustedCAConfigMap{
+				Name: "custom-ca-bundle",
+				Key:  "tls.pem",
+			},
+		}
+
+		deployment := getBuildServiceDeployment(t)
+		originalVolNames := make([]string, len(deployment.Spec.Template.Spec.Volumes))
+		for i, v := range deployment.Spec.Template.Spec.Volumes {
+			originalVolNames[i] = v.Name
+		}
+		manager := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(manager).NotTo(gomega.BeNil())
+		originalMountNames := make([]string, len(manager.VolumeMounts))
+		for i, m := range manager.VolumeMounts {
+			originalMountNames[i] = m.Name
+		}
+		webhookBefore := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, webhookConfigVolName)
+		g.Expect(webhookBefore).NotTo(gomega.BeNil())
+		g.Expect(webhookBefore.ConfigMap).NotTo(gomega.BeNil())
+		webhookCMName := webhookBefore.ConfigMap.Name
+		webhookItems := append([]corev1.KeyToPath(nil), webhookBefore.ConfigMap.Items...)
+		metricsBefore := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, "metrics-certs")
+		g.Expect(metricsBefore).NotTo(gomega.BeNil())
+		g.Expect(metricsBefore.Secret).NotTo(gomega.BeNil())
+		metricsSecretName := metricsBefore.Secret.SecretName
+
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		gotVolNames := make([]string, len(deployment.Spec.Template.Spec.Volumes))
+		for i, v := range deployment.Spec.Template.Spec.Volumes {
+			gotVolNames[i] = v.Name
+		}
+		g.Expect(gotVolNames).To(gomega.ConsistOf(originalVolNames))
+
+		manager = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		g.Expect(manager).NotTo(gomega.BeNil())
+		gotMountNames := make([]string, len(manager.VolumeMounts))
+		for i, m := range manager.VolumeMounts {
+			gotMountNames[i] = m.Name
+		}
+		g.Expect(gotMountNames).To(gomega.ConsistOf(originalMountNames))
+
+		webhookVol := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, webhookConfigVolName)
+		g.Expect(webhookVol).NotTo(gomega.BeNil())
+		g.Expect(webhookVol.ConfigMap).NotTo(gomega.BeNil())
+		g.Expect(webhookVol.ConfigMap.Name).To(gomega.Equal(webhookCMName))
+		g.Expect(webhookVol.ConfigMap.Items).To(gomega.Equal(webhookItems))
+
+		metricsVol := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, "metrics-certs")
+		g.Expect(metricsVol).NotTo(gomega.BeNil())
+		g.Expect(metricsVol.Secret).NotTo(gomega.BeNil())
+		g.Expect(metricsVol.Secret.SecretName).To(gomega.Equal(metricsSecretName))
+	})
+
+	t.Run("accepts key starting with special characters", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		for _, key := range []string{"-ca.pem", "_ca.pem", ".ca-bundle"} {
+			spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
+				TrustedCA: &konfluxv1alpha1.TrustedCAConfigMap{
+					Name: "custom-ca-bundle",
+					Key:  key,
+				},
+			}
+
+			deployment := getBuildServiceDeployment(t)
+			err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
+			g.Expect(err).NotTo(gomega.HaveOccurred(), "key %q should be accepted", key)
+
+			mount := findTrustedCAMount(deployment)
+			g.Expect(mount).NotTo(gomega.BeNil())
+			g.Expect(mount.MountPath).To(gomega.Equal(trustedCADefaultFileMountPath))
+			g.Expect(mount.SubPath).To(gomega.Equal(trustedCADefaultFileVolumePath))
+			vol := findTrustedCAVolume(deployment)
+			g.Expect(vol).NotTo(gomega.BeNil())
+			g.Expect(vol.ConfigMap).NotTo(gomega.BeNil())
+			g.Expect(vol.ConfigMap.Name).To(gomega.Equal(spec.TrustedCA.Name))
+			g.Expect(vol.ConfigMap.Optional).NotTo(gomega.BeNil())
+			g.Expect(*vol.ConfigMap.Optional).To(gomega.BeFalse())
+			g.Expect(vol.ConfigMap.Items).To(gomega.ConsistOf(corev1.KeyToPath{
+				Key:  key,
+				Path: trustedCADefaultFileVolumePath,
+			}))
+		}
+	})
+
+	t.Run("returns error when trusted-ca volume is missing", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
+			TrustedCA: &konfluxv1alpha1.TrustedCAConfigMap{
+				Name: "custom-ca-bundle",
+				Key:  "tls.pem",
+			},
+		}
+
+		deployment := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: buildControllerManagerDeploymentName},
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: buildManagerContainerName}},
+					},
+				},
+			},
+		}
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
+		g.Expect(err).To(gomega.HaveOccurred())
+		g.Expect(err.Error()).To(gomega.ContainSubstring("trusted-ca ConfigMap volume not found"))
+	})
+
+	t.Run("returns error when trusted-ca volume is not a ConfigMap", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
+			TrustedCA: &konfluxv1alpha1.TrustedCAConfigMap{
+				Name: "custom-ca-bundle",
+				Key:  "tls.pem",
+			},
+		}
+
+		deployment := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: buildControllerManagerDeploymentName},
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Volumes: []corev1.Volume{{
+							Name: trustedCAVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
+							},
+						}},
+						Containers: []corev1.Container{{Name: buildManagerContainerName}},
+					},
+				},
+			},
+		}
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
+		g.Expect(err).To(gomega.HaveOccurred())
+		g.Expect(err.Error()).To(gomega.ContainSubstring("trusted-ca ConfigMap volume not found"))
+	})
+
+	t.Run("returns error when manager container is missing", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
+			TrustedCA: &konfluxv1alpha1.TrustedCAConfigMap{
+				Name: "custom-ca-bundle",
+				Key:  "tls.pem",
+			},
+		}
+
+		deployment := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: buildControllerManagerDeploymentName},
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Volumes: []corev1.Volume{{
+							Name: trustedCAVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{Name: common.TrustedCAConfigMapName},
+								},
+							},
+						}},
+						Containers: []corev1.Container{{Name: "other-container"}},
+					},
+				},
+			},
+		}
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
+		g.Expect(err).To(gomega.MatchError(gomega.ContainSubstring(`container "manager" not found`)))
+	})
+
+	t.Run("returns error when trusted-ca volume mount is missing from container", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
+			TrustedCA: &konfluxv1alpha1.TrustedCAConfigMap{
+				Name: "custom-ca-bundle",
+				Key:  "tls.pem",
+			},
+		}
+
+		deployment := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: buildControllerManagerDeploymentName},
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Volumes: []corev1.Volume{{
+							Name: trustedCAVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{Name: common.TrustedCAConfigMapName},
+								},
+							},
+						}},
+						Containers: []corev1.Container{{
+							Name:         buildManagerContainerName,
+							VolumeMounts: []corev1.VolumeMount{{Name: "other-mount", MountPath: "/tmp"}},
+						}},
+					},
+				},
+			},
+		}
+		err := applyBuildServiceDeploymentCustomizations(deployment, spec, nil, "")
+		g.Expect(err).To(gomega.HaveOccurred())
+		g.Expect(err.Error()).To(gomega.ContainSubstring("trusted-ca volume mount not found"))
+	})
+}
+
+func TestTrustedCABundleHash(t *testing.T) {
+	const pem = "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n"
+
+	t.Run("hashes Data for the requested key", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := &corev1.ConfigMap{Data: map[string]string{"tls.pem": pem}}
+		g.Expect(trustedCABundleHash(cm, "tls.pem")).To(gomega.Equal(contenthash.String(pem)))
+	})
+
+	t.Run("hashes BinaryData when Data is absent", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := &corev1.ConfigMap{BinaryData: map[string][]byte{"tls.pem": []byte(pem)}}
+		g.Expect(trustedCABundleHash(cm, "tls.pem")).To(gomega.Equal(contenthash.String(pem)))
+	})
+
+	t.Run("prefers Data over BinaryData", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := &corev1.ConfigMap{
+			Data:       map[string]string{"tls.pem": pem},
+			BinaryData: map[string][]byte{"tls.pem": []byte("other")},
+		}
+		g.Expect(trustedCABundleHash(cm, "tls.pem")).To(gomega.Equal(contenthash.String(pem)))
+	})
+
+	t.Run("returns empty when the key is missing", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := &corev1.ConfigMap{Data: map[string]string{"other": pem}}
+		g.Expect(trustedCABundleHash(cm, "tls.pem")).To(gomega.BeEmpty())
+	})
+}
+
+func TestLookupTrustedCAHash(t *testing.T) {
+	scheme := runtime.NewScheme()
+	g := gomega.NewWithT(t)
+	g.Expect(clientgoscheme.AddToScheme(scheme)).To(gomega.Succeed())
+
+	spec := &konfluxv1alpha1.TrustedCAConfigMap{Name: "custom-ca-bundle", Key: "tls.pem"}
+	const pem = "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n"
+
+	t.Run("returns empty when spec is nil", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		r := &KonfluxBuildServiceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).Build()}
+		hash, err := r.lookupTrustedCAHash(context.Background(), nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(hash).To(gomega.BeEmpty())
+	})
+
+	t.Run("returns empty when the ConfigMap is missing", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		r := &KonfluxBuildServiceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).Build()}
+		hash, err := r.lookupTrustedCAHash(context.Background(), spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(hash).To(gomega.BeEmpty())
+	})
+
+	t.Run("returns empty when the key is missing", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: spec.Name, Namespace: webhookConfigNamespace},
+			Data:       map[string]string{"other": pem},
+		}
+		r := &KonfluxBuildServiceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm).Build()}
+		hash, err := r.lookupTrustedCAHash(context.Background(), spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(hash).To(gomega.BeEmpty())
+	})
+
+	t.Run("hashes the referenced key", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: spec.Name, Namespace: webhookConfigNamespace},
+			Data:       map[string]string{spec.Key: pem},
+		}
+		r := &KonfluxBuildServiceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm).Build()}
+		hash, err := r.lookupTrustedCAHash(context.Background(), spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(hash).To(gomega.Equal(contenthash.String(pem)))
+	})
+
+	t.Run("returns the Get error when it is not NotFound", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		forbidden := errors.NewForbidden(schema.GroupResource{Resource: "configmaps"}, spec.Name, fmt.Errorf("denied"))
+		r := &KonfluxBuildServiceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(context.Context, client.WithWatch, client.ObjectKey, client.Object, ...client.GetOption) error {
+				return forbidden
+			},
+		}).Build()}
+		hash, err := r.lookupTrustedCAHash(context.Background(), spec)
+		g.Expect(err).To(gomega.Equal(forbidden))
+		g.Expect(hash).To(gomega.BeEmpty())
+	})
+}
+
+func TestTrustedCAHashForApply(t *testing.T) {
+	scheme := runtime.NewScheme()
+	g := gomega.NewWithT(t)
+	g.Expect(clientgoscheme.AddToScheme(scheme)).To(gomega.Succeed())
+
+	spec := &konfluxv1alpha1.TrustedCAConfigMap{Name: "custom-ca-bundle", Key: "tls.pem"}
+	const pem = "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n"
+	const liveHash = "live-hash"
+
+	liveDeployment := func(hash string) *appsv1.Deployment {
+		annotations := map[string]string{}
+		if hash != "" {
+			annotations[trustedCAHashAnnotation] = hash
+		}
+		return &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      buildControllerManagerDeploymentName,
+				Namespace: webhookConfigNamespace,
+			},
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Annotations: annotations},
+				},
+			},
+		}
+	}
+
+	t.Run("returns empty when spec is nil even if the live annotation exists", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		r := &KonfluxBuildServiceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(liveDeployment(liveHash)).Build()}
+		hash, err := r.trustedCAHashForApply(context.Background(), nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(hash).To(gomega.BeEmpty())
+	})
+
+	t.Run("hashes the referenced key when the ConfigMap exists", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: spec.Name, Namespace: webhookConfigNamespace},
+			Data:       map[string]string{spec.Key: pem},
+		}
+		r := &KonfluxBuildServiceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm, liveDeployment("stale")).Build()}
+		hash, err := r.trustedCAHashForApply(context.Background(), spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(hash).To(gomega.Equal(contenthash.String(pem)))
+	})
+
+	t.Run("returns empty when the ConfigMap and Deployment are missing", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		r := &KonfluxBuildServiceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).Build()}
+		hash, err := r.trustedCAHashForApply(context.Background(), spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(hash).To(gomega.BeEmpty())
+	})
+
+	t.Run("preserves the live hash when the ConfigMap is missing", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		r := &KonfluxBuildServiceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(liveDeployment(liveHash)).Build()}
+		hash, err := r.trustedCAHashForApply(context.Background(), spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(hash).To(gomega.Equal(liveHash))
+	})
+
+	t.Run("preserves the live hash when the key is missing", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: spec.Name, Namespace: webhookConfigNamespace},
+			Data:       map[string]string{"other": pem},
+		}
+		r := &KonfluxBuildServiceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm, liveDeployment(liveHash)).Build()}
+		hash, err := r.trustedCAHashForApply(context.Background(), spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(hash).To(gomega.Equal(liveHash))
+	})
+
+	t.Run("returns the Deployment Get error when it is not NotFound", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		forbidden := errors.NewForbidden(schema.GroupResource{Resource: "deployments"}, buildControllerManagerDeploymentName, fmt.Errorf("denied"))
+		r := &KonfluxBuildServiceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(_ context.Context, _ client.WithWatch, _ client.ObjectKey, obj client.Object, _ ...client.GetOption) error {
+				if _, ok := obj.(*appsv1.Deployment); ok {
+					return forbidden
+				}
+				return errors.NewNotFound(schema.GroupResource{Resource: "configmaps"}, spec.Name)
+			},
+		}).Build()}
+		hash, err := r.trustedCAHashForApply(context.Background(), spec)
+		g.Expect(err).To(gomega.Equal(forbidden))
+		g.Expect(hash).To(gomega.BeEmpty())
+	})
+}
+
+func TestMapTrustedCAConfigMap(t *testing.T) {
+	scheme := runtime.NewScheme()
+	g := gomega.NewWithT(t)
+	g.Expect(clientgoscheme.AddToScheme(scheme)).To(gomega.Succeed())
+	g.Expect(konfluxv1alpha1.AddToScheme(scheme)).To(gomega.Succeed())
+
+	matchingCR := &konfluxv1alpha1.KonfluxBuildService{
+		ObjectMeta: metav1.ObjectMeta{Name: CRName},
+		Spec: konfluxv1alpha1.NewKonfluxBuildServiceSpec(
+			konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
+				TrustedCA: &konfluxv1alpha1.TrustedCAConfigMap{
+					Name: "custom-ca-bundle",
+					Key:  "tls.pem",
+				},
+			},
+			testutil.DefaultComponentMetricsConfig(),
+		),
+	}
+	want := []reconcile.Request{{NamespacedName: types.NamespacedName{Name: CRName}}}
+	matchingCM := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+		Name: "custom-ca-bundle", Namespace: webhookConfigNamespace,
+	}}
+
+	tests := []struct {
+		name    string
+		objects []client.Object
+		obj     client.Object
+		want    []reconcile.Request
+	}{
+		{
+			name:    "enqueues when the ConfigMap matches spec.trustedCA",
+			objects: []client.Object{matchingCR},
+			obj:     matchingCM,
+			want:    want,
+		},
+		{
+			name:    "ignores ConfigMaps in other namespaces",
+			objects: []client.Object{matchingCR},
+			obj: &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+				Name: "custom-ca-bundle", Namespace: "other",
+			}},
+		},
+		{
+			name:    "ignores ConfigMaps with a different name",
+			objects: []client.Object{matchingCR},
+			obj: &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+				Name: "other-bundle", Namespace: webhookConfigNamespace,
+			}},
+		},
+		{
+			name: "ignores ConfigMaps when the CR is missing",
+			obj:  matchingCM,
+		},
+		{
+			name: "ignores ConfigMaps when trustedCA is omitted",
+			objects: []client.Object{&konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.NewKonfluxBuildServiceSpec(
+					konfluxv1alpha1.KonfluxBuildServiceConfigSpec{},
+					testutil.DefaultComponentMetricsConfig(),
+				),
+			}},
+			obj: matchingCM,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.objects...).Build()
+			r := &KonfluxBuildServiceReconciler{Client: c}
+			g.Expect(r.mapTrustedCAConfigMap(context.Background(), tt.obj)).To(gomega.Equal(tt.want))
+		})
+	}
+
+	t.Run("enqueues when getting the CR fails with a non-NotFound error", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		c := fake.NewClientBuilder().WithScheme(scheme).WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(context.Context, client.WithWatch, client.ObjectKey, client.Object, ...client.GetOption) error {
+				return errors.NewForbidden(schema.GroupResource{Resource: "konfluxbuildservices"}, CRName, fmt.Errorf("denied"))
+			},
+		}).Build()
+		r := &KonfluxBuildServiceReconciler{Client: c}
+		g.Expect(r.mapTrustedCAConfigMap(context.Background(), matchingCM)).To(gomega.Equal(want))
 	})
 }
 

@@ -398,6 +398,44 @@ spec:
                     is being removed
                   rule: '!has(self.defaultPipelineName) || !self.pipelines.exists(p,
                     p.name == self.defaultPipelineName && has(p.removed) && p.removed)'
+              trustedCA:
+                description: |-
+                  TrustedCA retargets the baked-in extra-file CA mount to a ConfigMap in
+                  the build-service namespace. Additional CAs are added at
+                  /etc/ssl/certs/ca-custom-bundle.crt; the image trust store is not
+                  replaced.
+
+                  When omitted, the volume stays optional and points at ConfigMap
+                  trusted-ca / key ca-bundle.crt (platform-injected on OpenShift).
+
+                  When set, the volume uses spec.name and spec.key with optional: false
+                  so the pod will not start until the ConfigMap exists. The mount path
+                  is unchanged.
+                properties:
+                  key:
+                    description: |-
+                      Key is the key within the ConfigMap that contains the CA bundle in PEM format.
+                      Must be a valid ConfigMap key: alphanumeric characters, '-', '_' or '.', max 253 chars.
+                      "." and ".." are rejected (they match the ConfigMap key pattern but are not safe filenames).
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[-._a-zA-Z0-9]+$
+                    type: string
+                    x-kubernetes-validations:
+                    - message: key must not be '.' or '..'
+                      rule: self != '.' && self != '..'
+                  name:
+                    description: |-
+                      Name is the name of the ConfigMap containing the CA bundle.
+                      Must be a valid Kubernetes DNS-1123 subdomain (same rules as ConfigMap names).
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                    type: string
+                required:
+                - key
+                - name
+                type: object
               webhookURLs:
                 additionalProperties:
                   type: string

@@ -26,11 +26,13 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/clock"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -46,6 +48,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/contenthash"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/hashedconfigmap"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
@@ -66,6 +69,18 @@ const (
 
 	// Container names
 	buildManagerContainerName = "manager"
+
+	// trusted-ca volume is baked into the embedded Deployment as an extra file
+	// at /etc/ssl/certs/ca-custom-bundle.crt. That path is part of the image
+	// trust store; spec.trustedCA only changes which ConfigMap is mounted.
+	trustedCAVolumeName            = "trusted-ca"
+	trustedCADefaultFileMountPath  = "/etc/ssl/certs/ca-custom-bundle.crt"
+	trustedCADefaultFileVolumePath = "ca-bundle.crt"
+	// trustedCAHashAnnotation is stamped on the controller-manager pod template
+	// so a ConfigMap content change updates the pod spec and Kubernetes rolls
+	// the Deployment. subPath mounts do not propagate ConfigMap updates, and
+	// Go's SystemCertPool is loaded once per process.
+	trustedCAHashAnnotation = "konflux.konflux-ci.dev/trusted-ca-content-hash"
 
 	// PAC_WEBHOOK_URL is the fallback webhook URL registered on git repositories
 	// when no entry in the webhook config JSON matches. It is only set on
@@ -262,6 +277,10 @@ func (r *KonfluxBuildServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
 // webhookConfigMapName is the hashed ConfigMap name for the webhook config (empty if not configured).
+// The trustedCA content hash is resolved once before applying objects so a
+// Get error fails the reconcile without mutating Deployments. When the
+// ConfigMap or key is missing, a live annotation is reused so SSA cannot
+// prune it and roll running pods.
 func (r *KonfluxBuildServiceReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxBuildService, webhookConfigMapName string) error {
 	log := logf.FromContext(ctx)
 
@@ -271,6 +290,11 @@ func (r *KonfluxBuildServiceReconciler) applyManifests(ctx context.Context, tc *
 	objects, err := r.ObjectStore.GetForComponent(manifests.BuildService)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for BuildService: %w", err)
+	}
+
+	trustedCAHash, err := r.trustedCAHashForApply(ctx, owner.Spec.TrustedCA)
+	if err != nil {
+		return fmt.Errorf("lookup trusted CA hash: %w", err)
 	}
 
 	for _, obj := range objects {
@@ -295,7 +319,9 @@ func (r *KonfluxBuildServiceReconciler) applyManifests(ctx context.Context, tc *
 
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
-			if err := applyBuildServiceDeploymentCustomizations(deployment, owner.Spec.KonfluxBuildServiceConfigSpec, r.ClusterInfo, webhookConfigMapName); err != nil {
+			if err := applyBuildServiceDeploymentCustomizationsWithHash(
+				deployment, owner.Spec.KonfluxBuildServiceConfigSpec, r.ClusterInfo, webhookConfigMapName, trustedCAHash,
+			); err != nil {
 				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
 			}
 		}
@@ -334,14 +360,23 @@ func (r *KonfluxBuildServiceReconciler) applyManifests(ctx context.Context, tc *
 }
 
 // applyBuildServiceDeploymentCustomizations applies user-defined and platform-specific
-// customizations to BuildService deployments.
+// customizations to BuildService deployments. When spec.trustedCA is set, the
+// baked-in trusted-ca volume is retargeted to that ConfigMap. The extra-file
+// mount path is unchanged.
 func applyBuildServiceDeploymentCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxBuildServiceConfigSpec, clusterInfo *clusterinfo.Info, webhookConfigMapName string) error {
+	return applyBuildServiceDeploymentCustomizationsWithHash(deployment, spec, clusterInfo, webhookConfigMapName, "")
+}
+
+func applyBuildServiceDeploymentCustomizationsWithHash(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxBuildServiceConfigSpec, clusterInfo *clusterinfo.Info, webhookConfigMapName, trustedCAHash string) error {
 	switch deployment.Name {
 	case buildControllerManagerDeploymentName:
 		if spec.BuildControllerManager != nil {
 			deployment.Spec.Replicas = &spec.BuildControllerManager.Replicas
 		}
 		if err := buildBuildControllerManagerOverlay(spec, clusterInfo, webhookConfigMapName).ApplyToDeployment(deployment); err != nil {
+			return err
+		}
+		if err := applyTrustedCAMount(deployment, spec.TrustedCA, trustedCAHash); err != nil {
 			return err
 		}
 	}
@@ -418,6 +453,134 @@ func buildBuildControllerManagerOverlay(spec konfluxv1alpha1.KonfluxBuildService
 	return customization.NewPodOverlay(podOpts...)
 }
 
+// applyTrustedCAMount retargets the baked-in trusted-ca volume to the
+// ConfigMap named in spec when spec.trustedCA is set. The extra-file
+// mount path and subPath are left unchanged so additional CAs are added
+// at the same location in the image trust store. When spec is nil the
+// embedded volume is left unchanged. contentHash is stamped on the pod
+// template so ConfigMap data changes roll the Deployment.
+//
+// Production objects are fresh copies of the embedded manifests, so they
+// never carry the hash annotation. Omitting it on ApplyOwned lets SSA prune
+// it from the live Deployment. applyManifests copies a live hash when the
+// ConfigMap or key is missing so a successful mount is not rolled away.
+// The delete calls only strip a leftover on an in-memory object that already
+// has one.
+func applyTrustedCAMount(deployment *appsv1.Deployment, spec *konfluxv1alpha1.TrustedCAConfigMap, contentHash string) error {
+	if spec == nil {
+		delete(deployment.Spec.Template.Annotations, trustedCAHashAnnotation)
+		return nil
+	}
+
+	vol := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, trustedCAVolumeName)
+	if vol == nil || vol.ConfigMap == nil {
+		return fmt.Errorf("trusted-ca ConfigMap volume not found on deployment %s", deployment.Name)
+	}
+	vol.ConfigMap.Name = spec.Name
+	vol.ConfigMap.Items = []corev1.KeyToPath{{
+		Key:  spec.Key,
+		Path: trustedCADefaultFileVolumePath,
+	}}
+	vol.ConfigMap.Optional = ptr.To(false)
+
+	manager := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+	if manager == nil {
+		return fmt.Errorf("container %q not found on deployment %s", buildManagerContainerName, deployment.Name)
+	}
+	if kubernetes.FindVolumeMount(manager.VolumeMounts, trustedCAVolumeName) == nil {
+		return fmt.Errorf("trusted-ca volume mount not found on container %q", buildManagerContainerName)
+	}
+
+	if contentHash == "" {
+		delete(deployment.Spec.Template.Annotations, trustedCAHashAnnotation)
+		return nil
+	}
+	if deployment.Spec.Template.Annotations == nil {
+		deployment.Spec.Template.Annotations = map[string]string{}
+	}
+	deployment.Spec.Template.Annotations[trustedCAHashAnnotation] = contentHash
+	return nil
+}
+
+// trustedCAHashForApply returns the hash to stamp on the pod template.
+// A present ConfigMap key is hashed. Missing ConfigMaps or keys fall back to
+// the live Deployment annotation so SSA does not prune it and roll running
+// pods. spec == nil returns empty so clearing trustedCA drops the annotation.
+// Any non-NotFound Get error is returned so the Deployment is not applied.
+func (r *KonfluxBuildServiceReconciler) trustedCAHashForApply(ctx context.Context, spec *konfluxv1alpha1.TrustedCAConfigMap) (string, error) {
+	hash, err := r.lookupTrustedCAHash(ctx, spec)
+	if err != nil {
+		return "", err
+	}
+	if hash != "" || spec == nil {
+		return hash, nil
+	}
+	return r.liveTrustedCAHash(ctx)
+}
+
+func (r *KonfluxBuildServiceReconciler) liveTrustedCAHash(ctx context.Context) (string, error) {
+	dep := &appsv1.Deployment{}
+	if err := r.Get(ctx, types.NamespacedName{
+		Name:      buildControllerManagerDeploymentName,
+		Namespace: webhookConfigNamespace,
+	}, dep); err != nil {
+		if apierrors.IsNotFound(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	return dep.Spec.Template.Annotations[trustedCAHashAnnotation], nil
+}
+
+// lookupTrustedCAHash returns a content hash of spec.key in the referenced
+// ConfigMap. Missing ConfigMaps and missing keys return ("", nil). Any other
+// Get error is returned so the Deployment is not applied with an empty hash.
+func (r *KonfluxBuildServiceReconciler) lookupTrustedCAHash(ctx context.Context, spec *konfluxv1alpha1.TrustedCAConfigMap) (string, error) {
+	if spec == nil {
+		return "", nil
+	}
+	cm := &corev1.ConfigMap{}
+	if err := r.Get(ctx, types.NamespacedName{Name: spec.Name, Namespace: webhookConfigNamespace}, cm); err != nil {
+		if apierrors.IsNotFound(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	return trustedCABundleHash(cm, spec.Key), nil
+}
+
+func trustedCABundleHash(cm *corev1.ConfigMap, key string) string {
+	if v, ok := cm.Data[key]; ok {
+		return contenthash.String(v)
+	}
+	if v, ok := cm.BinaryData[key]; ok {
+		return contenthash.String(string(v))
+	}
+	return ""
+}
+
+// mapTrustedCAConfigMap enqueues the singleton KonfluxBuildService when the
+// ConfigMap named in spec.trustedCA changes. The object is user-owned, so
+// Owns(&ConfigMap{}) does not see it.
+func (r *KonfluxBuildServiceReconciler) mapTrustedCAConfigMap(ctx context.Context, obj client.Object) []reconcile.Request {
+	if obj.GetNamespace() != webhookConfigNamespace {
+		return nil
+	}
+	bs := &konfluxv1alpha1.KonfluxBuildService{}
+	if err := r.Get(ctx, types.NamespacedName{Name: CRName}, bs); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		// Transient Get failure: enqueue so the ConfigMap event is not dropped
+		// until the next informer resync.
+		return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: CRName}}}
+	}
+	if bs.Spec.TrustedCA == nil || bs.Spec.TrustedCA.Name != obj.GetName() {
+		return nil
+	}
+	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: CRName}}}
+}
+
 // reconcileWebhookConfig ensures the webhook config ConfigMap exists.
 // The ConfigMap is always created: with the webhookURLs mapping when configured,
 // or with an empty JSON object when not configured. This guarantees the
@@ -464,6 +627,12 @@ func (r *KonfluxBuildServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(predicate.DeploymentReadinessPredicate)).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
+		// User-owned trustedCA ConfigMap is not CR-owned; watch it so content
+		// changes stamp a new pod-template hash and roll the Deployment.
+		Watches(
+			&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(r.mapTrustedCAConfigMap),
+		).
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&rbacv1.Role{}).

@@ -33,6 +33,7 @@ import (
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 )
 
 const (
@@ -102,7 +103,7 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, namespaceListerContainerName)
+				container := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, namespaceListerContainerName)
 				g.Expect(container).NotTo(BeNil())
 				val, found := findEnvValue(container.Env, envLogLevel)
 				g.Expect(found).To(BeTrue())
@@ -139,7 +140,7 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
 				g.Expect(dep.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
-				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, namespaceListerContainerName)
+				container := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, namespaceListerContainerName)
 				g.Expect(container).NotTo(BeNil(), "namespace-lister container should exist")
 				g.Expect(container.Image).NotTo(BeEmpty(), "container image should be set")
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
@@ -372,7 +373,7 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, namespaceListerContainerName)
+				container := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, namespaceListerContainerName)
 				g.Expect(container).NotTo(BeNil())
 				originalImage = container.Image
 				g.Expect(originalImage).NotTo(BeEmpty())
@@ -382,7 +383,7 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, namespaceListerContainerName)
+				container := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, namespaceListerContainerName)
 				g.Expect(container).NotTo(BeNil())
 				container.Image = "tampered-image:latest"
 				g.Expect(k8sClient.Update(ctx, dep)).To(Succeed())
@@ -392,7 +393,7 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, namespaceListerContainerName)
+				container := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, namespaceListerContainerName)
 				g.Expect(container).NotTo(BeNil())
 				g.Expect(container.Image).To(Equal(originalImage))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
@@ -914,7 +915,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 			err := applyNamespaceListerCustomizations(deployment, spec)
 			Expect(err).NotTo(HaveOccurred())
 
-			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
 			Expect(container).NotTo(BeNil())
 			val, found := findEnvValue(container.Env, envLogLevel)
 			Expect(found).To(BeTrue())
@@ -935,7 +936,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 				err := applyNamespaceListerCustomizations(deployment, spec)
 				Expect(err).NotTo(HaveOccurred())
 
-				container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+				container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
 				Expect(container).NotTo(BeNil())
 				val, found := findEnvValue(container.Env, envLogLevel)
 				Expect(found).To(BeTrue())
@@ -948,7 +949,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 			err := applyNamespaceListerCustomizations(deployment, spec)
 			Expect(err).NotTo(HaveOccurred())
 
-			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
 			Expect(container).NotTo(BeNil())
 			_, found := findEnvValue(container.Env, envLogLevel)
 			Expect(found).To(BeFalse())
@@ -977,7 +978,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 			err := applyNamespaceListerCustomizations(deployment, spec)
 			Expect(err).NotTo(HaveOccurred())
 
-			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
 			Expect(container).NotTo(BeNil())
 			val, found := findEnvValue(container.Env, envLogLevel)
 			Expect(found).To(BeTrue())
@@ -997,7 +998,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 			err := applyNamespaceListerCustomizations(deployment, spec)
 			Expect(err).NotTo(HaveOccurred())
 
-			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
 			Expect(container).NotTo(BeNil())
 			val, found := findEnvValue(container.Env, envLogLevel)
 			Expect(found).To(BeTrue())
@@ -1013,7 +1014,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 			err := applyNamespaceListerCustomizations(deployment, spec)
 			Expect(err).NotTo(HaveOccurred())
 
-			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
 			Expect(container).NotTo(BeNil())
 			val, found := findEnvValue(container.Env, envCacheResyncPeriod)
 			Expect(found).To(BeTrue())
@@ -1025,7 +1026,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 			err := applyNamespaceListerCustomizations(deployment, spec)
 			Expect(err).NotTo(HaveOccurred())
 
-			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
 			Expect(container).NotTo(BeNil())
 			_, found := findEnvValue(container.Env, envCacheResyncPeriod)
 			Expect(found).To(BeFalse())
@@ -1039,7 +1040,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 				err := applyNamespaceListerCustomizations(deployment, spec)
 				Expect(err).NotTo(HaveOccurred())
 
-				container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+				container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
 				Expect(container).NotTo(BeNil())
 				val, found := findEnvValue(container.Env, envCacheResyncPeriod)
 				Expect(found).To(BeTrue())
@@ -1061,7 +1062,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 			err := applyNamespaceListerCustomizations(deployment, spec)
 			Expect(err).NotTo(HaveOccurred())
 
-			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
 			Expect(container).NotTo(BeNil())
 			val, found := findEnvValue(container.Env, envCacheResyncPeriod)
 			Expect(found).To(BeTrue())
@@ -1081,7 +1082,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 			err := applyNamespaceListerCustomizations(deployment, spec)
 			Expect(err).NotTo(HaveOccurred())
 
-			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
 			Expect(container).NotTo(BeNil())
 			val, found := findEnvValue(container.Env, envCacheResyncPeriod)
 			Expect(found).To(BeTrue())

@@ -34,6 +34,7 @@ import (
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
@@ -176,7 +177,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
 				g.Expect(dep.Labels).To(HaveKeyWithValue("control-plane", "controller-manager"))
-				manager := testutil.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
+				manager := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
 				g.Expect(manager).NotTo(BeNil(), "manager container should exist")
 				g.Expect(manager.Image).NotTo(BeEmpty(), "manager container image should be set")
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
@@ -470,7 +471,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				manager := testutil.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
+				manager := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
 				g.Expect(manager).NotTo(BeNil())
 				originalImage = manager.Image
 				g.Expect(originalImage).NotTo(BeEmpty())
@@ -480,7 +481,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				manager := testutil.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
+				manager := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
 				g.Expect(manager).NotTo(BeNil())
 				manager.Image = "tampered-image:latest"
 				g.Expect(k8sClient.Update(ctx, dep)).To(Succeed())
@@ -490,7 +491,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				m := testutil.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
+				m := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
 				g.Expect(m).NotTo(BeNil())
 				g.Expect(m.Image).To(Equal(originalImage))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
@@ -546,7 +547,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 			Eventually(func(g Gomega) {
 				cj := &batchv1.CronJob{}
 				g.Expect(k8sClient.Get(ctx, cjNN, cj)).To(Succeed())
-				container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
+				container := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
 				g.Expect(container).NotTo(BeNil())
 				originalImage = container.Image
 				g.Expect(originalImage).NotTo(BeEmpty())
@@ -556,7 +557,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 			Eventually(func(g Gomega) {
 				cj := &batchv1.CronJob{}
 				g.Expect(k8sClient.Get(ctx, cjNN, cj)).To(Succeed())
-				container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
+				container := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
 				g.Expect(container).NotTo(BeNil())
 				container.Image = "tampered-image:latest"
 				g.Expect(k8sClient.Update(ctx, cj)).To(Succeed())
@@ -566,7 +567,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 			Eventually(func(g Gomega) {
 				cj := &batchv1.CronJob{}
 				g.Expect(k8sClient.Get(ctx, cjNN, cj)).To(Succeed())
-				container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
+				container := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
 				g.Expect(container).NotTo(BeNil())
 				g.Expect(container.Image).To(Equal(originalImage))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
@@ -935,20 +936,14 @@ var _ = Describe("KonfluxImageController Controller", func() {
 		It("should NOT set QUAY_ADDITIONAL_CA when QuayCABundle is not configured", func() {
 			Eventually(func(g Gomega) {
 				dep := getDeployment(g)
-				managerContainer := testutil.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
+				managerContainer := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
 				g.Expect(managerContainer).NotTo(BeNil())
 
 				for _, e := range managerContainer.Env {
 					g.Expect(e.Name).NotTo(Equal(quayAdditionalCAEnvVar), "QUAY_ADDITIONAL_CA should not be set")
 				}
 
-				var caVolume *corev1.Volume
-				for i := range dep.Spec.Template.Spec.Volumes {
-					if dep.Spec.Template.Spec.Volumes[i].Name == quayCABundleVolumeName {
-						caVolume = &dep.Spec.Template.Spec.Volumes[i]
-						break
-					}
-				}
+				caVolume := kubernetes.FindVolume(dep.Spec.Template.Spec.Volumes, quayCABundleVolumeName)
 				g.Expect(caVolume).NotTo(BeNil(), "quay-ca-bundle volume should exist from base manifests")
 				g.Expect(caVolume.ConfigMap).NotTo(BeNil())
 				g.Expect(caVolume.ConfigMap.Name).To(Equal(defaultQuayCAConfigMapName))
@@ -965,7 +960,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 
 			Eventually(func(g Gomega) {
 				dep := getDeployment(g)
-				managerContainer := testutil.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
+				managerContainer := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
 				g.Expect(managerContainer).NotTo(BeNil())
 				var found bool
 				for _, e := range managerContainer.Env {
@@ -990,18 +985,12 @@ var _ = Describe("KonfluxImageController Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := getDeployment(g)
 
-				var caVolume *corev1.Volume
-				for i := range dep.Spec.Template.Spec.Volumes {
-					if dep.Spec.Template.Spec.Volumes[i].Name == quayCABundleVolumeName {
-						caVolume = &dep.Spec.Template.Spec.Volumes[i]
-						break
-					}
-				}
+				caVolume := kubernetes.FindVolume(dep.Spec.Template.Spec.Volumes, quayCABundleVolumeName)
 				g.Expect(caVolume).NotTo(BeNil(), "quay-ca-bundle volume should exist")
 				g.Expect(caVolume.ConfigMap).NotTo(BeNil())
 				g.Expect(caVolume.ConfigMap.Name).To(Equal("my-custom-ca-bundle"))
 
-				managerContainer := testutil.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
+				managerContainer := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
 				g.Expect(managerContainer).NotTo(BeNil())
 				var found bool
 				for _, e := range managerContainer.Env {
@@ -1026,7 +1015,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 			// Wait for QUAY_ADDITIONAL_CA to appear first.
 			Eventually(func(g Gomega) {
 				dep := getDeployment(g)
-				managerContainer := testutil.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
+				managerContainer := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
 				g.Expect(managerContainer).NotTo(BeNil())
 				var found bool
 				for _, e := range managerContainer.Env {
@@ -1044,7 +1033,7 @@ var _ = Describe("KonfluxImageController Controller", func() {
 
 			Eventually(func(g Gomega) {
 				dep := getDeployment(g)
-				managerContainer := testutil.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
+				managerContainer := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
 				g.Expect(managerContainer).NotTo(BeNil())
 				for _, e := range managerContainer.Env {
 					g.Expect(e.Name).NotTo(Equal(quayAdditionalCAEnvVar), "QUAY_ADDITIONAL_CA should not be present after removal")
