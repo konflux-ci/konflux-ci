@@ -79,6 +79,36 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 				}, dep)).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
+
+		It("should apply deployment customizations from operand spec during reconcile", func(ctx context.Context) {
+			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxNamespaceLister{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.NewKonfluxNamespaceListerSpec(
+					konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
+						LogLevel: konfluxv1alpha1.LogLevelInfo,
+					},
+					nil,
+				),
+			})).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxNamespaceLister{ObjectMeta: metav1.ObjectMeta{Name: CRName}})
+			})
+
+			deploymentNN := types.NamespacedName{
+				Name:      namespaceListerNamespace,
+				Namespace: namespaceListerNamespace,
+			}
+
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
+				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, namespaceListerContainerName)
+				g.Expect(container).NotTo(BeNil())
+				val, found := findEnvValue(container.Env, envLogLevel)
+				g.Expect(found).To(BeTrue())
+				g.Expect(val).To(Equal("0"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
 	})
 
 	Context("Self-healing", func() {
@@ -804,14 +834,14 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 	})
 
 	It("should not modify deployment with empty spec", func() {
-		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{}
+		spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{}
 		err := applyNamespaceListerCustomizations(deployment, spec)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*deployment.Spec.Replicas).To(Equal(int32(1)))
 	})
 
 	It("should not modify deployment with nil deployment spec", func() {
-		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+		spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 			NamespaceLister: nil,
 		}
 		err := applyNamespaceListerCustomizations(deployment, spec)
@@ -820,7 +850,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 	})
 
 	It("should apply replicas override", func() {
-		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+		spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 			NamespaceLister: &konfluxv1alpha1.NamespaceListerDeploymentSpec{
 				Replicas: 3,
 			},
@@ -831,7 +861,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 	})
 
 	It("should apply resources override", func() {
-		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+		spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 			NamespaceLister: &konfluxv1alpha1.NamespaceListerDeploymentSpec{
 				NamespaceLister: &konfluxv1alpha1.ContainerSpec{
 					Resources: &corev1.ResourceRequirements{
@@ -858,7 +888,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 	})
 
 	It("should apply both replicas and resources", func() {
-		spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+		spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 			NamespaceLister: &konfluxv1alpha1.NamespaceListerDeploymentSpec{
 				Replicas: 2,
 				NamespaceLister: &konfluxv1alpha1.ContainerSpec{
@@ -878,7 +908,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 
 	Context("logLevel typed field", func() {
 		It("should inject LOG_LEVEL as slog integer when set to info", func() {
-			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+			spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 				LogLevel: konfluxv1alpha1.LogLevelInfo,
 			}
 			err := applyNamespaceListerCustomizations(deployment, spec)
@@ -899,7 +929,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 				konfluxv1alpha1.LogLevelError: "8",
 			}
 			for level, expected := range cases {
-				spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+				spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 					LogLevel: level,
 				}
 				err := applyNamespaceListerCustomizations(deployment, spec)
@@ -914,7 +944,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 		})
 
 		It("should not inject LOG_LEVEL when omitted", func() {
-			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{}
+			spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{}
 			err := applyNamespaceListerCustomizations(deployment, spec)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -925,7 +955,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 		})
 
 		It("should return an error for unsupported logLevel values", func() {
-			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+			spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 				LogLevel: konfluxv1alpha1.LogLevel("trace"),
 			}
 			err := applyNamespaceListerCustomizations(deployment, spec)
@@ -934,7 +964,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 		})
 
 		It("should take precedence over same var in ContainerSpec.Env", func() {
-			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+			spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 				LogLevel: konfluxv1alpha1.LogLevelDebug,
 				NamespaceLister: &konfluxv1alpha1.NamespaceListerDeploymentSpec{
 					NamespaceLister: &konfluxv1alpha1.ContainerSpec{
@@ -955,7 +985,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 		})
 
 		It("should let ContainerSpec.Env pass through when typed field is omitted", func() {
-			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+			spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 				NamespaceLister: &konfluxv1alpha1.NamespaceListerDeploymentSpec{
 					NamespaceLister: &konfluxv1alpha1.ContainerSpec{
 						Env: []corev1.EnvVar{
@@ -977,7 +1007,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 
 	Context("cacheResyncPeriod typed field", func() {
 		It("should inject CACHE_RESYNC_PERIOD when set", func() {
-			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+			spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 				CacheResyncPeriod: "10m",
 			}
 			err := applyNamespaceListerCustomizations(deployment, spec)
@@ -991,7 +1021,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 		})
 
 		It("should not inject CACHE_RESYNC_PERIOD when omitted", func() {
-			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{}
+			spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{}
 			err := applyNamespaceListerCustomizations(deployment, spec)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -1003,7 +1033,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 
 		It("should accept various duration formats", func() {
 			for _, dur := range []string{"5s", "1h", "30m", "1h30m"} {
-				spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+				spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 					CacheResyncPeriod: dur,
 				}
 				err := applyNamespaceListerCustomizations(deployment, spec)
@@ -1018,7 +1048,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 		})
 
 		It("should take precedence over same var in ContainerSpec.Env", func() {
-			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+			spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 				CacheResyncPeriod: "5m",
 				NamespaceLister: &konfluxv1alpha1.NamespaceListerDeploymentSpec{
 					NamespaceLister: &konfluxv1alpha1.ContainerSpec{
@@ -1039,7 +1069,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 		})
 
 		It("should let ContainerSpec.Env pass through when typed field is omitted", func() {
-			spec := konfluxv1alpha1.KonfluxNamespaceListerSpec{
+			spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 				NamespaceLister: &konfluxv1alpha1.NamespaceListerDeploymentSpec{
 					NamespaceLister: &konfluxv1alpha1.ContainerSpec{
 						Env: []corev1.EnvVar{

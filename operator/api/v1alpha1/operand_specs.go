@@ -48,6 +48,14 @@ func NewKonfluxReleaseServiceSpec(cfg KonfluxReleaseServiceConfigSpec, metrics *
 	}
 }
 
+// NewKonfluxNamespaceListerSpec builds a KonfluxNamespaceLister spec from user config and forwarded metrics.
+func NewKonfluxNamespaceListerSpec(cfg KonfluxNamespaceListerConfigSpec, metrics *ComponentMetricsConfig) KonfluxNamespaceListerSpec {
+	return KonfluxNamespaceListerSpec{
+		KonfluxNamespaceListerConfigSpec: cfg,
+		ComponentMetrics:                 metrics,
+	}
+}
+
 // NewKonfluxUISpec builds a KonfluxUI spec from user config and forwarded metrics.
 func NewKonfluxUISpec(cfg KonfluxUIConfigSpec, metrics *ComponentMetricsConfig) KonfluxUISpec {
 	return KonfluxUISpec{

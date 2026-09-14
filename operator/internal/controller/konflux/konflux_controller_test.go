@@ -643,6 +643,33 @@ var _ = Describe("Konflux Controller", func() {
 		})
 	})
 
+	Context("NamespaceLister spec propagation", func() {
+		const resourceName = "konflux"
+
+		It("should propagate namespace-lister config spec to KonfluxNamespaceLister CR", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					NamespaceLister: &konfluxv1alpha1.NamespaceListerConfig{
+						Spec: &konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
+							LogLevel: konfluxv1alpha1.LogLevelInfo,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			Eventually(func(g Gomega) {
+				nl := &konfluxv1alpha1.KonfluxNamespaceLister{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: namespacelister.CRName}, nl)).To(Succeed())
+				g.Expect(nl.Spec.LogLevel).To(Equal(konfluxv1alpha1.LogLevelInfo))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
 	Context("CertManager spec forwarding", func() {
 		const resourceName = "konflux"
 
@@ -761,6 +788,11 @@ var _ = Describe("Konflux Controller", func() {
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: releaseservice.CRName}, rs)).To(Succeed())
 				g.Expect(rs.Spec.ComponentMetrics).NotTo(BeNil())
 				g.Expect(rs.Spec.ComponentMetrics.IsEnabled()).To(BeFalse())
+
+				nl := &konfluxv1alpha1.KonfluxNamespaceLister{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: namespacelister.CRName}, nl)).To(Succeed())
+				g.Expect(nl.Spec.ComponentMetrics).NotTo(BeNil())
+				g.Expect(nl.Spec.ComponentMetrics.IsEnabled()).To(BeFalse())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
@@ -809,6 +841,10 @@ var _ = Describe("Konflux Controller", func() {
 				bs := &konfluxv1alpha1.KonfluxBuildService{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: buildservice.CRName}, bs)).To(Succeed())
 				g.Expect(bs.Spec.ComponentMetrics.IsEnabled()).To(BeTrue())
+
+				nl := &konfluxv1alpha1.KonfluxNamespaceLister{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: namespacelister.CRName}, nl)).To(Succeed())
+				g.Expect(nl.Spec.ComponentMetrics.IsEnabled()).To(BeTrue())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			updated := &konfluxv1alpha1.Konflux{}
@@ -821,6 +857,10 @@ var _ = Describe("Konflux Controller", func() {
 				bs := &konfluxv1alpha1.KonfluxBuildService{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: buildservice.CRName}, bs)).To(Succeed())
 				g.Expect(bs.Spec.ComponentMetrics.IsEnabled()).To(BeFalse())
+
+				nl := &konfluxv1alpha1.KonfluxNamespaceLister{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: namespacelister.CRName}, nl)).To(Succeed())
+				g.Expect(nl.Spec.ComponentMetrics.IsEnabled()).To(BeFalse())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})

@@ -145,9 +145,9 @@ type BuildServiceConfig struct {
 // NamespaceListerConfig defines the configuration for the namespace-lister component.
 // The Spec field is the runtime configuration passed to the component.
 type NamespaceListerConfig struct {
-	// Spec configures the namespace-lister component.
+	// Spec configures the namespace-lister component (excludes componentMetrics; see spec.componentMetrics).
 	// +optional
-	Spec *KonfluxNamespaceListerSpec `json:"spec,omitempty"`
+	Spec *KonfluxNamespaceListerConfigSpec `json:"spec,omitempty"`
 }
 
 // EnterpriseContractConfig defines the configuration for the enterprise-contract component.

@@ -179,7 +179,7 @@ func (r *KonfluxNamespaceListerReconciler) applyManifests(ctx context.Context, t
 	for _, obj := range objects {
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
-			if err := applyNamespaceListerCustomizations(deployment, owner.Spec); err != nil {
+			if err := applyNamespaceListerCustomizations(deployment, owner.Spec.KonfluxNamespaceListerConfigSpec); err != nil {
 				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
 			}
 		}
@@ -194,7 +194,7 @@ func (r *KonfluxNamespaceListerReconciler) applyManifests(ctx context.Context, t
 }
 
 // applyNamespaceListerCustomizations applies user-defined customizations to the namespace-lister deployment.
-func applyNamespaceListerCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxNamespaceListerSpec) error {
+func applyNamespaceListerCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxNamespaceListerConfigSpec) error {
 	var containerSpec *konfluxv1alpha1.ContainerSpec
 	if spec.NamespaceLister != nil {
 		if spec.NamespaceLister.Replicas > 0 {
