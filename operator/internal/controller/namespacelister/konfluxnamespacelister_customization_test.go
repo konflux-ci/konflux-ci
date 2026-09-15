@@ -64,7 +64,7 @@ func TestLogLevelWithRealManifest(t *testing.T) {
 		spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 			LogLevel: konfluxv1alpha1.LogLevelInfo,
 		}
-		err := applyNamespaceListerCustomizations(deployment, spec)
+		err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
@@ -88,7 +88,7 @@ func TestLogLevelWithRealManifest(t *testing.T) {
 				spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 					LogLevel: level,
 				}
-				err := applyNamespaceListerCustomizations(deployment, spec)
+				err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 				g.Expect(err).NotTo(gomega.HaveOccurred())
 
 				container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
@@ -104,7 +104,7 @@ func TestLogLevelWithRealManifest(t *testing.T) {
 		g := gomega.NewWithT(t)
 		deployment := getNamespaceListerDeployment(t)
 		spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{}
-		err := applyNamespaceListerCustomizations(deployment, spec)
+		err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
@@ -126,7 +126,7 @@ func TestLogLevelWithRealManifest(t *testing.T) {
 				},
 			},
 		}
-		err := applyNamespaceListerCustomizations(deployment, spec)
+		err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
@@ -153,7 +153,7 @@ func TestCacheResyncPeriodWithRealManifest(t *testing.T) {
 		spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 			CacheResyncPeriod: "10m",
 		}
-		err := applyNamespaceListerCustomizations(deployment, spec)
+		err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
@@ -167,7 +167,7 @@ func TestCacheResyncPeriodWithRealManifest(t *testing.T) {
 		g := gomega.NewWithT(t)
 		deployment := getNamespaceListerDeployment(t)
 		spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{}
-		err := applyNamespaceListerCustomizations(deployment, spec)
+		err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
@@ -189,7 +189,7 @@ func TestCacheResyncPeriodWithRealManifest(t *testing.T) {
 				},
 			},
 		}
-		err := applyNamespaceListerCustomizations(deployment, spec)
+		err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
@@ -211,7 +211,7 @@ func TestCacheResyncPeriodWithRealManifest(t *testing.T) {
 				},
 			},
 		}
-		err := applyNamespaceListerCustomizations(deployment, spec)
+		err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
@@ -219,5 +219,37 @@ func TestCacheResyncPeriodWithRealManifest(t *testing.T) {
 		val, found := findEnvValue(container.Env, envCacheResyncPeriod)
 		g.Expect(found).To(gomega.BeTrue())
 		g.Expect(val).To(gomega.Equal("30m"), "ContainerSpec.Env should pass through")
+	})
+}
+
+func TestComponentMetricsWithRealManifest(t *testing.T) {
+	t.Run("enabled by default keeps metrics listener args on real manifest", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		deployment := getNamespaceListerDeployment(t)
+		spec := konfluxv1alpha1.NewKonfluxNamespaceListerSpec(konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{}, nil)
+		err := applyNamespaceListerCustomizations(deployment, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+		g.Expect(container.Args).To(gomega.ContainElement(argEnableMetrics))
+		g.Expect(container.Args).To(gomega.ContainElement(argMetricsAddress))
+	})
+
+	t.Run("disabled replaces metrics enable flag on real manifest", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		deployment := getNamespaceListerDeployment(t)
+		disabled := false
+		spec := konfluxv1alpha1.NewKonfluxNamespaceListerSpec(
+			konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{},
+			&konfluxv1alpha1.ComponentMetricsConfig{Enabled: &disabled},
+		)
+		err := applyNamespaceListerCustomizations(deployment, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+		g.Expect(container.Args).To(gomega.ContainElement(argDisableMetrics))
+		g.Expect(container.Args).NotTo(gomega.ContainElement(argEnableMetrics))
 	})
 }

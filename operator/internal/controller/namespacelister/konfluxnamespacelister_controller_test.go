@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
@@ -38,9 +39,18 @@ import (
 const (
 	namespaceListerNamespace            = "namespace-lister"
 	authorizerClusterRoleName           = "namespace-lister-authorizer"
+	metricsAuthRoleName                 = "namespace-lister-metrics-auth-role"
+	metricsAuthRoleBindingName          = "namespace-lister-metrics-auth-rolebinding"
 	networkPolicyAllowFromKonfluxUIName = "namespace-lister-allow-from-konfluxui"
 	networkPolicyAllowToAPIServerName   = "namespace-lister-allow-to-apiserver"
 )
+
+var namespaceListerClusterScopedChildren = []client.Object{
+	&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: authorizerClusterRoleName}},
+	&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: metricsAuthRoleName}},
+	&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: authorizerClusterRoleName}},
+	&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: metricsAuthRoleBindingName}},
+}
 
 // findEnvValue returns the last value of the named env var.
 // Checks the last match to match Kubernetes behavior where later entries override earlier ones.
@@ -107,6 +117,89 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 				val, found := findEnvValue(container.Env, envLogLevel)
 				g.Expect(found).To(BeTrue())
 				g.Expect(val).To(Equal("0"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("enables metrics listener args when componentMetrics is enabled", func(ctx context.Context) {
+			namespaceLister := &konfluxv1alpha1.KonfluxNamespaceLister{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.NewKonfluxNamespaceListerSpec(
+					konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{},
+					nil,
+				),
+			}
+			Expect(k8sClient.Create(ctx, namespaceLister)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, namespaceLister, namespaceListerClusterScopedChildren...)
+
+			deploymentNN := types.NamespacedName{
+				Name:      namespaceListerNamespace,
+				Namespace: namespaceListerNamespace,
+			}
+
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
+				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, namespaceListerContainerName)
+				g.Expect(container).NotTo(BeNil())
+				g.Expect(container.Args).To(ContainElement(argEnableMetrics))
+				g.Expect(container.Args).To(ContainElement(argMetricsAddress))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("disables metrics listener when componentMetrics is disabled", func(ctx context.Context) {
+			disabled := false
+			namespaceLister := &konfluxv1alpha1.KonfluxNamespaceLister{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.NewKonfluxNamespaceListerSpec(
+					konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{},
+					&konfluxv1alpha1.ComponentMetricsConfig{Enabled: &disabled},
+				),
+			}
+			Expect(k8sClient.Create(ctx, namespaceLister)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, namespaceLister, namespaceListerClusterScopedChildren...)
+
+			deploymentNN := types.NamespacedName{
+				Name:      namespaceListerNamespace,
+				Namespace: namespaceListerNamespace,
+			}
+
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
+				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, namespaceListerContainerName)
+				g.Expect(container).NotTo(BeNil())
+				g.Expect(container.Args).To(ContainElement(argDisableMetrics))
+				g.Expect(container.Args).NotTo(ContainElement(argEnableMetrics))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("exposes metrics port and selector label on Service", func(ctx context.Context) {
+			namespaceLister := &konfluxv1alpha1.KonfluxNamespaceLister{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, namespaceLister)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, namespaceLister, namespaceListerClusterScopedChildren...)
+
+			serviceNN := types.NamespacedName{
+				Name:      namespaceListerNamespace,
+				Namespace: namespaceListerNamespace,
+			}
+
+			Eventually(func(g Gomega) {
+				svc := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, serviceNN, svc)).To(Succeed())
+				g.Expect(svc.Labels).To(HaveKeyWithValue("apps", "namespace-lister"))
+
+				var metricsPort *corev1.ServicePort
+				for i := range svc.Spec.Ports {
+					if svc.Spec.Ports[i].Name == "metrics" {
+						metricsPort = &svc.Spec.Ports[i]
+						break
+					}
+				}
+				g.Expect(metricsPort).NotTo(BeNil())
+				g.Expect(metricsPort.Port).To(Equal(int32(9100)))
+				g.Expect(metricsPort.TargetPort.IntVal).To(Equal(int32(9100)))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})
@@ -350,6 +443,36 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 				crb := &rbacv1.ClusterRoleBinding{}
 				g.Expect(k8sClient.Get(ctx, crbNN, crb)).To(Succeed())
 				g.Expect(crb.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("recreates metrics-auth ClusterRoleBinding when deleted", func(ctx context.Context) {
+			namespaceLister := &konfluxv1alpha1.KonfluxNamespaceLister{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, namespaceLister)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, namespaceLister,
+				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: metricsAuthRoleBindingName}},
+			)
+
+			crbNN := types.NamespacedName{Name: metricsAuthRoleBindingName}
+
+			By("waiting for initial metrics-auth ClusterRoleBinding creation")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, crbNN, &rbacv1.ClusterRoleBinding{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("deleting the metrics-auth ClusterRoleBinding")
+			Expect(k8sClient.Delete(ctx, &rbacv1.ClusterRoleBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: crbNN.Name},
+			})).To(Succeed())
+
+			By("verifying the metrics-auth ClusterRoleBinding is recreated with ownership labels")
+			Eventually(func(g Gomega) {
+				crb := &rbacv1.ClusterRoleBinding{}
+				g.Expect(k8sClient.Get(ctx, crbNN, crb)).To(Succeed())
+				g.Expect(crb.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
+				g.Expect(crb.RoleRef.Name).To(Equal(metricsAuthRoleName))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})
@@ -835,7 +958,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 
 	It("should not modify deployment with empty spec", func() {
 		spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{}
-		err := applyNamespaceListerCustomizations(deployment, spec)
+		err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*deployment.Spec.Replicas).To(Equal(int32(1)))
 	})
@@ -844,7 +967,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 		spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 			NamespaceLister: nil,
 		}
-		err := applyNamespaceListerCustomizations(deployment, spec)
+		err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*deployment.Spec.Replicas).To(Equal(int32(1)))
 	})
@@ -855,7 +978,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 				Replicas: 3,
 			},
 		}
-		err := applyNamespaceListerCustomizations(deployment, spec)
+		err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*deployment.Spec.Replicas).To(Equal(int32(3)))
 	})
@@ -877,7 +1000,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 				},
 			},
 		}
-		err := applyNamespaceListerCustomizations(deployment, spec)
+		err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 		Expect(err).NotTo(HaveOccurred())
 
 		container := deployment.Spec.Template.Spec.Containers[0]
@@ -900,7 +1023,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 				},
 			},
 		}
-		err := applyNamespaceListerCustomizations(deployment, spec)
+		err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*deployment.Spec.Replicas).To(Equal(int32(2)))
 		Expect(deployment.Spec.Template.Spec.Containers[0].Resources.Limits.Memory().String()).To(Equal("256Mi"))
@@ -911,7 +1034,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 			spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 				LogLevel: konfluxv1alpha1.LogLevelInfo,
 			}
-			err := applyNamespaceListerCustomizations(deployment, spec)
+			err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 			Expect(err).NotTo(HaveOccurred())
 
 			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
@@ -932,7 +1055,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 				spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 					LogLevel: level,
 				}
-				err := applyNamespaceListerCustomizations(deployment, spec)
+				err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 				Expect(err).NotTo(HaveOccurred())
 
 				container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
@@ -945,7 +1068,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 
 		It("should not inject LOG_LEVEL when omitted", func() {
 			spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{}
-			err := applyNamespaceListerCustomizations(deployment, spec)
+			err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 			Expect(err).NotTo(HaveOccurred())
 
 			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
@@ -958,7 +1081,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 			spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 				LogLevel: konfluxv1alpha1.LogLevel("trace"),
 			}
-			err := applyNamespaceListerCustomizations(deployment, spec)
+			err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unsupported logLevel"))
 		})
@@ -974,7 +1097,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 					},
 				},
 			}
-			err := applyNamespaceListerCustomizations(deployment, spec)
+			err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 			Expect(err).NotTo(HaveOccurred())
 
 			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
@@ -994,7 +1117,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 					},
 				},
 			}
-			err := applyNamespaceListerCustomizations(deployment, spec)
+			err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 			Expect(err).NotTo(HaveOccurred())
 
 			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
@@ -1010,7 +1133,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 			spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 				CacheResyncPeriod: "10m",
 			}
-			err := applyNamespaceListerCustomizations(deployment, spec)
+			err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 			Expect(err).NotTo(HaveOccurred())
 
 			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
@@ -1022,7 +1145,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 
 		It("should not inject CACHE_RESYNC_PERIOD when omitted", func() {
 			spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{}
-			err := applyNamespaceListerCustomizations(deployment, spec)
+			err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 			Expect(err).NotTo(HaveOccurred())
 
 			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
@@ -1036,7 +1159,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 				spec := konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{
 					CacheResyncPeriod: dur,
 				}
-				err := applyNamespaceListerCustomizations(deployment, spec)
+				err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 				Expect(err).NotTo(HaveOccurred())
 
 				container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
@@ -1058,7 +1181,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 					},
 				},
 			}
-			err := applyNamespaceListerCustomizations(deployment, spec)
+			err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 			Expect(err).NotTo(HaveOccurred())
 
 			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
@@ -1078,7 +1201,7 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 					},
 				},
 			}
-			err := applyNamespaceListerCustomizations(deployment, spec)
+			err := applyNamespaceListerCustomizations(deployment, konfluxv1alpha1.NewKonfluxNamespaceListerSpec(spec, nil))
 			Expect(err).NotTo(HaveOccurred())
 
 			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
@@ -1086,6 +1209,58 @@ var _ = Describe("applyNamespaceListerCustomizations", func() {
 			val, found := findEnvValue(container.Env, envCacheResyncPeriod)
 			Expect(found).To(BeTrue())
 			Expect(val).To(Equal("30m"), "ContainerSpec.Env should pass through when typed field is omitted")
+		})
+	})
+
+	Context("componentMetrics", func() {
+		It("should keep metrics listener args when enabled", func() {
+			deployment := &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{
+								Name: namespaceListerContainerName,
+								Args: []string{argEnableMetrics, argMetricsAddress},
+							}},
+						},
+					},
+				},
+			}
+			spec := konfluxv1alpha1.NewKonfluxNamespaceListerSpec(konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{}, nil)
+			err := applyNamespaceListerCustomizations(deployment, spec)
+			Expect(err).NotTo(HaveOccurred())
+
+			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			Expect(container).NotTo(BeNil())
+			Expect(container.Args).To(ContainElement(argEnableMetrics))
+			Expect(container.Args).To(ContainElement(argMetricsAddress))
+		})
+
+		It("should disable metrics listener when componentMetrics is disabled", func() {
+			deployment := &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{
+								Name: namespaceListerContainerName,
+								Args: []string{argEnableMetrics, argMetricsAddress},
+							}},
+						},
+					},
+				},
+			}
+			disabled := false
+			spec := konfluxv1alpha1.NewKonfluxNamespaceListerSpec(
+				konfluxv1alpha1.KonfluxNamespaceListerConfigSpec{},
+				&konfluxv1alpha1.ComponentMetricsConfig{Enabled: &disabled},
+			)
+			err := applyNamespaceListerCustomizations(deployment, spec)
+			Expect(err).NotTo(HaveOccurred())
+
+			container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+			Expect(container).NotTo(BeNil())
+			Expect(container.Args).To(ContainElement(argDisableMetrics))
+			Expect(container.Args).NotTo(ContainElement(argEnableMetrics))
 		})
 	})
 })

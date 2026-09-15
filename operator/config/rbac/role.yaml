@@ -395,6 +395,7 @@ rules:
   - rbac.authorization.k8s.io
   resourceNames:
   - namespace-lister-authorizer
+  - namespace-lister-metrics-auth-rolebinding
   resources:
   - clusterrolebindings
   verbs:
@@ -560,6 +561,7 @@ rules:
   - rbac.authorization.k8s.io
   resourceNames:
   - namespace-lister-authorizer
+  - namespace-lister-metrics-auth-role
   resources:
   - clusterroles
   verbs:
