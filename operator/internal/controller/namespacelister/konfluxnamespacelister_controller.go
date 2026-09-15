@@ -52,6 +52,10 @@ const (
 	// namespaceListerContainerName is the name of the namespace-lister container
 	namespaceListerContainerName = "namespace-lister"
 
+	argEnableMetrics  = "-enable-metrics"
+	argDisableMetrics = "-enable-metrics=false"
+	argMetricsAddress = "-metrics-address=:9100"
+
 	envCacheResyncPeriod = "CACHE_RESYNC_PERIOD"
 	envLogLevel          = "LOG_LEVEL"
 )
@@ -105,8 +109,8 @@ type KonfluxNamespaceListerReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=core,resources=services;serviceaccounts,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles;clusterrolebindings,verbs=get;list;watch;create;patch;delete
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=namespace-lister-authorizer,verbs=bind;escalate
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=namespace-lister-authorizer,verbs=bind
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=namespace-lister-authorizer;namespace-lister-metrics-auth-role,verbs=bind;escalate
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=namespace-lister-authorizer;namespace-lister-metrics-auth-rolebinding,verbs=bind
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;patch;delete
 
@@ -179,7 +183,7 @@ func (r *KonfluxNamespaceListerReconciler) applyManifests(ctx context.Context, t
 	for _, obj := range objects {
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
-			if err := applyNamespaceListerCustomizations(deployment, owner.Spec.KonfluxNamespaceListerConfigSpec); err != nil {
+			if err := applyNamespaceListerCustomizations(deployment, owner.Spec); err != nil {
 				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
 			}
 		}
@@ -194,7 +198,7 @@ func (r *KonfluxNamespaceListerReconciler) applyManifests(ctx context.Context, t
 }
 
 // applyNamespaceListerCustomizations applies user-defined customizations to the namespace-lister deployment.
-func applyNamespaceListerCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxNamespaceListerConfigSpec) error {
+func applyNamespaceListerCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxNamespaceListerSpec) error {
 	var containerSpec *konfluxv1alpha1.ContainerSpec
 	if spec.NamespaceLister != nil {
 		if spec.NamespaceLister.Replicas > 0 {
@@ -214,14 +218,20 @@ func applyNamespaceListerCustomizations(deployment *appsv1.Deployment, spec konf
 		customization.WithOptionalEnvOverride(envLogLevel, logLevelValue),
 	}
 
-	overlay := customization.BuildPodOverlay(
-		customization.DeploymentContext{},
-		customization.WithContainerBuilder(
-			namespaceListerContainerName,
-			containerOpts...,
-		),
-	)
-	return overlay.ApplyToDeployment(deployment)
+	podOpts := []customization.PodOverlayOption{
+		customization.WithContainerOpts(namespaceListerContainerName, customization.DeploymentContext{}, containerOpts...),
+	}
+	if spec.ComponentMetrics.IsEnabled() {
+		podOpts = append(podOpts,
+			customization.WithArgReplace(namespaceListerContainerName, argEnableMetrics, argMetricsAddress),
+		)
+	} else {
+		podOpts = append(podOpts,
+			customization.WithArgReplace(namespaceListerContainerName, argDisableMetrics),
+		)
+	}
+
+	return customization.NewPodOverlay(podOpts...).ApplyToDeployment(deployment)
 }
 
 // SetupWithManager sets up the controller with the Manager.
