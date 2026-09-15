@@ -178,6 +178,54 @@ var _ = Describe("Internal registry credential helpers", func() {
 		Expect(htpasswdMatchesPassword(gotHtpasswd, dockerPassword)).To(BeTrue())
 	})
 
+	It("rotates both credentials when htpasswd is missing and dockerconfig exists", func() {
+		ctx := context.Background()
+		scheme := runtime.NewScheme()
+		Expect(corev1.AddToScheme(scheme)).To(Succeed())
+		Expect(konfluxv1alpha1.AddToScheme(scheme)).To(Succeed())
+
+		existingDocker := []byte(`{"auths":{"registry-service.kind-registry":{"auth":"a29uZmx1eDpwcmVzZXQ="}}}`)
+
+		owner := &konfluxv1alpha1.KonfluxInternalRegistry{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+				UID:  types.UID("test-owner-uid"),
+			},
+		}
+		docker := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      ClientCredentialsSecretName,
+				Namespace: RegistryNamespace,
+			},
+			Type: corev1.SecretTypeDockerConfigJson,
+			Data: map[string][]byte{
+				corev1.DockerConfigJsonKey: append([]byte(nil), existingDocker...),
+			},
+		}
+
+		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(owner, docker).Build()
+		tc := tracking.NewClientWithOwnership(cl, tracking.OwnershipConfig{
+			Owner:             owner,
+			OwnerLabelKey:     constant.KonfluxOwnerLabel,
+			ComponentLabelKey: constant.KonfluxComponentLabel,
+			Component:         string(manifests.Registry),
+			FieldManager:      FieldManager,
+		})
+
+		r := &KonfluxInternalRegistryReconciler{Client: cl, Scheme: scheme}
+		Expect(r.ensureRegistryCredentials(ctx, tc)).To(Succeed())
+
+		gotDocker := &corev1.Secret{}
+		Expect(cl.Get(ctx, types.NamespacedName{Name: ClientCredentialsSecretName, Namespace: RegistryNamespace}, gotDocker)).To(Succeed())
+		Expect(gotDocker.Data[corev1.DockerConfigJsonKey]).NotTo(Equal(existingDocker))
+
+		gotHtpasswd := &corev1.Secret{}
+		Expect(cl.Get(ctx, types.NamespacedName{Name: HtpasswdSecretName, Namespace: RegistryNamespace}, gotHtpasswd)).To(Succeed())
+		dockerPassword, err := dockerConfigPassword(gotDocker, RegistryServiceHost, RegistryAuthUsername)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(htpasswdMatchesPassword(gotHtpasswd, dockerPassword)).To(BeTrue())
+	})
+
 	It("returns an error when reading the htpasswd secret fails with a non-NotFound error", func() {
 		ctx := context.Background()
 		scheme := runtime.NewScheme()
@@ -210,6 +258,316 @@ var _ = Describe("Internal registry credential helpers", func() {
 		err := r.ensureRegistryCredentials(ctx, tc)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring(HtpasswdSecretName))
+	})
+
+	It("returns an error when updating the populated dockerconfig secret fails during rotate", func() {
+		ctx := context.Background()
+		scheme := runtime.NewScheme()
+		Expect(corev1.AddToScheme(scheme)).To(Succeed())
+		Expect(konfluxv1alpha1.AddToScheme(scheme)).To(Succeed())
+
+		owner := &konfluxv1alpha1.KonfluxInternalRegistry{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+				UID:  types.UID("test-owner-uid"),
+			},
+		}
+		docker := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      ClientCredentialsSecretName,
+				Namespace: RegistryNamespace,
+			},
+			Type: corev1.SecretTypeDockerConfigJson,
+			Data: map[string][]byte{
+				corev1.DockerConfigJsonKey: []byte(`{"auths":{"registry-service.kind-registry":{"auth":"a29uZmx1eDpwcmVzZXQ="}}}`),
+			},
+		}
+		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(owner, docker).WithInterceptorFuncs(interceptor.Funcs{
+			Update: func(cctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+				if obj.GetNamespace() == RegistryNamespace && obj.GetName() == ClientCredentialsSecretName {
+					return apierrors.NewTimeoutError("apiserver", 0)
+				}
+				return c.Update(cctx, obj, opts...)
+			},
+		}).Build()
+		tc := tracking.NewClientWithOwnership(cl, tracking.OwnershipConfig{
+			Owner:             owner,
+			OwnerLabelKey:     constant.KonfluxOwnerLabel,
+			ComponentLabelKey: constant.KonfluxComponentLabel,
+			Component:         string(manifests.Registry),
+			FieldManager:      FieldManager,
+		})
+		r := &KonfluxInternalRegistryReconciler{Client: cl, Scheme: scheme}
+
+		err := r.ensureRegistryCredentials(ctx, tc)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring(ClientCredentialsSecretName))
+	})
+
+	It("returns an error when creating htpasswd fails after dockerconfig rotate", func() {
+		ctx := context.Background()
+		scheme := runtime.NewScheme()
+		Expect(corev1.AddToScheme(scheme)).To(Succeed())
+		Expect(konfluxv1alpha1.AddToScheme(scheme)).To(Succeed())
+
+		owner := &konfluxv1alpha1.KonfluxInternalRegistry{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+				UID:  types.UID("test-owner-uid"),
+			},
+		}
+		docker := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      ClientCredentialsSecretName,
+				Namespace: RegistryNamespace,
+			},
+			Type: corev1.SecretTypeDockerConfigJson,
+			Data: map[string][]byte{
+				corev1.DockerConfigJsonKey: []byte(`{"auths":{"registry-service.kind-registry":{"auth":"a29uZmx1eDpwcmVzZXQ="}}}`),
+			},
+		}
+		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(owner, docker).WithInterceptorFuncs(interceptor.Funcs{
+			Create: func(cctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+				if obj.GetNamespace() == RegistryNamespace && obj.GetName() == HtpasswdSecretName {
+					return apierrors.NewTimeoutError("apiserver", 0)
+				}
+				return c.Create(cctx, obj, opts...)
+			},
+		}).Build()
+		tc := tracking.NewClientWithOwnership(cl, tracking.OwnershipConfig{
+			Owner:             owner,
+			OwnerLabelKey:     constant.KonfluxOwnerLabel,
+			ComponentLabelKey: constant.KonfluxComponentLabel,
+			Component:         string(manifests.Registry),
+			FieldManager:      FieldManager,
+		})
+		r := &KonfluxInternalRegistryReconciler{Client: cl, Scheme: scheme}
+
+		err := r.ensureRegistryCredentials(ctx, tc)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring(HtpasswdSecretName))
+	})
+
+	It("self-heals after htpasswd create fails following dockerconfig rotate", func() {
+		ctx := context.Background()
+		scheme := runtime.NewScheme()
+		Expect(corev1.AddToScheme(scheme)).To(Succeed())
+		Expect(konfluxv1alpha1.AddToScheme(scheme)).To(Succeed())
+
+		owner := &konfluxv1alpha1.KonfluxInternalRegistry{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+				UID:  types.UID("test-owner-uid"),
+			},
+		}
+		existingDocker := []byte(`{"auths":{"registry-service.kind-registry":{"auth":"a29uZmx1eDpwcmVzZXQ="}}}`)
+		docker := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      ClientCredentialsSecretName,
+				Namespace: RegistryNamespace,
+			},
+			Type: corev1.SecretTypeDockerConfigJson,
+			Data: map[string][]byte{
+				corev1.DockerConfigJsonKey: append([]byte(nil), existingDocker...),
+			},
+		}
+		failHtpasswdCreate := true
+		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(owner, docker).WithInterceptorFuncs(interceptor.Funcs{
+			Create: func(cctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+				if failHtpasswdCreate &&
+					obj.GetNamespace() == RegistryNamespace &&
+					obj.GetName() == HtpasswdSecretName {
+					return apierrors.NewTimeoutError("apiserver", 0)
+				}
+				return c.Create(cctx, obj, opts...)
+			},
+		}).Build()
+		tc := tracking.NewClientWithOwnership(cl, tracking.OwnershipConfig{
+			Owner:             owner,
+			OwnerLabelKey:     constant.KonfluxOwnerLabel,
+			ComponentLabelKey: constant.KonfluxComponentLabel,
+			Component:         string(manifests.Registry),
+			FieldManager:      FieldManager,
+		})
+		r := &KonfluxInternalRegistryReconciler{Client: cl, Scheme: scheme}
+
+		err := r.ensureRegistryCredentials(ctx, tc)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring(HtpasswdSecretName))
+
+		missingHtpasswd := &corev1.Secret{}
+		Expect(apierrors.IsNotFound(cl.Get(ctx, types.NamespacedName{Name: HtpasswdSecretName, Namespace: RegistryNamespace}, missingHtpasswd))).To(BeTrue())
+
+		failHtpasswdCreate = false
+		Expect(r.ensureRegistryCredentials(ctx, tc)).To(Succeed())
+
+		gotDocker := &corev1.Secret{}
+		Expect(cl.Get(ctx, types.NamespacedName{Name: ClientCredentialsSecretName, Namespace: RegistryNamespace}, gotDocker)).To(Succeed())
+		gotHtpasswd := &corev1.Secret{}
+		Expect(cl.Get(ctx, types.NamespacedName{Name: HtpasswdSecretName, Namespace: RegistryNamespace}, gotHtpasswd)).To(Succeed())
+		dockerPassword, err := dockerConfigPassword(gotDocker, RegistryServiceHost, RegistryAuthUsername)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(htpasswdMatchesPassword(gotHtpasswd, dockerPassword)).To(BeTrue())
+	})
+
+	It("returns an error when updating htpasswd fails during rotate", func() {
+		ctx := context.Background()
+		scheme := runtime.NewScheme()
+		Expect(corev1.AddToScheme(scheme)).To(Succeed())
+		Expect(konfluxv1alpha1.AddToScheme(scheme)).To(Succeed())
+
+		owner := &konfluxv1alpha1.KonfluxInternalRegistry{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+				UID:  types.UID("test-owner-uid"),
+			},
+		}
+		htpasswd := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      HtpasswdSecretName,
+				Namespace: RegistryNamespace,
+			},
+			Type: corev1.SecretTypeOpaque,
+			Data: map[string][]byte{
+				"htpasswd": []byte("konflux:$2y$05$already.present.hash\n"),
+			},
+		}
+		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(owner, htpasswd).WithInterceptorFuncs(interceptor.Funcs{
+			Update: func(cctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+				if obj.GetNamespace() == RegistryNamespace && obj.GetName() == HtpasswdSecretName {
+					return apierrors.NewTimeoutError("apiserver", 0)
+				}
+				return c.Update(cctx, obj, opts...)
+			},
+		}).Build()
+		tc := tracking.NewClientWithOwnership(cl, tracking.OwnershipConfig{
+			Owner:             owner,
+			OwnerLabelKey:     constant.KonfluxOwnerLabel,
+			ComponentLabelKey: constant.KonfluxComponentLabel,
+			Component:         string(manifests.Registry),
+			FieldManager:      FieldManager,
+		})
+		r := &KonfluxInternalRegistryReconciler{Client: cl, Scheme: scheme}
+
+		err := r.ensureRegistryCredentials(ctx, tc)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring(HtpasswdSecretName))
+	})
+
+	It("returns an error when creating dockerconfig fails after htpasswd rotate", func() {
+		ctx := context.Background()
+		scheme := runtime.NewScheme()
+		Expect(corev1.AddToScheme(scheme)).To(Succeed())
+		Expect(konfluxv1alpha1.AddToScheme(scheme)).To(Succeed())
+
+		owner := &konfluxv1alpha1.KonfluxInternalRegistry{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+				UID:  types.UID("test-owner-uid"),
+			},
+		}
+		htpasswd := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      HtpasswdSecretName,
+				Namespace: RegistryNamespace,
+			},
+			Type: corev1.SecretTypeOpaque,
+			Data: map[string][]byte{
+				"htpasswd": []byte("konflux:$2y$05$already.present.hash\n"),
+			},
+		}
+		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(owner, htpasswd).WithInterceptorFuncs(interceptor.Funcs{
+			Create: func(cctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+				if obj.GetNamespace() == RegistryNamespace && obj.GetName() == ClientCredentialsSecretName {
+					return apierrors.NewTimeoutError("apiserver", 0)
+				}
+				return c.Create(cctx, obj, opts...)
+			},
+		}).Build()
+		tc := tracking.NewClientWithOwnership(cl, tracking.OwnershipConfig{
+			Owner:             owner,
+			OwnerLabelKey:     constant.KonfluxOwnerLabel,
+			ComponentLabelKey: constant.KonfluxComponentLabel,
+			Component:         string(manifests.Registry),
+			FieldManager:      FieldManager,
+		})
+		r := &KonfluxInternalRegistryReconciler{Client: cl, Scheme: scheme}
+
+		err := r.ensureRegistryCredentials(ctx, tc)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring(ClientCredentialsSecretName))
+	})
+
+	It("returns an error when SetOwnership fails because the owner type is missing from the scheme", func() {
+		ctx := context.Background()
+		scheme := runtime.NewScheme()
+		Expect(corev1.AddToScheme(scheme)).To(Succeed())
+		// Intentionally omit konfluxv1alpha1 so SetControllerReference cannot resolve the owner GVK.
+
+		owner := &konfluxv1alpha1.KonfluxInternalRegistry{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+				UID:  types.UID("test-owner-uid"),
+			},
+		}
+		// Docker present forces the docker-first rotate path, so SetOwnership fails inside ensureDocker.
+		docker := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      ClientCredentialsSecretName,
+				Namespace: RegistryNamespace,
+			},
+			Type: corev1.SecretTypeDockerConfigJson,
+			Data: map[string][]byte{
+				corev1.DockerConfigJsonKey: []byte(`{"auths":{"registry-service.kind-registry":{"auth":"a29uZmx1eDpwcmVzZXQ="}}}`),
+			},
+		}
+		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(docker).Build()
+		tc := tracking.NewClientWithOwnership(cl, tracking.OwnershipConfig{
+			Owner:             owner,
+			OwnerLabelKey:     constant.KonfluxOwnerLabel,
+			ComponentLabelKey: constant.KonfluxComponentLabel,
+			Component:         string(manifests.Registry),
+			FieldManager:      FieldManager,
+		})
+		r := &KonfluxInternalRegistryReconciler{Client: cl, Scheme: scheme}
+
+		err := r.ensureRegistryCredentials(ctx, tc)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(Or(
+			ContainSubstring("controller reference"),
+			ContainSubstring("no kind is registered"),
+			ContainSubstring(ClientCredentialsSecretName),
+		))
+	})
+
+	It("returns an error when SetOwnership fails on the default htpasswd-first path", func() {
+		ctx := context.Background()
+		scheme := runtime.NewScheme()
+		Expect(corev1.AddToScheme(scheme)).To(Succeed())
+
+		owner := &konfluxv1alpha1.KonfluxInternalRegistry{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+				UID:  types.UID("test-owner-uid"),
+			},
+		}
+		cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+		tc := tracking.NewClientWithOwnership(cl, tracking.OwnershipConfig{
+			Owner:             owner,
+			OwnerLabelKey:     constant.KonfluxOwnerLabel,
+			ComponentLabelKey: constant.KonfluxComponentLabel,
+			Component:         string(manifests.Registry),
+			FieldManager:      FieldManager,
+		})
+		r := &KonfluxInternalRegistryReconciler{Client: cl, Scheme: scheme}
+
+		err := r.ensureRegistryCredentials(ctx, tc)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(Or(
+			ContainSubstring("controller reference"),
+			ContainSubstring("no kind is registered"),
+			ContainSubstring(HtpasswdSecretName),
+		))
 	})
 
 	It("detects whether a secret key has data", func() {
