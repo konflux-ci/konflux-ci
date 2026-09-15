@@ -1280,7 +1280,7 @@ var _ = Describe("KonfluxReleaseService Controller", func() {
 				g.Expect(k8sClient.Get(ctx, rscNN, rsc)).To(Succeed())
 				spec, ok := rsc.Object["spec"].(map[string]interface{})
 				g.Expect(ok).To(BeTrue())
-				originalDebug = spec["debug"]
+				originalDebug = spec[rscFieldDebug]
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			By("modifying the ReleaseServiceConfig spec")
@@ -1288,7 +1288,7 @@ var _ = Describe("KonfluxReleaseService Controller", func() {
 				rsc := newReleaseServiceConfig()
 				g.Expect(k8sClient.Get(ctx, rscNN, rsc)).To(Succeed())
 				spec := rsc.Object["spec"].(map[string]interface{})
-				spec["debug"] = true
+				spec[rscFieldDebug] = true
 				spec["tampered"] = "injected-field"
 				g.Expect(k8sClient.Update(ctx, rsc)).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
@@ -1298,7 +1298,7 @@ var _ = Describe("KonfluxReleaseService Controller", func() {
 				rsc := newReleaseServiceConfig()
 				g.Expect(k8sClient.Get(ctx, rscNN, rsc)).To(Succeed())
 				spec := rsc.Object["spec"].(map[string]interface{})
-				g.Expect(spec["debug"]).To(Equal(originalDebug))
+				g.Expect(spec[rscFieldDebug]).To(Equal(originalDebug))
 				g.Expect(spec).NotTo(HaveKey("tampered"))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
