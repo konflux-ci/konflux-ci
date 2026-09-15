@@ -19,6 +19,7 @@ package ui
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"time"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -45,6 +46,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/consolelink"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/contenthash"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/hashedsecret"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/ingress"
@@ -2550,6 +2552,159 @@ var _ = Describe("KonfluxUI Controller", func() {
 				cr := &rbacv1.ClusterRole{}
 				err := k8sClient.Get(ctx, types.NamespacedName{Name: metricsReaderCRName}, cr)
 				g.Expect(errors.IsNotFound(err)).To(BeTrue())
+			}).WithTimeout(3 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
+		})
+	})
+
+	Context("oauth2-proxy-client-secret rotation", Serial, func() {
+		// hashOfSecret computes the expected annotation value from a Secret's binary data,
+		// matching the logic in reconcileOAuth2ProxyClientSecretHash.
+		hashOfSecret := func(secret *corev1.Secret) string {
+			strData := make(map[string]string, len(secret.Data))
+			for k, v := range secret.Data {
+				strData[k] = string(v)
+			}
+			return contenthash.Map(strData)
+		}
+
+		// getDeploymentHashAnnotation returns the oauth2-proxy-client-secret hash annotation
+		// value from the named deployment's pod template, or an error if not set.
+		getDeploymentHashAnnotation := func(ctx context.Context, deploymentName string) (string, error) {
+			dep := &appsv1.Deployment{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{
+				Name: deploymentName, Namespace: uiNamespace,
+			}, dep); err != nil {
+				return "", err
+			}
+			val, ok := dep.Spec.Template.Annotations[oauth2ProxyClientSecretHashAnnotation]
+			if !ok {
+				return "", fmt.Errorf("annotation %s not found on deployment %s",
+					oauth2ProxyClientSecretHashAnnotation, deploymentName)
+			}
+			return val, nil
+		}
+
+		It("should set the hash annotation on both deployments after initial reconcile", func(ctx context.Context) {
+			startManager(nil)
+
+			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			})).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxUI{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				})
+			})
+
+			By("waiting for initial reconcile to complete")
+			waitForReconcile(ctx)
+
+			By("reading the created oauth2-proxy-client-secret")
+			secret := &corev1.Secret{}
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: oauth2ProxyClientSecretName, Namespace: uiNamespace,
+				}, secret)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			expectedHash := hashOfSecret(secret)
+
+			By("verifying the hash annotation is set on the proxy deployment")
+			Eventually(func(g Gomega) {
+				hash, err := getDeploymentHashAnnotation(ctx, proxyDeploymentName)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(hash).To(Equal(expectedHash))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the hash annotation is set on the dex deployment")
+			Eventually(func(g Gomega) {
+				hash, err := getDeploymentHashAnnotation(ctx, dexDeploymentName)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(hash).To(Equal(expectedHash))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should update the hash annotation on both deployments when the secret is rotated", func(ctx context.Context) {
+			startManager(nil)
+
+			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			})).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxUI{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				})
+			})
+
+			By("waiting for initial reconcile to complete and hash annotation to be set")
+			waitForReconcile(ctx)
+			Eventually(func(g Gomega) {
+				_, err := getDeploymentHashAnnotation(ctx, proxyDeploymentName)
+				g.Expect(err).NotTo(HaveOccurred())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("rotating the oauth2-proxy-client-secret")
+			secret := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: oauth2ProxyClientSecretName, Namespace: uiNamespace,
+			}, secret)).To(Succeed())
+
+			// Simulate rotation by overwriting the secret data with a new value.
+			secret.Data["client-secret"] = []byte("rotated-client-secret-value")
+			Expect(k8sClient.Update(ctx, secret)).To(Succeed())
+
+			newExpectedHash := hashOfSecret(secret)
+
+			By("verifying the proxy deployment annotation is updated to the new hash")
+			Eventually(func(g Gomega) {
+				hash, err := getDeploymentHashAnnotation(ctx, proxyDeploymentName)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(hash).To(Equal(newExpectedHash))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the dex deployment annotation is updated to the new hash")
+			Eventually(func(g Gomega) {
+				hash, err := getDeploymentHashAnnotation(ctx, dexDeploymentName)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(hash).To(Equal(newExpectedHash))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should keep the hash annotation stable when the secret is unchanged", func(ctx context.Context) {
+			startManager(nil)
+
+			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			})).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				testutil.DeleteAndWait(ctx, k8sClient, &konfluxv1alpha1.KonfluxUI{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				})
+			})
+
+			By("waiting for initial reconcile and annotation to stabilize")
+			waitForReconcile(ctx)
+			var initialHash string
+			Eventually(func(g Gomega) {
+				h, err := getDeploymentHashAnnotation(ctx, proxyDeploymentName)
+				g.Expect(err).NotTo(HaveOccurred())
+				initialHash = h
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("triggering an extra reconcile by touching the KonfluxUI CR")
+			ui := &konfluxv1alpha1.KonfluxUI{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, ui)).To(Succeed())
+			if ui.Annotations == nil {
+				ui.Annotations = make(map[string]string)
+			}
+			ui.Annotations["test-touch"] = "1"
+			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
+
+			By("verifying the hash annotation is unchanged after re-reconcile")
+			Consistently(func(g Gomega) {
+				hash, err := getDeploymentHashAnnotation(ctx, proxyDeploymentName)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(hash).To(Equal(initialHash))
 			}).WithTimeout(3 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
 		})
 	})
