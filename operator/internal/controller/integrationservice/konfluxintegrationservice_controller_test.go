@@ -153,7 +153,7 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 					Namespace: integrationServiceNamespace,
 				}, cj)).To(Succeed())
 
-				container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+				container := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 				g.Expect(container).NotTo(BeNil())
 
 				prVar := findEnvVar(container.Env, envPRSnapshotsToKeep)
@@ -199,7 +199,7 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
 				g.Expect(dep.Labels).To(HaveKeyWithValue("control-plane", "controller-manager"))
-				manager := testutil.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
+				manager := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
 				g.Expect(manager).NotTo(BeNil(), "manager container should exist")
 				g.Expect(manager.Image).NotTo(BeEmpty(), "manager container image should be set")
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
@@ -633,7 +633,7 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				manager := testutil.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
+				manager := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
 				g.Expect(manager).NotTo(BeNil())
 				originalImage = manager.Image
 				g.Expect(originalImage).NotTo(BeEmpty())
@@ -643,7 +643,7 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				manager := testutil.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
+				manager := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
 				g.Expect(manager).NotTo(BeNil())
 				manager.Image = "tampered-image:latest"
 				g.Expect(k8sClient.Update(ctx, dep)).To(Succeed())
@@ -653,7 +653,7 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				m := testutil.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
+				m := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, managerContainerName)
 				g.Expect(m).NotTo(BeNil())
 				g.Expect(m.Image).To(Equal(originalImage))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
@@ -713,7 +713,7 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 			Eventually(func(g Gomega) {
 				cj := &batchv1.CronJob{}
 				g.Expect(k8sClient.Get(ctx, cjNN, cj)).To(Succeed())
-				container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+				container := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 				g.Expect(container).NotTo(BeNil())
 				originalImage = container.Image
 				g.Expect(originalImage).NotTo(BeEmpty())
@@ -723,7 +723,7 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 			Eventually(func(g Gomega) {
 				cj := &batchv1.CronJob{}
 				g.Expect(k8sClient.Get(ctx, cjNN, cj)).To(Succeed())
-				container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+				container := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 				g.Expect(container).NotTo(BeNil())
 				container.Image = "tampered-image:latest"
 				g.Expect(k8sClient.Update(ctx, cj)).To(Succeed())
@@ -733,7 +733,7 @@ var _ = Describe("KonfluxIntegrationService Controller", func() {
 			Eventually(func(g Gomega) {
 				cj := &batchv1.CronJob{}
 				g.Expect(k8sClient.Get(ctx, cjNN, cj)).To(Succeed())
-				container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+				container := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 				g.Expect(container).NotTo(BeNil())
 				g.Expect(container.Image).To(Equal(originalImage))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())

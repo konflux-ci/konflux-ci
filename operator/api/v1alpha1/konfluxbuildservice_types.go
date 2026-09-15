@@ -59,6 +59,20 @@ type KonfluxBuildServiceConfigSpec struct {
 	// +optional
 	WebhookURLs map[string]string `json:"webhookURLs,omitempty"`
 
+	// TrustedCA mounts a CA bundle from a ConfigMap at the runtime default trust
+	// path used by the build-service image
+	// (/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem).
+	//
+	// When omitted, the controller leaves the embedded extra-file mount unchanged
+	// and does not overlay the image trust store. Platforms that inject additional
+	// CAs into the cluster trust store continue to use that injection.
+	//
+	// When set, the referenced ConfigMap replaces the image trust store at that
+	// path. The ConfigMap must exist in the build-service namespace and should
+	// contain a full PEM bundle (platform CAs plus any extras).
+	// +optional
+	TrustedCA *TrustedCAConfigMap `json:"trustedCA,omitempty"`
+
 	// PipelineConfig controls the contents of the build-pipeline-config ConfigMap.
 	// The operator always manages this ConfigMap; use this field to customize which
 	// pipelines are included.

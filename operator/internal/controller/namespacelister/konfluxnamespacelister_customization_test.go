@@ -25,6 +25,7 @@ import (
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
@@ -52,7 +53,7 @@ func TestLogLevelWithRealManifest(t *testing.T) {
 	t.Run("embedded manifest does not contain LOG_LEVEL", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		deployment := getNamespaceListerDeployment(t)
-		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+		container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		_, found := findEnvValue(container.Env, envLogLevel)
 		g.Expect(found).To(gomega.BeFalse(), "LOG_LEVEL should not be in the embedded base manifest")
@@ -67,7 +68,7 @@ func TestLogLevelWithRealManifest(t *testing.T) {
 		err := applyNamespaceListerCustomizations(deployment, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+		container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		val, found := findEnvValue(container.Env, envLogLevel)
 		g.Expect(found).To(gomega.BeTrue())
@@ -91,7 +92,7 @@ func TestLogLevelWithRealManifest(t *testing.T) {
 				err := applyNamespaceListerCustomizations(deployment, spec)
 				g.Expect(err).NotTo(gomega.HaveOccurred())
 
-				container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+				container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
 				g.Expect(container).NotTo(gomega.BeNil())
 				val, found := findEnvValue(container.Env, envLogLevel)
 				g.Expect(found).To(gomega.BeTrue())
@@ -107,7 +108,7 @@ func TestLogLevelWithRealManifest(t *testing.T) {
 		err := applyNamespaceListerCustomizations(deployment, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+		container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		_, found := findEnvValue(container.Env, envLogLevel)
 		g.Expect(found).To(gomega.BeFalse(), "upstream default should apply — env var should be absent")
@@ -129,7 +130,7 @@ func TestLogLevelWithRealManifest(t *testing.T) {
 		err := applyNamespaceListerCustomizations(deployment, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+		container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		val, found := findEnvValue(container.Env, envLogLevel)
 		g.Expect(found).To(gomega.BeTrue())
@@ -141,7 +142,7 @@ func TestCacheResyncPeriodWithRealManifest(t *testing.T) {
 	t.Run("embedded manifest does not contain CACHE_RESYNC_PERIOD", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		deployment := getNamespaceListerDeployment(t)
-		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+		container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		_, found := findEnvValue(container.Env, envCacheResyncPeriod)
 		g.Expect(found).To(gomega.BeFalse(), "CACHE_RESYNC_PERIOD should not be in the embedded base manifest")
@@ -156,7 +157,7 @@ func TestCacheResyncPeriodWithRealManifest(t *testing.T) {
 		err := applyNamespaceListerCustomizations(deployment, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+		container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		val, found := findEnvValue(container.Env, envCacheResyncPeriod)
 		g.Expect(found).To(gomega.BeTrue())
@@ -170,7 +171,7 @@ func TestCacheResyncPeriodWithRealManifest(t *testing.T) {
 		err := applyNamespaceListerCustomizations(deployment, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+		container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		_, found := findEnvValue(container.Env, envCacheResyncPeriod)
 		g.Expect(found).To(gomega.BeFalse(), "upstream default should apply — env var should be absent")
@@ -192,7 +193,7 @@ func TestCacheResyncPeriodWithRealManifest(t *testing.T) {
 		err := applyNamespaceListerCustomizations(deployment, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+		container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		val, found := findEnvValue(container.Env, envCacheResyncPeriod)
 		g.Expect(found).To(gomega.BeTrue())
@@ -214,7 +215,7 @@ func TestCacheResyncPeriodWithRealManifest(t *testing.T) {
 		err := applyNamespaceListerCustomizations(deployment, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		container := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
+		container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, namespaceListerContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		val, found := findEnvValue(container.Env, envCacheResyncPeriod)
 		g.Expect(found).To(gomega.BeTrue())

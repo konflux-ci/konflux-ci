@@ -18,6 +18,7 @@ package buildservice
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -36,6 +37,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	sigyaml "sigs.k8s.io/yaml"
 )
 
@@ -264,6 +266,169 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 
 			By("verifying no trusted-ca ConfigMap was created")
 			Expect(trustedCAExists()).To(BeFalse())
+		})
+	})
+
+	Context("trustedCA volume mount", func() {
+		var buildService *konfluxv1alpha1.KonfluxBuildService
+
+		getDeployment := func(g Gomega) *appsv1.Deployment {
+			dep := &appsv1.Deployment{}
+			g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      buildControllerManagerDeploymentName,
+				Namespace: buildServiceNamespace,
+			}, dep)).To(Succeed())
+			return dep
+		}
+
+		findTrustedCAMount := func(dep *appsv1.Deployment) *corev1.VolumeMount {
+			manager := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, buildManagerContainerName)
+			if manager == nil {
+				return nil
+			}
+			return kubernetes.FindVolumeMount(manager.VolumeMounts, trustedCAVolumeName)
+		}
+
+		findTrustedCAVolume := func(dep *appsv1.Deployment) *corev1.Volume {
+			return kubernetes.FindVolume(dep.Spec.Template.Spec.Volumes, trustedCAVolumeName)
+		}
+
+		BeforeEach(func() {
+			startManagerWithClusterInfo(nil)
+			buildService = newBuildServiceCR()
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, buildService,
+				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: pipelinesRunnerClusterRoleName}},
+				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: pipelinesRunnerClusterRoleBindingName}},
+			)
+			Eventually(getDeployment).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Not(BeNil()))
+		})
+
+		It("should keep the extra-file mount when trustedCA is omitted", func() {
+			Eventually(func(g Gomega) {
+				dep := getDeployment(g)
+				mount := findTrustedCAMount(dep)
+				g.Expect(mount).NotTo(BeNil())
+				g.Expect(mount.MountPath).To(Equal(trustedCADefaultFileMountPath))
+				g.Expect(mount.SubPath).To(Equal(trustedCADefaultFileVolumePath))
+
+				vol := findTrustedCAVolume(dep)
+				g.Expect(vol).NotTo(BeNil())
+				g.Expect(vol.ConfigMap).NotTo(BeNil())
+				g.Expect(vol.ConfigMap.Optional).NotTo(BeNil())
+				g.Expect(*vol.ConfigMap.Optional).To(BeTrue())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should remount trusted-ca at the system trust path when trustedCA is set", func() {
+			cm := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "custom-ca-bundle", Namespace: buildServiceNamespace},
+				Data:       map[string]string{"tls.pem": "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n"},
+			}
+			Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cm)
+
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, buildService)).To(Succeed())
+			buildService.Spec.TrustedCA = &konfluxv1alpha1.TrustedCAConfigMap{
+				Name: "custom-ca-bundle",
+				Key:  "tls.pem",
+			}
+			Expect(k8sClient.Update(ctx, buildService)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				dep := getDeployment(g)
+				mount := findTrustedCAMount(dep)
+				g.Expect(mount).NotTo(BeNil())
+				g.Expect(mount.MountPath).To(Equal(trustedCASystemMountPath))
+				g.Expect(mount.SubPath).To(BeEmpty())
+
+				vol := findTrustedCAVolume(dep)
+				g.Expect(vol).NotTo(BeNil())
+				g.Expect(vol.ConfigMap).NotTo(BeNil())
+				g.Expect(vol.ConfigMap.Name).To(Equal("custom-ca-bundle"))
+				g.Expect(vol.ConfigMap.Optional).NotTo(BeNil())
+				g.Expect(*vol.ConfigMap.Optional).To(BeFalse())
+				g.Expect(vol.ConfigMap.Items).To(ConsistOf(corev1.KeyToPath{
+					Key:  "tls.pem",
+					Path: trustedCASystemBundleFile,
+				}))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should restore the extra-file mount when trustedCA is cleared", func() {
+			cm := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "custom-ca-bundle", Namespace: buildServiceNamespace},
+				Data:       map[string]string{"tls.pem": "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n"},
+			}
+			Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cm)
+
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, buildService)).To(Succeed())
+			buildService.Spec.TrustedCA = &konfluxv1alpha1.TrustedCAConfigMap{
+				Name: "custom-ca-bundle",
+				Key:  "tls.pem",
+			}
+			Expect(k8sClient.Update(ctx, buildService)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				dep := getDeployment(g)
+				mount := findTrustedCAMount(dep)
+				g.Expect(mount).NotTo(BeNil())
+				g.Expect(mount.MountPath).To(Equal(trustedCASystemMountPath))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, buildService)).To(Succeed())
+			buildService.Spec.TrustedCA = nil
+			Expect(k8sClient.Update(ctx, buildService)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				dep := getDeployment(g)
+				mount := findTrustedCAMount(dep)
+				g.Expect(mount).NotTo(BeNil())
+				g.Expect(mount.MountPath).To(Equal(trustedCADefaultFileMountPath))
+				g.Expect(mount.SubPath).To(Equal(trustedCADefaultFileVolumePath))
+
+				vol := findTrustedCAVolume(dep)
+				g.Expect(vol).NotTo(BeNil())
+				g.Expect(vol.ConfigMap).NotTo(BeNil())
+				g.Expect(vol.ConfigMap.Name).To(Equal(trustedCAVolumeName))
+				g.Expect(vol.ConfigMap.Optional).NotTo(BeNil())
+				g.Expect(*vol.ConfigMap.Optional).To(BeTrue())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
+	Context("trustedCA CRD validation", func() {
+		newCR := func(key string) *konfluxv1alpha1.KonfluxBuildService {
+			return &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.NewKonfluxBuildServiceSpec(
+					konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
+						TrustedCA: &konfluxv1alpha1.TrustedCAConfigMap{
+							Name: "custom-ca-bundle",
+							Key:  key,
+						},
+					},
+					testutil.DefaultComponentMetricsConfig(),
+				),
+			}
+		}
+
+		It("should accept a trustedCA key of 253 characters", func() {
+			cr := newCR(strings.Repeat("a", 253))
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+		})
+
+		It("should reject a trustedCA key of 254 characters", func() {
+			cr := newCR(strings.Repeat("a", 254))
+			err := k8sClient.Create(ctx, cr)
+			Expect(errors.IsInvalid(err)).To(BeTrue(), "unexpected error: %v", err)
+			statusErr, ok := err.(*errors.StatusError)
+			Expect(ok).To(BeTrue())
+			Expect(statusErr.Status().Details).NotTo(BeNil())
+			Expect(statusErr.Status().Details.Causes).NotTo(BeEmpty())
+			Expect(statusErr.Status().Details.Causes[0].Field).To(Equal("spec.trustedCA.key"))
 		})
 	})
 
@@ -601,7 +766,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
 				g.Expect(dep.Labels).To(HaveKeyWithValue("control-plane", "controller-manager"))
-				manager := testutil.FindContainer(dep.Spec.Template.Spec.Containers, buildManagerContainerName)
+				manager := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, buildManagerContainerName)
 				g.Expect(manager).NotTo(BeNil(), "manager container should exist")
 				g.Expect(manager.Image).NotTo(BeEmpty(), "manager container image should be set")
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
@@ -909,7 +1074,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				manager := testutil.FindContainer(dep.Spec.Template.Spec.Containers, buildManagerContainerName)
+				manager := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, buildManagerContainerName)
 				g.Expect(manager).NotTo(BeNil())
 				originalImage = manager.Image
 				g.Expect(originalImage).NotTo(BeEmpty())
@@ -919,7 +1084,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				manager := testutil.FindContainer(dep.Spec.Template.Spec.Containers, buildManagerContainerName)
+				manager := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, buildManagerContainerName)
 				g.Expect(manager).NotTo(BeNil())
 				manager.Image = "tampered-image:latest"
 				g.Expect(k8sClient.Update(ctx, dep)).To(Succeed())
@@ -929,7 +1094,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				m := testutil.FindContainer(dep.Spec.Template.Spec.Containers, buildManagerContainerName)
+				m := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, buildManagerContainerName)
 				g.Expect(m).NotTo(BeNil())
 				g.Expect(m.Image).To(Equal(originalImage))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())

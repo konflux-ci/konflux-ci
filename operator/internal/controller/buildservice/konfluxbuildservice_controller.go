@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	securityv1 "github.com/openshift/api/security/v1"
@@ -31,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/clock"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -66,6 +68,18 @@ const (
 
 	// Container names
 	buildManagerContainerName = "manager"
+
+	// trusted-ca volume is baked into the embedded Deployment. The default mount
+	// is an extra file that does not overlay the image trust store.
+	trustedCAVolumeName = "trusted-ca"
+	// trustedCASystemMountPath is the directory where the ConfigMap is mounted
+	// (with SubPath=""). The Items projection maps the user's key to
+	// trustedCASystemBundleFile, so the final file path is
+	// /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem.
+	trustedCASystemMountPath       = "/etc/pki/ca-trust/extracted/pem"
+	trustedCASystemBundleFile      = "tls-ca-bundle.pem"
+	trustedCADefaultFileMountPath  = "/etc/ssl/certs/ca-custom-bundle.crt"
+	trustedCADefaultFileVolumePath = "ca-bundle.crt"
 
 	// PAC_WEBHOOK_URL is the fallback webhook URL registered on git repositories
 	// when no entry in the webhook config JSON matches. It is only set on
@@ -334,7 +348,8 @@ func (r *KonfluxBuildServiceReconciler) applyManifests(ctx context.Context, tc *
 }
 
 // applyBuildServiceDeploymentCustomizations applies user-defined and platform-specific
-// customizations to BuildService deployments.
+// customizations to BuildService deployments. When spec.trustedCA is set, the
+// baked-in trusted-ca volume is remounted at the image default trust path.
 func applyBuildServiceDeploymentCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxBuildServiceConfigSpec, clusterInfo *clusterinfo.Info, webhookConfigMapName string) error {
 	switch deployment.Name {
 	case buildControllerManagerDeploymentName:
@@ -342,6 +357,9 @@ func applyBuildServiceDeploymentCustomizations(deployment *appsv1.Deployment, sp
 			deployment.Spec.Replicas = &spec.BuildControllerManager.Replicas
 		}
 		if err := buildBuildControllerManagerOverlay(spec, clusterInfo, webhookConfigMapName).ApplyToDeployment(deployment); err != nil {
+			return err
+		}
+		if err := applyTrustedCAMount(deployment, spec.TrustedCA); err != nil {
 			return err
 		}
 	}
@@ -416,6 +434,47 @@ func buildBuildControllerManagerOverlay(spec konfluxv1alpha1.KonfluxBuildService
 		customization.WithLeaderElection(buildManagerContainerName, deployCtx.Replicas),
 	)
 	return customization.NewPodOverlay(podOpts...)
+}
+
+// applyTrustedCAMount remounts the baked-in trusted-ca volume at the image
+// default trust path when spec.trustedCA is set. When spec is nil the embedded
+// extra-file mount is left unchanged.
+func applyTrustedCAMount(deployment *appsv1.Deployment, spec *konfluxv1alpha1.TrustedCAConfigMap) error {
+	if spec == nil {
+		return nil
+	}
+	key := spec.Key
+	// Defense-in-depth: the CRD schema regex (^[-._a-zA-Z0-9]+$) allows keys
+	// like "." or "..", and direct API calls can bypass webhook validation
+	// entirely. This runtime check rejects path traversal.
+	if filepath.Base(key) != key || key == "." || key == ".." {
+		return fmt.Errorf("invalid CA bundle key %q: must be a plain filename without path separators or traversal sequences", key)
+	}
+
+	vol := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, trustedCAVolumeName)
+	if vol == nil || vol.ConfigMap == nil {
+		return fmt.Errorf("trusted-ca ConfigMap volume not found on deployment %s", deployment.Name)
+	}
+	vol.ConfigMap.Name = spec.Name
+	vol.ConfigMap.Items = []corev1.KeyToPath{{
+		Key:  key,
+		Path: trustedCASystemBundleFile,
+	}}
+	vol.ConfigMap.Optional = ptr.To(false)
+
+	manager := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+	if manager == nil {
+		return fmt.Errorf("container %q not found on deployment %s", buildManagerContainerName, deployment.Name)
+	}
+	mount := kubernetes.FindVolumeMount(manager.VolumeMounts, trustedCAVolumeName)
+	if mount == nil {
+		return fmt.Errorf("trusted-ca volume mount not found on container %q", buildManagerContainerName)
+	}
+	// mount points into the VolumeMounts slice; field assignments update the element in place.
+	mount.MountPath = trustedCASystemMountPath
+	mount.SubPath = ""
+	mount.ReadOnly = true
+	return nil
 }
 
 // reconcileWebhookConfig ensures the webhook config ConfigMap exists.
