@@ -8,9 +8,9 @@ metadata:
   namespace: cert-manager
   labels:
     app.kubernetes.io/name: trust-manager
-    helm.sh/chart: trust-manager-v0.24.0
+    helm.sh/chart: trust-manager-v0.25.0
     app.kubernetes.io/instance: trust-manager
-    app.kubernetes.io/version: "v0.24.0"
+    app.kubernetes.io/version: "v0.25.0"
     app.kubernetes.io/managed-by: Helm
 ---
 # Source: trust-manager/templates/crd-trust.cert-manager.io_bundles.yaml
@@ -22,9 +22,9 @@ metadata:
     helm.sh/resource-policy: keep
   labels:
     app.kubernetes.io/name: trust-manager
-    helm.sh/chart: trust-manager-v0.24.0
+    helm.sh/chart: trust-manager-v0.25.0
     app.kubernetes.io/instance: trust-manager
-    app.kubernetes.io/version: "v0.24.0"
+    app.kubernetes.io/version: "v0.25.0"
     app.kubernetes.io/managed-by: Helm
 spec:
   group: trust.cert-manager.io
@@ -539,9 +539,9 @@ apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   labels:
     app.kubernetes.io/name: trust-manager
-    helm.sh/chart: trust-manager-v0.24.0
+    helm.sh/chart: trust-manager-v0.25.0
     app.kubernetes.io/instance: trust-manager
-    app.kubernetes.io/version: "v0.24.0"
+    app.kubernetes.io/version: "v0.25.0"
     app.kubernetes.io/managed-by: Helm
     rbac.authorization.k8s.io/aggregate-to-cluster-reader: "true"
   name: trust-manager-cluster-view
@@ -558,9 +558,9 @@ apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   labels:
     app.kubernetes.io/name: trust-manager
-    helm.sh/chart: trust-manager-v0.24.0
+    helm.sh/chart: trust-manager-v0.25.0
     app.kubernetes.io/instance: trust-manager
-    app.kubernetes.io/version: "v0.24.0"
+    app.kubernetes.io/version: "v0.25.0"
     app.kubernetes.io/managed-by: Helm
   name: trust-manager
 rules:
@@ -608,9 +608,9 @@ apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   labels:
     app.kubernetes.io/name: trust-manager
-    helm.sh/chart: trust-manager-v0.24.0
+    helm.sh/chart: trust-manager-v0.25.0
     app.kubernetes.io/instance: trust-manager
-    app.kubernetes.io/version: "v0.24.0"
+    app.kubernetes.io/version: "v0.25.0"
     app.kubernetes.io/managed-by: Helm
   name: trust-manager
 roleRef:
@@ -630,9 +630,9 @@ metadata:
   namespace: cert-manager
   labels:
     app.kubernetes.io/name: trust-manager
-    helm.sh/chart: trust-manager-v0.24.0
+    helm.sh/chart: trust-manager-v0.25.0
     app.kubernetes.io/instance: trust-manager
-    app.kubernetes.io/version: "v0.24.0"
+    app.kubernetes.io/version: "v0.25.0"
     app.kubernetes.io/managed-by: Helm
 rules:
 - apiGroups:
@@ -652,9 +652,9 @@ metadata:
   namespace: cert-manager
   labels:
     app.kubernetes.io/name: trust-manager
-    helm.sh/chart: trust-manager-v0.24.0
+    helm.sh/chart: trust-manager-v0.25.0
     app.kubernetes.io/instance: trust-manager
-    app.kubernetes.io/version: "v0.24.0"
+    app.kubernetes.io/version: "v0.25.0"
     app.kubernetes.io/managed-by: Helm
 rules:
 - apiGroups:
@@ -676,9 +676,9 @@ metadata:
   namespace: cert-manager
   labels:
     app.kubernetes.io/name: trust-manager
-    helm.sh/chart: trust-manager-v0.24.0
+    helm.sh/chart: trust-manager-v0.25.0
     app.kubernetes.io/instance: trust-manager
-    app.kubernetes.io/version: "v0.24.0"
+    app.kubernetes.io/version: "v0.25.0"
     app.kubernetes.io/managed-by: Helm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -697,9 +697,9 @@ metadata:
   namespace: cert-manager
   labels:
     app.kubernetes.io/name: trust-manager
-    helm.sh/chart: trust-manager-v0.24.0
+    helm.sh/chart: trust-manager-v0.25.0
     app.kubernetes.io/instance: trust-manager
-    app.kubernetes.io/version: "v0.24.0"
+    app.kubernetes.io/version: "v0.25.0"
     app.kubernetes.io/managed-by: Helm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -720,9 +720,9 @@ metadata:
     app: trust-manager
     app.kubernetes.io/component: metrics
     app.kubernetes.io/name: trust-manager
-    helm.sh/chart: trust-manager-v0.24.0
+    helm.sh/chart: trust-manager-v0.25.0
     app.kubernetes.io/instance: trust-manager
-    app.kubernetes.io/version: "v0.24.0"
+    app.kubernetes.io/version: "v0.25.0"
     app.kubernetes.io/managed-by: Helm
 spec:
   type: ClusterIP
@@ -743,9 +743,9 @@ metadata:
   labels:
     app: trust-manager
     app.kubernetes.io/name: trust-manager
-    helm.sh/chart: trust-manager-v0.24.0
+    helm.sh/chart: trust-manager-v0.25.0
     app.kubernetes.io/instance: trust-manager
-    app.kubernetes.io/version: "v0.24.0"
+    app.kubernetes.io/version: "v0.25.0"
     app.kubernetes.io/managed-by: Helm
 spec:
   type: ClusterIP
@@ -765,9 +765,9 @@ metadata:
   namespace: cert-manager
   labels:
     app.kubernetes.io/name: trust-manager
-    helm.sh/chart: trust-manager-v0.24.0
+    helm.sh/chart: trust-manager-v0.25.0
     app.kubernetes.io/instance: trust-manager
-    app.kubernetes.io/version: "v0.24.0"
+    app.kubernetes.io/version: "v0.25.0"
     app.kubernetes.io/managed-by: Helm
 spec:
   replicas: 1
@@ -780,16 +780,16 @@ spec:
       labels:
         app: trust-manager
         app.kubernetes.io/name: trust-manager
-        helm.sh/chart: trust-manager-v0.24.0
+        helm.sh/chart: trust-manager-v0.25.0
         app.kubernetes.io/instance: trust-manager
-        app.kubernetes.io/version: "v0.24.0"
+        app.kubernetes.io/version: "v0.25.0"
         app.kubernetes.io/managed-by: Helm
     spec:
       serviceAccountName: trust-manager
       automountServiceAccountToken: true
       initContainers:
       - name: cert-manager-package-debian
-        image: "quay.io/jetstack/trust-pkg-debian-trixie:20250419.1"
+        image: "quay.io/jetstack/trust-pkg-debian-trixie:20250419.2"
         imagePullPolicy: IfNotPresent
         args:
           - "/copyandmaybepause"
@@ -817,7 +817,7 @@ spec:
             memory: 50Mi
       containers:
       - name: trust-manager
-        image: "quay.io/jetstack/trust-manager:v0.24.0"
+        image: "quay.io/jetstack/trust-manager:v0.25.0"
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 6443
@@ -888,15 +888,18 @@ metadata:
   namespace: cert-manager
   labels:
     app.kubernetes.io/name: trust-manager
-    helm.sh/chart: trust-manager-v0.24.0
+    helm.sh/chart: trust-manager-v0.25.0
     app.kubernetes.io/instance: trust-manager
-    app.kubernetes.io/version: "v0.24.0"
+    app.kubernetes.io/version: "v0.25.0"
     app.kubernetes.io/managed-by: Helm
 spec:
   commonName: "trust-manager.cert-manager.svc"
   dnsNames:
   - "trust-manager.cert-manager.svc"
   secretName: trust-manager-tls
+  secretTemplate:
+    annotations:
+      cert-manager.io/allow-direct-injection: "true"
   privateKey:
     rotationPolicy: Always
   revisionHistoryLimit: 1
@@ -913,9 +916,9 @@ metadata:
   namespace: cert-manager
   labels:
     app.kubernetes.io/name: trust-manager
-    helm.sh/chart: trust-manager-v0.24.0
+    helm.sh/chart: trust-manager-v0.25.0
     app.kubernetes.io/instance: trust-manager
-    app.kubernetes.io/version: "v0.24.0"
+    app.kubernetes.io/version: "v0.25.0"
     app.kubernetes.io/managed-by: Helm
 spec:
   selfSigned: {}
@@ -928,12 +931,12 @@ metadata:
   labels:
     app: trust-manager
     app.kubernetes.io/name: trust-manager
-    helm.sh/chart: trust-manager-v0.24.0
+    helm.sh/chart: trust-manager-v0.25.0
     app.kubernetes.io/instance: trust-manager
-    app.kubernetes.io/version: "v0.24.0"
+    app.kubernetes.io/version: "v0.25.0"
     app.kubernetes.io/managed-by: Helm
   annotations:
-    cert-manager.io/inject-ca-from: "cert-manager/trust-manager"
+    cert-manager.io/inject-ca-from-secret: "cert-manager/trust-manager-tls"
 webhooks:
   - name: trust.cert-manager.io
     rules:
