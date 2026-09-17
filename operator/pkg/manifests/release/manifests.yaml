@@ -5260,7 +5260,7 @@ spec:
               key: token
               name: release-service-github-token
               optional: true
-        image: quay.io/konflux-ci/release-service:6019c623c2ed00ffdf052c2f9118a553c1346237
+        image: quay.io/konflux-ci/release-service:cedabace9fd8230acc7e5983615efa74c1ade761
         livenessProbe:
           httpGet:
             path: /healthz
