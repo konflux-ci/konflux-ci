@@ -10,7 +10,7 @@ resources:
 - network_policy_allow_from_konfluxui.yaml
 namespace: namespace-lister
 images:
-- digest: sha256:b831a70b9c7672520400178a48e8939b727c1a239edd154a784bdfd93ea4b171
+- digest: sha256:b65eb39365fc7301f90d34bdb70b454a4edf69a48ac2804b658f96d1780ddec3
   name: quay.io/konflux-ci/namespace-lister
   newName: quay.io/konflux-ci/namespace-lister
 patches:
