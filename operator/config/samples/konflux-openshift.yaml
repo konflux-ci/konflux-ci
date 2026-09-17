@@ -1,0 +1,105 @@
+# Title: Konflux Configuration for OpenShift
+# Description: Complete Konflux configuration for OpenShift clusters.
+#
+# This sample is the default for ./deploy-konflux-on-ocp.sh (non-CI). It does not
+# include Dex static passwords. On OpenShift the operator enables OpenShift login
+# by default. For GitHub or other OIDC providers see konflux-with-github-auth.yaml
+# and docs/guides/oidc-configuration.md.
+#
+# Usage:
+#   ./deploy-konflux-on-ocp.sh
+#   KONFLUX_CR=operator/config/samples/konflux-openshift.yaml ./deploy-konflux-on-ocp.sh
+apiVersion: konflux.konflux-ci.dev/v1alpha1
+kind: Konflux
+metadata:
+  labels:
+    app.kubernetes.io/name: konflux-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: konflux
+spec:
+  ui:
+    spec:
+      ingress:
+        enabled: true
+      proxy:
+        replicas: 1
+        reverseProxy:
+          resources:
+            requests:
+              cpu: 30m
+              memory: 128Mi
+            limits:
+              cpu: 30m
+              memory: 128Mi
+      dex:
+        config:
+          # OpenShift login is enabled by default on OpenShift.
+          # Local password DB is for Kind/CI samples only.
+          enablePasswordDB: false
+  integrationService:
+    spec:
+      integrationControllerManager:
+        replicas: 1
+        manager:
+          resources:
+            requests:
+              cpu: 30m
+              memory: 128Mi
+            limits:
+              cpu: 30m
+              memory: 128Mi
+      snapshotGarbageCollector:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+  releaseService:
+    spec:
+      releaseControllerManager:
+        replicas: 1
+        manager:
+          resources:
+            requests:
+              cpu: 30m
+              memory: 128Mi
+            limits:
+              cpu: 30m
+              memory: 128Mi
+  buildService:
+    spec:
+      buildControllerManager:
+        replicas: 1
+        manager:
+          resources:
+            requests:
+              cpu: 30m
+              memory: 128Mi
+            limits:
+              cpu: 30m
+              memory: 128Mi
+  namespaceLister:
+    spec:
+      cacheResyncPeriod: "10m"
+      logLevel: info
+      namespaceLister:
+        replicas: 1
+        namespaceLister:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+  info:
+    spec:
+      publicInfo:
+        environment: development
+        visibility: public
+  certManager:
+    createClusterIssuer: true
+  internalRegistry:
+    # OpenShift has an integrated registry; Kind samples enable this instead.
+    enabled: false
+  defaultTenant:
+    enabled: true
