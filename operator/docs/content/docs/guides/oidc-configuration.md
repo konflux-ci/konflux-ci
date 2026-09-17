@@ -27,10 +27,10 @@ The `spec.ui.spec.dex.config` section controls which identity providers are avai
 and how Dex is configured.
 
 {{< alert color="warning" >}}
-The static-password configuration included in the default sample CR (and used in local
-Kind deployments) is intended for <strong>development and CI only</strong>. Remove
-<code>staticPasswords</code> and configure an OIDC connector before deploying to
-production.
+The static-password configuration included in the Kind and CI sample CRs is
+intended for <strong>development and CI only</strong>. Do not deploy
+<code>staticPasswords</code> to OpenShift; use <code>konflux-openshift.yaml</code>
+or configure an OIDC connector.
 {{< /alert >}}
 
 ## GitHub OAuth

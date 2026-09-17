@@ -12,12 +12,16 @@
 #   - OpenShift cluster with OperatorHub access
 #
 # Environment variables (optional):
-#   OPERATOR_IMAGE        - Full operator image to use (skips SHA-based construction)
-#   KONFLUX_OPERATOR_REPO - Operator image repository (default: quay.io/redhat-user-workloads/konflux-vanguard-tenant/konflux-operator)
+#   OPERATOR_IMAGE                 - Full operator image to use (skips SHA-based construction)
+#   KONFLUX_OPERATOR_REPO          - Operator image repository (default: quay.io/redhat-user-workloads/konflux-vanguard-tenant/konflux-operator)
+#   KONFLUX_CR                     - Konflux CR to apply. Default when unset: operator/config/samples/konflux-openshift.yaml
+#                                    (non-CI). In OpenShift CI, scripts/resolve-konflux-cr.sh selects the Kind/e2e sample.
+#   ALLOW_DEV_STATIC_PASSWORDS     - Set to true to apply a CR that contains Dex staticPasswords
 #
 # Environment variables (set by OpenShift CI/Prow):
 #   REPO_NAME      - Name of the repository being tested (e.g., "konflux-ci", "release")
 #   PULL_PULL_SHA  - Git SHA of the PR head commit being tested
+#   OPENSHIFT_CI   - When true, use Kind/e2e CRs (demo users allowed) instead of konflux-openshift.yaml
 #
 
 set -o nounset
@@ -26,6 +30,28 @@ set -o pipefail
 
 # Determine the absolute path of the repository root
 REPO_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
+
+# Refuse Dex static-password demo users unless this is OpenShift CI or the
+# caller explicitly opts in (KONFLUX-15639 / FIND-004). Kind/CI samples use
+# staticPasswords; the OpenShift sample does not.
+assert_no_dev_static_passwords() {
+    local cr_file="$1"
+    if ! grep -Fq 'staticPasswords:' "${cr_file}"; then
+        return 0
+    fi
+    if [ "${ALLOW_DEV_STATIC_PASSWORDS:-}" = "true" ] || [ "${OPENSHIFT_CI:-}" = "true" ]; then
+        echo "WARNING: Applying a Konflux CR that contains Dex staticPasswords." >&2
+        echo "         These demo credentials are for CI and local Kind only." >&2
+        return 0
+    fi
+    echo "ERROR: Refusing to apply ${cr_file}" >&2
+    echo "       This CR enables Dex staticPasswords (demo users with a published" >&2
+    echo "       password). That is for Kind and CI only, not OpenShift installs." >&2
+    echo "       Default CR: operator/config/samples/konflux-openshift.yaml" >&2
+    echo "       To use a demo-user CR anyway: ALLOW_DEV_STATIC_PASSWORDS=true" >&2
+    echo "       Authentication: operator/docs/content/docs/guides/oidc-configuration.md" >&2
+    return 1
+}
 
 # On OCP, use 'oc' as kubectl if kubectl is not available
 # oc is a superset of kubectl and works for all kubectl commands
@@ -136,7 +162,14 @@ echo "Operator is ready!"
 # Step 5: Create Konflux CR instance
 echo ""
 echo "=== Step 5/6: Creating Konflux CR ==="
+# Human OpenShift installs default to a CR without Dex static passwords.
+# OpenShift CI keeps the Kind/CI samples (demo users) via resolve-konflux-cr.sh.
+if [ -z "${KONFLUX_CR:-}" ] && [ "${OPENSHIFT_CI:-}" != "true" ]; then
+    KONFLUX_CR="${REPO_ROOT}/operator/config/samples/konflux-openshift.yaml"
+    export KONFLUX_CR
+fi
 KONFLUX_CR=$("${REPO_ROOT}/scripts/resolve-konflux-cr.sh")
+assert_no_dev_static_passwords "${KONFLUX_CR}"
 echo "Applying: ${KONFLUX_CR}"
 oc apply -f "${KONFLUX_CR}"
 

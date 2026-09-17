@@ -16,13 +16,19 @@ This directory contains sample YAML files for Konflux Custom Resources (CRs).
 
 ## Functional Samples
 
-**konflux_v1alpha1_konflux.yaml** - Used in CI tests and local development.
+**konflux_v1alpha1_konflux.yaml** - Used in CI tests and local Kind development.
 Represents a complete Konflux CR configuration with all components, realistic
 resource limits, and demo users for testing. Includes helpful comments for
-common configurations.
+common configurations. Do not use on OpenShift or other internet-reachable
+clusters.
 
-**konflux-e2e.yaml** - Extends the base configuration with image-controller
+**konflux-e2e.yaml** - Extends the Kind/CI base configuration with image-controller
 enabled, which is required for E2E tests. Used by the CI E2E workflow.
+
+**konflux-openshift.yaml** - Default for `./deploy-konflux-on-ocp.sh` (non-CI).
+Same component layout as the Kind sample, with Ingress instead of NodePort,
+`enablePasswordDB: false`, and no Dex static passwords. OpenShift login is
+enabled by the operator on OpenShift.
 
 **konflux-empty-cr.yaml** - Minimal empty spec using all default values.
 
@@ -42,9 +48,9 @@ These samples are useful for:
 
 ### Authentication
 
-The main `konflux_v1alpha1_konflux.yaml` sample includes demo users with static passwords for CI testing and local development. **These demo users are for testing only and should never be used in production.**
+The main `konflux_v1alpha1_konflux.yaml` and `konflux-e2e.yaml` samples include demo users with static passwords for CI testing and local Kind development. **These demo users are for testing only and should never be used on OpenShift or other internet-reachable clusters.** `./deploy-konflux-on-ocp.sh` refuses to apply a CR that contains `staticPasswords` unless `ALLOW_DEV_STATIC_PASSWORDS=true` (or `OPENSHIFT_CI=true` in Prow).
 
-For production deployments, remove the `staticPasswords` section and configure OIDC connectors (GitHub, Google, LDAP, etc.) for authentication. See `konflux-with-github-auth.yaml` for an example and the [Dex Connectors Documentation](https://dexidp.io/docs/connectors/) for all supported connectors.
+For OpenShift, use `konflux-openshift.yaml` (the script default). For other production identity providers, configure OIDC connectors (GitHub, Google, LDAP, etc.). See `konflux-with-github-auth.yaml` and the [Dex Connectors Documentation](https://dexidp.io/docs/connectors/).
 
 ### Default Tenant
 

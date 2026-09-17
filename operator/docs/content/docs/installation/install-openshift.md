@@ -113,16 +113,25 @@ OPERATOR_IMAGE=<your-registry>/konflux-operator:<tag> ./deploy-konflux-on-ocp.sh
 
 ### Konflux Custom Resource
 
-The script applies `operator/config/samples/konflux_v1alpha1_konflux.yaml` by default.
+By default the script applies `operator/config/samples/konflux-openshift.yaml`,
+which uses OpenShift login and does **not** include Dex static passwords.
 
 {{< alert color="warning" >}}
-The default CR contains demo users with static passwords intended for local testing
-only. Never use this configuration in a production environment. Use OIDC authentication
-instead. See <a href="{{< relref "../examples" >}}">Examples</a> for alternative sample
-configurations.
+Kind and CI sample CRs (<code>konflux_v1alpha1_konflux.yaml</code>,
+<code>konflux-e2e.yaml</code>) contain demo users with static passwords.
+<code>deploy-konflux-on-ocp.sh</code> refuses to apply those CRs unless you set
+<code>ALLOW_DEV_STATIC_PASSWORDS=true</code> (or <code>OPENSHIFT_CI=true</code> in
+Prow). Never use demo static passwords on an internet-reachable cluster.
+See <a href="{{< relref "../guides/oidc-configuration" >}}">Authentication and OIDC Configuration</a>.
 {{< /alert >}}
 
-To use a different CR, apply it after the script completes:
+To apply a different CR, set `KONFLUX_CR` before running the script:
+
+```bash
+KONFLUX_CR=operator/config/samples/konflux-with-github-auth.yaml ./deploy-konflux-on-ocp.sh
+```
+
+To replace the CR after the script completes:
 
 ```bash
 kubectl delete konflux konflux
