@@ -65,3 +65,11 @@ g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
 Import via `apierrors "k8s.io/apimachinery/pkg/api/errors"` (some files import the package without an alias and call `errors.IsNotFound()` — both work, but `apierrors` avoids confusion with the standard `errors` package).
 
 The same principle applies to other typed API error checks — prefer `apierrors.IsAlreadyExists()`, `apierrors.IsConflict()`, etc. over string matching.
+
+## CRD self-healing and drift tests
+
+For `Watches(&CRD{}, MapCRDToRequest)` tests:
+
+1. **Labels** — assert both `KonfluxOwnerLabel` and `KonfluxComponentLabel` on recreated CRDs, in the initial wait and again after recreation.
+2. **Cleanup** — `DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)` for CRD-only tests (each table entry uses a different CRD name, so no LIFO risk). Use `DeferCleanupParentAndChildren` only when the controller also creates other cluster-scoped children (ClusterRole, ClusterRoleBinding, VWC, MWC, etc.).
+3. **Entry descriptions** — use `c.kind` in `DescribeTable` entries. Use `c.name` (FQDN) when the controller has multiple CRDs with the same Kind (e.g. imagecontroller).
