@@ -920,17 +920,6 @@ func (r *KonfluxUIReconciler) mapSegmentKeySecretToUI(ctx context.Context, obj c
 	return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: CRName}}}
 }
 
-// mapOAuth2ProxyClientSecretToUI triggers a KonfluxUI reconcile whenever the
-// oauth2-proxy-client-secret Secret changes (e.g. after a rotation). The reconciler
-// then re-reads the Secret, recomputes the hash, and updates the pod-template
-// annotation on the dex and proxy deployments, causing a rolling restart.
-func (r *KonfluxUIReconciler) mapOAuth2ProxyClientSecretToUI(_ context.Context, obj client.Object) []ctrl.Request {
-	if obj.GetNamespace() == uiNamespace && obj.GetName() == oauth2ProxyClientSecretName {
-		return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: CRName}}}
-	}
-	return nil
-}
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	b := ctrl.NewControllerManagedBy(mgr).
@@ -953,15 +942,6 @@ func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&konfluxv1alpha1.KonfluxSegmentBridge{},
 			handler.EnqueueRequestsFromMapFunc(r.mapSegmentBridgeToUI),
 			builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
-		// Watch the oauth2-proxy-client-secret Secret so that rotations trigger a reconcile
-		// and the pod-template hash annotation is updated on both dex and proxy deployments.
-		Watches(&corev1.Secret{},
-			handler.EnqueueRequestsFromMapFunc(r.mapOAuth2ProxyClientSecretToUI),
-			builder.WithPredicates(
-				crpredicate.NewPredicateFuncs(func(o client.Object) bool {
-					return o.GetNamespace() == uiNamespace && o.GetName() == oauth2ProxyClientSecretName
-				}),
-			)).
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.mapSegmentKeySecretToUI),
 			builder.WithPredicates(
