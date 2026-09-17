@@ -2726,7 +2726,6 @@ var _ = Describe("KonfluxUI Controller", func() {
 				Expect(k8sClient.Delete(ctx, existingSecret)).To(Succeed())
 			}
 
-
 			By("returning an empty string when the secret does not exist")
 			hash, err := r.reconcileOAuth2ProxyClientSecretHash(ctx)
 			Expect(err).NotTo(HaveOccurred())
