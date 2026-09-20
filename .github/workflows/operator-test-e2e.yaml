@@ -12,27 +12,38 @@ jobs:
   # Gate: fork PRs (inline, before checkout) and companion skip labels (script; opt out: force-run-e2e).
   check-prerequisites:
     runs-on: ubuntu-latest
+    outputs:
+      run_e2e: ${{ steps.e2e-gate.outputs.run_e2e }}
     steps:
       # Inline so fork PRs cannot replace checked-out script content (see renovate-manifest-companion.yaml).
-      - name: Reject fork PRs
-        if: >-
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name != github.repository
+      - name: Check E2E authorization
+        id: e2e-gate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          echo "❌ Fork PR: heavy jobs do not run on push (no secrets). Comment /allow <commit-sha> to trigger tests." >&2
-          {
-            echo "### Fork PR"
-            echo ""
-            echo "Tests are not run automatically from forks."
-            echo "**Action Required:** A maintainer must comment \`/allow <commit-sha>\` on this PR to trigger tests."
-          } >>"${GITHUB_STEP_SUMMARY}"
-          exit 1
+          head_repo="$(jq -r '.pull_request.head.repo.full_name // ""' "${GITHUB_EVENT_PATH}")"
+          if [[ "${EVENT_NAME}" == "pull_request" && "${head_repo}" != "${REPOSITORY}" ]]; then
+            echo "run_e2e=false" >>"${GITHUB_OUTPUT}"
+            echo "::warning title=Fork PR E2E authorization required::Comment /allow <commit-sha> to trigger tests."
+            {
+              echo "### Fork PR"
+              echo ""
+              echo "Tests are not run automatically from forks."
+              echo "**Action Required:** A maintainer must comment \`/allow <commit-sha>\` on this PR to trigger tests."
+            } >>"${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+
+          echo "run_e2e=true" >>"${GITHUB_OUTPUT}"
 
       - name: Checkout
+        if: steps.e2e-gate.outputs.run_e2e == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
 
       - name: Check companion PR prerequisites
+        if: steps.e2e-gate.outputs.run_e2e == 'true'
         env:
           PR_LABELS_JSON: ${{ toJson(github.event.pull_request.labels) }}
         run: bash .github/scripts/check-operator-e2e-prerequisites.sh
@@ -41,6 +52,7 @@ jobs:
     name: Check for relevant changes
     runs-on: ubuntu-slim
     needs: [check-prerequisites]
+    if: needs.check-prerequisites.outputs.run_e2e == 'true'
     permissions:
       contents: read
       checks: write
@@ -108,7 +120,7 @@ jobs:
     name: ${{ matrix.job_name }}
     runs-on: ubuntu-slim
     needs: [check-prerequisites, check-changes]
-    if: needs.check-changes.outputs.operator != 'true'
+    if: needs.check-prerequisites.outputs.run_e2e == 'true' && needs.check-changes.outputs.operator != 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -149,7 +161,7 @@ jobs:
     name: ${{ matrix.job_name }}
     runs-on: ${{ matrix.runner }}
     needs: [check-prerequisites, check-changes]
-    if: needs.check-changes.outputs.operator == 'true'
+    if: needs.check-prerequisites.outputs.run_e2e == 'true' && needs.check-changes.outputs.operator == 'true'
     # Cancel superseded test jobs per PR/arch to reduce shared smee contention (#6551).
     # Job-level (not workflow-level) so report-operator-e2e-status can finalize /allow
     # Checks API runs when a superseded run's test job is cancelled.
