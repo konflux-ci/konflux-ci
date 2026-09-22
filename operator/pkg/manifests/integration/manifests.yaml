@@ -1323,12 +1323,18 @@ rules:
   - ""
   resources:
   - configmaps
-  - secrets
   verbs:
   - create
   - get
   - list
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - get
 - apiGroups:
   - ""
   resources:
@@ -1411,6 +1417,13 @@ rules:
   verbs:
   - get
   - patch
+- apiGroups:
+  - konflux-ci.dev
+  resources:
+  - components
+  verbs:
+  - get
+  - list
 - apiGroups:
   - pipelinesascode.tekton.dev
   resources:
@@ -1859,7 +1872,7 @@ spec:
         - --leader-elector-retry-period=5s
         command:
         - /manager
-        image: quay.io/konflux-ci/integration-service:534c2c8e44aafeb046ff5d1282a024099bff4054
+        image: quay.io/konflux-ci/integration-service:0d28787d6e1209294cef33816e9a9307c160f607
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1943,7 +1956,7 @@ spec:
             - --zap-log-level=debug
             - --pr-snapshots-to-keep=70
             - --non-pr-snapshots-to-keep=640
-            image: quay.io/konflux-ci/integration-service:534c2c8e44aafeb046ff5d1282a024099bff4054
+            image: quay.io/konflux-ci/integration-service:0d28787d6e1209294cef33816e9a9307c160f607
             imagePullPolicy: Always
             name: test-gc
             resources:
