@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 	. "github.com/onsi/gomega"
 )
 
@@ -18,18 +19,18 @@ func TestJwtAudienceContains(t *testing.T) {
 		return "hdr." + base64.RawURLEncoding.EncodeToString(payload) + ".sig"
 	}
 
-	ok, err := jwtAudienceContains(token("cli"), "cli")
+	ok, err := jwtAudienceContains(token(dex.CLIClientID), dex.CLIClientID)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(ok).To(BeTrue())
 
-	ok, err = jwtAudienceContains(token([]string{"cli", "other"}), "cli")
+	ok, err = jwtAudienceContains(token([]string{dex.CLIClientID, "other"}), dex.CLIClientID)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(ok).To(BeTrue())
 
-	ok, err = jwtAudienceContains(token("oauth2-proxy"), "cli")
+	ok, err = jwtAudienceContains(token("oauth2-proxy"), dex.CLIClientID)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(ok).To(BeFalse())
 
-	_, err = jwtAudienceContains("not-a-jwt", "cli")
+	_, err = jwtAudienceContains("not-a-jwt", dex.CLIClientID)
 	g.Expect(err).To(HaveOccurred())
 }

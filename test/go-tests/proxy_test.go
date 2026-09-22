@@ -15,6 +15,7 @@ import (
 
 	"github.com/coder/websocket"
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -204,10 +205,10 @@ var _ = Describe("Test Proxy endpoints", func() {
 		It("should accept a Dex ID token issued to the public cli client", func() {
 			// Password grant is test-only (Kind static users). Production CLIs use
 			// PKCE or device code; this asserts the same JWT audience and Bearer path.
-			token, err := GetIdTokenForPublicClient("cli", userName, password)
+			token, err := GetIdTokenForPublicClient(dex.CLIClientID, userName, password)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(token).NotTo(BeEmpty())
-			hasCLIAud, audErr := jwtAudienceContains(token, "cli")
+			hasCLIAud, audErr := jwtAudienceContains(token, dex.CLIClientID)
 			Expect(audErr).NotTo(HaveOccurred())
 			Expect(hasCLIAud).To(BeTrue(),
 				"id_token aud must be the public CLI client, not oauth2-proxy")
