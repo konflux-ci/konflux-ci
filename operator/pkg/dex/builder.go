@@ -152,6 +152,14 @@ func NewDexConfig(endpoint *url.URL, params *DexParams) *Config {
 		grantTypes = append(grantTypes, PasswordGrantType)
 	}
 
+	// Static passwords are only meaningful when the local password database is
+	// enabled. Dropping them when it is disabled keeps credentials out of the
+	// rendered ConfigMap, so `enablePasswordDB: false` means what it says.
+	staticPasswords := params.StaticPasswords
+	if !enablePasswordDB {
+		staticPasswords = nil
+	}
+
 	return &Config{
 		Issuer: fmt.Sprintf("%s/idp/", baseURL),
 		Storage: &Storage{
@@ -188,7 +196,7 @@ func NewDexConfig(endpoint *url.URL, params *DexParams) *Config {
 		},
 		Connectors:       connectors,
 		EnablePasswordDB: enablePasswordDB,
-		StaticPasswords:  params.StaticPasswords,
+		StaticPasswords:  staticPasswords,
 		Telemetry: &Telemetry{
 			HTTP: "0.0.0.0:5558",
 		},

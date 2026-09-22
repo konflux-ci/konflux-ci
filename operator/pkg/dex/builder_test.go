@@ -641,6 +641,98 @@ func TestNewDexConfig_PasswordDB(t *testing.T) {
 
 		g.Expect(config.OAuth2.PasswordConnector).To(gomega.Equal("local"))
 	})
+
+	t.Run("omits static passwords when password DB is explicitly disabled", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
+		params := &DexParams{
+			EnablePasswordDB: ptr.To(false),
+			StaticPasswords: []Password{
+				{
+					Email:    "admin@example.com",
+					Hash:     "$2a$10$abcdef",
+					Username: "admin",
+					UserID:   "admin-001",
+				},
+			},
+		}
+
+		config := NewDexConfig(endpoint, params)
+
+		g.Expect(config.EnablePasswordDB).To(gomega.BeFalse())
+		g.Expect(config.StaticPasswords).To(gomega.BeEmpty())
+	})
+
+	t.Run("omits static passwords when password DB resolves false from connectors", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
+		params := &DexParams{
+			// EnablePasswordDB unset: resolves to false because a connector exists.
+			Connectors: []Connector{
+				{Type: "github", ID: "github", Name: "GitHub"},
+			},
+			StaticPasswords: []Password{
+				{
+					Email:    "admin@example.com",
+					Hash:     "$2a$10$abcdef",
+					Username: "admin",
+					UserID:   "admin-001",
+				},
+			},
+		}
+
+		config := NewDexConfig(endpoint, params)
+
+		g.Expect(config.EnablePasswordDB).To(gomega.BeFalse())
+		g.Expect(config.StaticPasswords).To(gomega.BeEmpty())
+	})
+
+	t.Run("does not mutate the caller's static passwords when stripping", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
+		passwords := []Password{
+			{Email: "admin@example.com", Hash: "$2a$10$abcdef", Username: "admin", UserID: "admin-001"},
+		}
+		params := &DexParams{
+			EnablePasswordDB: ptr.To(false),
+			StaticPasswords:  passwords,
+		}
+
+		NewDexConfig(endpoint, params)
+
+		g.Expect(params.StaticPasswords).To(gomega.HaveLen(1))
+		g.Expect(passwords).To(gomega.HaveLen(1))
+	})
+
+	t.Run("keeps no credential in rendered YAML when password DB is disabled", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
+		params := &DexParams{
+			EnablePasswordDB: ptr.To(false),
+			StaticPasswords: []Password{
+				{
+					Email:    "user1@konflux.dev",
+					Hash:     "$2a$10$abcdef",
+					Username: "user1",
+					UserID:   "user-001",
+				},
+			},
+		}
+
+		config := NewDexConfig(endpoint, params)
+		yamlData, err := config.ToYAML()
+
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		// enablePasswordDB is omitempty, so false is omitted rather than rendered.
+		g.Expect(string(yamlData)).NotTo(gomega.ContainSubstring("enablePasswordDB: true"))
+		g.Expect(string(yamlData)).NotTo(gomega.ContainSubstring("staticPasswords"))
+		g.Expect(string(yamlData)).NotTo(gomega.ContainSubstring("$2a$10$abcdef"))
+		g.Expect(string(yamlData)).NotTo(gomega.ContainSubstring("user1@konflux.dev"))
+	})
 }
 
 func TestNewDexConfig_YAML_Output(t *testing.T) {

@@ -53,7 +53,7 @@ The script performs all of the following automatically:
 - Installs the Konflux CRDs
 - Deploys the Konflux Operator into the `konflux-operator` namespace
 - Waits for the Operator to be ready
-- Applies the default Konflux CR and waits for all components to reach `Ready`
+- Applies the OpenShift Konflux CR and waits for all components to reach `Ready`
 
 ## What gets deployed
 
@@ -89,7 +89,7 @@ manually after installation. See
 |-----------|---------|
 | Konflux CRDs | `Konflux` custom resource definition |
 | Konflux Operator | Deployed in the `konflux-operator` namespace |
-| Konflux instance | All Konflux components managed by the default sample CR |
+| Konflux instance | All Konflux components managed by `konflux-openshift.yaml` |
 
 ## Script configuration
 
@@ -113,16 +113,43 @@ OPERATOR_IMAGE=<your-registry>/konflux-operator:<tag> ./deploy-konflux-on-ocp.sh
 
 ### Konflux Custom Resource
 
-The script applies `operator/config/samples/konflux_v1alpha1_konflux.yaml` by default.
+The script applies `operator/config/samples/konflux-openshift.yaml` by default. That CR
+contains no demo users and disables the Dex password database. Users sign in with their
+existing cluster credentials through the OpenShift OAuth server, which the operator
+configures automatically on OpenShift.
+
+In OpenShift CI (Prow), `OPENSHIFT_CI=true` selects
+`operator/config/samples/konflux-openshift-e2e.yaml` instead: the same passwordless
+OpenShift login, with image-controller and PaC webhook TLS skip that the e2e suite
+needs. That file still has no Dex demo users.
+
+To use a different CR, set `KONFLUX_CR` before running the script:
+
+```bash
+KONFLUX_CR=operator/config/samples/konflux-with-github-auth.yaml ./deploy-konflux-on-ocp.sh
+```
 
 {{< alert color="warning" >}}
-The default CR contains demo users with static passwords intended for local testing
-only. Never use this configuration in a production environment. Use OIDC authentication
-instead. See <a href="{{< relref "../examples" >}}">Examples</a> for alternative sample
-configurations.
+Do not apply the Kind samples (<code>konflux_v1alpha1_konflux.yaml</code>,
+<code>konflux-e2e.yaml</code>) on OpenShift. They enable demo users whose password is
+published in this repository, and they pin a Kind-specific NodePort. An OpenShift
+cluster is usually reachable from the internet, so applying one of them grants
+authenticated tenant access to anyone who finds it.
 {{< /alert >}}
 
-To use a different CR, apply it after the script completes:
+The script refuses to apply any CR containing `staticPasswords`. If you are working on a
+deliberately throwaway cluster and accept the exposure, override it:
+
+```bash
+ALLOW_DEV_STATIC_PASSWORDS=true ./deploy-konflux-on-ocp.sh
+```
+
+See <a href="{{< relref "../examples" >}}">Examples</a> for alternative sample
+configurations and the
+[OIDC configuration guide]({{< relref "../guides/oidc-configuration" >}}) for connecting
+GitHub, Google, or LDAP.
+
+To swap the CR after the script completes:
 
 ```bash
 kubectl delete konflux konflux

@@ -1,0 +1,112 @@
+# Title: Konflux Configuration for OpenShift E2E
+# Description: OpenShift Konflux CR for Prow e2e — no demo users, image-controller enabled.
+#
+# Used by ./deploy-konflux-on-ocp.sh when OPENSHIFT_CI=true (Prow). Same as
+# konflux-openshift.yaml, plus image-controller and PaC webhook TLS skip that the
+# OpenShift e2e suite needs. Dex static passwords are not included.
+#
+# Do not use konflux-e2e.yaml on OpenShift. That Kind sample enables demo users
+# whose password is published in this repository.
+#
+# Usage:
+#   OPENSHIFT_CI=true ./deploy-konflux-on-ocp.sh
+#   KONFLUX_CR=operator/config/samples/konflux-openshift-e2e.yaml ./deploy-konflux-on-ocp.sh
+apiVersion: konflux.konflux-ci.dev/v1alpha1
+kind: Konflux
+metadata:
+  labels:
+    app.kubernetes.io/name: konflux-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: konflux
+spec:
+  ui:
+    spec:
+      # On OpenShift the operator creates an Ingress and derives the host from the
+      # cluster ingress domain, defaulting to "konflux-ui-{namespace}.{domain}".
+      ingress:
+        enabled: true
+      proxy:
+        replicas: 1
+        reverseProxy:
+          resources:
+            requests:
+              cpu: 30m
+              memory: 128Mi
+            limits:
+              cpu: 30m
+              memory: 128Mi
+      dex:
+        config:
+          # Local password database disabled. Prow uses OpenShift OAuth (kubeadmin).
+          enablePasswordDB: false
+  integrationService:
+    spec:
+      integrationControllerManager:
+        replicas: 1
+        manager:
+          resources:
+            requests:
+              cpu: 30m
+              memory: 128Mi
+            limits:
+              cpu: 30m
+              memory: 128Mi
+      snapshotGarbageCollector:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+  releaseService:
+    spec:
+      releaseControllerManager:
+        replicas: 1
+        manager:
+          resources:
+            requests:
+              cpu: 30m
+              memory: 128Mi
+            limits:
+              cpu: 30m
+              memory: 128Mi
+  buildService:
+    spec:
+      # Skip TLS verification for PaC webhook URLs — e2e exposes Pipelines-as-Code
+      # via a route with a self-signed certificate.
+      pacWebhookInsecureSSL: true
+      buildControllerManager:
+        replicas: 1
+        manager:
+          resources:
+            requests:
+              cpu: 30m
+              memory: 128Mi
+            limits:
+              cpu: 30m
+              memory: 128Mi
+  namespaceLister:
+    spec:
+      cacheResyncPeriod: "10m"
+      logLevel: info
+      namespaceLister:
+        replicas: 1
+        namespaceLister:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+  info:
+    spec:
+      publicInfo:
+        environment: development
+        visibility: public
+  certManager:
+    createClusterIssuer: true
+  internalRegistry:
+    enabled: false
+  defaultTenant:
+    enabled: true
+  imageController:
+    enabled: true

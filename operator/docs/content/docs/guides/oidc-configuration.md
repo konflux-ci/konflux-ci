@@ -90,10 +90,14 @@ Requires [kubelogin v1.26 or later](https://github.com/int128/kubelogin/releases
 The `cli` client already registers Dex's device callback (`/device/callback`).
 
 {{< alert color="warning" >}}
-The static-password configuration included in the default sample CR (and used in local
-Kind deployments) is intended for <strong>development and CI only</strong>. Remove
-<code>staticPasswords</code> and configure an OIDC connector before deploying to
-production.
+The static-password configuration in the Kind sample CRs
+(<code>konflux_v1alpha1_konflux.yaml</code>, <code>konflux-e2e.yaml</code>) is intended
+for <strong>development and CI only</strong>. Those demo users have a password that is
+published in this repository. Never apply those samples to a cluster reachable from the
+internet. On OpenShift use <code>konflux-openshift.yaml</code> (or
+<code>konflux-openshift-e2e.yaml</code> in Prow), which have no demo users;
+elsewhere, remove <code>staticPasswords</code>, set
+<code>enablePasswordDB: false</code>, and configure an OIDC connector.
 {{< /alert >}}
 
 ## GitHub OAuth
@@ -389,8 +393,14 @@ it with `enablePasswordDB: true` and define users in `staticPasswords`:
 {{< alert color="warning" >}}
 Static passwords are stored as bcrypt hashes in the Konflux CR, but the CR itself is
 visible to anyone with read access to the cluster. <strong>Never use this configuration
-in production.</strong> Use an OIDC connector instead.
+in production.</strong> Use an OIDC connector instead. The hash shown above is the one
+used by the Kind samples and corresponds to a password published in this repository, so
+it grants access to anyone who finds the cluster.
 {{< /alert >}}
+
+Static passwords only take effect while the password database is enabled. If
+`enablePasswordDB` is `false`, or it is unset and at least one connector is configured,
+the operator omits `staticPasswords` from the rendered Dex configuration entirely.
 
 ## Combining Multiple Connectors
 
