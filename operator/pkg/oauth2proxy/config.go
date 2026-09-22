@@ -107,6 +107,7 @@ func WithCookieConfig() customization.ContainerOption {
 
 // WithAuthSettings configures authentication behavior.
 // Sets email domain restrictions, X-Auth-Request header, JWT handling,
+// registers the public CLI client as an extra accepted audience,
 // and requests the "groups" scope so Dex includes group memberships in the ID token.
 func WithAuthSettings() customization.ContainerOption {
 	return customization.WithEnv(

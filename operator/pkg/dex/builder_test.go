@@ -112,7 +112,7 @@ func TestNewDexConfig(t *testing.T) {
 		g.Expect(client.Public).To(gomega.BeTrue())
 		g.Expect(client.Secret).To(gomega.BeEmpty())
 		g.Expect(client.SecretEnv).To(gomega.BeEmpty())
-		g.Expect(client.RedirectURIs).To(gomega.Equal(CLIRedirectURIs))
+		g.Expect(client.RedirectURIs).To(gomega.Equal(cliRedirectURIs))
 		g.Expect(client.RedirectURIs).To(gomega.ContainElement(DeviceCallbackURI))
 	})
 
