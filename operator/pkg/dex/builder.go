@@ -38,9 +38,9 @@ const (
 	DeviceCallbackURI = "/device/callback"
 )
 
-// CLIRedirectURIs are loopback callbacks for kubelogin (ports 8000 and 18000)
+// cliRedirectURIs are loopback callbacks for kubelogin (ports 8000 and 18000)
 // plus Dex's device-flow callback.
-var CLIRedirectURIs = []string{
+var cliRedirectURIs = []string{
 	"http://localhost:8000",
 	"http://localhost:8000/",
 	"http://localhost:18000",
@@ -177,7 +177,7 @@ func NewDexConfig(endpoint *url.URL, params *DexParams) *Config {
 				ID:           CLIClientID,
 				Name:         "CLI",
 				Public:       true,
-				RedirectURIs: CLIRedirectURIs,
+				RedirectURIs: cliRedirectURIs,
 			},
 		},
 		Connectors:       connectors,
