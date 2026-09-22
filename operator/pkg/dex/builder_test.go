@@ -518,6 +518,7 @@ func TestNewDexConfig_PasswordDB(t *testing.T) {
 		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.EnablePasswordDB).To(gomega.BeTrue())
+		g.Expect(config.OAuth2.GrantTypes).To(gomega.ContainElement("password"))
 	})
 
 	t.Run("disables password database when explicitly set to false", func(t *testing.T) {
@@ -531,6 +532,7 @@ func TestNewDexConfig_PasswordDB(t *testing.T) {
 		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.EnablePasswordDB).To(gomega.BeFalse())
+		g.Expect(config.OAuth2.GrantTypes).NotTo(gomega.ContainElement("password"))
 	})
 
 	t.Run("defaults to true when not set and no connectors", func(t *testing.T) {
@@ -545,6 +547,7 @@ func TestNewDexConfig_PasswordDB(t *testing.T) {
 		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.EnablePasswordDB).To(gomega.BeTrue())
+		g.Expect(config.OAuth2.GrantTypes).To(gomega.ContainElement("password"))
 	})
 
 	t.Run("defaults to false when not set and connectors exist", func(t *testing.T) {
@@ -561,6 +564,7 @@ func TestNewDexConfig_PasswordDB(t *testing.T) {
 		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.EnablePasswordDB).To(gomega.BeFalse())
+		g.Expect(config.OAuth2.GrantTypes).NotTo(gomega.ContainElement("password"))
 	})
 
 	t.Run("defaults to false when not set and OpenShift connector is enabled", func(t *testing.T) {
@@ -575,6 +579,7 @@ func TestNewDexConfig_PasswordDB(t *testing.T) {
 		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.EnablePasswordDB).To(gomega.BeFalse())
+		g.Expect(config.OAuth2.GrantTypes).NotTo(gomega.ContainElement("password"))
 	})
 
 	t.Run("respects explicit true even with connectors", func(t *testing.T) {
@@ -591,6 +596,7 @@ func TestNewDexConfig_PasswordDB(t *testing.T) {
 		config := NewDexConfig(endpoint, params)
 
 		g.Expect(config.EnablePasswordDB).To(gomega.BeTrue())
+		g.Expect(config.OAuth2.GrantTypes).To(gomega.ContainElement("password"))
 	})
 
 	t.Run("includes static passwords", func(t *testing.T) {

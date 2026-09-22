@@ -7,6 +7,7 @@ handle_path /api/chatbot/* {
         }
         inject_cached_vars
         reverse_proxy https://__WATSON_HOST__ {
+            header_up -Authorization
             header_up Authorization "Basic {http.vars.watson_auth}"
             header_up Host __WATSON_HOST__
             import /mnt/caddy-snippets/watson-tls.conf

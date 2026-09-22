@@ -80,6 +80,9 @@
 			}
 			rewrite * /api/v1/namespaces
 			reverse_proxy https://namespace-lister.namespace-lister.svc.cluster.local:8080 {
+				# Drop the client Dex JWT. This backend authenticates via X-User/X-Group.
+				# reverse_proxy copies incoming headers; do not let Authorization through.
+				header_up -Authorization
 				header_down -X-Correlation-ID
 				transport http {
 					read_timeout 30m
@@ -108,6 +111,9 @@
 			impersonate
 			inject_cached_vars
 			reverse_proxy https://kubernetes.default.svc {
+				# Strip the client Bearer JWT first. header_up set can append
+				# instead of replace, which would leak the Dex token upstream.
+				header_up -Authorization
 				header_up Authorization "Bearer {http.vars.kube_token}"
 				transport http {
 					read_timeout 30m
@@ -129,6 +135,7 @@
 			impersonate
 			inject_cached_vars
 			reverse_proxy https://kubernetes.default.svc {
+				header_up -Authorization
 				header_up Authorization "Bearer {http.vars.kube_token}"
 				transport http {
 					read_timeout 30m

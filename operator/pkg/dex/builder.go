@@ -133,6 +133,19 @@ func NewDexConfig(endpoint *url.URL, params *DexParams) *Config {
 	// or if not set and no connectors are configured
 	enablePasswordDB := ptr.Deref(params.EnablePasswordDB, len(connectors) == 0)
 
+	// Explicit list replaces Dex defaults. device_code is for headless CLIs.
+	// "password" is server-wide: include it only when the local password DB
+	// is on so Kind/CI ExtractToken still works, but the public CLI client
+	// cannot use ROPC in connector-based deployments.
+	grantTypes := []string{
+		"authorization_code",
+		"refresh_token",
+		DeviceCodeGrantType,
+	}
+	if enablePasswordDB {
+		grantTypes = append(grantTypes, "password")
+	}
+
 	return &Config{
 		Issuer: fmt.Sprintf("%s/idp/", baseURL),
 		Storage: &Storage{
@@ -149,14 +162,7 @@ func NewDexConfig(endpoint *url.URL, params *DexParams) *Config {
 		OAuth2: &OAuth2{
 			SkipApprovalScreen: true,
 			PasswordConnector:  params.PasswordConnector,
-			// Explicit list replaces Dex defaults. "password" is required for
-			// Kind/local static-user tests; device_code is for headless CLIs.
-			GrantTypes: []string{
-				"authorization_code",
-				"refresh_token",
-				"password",
-				DeviceCodeGrantType,
-			},
+			GrantTypes:         grantTypes,
 		},
 		StaticClients: []Client{
 			{

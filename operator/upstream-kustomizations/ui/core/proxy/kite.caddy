@@ -8,6 +8,7 @@ handle_path /api/k8s/plugins/kite/* {
 		impersonate
 		inject_cached_vars
         reverse_proxy https://__KITE_HOSTNAME__ {
+            header_up -Authorization
             header_up Authorization "Bearer {http.vars.kube_token}"
             import /mnt/caddy-snippets/backend-tls.conf
         }
