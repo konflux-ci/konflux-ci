@@ -35,7 +35,7 @@ func TestNewDexConfig(t *testing.T) {
 
 		g.Expect(config).NotTo(gomega.BeNil())
 		g.Expect(config.Issuer).To(gomega.Equal("https://dex.example.com/idp/"))
-		g.Expect(config.StaticClients).To(gomega.HaveLen(1))
+		g.Expect(config.StaticClients).To(gomega.HaveLen(2))
 		g.Expect(config.StaticClients[0].RedirectURIs).To(gomega.ContainElement("https://dex.example.com/oauth2/callback"))
 	})
 
@@ -90,11 +90,46 @@ func TestNewDexConfig(t *testing.T) {
 
 		config := NewDexConfig(endpoint, params)
 
-		g.Expect(config.StaticClients).To(gomega.HaveLen(1))
+		g.Expect(config.StaticClients).To(gomega.HaveLen(2))
 		client := config.StaticClients[0]
-		g.Expect(client.ID).To(gomega.Equal("oauth2-proxy"))
+		g.Expect(client.ID).To(gomega.Equal(OAuth2ProxyClientID))
 		g.Expect(client.SecretEnv).To(gomega.Equal("CLIENT_SECRET"))
 		g.Expect(client.Name).To(gomega.Equal("oauth2-proxy"))
+	})
+
+	t.Run("configures public CLI client", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
+		params := &DexParams{}
+
+		config := NewDexConfig(endpoint, params)
+
+		g.Expect(config.StaticClients).To(gomega.HaveLen(2))
+		client := config.StaticClients[1]
+		g.Expect(client.ID).To(gomega.Equal(CLIClientID))
+		g.Expect(client.Name).To(gomega.Equal("CLI"))
+		g.Expect(client.Public).To(gomega.BeTrue())
+		g.Expect(client.Secret).To(gomega.BeEmpty())
+		g.Expect(client.SecretEnv).To(gomega.BeEmpty())
+		g.Expect(client.RedirectURIs).To(gomega.Equal(CLIRedirectURIs))
+		g.Expect(client.RedirectURIs).To(gomega.ContainElement(DeviceCallbackURI))
+	})
+
+	t.Run("enables CLI OAuth grant types", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
+		params := &DexParams{}
+
+		config := NewDexConfig(endpoint, params)
+
+		g.Expect(config.OAuth2.GrantTypes).To(gomega.ConsistOf(
+			"authorization_code",
+			"refresh_token",
+			"password",
+			DeviceCodeGrantType,
+		))
 	})
 
 	t.Run("configures telemetry", func(t *testing.T) {
@@ -634,6 +669,10 @@ func TestNewDexConfig_YAML_Output(t *testing.T) {
 		g.Expect(string(yamlData)).To(gomega.ContainSubstring("enablePasswordDB: true"))
 		g.Expect(string(yamlData)).To(gomega.ContainSubstring("passwordConnector: local"))
 		g.Expect(string(yamlData)).To(gomega.ContainSubstring("email: admin@example.com"))
+		g.Expect(string(yamlData)).To(gomega.ContainSubstring("id: cli"))
+		g.Expect(string(yamlData)).To(gomega.ContainSubstring("public: true"))
+		g.Expect(string(yamlData)).To(gomega.ContainSubstring("urn:ietf:params:oauth:grant-type:device_code"))
+		g.Expect(string(yamlData)).To(gomega.ContainSubstring(DeviceCallbackURI))
 	})
 
 	t.Run("omits empty fields in YAML", func(t *testing.T) {

@@ -28,6 +28,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 )
 
 const (
@@ -112,6 +113,7 @@ func WithAuthSettings() customization.ContainerOption {
 		corev1.EnvVar{Name: "OAUTH2_PROXY_EMAIL_DOMAINS", Value: "*"},
 		corev1.EnvVar{Name: "OAUTH2_PROXY_SET_XAUTHREQUEST", Value: "true"},
 		corev1.EnvVar{Name: "OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS", Value: "true"},
+		corev1.EnvVar{Name: "OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES", Value: dex.CLIClientID},
 		corev1.EnvVar{Name: "OAUTH2_PROXY_SCOPE", Value: "openid email profile groups"},
 	)
 }

@@ -106,6 +106,11 @@ type OAuth2 struct {
 	// ResponseTypes specifies the allowed OAuth2 response types.
 	ResponseTypes []string `json:"responseTypes,omitempty"`
 
+	// GrantTypes specifies the allowed OAuth2 grant types.
+	// When set, this replaces Dex defaults; include "password" whenever
+	// passwordConnector is used (Kind/local Dex password-grant tests).
+	GrantTypes []string `json:"grantTypes,omitempty"`
+
 	// SkipApprovalScreen skips the user approval screen during authorization.
 	SkipApprovalScreen bool `json:"skipApprovalScreen,omitempty"`
 
