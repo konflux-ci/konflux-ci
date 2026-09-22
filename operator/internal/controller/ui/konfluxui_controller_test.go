@@ -117,7 +117,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 	})
 
 	Context("CLI login configuration", func() {
-		It("registers the public CLI Dex client and oauth2-proxy extra audience", func(ctx context.Context) {
+		It("should register the public CLI Dex client and oauth2-proxy extra audience", func(ctx context.Context) {
 			startManager(nil)
 
 			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}

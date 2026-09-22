@@ -158,7 +158,10 @@ public `cli` OAuth client (`/idp/` issuer) and send
 routes). Caddy forwards that header on `forward_auth`; oauth2-proxy
 validates the JWT (`aud` must be `oauth2-proxy` or `cli`) and returns the
 same `X-Auth-Request-Email` / `X-Auth-Request-Groups` headers as for a
-browser session. Impersonation then proceeds as above.
+browser session. Impersonation then proceeds as above. The client JWT is
+not forwarded to kube or other backends: each `reverse_proxy` strips
+`Authorization` and, for kube-style backends, sets the proxy service
+account token instead. Namespace-lister uses `X-User` / `X-Group` only.
 
 See [Authentication and OIDC Configuration](../../docs/content/docs/guides/oidc-configuration.md)
 for kubectl / kubelogin usage.

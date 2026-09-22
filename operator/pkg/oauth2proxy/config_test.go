@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 )
 
 // applyOption is a test helper that applies a ContainerOption and returns the resulting env vars.
@@ -50,7 +51,7 @@ func TestWithProvider(t *testing.T) {
 
 	g.Expect(envMap["OAUTH2_PROXY_PROVIDER"]).To(Equal("oidc"))
 	g.Expect(envMap["OAUTH2_PROXY_PROVIDER_DISPLAY_NAME"]).To(Equal("Dex OIDC"))
-	g.Expect(envMap["OAUTH2_PROXY_CLIENT_ID"]).To(Equal("oauth2-proxy"))
+	g.Expect(envMap["OAUTH2_PROXY_CLIENT_ID"]).To(Equal(dex.OAuth2ProxyClientID))
 	g.Expect(envMap["OAUTH2_PROXY_HTTP_ADDRESS"]).To(Equal("127.0.0.1:6000"))
 	g.Expect(envMap["OAUTH2_PROXY_SKIP_PROVIDER_BUTTON"]).To(Equal("true"))
 	g.Expect(envMap["OAUTH2_PROXY_PROMPT"]).To(Equal("login"))
@@ -135,7 +136,7 @@ func TestWithAuthSettings(t *testing.T) {
 	g.Expect(envMap["OAUTH2_PROXY_EMAIL_DOMAINS"]).To(Equal("*"))
 	g.Expect(envMap["OAUTH2_PROXY_SET_XAUTHREQUEST"]).To(Equal("true"))
 	g.Expect(envMap["OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS"]).To(Equal("true"))
-	g.Expect(envMap["OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES"]).To(Equal("cli"))
+	g.Expect(envMap["OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES"]).To(Equal(dex.CLIClientID))
 	g.Expect(envMap["OAUTH2_PROXY_SCOPE"]).To(Equal("openid email profile groups"))
 }
 
