@@ -196,13 +196,12 @@ data:
     after forward_auth. reverse_proxy copies\n\t\t\t# incoming headers; this backend
     authenticates via X-User/X-Group.\n\t\t\trequest_header -Authorization\n\t\t\trewrite
     * /api/v1/namespaces\n\t\t\treverse_proxy https://namespace-lister.namespace-lister.svc.cluster.local:8080
-    {\n\t\t\t\theader_up -Authorization\n\t\t\t\theader_down -X-Correlation-ID\n\t\t\t\ttransport
-    http {\n\t\t\t\t\tread_timeout 30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool
-    file /mnt/cluster-ca/ca-bundle.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t# Backend
-    snippets (tekton-results, kubearchive, etc.) loaded from init-generated configs.\n\t#
-    NOTE: Imported snippets MUST use paths more specific than /api/k8s/ to avoid\n\t#
-    shadowing the Kube API catch-all handler below. Caddy evaluates handle blocks\n\t#
-    by specificity (longest path match first), so e.g. /api/k8s/plugins/tekton-results/\n\t#
+    {\n\t\t\t\theader_down -X-Correlation-ID\n\t\t\t\ttransport http {\n\t\t\t\t\tread_timeout
+    30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool file /mnt/cluster-ca/ca-bundle.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
+    Backend snippets (tekton-results, kubearchive, etc.) loaded from init-generated
+    configs.\n\t# NOTE: Imported snippets MUST use paths more specific than /api/k8s/
+    to avoid\n\t# shadowing the Kube API catch-all handler below. Caddy evaluates
+    handle blocks\n\t# by specificity (longest path match first), so e.g. /api/k8s/plugins/tekton-results/\n\t#
     is safe because it is more specific than /api/k8s/.\n\timport /mnt/caddy-snippets/*.caddy\n\n\t#
     WebSocket to Kube API\n\thandle_path /wss/k8s/* {\n\t\troute {\n\t\t\tforward_auth
     127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\theader_up Authorization {http.request.header.Authorization}\n\t\t\t\tcopy_headers
@@ -226,7 +225,7 @@ data:
     {path} /index.html\n\t\tfile_server\n\t}\n}\n"
 kind: ConfigMap
 metadata:
-  name: proxy-caddyfile-f98dt7h67t
+  name: proxy-caddyfile-76hgkmbm4t
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -761,7 +760,7 @@ spec:
           items:
           - key: Caddyfile
             path: Caddyfile
-          name: proxy-caddyfile-f98dt7h67t
+          name: proxy-caddyfile-76hgkmbm4t
         name: proxy-caddyfile
       - configMap:
           defaultMode: 420
