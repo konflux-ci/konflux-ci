@@ -107,7 +107,7 @@ type OAuth2 struct {
 	ResponseTypes []string `json:"responseTypes,omitempty"`
 
 	// GrantTypes specifies the allowed OAuth2 grant types.
-	// When set, this replaces Dex defaults. Include "password" only when
+	// When set, this replaces Dex defaults. Include PasswordGrantType only when
 	// the local password DB is enabled (Kind/local Dex password-grant tests).
 	GrantTypes []string `json:"grantTypes,omitempty"`
 

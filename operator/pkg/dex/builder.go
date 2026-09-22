@@ -29,6 +29,12 @@ const (
 	OAuth2ProxyClientID = "oauth2-proxy"
 	// CLIClientID is the public Dex static client for kubectl and other OIDC CLIs.
 	CLIClientID = "cli"
+	// AuthorizationCodeGrantType is the OAuth2 authorization-code grant.
+	AuthorizationCodeGrantType = "authorization_code"
+	// RefreshTokenGrantType is the OAuth2 refresh-token grant.
+	RefreshTokenGrantType = "refresh_token"
+	// PasswordGrantType is the OAuth2 resource-owner password grant (ROPC).
+	PasswordGrantType = "password"
 	// DeviceCodeGrantType is the RFC 8628 device-code grant.
 	DeviceCodeGrantType = "urn:ietf:params:oauth:grant-type:device_code"
 	// DeviceCallbackURI is Dex's built-in device-flow callback. Dex sends
@@ -138,12 +144,12 @@ func NewDexConfig(endpoint *url.URL, params *DexParams) *Config {
 	// is on so Kind/CI ExtractToken still works, but the public CLI client
 	// cannot use ROPC in connector-based deployments.
 	grantTypes := []string{
-		"authorization_code",
-		"refresh_token",
+		AuthorizationCodeGrantType,
+		RefreshTokenGrantType,
 		DeviceCodeGrantType,
 	}
 	if enablePasswordDB {
-		grantTypes = append(grantTypes, "password")
+		grantTypes = append(grantTypes, PasswordGrantType)
 	}
 
 	return &Config{

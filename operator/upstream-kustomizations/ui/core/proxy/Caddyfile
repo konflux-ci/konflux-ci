@@ -83,7 +83,6 @@
 			request_header -Authorization
 			rewrite * /api/v1/namespaces
 			reverse_proxy https://namespace-lister.namespace-lister.svc.cluster.local:8080 {
-				header_up -Authorization
 				header_down -X-Correlation-ID
 				transport http {
 					read_timeout 30m
