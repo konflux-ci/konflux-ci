@@ -200,6 +200,22 @@ var _ = Describe("Test Proxy endpoints", func() {
 		})
 	})
 
+	Describe("Test public CLI client", Label("proxy-dex"), func() {
+		It("should accept a Dex ID token issued to the public cli client", func() {
+			// Password grant is test-only (Kind static users). Production CLIs use
+			// PKCE or device code; this asserts the same JWT audience and Bearer path.
+			token, err := GetIdTokenForPublicClient("cli", userName, password)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(token).NotTo(BeEmpty())
+			hasCLIAud, audErr := jwtAudienceContains(token, "cli")
+			Expect(audErr).NotTo(HaveOccurred())
+			Expect(hasCLIAud).To(BeTrue(),
+				"id_token aud must be the public CLI client, not oauth2-proxy")
+
+			expectProxyGETWithBearer("/api/k8s/api/v1/namespaces", token, http.StatusOK)
+		})
+	})
+
 	Describe("Test namespace-lister endpoint", func() {
 		It("should return namespaces for authenticated user", func() {
 			token, err := ExtractToken(proxyClient)
@@ -620,4 +636,76 @@ func GetIdTokenForUser(header, user, pass string) (string, error) {
 		return "", err
 	}
 	return tokenResp.IdToken, nil
+}
+
+// GetIdTokenForPublicClient obtains a Dex ID token using the resource-owner
+// password grant with a public client (no client secret). Kind/local only.
+func GetIdTokenForPublicClient(clientID, user, pass string) (string, error) {
+	formData := url.Values{}
+	formData.Add("grant_type", "password")
+	formData.Add("client_id", clientID)
+	formData.Add("scope", "openid profile email groups")
+	formData.Add("username", user)
+	formData.Add("password", pass)
+
+	request, err := http.NewRequest("POST", tokenURL, bytes.NewBufferString(formData.Encode()))
+	if err != nil {
+		return "", err
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := proxyHTTPClient.Do(request)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("dex token endpoint returned HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	var tokenResp TokenResponse
+	if err := json.Unmarshal(body, &tokenResp); err != nil {
+		return "", fmt.Errorf("decode token response: %w (%s)", err, string(body))
+	}
+	if tokenResp.IdToken == "" {
+		return "", fmt.Errorf("dex token response missing id_token: %s", string(body))
+	}
+	return tokenResp.IdToken, nil
+}
+
+// jwtAudienceContains reports whether the JWT aud claim is want or includes want.
+func jwtAudienceContains(idToken, want string) (bool, error) {
+	parts := strings.Split(idToken, ".")
+	if len(parts) < 2 {
+		return false, fmt.Errorf("id token is not a JWT")
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return false, fmt.Errorf("decode JWT payload: %w", err)
+	}
+	var claims struct {
+		Aud json.RawMessage `json:"aud"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return false, fmt.Errorf("unmarshal JWT claims: %w", err)
+	}
+	var asString string
+	if err := json.Unmarshal(claims.Aud, &asString); err == nil {
+		return asString == want, nil
+	}
+	var asList []string
+	if err := json.Unmarshal(claims.Aud, &asList); err == nil {
+		for _, a := range asList {
+			if a == want {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+	return false, fmt.Errorf("unexpected aud claim %s", string(claims.Aud))
 }

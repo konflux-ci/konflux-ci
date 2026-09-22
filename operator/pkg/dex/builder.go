@@ -24,6 +24,34 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+const (
+	// OAuth2ProxyClientID is the Dex static client used by the UI oauth2-proxy.
+	OAuth2ProxyClientID = "oauth2-proxy"
+	// CLIClientID is the public Dex static client for kubectl and other OIDC CLIs.
+	CLIClientID = "cli"
+	// DeviceCodeGrantType is the RFC 8628 device-code grant.
+	DeviceCodeGrantType = "urn:ietf:params:oauth:grant-type:device_code"
+	// DeviceCallbackURI is Dex's built-in device-flow callback. Dex sends
+	// redirect_uri=/device/callback after the user submits the device code.
+	// A public client with any RedirectURIs set does not get Dex's implicit
+	// allow for this path, so it must be listed explicitly.
+	DeviceCallbackURI = "/device/callback"
+)
+
+// CLIRedirectURIs are loopback callbacks for kubelogin (ports 8000 and 18000)
+// plus Dex's device-flow callback.
+var CLIRedirectURIs = []string{
+	"http://localhost:8000",
+	"http://localhost:8000/",
+	"http://localhost:18000",
+	"http://localhost:18000/",
+	"http://127.0.0.1:8000",
+	"http://127.0.0.1:8000/",
+	"http://127.0.0.1:18000",
+	"http://127.0.0.1:18000/",
+	DeviceCallbackURI,
+}
+
 // +kubebuilder:object:generate=true
 
 // DexParams contains the configurable parameters for the Dex IdP configuration.
@@ -65,7 +93,8 @@ type DexParams struct {
 }
 
 // NewDexConfig creates a Dex configuration for the Konflux UI.
-// This configuration uses Kubernetes storage, HTTPS with TLS, and an oauth2-proxy client.
+// This configuration uses Kubernetes storage, HTTPS with TLS, an oauth2-proxy
+// confidential client, and a public CLI client for kubectl and other OIDC tools.
 // endpoint is the base URL for the Dex issuer (e.g., https://dex.example.com).
 func NewDexConfig(endpoint *url.URL, params *DexParams) *Config {
 	baseURL := endpoint.String()
@@ -120,15 +149,29 @@ func NewDexConfig(endpoint *url.URL, params *DexParams) *Config {
 		OAuth2: &OAuth2{
 			SkipApprovalScreen: true,
 			PasswordConnector:  params.PasswordConnector,
+			// Explicit list replaces Dex defaults. "password" is required for
+			// Kind/local static-user tests; device_code is for headless CLIs.
+			GrantTypes: []string{
+				"authorization_code",
+				"refresh_token",
+				"password",
+				DeviceCodeGrantType,
+			},
 		},
 		StaticClients: []Client{
 			{
-				ID:        "oauth2-proxy",
+				ID:        OAuth2ProxyClientID,
 				SecretEnv: "CLIENT_SECRET",
 				Name:      "oauth2-proxy",
 				RedirectURIs: []string{
 					fmt.Sprintf("%s/oauth2/callback", baseURL),
 				},
+			},
+			{
+				ID:           CLIClientID,
+				Name:         "CLI",
+				Public:       true,
+				RedirectURIs: CLIRedirectURIs,
 			},
 		},
 		Connectors:       connectors,

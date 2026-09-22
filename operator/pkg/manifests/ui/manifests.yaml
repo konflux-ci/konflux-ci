@@ -119,30 +119,33 @@ subjects:
 apiVersion: v1
 data:
   kite.caddy: "handle_path /api/k8s/plugins/kite/* {\n    route {\n        forward_auth
-    127.0.0.1:6000 {\n            uri /oauth2/auth\n            copy_headers X-Auth-Request-Email
+    127.0.0.1:6000 {\n            uri /oauth2/auth\n            header_up Authorization
+    {http.request.header.Authorization}\n            copy_headers X-Auth-Request-Email
     X-Auth-Request-Groups\n        }\n\t\timpersonate\n\t\tinject_cached_vars\n        reverse_proxy
     https://__KITE_HOSTNAME__ {\n            header_up Authorization \"Bearer {http.vars.kube_token}\"\n
     \           import /mnt/caddy-snippets/backend-tls.conf\n        }\n    }\n}\n"
   kubearchive.caddy: "handle_path /api/k8s/plugins/kubearchive/* {\n    route {\n
-    \       forward_auth 127.0.0.1:6000 {\n            uri /oauth2/auth\n            copy_headers
-    X-Auth-Request-Email X-Auth-Request-Groups\n        }\n\t\timpersonate\n\t\tinject_cached_vars\n
-    \       reverse_proxy https://__KUBEARCHIVE_HOSTNAME__:8081 {\n            header_up
-    Authorization \"Bearer {http.vars.kube_token}\"\n            import /mnt/caddy-snippets/backend-tls.conf\n
-    \       }\n    }\n}\n"
-  tekton-results.caddy: "handle_path /api/k8s/plugins/tekton-results/* {\n    route
-    {\n        forward_auth 127.0.0.1:6000 {\n            uri /oauth2/auth\n            copy_headers
-    X-Auth-Request-Email X-Auth-Request-Groups\n        }\n\t\timpersonate\n\t\tinject_cached_vars\n
-    \       reverse_proxy https://__TEKTON_RESULTS_HOSTNAME__:8080 {\n            #
-    TODO: switch to {http.vars.backend_token} once Tekton Results\n            # accepts
-    the \"konflux-backend\" audience in TokenReview.\n            # See backend-token
-    volume in proxy.yaml for context.\n            header_up Authorization \"Bearer
+    \       forward_auth 127.0.0.1:6000 {\n            uri /oauth2/auth\n            header_up
+    Authorization {http.request.header.Authorization}\n            copy_headers X-Auth-Request-Email
+    X-Auth-Request-Groups\n        }\n\t\timpersonate\n\t\tinject_cached_vars\n        reverse_proxy
+    https://__KUBEARCHIVE_HOSTNAME__:8081 {\n            header_up Authorization \"Bearer
     {http.vars.kube_token}\"\n            import /mnt/caddy-snippets/backend-tls.conf\n
     \       }\n    }\n}\n"
+  tekton-results.caddy: "handle_path /api/k8s/plugins/tekton-results/* {\n    route
+    {\n        forward_auth 127.0.0.1:6000 {\n            uri /oauth2/auth\n            header_up
+    Authorization {http.request.header.Authorization}\n            copy_headers X-Auth-Request-Email
+    X-Auth-Request-Groups\n        }\n\t\timpersonate\n\t\tinject_cached_vars\n        reverse_proxy
+    https://__TEKTON_RESULTS_HOSTNAME__:8080 {\n            # TODO: switch to {http.vars.backend_token}
+    once Tekton Results\n            # accepts the \"konflux-backend\" audience in
+    TokenReview.\n            # See backend-token volume in proxy.yaml for context.\n
+    \           header_up Authorization \"Bearer {http.vars.kube_token}\"\n            import
+    /mnt/caddy-snippets/backend-tls.conf\n        }\n    }\n}\n"
   watson.caddy: |
     handle_path /api/chatbot/* {
         route {
             forward_auth 127.0.0.1:6000 {
                 uri /oauth2/auth
+                header_up Authorization {http.request.header.Authorization}
                 copy_headers X-Auth-Request-Email X-Auth-Request-Groups
             }
             inject_cached_vars
@@ -155,7 +158,7 @@ data:
     }
 kind: ConfigMap
 metadata:
-  name: proxy-caddy-templates-46ctfh6tk7
+  name: proxy-caddy-templates-hdbt5bdc65
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -184,25 +187,26 @@ data:
     only sees namespaces where\n\t# they are bound individually — group-based bindings
     are invisible.\n\t@nsListGet {\n\t\tmethod GET\n\t\tpath /api/k8s/api/v1/namespaces
     /api/k8s/api/v1/namespaces/\n\t}\n\thandle @nsListGet {\n\t\troute {\n\t\t\tforward_auth
-    127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\tcopy_headers X-Auth-Request-Email
-    X-Auth-Request-Groups\n\t\t\t}\n\t\t\timpersonate {\n\t\t\t\ttarget_user X-User\n\t\t\t\ttarget_group
-    X-Group\n\t\t\t}\n\t\t\trewrite * /api/v1/namespaces\n\t\t\treverse_proxy https://namespace-lister.namespace-lister.svc.cluster.local:8080
-    {\n\t\t\t\theader_down -X-Correlation-ID\n\t\t\t\ttransport http {\n\t\t\t\t\tread_timeout
-    30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool file /mnt/cluster-ca/ca-bundle.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
+    127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\theader_up Authorization {http.request.header.Authorization}\n\t\t\t\tcopy_headers
+    X-Auth-Request-Email X-Auth-Request-Groups\n\t\t\t}\n\t\t\timpersonate {\n\t\t\t\ttarget_user
+    X-User\n\t\t\t\ttarget_group X-Group\n\t\t\t}\n\t\t\trewrite * /api/v1/namespaces\n\t\t\treverse_proxy
+    https://namespace-lister.namespace-lister.svc.cluster.local:8080 {\n\t\t\t\theader_down
+    -X-Correlation-ID\n\t\t\t\ttransport http {\n\t\t\t\t\tread_timeout 30m\n\t\t\t\t\twrite_timeout
+    30m\n\t\t\t\t\ttls_trust_pool file /mnt/cluster-ca/ca-bundle.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
     Backend snippets (tekton-results, kubearchive, etc.) loaded from init-generated
     configs.\n\t# NOTE: Imported snippets MUST use paths more specific than /api/k8s/
     to avoid\n\t# shadowing the Kube API catch-all handler below. Caddy evaluates
     handle blocks\n\t# by specificity (longest path match first), so e.g. /api/k8s/plugins/tekton-results/\n\t#
     is safe because it is more specific than /api/k8s/.\n\timport /mnt/caddy-snippets/*.caddy\n\n\t#
     WebSocket to Kube API\n\thandle_path /wss/k8s/* {\n\t\troute {\n\t\t\tforward_auth
-    127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\tcopy_headers X-Auth-Request-Email
-    X-Auth-Request-Groups\n\t\t\t}\n\t\t\timpersonate\n\t\t\tinject_cached_vars\n\t\t\treverse_proxy
+    127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\theader_up Authorization {http.request.header.Authorization}\n\t\t\t\tcopy_headers
+    X-Auth-Request-Email X-Auth-Request-Groups\n\t\t\t}\n\t\t\timpersonate\n\t\t\tinject_cached_vars\n\t\t\treverse_proxy
     https://kubernetes.default.svc {\n\t\t\t\theader_up Authorization \"Bearer {http.vars.kube_token}\"\n\t\t\t\ttransport
     http {\n\t\t\t\t\tread_timeout 30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool
     file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
     Kube API (catch-all for /api/k8s/)\n\thandle_path /api/k8s/* {\n\t\troute {\n\t\t\tforward_auth
-    127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\tcopy_headers X-Auth-Request-Email
-    X-Auth-Request-Groups\n\t\t\t}\n\t\t\timpersonate\n\t\t\tinject_cached_vars\n\t\t\treverse_proxy
+    127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\theader_up Authorization {http.request.header.Authorization}\n\t\t\t\tcopy_headers
+    X-Auth-Request-Email X-Auth-Request-Groups\n\t\t\t}\n\t\t\timpersonate\n\t\t\tinject_cached_vars\n\t\t\treverse_proxy
     https://kubernetes.default.svc {\n\t\t\t\theader_up Authorization \"Bearer {http.vars.kube_token}\"\n\t\t\t\ttransport
     http {\n\t\t\t\t\tread_timeout 30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool
     file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
@@ -213,7 +217,7 @@ data:
     {path} /index.html\n\t\tfile_server\n\t}\n}\n"
 kind: ConfigMap
 metadata:
-  name: proxy-caddyfile-45hm8d8b52
+  name: proxy-caddyfile-85ft9b58m7
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -748,11 +752,11 @@ spec:
           items:
           - key: Caddyfile
             path: Caddyfile
-          name: proxy-caddyfile-45hm8d8b52
+          name: proxy-caddyfile-85ft9b58m7
         name: proxy-caddyfile
       - configMap:
           defaultMode: 420
-          name: proxy-caddy-templates-46ctfh6tk7
+          name: proxy-caddy-templates-hdbt5bdc65
         name: caddy-templates
       - emptyDir: {}
         name: caddy-snippets

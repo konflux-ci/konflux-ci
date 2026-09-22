@@ -71,6 +71,7 @@
 		route {
 			forward_auth 127.0.0.1:6000 {
 				uri /oauth2/auth
+				header_up Authorization {http.request.header.Authorization}
 				copy_headers X-Auth-Request-Email X-Auth-Request-Groups
 			}
 			impersonate {
@@ -101,6 +102,7 @@
 		route {
 			forward_auth 127.0.0.1:6000 {
 				uri /oauth2/auth
+				header_up Authorization {http.request.header.Authorization}
 				copy_headers X-Auth-Request-Email X-Auth-Request-Groups
 			}
 			impersonate
@@ -121,6 +123,7 @@
 		route {
 			forward_auth 127.0.0.1:6000 {
 				uri /oauth2/auth
+				header_up Authorization {http.request.header.Authorization}
 				copy_headers X-Auth-Request-Email X-Auth-Request-Groups
 			}
 			impersonate
