@@ -27,7 +27,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
     -o /opt/app-root/manager ./cmd/main.go
 
 # Use UBI minimal as base image
-FROM registry.access.redhat.com/ubi10/ubi-minimal@sha256:5b07a4099a1893e379a8eaf55768026337ab4ccb6affb44ea4506b7437199294
+FROM registry.access.redhat.com/ubi10/ubi-minimal@sha256:e3a5632d7ae8a97e06f634522d06187f12793e90ac0d7b51bc671c83a96d8eda
 ARG OPERATOR_VERSION
 WORKDIR /
 
