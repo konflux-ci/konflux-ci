@@ -32,6 +32,7 @@ spec:
       containers:
       - name: postgres
         image: quay.io/sclorg/postgresql-15-c9s
+        imagePullPolicy: IfNotPresent
         securityContext:
           runAsNonRoot: true
         resources:

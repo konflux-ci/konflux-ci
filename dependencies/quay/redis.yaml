@@ -19,6 +19,7 @@ spec:
       containers:
       - name: redis
         image: quay.io/sclorg/redis-7-c9s
+        imagePullPolicy: IfNotPresent
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true
