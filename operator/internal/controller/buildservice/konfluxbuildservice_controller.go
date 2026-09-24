@@ -108,9 +108,15 @@ const (
 )
 
 // BuildServiceCleanupGVKs defines which resource types should be cleaned up when they are
-// no longer part of the desired state. Metrics scrape resources may be skipped during apply
-// (componentMetrics disabled) or removed across releases while metrics stay enabled.
-var BuildServiceCleanupGVKs = append([]schema.GroupVersionKind(nil), kubernetes.ComponentMetricsOrphanCleanupGVKs...)
+// no longer part of the desired state. ConfigMap trusted-ca is skipped when spec.trustedCA
+// is set, so leftover operator-owned objects must be listed here. Always-applied ConfigMaps
+// (build-pipeline-config) stay tracked. Hashed webhook ConfigMaps are not labeled with
+// KonfluxOwnerLabel, so CleanupOrphans does not list them. Metrics scrape resources may
+// be skipped during apply (componentMetrics disabled) or removed across releases while
+// metrics stay enabled.
+var BuildServiceCleanupGVKs = append([]schema.GroupVersionKind{
+	corev1.SchemeGroupVersion.WithKind("ConfigMap"),
+}, kubernetes.ComponentMetricsOrphanCleanupGVKs...)
 
 // BuildServiceClusterScopedAllowList restricts which cluster-scoped resources can be deleted
 // during orphan cleanup. Only metrics scrape ClusterRoles and ClusterRoleBindings are listed;
@@ -199,8 +205,14 @@ func (r *KonfluxBuildServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	// On OpenShift, create the trusted-ca ConfigMap with the injection label so
 	// the cluster network operator populates it with the cluster CA bundle.
-	if err := common.EnsureTrustedCAConfigMap(ctx, webhookConfigNamespace, tc, r.ClusterInfo); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonConfigMapFailed, "ensure trusted-ca ConfigMap")
+	// When spec.trustedCA is set (including when spec.trustedCA.name is
+	// "trusted-ca") skip creation and mount that ConfigMap instead. A leftover
+	// operator-owned trusted-ca is then deleted by CleanupOrphans. Clearing
+	// the field restores the platform-injected object on the next reconcile.
+	if buildService.Spec.TrustedCA == nil {
+		if err := common.EnsureTrustedCAConfigMap(ctx, webhookConfigNamespace, tc, r.ClusterInfo); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonConfigMapFailed, "ensure trusted-ca ConfigMap")
+		}
 	}
 
 	// Reconcile webhook config ConfigMap.
