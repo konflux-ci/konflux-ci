@@ -55,7 +55,9 @@
     {
       "description": "Propagate operator go.mod updates to test/go-tests via local replace",
       "matchManagers": ["gomod"],
-      "matchPaths": ["operator/**"],
+      "matchFileNames": [
+        "operator/**"
+      ],
       "postUpdateOptions": ["gomodTidyAll"]
     }
   ],
@@ -68,7 +70,9 @@
     ]
   },
   "tekton": {
-    "fileMatch": [".*\\.ya?ml$"],
+    "managerFilePatterns": [
+      "/.*\\.ya?ml$/"
+    ],
     "includePaths": [
       ".tekton/**",
       "tasks/**",
@@ -88,7 +92,9 @@
   "customManagers": [
     {
       "customType": "regex",
-      "fileMatch": ["(^|\/)kustomization\\.(yaml|yml)$"],
+      "managerFilePatterns": [
+        "/(^|/)kustomization\\.(yaml|yml)$/"
+      ],
       "matchStrings": [
         "- (?<packageName>https:\/\/github\\.com\/[^/]+\/[^/]+)\/.*\\?ref=(?<currentDigest>[a-f0-9]{40})"
       ],
@@ -98,7 +104,9 @@
     {
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["(^|\/)kustomization\\.(yaml|yml)$"],
+      "managerFilePatterns": [
+        "/(^|/)kustomization\\.(yaml|yml)$/"
+      ],
       "matchStrings": [
         "- (?<packageName>https:\/\/github\\.com\/[^/]+\/[^/]+)\/.*\\?ref=[a-f0-9]{40}",
         "newTag:\\s+(?<currentDigest>[a-f0-9]{40})"
@@ -108,8 +116,8 @@
     },
     {
       "customType": "regex",
-      "fileMatch": [
-        "operator/upstream-kustomizations/enterprise-contract/core/kustomization.yaml"
+      "managerFilePatterns": [
+        "/operator/upstream-kustomizations/enterprise-contract/core/kustomization.yaml/"
       ],
       "matchStrings": [
         "- verify_ec_task_bundle=(?<depName>quay\\.io/conforma/tekton-task):latest@(?<currentDigest>sha256:[a-f0-9]{64})"
@@ -120,8 +128,8 @@
     {
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": [
-        "operator/upstream-kustomizations/enterprise-contract/core/kustomization.yaml"
+      "managerFilePatterns": [
+        "/operator/upstream-kustomizations/enterprise-contract/core/kustomization.yaml/"
       ],
       "matchStrings": [
         "- verify_ec_task_git_url=(?<packageName>https:\/\/github\\.com\/conforma\/cli)\\.git",
@@ -132,8 +140,8 @@
     },
     {
       "customType": "regex",
-      "fileMatch": [
-        "operator/upstream-kustomizations/build-service/core/build-pipeline-config.yaml"
+      "managerFilePatterns": [
+        "/operator/upstream-kustomizations/build-service/core/build-pipeline-config.yaml/"
       ],
       "matchStrings": [
         "bundle: (?<depName>quay\\.io/konflux-ci/tekton-catalog/pipeline-[^@]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
@@ -145,7 +153,9 @@
     {
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["(^|\/)kustomization\\.(yaml|yml)$"],
+      "managerFilePatterns": [
+        "/(^|/)kustomization\\.(yaml|yml)$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=git-refs depName=(?<packageName>https:\\/\\/github\\.com\\/[^\\s]+)",
         "- https:\\/\\/github\\.com\\/[^/]+\\/[^/]+\\/releases\\/download\\/v(?<currentValue>[^/]+)\\/"
@@ -157,7 +167,9 @@
       "description": "Track GitHub release download URLs in kustomization files",
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["(^|\/)kustomization\\.(yaml|yml)$"],
+      "managerFilePatterns": [
+        "/(^|/)kustomization\\.(yaml|yml)$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=github-releases depName=(?<depName>[^\\s]+)",
         "- https:\\/\\/github\\.com\\/[^/]+\\/[^/]+\\/releases\\/download\\/v(?<currentValue>[^/]+)\\/"
@@ -168,7 +180,9 @@
     {
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["(^|\/)kustomization\\.(yaml|yml)$"],
+      "managerFilePatterns": [
+        "/(^|/)kustomization\\.(yaml|yml)$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=git-refs depName=(?<packageName>https:\\/\\/github\\.com\\/[^\\s]+)",
         "- https:\\/\\/infra\\.tekton\\.dev\\/tekton-releases\\/[^/]+\\/previous\\/v(?<currentValue>[^/]+)\\/"
@@ -178,8 +192,8 @@
     },
     {
       "customType": "regex",
-      "fileMatch": [
-        "operator/upstream-kustomizations/enterprise-contract/policies/.*\\.yaml$"
+      "managerFilePatterns": [
+        "/operator/upstream-kustomizations/enterprise-contract/policies/.*\\.yaml$/"
       ],
       "matchStrings": [
         "- oci::(?<depName>quay\\.io/conforma/[^:]+):latest@(?<currentDigest>sha256:[a-f0-9]{64})"
@@ -189,8 +203,8 @@
     },
     {
       "customType": "regex",
-      "fileMatch": [
-        "operator/upstream-kustomizations/enterprise-contract/policies/.*\\.yaml$"
+      "managerFilePatterns": [
+        "/operator/upstream-kustomizations/enterprise-contract/policies/.*\\.yaml$/"
       ],
       "matchStrings": [
         "- github\\.com/konflux-ci/konflux-operator-trusted-sources//data\\?ref=(?<currentDigest>[a-f0-9]{40})"
@@ -205,7 +219,9 @@
       "description": "Track kind version in GitHub Actions workflows",
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["^\\.github/workflows/.*\\.ya?ml$"],
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.*\\.ya?ml$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=github-releases depName=kubernetes-sigs/kind",
         "KIND_VERSION:\\s*\"(?<currentValue>[^\"]+)\""
@@ -217,7 +233,9 @@
     {
       "description": "Track golangci-lint version for operator (CI + make lint). File is version-only; golangci-lint-action does not support extra lines.",
       "customType": "regex",
-      "fileMatch": ["^operator/\\.golangci-lint-version$"],
+      "managerFilePatterns": [
+        "/^operator/\\.golangci-lint-version$/"
+      ],
       "matchStrings": ["^(?<currentValue>v?\\d+\\.\\d+\\.\\d+)\\s*$"],
       "autoReplaceStringTemplate": "v{{{newValue}}}",
       "datasourceTemplate": "github-releases",
@@ -228,7 +246,9 @@
       "description": "Track curl image version in e2e tests",
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["operator/test/e2e/.*\\.go$"],
+      "managerFilePatterns": [
+        "/operator/test/e2e/.*\\.go$/"
+      ],
       "matchStrings": [
         "// renovate: datasource=docker depName=curlimages/curl",
         "const curlImageVersion = \"(?<currentValue>[^\"]+)\""
@@ -240,7 +260,9 @@
       "description": "Track go-toolset image digest in echo server test setup",
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["test/go-tests/echo_server_setup\\.go$"],
+      "managerFilePatterns": [
+        "/test/go-tests/echo_server_setup\\.go$/"
+      ],
       "matchStrings": [
         "// renovate: datasource=docker depName=(?<depName>[^\\s]+)",
         "echoServerImage\\s*=\\s*\"[^@]+@(?<currentDigest>sha256:[a-f0-9]{64})\""
@@ -252,7 +274,9 @@
       "description": "Track kube-linter version in shell scripts",
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["\\.github/scripts/.*\\.sh$"],
+      "managerFilePatterns": [
+        "/\\.github/scripts/.*\\.sh$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=github-releases depName=(?<depName>[^\\s]+)",
         "KUBE_LINTER_VERSION=\"(?<currentValue>[^\"]+)\""
@@ -263,7 +287,9 @@
       "description": "Track kustomize version in GitHub Actions workflows",
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["^\\.github/workflows/.*\\.ya?ml$"],
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.*\\.ya?ml$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=github-releases depName=kubernetes-sigs/kustomize",
         "KUSTOMIZE_VERSION:\\s*\"(?<currentValue>[^\"]+)\""
@@ -276,7 +302,9 @@
       "description": "Track kubectl version in GitHub Actions workflows",
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["^\\.github/workflows/.*\\.ya?ml$"],
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.*\\.ya?ml$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=github-releases depName=kubernetes/kubernetes",
         "KUBECTL_VERSION:\\s*\"(?<currentValue>[^\"]+)\""
@@ -289,7 +317,9 @@
       "description": "Track release-service-catalog development branch SHA in setup-release.sh",
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["operator/upstream-kustomizations/cli/setup-release\\.sh$"],
+      "managerFilePatterns": [
+        "/operator/upstream-kustomizations/cli/setup-release\\.sh$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=git-refs depName=https://github.com/konflux-ci/release-service-catalog currentValue=development",
         "CATALOG_REVISION=\"(?<currentDigest>[a-f0-9]{40})\""
@@ -303,7 +333,9 @@
       "description": "Track tekton-integration-catalog main HEAD in operator-e2e pipeline param default",
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["^\\.tekton/pipelines/operator-e2e/pipeline\\.yaml$"],
+      "managerFilePatterns": [
+        "/^\\.tekton/pipelines/operator-e2e/pipeline\\.yaml$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=git-refs depName=https://github.com/konflux-ci/tekton-integration-catalog",
         "default:\\s+(?<currentDigest>[a-f0-9]{40})"
@@ -317,7 +349,9 @@
       "description": "Track cert-manager Helm chart version (export-third-party-chart-env.sh)",
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["^\\.github/scripts/export-third-party-chart-env\\.sh$"],
+      "managerFilePatterns": [
+        "/^\\.github/scripts/export-third-party-chart-env\\.sh$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=helm depName=jetstack/cert-manager versioning=semver",
         "CERT_MANAGER_CHART_VERSION=\"(?<currentValue>[^\"]+)\""
@@ -330,7 +364,9 @@
       "description": "Track trust-manager Helm chart version (export-third-party-chart-env.sh)",
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["^\\.github/scripts/export-third-party-chart-env\\.sh$"],
+      "managerFilePatterns": [
+        "/^\\.github/scripts/export-third-party-chart-env\\.sh$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=helm depName=jetstack/trust-manager versioning=semver",
         "TRUST_MANAGER_CHART_VERSION=\"(?<currentValue>[^\"]+)\""
@@ -343,7 +379,9 @@
       "description": "Track prometheus-operator release (export-third-party-chart-env.sh)",
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["^\\.github/scripts/export-third-party-chart-env\\.sh$"],
+      "managerFilePatterns": [
+        "/^\\.github/scripts/export-third-party-chart-env\\.sh$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=github-releases depName=prometheus-operator/prometheus-operator versioning=semver",
         "PROMETHEUS_OPERATOR_VERSION=\"(?<currentValue>[^\"]+)\""
@@ -356,7 +394,9 @@
       "description": "Track envtest Kubernetes version in operator Makefile",
       "customType": "regex",
       "matchStringsStrategy": "combination",
-      "fileMatch": ["^operator/Makefile$"],
+      "managerFilePatterns": [
+        "/^operator/Makefile$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=custom.envtest depName=envtest",
         "ENVTEST_K8S_VERSION \\?= (?<currentValue>\\d+\\.\\d+\\.\\d+)"
@@ -368,7 +408,9 @@
     {
       "description": "Track sigstore scaffold Helm chart version in install script",
       "customType": "regex",
-      "fileMatch": ["integrations/sigstore/install\\.sh$"],
+      "managerFilePatterns": [
+        "/integrations/sigstore/install\\.sh$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=helm registryUrl=https://sigstore\\.github\\.io/helm-charts depName=scaffold\\nSCAFFOLD_VERSION=\"(?<currentValue>[^\"]+)\""
       ],
