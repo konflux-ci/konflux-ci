@@ -61,6 +61,13 @@ spec:
         (e.g. -ginkgo.focus=Subsuite -ginkgo.skip=Flaky). Empty uses default flags only.
       type: string
       default: ""
+    - name: conformance-image
+      description: >-
+        Optional conformance test image reference. When set, the conformance step runs the
+        pre-built image as a Kubernetes pod with credentials injected, instead of compiling
+        from source. Used to validate the conformance image as part of CI.
+      type: string
+      default: ""
   stepTemplate:
     volumeMounts:
       - name: repo
@@ -135,6 +142,8 @@ spec:
           value: $(params.integration-go-test-extra-args)
         - name: E2E_CONFORMANCE_GO_TEST_EXTRA_ARGS
           value: $(params.conformance-go-test-extra-args)
+        - name: E2E_CONFORMANCE_IMAGE
+          value: $(params.conformance-image)
       script: |
         #!/bin/bash
         set -euo pipefail
