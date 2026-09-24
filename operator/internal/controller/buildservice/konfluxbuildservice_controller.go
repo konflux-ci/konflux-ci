@@ -290,9 +290,10 @@ func (r *KonfluxBuildServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
 // webhookConfigMapName is the hashed ConfigMap name for the webhook config (empty if not configured).
 // The trustedCA content hash is resolved once before applying objects so a
-// Get error fails the reconcile without mutating Deployments. When the
+// Get error fails the reconcile without mutating Deployments. When a user
 // ConfigMap or key is missing, a live annotation is reused so SSA cannot
-// prune it and roll running pods.
+// prune it and roll running pods. When spec.trustedCA is omitted on
+// OpenShift, the hash is of the platform trusted-ca bundle instead.
 func (r *KonfluxBuildServiceReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxBuildService, webhookConfigMapName string) error {
 	log := logf.FromContext(ctx)
 
@@ -470,37 +471,35 @@ func buildBuildControllerManagerOverlay(spec konfluxv1alpha1.KonfluxBuildService
 // mount path and subPath are left unchanged so additional CAs are added
 // at the same location in the image trust store. When spec is nil the
 // embedded volume is left unchanged. contentHash is stamped on the pod
-// template so ConfigMap data changes roll the Deployment.
+// template so ConfigMap data changes roll the Deployment. An empty hash
+// omits the annotation, including a platform bundle that is not populated yet.
 //
 // Production objects are fresh copies of the embedded manifests, so they
 // never carry the hash annotation. Omitting it on ApplyOwned lets SSA prune
-// it from the live Deployment. applyManifests copies a live hash when the
+// it from the live Deployment. applyManifests copies a live hash when a user
 // ConfigMap or key is missing so a successful mount is not rolled away.
 // The delete calls only strip a leftover on an in-memory object that already
 // has one.
 func applyTrustedCAMount(deployment *appsv1.Deployment, spec *konfluxv1alpha1.TrustedCAConfigMap, contentHash string) error {
-	if spec == nil {
-		delete(deployment.Spec.Template.Annotations, trustedCAHashAnnotation)
-		return nil
-	}
+	if spec != nil {
+		vol := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, trustedCAVolumeName)
+		if vol == nil || vol.ConfigMap == nil {
+			return fmt.Errorf("trusted-ca ConfigMap volume not found on deployment %s", deployment.Name)
+		}
+		vol.ConfigMap.Name = spec.Name
+		vol.ConfigMap.Items = []corev1.KeyToPath{{
+			Key:  spec.Key,
+			Path: trustedCADefaultFileVolumePath,
+		}}
+		vol.ConfigMap.Optional = ptr.To(false)
 
-	vol := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, trustedCAVolumeName)
-	if vol == nil || vol.ConfigMap == nil {
-		return fmt.Errorf("trusted-ca ConfigMap volume not found on deployment %s", deployment.Name)
-	}
-	vol.ConfigMap.Name = spec.Name
-	vol.ConfigMap.Items = []corev1.KeyToPath{{
-		Key:  spec.Key,
-		Path: trustedCADefaultFileVolumePath,
-	}}
-	vol.ConfigMap.Optional = ptr.To(false)
-
-	manager := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
-	if manager == nil {
-		return fmt.Errorf("container %q not found on deployment %s", buildManagerContainerName, deployment.Name)
-	}
-	if kubernetes.FindVolumeMount(manager.VolumeMounts, trustedCAVolumeName) == nil {
-		return fmt.Errorf("trusted-ca volume mount not found on container %q", buildManagerContainerName)
+		manager := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, buildManagerContainerName)
+		if manager == nil {
+			return fmt.Errorf("container %q not found on deployment %s", buildManagerContainerName, deployment.Name)
+		}
+		if kubernetes.FindVolumeMount(manager.VolumeMounts, trustedCAVolumeName) == nil {
+			return fmt.Errorf("trusted-ca volume mount not found on container %q", buildManagerContainerName)
+		}
 	}
 
 	if contentHash == "" {
@@ -515,16 +514,27 @@ func applyTrustedCAMount(deployment *appsv1.Deployment, spec *konfluxv1alpha1.Tr
 }
 
 // trustedCAHashForApply returns the hash to stamp on the pod template.
-// A present ConfigMap key is hashed. Missing ConfigMaps or keys fall back to
-// the live Deployment annotation so SSA does not prune it and roll running
-// pods. spec == nil returns empty so clearing trustedCA drops the annotation.
-// Any non-NotFound Get error is returned so the Deployment is not applied.
+// A present ConfigMap key is hashed. Missing user ConfigMaps or keys fall
+// back to the live Deployment annotation so SSA does not prune it and roll
+// running pods. spec == nil hashes ConfigMap trusted-ca key ca-bundle.crt on
+// OpenShift and returns empty otherwise, including when that key is not
+// populated yet. Any non-NotFound Get error is returned so the Deployment is
+// not applied.
 func (r *KonfluxBuildServiceReconciler) trustedCAHashForApply(ctx context.Context, spec *konfluxv1alpha1.TrustedCAConfigMap) (string, error) {
+	if spec == nil {
+		if r.ClusterInfo == nil || !r.ClusterInfo.IsOpenShift() {
+			return "", nil
+		}
+		return r.lookupTrustedCAHash(ctx, &konfluxv1alpha1.TrustedCAConfigMap{
+			Name: common.TrustedCAConfigMapName,
+			Key:  trustedCADefaultFileVolumePath,
+		})
+	}
 	hash, err := r.lookupTrustedCAHash(ctx, spec)
 	if err != nil {
 		return "", err
 	}
-	if hash != "" || spec == nil {
+	if hash != "" {
 		return hash, nil
 	}
 	return r.liveTrustedCAHash(ctx)

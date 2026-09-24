@@ -246,6 +246,47 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 			}, &corev1.ConfigMap{})).To(Succeed())
 		}
 
+		// contentHash nil means the pod template must not carry the annotation.
+		expectTrustedCAMount := func(configMapName, key string, optional bool, contentHash *string) {
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      buildControllerManagerDeploymentName,
+					Namespace: buildServiceNamespace,
+				}, dep)).To(Succeed())
+				vol := kubernetes.FindVolume(dep.Spec.Template.Spec.Volumes, trustedCAVolumeName)
+				g.Expect(vol).NotTo(BeNil())
+				g.Expect(vol.ConfigMap).NotTo(BeNil())
+				g.Expect(vol.ConfigMap.Name).To(Equal(configMapName))
+				g.Expect(vol.ConfigMap.Optional).NotTo(BeNil())
+				g.Expect(*vol.ConfigMap.Optional).To(Equal(optional))
+				g.Expect(vol.ConfigMap.Items).To(ConsistOf(corev1.KeyToPath{
+					Key:  key,
+					Path: trustedCADefaultFileVolumePath,
+				}))
+				if contentHash == nil {
+					g.Expect(dep.Spec.Template.Annotations).NotTo(HaveKey(trustedCAHashAnnotation))
+					return
+				}
+				g.Expect(dep.Spec.Template.Annotations).To(HaveKeyWithValue(trustedCAHashAnnotation, *contentHash))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		}
+
+		setConfigMapKey := func(name, key, value string) {
+			Eventually(func(g Gomega) {
+				got := &corev1.ConfigMap{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      name,
+					Namespace: buildServiceNamespace,
+				}, got)).To(Succeed())
+				if got.Data == nil {
+					got.Data = map[string]string{}
+				}
+				got.Data[key] = value
+				g.Expect(k8sClient.Update(ctx, got)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		}
+
 		BeforeEach(func() {
 			buildService = newBuildServiceCR()
 			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
@@ -263,6 +304,21 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 
 			By("verifying the trusted-ca ConfigMap was created with the injection label")
 			Eventually(trustedCAHasInjectionLabel).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("Should stamp the platform bundle hash on startup when trustedCA is omitted", func() {
+			const platformPEM = "-----BEGIN CERTIFICATE-----\nplatform-startup\n-----END CERTIFICATE-----\n"
+
+			startManagerWithClusterInfo(detectOpenShiftClusterInfo())
+
+			By("mounting trusted-ca with no checksum until ca-bundle.crt exists")
+			Eventually(trustedCAHasInjectionLabel).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			expectTrustedCAMount(common.TrustedCAConfigMapName, trustedCADefaultFileVolumePath, true, nil)
+
+			By("stamping the checksum once the cluster bundle is written")
+			setConfigMapKey(common.TrustedCAConfigMapName, trustedCADefaultFileVolumePath, platformPEM)
+			platformHash := contenthash.String(platformPEM)
+			expectTrustedCAMount(common.TrustedCAConfigMapName, trustedCADefaultFileVolumePath, true, &platformHash)
 		})
 
 		It("Should NOT create trusted-ca ConfigMap when NOT running on OpenShift", func() {
@@ -304,6 +360,10 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 		})
 
 		It("Should NOT create trusted-ca ConfigMap when spec.trustedCA is set", func() {
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: buildServiceNamespace}}
+			err := k8sClient.Create(ctx, ns)
+			Expect(err == nil || errors.IsAlreadyExists(err)).To(BeTrue(), "unexpected error: %v", err)
+
 			cm := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{Name: "custom-ca-bundle", Namespace: buildServiceNamespace},
 				Data:       map[string]string{"tls.pem": "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n"},
@@ -320,8 +380,9 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 
 			startManagerWithClusterInfo(detectOpenShiftClusterInfo())
 
-			By("waiting for the controller to retarget the volume to the supplied ConfigMap")
-			expectVolumeConfigMapName("custom-ca-bundle")
+			By("waiting for the first apply to mount the user ConfigMap and stamp its checksum")
+			userHash := contenthash.String("-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n")
+			expectTrustedCAMount("custom-ca-bundle", "tls.pem", false, &userHash)
 
 			By("verifying the operator did not create the platform-injected trusted-ca ConfigMap")
 			Consistently(trustedCAIsGone).WithTimeout(3 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
@@ -383,9 +444,49 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 			expectVolumeConfigMapName("custom-ca-bundle")
 		})
 
-		It("Should delete leftover operator-owned trusted-ca when spec.trustedCA.name is trusted-ca", func() {
+		It("Should replace the platform bundle hash when trustedCA points at another ConfigMap", func() {
+			const platformPEM = "-----BEGIN CERTIFICATE-----\nplatform\n-----END CERTIFICATE-----\n"
+			const userPEM = "-----BEGIN CERTIFICATE-----\nuser-other\n-----END CERTIFICATE-----\n"
+
 			startManagerWithClusterInfo(detectOpenShiftClusterInfo())
 			Eventually(trustedCAHasInjectionLabel).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("stamping the platform checksum before the field is set")
+			setConfigMapKey(common.TrustedCAConfigMapName, trustedCADefaultFileVolumePath, platformPEM)
+			platformHash := contenthash.String(platformPEM)
+			expectTrustedCAMount(common.TrustedCAConfigMapName, trustedCADefaultFileVolumePath, true, &platformHash)
+
+			userCM := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "custom-ca-bundle", Namespace: buildServiceNamespace},
+				Data:       map[string]string{"tls.pem": userPEM},
+			}
+			Expect(k8sClient.Create(ctx, userCM)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, userCM)
+
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, buildService)).To(Succeed())
+			buildService.Spec.TrustedCA = &konfluxv1alpha1.TrustedCAConfigMap{
+				Name: "custom-ca-bundle",
+				Key:  "tls.pem",
+			}
+			Expect(k8sClient.Update(ctx, buildService)).To(Succeed())
+
+			By("mounting the user ConfigMap and replacing the platform checksum")
+			userHash := contenthash.String(userPEM)
+			expectTrustedCAMount("custom-ca-bundle", "tls.pem", false, &userHash)
+			Eventually(trustedCAIsGone).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("Should delete leftover operator-owned trusted-ca when spec.trustedCA.name is trusted-ca", func() {
+			const platformPEM = "-----BEGIN CERTIFICATE-----\nplatform\n-----END CERTIFICATE-----\n"
+			const userPEM = "-----BEGIN CERTIFICATE-----\nuser\n-----END CERTIFICATE-----\n"
+
+			startManagerWithClusterInfo(detectOpenShiftClusterInfo())
+			Eventually(trustedCAHasInjectionLabel).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("stamping the platform checksum before the name is reused")
+			setConfigMapKey(common.TrustedCAConfigMapName, trustedCADefaultFileVolumePath, platformPEM)
+			platformHash := contenthash.String(platformPEM)
+			expectTrustedCAMount(common.TrustedCAConfigMapName, trustedCADefaultFileVolumePath, true, &platformHash)
 
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, buildService)).To(Succeed())
 			buildService.Spec.TrustedCA = &konfluxv1alpha1.TrustedCAConfigMap{
@@ -398,21 +499,26 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 			Eventually(trustedCAIsGone).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 			expectPipelineConfigExists()
 
+			By("keeping the platform checksum while the user key is still missing")
+			expectTrustedCAMount(common.TrustedCAConfigMapName, "tls.pem", false, &platformHash)
+
 			userCM := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{Name: common.TrustedCAConfigMapName, Namespace: buildServiceNamespace},
-				Data:       map[string]string{"tls.pem": "-----BEGIN CERTIFICATE-----\nuser\n-----END CERTIFICATE-----\n"},
+				Data:       map[string]string{"tls.pem": userPEM},
 			}
 			Expect(k8sClient.Create(ctx, userCM)).To(Succeed())
 			DeferCleanup(testutil.DeleteAndWait, k8sClient, userCM)
 
-			expectVolumeConfigMapName(common.TrustedCAConfigMapName)
+			By("stamping the user checksum once the reused ConfigMap provides tls.pem")
+			userHash := contenthash.String(userPEM)
+			expectTrustedCAMount(common.TrustedCAConfigMapName, "tls.pem", false, &userHash)
 			Eventually(func(g Gomega) {
 				got := &corev1.ConfigMap{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name:      common.TrustedCAConfigMapName,
 					Namespace: buildServiceNamespace,
 				}, got)).To(Succeed())
-				g.Expect(got.Data).To(HaveKeyWithValue("tls.pem", "-----BEGIN CERTIFICATE-----\nuser\n-----END CERTIFICATE-----\n"))
+				g.Expect(got.Data).To(HaveKeyWithValue("tls.pem", userPEM))
 				g.Expect(got.Labels).NotTo(HaveKey(common.OpenShiftInjectTrustedCABundleLabel))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
@@ -444,6 +550,88 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 			By("verifying the platform-injected trusted-ca ConfigMap is created and mounted after trustedCA is cleared")
 			Eventually(trustedCAHasInjectionLabel).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 			expectVolumeConfigMapName(common.TrustedCAConfigMapName)
+		})
+
+		It("Should stamp the pod-template hash when the platform trusted-ca bundle is populated", func() {
+			const originalPEM = "-----BEGIN CERTIFICATE-----\nplatform\n-----END CERTIFICATE-----\n"
+			const rotatedPEM = "-----BEGIN CERTIFICATE-----\nplatform-rotated\n-----END CERTIFICATE-----\n"
+
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: buildServiceNamespace}}
+			err := k8sClient.Create(ctx, ns)
+			Expect(err == nil || errors.IsAlreadyExists(err)).To(BeTrue(), "unexpected error: %v", err)
+
+			cm := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "custom-ca-bundle", Namespace: buildServiceNamespace},
+				Data:       map[string]string{"tls.pem": "-----BEGIN CERTIFICATE-----\nuser\n-----END CERTIFICATE-----\n"},
+			}
+			Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cm)
+
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, buildService)).To(Succeed())
+			buildService.Spec.TrustedCA = &konfluxv1alpha1.TrustedCAConfigMap{
+				Name: "custom-ca-bundle",
+				Key:  "tls.pem",
+			}
+			Expect(k8sClient.Update(ctx, buildService)).To(Succeed())
+
+			startManagerWithClusterInfo(detectOpenShiftClusterInfo())
+			expectVolumeConfigMapName("custom-ca-bundle")
+
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, buildService)).To(Succeed())
+			buildService.Spec.TrustedCA = nil
+			Expect(k8sClient.Update(ctx, buildService)).To(Succeed())
+
+			By("verifying the restored mount has no hash until ca-bundle.crt is written")
+			Eventually(func(g Gomega) {
+				trustedCAHasInjectionLabel(g)
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      buildControllerManagerDeploymentName,
+					Namespace: buildServiceNamespace,
+				}, dep)).To(Succeed())
+				g.Expect(dep.Spec.Template.Annotations).NotTo(HaveKey(trustedCAHashAnnotation))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			setPlatformBundle := func(pem string) {
+				Eventually(func(g Gomega) {
+					got := &corev1.ConfigMap{}
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+						Name:      common.TrustedCAConfigMapName,
+						Namespace: buildServiceNamespace,
+					}, got)).To(Succeed())
+					if got.Data == nil {
+						got.Data = map[string]string{}
+					}
+					got.Data[trustedCADefaultFileVolumePath] = pem
+					g.Expect(k8sClient.Update(ctx, got)).To(Succeed())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			}
+
+			expectPlatformBundleHash := func(pem string) {
+				Eventually(func(g Gomega) {
+					dep := &appsv1.Deployment{}
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+						Name:      buildControllerManagerDeploymentName,
+						Namespace: buildServiceNamespace,
+					}, dep)).To(Succeed())
+					vol := kubernetes.FindVolume(dep.Spec.Template.Spec.Volumes, trustedCAVolumeName)
+					g.Expect(vol).NotTo(BeNil())
+					g.Expect(vol.ConfigMap).NotTo(BeNil())
+					g.Expect(vol.ConfigMap.Name).To(Equal(common.TrustedCAConfigMapName))
+					g.Expect(vol.ConfigMap.Optional).NotTo(BeNil())
+					g.Expect(*vol.ConfigMap.Optional).To(BeTrue())
+					g.Expect(dep.Spec.Template.Annotations).To(HaveKeyWithValue(
+						trustedCAHashAnnotation, contenthash.String(pem)))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			}
+
+			By("writing ca-bundle.crt the way the cluster network operator would")
+			setPlatformBundle(originalPEM)
+			expectPlatformBundleHash(originalPEM)
+
+			By("updating the bundle again")
+			setPlatformBundle(rotatedPEM)
+			expectPlatformBundleHash(rotatedPEM)
 		})
 	})
 

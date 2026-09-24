@@ -1113,6 +1113,32 @@ func TestApplyTrustedCAMount(t *testing.T) {
 		g.Expect(deployment.Spec.Template.Annotations).NotTo(gomega.HaveKey(trustedCAHashAnnotation))
 	})
 
+	t.Run("omitted trustedCA stamps a platform content hash without retargeting the volume", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		hash := contenthash.String("-----BEGIN CERTIFICATE-----\nplatform\n-----END CERTIFICATE-----\n")
+
+		deployment := getBuildServiceDeployment(t)
+		err := applyBuildServiceDeploymentCustomizationsWithHash(deployment, konfluxv1alpha1.KonfluxBuildServiceConfigSpec{}, nil, "", hash)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		mount := findTrustedCAMount(deployment)
+		g.Expect(mount).NotTo(gomega.BeNil())
+		g.Expect(mount.MountPath).To(gomega.Equal(trustedCADefaultFileMountPath))
+		g.Expect(mount.SubPath).To(gomega.Equal(trustedCADefaultFileVolumePath))
+
+		vol := findTrustedCAVolume(deployment)
+		g.Expect(vol).NotTo(gomega.BeNil())
+		g.Expect(vol.ConfigMap).NotTo(gomega.BeNil())
+		g.Expect(vol.ConfigMap.Name).To(gomega.Equal(common.TrustedCAConfigMapName))
+		g.Expect(vol.ConfigMap.Optional).NotTo(gomega.BeNil())
+		g.Expect(*vol.ConfigMap.Optional).To(gomega.BeTrue())
+		g.Expect(vol.ConfigMap.Items).To(gomega.ConsistOf(corev1.KeyToPath{
+			Key:  trustedCADefaultFileVolumePath,
+			Path: trustedCADefaultFileVolumePath,
+		}))
+		g.Expect(deployment.Spec.Template.Annotations).To(gomega.HaveKeyWithValue(trustedCAHashAnnotation, hash))
+	})
+
 	t.Run("trustedCA retargets even when ConfigMap name is the default", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
@@ -1477,6 +1503,51 @@ func TestTrustedCAHashForApply(t *testing.T) {
 	t.Run("returns empty when spec is nil even if the live annotation exists", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		r := &KonfluxBuildServiceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(liveDeployment(liveHash)).Build()}
+		hash, err := r.trustedCAHashForApply(context.Background(), nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(hash).To(gomega.BeEmpty())
+	})
+
+	t.Run("hashes the platform bundle when spec is nil on OpenShift", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: common.TrustedCAConfigMapName, Namespace: webhookConfigNamespace},
+			Data:       map[string]string{trustedCADefaultFileVolumePath: pem},
+		}
+		r := &KonfluxBuildServiceReconciler{
+			Client:      fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm, liveDeployment(liveHash)).Build(),
+			ClusterInfo: newOpenShiftClusterInfo(t),
+		}
+		hash, err := r.trustedCAHashForApply(context.Background(), nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(hash).To(gomega.Equal(contenthash.String(pem)))
+	})
+
+	t.Run("returns empty when the platform bundle key is missing on OpenShift", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: common.TrustedCAConfigMapName, Namespace: webhookConfigNamespace},
+			Data:       map[string]string{"other": pem},
+		}
+		r := &KonfluxBuildServiceReconciler{
+			Client:      fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm, liveDeployment(liveHash)).Build(),
+			ClusterInfo: newOpenShiftClusterInfo(t),
+		}
+		hash, err := r.trustedCAHashForApply(context.Background(), nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(hash).To(gomega.BeEmpty())
+	})
+
+	t.Run("returns empty when spec is nil on a non-OpenShift cluster", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: common.TrustedCAConfigMapName, Namespace: webhookConfigNamespace},
+			Data:       map[string]string{trustedCADefaultFileVolumePath: pem},
+		}
+		r := &KonfluxBuildServiceReconciler{
+			Client:      fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm, liveDeployment(liveHash)).Build(),
+			ClusterInfo: newDefaultClusterInfo(t),
+		}
 		hash, err := r.trustedCAHashForApply(context.Background(), nil)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(hash).To(gomega.BeEmpty())
