@@ -69,7 +69,10 @@ type KonfluxBuildServiceConfigSpec struct {
 	//
 	// When set, the volume uses spec.name and spec.key with optional: false
 	// so the pod will not start until the ConfigMap exists. The mount path
-	// is unchanged.
+	// is unchanged. spec.name may be trusted-ca. On OpenShift the operator
+	// does not create ConfigMap trusted-ca while this field is set; it
+	// deletes a leftover operator-owned trusted-ca so the name can be reused.
+	// Clearing the field restores the platform-injected ConfigMap.
 	// +optional
 	TrustedCA *TrustedCAConfigMap `json:"trustedCA,omitempty"`
 

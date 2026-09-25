@@ -24,6 +24,40 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+const (
+	// OAuth2ProxyClientID is the Dex static client used by the UI oauth2-proxy.
+	OAuth2ProxyClientID = "oauth2-proxy"
+	// CLIClientID is the public Dex static client for kubectl and other OIDC CLIs.
+	CLIClientID = "cli"
+	// AuthorizationCodeGrantType is the OAuth2 authorization-code grant.
+	AuthorizationCodeGrantType = "authorization_code"
+	// RefreshTokenGrantType is the OAuth2 refresh-token grant.
+	RefreshTokenGrantType = "refresh_token"
+	// PasswordGrantType is the OAuth2 resource-owner password grant (ROPC).
+	PasswordGrantType = "password"
+	// DeviceCodeGrantType is the RFC 8628 device-code grant.
+	DeviceCodeGrantType = "urn:ietf:params:oauth:grant-type:device_code"
+	// DeviceCallbackURI is Dex's built-in device-flow callback. Dex sends
+	// redirect_uri=/device/callback after the user submits the device code.
+	// A public client with any RedirectURIs set does not get Dex's implicit
+	// allow for this path, so it must be listed explicitly.
+	DeviceCallbackURI = "/device/callback"
+)
+
+// cliRedirectURIs are loopback callbacks for kubelogin (ports 8000 and 18000)
+// plus Dex's device-flow callback.
+var cliRedirectURIs = []string{
+	"http://localhost:8000",
+	"http://localhost:8000/",
+	"http://localhost:18000",
+	"http://localhost:18000/",
+	"http://127.0.0.1:8000",
+	"http://127.0.0.1:8000/",
+	"http://127.0.0.1:18000",
+	"http://127.0.0.1:18000/",
+	DeviceCallbackURI,
+}
+
 // +kubebuilder:object:generate=true
 
 // DexParams contains the configurable parameters for the Dex IdP configuration.
@@ -65,7 +99,8 @@ type DexParams struct {
 }
 
 // NewDexConfig creates a Dex configuration for the Konflux UI.
-// This configuration uses Kubernetes storage, HTTPS with TLS, and an oauth2-proxy client.
+// This configuration uses Kubernetes storage, HTTPS with TLS, an oauth2-proxy
+// confidential client, and a public CLI client for kubectl and other OIDC tools.
 // endpoint is the base URL for the Dex issuer (e.g., https://dex.example.com).
 func NewDexConfig(endpoint *url.URL, params *DexParams) *Config {
 	baseURL := endpoint.String()
@@ -104,6 +139,27 @@ func NewDexConfig(endpoint *url.URL, params *DexParams) *Config {
 	// or if not set and no connectors are configured
 	enablePasswordDB := ptr.Deref(params.EnablePasswordDB, len(connectors) == 0)
 
+	// Explicit list replaces Dex defaults. device_code is for headless CLIs.
+	// "password" is server-wide: include it only when the local password DB
+	// is on so Kind/CI ExtractToken still works, but the public CLI client
+	// cannot use ROPC in connector-based deployments.
+	grantTypes := []string{
+		AuthorizationCodeGrantType,
+		RefreshTokenGrantType,
+		DeviceCodeGrantType,
+	}
+	if enablePasswordDB {
+		grantTypes = append(grantTypes, PasswordGrantType)
+	}
+
+	// Static passwords are only meaningful when the local password database is
+	// enabled. Dropping them when it is disabled keeps credentials out of the
+	// rendered ConfigMap, so `enablePasswordDB: false` means what it says.
+	staticPasswords := params.StaticPasswords
+	if !enablePasswordDB {
+		staticPasswords = nil
+	}
+
 	return &Config{
 		Issuer: fmt.Sprintf("%s/idp/", baseURL),
 		Storage: &Storage{
@@ -120,20 +176,27 @@ func NewDexConfig(endpoint *url.URL, params *DexParams) *Config {
 		OAuth2: &OAuth2{
 			SkipApprovalScreen: true,
 			PasswordConnector:  params.PasswordConnector,
+			GrantTypes:         grantTypes,
 		},
 		StaticClients: []Client{
 			{
-				ID:        "oauth2-proxy",
+				ID:        OAuth2ProxyClientID,
 				SecretEnv: "CLIENT_SECRET",
 				Name:      "oauth2-proxy",
 				RedirectURIs: []string{
 					fmt.Sprintf("%s/oauth2/callback", baseURL),
 				},
 			},
+			{
+				ID:           CLIClientID,
+				Name:         "CLI",
+				Public:       true,
+				RedirectURIs: cliRedirectURIs,
+			},
 		},
 		Connectors:       connectors,
 		EnablePasswordDB: enablePasswordDB,
-		StaticPasswords:  params.StaticPasswords,
+		StaticPasswords:  staticPasswords,
 		Telemetry: &Telemetry{
 			HTTP: "0.0.0.0:5558",
 		},

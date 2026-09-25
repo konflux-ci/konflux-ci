@@ -28,6 +28,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 )
 
 const (
@@ -63,7 +64,7 @@ func WithProvider() customization.ContainerOption {
 	return customization.WithEnv(
 		corev1.EnvVar{Name: "OAUTH2_PROXY_PROVIDER", Value: "oidc"},
 		corev1.EnvVar{Name: "OAUTH2_PROXY_PROVIDER_DISPLAY_NAME", Value: "Dex OIDC"},
-		corev1.EnvVar{Name: "OAUTH2_PROXY_CLIENT_ID", Value: "oauth2-proxy"},
+		corev1.EnvVar{Name: "OAUTH2_PROXY_CLIENT_ID", Value: dex.OAuth2ProxyClientID},
 		corev1.EnvVar{Name: "OAUTH2_PROXY_HTTP_ADDRESS", Value: "127.0.0.1:6000"},
 		corev1.EnvVar{Name: "OAUTH2_PROXY_SKIP_PROVIDER_BUTTON", Value: "true"},
 		corev1.EnvVar{Name: "OAUTH2_PROXY_PROMPT", Value: "login"},
@@ -106,12 +107,14 @@ func WithCookieConfig() customization.ContainerOption {
 
 // WithAuthSettings configures authentication behavior.
 // Sets email domain restrictions, X-Auth-Request header, JWT handling,
+// registers the public CLI client as an extra accepted audience,
 // and requests the "groups" scope so Dex includes group memberships in the ID token.
 func WithAuthSettings() customization.ContainerOption {
 	return customization.WithEnv(
 		corev1.EnvVar{Name: "OAUTH2_PROXY_EMAIL_DOMAINS", Value: "*"},
 		corev1.EnvVar{Name: "OAUTH2_PROXY_SET_XAUTHREQUEST", Value: "true"},
 		corev1.EnvVar{Name: "OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS", Value: "true"},
+		corev1.EnvVar{Name: "OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES", Value: dex.CLIClientID},
 		corev1.EnvVar{Name: "OAUTH2_PROXY_SCOPE", Value: "openid email profile groups"},
 	)
 }

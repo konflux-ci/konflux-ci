@@ -27,6 +27,7 @@ spec:
       containers:
       - name: registry
         image: quay.io/konflux-ci/zot
+        imagePullPolicy: IfNotPresent
         args: ["/etc/zot/config.json"]
         resources:
           requests:

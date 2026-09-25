@@ -15,8 +15,10 @@ Konflux to be ready. See the [Examples]({{< relref "../examples" >}}) page for a
 configurations.
 
 {{< alert color="warning" >}}
-Do <strong>not</strong> use <code>konflux_v1alpha1_konflux.yaml</code> for production — it
-contains demo users with static passwords intended for local testing only. Use OIDC
+Do <strong>not</strong> use <code>konflux_v1alpha1_konflux.yaml</code> or
+<code>konflux-e2e.yaml</code> on OpenShift or other internet-reachable clusters —
+they contain demo users with static passwords intended for local Kind testing
+only. Use <code>konflux-openshift.yaml</code> (OpenShift login) or configure OIDC
 authentication instead.
 {{< /alert >}}
 
