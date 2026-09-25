@@ -128,6 +128,16 @@ subjects:
   name: segment-bridge
   namespace: segment-bridge
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  annotations:
+    service.beta.openshift.io/inject-cabundle: "true"
+  labels:
+    app.kubernetes.io/name: segment-bridge
+  name: segment-bridge-tekton-results-service-ca
+  namespace: segment-bridge
+---
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -142,11 +152,14 @@ spec:
       template:
         spec:
           containers:
-          - envFrom:
+          - env:
+            - name: TEKTON_RESULTS_CA_PATH
+              value: /var/run/segment-bridge/tekton-results-ca/service-ca.crt
+            envFrom:
             - secretRef:
                 name: segment-bridge-config
                 optional: true
-            image: quay.io/konflux-ci/segment-bridge:20a9a145f3728fcc946423acc1689017c052d8cc
+            image: quay.io/konflux-ci/segment-bridge:f44092eb5d3c6ea5f874721dd77cccbc6453374d
             imagePullPolicy: IfNotPresent
             name: segment-bridge
             resources:
@@ -165,6 +178,9 @@ spec:
             volumeMounts:
             - mountPath: /tmp
               name: tmp
+            - mountPath: /var/run/segment-bridge/tekton-results-ca
+              name: tekton-results-service-ca
+              readOnly: true
           restartPolicy: OnFailure
           securityContext:
             runAsNonRoot: true
@@ -174,4 +190,11 @@ spec:
           volumes:
           - emptyDir: {}
             name: tmp
+          - configMap:
+              items:
+              - key: service-ca.crt
+                path: service-ca.crt
+              name: segment-bridge-tekton-results-service-ca
+              optional: true
+            name: tekton-results-service-ca
   schedule: 0 * * * *
