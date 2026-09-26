@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -492,6 +494,71 @@ var _ = Describe("Test Proxy endpoints", func() {
 					fmt.Sprintf(`window.KONFLUX_RUNTIME["%s"] = "%s";`, propName, value)),
 					"runtime-config.js should contain property %s=%s from the CR", propName, value)
 			}
+		})
+	})
+
+	Context("Secret Rotation", func() {
+		It("should update Dex and oauth2-proxy when oauth2-proxy-client-secret is rotated", func() {
+			if os.Getenv("KONFLUX_PROXY_TEST_SECRET_ROTATION") != "1" {
+				Skip("Skipping secret rotation test (set KONFLUX_PROXY_TEST_SECRET_ROTATION=1 to enable)")
+			}
+
+			ctx := context.TODO()
+
+			getToken := func() (string, error) {
+				if isProxyOpenShiftAuth() {
+					return obtainOpenShiftProxyIDToken(ctx, proxyHTTPClient, proxyClient, proxyHome)
+				}
+				return ExtractToken(proxyClient)
+			}
+
+			By("1. Baseline auth check before rotation")
+			token, err := getToken()
+			Expect(err).NotTo(HaveOccurred(), "failed baseline token acquisition before rotation")
+			Expect(token).NotTo(BeEmpty())
+			expectProxyGETWithBearer("", token, 200)
+
+			By("2. Rotating oauth2-proxy-client-secret in konflux-ui namespace")
+			secret := &v1.Secret{}
+			err = proxyClient.Get(ctx, crclient.ObjectKey{Namespace: "konflux-ui", Name: "oauth2-proxy-client-secret"}, secret)
+			Expect(err).NotTo(HaveOccurred(), "failed to read oauth2-proxy-client-secret")
+
+			if secret.Data == nil {
+				secret.Data = make(map[string][]byte)
+			}
+			newSecretVal := fmt.Sprintf("rotated-secret-%d", time.Now().UnixNano())
+			secret.Data["client-secret"] = []byte(newSecretVal)
+			err = proxyClient.Update(ctx, secret)
+			Expect(err).NotTo(HaveOccurred(), "failed to update oauth2-proxy-client-secret")
+
+			By("3. Waiting for deployment rollouts of dex and proxy to complete")
+			deploymentsToWait := []string{"proxy"}
+			if !isProxyOpenShiftAuth() {
+				deploymentsToWait = append(deploymentsToWait, "dex")
+			}
+
+			for _, depName := range deploymentsToWait {
+				Eventually(func(g Gomega) {
+					dep := &appsv1.Deployment{}
+					err := proxyClient.Get(ctx, crclient.ObjectKey{Namespace: "konflux-ui", Name: depName}, dep)
+					g.Expect(err).NotTo(HaveOccurred())
+
+					replicas := int32(1)
+					if dep.Spec.Replicas != nil {
+						replicas = *dep.Spec.Replicas
+					}
+					g.Expect(dep.Status.ObservedGeneration).To(Equal(dep.Generation))
+					g.Expect(dep.Status.UpdatedReplicas).To(Equal(replicas))
+					g.Expect(dep.Status.AvailableReplicas).To(Equal(replicas))
+				}).WithTimeout(3*time.Minute).WithPolling(3*time.Second).Should(Succeed(),
+					"timed out waiting for rollout of deployment %s after secret rotation", depName)
+			}
+
+			By("4. Post-rotation auth check with rotated secret")
+			newToken, err := getToken()
+			Expect(err).NotTo(HaveOccurred(), "failed token acquisition after secret rotation")
+			Expect(newToken).NotTo(BeEmpty())
+			expectProxyGETWithBearer("", newToken, 200)
 		})
 	})
 })

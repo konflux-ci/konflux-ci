@@ -591,7 +591,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		})
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		rpContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
@@ -616,7 +616,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		})
 
 		deployment := getUIDeployment(t, dexDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		dexContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, dexContainerName)
@@ -653,7 +653,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 			},
 		}
 
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic and container should be unchanged
@@ -669,7 +669,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		})
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
@@ -686,7 +686,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		})
 
 		deployment := getUIDeployment(t, dexDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
@@ -699,7 +699,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
@@ -717,7 +717,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		})
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).NotTo(gomega.BeNil())
@@ -735,7 +735,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		})
 
 		deployment := getUIDeployment(t, dexDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).NotTo(gomega.BeNil())
@@ -753,7 +753,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		})
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).NotTo(gomega.BeNil())
@@ -770,7 +770,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
 		originalReplicas := deployment.Spec.Replicas
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).To(gomega.Equal(originalReplicas))
@@ -794,7 +794,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		})
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Check replicas
@@ -812,7 +812,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
 
 		deployment := getUIDeployment(t, dexDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, "dex-custom-config-abc", "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, "dex-custom-config-abc", "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Find the dex volume and verify ConfigMap name was updated
@@ -828,7 +828,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
 		hashedSecretName := "segment-bridge-config-abc1234567"
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, hashedSecretName, testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, hashedSecretName, "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Find the segment-bridge-config volume and verify Secret name was updated
@@ -850,7 +850,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g.Expect(origVol.Secret).NotTo(gomega.BeNil())
 		originalSecretName := origVol.Secret.SecretName
 
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Volume should retain its original secret name
@@ -858,6 +858,72 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g.Expect(segmentVolume).NotTo(gomega.BeNil(), "segment-bridge-config volume must exist")
 		g.Expect(segmentVolume.Secret).NotTo(gomega.BeNil())
 		g.Expect(segmentVolume.Secret.SecretName).To(gomega.Equal(originalSecretName))
+	})
+}
+
+func TestApplyUIDeploymentCustomizations_ClientSecretHash(t *testing.T) {
+	const testConfigMapName = "dex-config-test123"
+
+	t.Run("sets hash annotation on proxy deployment when clientSecretHash is provided", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
+		deployment := getUIDeployment(t, proxyDeploymentName)
+
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "abc1234567", testEndpoint)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(deployment.Spec.Template.Annotations).NotTo(gomega.BeNil())
+		g.Expect(deployment.Spec.Template.Annotations[oauth2ProxyClientSecretHashAnnotation]).
+			To(gomega.Equal("abc1234567"))
+	})
+
+	t.Run("sets hash annotation on dex deployment when clientSecretHash is provided", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
+		deployment := getUIDeployment(t, dexDeploymentName)
+
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "dex9876543", testEndpoint)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(deployment.Spec.Template.Annotations).NotTo(gomega.BeNil())
+		g.Expect(deployment.Spec.Template.Annotations[oauth2ProxyClientSecretHashAnnotation]).
+			To(gomega.Equal("dex9876543"))
+	})
+
+	t.Run("does not set hash annotation when clientSecretHash is empty", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
+
+		for _, name := range []string{proxyDeploymentName, dexDeploymentName} {
+			deployment := getUIDeployment(t, name)
+			// Ensure no pre-existing annotation
+			delete(deployment.Spec.Template.Annotations, oauth2ProxyClientSecretHashAnnotation)
+
+			err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+
+			g.Expect(deployment.Spec.Template.Annotations).
+				NotTo(gomega.HaveKey(oauth2ProxyClientSecretHashAnnotation),
+					"annotation must not be set when hash is empty for deployment %s", name)
+		}
+	})
+
+	t.Run("updates existing hash annotation when clientSecretHash changes", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
+		deployment := getUIDeployment(t, proxyDeploymentName)
+
+		// Set an initial hash
+		if deployment.Spec.Template.Annotations == nil {
+			deployment.Spec.Template.Annotations = make(map[string]string)
+		}
+		deployment.Spec.Template.Annotations[oauth2ProxyClientSecretHashAnnotation] = "oldhash1234"
+
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "newhash5678", testEndpoint)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(deployment.Spec.Template.Annotations[oauth2ProxyClientSecretHashAnnotation]).
+			To(gomega.Equal("newhash5678"))
 	})
 }
 
@@ -890,7 +956,7 @@ func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
 			},
 		})
 
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		rpContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
@@ -926,7 +992,7 @@ func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
 			},
 		})
 
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		rpContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
@@ -1026,7 +1092,7 @@ func TestProxyDeploymentRunAsUser(t *testing.T) {
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
 		deployment := getUIDeployment(t, proxyDeploymentName)
 
-		err := applyUIDeploymentCustomizations(deployment, ui, newDefaultInfo(t), testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, newDefaultInfo(t), testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		rpContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
@@ -1041,7 +1107,7 @@ func TestProxyDeploymentRunAsUser(t *testing.T) {
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
 		deployment := getUIDeployment(t, proxyDeploymentName)
 
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		rpContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
@@ -1056,7 +1122,7 @@ func TestProxyDeploymentRunAsUser(t *testing.T) {
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
 		deployment := getUIDeployment(t, proxyDeploymentName)
 
-		err := applyUIDeploymentCustomizations(deployment, ui, newOpenShiftInfo(t), testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, newOpenShiftInfo(t), testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		rpContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
