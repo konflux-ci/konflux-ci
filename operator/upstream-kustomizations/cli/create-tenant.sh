@@ -15,7 +15,6 @@ Required arguments:
 Example:
   $(basename "$0") -n my-tenant -u user1@konflux.dev
 EOF
-    exit 1
 }
 
 # Parse arguments
@@ -31,23 +30,27 @@ while [[ $# -gt 0 ]]; do
             ;;
         -h|--help)
             usage
+            exit 0
             ;;
         *)
-            echo "Unknown option: $1"
-            usage
+            echo "Unknown option: $1" >&2
+            usage >&2
+            exit 1
             ;;
     esac
 done
 
 # Validate required arguments
 if [[ -z "${NAMESPACE}" ]]; then
-    echo "Error: Namespace is required"
-    usage
+    echo "Error: Namespace is required" >&2
+    usage >&2
+    exit 1
 fi
 
 if [[ -z "${ADMIN_USER}" ]]; then
-    echo "Error: Admin user is required"
-    usage
+    echo "Error: Admin user is required" >&2
+    usage >&2
+    exit 1
 fi
 
 echo "🏗️  Creating Konflux tenant namespace: ${NAMESPACE}"
