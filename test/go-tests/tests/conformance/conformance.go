@@ -11,7 +11,7 @@ import (
 	buildexport "github.com/konflux-ci/build-service/export"
 
 	"github.com/devfile/library/v2/pkg/util"
-	"github.com/google/go-github/v91/github"
+	"github.com/google/go-github/v92/github"
 	appservice "github.com/konflux-ci/application-api/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/clients/has"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/constants"
