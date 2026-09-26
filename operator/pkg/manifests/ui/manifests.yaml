@@ -119,33 +119,39 @@ subjects:
 apiVersion: v1
 data:
   kite.caddy: "handle_path /api/k8s/plugins/kite/* {\n    route {\n        forward_auth
-    127.0.0.1:6000 {\n            uri /oauth2/auth\n            copy_headers X-Auth-Request-Email
-    X-Auth-Request-Groups\n        }\n\t\timpersonate\n\t\tinject_cached_vars\n        reverse_proxy
-    https://__KITE_HOSTNAME__ {\n            header_up Authorization \"Bearer {http.vars.kube_token}\"\n
-    \           import /mnt/caddy-snippets/backend-tls.conf\n        }\n    }\n}\n"
-  kubearchive.caddy: "handle_path /api/k8s/plugins/kubearchive/* {\n    route {\n
-    \       forward_auth 127.0.0.1:6000 {\n            uri /oauth2/auth\n            copy_headers
-    X-Auth-Request-Email X-Auth-Request-Groups\n        }\n\t\timpersonate\n\t\tinject_cached_vars\n
-    \       reverse_proxy https://__KUBEARCHIVE_HOSTNAME__:8081 {\n            header_up
+    127.0.0.1:6000 {\n            uri /oauth2/auth\n            header_up Authorization
+    {http.request.header.Authorization}\n            copy_headers X-Auth-Request-Email
+    X-Auth-Request-Groups\n        }\n\t\timpersonate\n\t\tinject_cached_vars\n\t\trequest_header
+    -Authorization\n        reverse_proxy https://__KITE_HOSTNAME__ {\n            header_up
     Authorization \"Bearer {http.vars.kube_token}\"\n            import /mnt/caddy-snippets/backend-tls.conf\n
     \       }\n    }\n}\n"
+  kubearchive.caddy: "handle_path /api/k8s/plugins/kubearchive/* {\n    route {\n
+    \       forward_auth 127.0.0.1:6000 {\n            uri /oauth2/auth\n            header_up
+    Authorization {http.request.header.Authorization}\n            copy_headers X-Auth-Request-Email
+    X-Auth-Request-Groups\n        }\n\t\timpersonate\n\t\tinject_cached_vars\n\t\trequest_header
+    -Authorization\n        reverse_proxy https://__KUBEARCHIVE_HOSTNAME__:8081 {\n
+    \           header_up Authorization \"Bearer {http.vars.kube_token}\"\n            import
+    /mnt/caddy-snippets/backend-tls.conf\n        }\n    }\n}\n"
   tekton-results.caddy: "handle_path /api/k8s/plugins/tekton-results/* {\n    route
-    {\n        forward_auth 127.0.0.1:6000 {\n            uri /oauth2/auth\n            copy_headers
-    X-Auth-Request-Email X-Auth-Request-Groups\n        }\n\t\timpersonate\n\t\tinject_cached_vars\n
-    \       reverse_proxy https://__TEKTON_RESULTS_HOSTNAME__:8080 {\n            #
-    TODO: switch to {http.vars.backend_token} once Tekton Results\n            # accepts
-    the \"konflux-backend\" audience in TokenReview.\n            # See backend-token
-    volume in proxy.yaml for context.\n            header_up Authorization \"Bearer
-    {http.vars.kube_token}\"\n            import /mnt/caddy-snippets/backend-tls.conf\n
+    {\n        forward_auth 127.0.0.1:6000 {\n            uri /oauth2/auth\n            header_up
+    Authorization {http.request.header.Authorization}\n            copy_headers X-Auth-Request-Email
+    X-Auth-Request-Groups\n        }\n\t\timpersonate\n\t\tinject_cached_vars\n\t\trequest_header
+    -Authorization\n        reverse_proxy https://__TEKTON_RESULTS_HOSTNAME__:8080
+    {\n            # TODO: switch to {http.vars.backend_token} once Tekton Results\n
+    \           # accepts the \"konflux-backend\" audience in TokenReview.\n            #
+    See backend-token volume in proxy.yaml for context.\n            header_up Authorization
+    \"Bearer {http.vars.kube_token}\"\n            import /mnt/caddy-snippets/backend-tls.conf\n
     \       }\n    }\n}\n"
   watson.caddy: |
     handle_path /api/chatbot/* {
         route {
             forward_auth 127.0.0.1:6000 {
                 uri /oauth2/auth
+                header_up Authorization {http.request.header.Authorization}
                 copy_headers X-Auth-Request-Email X-Auth-Request-Groups
             }
             inject_cached_vars
+            request_header -Authorization
             reverse_proxy https://__WATSON_HOST__ {
                 header_up Authorization "Basic {http.vars.watson_auth}"
                 header_up Host __WATSON_HOST__
@@ -155,7 +161,7 @@ data:
     }
 kind: ConfigMap
 metadata:
-  name: proxy-caddy-templates-46ctfh6tk7
+  name: proxy-caddy-templates-fm8mc86t87
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -184,9 +190,12 @@ data:
     only sees namespaces where\n\t# they are bound individually — group-based bindings
     are invisible.\n\t@nsListGet {\n\t\tmethod GET\n\t\tpath /api/k8s/api/v1/namespaces
     /api/k8s/api/v1/namespaces/\n\t}\n\thandle @nsListGet {\n\t\troute {\n\t\t\tforward_auth
-    127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\tcopy_headers X-Auth-Request-Email
-    X-Auth-Request-Groups\n\t\t\t}\n\t\t\timpersonate {\n\t\t\t\ttarget_user X-User\n\t\t\t\ttarget_group
-    X-Group\n\t\t\t}\n\t\t\trewrite * /api/v1/namespaces\n\t\t\treverse_proxy https://namespace-lister.namespace-lister.svc.cluster.local:8080
+    127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\theader_up Authorization {http.request.header.Authorization}\n\t\t\t\tcopy_headers
+    X-Auth-Request-Email X-Auth-Request-Groups\n\t\t\t}\n\t\t\timpersonate {\n\t\t\t\ttarget_user
+    X-User\n\t\t\t\ttarget_group X-Group\n\t\t\t}\n\t\t\t# Drop the client Dex JWT
+    after forward_auth. reverse_proxy copies\n\t\t\t# incoming headers; this backend
+    authenticates via X-User/X-Group.\n\t\t\trequest_header -Authorization\n\t\t\trewrite
+    * /api/v1/namespaces\n\t\t\treverse_proxy https://namespace-lister.namespace-lister.svc.cluster.local:8080
     {\n\t\t\t\theader_down -X-Correlation-ID\n\t\t\t\ttransport http {\n\t\t\t\t\tread_timeout
     30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool file /mnt/cluster-ca/ca-bundle.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
     Backend snippets (tekton-results, kubearchive, etc.) loaded from init-generated
@@ -195,17 +204,20 @@ data:
     handle blocks\n\t# by specificity (longest path match first), so e.g. /api/k8s/plugins/tekton-results/\n\t#
     is safe because it is more specific than /api/k8s/.\n\timport /mnt/caddy-snippets/*.caddy\n\n\t#
     WebSocket to Kube API\n\thandle_path /wss/k8s/* {\n\t\troute {\n\t\t\tforward_auth
-    127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\tcopy_headers X-Auth-Request-Email
-    X-Auth-Request-Groups\n\t\t\t}\n\t\t\timpersonate\n\t\t\tinject_cached_vars\n\t\t\treverse_proxy
-    https://kubernetes.default.svc {\n\t\t\t\theader_up Authorization \"Bearer {http.vars.kube_token}\"\n\t\t\t\ttransport
-    http {\n\t\t\t\t\tread_timeout 30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool
-    file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
+    127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\theader_up Authorization {http.request.header.Authorization}\n\t\t\t\tcopy_headers
+    X-Auth-Request-Email X-Auth-Request-Groups\n\t\t\t}\n\t\t\timpersonate\n\t\t\tinject_cached_vars\n\t\t\t#
+    Strip the client JWT after forward_auth. Do not use\n\t\t\t# header_up -Authorization
+    in the same reverse_proxy that sets\n\t\t\t# Authorization: Caddy can apply the
+    delete after the set and\n\t\t\t# drop the proxy SA token, so kube sees system:anonymous.\n\t\t\trequest_header
+    -Authorization\n\t\t\treverse_proxy https://kubernetes.default.svc {\n\t\t\t\theader_up
+    Authorization \"Bearer {http.vars.kube_token}\"\n\t\t\t\ttransport http {\n\t\t\t\t\tread_timeout
+    30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
     Kube API (catch-all for /api/k8s/)\n\thandle_path /api/k8s/* {\n\t\troute {\n\t\t\tforward_auth
-    127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\tcopy_headers X-Auth-Request-Email
-    X-Auth-Request-Groups\n\t\t\t}\n\t\t\timpersonate\n\t\t\tinject_cached_vars\n\t\t\treverse_proxy
-    https://kubernetes.default.svc {\n\t\t\t\theader_up Authorization \"Bearer {http.vars.kube_token}\"\n\t\t\t\ttransport
-    http {\n\t\t\t\t\tread_timeout 30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool
-    file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
+    127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\theader_up Authorization {http.request.header.Authorization}\n\t\t\t\tcopy_headers
+    X-Auth-Request-Email X-Auth-Request-Groups\n\t\t\t}\n\t\t\timpersonate\n\t\t\tinject_cached_vars\n\t\t\trequest_header
+    -Authorization\n\t\t\treverse_proxy https://kubernetes.default.svc {\n\t\t\t\theader_up
+    Authorization \"Bearer {http.vars.kube_token}\"\n\t\t\t\ttransport http {\n\t\t\t\t\tread_timeout
+    30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
     Dex Identity Provider\n\thandle /idp/* {\n\t\treverse_proxy https://dex.konflux-ui.svc.cluster.local:9443
     {\n\t\t\theader_up X-Forwarded-Port \"9443\"\n\t\t\ttransport http {\n\t\t\t\ttls_trust_pool
     file /mnt/serving-cert/ca.crt\n\t\t\t}\n\t\t}\n\t}\n\n\t# Static SPA (catch-all,
@@ -213,7 +225,7 @@ data:
     {path} /index.html\n\t\tfile_server\n\t}\n}\n"
 kind: ConfigMap
 metadata:
-  name: proxy-caddyfile-45hm8d8b52
+  name: proxy-caddyfile-76hgkmbm4t
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -562,7 +574,7 @@ spec:
         - /etc/caddy/Caddyfile
         - --adapter
         - caddyfile
-        image: quay.io/konflux-ci/reverse-proxy@sha256:08813e9e46714a9c865f232f6095d06b413143941fab070b24087b5cd38add09
+        image: quay.io/konflux-ci/reverse-proxy@sha256:0ebf04596ce82981ee483d4047870b50627fd5e60400e49f29a74f97e8aa7984
         livenessProbe:
           failureThreshold: 3
           httpGet:
@@ -646,7 +658,7 @@ spec:
             secretKeyRef:
               key: cookie-secret
               name: oauth2-proxy-cookie-secret
-        image: registry.access.redhat.com/hi/oauth2-proxy@sha256:f6465973c06a48c630c52dab77ab0bf496e27419cb051650a267653b8063cc1a
+        image: registry.access.redhat.com/hi/oauth2-proxy@sha256:f4c766aa6e236bebffffaf39d87756d4bb9417dd76ce3578ef16424edc0ea02d
         name: oauth2-proxy
         ports:
         - containerPort: 6000
@@ -668,7 +680,7 @@ spec:
         - -R
         - /opt/app-root/src/.
         - /mnt/static-content/
-        image: quay.io/konflux-ci/konflux-ui@sha256:dc520464dbb7f117217ca0aca1da69b105b955f063d88962dc06e007c903c0cb
+        image: quay.io/konflux-ci/konflux-ui@sha256:cb639c493db63300b755568fd0be3414f33200d0b806cc7fff747bc8a20f5aed
         name: copy-static-content
         resources:
           limits:
@@ -686,7 +698,7 @@ spec:
       - command:
         - sh
         - /var/run/scripts/konflux-ci.dev/generate-proxy-config.sh
-        image: quay.io/konflux-ci/konflux-ui@sha256:dc520464dbb7f117217ca0aca1da69b105b955f063d88962dc06e007c903c0cb
+        image: quay.io/konflux-ci/konflux-ui@sha256:cb639c493db63300b755568fd0be3414f33200d0b806cc7fff747bc8a20f5aed
         name: generate-proxy-config
         resources:
           limits:
@@ -748,11 +760,11 @@ spec:
           items:
           - key: Caddyfile
             path: Caddyfile
-          name: proxy-caddyfile-45hm8d8b52
+          name: proxy-caddyfile-76hgkmbm4t
         name: proxy-caddyfile
       - configMap:
           defaultMode: 420
-          name: proxy-caddy-templates-46ctfh6tk7
+          name: proxy-caddy-templates-fm8mc86t87
         name: caddy-templates
       - emptyDir: {}
         name: caddy-snippets

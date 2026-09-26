@@ -96,6 +96,11 @@ kubectl apply -f config/samples/konflux_v1alpha1_konflux.yaml
 kubectl wait --for=condition=Ready=True konflux konflux --timeout=10m
 ```
 
+> [!WARNING]
+> `konflux_v1alpha1_konflux.yaml` enables Dex demo users whose password is published in
+> this repository, and it pins a Kind-specific NodePort. Use it only on a local Kind
+> cluster. On OpenShift apply `config/samples/konflux-openshift.yaml` instead.
+
 ## Development Workflow
 
 For iterative development:

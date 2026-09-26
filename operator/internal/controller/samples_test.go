@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -152,6 +153,116 @@ var _ = Describe("Sample YAML Files", func() {
 					GinkgoWriter.Printf("  ⚠ Skipping dry-run (no decodable documents)\n")
 				}
 			}
+		})
+
+		// Guards the remediation for the Dex static-password finding (CWE-798).
+		// Kind samples keep published demo users; OpenShift samples must not.
+		DescribeTable("OpenShift Konflux samples must not ship Dex demo users",
+			func(name string, wantImageController, wantPACInsecureSSL bool) {
+				filePath := filepath.Join(samplesDir, name)
+				data, err := os.ReadFile(filePath)
+				Expect(err).NotTo(HaveOccurred(), "%s must exist", name)
+
+				Expect(string(data)).NotTo(ContainSubstring("staticPasswords:"),
+					"%s must not define Dex static passwords", name)
+
+				konflux := &konfluxv1alpha1.Konflux{}
+				Expect(yaml.Unmarshal(data, konflux)).To(Succeed())
+
+				Expect(konflux.Spec.KonfluxUI).NotTo(BeNil())
+				Expect(konflux.Spec.KonfluxUI.Spec).NotTo(BeNil())
+				dex := konflux.Spec.KonfluxUI.Spec.Dex
+				Expect(dex).NotTo(BeNil(), "%s should configure Dex explicitly", name)
+				Expect(dex.Config).NotTo(BeNil(), "%s should set dex.config", name)
+				Expect(dex.Config.StaticPasswords).To(BeEmpty(),
+					"%s must not define Dex static passwords", name)
+				Expect(dex.Config.EnablePasswordDB).NotTo(BeNil(),
+					"%s should set enablePasswordDB explicitly", name)
+				Expect(*dex.Config.EnablePasswordDB).To(BeFalse(),
+					"%s must disable the local password database", name)
+
+				Expect(konflux.Spec.IsImageControllerEnabled()).To(Equal(wantImageController),
+					"%s image-controller enabled=%v", name, wantImageController)
+				Expect(konflux.Spec.IsInternalRegistryEnabled()).To(BeFalse(),
+					"%s should use the OpenShift integrated registry", name)
+				Expect(string(data)).NotTo(ContainSubstring("nodePort"),
+					"%s must not pin a Kind NodePort", name)
+
+				var pacInsecure *bool
+				if konflux.Spec.KonfluxBuildService != nil && konflux.Spec.KonfluxBuildService.Spec != nil {
+					pacInsecure = konflux.Spec.KonfluxBuildService.Spec.PACWebhookInsecureSSL
+				}
+				if wantPACInsecureSSL {
+					Expect(pacInsecure).NotTo(BeNil(), "%s should set pacWebhookInsecureSSL", name)
+					Expect(*pacInsecure).To(BeTrue(), "%s must skip PaC webhook TLS verify", name)
+				} else if pacInsecure != nil {
+					Expect(*pacInsecure).To(BeFalse(),
+						"%s must not skip PaC webhook TLS verify", name)
+				}
+			},
+			Entry("human OpenShift default", "konflux-openshift.yaml", false, false),
+			Entry("Prow OpenShift e2e", "konflux-openshift-e2e.yaml", true, true),
+		)
+
+		It("keeps Dex demo users and image-controller on the Kind e2e sample", func() {
+			filePath := filepath.Join(samplesDir, "konflux-e2e.yaml")
+			data, err := os.ReadFile(filePath)
+			Expect(err).NotTo(HaveOccurred())
+
+			konflux := &konfluxv1alpha1.Konflux{}
+			Expect(yaml.Unmarshal(data, konflux)).To(Succeed())
+
+			Expect(konflux.Spec.KonfluxUI).NotTo(BeNil())
+			Expect(konflux.Spec.KonfluxUI.Spec).NotTo(BeNil())
+			dex := konflux.Spec.KonfluxUI.Spec.Dex
+			Expect(dex).NotTo(BeNil())
+			Expect(dex.Config).NotTo(BeNil())
+			Expect(dex.Config.StaticPasswords).NotTo(BeEmpty(),
+				"Kind e2e still authenticates with Dex static passwords")
+			Expect(dex.Config.EnablePasswordDB).NotTo(BeNil())
+			Expect(*dex.Config.EnablePasswordDB).To(BeTrue())
+			Expect(konflux.Spec.IsImageControllerEnabled()).To(BeTrue())
+			Expect(string(data)).To(ContainSubstring("staticPasswords:"),
+				"Kind e2e still carries the demo-user staticPasswords key")
+		})
+
+		It("selects the OpenShift e2e sample only when OPENSHIFT_CI is true", func() {
+			repoRoot, err := filepath.Abs(filepath.Join(samplesDir, "..", "..", ".."))
+			Expect(err).NotTo(HaveOccurred())
+
+			humanCR := filepath.Join(repoRoot, "operator", "config", "samples", "konflux-openshift.yaml")
+			e2eCR := filepath.Join(repoRoot, "operator", "config", "samples", "konflux-openshift-e2e.yaml")
+			kindE2eCR := filepath.Join(repoRoot, "operator", "config", "samples", "konflux-e2e.yaml")
+			kindBaseCR := filepath.Join(repoRoot, "operator", "config", "samples", "konflux_v1alpha1_konflux.yaml")
+
+			baseEnv := envWithout(os.Environ(), "OPENSHIFT_CI")
+			baseEnv = envWithout(baseEnv, "KONFLUX_CR")
+			baseEnv = envWithout(baseEnv, "QUAY_TOKEN")
+			baseEnv = envWithout(baseEnv, "QUAY_ORGANIZATION")
+			baseEnv = envWithout(baseEnv, "SAMPLES_DIR")
+
+			Expect(runCRScript(repoRoot, "scripts/default-ocp-konflux-cr.sh", baseEnv, repoRoot)).To(Equal(humanCR))
+			Expect(runCRScript(repoRoot, "scripts/default-ocp-konflux-cr.sh",
+				append(baseEnv, "OPENSHIFT_CI=true"), repoRoot)).To(Equal(e2eCR))
+			Expect(runCRScript(repoRoot, "scripts/default-ocp-konflux-cr.sh",
+				append(baseEnv, "OPENSHIFT_CI=1"), repoRoot)).To(Equal(humanCR),
+				"only OPENSHIFT_CI=true selects the e2e sample")
+			Expect(runCRScript(repoRoot, "scripts/default-ocp-konflux-cr.sh",
+				append(baseEnv, "QUAY_TOKEN=unused", "QUAY_ORGANIZATION=unused"), repoRoot)).To(Equal(humanCR),
+				"Quay credentials must not select the OpenShift CR")
+
+			// deploy-konflux-on-ocp.sh sets KONFLUX_CR then calls resolve-konflux-cr.sh.
+			// Prow also exports QUAY_TOKEN; that must not switch to the Kind e2e sample.
+			Expect(runCRScript(repoRoot, "scripts/resolve-konflux-cr.sh",
+				append(baseEnv, "KONFLUX_CR="+e2eCR, "QUAY_TOKEN=unused", "QUAY_ORGANIZATION=unused"))).To(Equal(e2eCR))
+			Expect(runCRScript(repoRoot, "scripts/resolve-konflux-cr.sh",
+				append(baseEnv, "KONFLUX_CR="+humanCR, "QUAY_TOKEN=unused", "QUAY_ORGANIZATION=unused"))).To(Equal(humanCR))
+
+			// Kind / GHA / Tekton still auto-select konflux-e2e.yaml when Quay is set
+			// and KONFLUX_CR is unset.
+			Expect(runCRScript(repoRoot, "scripts/resolve-konflux-cr.sh",
+				append(baseEnv, "QUAY_TOKEN=unused", "QUAY_ORGANIZATION=unused"))).To(Equal(kindE2eCR))
+			Expect(runCRScript(repoRoot, "scripts/resolve-konflux-cr.sh", baseEnv)).To(Equal(kindBaseCR))
 		})
 
 		It("should preserve all fields from YAML when decoding (no unknown fields)", func() {
@@ -493,4 +604,33 @@ func isNormalizedDifference(original, decoded interface{}) bool {
 		return original == nil
 	}
 	return false
+}
+
+// envWithout returns a copy of env with any KEY=... entries for key removed.
+func envWithout(env []string, key string) []string {
+	prefix := key + "="
+	out := make([]string, 0, len(env))
+	for _, e := range env {
+		if strings.HasPrefix(e, prefix) {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// runCRScript runs a repo-root bash helper and returns its trimmed stdout.
+func runCRScript(repoRoot, rel string, env []string, args ...string) string {
+	GinkgoHelper()
+	script := filepath.Join(repoRoot, rel)
+	cmd := exec.Command("bash", append([]string{script}, args...)...) //nolint:gosec // G204: in-repo helper path
+	cmd.Dir = repoRoot
+	cmd.Env = env
+	out, err := cmd.Output()
+	stderr := ""
+	if ee, ok := err.(*exec.ExitError); ok {
+		stderr = string(ee.Stderr)
+	}
+	Expect(err).NotTo(HaveOccurred(), "script %s failed: stdout=%q stderr=%q", rel, string(out), stderr)
+	return strings.TrimSpace(string(out))
 }
