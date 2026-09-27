@@ -1,0 +1,125 @@
+# Title: Konflux Configuration for OpenShift
+# Description: Complete Konflux configuration for OpenShift clusters, without demo users.
+#
+# This is the default CR applied by ./deploy-konflux-on-ocp.sh for human installs.
+# OpenShift CI (OPENSHIFT_CI=true) uses konflux-openshift-e2e.yaml instead.
+#
+# It deliberately contains NO Dex static passwords. On OpenShift the operator enables
+# the OpenShift connector by default, so users authenticate with their existing cluster
+# credentials through the OpenShift OAuth server. The local password database is turned
+# off explicitly below.
+#
+# Do not use the Kind samples (konflux_v1alpha1_konflux.yaml, konflux-e2e.yaml) on an
+# OpenShift cluster. They enable demo users whose password is published in this
+# repository, and they pin a Kind-specific NodePort that does not apply here.
+#
+# For GitHub or another OIDC provider, see konflux-with-github-auth.yaml and
+# docs/content/docs/guides/oidc-configuration.md.
+#
+# Usage:
+#   ./deploy-konflux-on-ocp.sh
+#   KONFLUX_CR=operator/config/samples/konflux-openshift.yaml ./deploy-konflux-on-ocp.sh
+apiVersion: konflux.konflux-ci.dev/v1alpha1
+kind: Konflux
+metadata:
+  labels:
+    app.kubernetes.io/name: konflux-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: konflux
+spec:
+  ui:
+    spec:
+      # On OpenShift the operator creates an Ingress and derives the host from the
+      # cluster ingress domain, defaulting to "konflux-ui-{namespace}.{domain}".
+      # Set ingress.fqdn or ingress.hostname to choose a specific name.
+      ingress:
+        enabled: true
+      proxy:
+        replicas: 1
+        reverseProxy:
+          resources:
+            requests:
+              cpu: 30m
+              memory: 128Mi
+            limits:
+              cpu: 30m
+              memory: 128Mi
+      dex:
+        config:
+          # Local password database disabled. Authentication goes through the
+          # OpenShift connector, which the operator adds automatically on OpenShift.
+          # Do not add staticPasswords here; deploy-konflux-on-ocp.sh refuses to
+          # apply a CR that contains them.
+          enablePasswordDB: false
+  integrationService:
+    spec:
+      integrationControllerManager:
+        replicas: 1
+        manager:
+          resources:
+            requests:
+              cpu: 30m
+              memory: 128Mi
+            limits:
+              cpu: 30m
+              memory: 128Mi
+      snapshotGarbageCollector:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+  releaseService:
+    spec:
+      releaseControllerManager:
+        replicas: 1
+        manager:
+          resources:
+            requests:
+              cpu: 30m
+              memory: 128Mi
+            limits:
+              cpu: 30m
+              memory: 128Mi
+  buildService:
+    spec:
+      buildControllerManager:
+        replicas: 1
+        manager:
+          resources:
+            requests:
+              cpu: 30m
+              memory: 128Mi
+            limits:
+              cpu: 30m
+              memory: 128Mi
+  namespaceLister:
+    spec:
+      cacheResyncPeriod: "10m"
+      logLevel: info
+      namespaceLister:
+        replicas: 1
+        namespaceLister:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+  info:
+    spec:
+      publicInfo:
+        environment: development
+        visibility: public
+  certManager:
+    createClusterIssuer: true
+    # OpenShift injects trusted CA bundles natively, so the trust-manager Bundle
+    # is not required. The operator already defaults this to false on OpenShift.
+    # distributeClusterCABundle: false
+  internalRegistry:
+    # OpenShift ships an integrated registry; the Kind samples enable this instead.
+    enabled: false
+  # Default tenant creates a shared "default-tenant" namespace that every authenticated
+  # user can use. Set to false for a multi-tenant deployment needing strict isolation.
+  defaultTenant:
+    enabled: true

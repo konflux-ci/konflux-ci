@@ -23,8 +23,8 @@ spec:
         - name: shared-health
           emptyDir: {}
       containers:
-        - image: ghcr.io/chmouel/gosmee:latest
-          imagePullPolicy: Always
+        - image: ghcr.io/chmouel/gosmee
+          imagePullPolicy: IfNotPresent
           name: gosmee
           args:
             - "client"
@@ -52,7 +52,7 @@ spec:
             timeoutSeconds: 10
             failureThreshold: 2
         - name: health-check-sidecar
-          image: quay.io/konflux-ci/smee-sidecar:latest
+          image: quay.io/konflux-ci/smee-sidecar
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

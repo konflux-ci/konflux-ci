@@ -101,7 +101,7 @@ Use **one token per flag** where possible (e.g. `-ginkgo.skip=Flaky`). Values wi
 | Variable | Purpose |
 |----------|---------|
 | `E2E_DEPLOY_TEST_RESOURCES` | When `true`, run `deploy-test-resources.sh` before tests (Kind Dex `proxy-dex` RBAC; off by default in `run-e2e.sh`) |
-| `KONFLUX_PROXY_AUTH` | `openshift` or `dex` (default: infer — openshift when `OPENSHIFT_PASSWORD`, `KUBEADMIN_PASSWORD_FILE`, or `SHARED_DIR/kubeadmin-password` is set and `TEST_ENVIRONMENT!=upstream`, else dex) |
+| `KONFLUX_PROXY_AUTH` | `openshift` or `dex`. Default: `dex` when `TEST_ENVIRONMENT=upstream`; otherwise `openshift` if the cluster serves `route.openshift.io` (a kubeadmin password is then required, and a missing one is a hard error, because the OpenShift CR has no Dex static passwords); otherwise `openshift` if `OPENSHIFT_PASSWORD`, `KUBEADMIN_PASSWORD_FILE`, or `SHARED_DIR/kubeadmin-password` is set; else `dex` |
 | `KONFLUX_PROXY_AUTH_METHOD` | Set by the runner: `openshift-oauth` or `dex-password-grant` |
 | `OPENSHIFT_PASSWORD` / `KUBEADMIN_PASSWORD_FILE` / `SHARED_DIR/kubeadmin-password` | Kubeadmin password for OpenShift OAuth (file or env; see runner script) |
 | `KONFLUX_PROXY_ID_TOKEN` | Optional override: skip OAuth and use a pre-obtained Dex `id_token` |

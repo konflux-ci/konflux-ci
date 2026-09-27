@@ -21,8 +21,19 @@ Represents a complete Konflux CR configuration with all components, realistic
 resource limits, and demo users for testing. Includes helpful comments for
 common configurations.
 
-**konflux-e2e.yaml** - Extends the base configuration with image-controller
-enabled, which is required for E2E tests. Used by the CI E2E workflow.
+**konflux-e2e.yaml** - Extends the Kind base configuration with image-controller
+enabled, which is required for E2E tests. Used by GitHub Actions and Tekton Kind
+e2e. Do not apply on OpenShift.
+
+**konflux-openshift.yaml** - Default CR for `deploy-konflux-on-ocp.sh` (human
+installs). Contains no demo users and disables the Dex password database; users
+authenticate through the OpenShift OAuth server, which the operator wires up
+automatically on OpenShift. Use this, not the Kind samples, on any OpenShift
+cluster.
+
+**konflux-openshift-e2e.yaml** - Default CR for `deploy-konflux-on-ocp.sh` when
+`OPENSHIFT_CI=true` (Prow). Same as `konflux-openshift.yaml`, plus
+image-controller and PaC webhook TLS skip. No Dex demo users.
 
 **konflux-empty-cr.yaml** - Minimal empty spec using all default values.
 
@@ -42,9 +53,20 @@ These samples are useful for:
 
 ### Authentication
 
-The main `konflux_v1alpha1_konflux.yaml` sample includes demo users with static passwords for CI testing and local development. **These demo users are for testing only and should never be used in production.**
+`konflux_v1alpha1_konflux.yaml` and `konflux-e2e.yaml` include demo users whose password
+is published in this repository. **They are for Kind and CI only and must never be
+applied to a cluster that is reachable from the internet.**
 
-For production deployments, remove the `staticPasswords` section and configure OIDC connectors (GitHub, Google, LDAP, etc.) for authentication. See `konflux-with-github-auth.yaml` for an example and the [Dex Connectors Documentation](https://dexidp.io/docs/connectors/) for all supported connectors.
+For OpenShift, use `konflux-openshift.yaml` (or `konflux-openshift-e2e.yaml` in
+Prow). `deploy-konflux-on-ocp.sh` refuses to apply any CR containing
+`staticPasswords` unless `ALLOW_DEV_STATIC_PASSWORDS=true` is set.
+
+For any other production deployment, omit the `staticPasswords` section, set
+`enablePasswordDB: false`, and configure OIDC connectors (GitHub, Google, LDAP, etc.).
+See `konflux-with-github-auth.yaml` for an example and the
+[Dex Connectors Documentation](https://dexidp.io/docs/connectors/) for all supported
+connectors. When the password database is disabled the operator drops any
+`staticPasswords` from the rendered Dex config, so they never reach the cluster.
 
 ### Default Tenant
 

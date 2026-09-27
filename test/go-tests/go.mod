@@ -4,41 +4,41 @@ go 1.26.0
 
 require (
 	github.com/coder/websocket v1.8.15
-	github.com/codeready-toolchain/api v0.0.0-20260807111559-e29da2fc346c
-	github.com/conforma/crds/api v0.1.17
+	github.com/codeready-toolchain/api v0.0.0-20260923121658-43ad10110efe
+	github.com/conforma/crds/api v0.1.23
 	github.com/devfile/library/v2 v2.4.0
-	github.com/docker/cli v29.8.0+incompatible
+	github.com/docker/cli v29.8.1+incompatible
 	github.com/gofri/go-github-ratelimit/v2 v2.0.2
 	github.com/google/go-containerregistry v0.22.1
-	github.com/google/go-github/v91 v91.0.0
+	github.com/google/go-github/v92 v92.0.0
 	github.com/h2non/gock v1.2.0
-	github.com/konflux-ci/application-api v0.0.0-20260727123715-2999a91451c6
+	github.com/konflux-ci/application-api v0.0.0-20260922132835-de56d0a1a17b
 	github.com/konflux-ci/build-service v0.0.0-20260902135154-0be399c54c4e
-	github.com/konflux-ci/image-controller v0.0.0-20260902123452-65b644b9b875
+	github.com/konflux-ci/image-controller v0.0.0-20260922140956-1775f73cc0f9
 	github.com/konflux-ci/integration-service v0.0.0-20260908121035-278281fdf582
 	github.com/konflux-ci/konflux-ci/operator v0.0.0
-	github.com/konflux-ci/operator-toolkit v0.0.0-20260312101100-d4e398191a68
+	github.com/konflux-ci/operator-toolkit v0.0.0-20260921214948-0f252ff98994
 	github.com/konflux-ci/release-service v0.0.0-20260827132247-55646fffcc3b
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/onsi/ginkgo/v2 v2.32.2
-	github.com/onsi/gomega v1.43.0
+	github.com/onsi/ginkgo/v2 v2.33.0
+	github.com/onsi/gomega v1.43.1
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/openshift-pipelines/pipelines-as-code v0.48.0
-	github.com/openshift/api v0.0.0-20260825094607-13a84dedc5a3
-	github.com/openshift/client-go v0.0.0-20260806041845-b74fb348f1e7
+	github.com/openshift/api v0.0.0-20260925090845-44bef346c3f0
+	github.com/openshift/client-go v0.0.0-20260923093432-89e5bba1be29
 	github.com/openshift/library-go v0.0.0-20260911204104-f7fdf34b126f
 	github.com/redhat-appstudio/jvm-build-service v0.0.0-20250301023318-b47170d413c5
 	github.com/stretchr/testify v1.12.1
 	github.com/tektoncd/cli v0.45.0
 	github.com/tektoncd/pipeline v1.13.1
-	github.com/xanzy/go-gitlab v0.114.0
+	github.com/xanzy/go-gitlab v0.115.0
 	golang.org/x/oauth2 v0.37.0
-	k8s.io/api v0.37.0
-	k8s.io/apimachinery v0.37.0
+	k8s.io/api v0.37.1
+	k8s.io/apimachinery v0.37.1
 	k8s.io/client-go v11.0.0+incompatible
 	k8s.io/klog/v2 v2.140.0
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3
-	knative.dev/pkg v0.0.0-20260825072334-d2a153acc00c
+	knative.dev/pkg v0.0.0-20260918182429-5dc1978f0042
 	oras.land/oras-go/v2 v2.6.2
 	sigs.k8s.io/controller-runtime v0.25.1
 	sigs.k8s.io/yaml v1.6.0
@@ -51,30 +51,30 @@ replace (
 	github.com/docker/distribution/reference => github.com/distribution/reference v0.6.0
 	github.com/docker/docker => github.com/docker/docker v28.5.2+incompatible
 	github.com/konflux-ci/konflux-ci/operator => ../../operator
-	k8s.io/api => k8s.io/api v0.37.0
-	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.37.0
-	k8s.io/apimachinery => k8s.io/apimachinery v0.37.0
-	k8s.io/apiserver => k8s.io/apiserver v0.37.0
-	k8s.io/cli-runtime => k8s.io/cli-runtime v0.37.0
-	k8s.io/client-go => k8s.io/client-go v0.37.0
-	k8s.io/cloud-provider => k8s.io/cloud-provider v0.37.0
-	k8s.io/cluster-bootstrap => k8s.io/cluster-bootstrap v0.37.0
-	k8s.io/code-generator => k8s.io/code-generator v0.37.0
-	k8s.io/component-base => k8s.io/component-base v0.37.0
-	k8s.io/component-helpers => k8s.io/component-helpers v0.37.0
-	k8s.io/controller-manager => k8s.io/controller-manager v0.37.0
-	k8s.io/cri-api => k8s.io/cri-api v0.37.0
-	k8s.io/csi-translation-lib => k8s.io/csi-translation-lib v0.37.0
-	k8s.io/kube-aggregator => k8s.io/kube-aggregator v0.37.0
-	k8s.io/kube-controller-manager => k8s.io/kube-controller-manager v0.37.0
-	k8s.io/kube-proxy => k8s.io/kube-proxy v0.37.0
-	k8s.io/kube-scheduler => k8s.io/kube-scheduler v0.37.0
-	k8s.io/kubectl => k8s.io/kubectl v0.37.0
-	k8s.io/kubelet => k8s.io/kubelet v0.37.0
-	k8s.io/metrics => k8s.io/metrics v0.37.0
-	k8s.io/mount-utils => k8s.io/mount-utils v0.37.0
-	k8s.io/pod-security-admission => k8s.io/pod-security-admission v0.37.0
-	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.37.0
+	k8s.io/api => k8s.io/api v0.37.1
+	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.37.1
+	k8s.io/apimachinery => k8s.io/apimachinery v0.37.1
+	k8s.io/apiserver => k8s.io/apiserver v0.37.1
+	k8s.io/cli-runtime => k8s.io/cli-runtime v0.37.1
+	k8s.io/client-go => k8s.io/client-go v0.37.1
+	k8s.io/cloud-provider => k8s.io/cloud-provider v0.37.1
+	k8s.io/cluster-bootstrap => k8s.io/cluster-bootstrap v0.37.1
+	k8s.io/code-generator => k8s.io/code-generator v0.37.1
+	k8s.io/component-base => k8s.io/component-base v0.37.1
+	k8s.io/component-helpers => k8s.io/component-helpers v0.37.1
+	k8s.io/controller-manager => k8s.io/controller-manager v0.37.1
+	k8s.io/cri-api => k8s.io/cri-api v0.37.1
+	k8s.io/csi-translation-lib => k8s.io/csi-translation-lib v0.37.1
+	k8s.io/kube-aggregator => k8s.io/kube-aggregator v0.37.1
+	k8s.io/kube-controller-manager => k8s.io/kube-controller-manager v0.37.1
+	k8s.io/kube-proxy => k8s.io/kube-proxy v0.37.1
+	k8s.io/kube-scheduler => k8s.io/kube-scheduler v0.37.1
+	k8s.io/kubectl => k8s.io/kubectl v0.37.1
+	k8s.io/kubelet => k8s.io/kubelet v0.37.1
+	k8s.io/metrics => k8s.io/metrics v0.37.1
+	k8s.io/mount-utils => k8s.io/mount-utils v0.37.1
+	k8s.io/pod-security-admission => k8s.io/pod-security-admission v0.37.1
+	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.37.1
 	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.25.1
 	vbom.ml/util => github.com/fvbommel/util v0.0.3
 )
@@ -215,10 +215,10 @@ require (
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
-	k8s.io/apiextensions-apiserver v0.37.0 // indirect
+	k8s.io/apiextensions-apiserver v0.37.1 // indirect
 	k8s.io/klog v1.0.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260821135717-be32def86098 // indirect
-	k8s.io/streaming v0.37.0 // indirect
+	k8s.io/streaming v0.37.1 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect

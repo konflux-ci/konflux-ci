@@ -26,11 +26,78 @@ Authentication in Konflux works as follows:
 The `spec.ui.spec.dex.config` section controls which identity providers are available
 and how Dex is configured.
 
+## CLI and kubectl login
+
+The operator registers a public Dex OAuth client with id `cli` (no client secret)
+and configures oauth2-proxy to accept ID tokens with that audience. kubectl,
+kubelogin, and other OIDC CLIs can use this client.
+
+Point kubectl at the **UI proxy** Kubernetes API prefix, not the cluster API
+server:
+
+```
+https://<konflux-host>/api/k8s
+```
+
+The proxy validates the Dex ID token and impersonates that user (email and
+groups). You only see resources that identity can access. `kubectl oidc-login
+setup` also prints kube-apiserver `--oidc-*` flags and a `clusterrolebinding`;
+**ignore those**. They assume the API server is the OIDC client. Konflux
+authenticates at the proxy instead. `setup` only prints kubeconfig snippets —
+you still need to run `kubectl config set-credentials` / `set-cluster` yourself.
+
+Configure kubectl with [kubelogin](https://github.com/int128/kubelogin)
+(`kubectl oidc-login`) as an exec credential plugin. `set-credentials` does
+not log in; it records that kubectl should run `oidc-login get-token` when it
+needs a token. Login happens on the first `kubectl` call (or when the cached
+token expires).
+
+```bash
+kubectl config set-credentials oidc \
+  --exec-api-version=client.authentication.k8s.io/v1beta1 \
+  --exec-command=kubectl \
+  --exec-arg=oidc-login \
+  --exec-arg=get-token \
+  --exec-arg=--oidc-issuer-url=https://<konflux-host>/idp/ \
+  --exec-arg=--oidc-client-id=cli \
+  --exec-arg=--oidc-extra-scope=email \
+  --exec-arg=--oidc-extra-scope=profile \
+  --exec-arg=--oidc-extra-scope=groups \
+  --exec-arg=--oidc-extra-scope=offline_access
+
+kubectl config set-cluster konflux-ui \
+  --server=https://<konflux-host>/api/k8s
+
+kubectl config set-context konflux-ui --cluster=konflux-ui --user=oidc
+kubectl --context=konflux-ui get ns
+```
+
+kubectl sends the Dex **ID token** as `Authorization: Bearer`. Opaque access
+tokens are not accepted by oauth2-proxy.
+
+To test Dex without kubeconfig, you can run `kubectl oidc-login get-token` with
+the same issuer, client id, and scopes; that is the command the exec plugin
+invokes.
+
+**Browser (default):** auth-code + PKCE. kubelogin opens a local browser and
+listens on ports 8000 or 18000 (`http://localhost` and `http://127.0.0.1`, with
+or without a trailing slash). Use this when kubectl and a browser run on the
+same machine.
+
+**Headless:** add `--exec-arg=--grant-type=device-code` to `set-credentials`.
+kubectl prints a URL; complete login on another device that has a browser.
+Requires [kubelogin v1.26 or later](https://github.com/int128/kubelogin/releases).
+The `cli` client already registers Dex's device callback (`/device/callback`).
+
 {{< alert color="warning" >}}
-The static-password configuration included in the default sample CR (and used in local
-Kind deployments) is intended for <strong>development and CI only</strong>. Remove
-<code>staticPasswords</code> and configure an OIDC connector before deploying to
-production.
+The static-password configuration in the Kind sample CRs
+(<code>konflux_v1alpha1_konflux.yaml</code>, <code>konflux-e2e.yaml</code>) is intended
+for <strong>development and CI only</strong>. Those demo users have a password that is
+published in this repository. Never apply those samples to a cluster reachable from the
+internet. On OpenShift use <code>konflux-openshift.yaml</code> (or
+<code>konflux-openshift-e2e.yaml</code> in Prow), which have no demo users;
+elsewhere, remove <code>staticPasswords</code>, set
+<code>enablePasswordDB: false</code>, and configure an OIDC connector.
 {{< /alert >}}
 
 ## GitHub OAuth
@@ -326,8 +393,14 @@ it with `enablePasswordDB: true` and define users in `staticPasswords`:
 {{< alert color="warning" >}}
 Static passwords are stored as bcrypt hashes in the Konflux CR, but the CR itself is
 visible to anyone with read access to the cluster. <strong>Never use this configuration
-in production.</strong> Use an OIDC connector instead.
+in production.</strong> Use an OIDC connector instead. The hash shown above is the one
+used by the Kind samples and corresponds to a password published in this repository, so
+it grants access to anyone who finds the cluster.
 {{< /alert >}}
+
+Static passwords only take effect while the password database is enabled. If
+`enablePasswordDB` is `false`, or it is unset and at least one connector is configured,
+the operator omits `staticPasswords` from the rendered Dex configuration entirely.
 
 ## Combining Multiple Connectors
 

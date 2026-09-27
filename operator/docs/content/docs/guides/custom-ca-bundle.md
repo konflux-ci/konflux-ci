@@ -13,11 +13,14 @@ By default the volume points at ConfigMap `trusted-ca` (key `ca-bundle.crt`)
 with `optional: true`. On OpenShift the operator creates that ConfigMap with
 `inject-trusted-cabundle` so the platform fills `ca-bundle.crt`.
 
-The `trustedCA` field points that **same extra-file path** at a different
-ConfigMap in the `build-service` namespace. The file becomes exactly the
-PEM at `spec.trustedCA.key`. It is not merged with ConfigMap `trusted-ca`.
-The image trust store is unchanged. On OpenShift the platform-injected
-ConfigMap may still exist, but it is no longer mounted.
+The `trustedCA` field points that **same extra-file path** at a ConfigMap
+in the `build-service` namespace (`spec.trustedCA.name` may be `trusted-ca`).
+The file becomes exactly the PEM at `spec.trustedCA.key`. It is not merged
+with ConfigMap `trusted-ca`. The image trust store is unchanged. On
+OpenShift the operator does not create the platform-injected ConfigMap
+while `trustedCA` is set. If it already created that object, it deletes it
+when the operator owns it so the name can be reused. A user-supplied
+ConfigMap named `trusted-ca` is left in place and mounted.
 
 ## When you need this
 
@@ -41,19 +44,37 @@ default `trusted-ca` / `ca-bundle.crt` object. Common examples include:
 
 ## Prerequisites
 
-A ConfigMap containing your CA bundle in PEM format must exist in the
-`build-service` namespace. You can use any name and key — the examples
-below use `custom-ca-bundle` and `ca-bundle.pem`. The key name does not
-have to end in `.pem`; it is only the ConfigMap data key. The operator
-projects that key onto the extra-file mount as `ca-bundle.crt`.
+For any name **other than** `trusted-ca`, a ConfigMap containing your CA
+bundle in PEM format must already exist in the `build-service` namespace.
+You can use any key — the examples below use `custom-ca-bundle` and
+`ca-bundle.pem`. The key name does not have to end in `.pem`; it is only
+the ConfigMap data key. The operator projects that key onto the extra-file
+mount as `ca-bundle.crt`.
+
+### Reusing the name trusted-ca
+
+On OpenShift the operator already owns ConfigMap `trusted-ca`, so you
+cannot create that name first. Set `trustedCA` (with `name: trusted-ca`)
+on the CR, wait until the leftover is gone, then create your ConfigMap.
+Until it exists the pod stays `Pending` because the volume is
+`optional: false`.
+
+```bash
+# after spec.trustedCA.name is trusted-ca
+kubectl -n build-service wait --for=delete configmap/trusted-ca --timeout=60s
+kubectl -n build-service create configmap trusted-ca \
+  --from-file=ca-bundle.pem=/path/to/ca-bundle.pem
+```
 
 {{% alert title="Important" color="warning" %}}
 `/etc/ssl/certs/ca-custom-bundle.crt` is **replaced** by the referenced
 key, not merged with ConfigMap `trusted-ca`. Put every CA that should
 appear in that extra file into this ConfigMap (the new CA and any others
 you still need there). Public CAs from the container image remain. On
-OpenShift, cluster or proxy CAs that lived only in the platform-injected
-`trusted-ca` ConfigMap are not mounted while `trustedCA` is set.
+OpenShift, the operator does not create the platform-injected
+`trusted-ca` ConfigMap while `trustedCA` is set, and it removes a leftover
+operator-owned object of that name, so cluster or proxy CAs from that
+object are not mounted on the controller-manager.
 {{% /alert %}}
 
 ## Configure trustedCA
@@ -95,6 +116,8 @@ Once applied, the operator:
    ConfigMap is missing.
 3. Stamps a content hash on the controller-manager pod template so later
    ConfigMap updates roll the Deployment.
+4. On OpenShift, skips creating ConfigMap `trusted-ca` and deletes a
+   leftover operator-owned object of that name.
 
 ## Removing the custom CA bundle
 
@@ -122,8 +145,9 @@ spec:
 ```
 
 The operator restores the volume to ConfigMap `trusted-ca` / key
-`ca-bundle.crt` and sets `optional: true`. The extra-file mount path does
-not change.
+`ca-bundle.crt` and sets `optional: true`. On OpenShift it creates that
+ConfigMap with `inject-trusted-cabundle` if it is not already present.
+The extra-file mount path does not change.
 
 ## Behavior on errors
 

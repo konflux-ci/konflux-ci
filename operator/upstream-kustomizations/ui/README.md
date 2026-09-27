@@ -150,6 +150,26 @@ sequenceDiagram
    processes the request as if it came from the impersonated user with
    the specified groups.
 
+### CLI / kubectl (JWT Bearer)
+
+CLIs do not use the session cookie. They obtain a Dex ID token from the
+public `cli` OAuth client (`/idp/` issuer) and send
+`Authorization: Bearer <id_token>` on `/api/k8s/` (and other authenticated
+routes). Caddy forwards that header on `forward_auth`; oauth2-proxy
+validates the JWT (`aud` must be `oauth2-proxy` or `cli`) and returns the
+same `X-Auth-Request-Email` / `X-Auth-Request-Groups` headers as for a
+browser session. Impersonation then proceeds as above. The client JWT is
+not forwarded to kube or other backends: after `forward_auth`, Caddy
+deletes `Authorization` on the request (`request_header -Authorization`)
+so `reverse_proxy` does not copy the Dex token. Kube-style backends then
+set the proxy service account token. Namespace-lister uses `X-User` /
+`X-Group` only. Do not pair `header_up -Authorization` with
+`header_up Authorization` in the same `reverse_proxy` — Caddy can apply
+the delete after the set and drop the replacement token.
+
+See [Authentication and OIDC Configuration](../../docs/content/docs/guides/oidc-configuration.md)
+for kubectl / kubelogin usage.
+
 ## Group Impersonation
 
 The Kubernetes API requires each group as a separate `Impersonate-Group`

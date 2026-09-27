@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/version"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -1112,6 +1113,32 @@ func TestApplyTrustedCAMount(t *testing.T) {
 		g.Expect(deployment.Spec.Template.Annotations).NotTo(gomega.HaveKey(trustedCAHashAnnotation))
 	})
 
+	t.Run("omitted trustedCA stamps a platform content hash without retargeting the volume", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		hash := contenthash.String("-----BEGIN CERTIFICATE-----\nplatform\n-----END CERTIFICATE-----\n")
+
+		deployment := getBuildServiceDeployment(t)
+		err := applyBuildServiceDeploymentCustomizationsWithHash(deployment, konfluxv1alpha1.KonfluxBuildServiceConfigSpec{}, nil, "", hash)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		mount := findTrustedCAMount(deployment)
+		g.Expect(mount).NotTo(gomega.BeNil())
+		g.Expect(mount.MountPath).To(gomega.Equal(trustedCADefaultFileMountPath))
+		g.Expect(mount.SubPath).To(gomega.Equal(trustedCADefaultFileVolumePath))
+
+		vol := findTrustedCAVolume(deployment)
+		g.Expect(vol).NotTo(gomega.BeNil())
+		g.Expect(vol.ConfigMap).NotTo(gomega.BeNil())
+		g.Expect(vol.ConfigMap.Name).To(gomega.Equal(common.TrustedCAConfigMapName))
+		g.Expect(vol.ConfigMap.Optional).NotTo(gomega.BeNil())
+		g.Expect(*vol.ConfigMap.Optional).To(gomega.BeTrue())
+		g.Expect(vol.ConfigMap.Items).To(gomega.ConsistOf(corev1.KeyToPath{
+			Key:  trustedCADefaultFileVolumePath,
+			Path: trustedCADefaultFileVolumePath,
+		}))
+		g.Expect(deployment.Spec.Template.Annotations).To(gomega.HaveKeyWithValue(trustedCAHashAnnotation, hash))
+	})
+
 	t.Run("trustedCA retargets even when ConfigMap name is the default", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
@@ -1481,6 +1508,51 @@ func TestTrustedCAHashForApply(t *testing.T) {
 		g.Expect(hash).To(gomega.BeEmpty())
 	})
 
+	t.Run("hashes the platform bundle when spec is nil on OpenShift", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: common.TrustedCAConfigMapName, Namespace: webhookConfigNamespace},
+			Data:       map[string]string{trustedCADefaultFileVolumePath: pem},
+		}
+		r := &KonfluxBuildServiceReconciler{
+			Client:      fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm, liveDeployment(liveHash)).Build(),
+			ClusterInfo: newOpenShiftClusterInfo(t),
+		}
+		hash, err := r.trustedCAHashForApply(context.Background(), nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(hash).To(gomega.Equal(contenthash.String(pem)))
+	})
+
+	t.Run("returns empty when the platform bundle key is missing on OpenShift", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: common.TrustedCAConfigMapName, Namespace: webhookConfigNamespace},
+			Data:       map[string]string{"other": pem},
+		}
+		r := &KonfluxBuildServiceReconciler{
+			Client:      fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm, liveDeployment(liveHash)).Build(),
+			ClusterInfo: newOpenShiftClusterInfo(t),
+		}
+		hash, err := r.trustedCAHashForApply(context.Background(), nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(hash).To(gomega.BeEmpty())
+	})
+
+	t.Run("returns empty when spec is nil on a non-OpenShift cluster", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: common.TrustedCAConfigMapName, Namespace: webhookConfigNamespace},
+			Data:       map[string]string{trustedCADefaultFileVolumePath: pem},
+		}
+		r := &KonfluxBuildServiceReconciler{
+			Client:      fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm, liveDeployment(liveHash)).Build(),
+			ClusterInfo: newDefaultClusterInfo(t),
+		}
+		hash, err := r.trustedCAHashForApply(context.Background(), nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(hash).To(gomega.BeEmpty())
+	})
+
 	t.Run("hashes the referenced key when the ConfigMap exists", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		cm := &corev1.ConfigMap{
@@ -1623,6 +1695,51 @@ func TestMapTrustedCAConfigMap(t *testing.T) {
 		r := &KonfluxBuildServiceReconciler{Client: c}
 		g.Expect(r.mapTrustedCAConfigMap(context.Background(), matchingCM)).To(gomega.Equal(want))
 	})
+}
+
+func TestReconcileEnsureTrustedCAConfigMapError(t *testing.T) {
+	scheme := runtime.NewScheme()
+	g := gomega.NewWithT(t)
+	g.Expect(clientgoscheme.AddToScheme(scheme)).To(gomega.Succeed())
+	g.Expect(konfluxv1alpha1.AddToScheme(scheme)).To(gomega.Succeed())
+
+	bs := &konfluxv1alpha1.KonfluxBuildService{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "konflux.konflux-ci.dev/v1alpha1",
+			Kind:       "KonfluxBuildService",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: CRName,
+			UID:  "test-uid",
+		},
+		Spec: konfluxv1alpha1.NewKonfluxBuildServiceSpec(
+			konfluxv1alpha1.KonfluxBuildServiceConfigSpec{},
+			testutil.DefaultComponentMetricsConfig(),
+		),
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(bs).WithStatusSubresource(bs).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Patch: func(_ context.Context, _ client.WithWatch, obj client.Object, _ client.Patch, _ ...client.PatchOption) error {
+				cm, ok := obj.(*corev1.ConfigMap)
+				if ok && cm.Name == common.TrustedCAConfigMapName {
+					return fmt.Errorf("simulated trusted-ca apply failure")
+				}
+				return nil
+			},
+		}).Build()
+
+	r := &KonfluxBuildServiceReconciler{
+		Client:      c,
+		Scheme:      scheme,
+		ObjectStore: testutil.GetTestObjectStore(t),
+		ClusterInfo: newOpenShiftClusterInfo(t),
+	}
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: CRName}})
+	g.Expect(err).To(gomega.HaveOccurred())
+	g.Expect(err.Error()).To(gomega.ContainSubstring("failed to apply trusted-ca ConfigMap in " + webhookConfigNamespace))
+	g.Expect(err.Error()).To(gomega.ContainSubstring("simulated trusted-ca apply failure"))
 }
 
 func boolPtr(b bool) *bool { return &b }

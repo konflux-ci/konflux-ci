@@ -8,8 +8,9 @@ description: >-
 
 # PR Review
 
-Apply these checks on human-authored PRs (skip companion-eligible MintMaker/Renovate
-parents — see [companion-pr-review](../companion-pr-review/SKILL.md)).
+Apply these checks on every PR, including ones opened by agents (for example
+fullsend). Skip companion-eligible MintMaker/Renovate parents — see
+[companion-pr-review](../companion-pr-review/SKILL.md).
 
 ## Upstream / downstream hygiene
 

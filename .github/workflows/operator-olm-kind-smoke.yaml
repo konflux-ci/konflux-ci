@@ -39,7 +39,7 @@ jobs:
       # renovate: datasource=github-releases depName=kubernetes-sigs/kind
       KIND_VERSION: "0.33.0"
       # renovate: datasource=github-releases depName=kubernetes/kubernetes
-      KUBECTL_VERSION: "1.37.0"
+      KUBECTL_VERSION: "1.37.1"
       # Match operator-test-e2e arm64 matrix binary names.
       ARCH: arm64
       KIND_BINARY: kind-linux-arm64
