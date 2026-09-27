@@ -72,8 +72,8 @@ When writing or modifying these scripts, follow these guidelines:
 
 # Editing Markdown Files
 
-If the structure of Markdown files containing a table of contents changes, those
-need to be updated as well.
+If the structure of a Markdown file containing a table of contents changes, the
+table of contents need to be updated as well.
 
 To do that, run the command below and add the produced changes to your PR.
 
