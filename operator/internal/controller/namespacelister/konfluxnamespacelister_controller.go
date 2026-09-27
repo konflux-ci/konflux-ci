@@ -27,16 +27,25 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/utils/clock"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/common"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
@@ -49,8 +58,12 @@ const (
 	// crKind is used in error messages to identify this CR type.
 	crKind = "KonfluxNamespaceLister"
 
-	// namespaceListerContainerName is the name of the namespace-lister container
-	namespaceListerContainerName = "namespace-lister"
+	namespaceListerNamespace          = "namespace-lister"
+	namespaceListerTLSSecretName      = "namespace-lister-tls"
+	namespaceListerServiceMonitorName = "namespace-lister"
+	namespaceListerContainerName      = "namespace-lister"
+	namespaceListerMetricsReaderRole  = "namespace-lister-metrics-reader"
+	namespaceListerMetricsReaderCRB   = "prometheus-namespace-lister-metrics-reader"
 
 	argEnableMetrics  = "-enable-metrics"
 	argDisableMetrics = "-enable-metrics=false"
@@ -83,23 +96,32 @@ func resolveLogLevelEnvValue(level konfluxv1alpha1.LogLevel) (string, error) {
 }
 
 // NamespaceListerCleanupGVKs defines which resource types should be cleaned up when they are
-// no longer part of the desired state. All resources managed by this controller are always
-// applied, so no cleanup GVKs are needed (they're always tracked and never become orphans).
-var NamespaceListerCleanupGVKs = []schema.GroupVersionKind{}
+// no longer part of the desired state. Metrics scrape resources may be skipped during apply
+// (componentMetrics disabled) or removed across releases while metrics stay enabled.
+var NamespaceListerCleanupGVKs = append([]schema.GroupVersionKind(nil), kubernetes.ComponentMetricsOrphanCleanupGVKs...)
 
 // NamespaceListerClusterScopedAllowList restricts which cluster-scoped resources can be deleted
-// during orphan cleanup. This is a security measure to prevent attackers from
-// triggering deletion of arbitrary cluster resources by adding the owner label.
-// NamespaceListerClusterScopedAllowList restricts which cluster-scoped resources can be deleted
-// during orphan cleanup. All cluster-scoped resources managed by this controller are always
-// applied, so no allow list is needed (they're always tracked and never become orphans).
-var NamespaceListerClusterScopedAllowList tracking.ClusterScopedAllowList = nil
+// during orphan cleanup. Only metrics scrape ClusterRoles and ClusterRoleBindings are listed;
+// other cluster-scoped RBAC managed by this controller is always applied and stays tracked.
+var NamespaceListerClusterScopedAllowList = tracking.ClusterScopedAllowList{
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"}: sets.New(
+		namespaceListerMetricsReaderRole,
+	),
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"}: sets.New(
+		namespaceListerMetricsReaderCRB,
+	),
+}
 
 // KonfluxNamespaceListerReconciler reconciles a KonfluxNamespaceLister object
 type KonfluxNamespaceListerReconciler struct {
 	client.Client
-	Scheme      *runtime.Scheme
-	ObjectStore *manifests.ObjectStore
+	Scheme              *runtime.Scheme
+	ObjectStore         *manifests.ObjectStore
+	TokenCreator        kubernetes.TokenCreator
+	Clock               clock.Clock
+	TokenRotationEvents <-chan event.TypedGenericEvent[client.Object]
+	// SecretReader loads metrics TLS Secrets; prefer mgr.GetAPIReader() to avoid stale cache.
+	SecretReader client.Reader
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxnamespacelisters,verbs=get;list;watch;create;update;patch;delete
@@ -108,18 +130,17 @@ type KonfluxNamespaceListerReconciler struct {
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=core,resources=services;serviceaccounts,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=core,resources=serviceaccounts/token,verbs=create
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles;clusterrolebindings,verbs=get;list;watch;create;patch;delete
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=namespace-lister-authorizer;namespace-lister-metrics-auth-role,verbs=bind;escalate
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=namespace-lister-authorizer;namespace-lister-metrics-auth-rolebinding,verbs=bind
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=namespace-lister-authorizer;namespace-lister-metrics-auth-role;namespace-lister-metrics-reader,verbs=bind;escalate
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=namespace-lister-authorizer;namespace-lister-metrics-auth-rolebinding;prometheus-namespace-lister-metrics-reader,verbs=bind
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the KonfluxNamespaceLister object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/reconcile
@@ -151,6 +172,43 @@ func (r *KonfluxNamespaceListerReconciler) Reconcile(ctx context.Context, req ct
 		return errHandler.HandleApplyError(ctx, err)
 	}
 
+	scrapeResult := reconcile.Result{}
+	if konfluxNamespaceLister.Spec.ComponentMetrics.IsEnabled() && r.TokenCreator != nil {
+		scraper := kubernetes.OperandMetricsScraperSA(namespaceListerNamespace)
+		var scrapeErr error
+		scrapeResult, scrapeErr = common.ReconcilePrometheusScrapeToken(ctx, common.ScrapeTokenReconcilerConfig{
+			Client:               r.Client,
+			SecretReader:         r.SecretReader,
+			Clock:                r.Clock,
+			TokenCreator:         r.TokenCreator,
+			Scraper:              scraper,
+			OperandNamespace:     namespaceListerNamespace,
+			ServiceMonitorName:   namespaceListerServiceMonitorName,
+			MetricsTLSSecretName: namespaceListerTLSSecretName,
+			Apply: func(applyCtx context.Context, secret *corev1.Secret) error {
+				return tc.ApplyOwned(applyCtx, secret)
+			},
+			ApplyServiceMonitor: func(applyCtx context.Context) error {
+				objects, storeErr := r.ObjectStore.GetForComponent(manifests.NamespaceLister)
+				if storeErr != nil {
+					return fmt.Errorf("get manifests for ServiceMonitor apply: %w", storeErr)
+				}
+				sm, ok := common.OperandServiceMonitorFromObjects(objects, namespaceListerNamespace, namespaceListerServiceMonitorName)
+				if !ok {
+					return fmt.Errorf("operand ServiceMonitor %s/%s not found in embedded manifests",
+						namespaceListerNamespace, namespaceListerServiceMonitorName)
+				}
+				if err := common.ApplyMetricsScraperBindingSubjects(namespaceListerNamespace, sm); err != nil {
+					return fmt.Errorf("apply metrics scraper binding subjects for ServiceMonitor: %w", err)
+				}
+				return tc.ApplyOwned(applyCtx, sm)
+			},
+		})
+		if scrapeErr != nil {
+			return errHandler.HandleWithReason(ctx, scrapeErr, condition.ReasonApplyFailed, "reconcile prometheus scrape token")
+		}
+	}
+
 	// Cleanup orphaned resources
 	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, konfluxNamespaceLister.Name, NamespaceListerCleanupGVKs,
 		tracking.WithClusterScopedAllowList(NamespaceListerClusterScopedAllowList)); err != nil {
@@ -169,23 +227,51 @@ func (r *KonfluxNamespaceListerReconciler) Reconcile(ctx context.Context, req ct
 	}
 
 	log.Info("Successfully reconciled KonfluxNamespaceLister")
-	return ctrl.Result{}, nil
+	return scrapeResult, nil
 }
 
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
 func (r *KonfluxNamespaceListerReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxNamespaceLister) error {
+	log := logf.FromContext(ctx)
+
+	metricsEnabled := owner.Spec.ComponentMetrics.IsEnabled()
+	deferServiceMonitor := metricsEnabled && r.TokenCreator != nil
+
 	objects, err := r.ObjectStore.GetForComponent(manifests.NamespaceLister)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for NamespaceLister: %w", err)
 	}
 
 	for _, obj := range objects {
+		// Deferred ServiceMonitor apply: skip operand SM until ReconcilePrometheusScrapeToken
+		// applies it after prometheus-scrape-token is readable and metrics TLS verifies.
+		if deferServiceMonitor && kubernetes.IsComponentMetricsServiceMonitor(obj) {
+			log.V(2).Info("Deferring operand ServiceMonitor apply until scrape token and metrics TLS are ready",
+				"kind", tracking.GetKind(obj),
+				"name", obj.GetName(),
+				"namespace", obj.GetNamespace(),
+			)
+			continue
+		}
+		if !metricsEnabled && kubernetes.IsComponentMetricsScrapeResource(obj) {
+			log.V(1).Info("Skipping component metrics scrape resource",
+				"kind", tracking.GetKind(obj),
+				"name", obj.GetName(),
+				"namespace", obj.GetNamespace(),
+			)
+			continue
+		}
+
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
 			if err := applyNamespaceListerCustomizations(deployment, owner.Spec); err != nil {
 				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
 			}
+		}
+
+		if err := common.ApplyMetricsScraperBindingSubjects(namespaceListerNamespace, obj); err != nil {
+			return fmt.Errorf("apply metrics scraper binding subjects for %s: %w", obj.GetName(), err)
 		}
 
 		// Apply with ownership using the tracking client
@@ -236,7 +322,7 @@ func applyNamespaceListerCustomizations(deployment *appsv1.Deployment, spec konf
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxNamespaceListerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	controllerBuilder := ctrl.NewControllerManagedBy(mgr).
 		For(&konfluxv1alpha1.KonfluxNamespaceLister{}).
 		Named("konfluxnamespacelister").
 		// Use predicates to filter out unnecessary updates and prevent reconcile loops
@@ -248,6 +334,36 @@ func (r *KonfluxNamespaceListerReconciler) SetupWithManager(mgr ctrl.Manager) er
 		Owns(&rbacv1.ClusterRole{}).
 		Owns(&rbacv1.ClusterRoleBinding{}).
 		Owns(&networkingv1.NetworkPolicy{}).
-		Owns(&certmanagerv1.Certificate{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
-		Complete(r)
+		Owns(&certmanagerv1.Certificate{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate))
+
+	if r.TokenCreator != nil {
+		controllerBuilder = controllerBuilder.Owns(
+			&corev1.Secret{},
+			builder.WithPredicates(predicate.PrometheusScrapeTokenSecretPredicate),
+		)
+		if sm, ok := common.OperandServiceMonitorWatchObjectIfInstalled(mgr.GetRESTMapper()); ok {
+			controllerBuilder = controllerBuilder.Owns(sm)
+		}
+		// namespace-lister-tls is created by cert-manager (not CR ownerRefs).
+		controllerBuilder = controllerBuilder.Watches(
+			&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
+				if obj.GetNamespace() != namespaceListerNamespace {
+					return nil
+				}
+				return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: CRName}}}
+			}),
+			builder.WithPredicates(predicate.MetricsTLSSecretNamedPredicate(namespaceListerTLSSecretName)),
+		)
+	}
+	if r.TokenRotationEvents != nil && r.TokenCreator != nil {
+		controllerBuilder = controllerBuilder.WatchesRawSource(source.Channel(
+			r.TokenRotationEvents,
+			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, _ client.Object) []reconcile.Request {
+				return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: CRName}}}
+			}),
+		))
+	}
+
+	return controllerBuilder.Complete(r)
 }

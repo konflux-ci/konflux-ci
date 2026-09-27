@@ -32,6 +32,14 @@ import (
 // EnsureMetricsTLSSecrets creates a metrics-server-cert Secret with tls.crt and ca.crt so
 // deferred ServiceMonitor apply can proceed in envtest (no cert-manager controller).
 func EnsureMetricsTLSSecrets(ctx context.Context, c client.Client, namespace string) {
+	EnsureNamedMetricsTLSSecret(ctx, c, namespace, kubernetes.MetricsServerCertSecretName)
+}
+
+// EnsureNamedMetricsTLSSecret creates a named metrics TLS Secret with tls.crt and ca.crt so
+// deferred ServiceMonitor apply can proceed in envtest (no cert-manager controller).
+// Use for service-secure-scrape operands whose TLS material is not metrics-server-cert
+// (e.g. namespace-lister-tls).
+func EnsureNamedMetricsTLSSecret(ctx context.Context, c client.Client, namespace, secretName string) {
 	err := c.Create(ctx, &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{Name: namespace},
 	})
@@ -42,7 +50,7 @@ func EnsureMetricsTLSSecrets(ctx context.Context, c client.Client, namespace str
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      kubernetes.MetricsServerCertSecretName,
+			Name:      secretName,
 			Namespace: namespace,
 		},
 		Data: map[string][]byte{
@@ -67,9 +75,15 @@ func EnsureMetricsTLSSecrets(ctx context.Context, c client.Client, namespace str
 // DeleteMetricsTLSSecrets removes metrics-server-cert so envtests can exercise the
 // deferred ServiceMonitor path while TLS is not ready.
 func DeleteMetricsTLSSecrets(ctx context.Context, c client.Client, namespace string) {
+	DeleteNamedMetricsTLSSecret(ctx, c, namespace, kubernetes.MetricsServerCertSecretName)
+}
+
+// DeleteNamedMetricsTLSSecret removes a named metrics TLS Secret so envtests can exercise
+// the deferred ServiceMonitor path while TLS is not ready.
+func DeleteNamedMetricsTLSSecret(ctx context.Context, c client.Client, namespace, secretName string) {
 	_ = client.IgnoreNotFound(c.Delete(ctx, &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      kubernetes.MetricsServerCertSecretName,
+			Name:      secretName,
 			Namespace: namespace,
 		},
 	}))
@@ -78,6 +92,12 @@ func DeleteMetricsTLSSecrets(ctx context.Context, c client.Client, namespace str
 // ExpectVerifiedMetricsEndpointTLS asserts verified scrape tlsConfig
 // (CA from metrics-server-cert ca.crt + serverName, insecureSkipVerify false).
 func ExpectVerifiedMetricsEndpointTLS(g Gomega, endpoint map[string]any, wantServerName string) {
+	ExpectVerifiedNamedMetricsEndpointTLS(g, endpoint, wantServerName, kubernetes.MetricsServerCertSecretName)
+}
+
+// ExpectVerifiedNamedMetricsEndpointTLS asserts verified scrape tlsConfig for a named CA Secret
+// (CA ca.crt + serverName, insecureSkipVerify false).
+func ExpectVerifiedNamedMetricsEndpointTLS(g Gomega, endpoint map[string]any, wantServerName, caSecretName string) {
 	tlsConfig, ok := endpoint["tlsConfig"].(map[string]any)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(tlsConfig["insecureSkipVerify"]).To(BeFalse())
@@ -86,6 +106,6 @@ func ExpectVerifiedMetricsEndpointTLS(g Gomega, endpoint map[string]any, wantSer
 	g.Expect(ok).To(BeTrue())
 	caSecret, ok := ca["secret"].(map[string]any)
 	g.Expect(ok).To(BeTrue())
-	g.Expect(caSecret["name"]).To(Equal(kubernetes.MetricsServerCertSecretName))
+	g.Expect(caSecret["name"]).To(Equal(caSecretName))
 	g.Expect(caSecret["key"]).To(Equal(kubernetes.MetricsCACertKey))
 }

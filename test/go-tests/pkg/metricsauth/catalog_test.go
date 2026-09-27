@@ -11,7 +11,7 @@ import (
 func TestDefaultCatalog_TargetGroups(t *testing.T) {
 	catalog, err := DefaultCatalog()
 	require.NoError(t, err)
-	require.Len(t, catalog.Targets, 6)
+	require.Len(t, catalog.Targets, 7)
 
 	byID := map[string]Target{}
 	for _, target := range catalog.Targets {
@@ -23,6 +23,7 @@ func TestDefaultCatalog_TargetGroups(t *testing.T) {
 	assert.Equal(t, TargetGroupComponent, byID["integration-service"].LabelGroup())
 	assert.Equal(t, TargetGroupComponent, byID["release-service"].LabelGroup())
 	assert.Equal(t, TargetGroupComponent, byID["image-controller"].LabelGroup())
+	assert.Equal(t, TargetGroupComponent, byID["namespace-lister"].LabelGroup())
 	assert.Equal(t, TargetGroupComponent, byID["konflux-ui-proxy"].LabelGroup())
 	assert.False(t, byID["integration-service"].UWMUpCheck)
 	assert.Equal(t, kubernetes.ScrapeTokenSecretName, byID["integration-service"].ScrapeTokenSecret)
@@ -59,6 +60,12 @@ func TestDefaultCatalog_TargetGroups(t *testing.T) {
 	assert.Equal(t,
 		"integration-service-controller-manager-metrics-service.integration-service.svc",
 		byID["integration-service"].TLSServerNameForScrape())
+	assert.False(t, byID["namespace-lister"].TLSInsecureSkipVerifyForScrape())
+	assert.Equal(t, "namespace-lister-tls", byID["namespace-lister"].MetricsCASecret)
+	assert.Equal(t, kubernetes.ScrapeTokenSecretName, byID["namespace-lister"].ScrapeTokenSecret)
+	assert.Equal(t,
+		"namespace-lister.namespace-lister.svc",
+		byID["namespace-lister"].TLSServerNameForScrape())
 }
 
 func TestNewCatalog_InvalidGroup(t *testing.T) {
