@@ -337,9 +337,9 @@ that Kubernetes RBAC group bindings work as expected.
 
 ### Enabling Groups
 
-Groups are enabled by default. The proxy requests the `groups` scope from Dex
-automatically. For most connectors (GitHub, LDAP, OIDC), groups are returned as
-long as the connector is configured to fetch them.
+The proxy requests the `groups` scope from Dex automatically. GitHub and LDAP
+return groups when the connector is configured to fetch them. The Dex OIDC
+connector does not, unless `insecureEnableGroups` is set.
 
 For **GitHub**, teams within configured orgs are returned as groups automatically
 when `orgs` are specified in the connector config.
@@ -347,9 +347,37 @@ when `orgs` are specified in the connector config.
 For **LDAP**, configure a `groupSearch` section in the connector (see the
 [LDAP Connector](#ldap-connector) section above).
 
-For **OIDC**, ensure your identity provider includes a `groups` claim in the
-ID token and that Dex is configured to request it (most OIDC connectors do this
-by default).
+For **OIDC**, Dex ignores a `groups` list on the connector. It forwards the
+upstream groups claim only when `insecureEnableGroups` is set and `scopes`
+includes `groups`. `scopes` is what Dex requests from the identity provider.
+Setting it replaces Dex's default of `profile` and `email`, so include those
+too. Prefix group names when they are forwarded as `Impersonate-Group`, so an
+identity-provider group cannot collide with a cluster group such as
+`system:authenticated`:
+
+```yaml
+        config:
+          connectors:
+            - type: oidc
+              id: oidc
+              name: OIDC
+              config:
+                clientID: $OIDC_CLIENT_ID
+                clientSecret: $OIDC_CLIENT_SECRET
+                issuer: https://sso.example.com/auth/realms/example
+                scopes:
+                  - profile
+                  - email
+                  - groups
+                insecureEnableGroups: true
+                claimModifications:
+                  modifyGroupNames:
+                    prefix: konflux-
+```
+
+The same `config` object accepts the other Dex OIDC connector options, including
+`claimMapping` and `providerDiscoveryOverrides`. See the
+[Dex OIDC connector documentation](https://dexidp.io/docs/connectors/oidc/).
 
 For **static passwords** (local development), groups can be set directly on
 each user entry (requires Dex v2.45.0+):
