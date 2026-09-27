@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -76,6 +77,14 @@ func TestIsComponentMetricsScrapeResource(t *testing.T) {
 	g.Expect(IsComponentMetricsScrapeResource(&corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{Name: "integration-service-metrics-reader", Namespace: "integration-service"},
 	})).To(BeTrue())
+
+	g.Expect(IsComponentMetricsScrapeResource(&corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{Name: MetricsScraperServiceAccountName, Namespace: "namespace-lister"},
+	})).To(BeTrue())
+
+	g.Expect(IsComponentMetricsScrapeResource(&corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{Name: "namespace-lister", Namespace: "namespace-lister"},
+	})).To(BeFalse())
 
 	g.Expect(IsComponentMetricsScrapeResource(&corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -140,8 +149,19 @@ func TestIsComponentMetricsScrapeResource(t *testing.T) {
 
 	g.Expect(IsComponentMetricsScrapeResource(nil)).To(BeFalse())
 
+	g.Expect(IsComponentMetricsScrapeResource(&networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "namespace-lister-allow-metrics-traffic", Namespace: "namespace-lister"},
+	})).To(BeTrue())
+
+	g.Expect(IsComponentMetricsScrapeResource(&networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "namespace-lister-allow-from-konfluxui", Namespace: "namespace-lister"},
+	})).To(BeFalse())
+
 	g.Expect(ComponentMetricsOrphanCleanupGVKs).To(ContainElement(
 		schema.GroupVersionKind{Group: "monitoring.coreos.com", Version: "v1", Kind: "ServiceMonitor"},
+	))
+	g.Expect(ComponentMetricsOrphanCleanupGVKs).To(ContainElement(
+		schema.GroupVersionKind{Group: "networking.k8s.io", Version: "v1", Kind: "NetworkPolicy"},
 	))
 }
 
@@ -197,5 +217,30 @@ func TestIsComponentMetricsScrapeResource_UnstructuredServiceAccount(t *testing.
 				"namespace": "integration-service",
 			},
 		},
+	})).To(BeTrue())
+
+	g.Expect(IsComponentMetricsScrapeResource(&unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ServiceAccount",
+			"metadata": map[string]interface{}{
+				"name":      MetricsScraperServiceAccountName,
+				"namespace": "build-service",
+			},
+		},
+	})).To(BeTrue())
+}
+
+func TestIsComponentMetricsScrapeResource_MetricsScraperTokenSecret(t *testing.T) {
+	g := NewWithT(t)
+	g.Expect(IsComponentMetricsScrapeResource(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "metrics-scraper-token",
+			Namespace: "namespace-lister",
+			Annotations: map[string]string{
+				"kubernetes.io/service-account.name": MetricsScraperServiceAccountName,
+			},
+		},
+		Type: corev1.SecretTypeServiceAccountToken,
 	})).To(BeTrue())
 }

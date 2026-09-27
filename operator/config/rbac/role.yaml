@@ -396,6 +396,7 @@ rules:
   resourceNames:
   - namespace-lister-authorizer
   - namespace-lister-metrics-auth-rolebinding
+  - prometheus-namespace-lister-metrics-reader
   resources:
   - clusterrolebindings
   verbs:
@@ -562,6 +563,7 @@ rules:
   resourceNames:
   - namespace-lister-authorizer
   - namespace-lister-metrics-auth-role
+  - namespace-lister-metrics-reader
   resources:
   - clusterroles
   verbs:

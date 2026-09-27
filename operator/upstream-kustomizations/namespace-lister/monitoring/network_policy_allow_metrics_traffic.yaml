@@ -1,0 +1,21 @@
+# Allow OpenShift user-workload Prometheus to scrape HTTPS metrics on :9100.
+# Required because namespace-lister-allow-from-konfluxui only permits :8080 from konflux-ui.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: namespace-lister-allow-metrics-traffic
+  namespace: namespace-lister
+spec:
+  podSelector:
+    matchLabels:
+      apps: namespace-lister
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: openshift-user-workload-monitoring
+    ports:
+    - protocol: TCP
+      port: 9100

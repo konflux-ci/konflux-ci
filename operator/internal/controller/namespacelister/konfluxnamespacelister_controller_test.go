@@ -38,10 +38,11 @@ import (
 )
 
 const (
-	namespaceListerNamespace            = "namespace-lister"
 	authorizerClusterRoleName           = "namespace-lister-authorizer"
 	metricsAuthRoleName                 = "namespace-lister-metrics-auth-role"
 	metricsAuthRoleBindingName          = "namespace-lister-metrics-auth-rolebinding"
+	metricsReaderRoleName               = "namespace-lister-metrics-reader"
+	metricsReaderRoleBindingName        = "prometheus-namespace-lister-metrics-reader"
 	networkPolicyAllowFromKonfluxUIName = "namespace-lister-allow-from-konfluxui"
 	networkPolicyAllowToAPIServerName   = "namespace-lister-allow-to-apiserver"
 )
@@ -49,8 +50,10 @@ const (
 var namespaceListerClusterScopedChildren = []client.Object{
 	&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: authorizerClusterRoleName}},
 	&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: metricsAuthRoleName}},
+	&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: metricsReaderRoleName}},
 	&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: authorizerClusterRoleName}},
 	&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: metricsAuthRoleBindingName}},
+	&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: metricsReaderRoleBindingName}},
 }
 
 // findEnvValue returns the last value of the named env var.
@@ -85,7 +88,30 @@ func assertMetricsAuthClusterRoleRules(ctx context.Context, g Gomega) {
 }
 
 var _ = Describe("KonfluxNamespaceLister Controller", func() {
+	// startManager starts a per-test manager and registers DeferCleanup to stop it.
+	// A per-test manager is used rather than a shared suite-level manager so scrape-token
+	// specs that wire TokenCreator do not race a TokenCreator-nil reconciler that would
+	// apply the ServiceMonitor immediately.
+	startManager := func() {
+		mgrCtx, mgrCancel := context.WithCancel(testEnv.Ctx)
+		mgr := testutil.NewTestManager(testEnv)
+		Expect((&KonfluxNamespaceListerReconciler{
+			Client:      mgr.GetClient(),
+			Scheme:      mgr.GetScheme(),
+			ObjectStore: objectStore,
+		}).SetupWithManager(mgr)).To(Succeed())
+		waitForStop := testutil.StartManagerWithContext(mgrCtx, mgr)
+		DeferCleanup(func() {
+			mgrCancel()
+			waitForStop()
+		})
+	}
+
 	Context("When reconciling a resource", func() {
+		BeforeEach(func() {
+			startManager()
+		})
+
 		It("should successfully reconcile the resource", func(ctx context.Context) {
 			Expect(k8sClient.Create(ctx, &konfluxv1alpha1.KonfluxNamespaceLister{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
@@ -246,6 +272,10 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 	})
 
 	Context("Self-healing", func() {
+		BeforeEach(func() {
+			startManager()
+		})
+
 		It("recreates Deployment when deleted", func(ctx context.Context) {
 			namespaceLister := &konfluxv1alpha1.KonfluxNamespaceLister{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
@@ -524,6 +554,10 @@ var _ = Describe("KonfluxNamespaceLister Controller", func() {
 	})
 
 	Context("Drift correction", func() {
+		BeforeEach(func() {
+			startManager()
+		})
+
 		It("restores Deployment image when modified", func(ctx context.Context) {
 			namespaceLister := &konfluxv1alpha1.KonfluxNamespaceLister{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},

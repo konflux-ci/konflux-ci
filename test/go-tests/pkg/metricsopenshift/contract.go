@@ -3,8 +3,11 @@ package metricsopenshift
 import (
 	"context"
 	"fmt"
+	"strings"
 
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -21,6 +24,9 @@ func ValidateScrapeContract(ctx context.Context, c client.Reader, target metrics
 		return fmt.Errorf("serviceMonitor: %w", err)
 	}
 	if err := ValidateOperandScrapeResync(sm, target); err != nil {
+		return err
+	}
+	if err := ValidateServiceMonitorSelectorMatch(ctx, c, target, sm); err != nil {
 		return err
 	}
 
@@ -88,4 +94,28 @@ func ValidateScrapeContract(ctx context.Context, c client.Reader, target metrics
 		}
 	}
 	return fmt.Errorf("clusterRoleBinding %q subjects missing metrics-scraper SA in %s", crb.Name, target.Namespace)
+}
+
+// ValidateServiceMonitorSelectorMatch asserts Service metadata.labels satisfy the
+// ServiceMonitor spec.selector.matchLabels (required for UWM endpoint discovery).
+func ValidateServiceMonitorSelectorMatch(
+	ctx context.Context,
+	c client.Reader,
+	target metricsauth.Target,
+	sm *unstructured.Unstructured,
+) error {
+	selector, err := ServiceMonitorMatchLabels(sm)
+	if err != nil {
+		return fmt.Errorf("serviceMonitor selector: %w", err)
+	}
+	svc := &corev1.Service{}
+	if err := c.Get(ctx, client.ObjectKey{Namespace: target.Namespace, Name: target.Service}, svc); err != nil {
+		return fmt.Errorf("service %s/%s: %w", target.Namespace, target.Service, err)
+	}
+	matches, mismatches := SelectorMatchReport(svc.Labels, selector)
+	if matches {
+		return nil
+	}
+	return fmt.Errorf("service %s/%s labels do not match ServiceMonitor selector: %s",
+		target.Namespace, target.Service, strings.Join(mismatches, "; "))
 }
