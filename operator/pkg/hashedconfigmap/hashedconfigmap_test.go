@@ -200,7 +200,8 @@ func TestHashedConfigMapApply(t *testing.T) {
 		g.Expect(cm.Data[dataKey]).To(gomega.Equal(content))
 	})
 
-	t.Run("cleans up old ConfigMaps with different hash", func(t *testing.T) {
+	// Deleting here would strand workloads that are only repointed later in the reconcile.
+	t.Run("retains old ConfigMaps with different hash", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		ctx := context.Background()
 		scheme := newTestScheme()
@@ -228,63 +229,9 @@ func TestHashedConfigMapApply(t *testing.T) {
 		err = c.Get(ctx, client.ObjectKey{Name: result.ConfigMapName, Namespace: namespace}, newCM)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		// Verify old ConfigMap was deleted
-		deletedCM := &corev1.ConfigMap{}
-		err = c.Get(ctx, client.ObjectKey{Name: oldCM.Name, Namespace: namespace}, deletedCM)
-		g.Expect(errors.IsNotFound(err)).To(gomega.BeTrue())
-	})
-
-	t.Run("does not delete ConfigMaps without managed label", func(t *testing.T) {
-		g := gomega.NewWithT(t)
-		ctx := context.Background()
-		scheme := newTestScheme()
-		owner := newOwner()
-
-		// Create a ConfigMap with the prefix but without the managed label
-		unmanagedCM := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      baseName + "-unmanaged1",
-				Namespace: namespace,
-				// No managed label
-			},
-			Data: map[string]string{dataKey: "unmanaged content"},
-		}
-		c := newFakeClient(scheme, owner, unmanagedCM)
-
-		hcm := New(c, scheme, baseName, namespace, dataKey, label, testFieldManager)
-		_, err := hcm.Apply(ctx, "new content", owner)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
-
-		// Verify unmanaged ConfigMap still exists
-		existingCM := &corev1.ConfigMap{}
-		err = c.Get(ctx, client.ObjectKey{Name: unmanagedCM.Name, Namespace: namespace}, existingCM)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
-	})
-
-	t.Run("does not delete ConfigMaps with different base name", func(t *testing.T) {
-		g := gomega.NewWithT(t)
-		ctx := context.Background()
-		scheme := newTestScheme()
-		owner := newOwner()
-
-		// Create a ConfigMap with a different base name but with the managed label
-		differentBaseCM := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "other-config-1234567890",
-				Namespace: namespace,
-				Labels:    map[string]string{label: "true"},
-			},
-			Data: map[string]string{dataKey: "other content"},
-		}
-		c := newFakeClient(scheme, owner, differentBaseCM)
-
-		hcm := New(c, scheme, baseName, namespace, dataKey, label, testFieldManager)
-		_, err := hcm.Apply(ctx, "new content", owner)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
-
-		// Verify the other ConfigMap still exists
-		existingCM := &corev1.ConfigMap{}
-		err = c.Get(ctx, client.ObjectKey{Name: differentBaseCM.Name, Namespace: namespace}, existingCM)
+		// Verify the old ConfigMap survived
+		retainedCM := &corev1.ConfigMap{}
+		err = c.Get(ctx, client.ObjectKey{Name: oldCM.Name, Namespace: namespace}, retainedCM)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 	})
 
@@ -304,6 +251,121 @@ func TestHashedConfigMapApply(t *testing.T) {
 		g.Expect(result.ConfigMap.Name).To(gomega.Equal(result.ConfigMapName))
 		g.Expect(result.ConfigMap.Namespace).To(gomega.Equal(namespace))
 		g.Expect(result.ConfigMap.Data[dataKey]).To(gomega.Equal(content))
+	})
+}
+
+func TestHashedConfigMapPrune(t *testing.T) {
+	const (
+		baseName  = testBaseName
+		namespace = testNamespace
+		dataKey   = testDataKey
+		label     = testLabel
+	)
+
+	// managedCM builds a ConfigMap Prune should consider: right namespace and prefix, labelled.
+	managedCM := func(name string) *corev1.ConfigMap {
+		return &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: namespace,
+				Labels:    map[string]string{label: "true"},
+			},
+			Data: map[string]string{dataKey: "content of " + name},
+		}
+	}
+
+	t.Run("deletes superseded revisions and keeps the current one", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ctx := context.Background()
+		scheme := newTestScheme()
+		current := managedCM(baseName + "-currenthash")
+		superseded := managedCM(baseName + "-oldhash123")
+		olderStill := managedCM(baseName + "-oldhash456")
+		c := newFakeClient(scheme, current, superseded, olderStill)
+
+		hcm := New(c, scheme, baseName, namespace, dataKey, label, testFieldManager)
+		g.Expect(hcm.Prune(ctx, current.Name)).To(gomega.Succeed())
+
+		g.Expect(c.Get(ctx, client.ObjectKeyFromObject(current), &corev1.ConfigMap{})).To(gomega.Succeed())
+		g.Expect(errors.IsNotFound(
+			c.Get(ctx, client.ObjectKeyFromObject(superseded), &corev1.ConfigMap{}),
+		)).To(gomega.BeTrue())
+		g.Expect(errors.IsNotFound(
+			c.Get(ctx, client.ObjectKeyFromObject(olderStill), &corev1.ConfigMap{}),
+		)).To(gomega.BeTrue())
+	})
+
+	t.Run("does not delete ConfigMaps without managed label", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ctx := context.Background()
+		scheme := newTestScheme()
+
+		// Same base-name prefix, but not managed by this handler
+		unmanagedCM := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      baseName + "-unmanaged1",
+				Namespace: namespace,
+				// No managed label
+			},
+			Data: map[string]string{dataKey: "unmanaged content"},
+		}
+		c := newFakeClient(scheme, unmanagedCM)
+
+		hcm := New(c, scheme, baseName, namespace, dataKey, label, testFieldManager)
+		g.Expect(hcm.Prune(ctx, baseName+"-currenthash")).To(gomega.Succeed())
+
+		g.Expect(c.Get(ctx, client.ObjectKeyFromObject(unmanagedCM), &corev1.ConfigMap{})).To(gomega.Succeed())
+	})
+
+	t.Run("does not delete ConfigMaps with different base name", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ctx := context.Background()
+		scheme := newTestScheme()
+
+		// Managed label, but a different base name - another handler owns it
+		differentBaseCM := managedCM("other-config-1234567890")
+		c := newFakeClient(scheme, differentBaseCM)
+
+		hcm := New(c, scheme, baseName, namespace, dataKey, label, testFieldManager)
+		g.Expect(hcm.Prune(ctx, baseName+"-currenthash")).To(gomega.Succeed())
+
+		g.Expect(c.Get(ctx, client.ObjectKeyFromObject(differentBaseCM), &corev1.ConfigMap{})).To(gomega.Succeed())
+	})
+
+	t.Run("is a no-op when only the current revision exists", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ctx := context.Background()
+		scheme := newTestScheme()
+		current := managedCM(baseName + "-currenthash")
+		c := newFakeClient(scheme, current)
+
+		hcm := New(c, scheme, baseName, namespace, dataKey, label, testFieldManager)
+		g.Expect(hcm.Prune(ctx, current.Name)).To(gomega.Succeed())
+
+		g.Expect(c.Get(ctx, client.ObjectKeyFromObject(current), &corev1.ConfigMap{})).To(gomega.Succeed())
+	})
+
+	// Apply then Prune is the full rotation a reconciler performs.
+	t.Run("removes the previous revision after a fresh Apply", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ctx := context.Background()
+		scheme := newTestScheme()
+		owner := newOwner()
+		previous := managedCM(baseName + "-oldhash123")
+		c := newFakeClient(scheme, owner, previous)
+
+		hcm := New(c, scheme, baseName, namespace, dataKey, label, testFieldManager)
+		result, err := hcm.Apply(ctx, "new content", owner)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(hcm.Prune(ctx, result.ConfigMapName)).To(gomega.Succeed())
+
+		g.Expect(c.Get(ctx, client.ObjectKey{
+			Name: result.ConfigMapName, Namespace: namespace,
+		}, &corev1.ConfigMap{})).To(gomega.Succeed())
+		g.Expect(errors.IsNotFound(
+			c.Get(ctx, client.ObjectKeyFromObject(previous), &corev1.ConfigMap{}),
+		)).To(gomega.BeTrue())
 	})
 }
 
