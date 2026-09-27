@@ -300,8 +300,8 @@ github.com/openshift/api v0.0.0-20260825094607-13a84dedc5a3 h1:JRsHyxZTqcs5MK0LY
 github.com/openshift/api v0.0.0-20260825094607-13a84dedc5a3/go.mod h1:k6qH5QOVa5GDln2VVm8Jz4NV3Z7R2SATHFLwGS6Wh3M=
 github.com/openshift/client-go v0.0.0-20260806041845-b74fb348f1e7 h1:Lphm0uMAyM26ibbOca0+dg7uLz7GmmrIdeWjzOh5R/U=
 github.com/openshift/client-go v0.0.0-20260806041845-b74fb348f1e7/go.mod h1:u08LcpI8Hq3IpelQLbciGRa/P158cE/O3uQe2Bt3Roo=
-github.com/openshift/library-go v0.0.0-20260911204104-f7fdf34b126f h1:TjXVEVAV6qN0udu2s564h/IgmFtw4IucmcHyZiqCoVw=
-github.com/openshift/library-go v0.0.0-20260911204104-f7fdf34b126f/go.mod h1:uGv0Raq/bRG1CNlvR8IQ91Q7E+HnGM48Yp93QmlPn/s=
+github.com/openshift/library-go v0.0.0-20260915203445-79b4826daec4 h1:0+E47I8jdcL7JNfIKDgrCstmCMtkCSY2LOxpwdECl1w=
+github.com/openshift/library-go v0.0.0-20260915203445-79b4826daec4/go.mod h1:uGv0Raq/bRG1CNlvR8IQ91Q7E+HnGM48Yp93QmlPn/s=
 github.com/operator-framework/operator-lib v0.19.0 h1:az6ogYj21rtU0SF9uYctRLyKp2dtlqTsmpfehFy6Ce8=
 github.com/operator-framework/operator-lib v0.19.0/go.mod h1:KxycAjFnHt0DBtHmH3Jm7yHcY5sdrshPKTqM/HKAQ08=
 github.com/pborman/getopt v0.0.0-20170112200414-7148bc3a4c30/go.mod h1:85jBQOZwpVEaDAr341tbn15RS4fCAsIst0qp7i8ex1o=
