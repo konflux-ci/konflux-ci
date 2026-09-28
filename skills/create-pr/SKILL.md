@@ -20,6 +20,18 @@ Fork PRs cannot access secrets. The `/allow <commit-sha>` command:
 
 See `.github/workflows/operator-test-e2e.yaml` (check-prerequisites job) and `.github/workflows/pr-comment-commands.yaml`.
 
+PRs trigger:
+
+- `operator-test` — `go mod tidy -diff` + `make test`, uploads coverage
+- `operator-lint` — golangci-lint (version is the **single semver line** in `operator/.golangci-lint-version`; do not add comments or extra lines)
+- `operator-verify-generated-files` — CRDs/RBAC/deepcopy must be up to date (`make manifests generate` after API or RBAC marker changes)
+- `operator-test-e2e` — full operator e2e (fork PRs need `/allow <commit-sha>`)
+- `operator-olm-kind-smoke` — Kind + OLM `operator-sdk run bundle` (ARM64; non-default namespace to match preflight)
+- `kube-linter` — rendered kustomize manifests
+- `check-toc` — markdown TOC (excludes `operator/docs/`, `.cursor/*`, `skills/*`)
+- `differential-shellcheck` — changed shell scripts
+- `caddy-fmt` — only when `Caddyfile` changes
+
 ## Before Creating a PR: Check Write Access
 
 **Always check if the user has upstream write access before choosing a workflow.**
@@ -63,6 +75,8 @@ From `CONTRIBUTING.md`:
 
 2. **Table of contents** (if markdown structure changed):
    See `CONTRIBUTING.md` for the exact command.
+
+3. **`make manifests generate`** (from `operator/`, if API types or RBAC markers changed).
 
 ## Troubleshooting
 

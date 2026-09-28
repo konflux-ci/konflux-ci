@@ -7,9 +7,9 @@ metadata:
     helm.sh/resource-policy: keep
   labels:
     app.kubernetes.io/name: trust-manager
-    helm.sh/chart: trust-manager-v0.24.0
+    helm.sh/chart: trust-manager-v0.25.0
     app.kubernetes.io/instance: trust-manager
-    app.kubernetes.io/version: "v0.24.0"
+    app.kubernetes.io/version: "v0.25.0"
     app.kubernetes.io/managed-by: Helm
 spec:
   group: trust.cert-manager.io

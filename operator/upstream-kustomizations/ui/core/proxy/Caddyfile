@@ -71,12 +71,16 @@
 		route {
 			forward_auth 127.0.0.1:6000 {
 				uri /oauth2/auth
+				header_up Authorization {http.request.header.Authorization}
 				copy_headers X-Auth-Request-Email X-Auth-Request-Groups
 			}
 			impersonate {
 				target_user X-User
 				target_group X-Group
 			}
+			# Drop the client Dex JWT after forward_auth. reverse_proxy copies
+			# incoming headers; this backend authenticates via X-User/X-Group.
+			request_header -Authorization
 			rewrite * /api/v1/namespaces
 			reverse_proxy https://namespace-lister.namespace-lister.svc.cluster.local:8080 {
 				header_down -X-Correlation-ID
@@ -101,10 +105,16 @@
 		route {
 			forward_auth 127.0.0.1:6000 {
 				uri /oauth2/auth
+				header_up Authorization {http.request.header.Authorization}
 				copy_headers X-Auth-Request-Email X-Auth-Request-Groups
 			}
 			impersonate
 			inject_cached_vars
+			# Strip the client JWT after forward_auth. Do not use
+			# header_up -Authorization in the same reverse_proxy that sets
+			# Authorization: Caddy can apply the delete after the set and
+			# drop the proxy SA token, so kube sees system:anonymous.
+			request_header -Authorization
 			reverse_proxy https://kubernetes.default.svc {
 				header_up Authorization "Bearer {http.vars.kube_token}"
 				transport http {
@@ -121,10 +131,12 @@
 		route {
 			forward_auth 127.0.0.1:6000 {
 				uri /oauth2/auth
+				header_up Authorization {http.request.header.Authorization}
 				copy_headers X-Auth-Request-Email X-Auth-Request-Groups
 			}
 			impersonate
 			inject_cached_vars
+			request_header -Authorization
 			reverse_proxy https://kubernetes.default.svc {
 				header_up Authorization "Bearer {http.vars.kube_token}"
 				transport http {

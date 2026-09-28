@@ -39,6 +39,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -256,7 +257,7 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 				Eventually(func(g Gomega) {
 					cj := &batchv1.CronJob{}
 					g.Expect(k8sClient.Get(ctx, cjNN, cj)).To(Succeed())
-					container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, childResourceName)
+					container := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, childResourceName)
 					g.Expect(container).NotTo(BeNil())
 					g.Expect(container.Resources.Limits.Cpu().String()).To(Equal("500m"))
 					g.Expect(container.Resources.Limits.Memory().String()).To(Equal("512Mi"))
@@ -710,7 +711,7 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 			Eventually(func(g Gomega) {
 				cj := &batchv1.CronJob{}
 				g.Expect(k8sClient.Get(ctx, cjNN, cj)).To(Succeed())
-				container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, "segment-bridge")
+				container := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, "segment-bridge")
 				g.Expect(container).NotTo(BeNil())
 				originalImage = container.Image
 				g.Expect(originalImage).NotTo(BeEmpty())
@@ -720,7 +721,7 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 			Eventually(func(g Gomega) {
 				cj := &batchv1.CronJob{}
 				g.Expect(k8sClient.Get(ctx, cjNN, cj)).To(Succeed())
-				container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, "segment-bridge")
+				container := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, "segment-bridge")
 				g.Expect(container).NotTo(BeNil())
 				container.Image = "tampered-image:latest"
 				g.Expect(k8sClient.Update(ctx, cj)).To(Succeed())
@@ -730,7 +731,7 @@ var _ = Describe("KonfluxSegmentBridge Controller", func() {
 			Eventually(func(g Gomega) {
 				cj := &batchv1.CronJob{}
 				g.Expect(k8sClient.Get(ctx, cjNN, cj)).To(Succeed())
-				container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, "segment-bridge")
+				container := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, "segment-bridge")
 				g.Expect(container).NotTo(BeNil())
 				g.Expect(container.Image).To(Equal(originalImage))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())

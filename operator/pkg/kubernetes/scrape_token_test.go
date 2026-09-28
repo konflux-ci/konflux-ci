@@ -320,6 +320,32 @@ func TestIsMetricsTLSSecret(t *testing.T) {
 	}
 }
 
+func TestIsMetricsTLSSecretNamed(t *testing.T) {
+	t.Parallel()
+	const custom = "operand-tls"
+	if IsMetricsTLSSecretNamed(nil, custom) {
+		t.Fatal("nil object should not match")
+	}
+	if IsMetricsTLSSecretNamed(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: custom}}, custom) {
+		t.Fatal("empty namespace should not match")
+	}
+	if !IsMetricsTLSSecretNamed(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: MetricsServerCertSecretName, Namespace: "ns"},
+	}, "") {
+		t.Fatal("empty secret name should default to metrics-server-cert")
+	}
+	if !IsMetricsTLSSecretNamed(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: custom, Namespace: "ns"},
+	}, custom) {
+		t.Fatal("expected custom secret name to match")
+	}
+	if IsMetricsTLSSecretNamed(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: MetricsServerCertSecretName, Namespace: "ns"},
+	}, custom) {
+		t.Fatal("wrong secret name should not match")
+	}
+}
+
 func TestIgnoreScrapeTokenNotFound(t *testing.T) {
 	t.Parallel()
 	if err := IgnoreScrapeTokenNotFound(nil); err != nil {

@@ -40,6 +40,7 @@ import (
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/yaml"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
@@ -51,6 +52,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/hashedsecret"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/ingress"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/segment"
 )
@@ -114,6 +116,55 @@ var _ = Describe("KonfluxUI Controller", func() {
 			// gates Ready=True on ReadyReplicas == Replicas, which never happens in
 			// envtest (no kubelet → pods never start).
 			waitForReconcile(ctx)
+		})
+	})
+
+	Context("CLI login configuration", func() {
+		It("should register the public CLI Dex client and oauth2-proxy extra audience", func(ctx context.Context) {
+			startManager(nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			waitForReconcile(ctx)
+
+			Eventually(func(g Gomega) {
+				cmList := &corev1.ConfigMapList{}
+				g.Expect(k8sClient.List(ctx, cmList,
+					client.InNamespace(uiNamespace),
+					client.MatchingLabels{dexConfigMapLabel: "true"},
+				)).To(Succeed())
+				g.Expect(cmList.Items).NotTo(BeEmpty(), "expected a Dex ConfigMap")
+				yamlData := cmList.Items[0].Data[dexConfigKey]
+				g.Expect(yamlData).NotTo(BeEmpty())
+
+				var cfg dex.Config
+				g.Expect(yaml.Unmarshal([]byte(yamlData), &cfg)).To(Succeed())
+
+				var cliClient *dex.Client
+				for i := range cfg.StaticClients {
+					if cfg.StaticClients[i].ID == dex.CLIClientID {
+						cliClient = &cfg.StaticClients[i]
+						break
+					}
+				}
+				g.Expect(cliClient).NotTo(BeNil(), "expected public Dex static client %q", dex.CLIClientID)
+				g.Expect(cliClient.Public).To(BeTrue())
+				g.Expect(cliClient.Secret).To(BeEmpty())
+				g.Expect(cliClient.SecretEnv).To(BeEmpty())
+
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: proxyDeploymentName, Namespace: uiNamespace,
+				}, dep)).To(Succeed())
+				oauth2 := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
+				g.Expect(oauth2).NotTo(BeNil())
+				g.Expect(oauth2.Env).To(ContainElement(corev1.EnvVar{
+					Name:  "OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES",
+					Value: dex.CLIClientID,
+				}))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})
 
@@ -1269,7 +1320,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
 				g.Expect(dep.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
-				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, reverseProxyContainerName)
+				container := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, reverseProxyContainerName)
 				g.Expect(container).NotTo(BeNil(), "reverse-proxy container should exist")
 				g.Expect(container.Image).NotTo(BeEmpty(), "container image should be set")
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
@@ -1488,7 +1539,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, reverseProxyContainerName)
+				container := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, reverseProxyContainerName)
 				g.Expect(container).NotTo(BeNil())
 				originalImage = container.Image
 				g.Expect(originalImage).NotTo(BeEmpty())
@@ -1498,7 +1549,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, reverseProxyContainerName)
+				container := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, reverseProxyContainerName)
 				g.Expect(container).NotTo(BeNil())
 				container.Image = "tampered-image:latest"
 				g.Expect(k8sClient.Update(ctx, dep)).To(Succeed())
@@ -1508,7 +1559,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, reverseProxyContainerName)
+				container := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, reverseProxyContainerName)
 				g.Expect(container).NotTo(BeNil())
 				g.Expect(container.Image).To(Equal(originalImage))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
@@ -1879,7 +1930,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, dexContainerName)
+				container := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, dexContainerName)
 				g.Expect(container).NotTo(BeNil())
 				originalImage = container.Image
 				g.Expect(originalImage).NotTo(BeEmpty())
@@ -1889,7 +1940,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, dexContainerName)
+				container := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, dexContainerName)
 				g.Expect(container).NotTo(BeNil())
 				container.Image = "tampered-image:latest"
 				g.Expect(k8sClient.Update(ctx, dep)).To(Succeed())
@@ -1899,7 +1950,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, dexContainerName)
+				container := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, dexContainerName)
 				g.Expect(container).NotTo(BeNil())
 				g.Expect(container.Image).To(Equal(originalImage))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())

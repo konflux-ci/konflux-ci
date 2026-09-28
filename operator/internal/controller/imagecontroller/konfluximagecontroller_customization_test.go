@@ -28,6 +28,7 @@ import (
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
@@ -59,15 +60,6 @@ func findQuayCAEnvVar(envVars []corev1.EnvVar) *corev1.EnvVar {
 	return nil
 }
 
-func findVolume(volumes []corev1.Volume, name string) *corev1.Volume {
-	for i := range volumes {
-		if volumes[i].Name == name {
-			return &volumes[i]
-		}
-	}
-	return nil
-}
-
 func TestBuildImageControllerManagerOverlay(t *testing.T) {
 	t.Run("empty spec returns overlay", func(t *testing.T) {
 		g := gomega.NewWithT(t)
@@ -88,7 +80,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(findQuayCAEnvVar(managerContainer.Env)).To(gomega.BeNil())
 	})
@@ -118,7 +110,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
 		g.Expect(managerContainer.Resources.Limits.Memory().String()).To(gomega.Equal("6Gi"))
@@ -144,7 +136,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		var found bool
 		for _, env := range managerContainer.Env {
@@ -171,7 +163,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		}
 
 		deployment := getImageControllerDeployment(t)
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		originalImage := managerContainer.Image
 
@@ -180,7 +172,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Image).To(gomega.Equal(originalImage))
 	})
@@ -199,7 +191,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Args).To(gomega.ContainElement("--leader-elect=false"))
 	})
@@ -218,7 +210,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Args).To(gomega.ContainElement("--leader-elect=true"))
 	})
@@ -235,7 +227,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Args).To(gomega.ContainElement(konfluxv1alpha1.ZapEncoderArg + "=" + string(konfluxv1alpha1.LogEncoderConsole)))
 	})
@@ -252,7 +244,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Args).To(gomega.ContainElement(konfluxv1alpha1.ZapEncoderArg + "=" + string(konfluxv1alpha1.LogEncoderJSON)))
 	})
@@ -262,7 +254,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{}
 
 		deployment := getImageControllerDeployment(t)
-		originalContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		originalContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(originalContainer).NotTo(gomega.BeNil())
 		originalArgs := make([]string, len(originalContainer.Args))
 		copy(originalArgs, originalContainer.Args)
@@ -272,7 +264,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Args).To(gomega.Equal(originalArgs))
 	})
@@ -299,7 +291,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Args).To(gomega.ContainElement(konfluxv1alpha1.ZapEncoderArg + "=" + string(konfluxv1alpha1.LogEncoderConsole)))
 		g.Expect(managerContainer.Args).To(gomega.ContainElement("--leader-elect=true"))
@@ -313,7 +305,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		}
 
 		deployment := getImageControllerDeployment(t)
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		managerContainer.Args = append(managerContainer.Args, konfluxv1alpha1.ZapEncoderArg+"="+string(konfluxv1alpha1.LogEncoderJSON))
 
@@ -322,7 +314,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Args).To(gomega.ContainElement(konfluxv1alpha1.ZapEncoderArg + "=" + string(konfluxv1alpha1.LogEncoderConsole)))
 		g.Expect(managerContainer.Args).NotTo(gomega.ContainElement(konfluxv1alpha1.ZapEncoderArg + "=" + string(konfluxv1alpha1.LogEncoderJSON)))
@@ -352,7 +344,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		envVar := findQuayCAEnvVar(managerContainer.Env)
@@ -361,7 +353,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
 
-		vol := findVolume(deployment.Spec.Template.Spec.Volumes, quayCABundleVolumeName)
+		vol := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, quayCABundleVolumeName)
 		g.Expect(vol).NotTo(gomega.BeNil())
 		g.Expect(vol.ConfigMap).NotTo(gomega.BeNil())
 		g.Expect(vol.ConfigMap.Name).To(gomega.Equal("my-custom-ca"))
@@ -382,7 +374,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		envVar := findQuayCAEnvVar(managerContainer.Env)
@@ -405,7 +397,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		vol := findVolume(deployment.Spec.Template.Spec.Volumes, quayCABundleVolumeName)
+		vol := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, quayCABundleVolumeName)
 		g.Expect(vol).NotTo(gomega.BeNil())
 		g.Expect(vol.ConfigMap).NotTo(gomega.BeNil())
 		g.Expect(vol.ConfigMap.Name).To(gomega.Equal("my-custom-ca"))
@@ -426,7 +418,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		vol := findVolume(deployment.Spec.Template.Spec.Volumes, quayCABundleVolumeName)
+		vol := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, quayCABundleVolumeName)
 		g.Expect(vol).NotTo(gomega.BeNil())
 		g.Expect(vol.ConfigMap).NotTo(gomega.BeNil())
 		g.Expect(vol.ConfigMap.Name).To(gomega.Equal(defaultQuayCAConfigMapName))
@@ -448,21 +440,15 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// quaytoken volume should still exist
-		vol := findVolume(deployment.Spec.Template.Spec.Volumes, "quaytoken")
+		vol := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, "quaytoken")
 		g.Expect(vol).NotTo(gomega.BeNil())
 		g.Expect(vol.Secret).NotTo(gomega.BeNil())
 		g.Expect(vol.Secret.SecretName).To(gomega.Equal("quaytoken"))
 
 		// quaytoken mount should still exist on the manager container
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
-		var quaytokenMount *corev1.VolumeMount
-		for i := range managerContainer.VolumeMounts {
-			if managerContainer.VolumeMounts[i].Name == "quaytoken" {
-				quaytokenMount = &managerContainer.VolumeMounts[i]
-				break
-			}
-		}
+		quaytokenMount := kubernetes.FindVolumeMount(managerContainer.VolumeMounts, "quaytoken")
 		g.Expect(quaytokenMount).NotTo(gomega.BeNil())
 		g.Expect(quaytokenMount.MountPath).To(gomega.Equal("/workspace"))
 	})
@@ -477,7 +463,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		}
 
 		deployment := getImageControllerDeployment(t)
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		originalImage := managerContainer.Image
 
@@ -486,7 +472,7 @@ func TestBuildImageControllerManagerOverlay(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Image).To(gomega.Equal(originalImage))
 	})
@@ -548,7 +534,7 @@ func TestApplyImageControllerDeploymentCustomizations(t *testing.T) {
 		err := applyImageControllerDeploymentCustomizations(deployment, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		envVar := findQuayCAEnvVar(managerContainer.Env)
 		g.Expect(envVar).NotTo(gomega.BeNil())
@@ -590,7 +576,7 @@ func TestApplyImageControllerDeploymentCustomizations(t *testing.T) {
 		err := applyImageControllerDeploymentCustomizations(deployment, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(findQuayCAEnvVar(managerContainer.Env)).To(gomega.BeNil())
 	})
@@ -663,7 +649,7 @@ func TestApplyImageControllerDeploymentCustomizations(t *testing.T) {
 		g.Expect(deployment.Spec.Replicas).NotTo(gomega.BeNil())
 		g.Expect(*deployment.Spec.Replicas).To(gomega.Equal(int32(5)))
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("2"))
 	})
@@ -708,7 +694,7 @@ func TestApplyImagePrunerCustomizations(t *testing.T) {
 		err := applyImagePrunerCustomizations(cj, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
+		container := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		g.Expect(container.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
 		g.Expect(container.Resources.Limits.Memory().String()).To(gomega.Equal("8Gi"))
@@ -721,7 +707,7 @@ func TestApplyImagePrunerCustomizations(t *testing.T) {
 		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{}
 
 		cj := getImageControllerCronJob(t, imagePrunerCronJobName)
-		container := testutil.FindContainer(
+		container := kubernetes.FindContainer(
 			cj.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		originalLimits := container.Resources.Limits.Cpu().String()
@@ -729,7 +715,7 @@ func TestApplyImagePrunerCustomizations(t *testing.T) {
 		err := applyImagePrunerCustomizations(cj, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		container = testutil.FindContainer(
+		container = kubernetes.FindContainer(
 			cj.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		g.Expect(container.Resources.Limits.Cpu().String()).To(gomega.Equal(originalLimits))
@@ -748,7 +734,7 @@ func TestApplyImagePrunerCustomizations(t *testing.T) {
 		}
 
 		cj := getImageControllerCronJob(t, imagePrunerCronJobName)
-		container := testutil.FindContainer(
+		container := kubernetes.FindContainer(
 			cj.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		originalImage := container.Image
@@ -756,7 +742,7 @@ func TestApplyImagePrunerCustomizations(t *testing.T) {
 		err := applyImagePrunerCustomizations(cj, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		container = testutil.FindContainer(
+		container = kubernetes.FindContainer(
 			cj.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		g.Expect(container.Image).To(gomega.Equal(originalImage))
@@ -777,7 +763,7 @@ func TestApplyImagePrunerCustomizations(t *testing.T) {
 		err := applyImagePrunerCustomizations(cj, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		container := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
+		container := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		g.Expect(container.Env).To(gomega.ContainElement(
 			corev1.EnvVar{Name: "PRUNE_DRY_RUN", Value: "true"}))
@@ -806,7 +792,7 @@ func TestApplyNotificationResetterCustomizations(t *testing.T) {
 		err := applyNotificationResetterCustomizations(cj, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		container := testutil.FindContainer(
+		container := kubernetes.FindContainer(
 			cj.Spec.JobTemplate.Spec.Template.Spec.Containers, notificationResetterContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		g.Expect(container.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
@@ -820,7 +806,7 @@ func TestApplyNotificationResetterCustomizations(t *testing.T) {
 		spec := konfluxv1alpha1.KonfluxImageControllerConfigSpec{}
 
 		cj := getImageControllerCronJob(t, notificationResetterCronJobName)
-		container := testutil.FindContainer(
+		container := kubernetes.FindContainer(
 			cj.Spec.JobTemplate.Spec.Template.Spec.Containers, notificationResetterContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		originalLimits := container.Resources.Limits.Cpu().String()
@@ -828,7 +814,7 @@ func TestApplyNotificationResetterCustomizations(t *testing.T) {
 		err := applyNotificationResetterCustomizations(cj, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		container = testutil.FindContainer(
+		container = kubernetes.FindContainer(
 			cj.Spec.JobTemplate.Spec.Template.Spec.Containers, notificationResetterContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		g.Expect(container.Resources.Limits.Cpu().String()).To(gomega.Equal(originalLimits))
@@ -847,7 +833,7 @@ func TestApplyNotificationResetterCustomizations(t *testing.T) {
 		}
 
 		cj := getImageControllerCronJob(t, notificationResetterCronJobName)
-		container := testutil.FindContainer(
+		container := kubernetes.FindContainer(
 			cj.Spec.JobTemplate.Spec.Template.Spec.Containers, notificationResetterContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		originalImage := container.Image
@@ -855,7 +841,7 @@ func TestApplyNotificationResetterCustomizations(t *testing.T) {
 		err := applyNotificationResetterCustomizations(cj, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		container = testutil.FindContainer(
+		container = kubernetes.FindContainer(
 			cj.Spec.JobTemplate.Spec.Template.Spec.Containers, notificationResetterContainerName)
 		g.Expect(container).NotTo(gomega.BeNil())
 		g.Expect(container.Image).To(gomega.Equal(originalImage))
@@ -923,11 +909,11 @@ func TestBothCronJobCustomizationsApplied(t *testing.T) {
 		g.Expect(applyImagePrunerCustomizations(prunerCJ, spec)).To(gomega.Succeed())
 		g.Expect(applyNotificationResetterCustomizations(resetterCJ, spec)).To(gomega.Succeed())
 
-		pruner := testutil.FindContainer(prunerCJ.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
+		pruner := kubernetes.FindContainer(prunerCJ.Spec.JobTemplate.Spec.Template.Spec.Containers, imagePrunerContainerName)
 		g.Expect(pruner).NotTo(gomega.BeNil())
 		g.Expect(pruner.Resources.Limits.Memory().String()).To(gomega.Equal("8Gi"))
 
-		resetter := testutil.FindContainer(resetterCJ.Spec.JobTemplate.Spec.Template.Spec.Containers, notificationResetterContainerName)
+		resetter := kubernetes.FindContainer(resetterCJ.Spec.JobTemplate.Spec.Template.Spec.Containers, notificationResetterContainerName)
 		g.Expect(resetter).NotTo(gomega.BeNil())
 		g.Expect(resetter.Resources.Limits.Memory().String()).To(gomega.Equal("1Gi"))
 	})

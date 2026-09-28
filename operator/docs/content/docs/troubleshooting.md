@@ -137,13 +137,22 @@ It may take a few minutes for the UI to become available again.
    ```
 
 3. If the smee client pod is missing or the logs do not include forwarding entries,
-   verify the smee channel URL in the smee-client manifest, then redeploy it:
+   confirm the channel URL, then redeploy with Kustomize (do not `kubectl create -f`
+   the raw `smee-client.yaml`; that skips the image digest pins).
+
+   The channel is set in `dependencies/smee/smee-channel-id.yaml`, generated from
+   `smee-channel-id.tpl` (the generated file is gitignored). Use the same URL as
+   the GitHub App webhook:
 
    ```bash
-   kubectl delete -f ./dependencies/smee/smee-client.yaml
-   # fix the channel URL in the manifest
-   kubectl create -f ./dependencies/smee/smee-client.yaml
+   sed "s|https://smee.io/CHANNELID|https://smee.io/<channel-id>|g" \
+     ./dependencies/smee/smee-channel-id.tpl \
+     > ./dependencies/smee/smee-channel-id.yaml
+   kubectl apply -k ./dependencies/smee
    ```
+
+   If `smee-channel-id.yaml` already exists, edit the URL there instead of
+   regenerating the file, then run `kubectl apply -k ./dependencies/smee`.
 
    {{< alert color="info" >}}
    If the host machine goes to sleep, the smee client may stop responding to events.

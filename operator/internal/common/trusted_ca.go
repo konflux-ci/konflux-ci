@@ -37,7 +37,7 @@ const (
 	OpenShiftInjectTrustedCABundleLabel = "config.openshift.io/inject-trusted-cabundle"
 )
 
-// EnsureTrustedCAConfigMap creates or updates the trusted-ca ConfigMap with the
+// EnsureTrustedCAConfigMap creates or updates ConfigMap trusted-ca with the
 // OpenShift CA injection label in the given namespace. On non-OpenShift clusters
 // (or when clusterInfo is nil) this is a no-op. OpenShift's cluster network operator
 // automatically populates the ca-bundle.crt key when this label is present.

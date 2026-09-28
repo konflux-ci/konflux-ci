@@ -82,6 +82,22 @@ type MetricsScrapeTLSInput struct {
 	// updates are not missed due to informer lag. When nil, Client is used.
 	Reader    client.Reader
 	Namespace string
+	// SecretName is the TLS Secret to verify (tls.crt + ca.crt). When empty, defaults to
+	// MetricsServerCertSecretName (controller operands).
+	SecretName string
+}
+
+// ResolveMetricsTLSSecretName returns the effective metrics TLS Secret name.
+// When secretName is empty, defaults to MetricsServerCertSecretName (controller operands).
+func ResolveMetricsTLSSecretName(secretName string) string {
+	if secretName != "" {
+		return secretName
+	}
+	return MetricsServerCertSecretName
+}
+
+func metricsTLSSecretName(in MetricsScrapeTLSInput) string {
+	return ResolveMetricsTLSSecretName(in.SecretName)
 }
 
 func metricsTLSReader(in MetricsScrapeTLSInput) client.Reader {
@@ -105,7 +121,7 @@ func EvaluateMetricsScrapeTLS(ctx context.Context, in MetricsScrapeTLSInput) (Me
 	secret := &corev1.Secret{}
 	if err := reader.Get(ctx, types.NamespacedName{
 		Namespace: in.Namespace,
-		Name:      MetricsServerCertSecretName,
+		Name:      metricsTLSSecretName(in),
 	}, secret); err != nil {
 		if apierrors.IsNotFound(err) {
 			return MetricsScrapeTLSResult{Reason: MetricsTLSReasonCertMissing}, nil

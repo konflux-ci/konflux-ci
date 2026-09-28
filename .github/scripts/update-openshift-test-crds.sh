@@ -43,7 +43,7 @@ mkdir -p "${OUT_DIR}"
 # dest_filename|relative_source_path_under-module-root
 CRDS=(
   "clusterversions.config.openshift.io.yaml|config/v1/zz_generated.crd-manifests/0000_00_cluster-version-operator_01_clusterversions-Default.crd.yaml"
-  "ingresses.config.openshift.io.yaml|config/v1/zz_generated.crd-manifests/0000_10_config-operator_01_ingresses.crd.yaml"
+  "ingresses.config.openshift.io.yaml|config/v1/zz_generated.crd-manifests/0000_10_config-operator_01_ingresses-Default.crd.yaml"
   "consolelinks.console.openshift.io.yaml|console/v1/zz_generated.crd-manifests/00_consolelinks.crd.yaml"
   "securitycontextconstraints.security.openshift.io.yaml|security/v1/zz_generated.crd-manifests/0000_03_config-operator_01_securitycontextconstraints.crd.yaml"
 )

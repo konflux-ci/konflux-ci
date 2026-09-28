@@ -635,8 +635,9 @@ func (r *KonfluxReconciler) applyKonfluxNamespaceLister(ctx context.Context, tc 
 
 	var spec konfluxv1alpha1.KonfluxNamespaceListerSpec
 	if owner.Spec.NamespaceLister != nil && owner.Spec.NamespaceLister.Spec != nil {
-		spec = *owner.Spec.NamespaceLister.Spec
+		spec.KonfluxNamespaceListerConfigSpec = *owner.Spec.NamespaceLister.Spec
 	}
+	spec.ComponentMetrics = common.ForwardedComponentMetrics(owner)
 
 	konfluxNamespaceLister := &konfluxv1alpha1.KonfluxNamespaceLister{
 		TypeMeta: metav1.TypeMeta{

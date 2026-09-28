@@ -32,6 +32,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 )
 
 const internalRegistryNamespace = "kind-registry"
@@ -120,7 +121,7 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
 				g.Expect(dep.Labels).To(HaveKey(constant.KonfluxOwnerLabel))
-				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, "registry")
+				container := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, "registry")
 				g.Expect(container).NotTo(BeNil(), "registry container should exist")
 				g.Expect(container.Image).NotTo(BeEmpty(), "container image should be set")
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
@@ -266,7 +267,7 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, "registry")
+				container := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, "registry")
 				g.Expect(container).NotTo(BeNil())
 				originalImage = container.Image
 				g.Expect(originalImage).NotTo(BeEmpty())
@@ -276,7 +277,7 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, "registry")
+				container := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, "registry")
 				g.Expect(container).NotTo(BeNil())
 				container.Image = "tampered-image:latest"
 				g.Expect(k8sClient.Update(ctx, dep)).To(Succeed())
@@ -286,7 +287,7 @@ var _ = Describe("KonfluxInternalRegistry Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				container := testutil.FindContainer(dep.Spec.Template.Spec.Containers, "registry")
+				container := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, "registry")
 				g.Expect(container).NotTo(BeNil())
 				g.Expect(container.Image).To(Equal(originalImage))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())

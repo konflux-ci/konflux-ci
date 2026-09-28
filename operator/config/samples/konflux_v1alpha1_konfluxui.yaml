@@ -151,9 +151,17 @@ spec:
               userMatchers:
                 - userAttr: "DN"
                   groupAttr: "member"
+      # staticPasswords is a local user database, intended for development and
+      # testing only. Prefer an OIDC connector (above) for any real deployment.
+      #
+      # Every "hash" below is the placeholder literal REDACTED, not a credential.
+      # This sample is illustrative and is not applied by any script; as written it
+      # cannot authenticate anyone. To use it, replace each placeholder with a real
+      # bcrypt hash, for example:
+      #   echo <password> | htpasswd -BinC 10 <user> | cut -d: -f2
       staticPasswords:
         - email: "user1@konflux.dev"
-          # bcrypt hash of the string "password": $(echo password | htpasswd -BinC 10 admin | cut -d: -f2)
+          # Placeholder, not a bcrypt hash. Replace before use.
           hash: REDACTED
           username: "user1"
           userID: "7138d2fe-724e-4e86-af8a-db7c4b080e20"
@@ -161,7 +169,7 @@ spec:
             - "konflux-users"
             - "team-alpha"
         - email: "user2@konflux.dev"
-          # bcrypt hash of the string "password": $(echo password | htpasswd -BinC 10 admin | cut -d: -f2)
+          # Placeholder, not a bcrypt hash. Replace before use.
           hash: REDACTED
           username: "user2"
           userID: "ea8e8ee1-2283-4e03-83d4-b00f8b821b64"
@@ -169,7 +177,7 @@ spec:
             - "konflux-users"
             - "team-beta"
         - email: "admin@konflux.dev"
-          # bcrypt hash of the string "admin": $(echo admin | htpasswd -BinC 10 admin | cut -d: -f2)
+          # Placeholder, not a bcrypt hash. Replace before use.
           hash: REDACTED
           username: "admin"
           userID: "admin-12345-67890-abcdef"

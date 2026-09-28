@@ -28,6 +28,7 @@ import (
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
@@ -111,7 +112,7 @@ func TestBuildControllerManagerOverlay(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
 		g.Expect(managerContainer.Resources.Limits.Memory().String()).To(gomega.Equal("256Mi"))
@@ -132,7 +133,7 @@ func TestBuildControllerManagerOverlay(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil(), "manager container must exist in controller-manager deployment")
 		originalImage := managerContainer.Image
 
@@ -140,7 +141,7 @@ func TestBuildControllerManagerOverlay(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Image).To(gomega.Equal(originalImage))
 	})
@@ -165,7 +166,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
 	})
@@ -215,7 +216,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 	})
 
@@ -301,7 +302,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 		g.Expect(*deployment.Spec.Replicas).To(gomega.Equal(int32(5)))
 
 		// Check container resources
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("2"))
 	})
@@ -313,7 +314,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations_ResourceMerging(t *test
 
 		// Get deployment and set existing requests
 		deployment := getIntegrationServiceDeployment(t)
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil(), "manager container must exist")
 		managerContainer.Resources.Requests = corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("50m"),
@@ -335,7 +336,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations_ResourceMerging(t *test
 		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
 		g.Expect(managerContainer.Resources.Requests.Cpu().String()).To(gomega.Equal("50m"))
@@ -347,7 +348,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations_ResourceMerging(t *test
 
 		// Get deployment and set existing limits
 		deployment := getIntegrationServiceDeployment(t)
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil(), "manager container must exist")
 		managerContainer.Resources.Limits = corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("1"),
@@ -369,7 +370,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations_ResourceMerging(t *test
 		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
 		g.Expect(managerContainer.Resources.Limits.Memory().String()).To(gomega.Equal("512Mi"))
@@ -397,7 +398,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		envVar := findEnvVar(managerContainer.Env, "CONSOLE_URL")
@@ -413,7 +414,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		envVar := findEnvVar(managerContainer.Env, "CONSOLE_URL")
@@ -430,7 +431,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		// CONSOLE_URL should be present with empty value
@@ -456,7 +457,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		// System-provided CONSOLE_URL should override user-provided one
@@ -485,7 +486,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		// Both CONSOLE_URL and user-provided env vars should be present
@@ -516,7 +517,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		// Resources should be preserved
@@ -546,7 +547,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		// Resources should be preserved
@@ -571,7 +572,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		// Verify old URL template is set
@@ -584,7 +585,7 @@ func TestBuildControllerManagerOverlay_ConsoleURL(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		// Verify URL was updated to new value
@@ -604,7 +605,7 @@ func TestBuildControllerManagerOverlay_ConsoleURLTasklog(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		envVar := findEnvVar(managerContainer.Env, "CONSOLE_URL_TASKLOG")
@@ -620,7 +621,7 @@ func TestBuildControllerManagerOverlay_ConsoleURLTasklog(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		envVar := findEnvVar(managerContainer.Env, "CONSOLE_URL_TASKLOG")
@@ -637,7 +638,7 @@ func TestBuildControllerManagerOverlay_ConsoleURLTasklog(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		envVar := findEnvVar(managerContainer.Env, "CONSOLE_URL_TASKLOG")
@@ -661,7 +662,7 @@ func TestBuildControllerManagerOverlay_ConsoleURLTasklog(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		envVar := findEnvVar(managerContainer.Env, "CONSOLE_URL_TASKLOG")
@@ -681,7 +682,7 @@ func TestBuildControllerManagerOverlay_ConsoleURLTasklog(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		envVar := findEnvVar(managerContainer.Env, "CONSOLE_URL_TASKLOG")
@@ -692,7 +693,7 @@ func TestBuildControllerManagerOverlay_ConsoleURLTasklog(t *testing.T) {
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		envVar = findEnvVar(managerContainer.Env, "CONSOLE_URL_TASKLOG")
@@ -712,7 +713,7 @@ func TestBuildControllerManagerOverlay_PipelineTimeouts(t *testing.T) {
 		deployment := getIntegrationServiceDeployment(t)
 		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "")).To(gomega.Succeed())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		pipelineTimeoutVar := findEnvVar(managerContainer.Env, envPipelineTimeout)
 		g.Expect(pipelineTimeoutVar).NotTo(gomega.BeNil())
@@ -744,7 +745,7 @@ func TestBuildControllerManagerOverlay_PipelineTimeouts(t *testing.T) {
 		deployment := getIntegrationServiceDeployment(t)
 		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "")).To(gomega.Succeed())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		pipelineTimeoutVar := findEnvVar(managerContainer.Env, envPipelineTimeout)
 		g.Expect(pipelineTimeoutVar).NotTo(gomega.BeNil())
@@ -763,7 +764,7 @@ func TestBuildControllerManagerOverlay_PipelineTimeouts(t *testing.T) {
 		deployment := getIntegrationServiceDeployment(t)
 		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "")).To(gomega.Succeed())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(findEnvVar(managerContainer.Env, envPipelineTimeout)).To(gomega.BeNil())
 		g.Expect(findEnvVar(managerContainer.Env, envTasksTimeout)).To(gomega.BeNil())
@@ -787,7 +788,7 @@ func TestBuildControllerManagerOverlay_PipelineTimeouts(t *testing.T) {
 		deployment := getIntegrationServiceDeployment(t)
 		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "")).To(gomega.Succeed())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		pipelineTimeoutVar := findEnvVar(managerContainer.Env, envPipelineTimeout)
 		g.Expect(pipelineTimeoutVar).NotTo(gomega.BeNil())
@@ -818,7 +819,7 @@ func TestBuildControllerManagerOverlay_PipelineTimeouts(t *testing.T) {
 		deployment := getIntegrationServiceDeployment(t)
 		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "")).To(gomega.Succeed())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 
 		pipelineTimeoutVar := findEnvVar(managerContainer.Env, envPipelineTimeout)
@@ -941,7 +942,7 @@ func TestApplySnapshotGCCustomizations(t *testing.T) {
 			},
 		}
 		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.Succeed())
-		gc := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		gc := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 		g.Expect(gc).NotTo(gomega.BeNil())
 		prVar := findEnvVar(gc.Env, envPRSnapshotsToKeep)
 		g.Expect(prVar).NotTo(gomega.BeNil())
@@ -958,7 +959,7 @@ func TestApplySnapshotGCCustomizations(t *testing.T) {
 		g := gomega.NewWithT(t)
 		cj := getIntegrationSnapshotGCCronJob(t)
 		g.Expect(applySnapshotGCCustomizations(cj, konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})).To(gomega.Succeed())
-		gc := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		gc := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 		g.Expect(gc).NotTo(gomega.BeNil())
 		g.Expect(findEnvVar(gc.Env, envPRSnapshotsToKeep)).To(gomega.BeNil())
 	})
@@ -981,7 +982,7 @@ func TestApplySnapshotGCCustomizations(t *testing.T) {
 			},
 		}
 		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.Succeed())
-		gc := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		gc := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 		g.Expect(gc).NotTo(gomega.BeNil())
 		g.Expect(gc.Resources.Requests.Cpu().String()).To(gomega.Equal("1"))
 		g.Expect(gc.Resources.Requests.Memory().String()).To(gomega.Equal("2000Mi"))
@@ -992,7 +993,7 @@ func TestApplySnapshotGCCustomizations(t *testing.T) {
 	t.Run("requests-only ContainerSpec preserves embedded limits", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		cj := getIntegrationSnapshotGCCronJob(t)
-		gcBefore := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		gcBefore := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 		g.Expect(gcBefore).NotTo(gomega.BeNil())
 		origLimitsCPU := gcBefore.Resources.Limits.Cpu().String()
 		origLimitsMem := gcBefore.Resources.Limits.Memory().String()
@@ -1009,7 +1010,7 @@ func TestApplySnapshotGCCustomizations(t *testing.T) {
 		}
 		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.Succeed())
 
-		gc := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		gc := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 		g.Expect(gc).NotTo(gomega.BeNil())
 		g.Expect(gc.Resources.Requests.Cpu().String()).To(gomega.Equal("50m"))
 		g.Expect(gc.Resources.Requests.Memory().String()).To(gomega.Equal("64Mi"))
@@ -1020,7 +1021,7 @@ func TestApplySnapshotGCCustomizations(t *testing.T) {
 	t.Run("typed fields only apply env vars without ContainerSpec", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		cj := getIntegrationSnapshotGCCronJob(t)
-		gcBefore := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		gcBefore := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 		g.Expect(gcBefore).NotTo(gomega.BeNil())
 		origLimitsCPU := gcBefore.Resources.Limits.Cpu().String()
 
@@ -1029,7 +1030,7 @@ func TestApplySnapshotGCCustomizations(t *testing.T) {
 		}
 		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.Succeed())
 
-		gc := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		gc := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 		g.Expect(gc).NotTo(gomega.BeNil())
 		prVar := findEnvVar(gc.Env, envPRSnapshotsToKeep)
 		g.Expect(prVar).NotTo(gomega.BeNil())
@@ -1054,7 +1055,7 @@ func TestApplySnapshotGCCustomizations(t *testing.T) {
 		}
 		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.Succeed())
 
-		gc := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		gc := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 		g.Expect(gc).NotTo(gomega.BeNil())
 		g.Expect(gc.Resources.Limits.Cpu().String()).To(gomega.Equal("4"))
 		g.Expect(gc.Resources.Limits.Memory().String()).To(gomega.Equal("8Gi"))
@@ -1069,7 +1070,7 @@ func TestApplySnapshotGCCustomizations(t *testing.T) {
 	t.Run("ContainerSpec env-only applies without resources", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		cj := getIntegrationSnapshotGCCronJob(t)
-		gcBefore := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		gcBefore := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 		g.Expect(gcBefore).NotTo(gomega.BeNil())
 		origLimitsCPU := gcBefore.Resources.Limits.Cpu().String()
 
@@ -1082,7 +1083,7 @@ func TestApplySnapshotGCCustomizations(t *testing.T) {
 		}
 		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.Succeed())
 
-		gc := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		gc := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 		g.Expect(gc).NotTo(gomega.BeNil())
 		customVar := findEnvVar(gc.Env, "CUSTOM_FLAG")
 		g.Expect(customVar).NotTo(gomega.BeNil())
@@ -1105,7 +1106,7 @@ func TestApplySnapshotGCCustomizations_TypedFields(t *testing.T) {
 		}
 		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.Succeed())
 
-		gc := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		gc := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 		g.Expect(gc).NotTo(gomega.BeNil())
 		prVar := findEnvVar(gc.Env, envPRSnapshotsToKeep)
 		g.Expect(prVar).NotTo(gomega.BeNil())
@@ -1138,7 +1139,7 @@ func TestApplySnapshotGCCustomizations_TypedFields(t *testing.T) {
 		}
 		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.Succeed())
 
-		gc := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		gc := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 		g.Expect(gc).NotTo(gomega.BeNil())
 		prVar := findEnvVar(gc.Env, envPRSnapshotsToKeep)
 		g.Expect(prVar).NotTo(gomega.BeNil())
@@ -1156,7 +1157,7 @@ func TestApplySnapshotGCCustomizations_TypedFields(t *testing.T) {
 		cj := getIntegrationSnapshotGCCronJob(t)
 		g.Expect(applySnapshotGCCustomizations(cj, konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{})).To(gomega.Succeed())
 
-		gc := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		gc := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 		g.Expect(gc).NotTo(gomega.BeNil())
 		g.Expect(findEnvVar(gc.Env, envPRSnapshotsToKeep)).To(gomega.BeNil())
 		g.Expect(findEnvVar(gc.Env, envNonPRSnapshotsToKeep)).To(gomega.BeNil())
@@ -1176,7 +1177,7 @@ func TestApplySnapshotGCCustomizations_TypedFields(t *testing.T) {
 		}
 		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.Succeed())
 
-		gc := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		gc := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 		g.Expect(gc).NotTo(gomega.BeNil())
 		prVar := findEnvVar(gc.Env, envPRSnapshotsToKeep)
 		g.Expect(prVar).NotTo(gomega.BeNil())
@@ -1205,7 +1206,7 @@ func TestApplySnapshotGCCustomizations_TypedFields(t *testing.T) {
 		}
 		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.Succeed())
 
-		gc := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		gc := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 		g.Expect(gc).NotTo(gomega.BeNil())
 		g.Expect(gc.Resources.Limits.Cpu().String()).To(gomega.Equal("2"))
 		g.Expect(gc.Resources.Limits.Memory().String()).To(gomega.Equal("4Gi"))
@@ -1232,7 +1233,7 @@ func TestApplySnapshotGCCustomizations_TypedFields(t *testing.T) {
 		}
 		g.Expect(applySnapshotGCCustomizations(cj, spec)).To(gomega.Succeed())
 
-		gc := testutil.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
+		gc := kubernetes.FindContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, snapshotGCContainerName)
 		g.Expect(gc).NotTo(gomega.BeNil())
 		prVar := findEnvVar(gc.Env, envPRSnapshotsToKeep)
 		g.Expect(prVar).NotTo(gomega.BeNil())

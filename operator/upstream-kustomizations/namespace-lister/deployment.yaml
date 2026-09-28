@@ -30,6 +30,8 @@ spec:
         - -enable-tls
         - -cert-path=/var/tls/tls.crt
         - -key-path=/var/tls/tls.key
+        - -enable-metrics
+        - -metrics-address=:9100
         name: namespace-lister
         image: quay.io/konflux-ci/namespace-lister:foo
         env:
@@ -57,6 +59,8 @@ spec:
         ports:
         - containerPort: 8080
           name: http
+        - containerPort: 9100
+          name: metrics
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true

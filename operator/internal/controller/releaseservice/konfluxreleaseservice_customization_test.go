@@ -28,6 +28,7 @@ import (
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
 
@@ -87,7 +88,7 @@ func TestBuildReleaseControllerManagerOverlay(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
 		g.Expect(managerContainer.Resources.Limits.Memory().String()).To(gomega.Equal("256Mi"))
@@ -108,7 +109,7 @@ func TestBuildReleaseControllerManagerOverlay(t *testing.T) {
 		}
 
 		deployment := getReleaseServiceDeployment(t)
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil(), "manager container must exist in controller-manager deployment")
 		originalImage := managerContainer.Image
 
@@ -116,7 +117,7 @@ func TestBuildReleaseControllerManagerOverlay(t *testing.T) {
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
+		managerContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Image).To(gomega.Equal(originalImage))
 	})
@@ -143,7 +144,7 @@ func TestApplyReleaseServiceDeploymentCustomizations(t *testing.T) {
 		err := applyReleaseServiceDeploymentCustomizations(deployment, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
 	})
@@ -197,7 +198,7 @@ func TestApplyReleaseServiceDeploymentCustomizations(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 	})
 
@@ -291,7 +292,7 @@ func TestApplyReleaseServiceDeploymentCustomizations(t *testing.T) {
 		g.Expect(*deployment.Spec.Replicas).To(gomega.Equal(int32(5)))
 
 		// Check container resources
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("2"))
 	})
@@ -550,7 +551,7 @@ func TestApplyReleaseServiceDeploymentCustomizations_ResourceMerging(t *testing.
 
 		// Get deployment and set existing requests
 		deployment := getReleaseServiceDeployment(t)
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil(), "manager container must exist")
 		managerContainer.Resources.Requests = corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("50m"),
@@ -574,7 +575,7 @@ func TestApplyReleaseServiceDeploymentCustomizations_ResourceMerging(t *testing.
 		err := applyReleaseServiceDeploymentCustomizations(deployment, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
+		managerContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("500m"))
 		g.Expect(managerContainer.Resources.Requests.Cpu().String()).To(gomega.Equal("50m"))
@@ -586,7 +587,7 @@ func TestApplyReleaseServiceDeploymentCustomizations_ResourceMerging(t *testing.
 
 		// Get deployment and set existing limits
 		deployment := getReleaseServiceDeployment(t)
-		managerContainer := testutil.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil(), "manager container must exist")
 		managerContainer.Resources.Limits = corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("1"),
@@ -610,7 +611,7 @@ func TestApplyReleaseServiceDeploymentCustomizations_ResourceMerging(t *testing.
 		err := applyReleaseServiceDeploymentCustomizations(deployment, spec)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		managerContainer = testutil.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
+		managerContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, releaseManagerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
 		g.Expect(managerContainer.Resources.Limits.Cpu().String()).To(gomega.Equal("1"))
 		g.Expect(managerContainer.Resources.Limits.Memory().String()).To(gomega.Equal("512Mi"))

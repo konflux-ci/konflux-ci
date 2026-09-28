@@ -178,7 +178,7 @@ var _ = Describe("KonfluxReleaseService Controller", func() {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
 				g.Expect(dep.Labels).To(HaveKeyWithValue("control-plane", "controller-manager"))
-				manager := testutil.FindContainer(dep.Spec.Template.Spec.Containers, releaseManagerContainerName)
+				manager := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, releaseManagerContainerName)
 				g.Expect(manager).NotTo(BeNil(), "manager container should exist")
 				g.Expect(manager.Image).NotTo(BeEmpty(), "manager container image should be set")
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
@@ -612,7 +612,7 @@ var _ = Describe("KonfluxReleaseService Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				manager := testutil.FindContainer(dep.Spec.Template.Spec.Containers, releaseManagerContainerName)
+				manager := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, releaseManagerContainerName)
 				g.Expect(manager).NotTo(BeNil())
 				originalImage = manager.Image
 				g.Expect(originalImage).NotTo(BeEmpty())
@@ -622,7 +622,7 @@ var _ = Describe("KonfluxReleaseService Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				manager := testutil.FindContainer(dep.Spec.Template.Spec.Containers, releaseManagerContainerName)
+				manager := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, releaseManagerContainerName)
 				g.Expect(manager).NotTo(BeNil())
 				manager.Image = "tampered-image:latest"
 				g.Expect(k8sClient.Update(ctx, dep)).To(Succeed())
@@ -632,7 +632,7 @@ var _ = Describe("KonfluxReleaseService Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := &appsv1.Deployment{}
 				g.Expect(k8sClient.Get(ctx, deploymentNN, dep)).To(Succeed())
-				m := testutil.FindContainer(dep.Spec.Template.Spec.Containers, releaseManagerContainerName)
+				m := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, releaseManagerContainerName)
 				g.Expect(m).NotTo(BeNil())
 				g.Expect(m.Image).To(Equal(originalImage))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())

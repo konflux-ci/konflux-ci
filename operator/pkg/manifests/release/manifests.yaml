@@ -1458,6 +1458,12 @@ spec:
                 description: RetryInfo contains information about retry configuration
                   for this ReleasePlanAdmission
                 properties:
+                  disablingTags:
+                    description: DisablingTags is the list of tags from the ReleaseServiceConfig
+                      that disable retries on match.
+                    items:
+                      type: string
+                    type: array
                   enabled:
                     description: Enabled indicates whether retries are enabled for
                       this RPA's pipeline
@@ -3981,6 +3987,10 @@ spec:
                         managed Release PipelineRun executed as part of this attempt
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?\/[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                       type: string
+                    retryDisabledReason:
+                      description: RetryDisabledReason is the reason retries were
+                        not performed for this attempt
+                      type: string
                     roleBindings:
                       description: RoleBindings defines the roleBindings for accessing
                         resources during the managed pipeline attempt
@@ -4250,8 +4260,8 @@ spec:
                           properties:
                             tags:
                               description: |-
-                                Tags is a list of values which disable retries when present in the ReleasePlanAdmission
-                                mapping data.
+                                Tags is a list of values which disable retries when present in the ReleasePlan or
+                                ReleasePlanAdmission mapping data.
                               items:
                                 type: string
                               type: array
@@ -5260,7 +5270,7 @@ spec:
               key: token
               name: release-service-github-token
               optional: true
-        image: quay.io/konflux-ci/release-service:16c119ccaaec605dc0545b033a7752c62c388753
+        image: quay.io/konflux-ci/release-service:3f78e9ca61075d10298f9edcb3902a50e92628c2
         livenessProbe:
           httpGet:
             path: /healthz

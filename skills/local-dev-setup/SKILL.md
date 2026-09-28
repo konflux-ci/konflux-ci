@@ -251,3 +251,14 @@ If the user asks to install an integration not listed here, look for an install 
 | Port 5001 in use | Set `REGISTRY_HOST_PORT` to another port in `deploy-local.env`, or set `ENABLE_REGISTRY_PORT=0` |
 | Operator panics on start | Check if secrets exist: `kubectl get secrets -n konflux-build-service` — if missing, re-run `deploy-local.sh` |
 | Konflux CR not becoming Ready | `kubectl get konflux konflux -o yaml` and inspect `.status.conditions` |
+
+## Run platform e2e (after Konflux is up)
+
+Uses `test/e2e/e2e.env` (GitHub token for PaC), not `scripts/deploy-local.env`.
+
+```bash
+cp test/e2e/e2e.env.template test/e2e/e2e.env
+# Fill in GH_ORG, GH_TOKEN, etc. (see the template)
+source test/e2e/e2e.env
+./test/e2e/run-e2e.sh
+```

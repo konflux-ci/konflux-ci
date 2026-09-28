@@ -37,6 +37,13 @@ var PrometheusScrapeTokenSecretPredicate = predicate.NewPredicateFuncs(kubernete
 // (cert-manager issued; watched by name because it is not a CR ownerRef).
 var MetricsTLSSecretPredicate = predicate.NewPredicateFuncs(kubernetes.IsMetricsTLSSecret)
 
+// MetricsTLSSecretNamedPredicate limits Secret watches to a named operand TLS Secret.
+func MetricsTLSSecretNamedPredicate(secretName string) predicate.Predicate {
+	return predicate.NewPredicateFuncs(func(obj client.Object) bool {
+		return kubernetes.IsMetricsTLSSecretNamed(obj, secretName)
+	})
+}
+
 // generationOrMetadataChanged returns true if the update is NOT a status-only change.
 // It detects spec changes (generation bump), ownerReference changes, and
 // label/annotation changes -- none of which are reflected in the generation
