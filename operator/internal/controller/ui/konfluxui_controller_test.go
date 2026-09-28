@@ -31,6 +31,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -41,6 +42,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/segmentbridge"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
@@ -1578,6 +1580,21 @@ var _ = Describe("KonfluxUI Controller", func() {
 				Key:                  "write-key",
 			}
 			Expect(k8sClient.Update(ctx, bridge)).To(Succeed())
+
+			// Wait for the failure to show up in status before rotating the Dex config. The
+			// reconciler reads the Bridge from its own cache, so without this it could still
+			// see the pre-update spec, resolve no write key without erroring, and go on to
+			// patch the Deployment.
+			By("waiting for the reconciler to observe the unresolvable ref")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.KonfluxUI{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
+				readyCond := meta.FindStatusCondition(updated.Status.Conditions, condition.TypeReady)
+				g.Expect(readyCond).NotTo(BeNil())
+				g.Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+				g.Expect(readyCond.Reason).To(Equal(condition.ReasonSecretCreationFailed))
+				g.Expect(readyCond.Message).To(ContainSubstring("missing-segment-secret"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			By("changing the Dex config so the ConfigMap hash rotates")
 			setPasswordConnector(ctx, ui)
