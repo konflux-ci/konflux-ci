@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/coder/websocket v1.8.15
 	github.com/codeready-toolchain/api v0.0.0-20260923121658-43ad10110efe
-	github.com/conforma/crds/api v0.1.23
+	github.com/conforma/crds/api v0.1.24
 	github.com/devfile/library/v2 v2.4.0
 	github.com/docker/cli v29.8.1+incompatible
 	github.com/gofri/go-github-ratelimit/v2 v2.0.2
