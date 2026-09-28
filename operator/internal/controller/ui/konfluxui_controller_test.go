@@ -2800,6 +2800,12 @@ var _ = Describe("KonfluxUI Controller", func() {
 			hash, err = r.reconcileOAuth2ProxyClientSecretHash(ctx)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(hash).NotTo(BeEmpty())
+
+			By("returning an error when client Get fails with an error other than NotFound")
+			canceledCtx, cancel := context.WithCancel(ctx)
+			cancel()
+			_, err = r.reconcileOAuth2ProxyClientSecretHash(canceledCtx)
+			Expect(err).To(HaveOccurred())
 		})
 
 		It("should handle applyUIDeploymentCustomizations with different clientSecretHash inputs", func() {

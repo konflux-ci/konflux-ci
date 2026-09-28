@@ -105,7 +105,7 @@ const (
 	// secretKeyRef (not as a volume), a name change alone is insufficient; instead the
 	// reconciler injects this hash so Kubernetes sees a new pod template and performs
 	// a rolling update automatically.
-	oauth2ProxyClientSecretHashAnnotation = "konflux.dev/oauth2-proxy-client-secret-hash" //nolint:gosec // annotation key, not a secret value
+	oauth2ProxyClientSecretHashAnnotation = "konflux.konflux-ci.dev/oauth2-proxy-client-secret-hash" //nolint:gosec // annotation key, not a secret value
 
 	// Segment Secret constants
 	segmentSecretBaseName = "segment-bridge-config"

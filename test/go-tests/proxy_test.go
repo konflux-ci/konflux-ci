@@ -516,12 +516,40 @@ var _ = Describe("Test Proxy endpoints", func() {
 			token, err := getToken()
 			Expect(err).NotTo(HaveOccurred(), "failed baseline token acquisition before rotation")
 			Expect(token).NotTo(BeEmpty())
-			expectProxyGETWithBearer("", token, 200)
+			expectProxyGETWithBearer("/api/k8s/api/v1/namespaces", token, http.StatusOK)
 
 			By("2. Rotating oauth2-proxy-client-secret in konflux-ui namespace")
 			secret := &v1.Secret{}
 			err = proxyClient.Get(ctx, crclient.ObjectKey{Namespace: "konflux-ui", Name: "oauth2-proxy-client-secret"}, secret)
 			Expect(err).NotTo(HaveOccurred(), "failed to read oauth2-proxy-client-secret")
+
+			deploymentsToWait := []string{"proxy", "dex"}
+			originalSecretVal := make([]byte, len(secret.Data["client-secret"]))
+			copy(originalSecretVal, secret.Data["client-secret"])
+			DeferCleanup(func(cleanupCtx context.Context) {
+				s := &v1.Secret{}
+				if getErr := proxyClient.Get(cleanupCtx, crclient.ObjectKey{Namespace: "konflux-ui", Name: "oauth2-proxy-client-secret"}, s); getErr == nil {
+					if s.Data == nil {
+						s.Data = make(map[string][]byte)
+					}
+					s.Data["client-secret"] = originalSecretVal
+					_ = proxyClient.Update(cleanupCtx, s)
+					for _, depName := range deploymentsToWait {
+						Eventually(func(g Gomega) {
+							dep := &appsv1.Deployment{}
+							g.Expect(proxyClient.Get(cleanupCtx, crclient.ObjectKey{Namespace: "konflux-ui", Name: depName}, dep)).To(Succeed())
+							replicas := int32(1)
+							if dep.Spec.Replicas != nil {
+								replicas = *dep.Spec.Replicas
+							}
+							g.Expect(dep.Status.ObservedGeneration).To(Equal(dep.Generation))
+							g.Expect(dep.Status.UpdatedReplicas).To(Equal(replicas))
+							g.Expect(dep.Status.AvailableReplicas).To(Equal(replicas))
+						}).WithTimeout(3*time.Minute).WithPolling(3*time.Second).Should(Succeed(),
+							"timed out waiting for rollback of deployment %s after secret restoration", depName)
+					}
+				}
+			})
 
 			if secret.Data == nil {
 				secret.Data = make(map[string][]byte)
@@ -532,10 +560,6 @@ var _ = Describe("Test Proxy endpoints", func() {
 			Expect(err).NotTo(HaveOccurred(), "failed to update oauth2-proxy-client-secret")
 
 			By("3. Waiting for deployment rollouts of dex and proxy to complete")
-			deploymentsToWait := []string{"proxy"}
-			if !isProxyOpenShiftAuth() {
-				deploymentsToWait = append(deploymentsToWait, "dex")
-			}
 
 			for _, depName := range deploymentsToWait {
 				Eventually(func(g Gomega) {
@@ -558,7 +582,7 @@ var _ = Describe("Test Proxy endpoints", func() {
 			newToken, err := getToken()
 			Expect(err).NotTo(HaveOccurred(), "failed token acquisition after secret rotation")
 			Expect(newToken).NotTo(BeEmpty())
-			expectProxyGETWithBearer("", newToken, 200)
+			expectProxyGETWithBearer("/api/k8s/api/v1/namespaces", newToken, http.StatusOK)
 		})
 	})
 })
