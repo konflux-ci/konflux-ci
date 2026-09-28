@@ -102,8 +102,6 @@ spec:
       publicInfo:
         environment: development
         visibility: public
-  certManager:
-    createClusterIssuer: true
   internalRegistry:
     enabled: false
   defaultTenant:

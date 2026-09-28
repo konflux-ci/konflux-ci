@@ -25,12 +25,6 @@ import (
 
 // KonfluxCertManagerSpec defines the desired state of KonfluxCertManager.
 type KonfluxCertManagerSpec struct {
-	// CreateClusterIssuer controls whether cluster issuer resources are created.
-	// Defaults to true if not specified.
-	// The cluster-Issuer will be used for generating certificates for the Konflux components
-	// +optional
-	CreateClusterIssuer *bool `json:"createClusterIssuer,omitempty"`
-
 	// DistributeClusterCABundle controls whether the operator applies the
 	// trust-manager Bundle that populates cluster-wide trusted-ca ConfigMaps.
 	// When nil, the effective default is platform-aware:
@@ -81,15 +75,6 @@ func (k *KonfluxCertManager) GetConditions() []metav1.Condition {
 // SetConditions sets the conditions on the KonfluxCertManager status.
 func (k *KonfluxCertManager) SetConditions(conditions []metav1.Condition) {
 	k.Status.Conditions = conditions
-}
-
-// ShouldCreateClusterIssuer returns true if cluster issuer resources should be created.
-// Defaults to true if not specified.
-func (k *KonfluxCertManagerSpec) ShouldCreateClusterIssuer() bool {
-	if k.CreateClusterIssuer == nil {
-		return true
-	}
-	return *k.CreateClusterIssuer
 }
 
 // ShouldDistributeClusterCABundle returns whether the trust-manager Bundle
