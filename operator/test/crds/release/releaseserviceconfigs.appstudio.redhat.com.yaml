@@ -99,8 +99,8 @@ spec:
                             properties:
                               tags:
                                 description: |-
-                                  Tags is a list of values which disable retries when present in the ReleasePlanAdmission
-                                  mapping data.
+                                  Tags is a list of values which disable retries when present in the ReleasePlan or
+                                  ReleasePlanAdmission mapping data.
                                 items:
                                   type: string
                                 type: array
