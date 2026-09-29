@@ -17,11 +17,10 @@
 # changes to enrolled repos.
 name: fullsend
 
-permissions:
-  actions: write
-  id-token: write
-  contents: read
-  pull-requests: read
+# No workflow-wide token. The reusable workflow already limits
+# actions: write and id-token: write to its dispatch job; the caller
+# must grant that same ceiling on the job that calls it.
+permissions: {}
 
 on:
   issues:
@@ -41,7 +40,11 @@ jobs:
     if: >-
       github.event_name != 'issue_comment'
       || github.event.comment.user.type != 'Bot'
-    uses: konflux-ci/.fullsend/.github/workflows/dispatch.yml@main
+    permissions:
+      actions: write
+      contents: read
+      id-token: write
+    uses: konflux-ci/.fullsend/.github/workflows/dispatch.yml@f6f0c518c6930f53d0b6566053598961e39c98b9 # main
     with:
       event_action: ${{ github.event.action }}
 
