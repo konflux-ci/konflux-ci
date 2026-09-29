@@ -2,40 +2,43 @@
 title: "Custom CA Bundle"
 linkTitle: "Custom CA Bundle"
 weight: 4
-description: "Mounting a custom CA bundle into the build-service for environments with private registries or corporate proxies."
+description: "Mounting a custom CA bundle into build-service and integration-service for environments with private registries or corporate proxies."
 ---
 
-The build-service controller-manager ships with a trusted-ca volume that
-mounts an extra file at `/etc/ssl/certs/ca-custom-bundle.crt`. CAs in that
-file are added to the image trust store; the store itself is not replaced.
+The build-service and integration-service controller-managers each ship with
+a trusted-ca volume that mounts an extra file at
+`/etc/ssl/certs/ca-custom-bundle.crt`. CAs in that file are added to the
+image trust store; the store itself is not replaced.
 
 By default the volume points at ConfigMap `trusted-ca` (key `ca-bundle.crt`)
-with `optional: true`. On OpenShift the operator creates that ConfigMap with
-`inject-trusted-cabundle` so the platform fills `ca-bundle.crt`.
+with `optional: true`. On OpenShift the operator creates that ConfigMap in
+the component namespace with `inject-trusted-cabundle` so the platform fills
+`ca-bundle.crt`.
 
 The `trustedCA` field points that **same extra-file path** at a ConfigMap
-in the `build-service` namespace (`spec.trustedCA.name` may be `trusted-ca`).
-The file becomes exactly the PEM at `spec.trustedCA.key`. It is not merged
-with ConfigMap `trusted-ca`. The image trust store is unchanged. On
-OpenShift the operator does not create the platform-injected ConfigMap
-while `trustedCA` is set. If it already created that object, it deletes it
-when the operator owns it so the name can be reused. A user-supplied
-ConfigMap named `trusted-ca` is left in place and mounted.
+in the component namespace (`build-service` or `integration-service`).
+`spec.trustedCA.name` may be `trusted-ca`. The file becomes exactly the PEM
+at `spec.trustedCA.key`. It is not merged with ConfigMap `trusted-ca`. The
+image trust store is unchanged. On OpenShift the operator does not create
+the platform-injected ConfigMap while `trustedCA` is set. If it already
+created that object, it deletes it when the operator owns it so the name
+can be reused. A user-supplied ConfigMap named `trusted-ca` is left in
+place and mounted.
 
 ## When you need this
 
 Configure `trustedCA` when the extra CAs you need are **not** in the
 default `trusted-ca` / `ca-bundle.crt` object. Common examples include:
 
-- **trust-manager Bundle** — The Bundle writes a ConfigMap in
-  `build-service` that is not named `trusted-ca`, or uses a key other
-  than `ca-bundle.crt`.
-- **Private registry or other extra CA** — You keep a ConfigMap in
-  `build-service` whose PEM is the extra-file you want mounted.
+- **trust-manager Bundle** — The Bundle writes a ConfigMap in the component
+  namespace that is not named `trusted-ca`, or uses a key other than
+  `ca-bundle.crt`.
+- **Private registry or other extra CA** — You keep a ConfigMap in the
+  component namespace whose PEM is the extra-file you want mounted.
 
 ### When you do NOT need this
 
-- **Public endpoints** — If the build-service only connects to public
+- **Public endpoints** — If the component only connects to public
   registries and git providers with certificates signed by well-known CAs,
   the default image trust store is sufficient.
 - **Platform-injected CA bundles** — If OpenShift already injects the CAs
@@ -45,7 +48,8 @@ default `trusted-ca` / `ca-bundle.crt` object. Common examples include:
 ## Prerequisites
 
 For any name **other than** `trusted-ca`, a ConfigMap containing your CA
-bundle in PEM format must already exist in the `build-service` namespace.
+bundle in PEM format must already exist in the component namespace
+(`build-service` or `integration-service`).
 You can use any key — the examples below use `custom-ca-bundle` and
 `ca-bundle.pem`. The key name does not have to end in `.pem`; it is only
 the ConfigMap data key. The operator projects that key onto the extra-file
@@ -60,9 +64,16 @@ Until it exists the pod stays `Pending` because the volume is
 `optional: false`.
 
 ```bash
-# after spec.trustedCA.name is trusted-ca
+# build-service
 kubectl -n build-service wait --for=delete configmap/trusted-ca --timeout=60s
 kubectl -n build-service create configmap trusted-ca \
+  --from-file=ca-bundle.pem=/path/to/ca-bundle.pem
+```
+
+```bash
+# integration-service
+kubectl -n integration-service wait --for=delete configmap/trusted-ca --timeout=60s
+kubectl -n integration-service create configmap trusted-ca \
   --from-file=ca-bundle.pem=/path/to/ca-bundle.pem
 ```
 
@@ -92,15 +103,31 @@ spec:
       trustedCA:
         name: custom-ca-bundle
         key: ca-bundle.pem
+  integrationService:
+    spec:
+      trustedCA:
+        name: custom-ca-bundle
+        key: ca-bundle.pem
 ```
 
-**Via the standalone KonfluxBuildService CR:**
+**Via the standalone component CR:**
 
 ```yaml
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: KonfluxBuildService
 metadata:
   name: konflux-build-service
+spec:
+  trustedCA:
+    name: custom-ca-bundle
+    key: ca-bundle.pem
+```
+
+```yaml
+apiVersion: konflux.konflux-ci.dev/v1alpha1
+kind: KonfluxIntegrationService
+metadata:
+  name: konflux-integration-service
 spec:
   trustedCA:
     name: custom-ca-bundle
@@ -122,13 +149,17 @@ Once applied, the operator:
 ## Removing the custom CA bundle
 
 To revert to the default `trusted-ca` ConfigMap, remove only the
-`trustedCA` field. Leave the rest of `buildService.spec` unchanged.
+`trustedCA` field. Leave the rest of the component spec unchanged.
 
 ```yaml
 spec:
   buildService:
     spec:
-      # existing fields (replicas, pipelineConfig, webhookURLs, …) stay as they are
+      # existing fields stay as they are
+      # trustedCA omitted
+  integrationService:
+    spec:
+      # existing fields stay as they are
       # trustedCA omitted
 ```
 
@@ -139,6 +170,9 @@ absent):
 kubectl patch konflux konflux --type=merge -p '
 spec:
   buildService:
+    spec:
+      trustedCA: null
+  integrationService:
     spec:
       trustedCA: null
 '
@@ -163,7 +197,15 @@ The extra-file mount path does not change.
 Update the ConfigMap data:
 
 ```bash
+# build-service
 kubectl -n build-service create configmap custom-ca-bundle \
+  --from-file=ca-bundle.pem=/path/to/updated-ca-bundle.pem \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+```bash
+# integration-service
+kubectl -n integration-service create configmap custom-ca-bundle \
   --from-file=ca-bundle.pem=/path/to/updated-ca-bundle.pem \
   --dry-run=client -o yaml | kubectl apply -f -
 ```

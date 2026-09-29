@@ -8,6 +8,10 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: konflux-integration-service
 spec:
+  # trustedCA:  # Point the extra-file CA mount at a different ConfigMap (optional)
+  #   name: custom-ca-bundle
+  #   key: tls.pem
+
   # Pipeline run timeouts. Each field maps to the corresponding env var on the
   # controller-manager container. Omit to use the upstream integration-service defaults.
   pipelineTimeout: "6h"
