@@ -1,7 +1,7 @@
 # Build the conformance test binary. Context must be the repo root (test module
 # uses a replace directive to ../../operator), not test/go-tests/ alone.
 # Build:  podman build -f test/go-tests/Containerfile -t conformance-tests .
-FROM registry.access.redhat.com/ubi10/go-toolset@sha256:e059478002805a3056b69ae5b3916969b85ec4eee007eed5661c6293d0f5fb82 AS builder
+FROM registry.access.redhat.com/ubi10/go-toolset@sha256:2e390158e50d9a462b79725e1b04424954029249f1c0bb39de1b00e4bad7b8c8 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
