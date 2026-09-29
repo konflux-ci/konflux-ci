@@ -70,6 +70,9 @@ spec:
               - "team-beta"
   integrationService:
     spec:
+      # trustedCA:  # Point the extra-file CA mount at a different ConfigMap (optional)
+      #   name: custom-ca-bundle
+      #   key: tls.pem
       integrationControllerManager:
         replicas: 1
         manager:

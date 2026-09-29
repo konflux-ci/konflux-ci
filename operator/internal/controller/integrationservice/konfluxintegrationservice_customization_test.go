@@ -17,6 +17,8 @@ limitations under the License.
 package integrationservice
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/onsi/gomega"
@@ -25,9 +27,20 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/version"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/common"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/contenthash"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 )
@@ -163,7 +176,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
+		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "", "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
@@ -198,7 +211,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 			},
 		}
 
-		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
+		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "", "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic and container should be unchanged
@@ -212,7 +225,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
+		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "", "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
@@ -225,7 +238,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{}
 
 		deployment := getIntegrationServiceDeployment(t)
-		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
+		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "", "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
@@ -241,7 +254,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
+		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "", "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).NotTo(gomega.BeNil())
@@ -257,7 +270,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
+		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "", "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).NotTo(gomega.BeNil())
@@ -272,7 +285,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 
 		deployment := getIntegrationServiceDeployment(t)
 		originalReplicas := deployment.Spec.Replicas
-		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
+		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "", "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).To(gomega.Equal(originalReplicas))
@@ -294,7 +307,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations(t *testing.T) {
 		}
 
 		deployment := getIntegrationServiceDeployment(t)
-		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
+		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "", "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Check replicas
@@ -333,7 +346,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations_ResourceMerging(t *test
 			},
 		}
 
-		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
+		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "", "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		managerContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
@@ -367,7 +380,7 @@ func TestApplyIntegrationServiceDeploymentCustomizations_ResourceMerging(t *test
 			},
 		}
 
-		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "")
+		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "", "")
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		managerContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
@@ -711,7 +724,7 @@ func TestBuildControllerManagerOverlay_PipelineTimeouts(t *testing.T) {
 			FinallyTimeout:  "2h",
 		}
 		deployment := getIntegrationServiceDeployment(t)
-		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "")).To(gomega.Succeed())
+		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "", "")).To(gomega.Succeed())
 
 		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
@@ -743,7 +756,7 @@ func TestBuildControllerManagerOverlay_PipelineTimeouts(t *testing.T) {
 			},
 		}
 		deployment := getIntegrationServiceDeployment(t)
-		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "")).To(gomega.Succeed())
+		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "", "")).To(gomega.Succeed())
 
 		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
@@ -762,7 +775,7 @@ func TestBuildControllerManagerOverlay_PipelineTimeouts(t *testing.T) {
 		g := gomega.NewWithT(t)
 		integrationSpec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{}
 		deployment := getIntegrationServiceDeployment(t)
-		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "")).To(gomega.Succeed())
+		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "", "")).To(gomega.Succeed())
 
 		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
@@ -786,7 +799,7 @@ func TestBuildControllerManagerOverlay_PipelineTimeouts(t *testing.T) {
 			},
 		}
 		deployment := getIntegrationServiceDeployment(t)
-		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "")).To(gomega.Succeed())
+		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "", "")).To(gomega.Succeed())
 
 		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
@@ -817,7 +830,7 @@ func TestBuildControllerManagerOverlay_PipelineTimeouts(t *testing.T) {
 			},
 		}
 		deployment := getIntegrationServiceDeployment(t)
-		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "")).To(gomega.Succeed())
+		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "", "")).To(gomega.Succeed())
 
 		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
 		g.Expect(managerContainer).NotTo(gomega.BeNil())
@@ -1245,4 +1258,154 @@ func TestApplySnapshotGCCustomizations_TypedFields(t *testing.T) {
 		g.Expect(minVar).NotTo(gomega.BeNil())
 		g.Expect(minVar.Value).To(gomega.Equal(minToKeep))
 	})
+}
+
+func newOpenShiftClusterInfo(t *testing.T) *clusterinfo.Info {
+	t.Helper()
+	info, err := clusterinfo.DetectWithClient(&integrationServiceMockDiscoveryClient{
+		resources: map[string]*metav1.APIResourceList{
+			"config.openshift.io/v1": {APIResources: []metav1.APIResource{{Kind: "ClusterVersion"}}},
+		},
+		serverVersion: &version.Info{GitVersion: "v1.29.0"},
+	})
+	if err != nil {
+		t.Fatalf("failed to create OpenShift cluster info: %v", err)
+	}
+	return info
+}
+
+func TestApplyTrustedCAMount(t *testing.T) {
+	t.Run("deployment customization retargets trusted-ca and stamps the hash", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
+			TrustedCA: &konfluxv1alpha1.TrustedCAConfigMap{
+				Name: "custom-ca-bundle",
+				Key:  "tls.pem",
+			},
+		}
+		hash := contenthash.String("-----BEGIN CERTIFICATE-----\nnew\n-----END CERTIFICATE-----\n")
+		deployment := getIntegrationServiceDeployment(t)
+		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, spec, "", hash)).To(gomega.Succeed())
+
+		manager := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(manager).NotTo(gomega.BeNil())
+		mount := kubernetes.FindVolumeMount(manager.VolumeMounts, common.TrustedCAVolumeName)
+		g.Expect(mount).NotTo(gomega.BeNil())
+		g.Expect(mount.MountPath).To(gomega.Equal(common.TrustedCADefaultFileMountPath))
+		g.Expect(mount.SubPath).To(gomega.Equal(common.TrustedCADefaultFileVolumePath))
+
+		vol := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, common.TrustedCAVolumeName)
+		g.Expect(vol).NotTo(gomega.BeNil())
+		g.Expect(vol.ConfigMap).NotTo(gomega.BeNil())
+		g.Expect(vol.ConfigMap.Name).To(gomega.Equal(spec.TrustedCA.Name))
+		g.Expect(vol.ConfigMap.Optional).NotTo(gomega.BeNil())
+		g.Expect(*vol.ConfigMap.Optional).To(gomega.BeFalse())
+		g.Expect(vol.ConfigMap.Items).To(gomega.ConsistOf(corev1.KeyToPath{
+			Key:  spec.TrustedCA.Key,
+			Path: common.TrustedCADefaultFileVolumePath,
+		}))
+		g.Expect(deployment.Spec.Template.Annotations).To(gomega.HaveKeyWithValue(common.TrustedCAHashAnnotation, hash))
+	})
+
+	t.Run("preserves other volumes when trustedCA is set", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		spec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
+			TrustedCA: &konfluxv1alpha1.TrustedCAConfigMap{
+				Name: "custom-ca-bundle",
+				Key:  "tls.pem",
+			},
+		}
+
+		deployment := getIntegrationServiceDeployment(t)
+		originalVolNames := make([]string, len(deployment.Spec.Template.Spec.Volumes))
+		for i, v := range deployment.Spec.Template.Spec.Volumes {
+			originalVolNames[i] = v.Name
+		}
+		manager := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(manager).NotTo(gomega.BeNil())
+		originalMountNames := make([]string, len(manager.VolumeMounts))
+		for i, m := range manager.VolumeMounts {
+			originalMountNames[i] = m.Name
+		}
+		certBefore := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, "cert")
+		g.Expect(certBefore).NotTo(gomega.BeNil())
+		g.Expect(certBefore.Secret).NotTo(gomega.BeNil())
+		certSecretName := certBefore.Secret.SecretName
+		metricsBefore := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, "metrics-certs")
+		g.Expect(metricsBefore).NotTo(gomega.BeNil())
+		g.Expect(metricsBefore.Secret).NotTo(gomega.BeNil())
+		metricsSecretName := metricsBefore.Secret.SecretName
+
+		err := applyIntegrationServiceDeploymentCustomizations(deployment, spec, "", "")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		gotVolNames := make([]string, len(deployment.Spec.Template.Spec.Volumes))
+		for i, v := range deployment.Spec.Template.Spec.Volumes {
+			gotVolNames[i] = v.Name
+		}
+		g.Expect(gotVolNames).To(gomega.ConsistOf(originalVolNames))
+
+		manager = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(manager).NotTo(gomega.BeNil())
+		gotMountNames := make([]string, len(manager.VolumeMounts))
+		for i, m := range manager.VolumeMounts {
+			gotMountNames[i] = m.Name
+		}
+		g.Expect(gotMountNames).To(gomega.ConsistOf(originalMountNames))
+
+		certVol := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, "cert")
+		g.Expect(certVol).NotTo(gomega.BeNil())
+		g.Expect(certVol.Secret).NotTo(gomega.BeNil())
+		g.Expect(certVol.Secret.SecretName).To(gomega.Equal(certSecretName))
+
+		metricsVol := kubernetes.FindVolume(deployment.Spec.Template.Spec.Volumes, "metrics-certs")
+		g.Expect(metricsVol).NotTo(gomega.BeNil())
+		g.Expect(metricsVol.Secret).NotTo(gomega.BeNil())
+		g.Expect(metricsVol.Secret.SecretName).To(gomega.Equal(metricsSecretName))
+	})
+}
+
+func TestReconcileEnsureTrustedCAConfigMapError(t *testing.T) {
+	scheme := runtime.NewScheme()
+	g := gomega.NewWithT(t)
+	g.Expect(clientgoscheme.AddToScheme(scheme)).To(gomega.Succeed())
+	g.Expect(konfluxv1alpha1.AddToScheme(scheme)).To(gomega.Succeed())
+
+	is := &konfluxv1alpha1.KonfluxIntegrationService{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "konflux.konflux-ci.dev/v1alpha1",
+			Kind:       "KonfluxIntegrationService",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: CRName,
+			UID:  "test-uid",
+		},
+		Spec: konfluxv1alpha1.NewKonfluxIntegrationServiceSpec(
+			konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{},
+			testutil.DefaultComponentMetricsConfig(),
+		),
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(is).WithStatusSubresource(is).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Patch: func(_ context.Context, _ client.WithWatch, obj client.Object, _ client.Patch, _ ...client.PatchOption) error {
+				cm, ok := obj.(*corev1.ConfigMap)
+				if ok && cm.Name == common.TrustedCAConfigMapName {
+					return fmt.Errorf("simulated trusted-ca apply failure")
+				}
+				return nil
+			},
+		}).Build()
+
+	r := &KonfluxIntegrationServiceReconciler{
+		Client:      c,
+		Scheme:      scheme,
+		ObjectStore: testutil.GetTestObjectStore(t),
+		ClusterInfo: newOpenShiftClusterInfo(t),
+	}
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: CRName}})
+	g.Expect(err).To(gomega.HaveOccurred())
+	g.Expect(err.Error()).To(gomega.ContainSubstring("failed to apply trusted-ca ConfigMap in " + integrationServiceNamespace))
+	g.Expect(err.Error()).To(gomega.ContainSubstring("simulated trusted-ca apply failure"))
 }
