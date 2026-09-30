@@ -26,9 +26,8 @@ Parent PRs that stay open after a companion merges are expected. MintMaker
 closes them on its next run when the dependency is superseded — do not propose
 workflows to close them earlier.
 
-**Note:** Renovate lock file maintenance PRs (lock-file-only, title contains
-"lock file maintenance") are **not** companion-eligible. They are handled by
-the fast path in [pr-review](../pr-review/SKILL.md).
+**Note:** Lock-file-only PRs are not companion-eligible — see
+[pr-review](../pr-review/SKILL.md).
 
 ## Classify the PR first
 
