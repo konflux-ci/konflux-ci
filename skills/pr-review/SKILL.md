@@ -12,6 +12,32 @@ Apply these checks on every PR, including ones opened by agents (for example
 fullsend). Skip companion-eligible MintMaker/Renovate parents — see
 [companion-pr-review](../companion-pr-review/SKILL.md).
 
+## Renovate lock file maintenance PRs
+
+Lock file maintenance PRs are a recurring Renovate job type distinct from
+upstream pin bumps. They touch only lock files and require no manifest
+regeneration or companion PR.
+
+**Classification — all three must match:**
+
+1. Author is `renovate[bot]` or `red-hat-konflux[bot]`
+2. Title contains "lock file maintenance" (case-insensitive)
+3. Diff touches only `**/package-lock.json` and/or `**/yarn.lock` files —
+   no source code, no `go.mod`/`go.sum`, no manifests
+
+**Handling — minimal review, no sub-agents:**
+
+1. Verify the diff is lock-file-only (no source code changes, no unexpected
+   files). If any non-lock file is modified, **stop** — the PR does not
+   qualify; fall through to normal review.
+2. Verify CI status is not failing.
+3. Approve. Do not dispatch correctness, style, or risk sub-agents.
+4. Apply `ready-for-merge` if CI passes.
+
+**Edge case:** a PR whose title says "lock file maintenance" but whose diff
+also modifies source files does **not** qualify for the fast path. Fall
+through to normal review.
+
 ## Upstream / downstream hygiene
 
 This repo is upstream. Diffs must not name specific downstream consumers.
