@@ -1,0 +1,147 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: rpms-signature-scan
+  labels:
+    app.kubernetes.io/version: "0.2.2"
+spec:
+  description: |-
+    Scans RPMs in an image and provides information about RPM signatures.
+    When rpmsig-blob-url is set, rpm_verifier reads those rpm-signatures.json
+    blobs. When it is omitted or every value is empty, the image is extracted.
+  params:
+    - name: image-url
+      type: string
+      description: Image URL
+    - name: image-digest
+      type: string
+      description: Image digest to scan
+    - name: rpmsig-blob-url
+      type: array
+      description: |
+        Digest references of rpm-signatures.json ({repo}@sha256:<file hash>),
+        one per architecture. Empty values are ignored. When every value is
+        empty, the image is extracted. A non-empty value is fetched and is
+        not replaced by image extract when the fetch fails.
+      default: []
+    - name: workdir
+      type: string
+      default: /tmp
+      description: |
+        Directory that will be used for storing temporary
+        files produced by this task.
+    - name: ca-trust-config-map-name
+      type: string
+      description: The name of the ConfigMap to read CA bundle data from.
+      default: trusted-ca
+    - name: ca-trust-config-map-key
+      type: string
+      description: The name of the key in the ConfigMap that contains the CA bundle data.
+      default: ca-bundle.crt
+  results:
+    - name: TEST_OUTPUT
+      description: Tekton task test output.
+    - name: RPMS_DATA
+      description: Information about signed and unsigned RPMs
+    - name: IMAGES_PROCESSED
+      description: Images processed in the task.
+    - name: SCAN_LOG
+      description: Diagnostic log from the RPM scan, including which signature source was used.
+  volumes:
+    - name: workdir
+      emptyDir: {}
+    - name: trusted-ca
+      configMap:
+        name: $(params.ca-trust-config-map-name)
+        items:
+          - key: $(params.ca-trust-config-map-key)
+            path: ca-bundle.crt
+        optional: true
+  steps:
+    - name: rpms-signature-scan
+      image: quay.io/vanguard_tests/tools@sha256:35e1807e75547af33f70b0ed086fbd3892047b7025552b3122811c40b2e7b212
+      computeResources:
+        limits:
+          memory: 256Mi
+          cpu: 200m
+        requests:
+          memory: 256Mi
+          cpu: 200m
+      volumeMounts:
+        - name: workdir
+          mountPath: "$(params.workdir)"
+        - name: trusted-ca
+          mountPath: /etc/pki/tls/certs/ca-custom-bundle.crt
+          subPath: ca-bundle.crt
+          readOnly: true
+      env:
+        - name: IMAGE_URL
+          value: "$(params.image-url)"
+        - name: IMAGE_DIGEST
+          value: "$(params.image-digest)"
+        - name: WORKDIR
+          value: "$(params.workdir)"
+      # Array params cannot be expanded inside script. Tekton passes
+      # $(params.rpmsig-blob-url[*]) as the script's positional arguments.
+      args:
+        - $(params.rpmsig-blob-url[*])
+      script: |
+        #!/bin/bash
+        set -ex
+        set -o pipefail
+
+        blob_args=()
+        for url in "$@"; do
+          if [ -n "${url}" ]; then
+            blob_args+=(--rpmsig-blob-url "${url}")
+          fi
+        done
+
+        rpm_verifier \
+          --image-url "${IMAGE_URL}" \
+          --image-digest "${IMAGE_DIGEST}" \
+          --workdir "${WORKDIR}" \
+          "${blob_args[@]}" \
+          2> >(tee "${WORKDIR}/stderr" >&2)
+    - name: output-results
+      image: quay.io/konflux-ci/konflux-test:v1.5.6@sha256:365b172d2a8a145406f028d0a94a77b489fbdf9d84e5bd9529b1c3ad72f077b1
+      computeResources:
+        limits:
+          memory: 32Mi
+          cpu: 50m
+        requests:
+          memory: 32Mi
+          cpu: 50m
+      volumeMounts:
+        - name: workdir
+          mountPath: "$(params.workdir)"
+      env:
+        - name: WORKDIR
+          value: "$(params.workdir)"
+      script: |
+        #!/bin/bash
+        set -ex
+
+        source /utils.sh
+        status=$(cat "${WORKDIR}"/status)
+        rpms_data=$(cat "${WORKDIR}"/results)
+        images_processed=$(cat "${WORKDIR}"/images_processed)
+
+        if [ "$status" == "ERROR" ]; then
+          note="Task $(context.task.name) failed to scan images. Refer to Tekton task output for details"
+        else
+          note="Task $(context.task.name) completed successfully"
+        fi
+
+        TEST_OUTPUT=$(make_result_json -r "$status" -t "$note")
+
+        echo "${TEST_OUTPUT}" | tee "$(results.TEST_OUTPUT.path)"
+        echo "${rpms_data}" | tee "$(results.RPMS_DATA.path)"
+        echo "${images_processed}" | tee "$(results.IMAGES_PROCESSED.path)"
+
+        if [ -f "${WORKDIR}/stderr" ]; then
+          head -c 4000 "${WORKDIR}/stderr" | tee "$(results.SCAN_LOG.path)"
+        else
+          echo "" > "$(results.SCAN_LOG.path)"
+        fi
