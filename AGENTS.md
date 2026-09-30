@@ -49,6 +49,7 @@ Controller-runtime:
 
 - Conformance: copy `test/e2e/e2e.env.template` to `test/e2e/e2e.env`, source it, then `./test/e2e/run-e2e.sh` (`test/go-tests/tests/conformance/`; shared `Framework` in `test/go-tests/pkg/framework/`). Also `skills/local-dev-setup/SKILL.md`.
 - Operator envtest: `make test` from `operator/` (`operator/internal/controller/testutil/`).
+- Controller envtest suites: start the controller manager inside each spec (or `BeforeEach`), not in `BeforeSuite`. A suite-level manager races per-spec managers and causes non-deterministic `Consistently` failures. See release-service, build-service, and image-controller suites for the established pattern.
 - Manager-role RBAC contract (`operator/internal/rbac/`, also in `make test`): forbids unscoped `escalate`/`bind` on clusterroles and unscoped `bind` on clusterrolebindings; requires `escalate` for embedded component ClusterRoles; every named `escalate`/`bind` target must be known.
 - CRD self-healing/drift tests: `skills/ginkgo-testing/SKILL.md`.
 
