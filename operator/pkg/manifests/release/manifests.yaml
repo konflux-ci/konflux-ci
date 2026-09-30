@@ -308,6 +308,14 @@ spec:
                 items:
                   type: string
                 type: array
+              allowedServiceAccounts:
+                description: |-
+                  AllowedServiceAccounts is the list of ServiceAccount names allowed for PipelineRun execution.
+                  When non-empty, only InternalRequests specifying a ServiceAccount in this list will be allowed.
+                  When empty, any ServiceAccount is permitted.
+                items:
+                  type: string
+                type: array
               debug:
                 description: Debug sets the operator to run in debug mode. In this
                   mode, PipelineRuns and PVCs will not be removed
