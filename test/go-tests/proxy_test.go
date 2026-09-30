@@ -504,21 +504,31 @@ type echoResponseBody struct {
 
 func expectEndpointRouted(path, token string) {
 	GinkgoHelper()
-	request, err := http.NewRequest("GET", proxyURL(path), nil)
-	Expect(err).NotTo(HaveOccurred())
-	request.Header.Set("Authorization", "Bearer "+token)
+	// Poll to tolerate transient reverse-proxy 5xx (e.g. OpenShift
+	// service-serving cert not yet trusted by Caddy: x509 unknown authority → 502).
+	Eventually(func(g Gomega) {
+		request, err := http.NewRequest("GET", proxyURL(path), nil)
+		g.Expect(err).NotTo(HaveOccurred())
+		if err != nil {
+			return
+		}
+		request.Header.Set("Authorization", "Bearer "+token)
 
-	response, err := proxyHTTPClient.Do(request)
-	Expect(err).NotTo(HaveOccurred())
-	defer response.Body.Close()
+		response, err := proxyHTTPClient.Do(request)
+		g.Expect(err).NotTo(HaveOccurred())
+		if err != nil {
+			return
+		}
+		defer response.Body.Close()
 
-	body, err := io.ReadAll(response.Body)
-	Expect(err).NotTo(HaveOccurred())
+		body, err := io.ReadAll(response.Body)
+		g.Expect(err).NotTo(HaveOccurred())
 
-	Expect(response.StatusCode).To(BeNumerically("<", 500),
-		"backend at %s returned a server error (HTTP %d)", path, response.StatusCode)
-	Expect(string(body)).NotTo(HavePrefix("<!doctype html>"),
-		"expected a backend service response, got the SPA HTML fallback — proxy may not be routing to the endpoint")
+		g.Expect(response.StatusCode).To(BeNumerically("<", 500),
+			"backend at %s returned a server error (HTTP %d)", path, response.StatusCode)
+		g.Expect(string(body)).NotTo(HavePrefix("<!doctype html>"),
+			"expected a backend service response, got the SPA HTML fallback — proxy may not be routing to the endpoint")
+	}).WithTimeout(proxyAPITransientRetryTimeout).WithPolling(konfluxReadyPollInterval).Should(Succeed())
 }
 
 // echoGetG performs a GET against the echo server and returns the echoed
