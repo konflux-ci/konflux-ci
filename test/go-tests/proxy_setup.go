@@ -244,6 +244,9 @@ func expectProxyGETWithBearer(path, token string, expected int) {
 	Eventually(func(g Gomega) {
 		req, err := http.NewRequest(http.MethodGet, proxyURL(path), nil)
 		g.Expect(err).NotTo(HaveOccurred())
+		if err != nil {
+			return // prevent nil-pointer dereference on req
+		}
 		req.Header.Set("Authorization", "Bearer "+token)
 
 		resp, err := proxyHTTPClient.Do(req)
@@ -296,6 +299,9 @@ func expectProxyWebSocketDialWithBearer(wsPath, token string) {
 			g.Expect(resp.StatusCode).To(Equal(http.StatusSwitchingProtocols))
 		}
 		g.Expect(conn).NotTo(BeNil())
+		if conn == nil {
+			return // prevent nil-pointer dereference on conn
+		}
 		_ = conn.Close(websocket.StatusNormalClosure, "test complete")
 	}).WithTimeout(proxyAPITransientRetryTimeout).WithPolling(konfluxReadyPollInterval).Should(Succeed())
 }

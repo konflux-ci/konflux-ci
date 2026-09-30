@@ -77,8 +77,8 @@ defer resp.Body.Close()
 ```
 
 This pattern applies to any error-paired return value, not just HTTP responses.
-Common cases include `os.Open`, `json.Marshal`, `io.ReadAll`, and Kubernetes
-client calls that return `(result, error)`.
+Common cases include `os.Open`, `tls.Dial`, `sql.Open`, and Kubernetes
+client calls that return `(*T, error)`.
 
 ## Kubernetes API error assertions
 
