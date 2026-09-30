@@ -52,14 +52,15 @@ Eventually(func(g Gomega) {
 ### Nil-dereference guards after soft assertions
 
 Because `g.Expect()` records a soft failure **without halting execution**, code
-after a failed `g.Expect(err).NotTo(HaveOccurred())` continues to run with the
-error-case values. If `err != nil`, any variable paired with the error (e.g., an
-`*http.Response`) is typically nil, and dereferencing it causes a nil-pointer
-panic — not a soft retry.
+after a failed soft assertion continues to run with the failure-case values.
+If `err != nil`, any variable paired with the error (e.g., an `*http.Response`)
+is typically nil; likewise, a value that fails a `BeNil()` check is nil by
+definition. Dereferencing either causes a nil-pointer panic — not a soft retry.
 
-**Rule:** After `g.Expect(err).NotTo(HaveOccurred())` inside an `Eventually` or
-`Consistently` callback, add an explicit guard return before any code that
-dereferences an error-paired variable:
+**Rule:** After any soft assertion that guards against a nil or error value
+(`g.Expect(err).NotTo(HaveOccurred())` or `g.Expect(val).NotTo(BeNil())`)
+inside an `Eventually` or `Consistently` callback, add an explicit guard return
+before code that dereferences that variable:
 
 ```go
 // ✗ Wrong — if err != nil, resp is nil and defer panics
@@ -76,9 +77,10 @@ if err != nil {
 defer resp.Body.Close()
 ```
 
-This pattern applies to any error-paired return value, not just HTTP responses.
-Common cases include `os.Open`, `tls.Dial`, `sql.Open`, and Kubernetes
-client calls that return `(*T, error)`.
+This pattern applies to any value that can be nil after a soft assertion — both
+error-paired return values (`os.Open`, `tls.Dial`, `sql.Open`, Kubernetes
+client calls that return `(*T, error)`) and standalone nil checks on pointer
+or interface values (e.g., a `websocket.Conn` guarded by `g.Expect(conn).NotTo(BeNil())`).
 
 ## Kubernetes API error assertions
 
