@@ -49,6 +49,37 @@ Eventually(func(g Gomega) {
 }).Should(Succeed())
 ```
 
+### Nil-dereference guards after soft assertions
+
+Because `g.Expect()` records a soft failure **without halting execution**, code
+after a failed `g.Expect(err).NotTo(HaveOccurred())` continues to run with the
+error-case values. If `err != nil`, any variable paired with the error (e.g., an
+`*http.Response`) is typically nil, and dereferencing it causes a nil-pointer
+panic — not a soft retry.
+
+**Rule:** After `g.Expect(err).NotTo(HaveOccurred())` inside an `Eventually` or
+`Consistently` callback, add an explicit guard return before any code that
+dereferences an error-paired variable:
+
+```go
+// ✗ Wrong — if err != nil, resp is nil and defer panics
+resp, err := client.Do(request)
+g.Expect(err).NotTo(HaveOccurred())
+defer resp.Body.Close()  // nil-pointer dereference
+
+// ✓ Correct — guard prevents dereference when err != nil
+resp, err := client.Do(request)
+g.Expect(err).NotTo(HaveOccurred())
+if err != nil {
+    return  // prevent nil-pointer dereference on resp
+}
+defer resp.Body.Close()
+```
+
+This pattern applies to any error-paired return value, not just HTTP responses.
+Common cases include `os.Open`, `json.Marshal`, `io.ReadAll`, and Kubernetes
+client calls that return `(result, error)`.
+
 ## Kubernetes API error assertions
 
 When asserting that a resource does not exist, use `apierrors.IsNotFound()` — never match error strings:

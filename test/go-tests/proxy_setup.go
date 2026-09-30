@@ -80,6 +80,9 @@ var _ = BeforeSuite(func() {
 	Eventually(func(g Gomega) {
 		resp, doErr := proxyHTTPClient.Get(proxyURL("/health"))
 		g.Expect(doErr).NotTo(HaveOccurred())
+		if doErr != nil {
+			return // prevent nil-pointer dereference on resp
+		}
 		defer resp.Body.Close()
 		g.Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	}).WithTimeout(konfluxHealthWaitTimeout).WithPolling(konfluxReadyPollInterval).Should(Succeed())
@@ -245,6 +248,9 @@ func expectProxyGETWithBearer(path, token string, expected int) {
 
 		resp, err := proxyHTTPClient.Do(req)
 		g.Expect(err).NotTo(HaveOccurred())
+		if err != nil {
+			return // prevent nil-pointer dereference on resp
+		}
 		defer resp.Body.Close()
 
 		body, err := io.ReadAll(resp.Body)
