@@ -81,6 +81,7 @@ This pattern applies to any value that can be nil after a soft assertion — bot
 error-paired return values (`os.Open`, `tls.Dial`, `sql.Open`, Kubernetes
 client calls that return `(*T, error)`) and standalone nil checks on pointer
 or interface values (e.g., a `websocket.Conn` guarded by `g.Expect(conn).NotTo(BeNil())`).
+See the guards added to `expectProxyGETWithBearer` and `expectProxyWebSocketDialWithBearer` in `test/go-tests/proxy_setup.go` for real-world examples.
 
 ## Kubernetes API error assertions
 
