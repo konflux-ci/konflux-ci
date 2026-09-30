@@ -229,9 +229,8 @@ spec:
           value: $(params.rewrite-timestamp)
         - name: OMIT_HISTORY
           value: $(params.omit-history)
-        - name: BUILD_ARGS_FILES
-          value:
-          - $(params.build-args-file)
+        - name: BUILD_ARGS_FILE
+          value: $(params.build-args-file)
       runAfter:
         - prefetch-dependencies
       taskRef:
@@ -239,7 +238,7 @@ spec:
           - name: name
             value: buildah-remote-oci-ta
           - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-buildah-remote-oci-ta:0.13.0@sha256:04dbc0e479ebc2d7c94a4e1cde84aaf3f6ab84b3e1bbae012a4554219a297618
+            value: quay.io/konflux-ci/tekton-catalog/task-buildah-remote-oci-ta:0.12.3@sha256:88b971c800b3e71903ddad83da884d092e9beda8b51deaf980f6525e45ed043f
           - name: kind
             value: task
         resolver: bundles
@@ -579,17 +578,13 @@ spec:
           value: $(tasks.build-image-index.results.IMAGE_URL)
         - name: image-digest
           value: $(tasks.build-image-index.results.IMAGE_DIGEST)
+        - name: rpmsig-blob-url
+          value:
+            - $(tasks.build-images.results.RPMSIG_BLOB_URL[*])
       runAfter:
         - build-image-index
       taskRef:
-        params:
-          - name: name
-            value: rpms-signature-scan
-          - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-rpms-signature-scan:0.2.2@sha256:860d262d199fc45b8a3a717278897f680fa96f841fbfd4a3c1fc23bc3cdaf373
-          - name: kind
-            value: task
-        resolver: bundles
+        name: rpms-signature-scan
       when:
         - input: $(params.skip-checks)
           operator: in
