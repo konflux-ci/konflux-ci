@@ -1043,6 +1043,154 @@ spec:
           status:
             description: NudgeConfigStatus defines the observed state of NudgeConfig.
             properties:
+              activeBatches:
+                description: |-
+                  ActiveBatches tracks the runtime state of all in-progress nudge batches.
+                  Batch lifecycle (including removal of terminal entries) is managed by the controller.
+                items:
+                  description: |-
+                    ActiveBatch defines the runtime state of a single nudge batch.
+                    All batch state is persisted here so it survives controller restarts.
+                  properties:
+                    accumulated:
+                      description: Accumulated is the list of build events collected
+                        into this batch.
+                      items:
+                        description: AccumulatedEntry defines a build event that has
+                          been collected into a batch.
+                        properties:
+                          buildPipelineRun:
+                            description: BuildPipelineRun is the name of the build
+                              PipelineRun that produced this entry.
+                            minLength: 1
+                            type: string
+                          capturedAt:
+                            description: CapturedAt is the timestamp when this entry
+                              was added to the batch.
+                            format: date-time
+                            type: string
+                          from:
+                            description: From is the source component name whose build
+                              was captured.
+                            maxLength: 63
+                            minLength: 1
+                            pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                            type: string
+                          imageDigest:
+                            description: ImageDigest is the OCI image digest produced
+                              by the build pipeline run.
+                            minLength: 1
+                            type: string
+                        required:
+                        - buildPipelineRun
+                        - capturedAt
+                        - from
+                        - imageDigest
+                        type: object
+                      maxItems: 360
+                      type: array
+                    batchId:
+                      description: BatchID is a unique identifier for this batch instance.
+                      maxLength: 253
+                      minLength: 1
+                      type: string
+                    createdAt:
+                      description: CreatedAt is the timestamp when this batch was
+                        first created.
+                      format: date-time
+                      type: string
+                    failed:
+                      description: Failed is the list of build events that could not
+                        be accumulated into this batch.
+                      items:
+                        description: FailedEntry defines a build event that could
+                          not be accumulated into the batch.
+                        properties:
+                          buildPipelineRun:
+                            description: BuildPipelineRun is the name of the build
+                              PipelineRun associated with the failure.
+                            minLength: 1
+                            type: string
+                          capturedAt:
+                            description: CapturedAt is the timestamp when this failure
+                              was recorded.
+                            format: date-time
+                            type: string
+                          from:
+                            description: From is the source component name whose build
+                              failed to be accumulated.
+                            maxLength: 63
+                            minLength: 1
+                            pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                            type: string
+                          reason:
+                            description: Reason is a human-readable explanation of
+                              why this entry failed.
+                            minLength: 1
+                            type: string
+                        required:
+                        - buildPipelineRun
+                        - capturedAt
+                        - from
+                        - reason
+                        type: object
+                      maxItems: 360
+                      type: array
+                    fireAt:
+                      description: |-
+                        FireAt is the scheduled time when this batch will fire and create the nudge pipeline run.
+                        Nil when the batch is in Blocked phase. Semantics aligned with ADR 72 (landing in parallel).
+                      format: date-time
+                      type: string
+                    hardDeadline:
+                      description: |-
+                        HardDeadline is the absolute deadline by which an accumulating batch must fire,
+                        regardless of debounce timer resets. If passed while blocked, the batch fires
+                        immediately once unblocked rather than being abandoned.
+                      format: date-time
+                      type: string
+                    message:
+                      description: Message provides additional human-readable context
+                        about the current batch state.
+                      type: string
+                    nudgePipelineRun:
+                      description: NudgePipelineRun is the name of the nudge PipelineRun
+                        created when this batch fired.
+                      type: string
+                    phase:
+                      description: Phase is the current lifecycle phase of this batch.
+                      enum:
+                      - Accumulating
+                      - Blocked
+                      - Firing
+                      - Failed
+                      - Completed
+                      type: string
+                    retryCount:
+                      description: |-
+                        RetryCount is the number of times this batch has been retried after failure.
+                        Persisted to survive controller restarts.
+                      format: int32
+                      type: integer
+                    target:
+                      description: Target is the component name that will receive
+                        the nudge when the batch fires.
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                  required:
+                  - batchId
+                  - createdAt
+                  - hardDeadline
+                  - phase
+                  - target
+                  type: object
+                maxItems: 360
+                type: array
+                x-kubernetes-list-map-keys:
+                - batchId
+                x-kubernetes-list-type: map
               conditions:
                 description: Conditions represent the latest available observations
                   of the NudgeConfig's state.
@@ -1872,7 +2020,7 @@ spec:
         - --leader-elector-retry-period=5s
         command:
         - /manager
-        image: quay.io/konflux-ci/integration-service:3da3b90852f3f472c4ba07bcd7d90920e8f09534
+        image: quay.io/konflux-ci/integration-service:96c1de4fd8c260d31049fe2bb12aa6b0d807797c
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1956,7 +2104,7 @@ spec:
             - --zap-log-level=debug
             - --pr-snapshots-to-keep=70
             - --non-pr-snapshots-to-keep=640
-            image: quay.io/konflux-ci/integration-service:3da3b90852f3f472c4ba07bcd7d90920e8f09534
+            image: quay.io/konflux-ci/integration-service:96c1de4fd8c260d31049fe2bb12aa6b0d807797c
             imagePullPolicy: Always
             name: test-gc
             resources:
