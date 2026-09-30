@@ -33,6 +33,7 @@ regeneration or companion PR.
 2. Verify CI status is not failing.
 3. Approve. Do not dispatch correctness, style, or risk sub-agents.
 4. Apply `ready-for-merge` if CI passes.
+5. Skip all remaining sections of this skill.
 
 **Edge case:** a PR whose title says "lock file maintenance" but whose diff
 also modifies source files does **not** qualify for the fast path. Fall
