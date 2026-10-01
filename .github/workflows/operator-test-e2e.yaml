@@ -1,4 +1,9 @@
 name: Operator E2E Tests
+# Distinct run name for /allow so pr-comment-commands can single-flight per PR
+# (same-repo pull_request/merge_group keep the default workflow name).
+# Avoid format('{0}') — the } in {0} terminates ${{ }} for the expression lexer.
+# Quote the value so YAML does not treat # in "PR #" as a comment.
+run-name: "${{ github.workflow }}${{ github.event_name == 'repository_dispatch' && ' /allow PR #' || '' }}${{ github.event_name == 'repository_dispatch' && github.event.client_payload.pr_number || '' }}"
 
 on:
   pull_request:
@@ -58,42 +63,73 @@ jobs:
       checks: write
     outputs:
       operator: ${{ steps.changed-files.outputs.any_changed }}
-      check_run_id: ${{ steps.create-check.outputs.check_run_id }}
-      check_run_id_arm64: ${{ steps.create-check.outputs.check_run_id_arm64 }}
+      check_run_id: ${{ steps.resolve-checks.outputs.check_run_id }}
+      check_run_id_arm64: ${{ steps.resolve-checks.outputs.check_run_id_arm64 }}
     steps:
       - name: Set checkout ref
         id: set-ref
         run: |
           case "${{ github.event_name }}" in
-            repository_dispatch) ref=$(jq -r '.client_payload.head_sha' $GITHUB_EVENT_PATH) ;;
-            merge_group)        ref=$(jq -r '.merge_group.head_sha' $GITHUB_EVENT_PATH) ;;
-            *)                  ref=$(jq -r '.pull_request.head.sha' $GITHUB_EVENT_PATH) ;;
+            repository_dispatch) ref=$(jq -r '.client_payload.head_sha' "${GITHUB_EVENT_PATH}") ;;
+            merge_group)        ref=$(jq -r '.merge_group.head_sha' "${GITHUB_EVENT_PATH}") ;;
+            *)                  ref=$(jq -r '.pull_request.head.sha' "${GITHUB_EVENT_PATH}") ;;
           esac
-          echo "ref=$ref" >> $GITHUB_OUTPUT
+          echo "ref=$ref" >>"${GITHUB_OUTPUT}"
           echo "Trigger: ${{ github.event_name }} → checkout ref: $ref"
-      - name: Create check run (comment-triggered)
+      # /allow must update the pull_request workflow's check runs. checks.create with
+      # GITHUB_TOKEN attaches to the oldest Actions suite on the SHA (often fullsend's
+      # pull_request_target), which does not clear the required Expected contexts.
+      - name: Resolve PR check runs (comment-triggered)
         if: github.event_name == 'repository_dispatch'
-        id: create-check
+        id: resolve-checks
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9
         with:
           script: |
             const head_sha = '${{ steps.set-ref.outputs.ref }}';
-            const { data: e2e } = await github.rest.checks.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              name: 'Run Operator E2E Tests (AMD64)',
-              head_sha,
-              status: 'in_progress'
-            });
-            const { data: arm64 } = await github.rest.checks.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              name: 'Run Operator E2E Tests (ARM64)',
-              head_sha,
-              status: 'in_progress'
-            });
-            core.setOutput('check_run_id', e2e.id);
-            core.setOutput('check_run_id_arm64', arm64.id);
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Look up only — do not mutate until both arches resolve (avoids stranded in_progress).
+            async function findCheckRun(name) {
+              const { data } = await github.rest.checks.listForRef({
+                owner,
+                repo,
+                ref: head_sha,
+                check_name: name,
+                filter: 'latest',
+                per_page: 100,
+              });
+              let runs = data.check_runs || [];
+              const actionsRuns = runs.filter((r) => r.app?.slug === 'github-actions');
+              if (actionsRuns.length > 0) runs = actionsRuns;
+              if (runs.length === 0) {
+                throw new Error(
+                  `No existing check run named "${name}" on ${head_sha}. ` +
+                  'Push or re-open the PR so Operator E2E posts the required checks, then /allow again.'
+                );
+              }
+              // Newest by started_at — not "any historical failure" (avoids obsolete retries).
+              const preferred = [...runs].sort(
+                (a, b) => Date.parse(b.started_at || 0) - Date.parse(a.started_at || 0)
+              )[0];
+              return preferred.id;
+            }
+
+            async function setInProgress(check_run_id) {
+              await github.rest.checks.update({
+                owner,
+                repo,
+                check_run_id,
+                status: 'in_progress',
+              });
+            }
+
+            const amdId = await findCheckRun('Run Operator E2E Tests (AMD64)');
+            const armId = await findCheckRun('Run Operator E2E Tests (ARM64)');
+            await setInProgress(amdId);
+            await setInProgress(armId);
+            core.setOutput('check_run_id', amdId);
+            core.setOutput('check_run_id_arm64', armId);
       - name: Checkout PR branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
@@ -111,253 +147,166 @@ jobs:
             kind-config.yaml
             generate-err-logs.sh
             .github/workflows/operator-test-e2e.yaml
+            .github/workflows/operator-e2e-run.yaml
 
-  # Lightweight jobs that create status checks when tests are skipped
-  # These use the same matrix structure and job names as the test jobs to ensure
-  # status checks are always created. Since the 'if' conditions are mutually exclusive,
-  # only one of test-skip or test will run, so there's no conflict with duplicate status check names.
-  test-skip:
-    name: ${{ matrix.job_name }}
+  # Per-arch workers (not the required status-check names). Split so report-e2e-* can
+  # mirror each arch independently. Required names are posted by report-e2e-* below.
+  test-skip-amd64:
+    name: Operator E2E skip (amd64)
     runs-on: ubuntu-slim
     needs: [check-prerequisites, check-changes]
     if: needs.check-prerequisites.outputs.run_e2e == 'true' && needs.check-changes.outputs.operator != 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-latest
-            kind_binary: kind-linux-amd64
-            kubectl_arch: amd64
-            image_suffix: ""
-            cluster_suffix: ""
-            test_scope: "integration+e2e"
-            konflux_cr: "operator/config/samples/konflux-e2e.yaml"
-            job_name: "Run Operator E2E Tests (AMD64)"
-            github_app_id: APP_ID_AMD64
-            github_private_key: APP_PRIVATE_KEY_AMD64
-            webhook_secret: APP_WEBHOOK_SECRET_AMD64
-            smee_channel: SMEE_CHANNEL_AMD64
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-            kind_binary: kind-linux-arm64
-            kubectl_arch: arm64
-            image_suffix: "-arm64"
-            cluster_suffix: "-arm"
-            test_scope: "integration+e2e"
-            konflux_cr: "operator/config/samples/konflux-e2e.yaml"
-            job_name: "Run Operator E2E Tests (ARM64)"
-            github_app_id: APP_ID_ARM64
-            github_private_key: APP_PRIVATE_KEY_ARM64
-            webhook_secret: APP_WEBHOOK_SECRET_ARM64
-            smee_channel: SMEE_CHANNEL_ARM64
     steps:
       - name: Skip test - no operator changes
         run: |
           echo "No operator-related changes detected. Skipping tests."
           echo "This check passes when there are no operator changes to test."
 
-  test:
-    name: ${{ matrix.job_name }}
-    runs-on: ${{ matrix.runner }}
+  test-skip-arm64:
+    name: Operator E2E skip (arm64)
+    runs-on: ubuntu-slim
+    needs: [check-prerequisites, check-changes]
+    if: needs.check-prerequisites.outputs.run_e2e == 'true' && needs.check-changes.outputs.operator != 'true'
+    steps:
+      - name: Skip test - no operator changes
+        run: |
+          echo "No operator-related changes detected. Skipping tests."
+          echo "This check passes when there are no operator changes to test."
+
+  test-amd64:
+    name: Operator E2E (amd64)
     needs: [check-prerequisites, check-changes]
     if: needs.check-prerequisites.outputs.run_e2e == 'true' && needs.check-changes.outputs.operator == 'true'
-    # Cancel superseded test jobs per PR/arch to reduce shared smee contention (#6551).
-    # Job-level (not workflow-level) so report-operator-e2e-status can finalize /allow
-    # Checks API runs when a superseded run's test job is cancelled.
-    # Group key (first match wins): pull_request.number, client_payload.pr_number,
-    # ref (merge queue), run_id; matrix.arch keeps AMD64/ARM64 from cancelling each other.
-    concurrency:
-      group: >-
-        operator-e2e-${{
-          github.event.pull_request.number
-          || github.event.client_payload.pr_number
-          || github.ref
-          || github.run_id
-        }}-${{ matrix.arch }}
-      cancel-in-progress: true
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-latest
-            kind_binary: kind-linux-amd64
-            kubectl_arch: amd64
-            image_suffix: ""
-            cluster_suffix: ""
-            test_scope: "integration+e2e"
-            konflux_cr: "operator/config/samples/konflux-e2e.yaml"
-            job_name: "Run Operator E2E Tests (AMD64)"
-            github_app_id: APP_ID_AMD64
-            github_private_key: APP_PRIVATE_KEY_AMD64
-            webhook_secret: APP_WEBHOOK_SECRET_AMD64
-            smee_channel: SMEE_CHANNEL_AMD64
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-            kind_binary: kind-linux-arm64
-            kubectl_arch: arm64
-            image_suffix: "-arm64"
-            cluster_suffix: "-arm"
-            test_scope: "integration+e2e"
-            konflux_cr: "operator/config/samples/konflux-e2e.yaml"
-            job_name: "Run Operator E2E Tests (ARM64)"
-            github_app_id: APP_ID_ARM64
-            github_private_key: APP_PRIVATE_KEY_ARM64
-            webhook_secret: APP_WEBHOOK_SECRET_ARM64
-            smee_channel: SMEE_CHANNEL_ARM64
-    env:
-      # renovate: datasource=github-releases depName=kubernetes-sigs/kind
-      KIND_VERSION: "0.33.0"
-      # renovate: datasource=github-releases depName=kubernetes/kubernetes
-      KUBECTL_VERSION: "1.37.1"
-      OPERATOR_IMAGE: example.com/konflux-operator:v0.0.1${{ matrix.image_suffix }}
-      KIND_CLUSTER: konflux-operator-test-e2e${{ matrix.cluster_suffix }}
-    defaults:
-      run:
-        working-directory: operator
+    uses: ./.github/workflows/operator-e2e-run.yaml
+    secrets: inherit
+    with:
+      arch: amd64
+      runner: ubuntu-latest
+      kind_binary: kind-linux-amd64
+      kubectl_arch: amd64
+      image_suffix: ""
+      cluster_suffix: ""
+      test_scope: integration+e2e
+      konflux_cr: operator/config/samples/konflux-e2e.yaml
+      github_app_id_secret: APP_ID_AMD64
+      github_private_key_secret: APP_PRIVATE_KEY_AMD64
+      webhook_secret_name: APP_WEBHOOK_SECRET_AMD64
+      smee_channel_secret: SMEE_CHANNEL_AMD64
+
+  test-arm64:
+    name: Operator E2E (arm64)
+    needs: [check-prerequisites, check-changes]
+    if: needs.check-prerequisites.outputs.run_e2e == 'true' && needs.check-changes.outputs.operator == 'true'
+    uses: ./.github/workflows/operator-e2e-run.yaml
+    secrets: inherit
+    with:
+      arch: arm64
+      runner: ubuntu-24.04-arm
+      kind_binary: kind-linux-arm64
+      kubectl_arch: arm64
+      image_suffix: "-arm64"
+      cluster_suffix: "-arm"
+      test_scope: integration+e2e
+      konflux_cr: operator/config/samples/konflux-e2e.yaml
+      github_app_id_secret: APP_ID_ARM64
+      github_private_key_secret: APP_PRIVATE_KEY_ARM64
+      webhook_secret_name: APP_WEBHOOK_SECRET_ARM64
+      smee_channel_secret: SMEE_CHANNEL_ARM64
+
+  # Required status-check names. Always run (never job-skipped) so branch protection
+  # never stays on Expected — including when check-prerequisites fails (companion labels).
+  # Forks fail until /allow updates these check runs in place.
+  # Each reporter mirrors only its arch so AMD/ARM stay independently visible.
+  report-e2e-amd64:
+    name: Run Operator E2E Tests (AMD64)
+    runs-on: ubuntu-slim
+    needs: [check-prerequisites, check-changes, test-skip-amd64, test-amd64]
+    if: always() && !cancelled()
     steps:
-      - name: Set checkout ref
-        id: set-ref
-        working-directory: ${{ github.workspace }}
-        run: |
-          case "${{ github.event_name }}" in
-            repository_dispatch) ref=$(jq -r '.client_payload.head_sha' $GITHUB_EVENT_PATH) ;;
-            merge_group)        ref=$(jq -r '.merge_group.head_sha' $GITHUB_EVENT_PATH) ;;
-            *)                  ref=$(jq -r '.pull_request.head.sha' $GITHUB_EVENT_PATH) ;;
-          esac
-          echo "ref=$ref" >> $GITHUB_OUTPUT
-          echo "Trigger: ${{ github.event_name }} → checkout ref: $ref"
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6  # v2.0.0
-        with:
-          tool-cache: false
-          docker-images: false
-
-      - name: Clone the code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-        with:
-          ref: ${{ steps.set-ref.outputs.ref }}
-
-      - name: Disable AppArmor
-        # works around a change in ubuntu 24.04 that restricts Linux namespace access
-        # for unprivileged users
-        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-
-      - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
-        with:
-          go-version-file: operator/go.mod
-          cache-dependency-path: operator/go.sum
-
-      - name: Install kind (${{ matrix.arch }})
-        run: |
-          curl -Lo ./kind https://kind.sigs.k8s.io/dl/v${KIND_VERSION}/${{ matrix.kind_binary }}
-          chmod +x ./kind
-          sudo mv ./kind /usr/local/bin/kind
-
-      - name: Install kubectl (${{ matrix.arch }})
-        run: |
-          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${{ matrix.kubectl_arch }}/kubectl"
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/kubectl
-
-      - name: Verify kind installation
-        run: kind version
-
-      - name: Deploy Konflux using deploy-local.sh
-        working-directory: ${{ github.workspace }}
+      - name: Gate / mirror AMD64 result
         env:
-          # Cluster configuration
-          KIND_CLUSTER: ${{ env.KIND_CLUSTER }}
-          OPERATOR_INSTALL_METHOD: "build"
-          OPERATOR_IMAGE: ${{ env.OPERATOR_IMAGE }}
-
-          # MutatingAdmissionPolicy: default pipeline checks on; true mutates PR builds to skip-checks (flaky on GHA).
-          # SET_SKIP_CHECKS: "true"
-
-          KONFLUX_CR: ${{ matrix.konflux_cr }}
-
-          # GitHub App secrets (secret names in matrix; one set per row to avoid shared rate limits)
-          GITHUB_PRIVATE_KEY: ${{ secrets[matrix.github_private_key] }}
-          GITHUB_APP_ID: ${{ secrets[matrix.github_app_id] }}
-          WEBHOOK_SECRET: ${{ secrets[matrix.webhook_secret] }}
-
-          # Quay secrets for image-controller (required by konflux-e2e.yaml CR)
-          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
-          QUAY_ORGANIZATION: ${{ secrets.QUAY_ORG }}
-
-          # Smee webhook forwarding for E2E tests only (one channel per matrix row)
-          SMEE_CHANNEL: ${{ matrix.test_scope == 'integration+e2e' && secrets[matrix.smee_channel] || '' }}
-
-          SKIP_PROMETHEUS_OPERATOR_CRDS: "false"
-        run: ./scripts/deploy-local.sh
-
-      - name: Show version information
-        working-directory: operator
+          PREREQ: ${{ needs.check-prerequisites.result }}
+          RUN_E2E: ${{ needs.check-prerequisites.outputs.run_e2e }}
+          OPERATOR: ${{ needs.check-changes.outputs.operator }}
+          TEST: ${{ needs.test-amd64.result }}
+          TEST_SKIP: ${{ needs.test-skip-amd64.result }}
         run: |
-          kubectl version
-          kind version
+          set -euo pipefail
+          if [[ "${PREREQ}" != "success" ]]; then
+            echo "::error::check-prerequisites did not succeed (result=${PREREQ})."
+            exit 1
+          fi
+          if [[ "${RUN_E2E}" != "true" ]]; then
+            echo "::error::Fork PR: E2E is not authorized. A maintainer must comment \`/allow <commit-sha>\`."
+            exit 1
+          fi
+          # On repository_dispatch these job checks land on main; report-operator-e2e-status
+          # updates the pull_request check runs on the PR head SHA.
+          if [[ "${OPERATOR}" == "true" ]]; then
+            if [[ "${TEST}" == "success" ]]; then
+              echo "Operator E2E (AMD64) passed."
+              exit 0
+            fi
+            echo "::error::Operator E2E (AMD64) did not succeed (result=${TEST})."
+            exit 1
+          fi
+          if [[ "${TEST_SKIP}" == "success" ]]; then
+            echo "No operator-related changes; E2E skipped."
+            exit 0
+          fi
+          echo "::error::Skip job did not succeed (result=${TEST_SKIP})."
+          exit 1
 
-      - name: List namespaces
-        run: |
-          kubectl get namespace
-
-      - name: Run go-tests pkg unit tests
-        working-directory: ${{ github.workspace }}
-        run: |
-          cd test/go-tests
-          go test ./pkg/...
-
-      - name: Set build pipeline bundle (min)
-        if: matrix.test_scope == 'integration+e2e'
-        working-directory: ${{ github.workspace }}
-        run: |
-          BUNDLE=$(yq eval-all 'select(.kind == "ConfigMap" and .metadata.name == "build-pipeline-config") | .data["config.yaml"]' operator/pkg/manifests/build-service/manifests.yaml | yq eval '.pipelines[] | select(.name == "docker-build-oci-ta-min") | .bundle' -)
-          echo "CUSTOM_DOCKER_BUILD_OCI_TA_MIN_PIPELINE_BUNDLE=$BUNDLE" >> $GITHUB_ENV
-
-      - name: Run E2E tests
-        if: matrix.test_scope == 'integration+e2e'
-        working-directory: ${{ github.workspace }}
+  report-e2e-arm64:
+    name: Run Operator E2E Tests (ARM64)
+    runs-on: ubuntu-slim
+    needs: [check-prerequisites, check-changes, test-skip-arm64, test-arm64]
+    if: always() && !cancelled()
+    steps:
+      - name: Gate / mirror ARM64 result
         env:
-          GH_ORG: ${{ secrets.GH_ORG }}
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          # Test framework reads GITHUB_TOKEN and MY_GITHUB_ORG (see pkg/clients/common/controller.go, e2e.env.template)
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-          MY_GITHUB_ORG: ${{ secrets.GH_ORG }}
-          E2E_APPLICATIONS_NAMESPACE: default-tenant
-          E2E_DEPLOY_TEST_RESOURCES: "true"
+          PREREQ: ${{ needs.check-prerequisites.result }}
+          RUN_E2E: ${{ needs.check-prerequisites.outputs.run_e2e }}
+          OPERATOR: ${{ needs.check-changes.outputs.operator }}
+          TEST: ${{ needs.test-arm64.result }}
+          TEST_SKIP: ${{ needs.test-skip-arm64.result }}
         run: |
-          ./test/e2e/run-e2e.sh \
-            -ginkgo.github-output \
-            -ginkgo.junit-report=${{ github.workspace }}/junit-conformance-${{ matrix.arch }}.xml
+          set -euo pipefail
+          if [[ "${PREREQ}" != "success" ]]; then
+            echo "::error::check-prerequisites did not succeed (result=${PREREQ})."
+            exit 1
+          fi
+          if [[ "${RUN_E2E}" != "true" ]]; then
+            echo "::error::Fork PR: E2E is not authorized. A maintainer must comment \`/allow <commit-sha>\`."
+            exit 1
+          fi
+          if [[ "${OPERATOR}" == "true" ]]; then
+            if [[ "${TEST}" == "success" ]]; then
+              echo "Operator E2E (ARM64) passed."
+              exit 0
+            fi
+            echo "::error::Operator E2E (ARM64) did not succeed (result=${TEST})."
+            exit 1
+          fi
+          if [[ "${TEST_SKIP}" == "success" ]]; then
+            echo "No operator-related changes; E2E skipped."
+            exit 0
+          fi
+          echo "::error::Skip job did not succeed (result=${TEST_SKIP})."
+          exit 1
 
-      - name: Generate error logs
-        if: ${{ !cancelled() }}
-        working-directory: ${{ github.workspace }}
-        run: |
-          echo "Konflux CR:"
-          kubectl get konflux konflux -o yaml || :
-          ./generate-err-logs.sh
-
-      - name: Collect JUnit report
-        if: ${{ !cancelled() }}
-        working-directory: ${{ github.workspace }}
-        run: |
-          mkdir -p logs/junit
-          cp junit-conformance-${{ matrix.arch }}.xml logs/junit/ 2>/dev/null || true
-
-      - name: Archive logs
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
-        with:
-          name: logs-${{ matrix.arch }}
-          path: logs
-
-  # Report check result to PR when triggered by /allow (so the run appears on the PR and can gate it)
+  # Finalize the pull_request check runs when triggered by /allow (same check_run ids, same suite).
+  #
+  # Known residual race (accepted): workers use cancel-in-progress per PR/arch, but this
+  # finalizer does not. If a second repository_dispatch for the same SHA somehow runs
+  # (Actions UI re-run, or a slip past single-flight in pr-comment-commands), the older
+  # run's finalizer can still write cancelled/failure to the shared check-run IDs after a
+  # newer run has set them in_progress or succeeded. Scope: same commit SHA + required
+  # check names. Mitigations: per-PR /allow single-flight (normal path); no ownership
+  # token on finalize yet.
   report-operator-e2e-status:
     if: always() && needs.check-changes.outputs.check_run_id != ''
-    needs: [check-changes, test-skip, test]
+    needs: [check-changes, test-skip-amd64, test-skip-arm64, test-amd64, test-arm64]
     runs-on: ubuntu-latest
     permissions:
       checks: write
@@ -366,18 +315,31 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9
         with:
           script: |
-            const checkRunId = parseInt(process.env.CHECK_RUN_ID);
-            const checkRunIdArm64 = parseInt(process.env.CHECK_RUN_ID_ARM64);
-            const testResult = process.env.TEST_RESULT;
-            const testSkipResult = process.env.TEST_SKIP_RESULT;
-            let conclusion = 'failure';
-            if (testResult === 'success' || testSkipResult === 'success') conclusion = 'success';
-            else if (testResult === 'cancelled' || testSkipResult === 'cancelled') conclusion = 'cancelled';
-            const update = { owner: context.repo.owner, repo: context.repo.repo, status: 'completed', conclusion };
-            await github.rest.checks.update({ ...update, check_run_id: checkRunId });
-            await github.rest.checks.update({ ...update, check_run_id: checkRunIdArm64 });
+            function conclusion(testResult, testSkipResult) {
+              if (testResult === 'success' || testSkipResult === 'success') return 'success';
+              if (testResult === 'cancelled' || testSkipResult === 'cancelled') return 'cancelled';
+              return 'failure';
+            }
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const amd64 = conclusion(process.env.TEST_AMD64, process.env.SKIP_AMD64);
+            const arm64 = conclusion(process.env.TEST_ARM64, process.env.SKIP_ARM64);
+            await github.rest.checks.update({
+              owner, repo,
+              check_run_id: parseInt(process.env.CHECK_RUN_ID),
+              status: 'completed',
+              conclusion: amd64,
+            });
+            await github.rest.checks.update({
+              owner, repo,
+              check_run_id: parseInt(process.env.CHECK_RUN_ID_ARM64),
+              status: 'completed',
+              conclusion: arm64,
+            });
         env:
           CHECK_RUN_ID: ${{ needs.check-changes.outputs.check_run_id }}
           CHECK_RUN_ID_ARM64: ${{ needs.check-changes.outputs.check_run_id_arm64 }}
-          TEST_RESULT: ${{ needs.test.result }}
-          TEST_SKIP_RESULT: ${{ needs.test-skip.result }}
+          TEST_AMD64: ${{ needs.test-amd64.result }}
+          TEST_ARM64: ${{ needs.test-arm64.result }}
+          SKIP_AMD64: ${{ needs.test-skip-amd64.result }}
+          SKIP_ARM64: ${{ needs.test-skip-arm64.result }}
