@@ -76,14 +76,19 @@ these paths (and whose author passes step 1) is companion-eligible:
 - **`.github/scripts/export-third-party-chart-env.sh`** — chart version
   bumps that trigger companion manifest regeneration.
 - **`dependencies/registry/kustomization.yml`** — registry digest bumps
-  only.
+  only. In practice MintMaker always bumps this file together with
+  `operator/upstream-kustomizations/registry`, so it does not appear
+  alone in a PR diff.
 - **`operator/go.mod` / `operator/go.sum`** — OpenShift envtest CRDs
   derived from `github.com/openshift/api`; the companion workflow
   regenerates the corresponding test CRDs.
 - **`test/go-tests/go.mod` / `test/go-tests/go.sum`** — these files do
   not affect manifest regeneration. Renovate bumps them when a shared
   dependency (e.g. `application-api`) is updated in both Go modules, or
-  independently for test-only dependencies.
+  independently for test-only dependencies. Because these paths are not
+  in the companion workflow's trigger list, no companion PR is created
+  and no noop marker is posted; these PRs are resolved by Renovate
+  auto-merge or MintMaker closure.
 
 ### Examples
 
