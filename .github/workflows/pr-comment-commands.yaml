@@ -1,11 +1,16 @@
 # For fork PRs only: org members trigger E2E runs by commenting /allow <commit-sha> on the PR.
-# (Same-repo PRs from collaborators run CI automatically via pull_request_target.)
+# (Same-repo PRs from collaborators run CI automatically via pull_request.)
 #
 # Flow: Maintainer comments "/allow <commit-sha>" → we verify the provided SHA matches
 # the current PR HEAD (prevents approving stale code), verify the SHA was seen by GitHub
 # before the comment (TOCTOU using check suite created_at; server-side, not spoofable),
+# ensure no other /allow E2E is already queued/in progress for this PR (single-flight),
 # then dispatch "e2e".  Requiring the SHA forces the maintainer to identify the exact
 # revision they reviewed before granting secret access to fork code.
+#
+# Concurrency:
+# - Same PR: one /allow at a time (job concurrency + in-flight checks below).
+# - Other PRs: independent — same as same-repo Operator E2E (per-PR worker groups).
 
 name: PR Comment Commands
 
@@ -17,10 +22,16 @@ jobs:
   handle-command:
     name: Handle /allow
     runs-on: ubuntu-latest
+    # Serialize /allow handlers for this PR so two comments cannot both pass the
+    # in-flight check and double-dispatch before either run is visible.
+    concurrency:
+      group: pr-allow-${{ github.event.issue.number }}
+      cancel-in-progress: false
     permissions:
       contents: write   # required for repos.createDispatchEvent
       pull-requests: read
-      checks: read      # list check suites for ref (when GitHub first saw this SHA)
+      checks: read      # list check suites / in-progress required checks
+      actions: read     # list in-flight repository_dispatch E2E runs
       issues: write     # for reactions and posting error comments
     if: |
       github.event.issue.pull_request &&
@@ -43,6 +54,7 @@ jobs:
               pull_number: context.issue.number
             });
             const headSha = pr.data.head.sha;
+            const prNumber = pr.data.number;
 
             // 3. Validate: must be present, hex-only, 7–40 chars (rejects branch names/tags).
             if (!providedSha) {
@@ -139,7 +151,54 @@ jobs:
               return;
             }
 
-            core.setOutput('number', pr.data.number);
+            // 6. Single-flight per PR: refuse if an /allow E2E is already non-terminal.
+            //    Same-repo PRs are unaffected (they never use repository_dispatch /allow).
+            //    Other fork PRs are independent (separate concurrency groups / run names).
+            // Match whole PR number (PR #12 must not match run name "… PR #123").
+            // Do not treat pull_request reporter checks (same required names, briefly
+            // in_progress on fork open) as an in-flight /allow — only dispatch runs.
+            // Include waiting/requested/pending (not only queued/in_progress).
+            const prRunRe = new RegExp(`(?:^|[^0-9])PR #${prNumber}(?:[^0-9]|$)`);
+            const nonTerminal = ['queued', 'in_progress', 'waiting', 'requested', 'pending'];
+            const inFlight = [];
+            for (const status of nonTerminal) {
+              const { data } = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'operator-test-e2e.yaml',
+                event: 'repository_dispatch',
+                status,
+                per_page: 30,
+              });
+              for (const run of data.workflow_runs || []) {
+                const label = `${run.name || ''} ${run.display_title || ''}`;
+                if (prRunRe.test(label)) {
+                  inFlight.push({ id: run.id, status: run.status, url: run.html_url });
+                }
+              }
+            }
+            if (inFlight.length > 0) {
+              const links = [...new Map(inFlight.map((x) => [x.url, x])).values()]
+                .map((x) => `- workflow (${x.status}): ${x.url}`)
+                .join("\n");
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: [
+                  "⚠️ **/allow already in progress** for this PR.",
+                  "",
+                  "Only one Operator E2E `/allow` run is allowed at a time per PR (avoids racing required check updates).",
+                  "Wait for the current run to finish, then `/allow` again if needed.",
+                  "",
+                  links,
+                ].join("\n")
+              });
+              core.setFailed("Aborting: /allow already in flight for this PR.");
+              return;
+            }
+
+            core.setOutput('number', prNumber);
             core.setOutput('head_sha', headSha);
 
       - name: Trigger E2E workflows

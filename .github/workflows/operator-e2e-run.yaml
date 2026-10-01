@@ -1,0 +1,209 @@
+# Reusable worker for Operator E2E (one arch). Called by operator-test-e2e.yaml.
+# Job names here are not branch-protection required checks.
+
+name: Operator E2E run
+
+on:
+  workflow_call:
+    inputs:
+      arch:
+        description: Architecture label (amd64|arm64)
+        required: true
+        type: string
+      runner:
+        required: true
+        type: string
+      kind_binary:
+        required: true
+        type: string
+      kubectl_arch:
+        required: true
+        type: string
+      image_suffix:
+        required: false
+        type: string
+        default: ""
+      cluster_suffix:
+        required: false
+        type: string
+        default: ""
+      test_scope:
+        required: false
+        type: string
+        default: "integration+e2e"
+      konflux_cr:
+        required: false
+        type: string
+        default: "operator/config/samples/konflux-e2e.yaml"
+      github_app_id_secret:
+        description: Name of the secret holding the GitHub App ID
+        required: true
+        type: string
+      github_private_key_secret:
+        required: true
+        type: string
+      webhook_secret_name:
+        required: true
+        type: string
+      smee_channel_secret:
+        required: true
+        type: string
+
+jobs:
+  run:
+    runs-on: ${{ inputs.runner }}
+    # Cancel superseded test jobs per PR/arch to reduce shared smee contention (#6551).
+    # Job-level so report-operator-e2e-status can finalize /allow Checks API updates
+    # when a superseded run's test job is cancelled.
+    concurrency:
+      group: >-
+        operator-e2e-${{
+          github.event.pull_request.number
+          || github.event.client_payload.pr_number
+          || github.ref
+          || github.run_id
+        }}-${{ inputs.arch }}
+      cancel-in-progress: true
+    env:
+      # renovate: datasource=github-releases depName=kubernetes-sigs/kind
+      KIND_VERSION: "0.33.0"
+      # renovate: datasource=github-releases depName=kubernetes/kubernetes
+      KUBECTL_VERSION: "1.37.1"
+      OPERATOR_IMAGE: example.com/konflux-operator:v0.0.1${{ inputs.image_suffix }}
+      KIND_CLUSTER: konflux-operator-test-e2e${{ inputs.cluster_suffix }}
+    defaults:
+      run:
+        working-directory: operator
+    steps:
+      - name: Set checkout ref
+        id: set-ref
+        working-directory: ${{ github.workspace }}
+        run: |
+          case "${{ github.event_name }}" in
+            repository_dispatch) ref=$(jq -r '.client_payload.head_sha' "${GITHUB_EVENT_PATH}") ;;
+            merge_group)        ref=$(jq -r '.merge_group.head_sha' "${GITHUB_EVENT_PATH}") ;;
+            *)                  ref=$(jq -r '.pull_request.head.sha' "${GITHUB_EVENT_PATH}") ;;
+          esac
+          echo "ref=$ref" >>"${GITHUB_OUTPUT}"
+          echo "Trigger: ${{ github.event_name }} → checkout ref: $ref"
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6  # v2.0.0
+        with:
+          tool-cache: false
+          docker-images: false
+
+      - name: Clone the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ steps.set-ref.outputs.ref }}
+
+      - name: Disable AppArmor
+        # works around a change in ubuntu 24.04 that restricts Linux namespace access
+        # for unprivileged users
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+        with:
+          go-version-file: operator/go.mod
+          cache-dependency-path: operator/go.sum
+
+      - name: Install kind (${{ inputs.arch }})
+        run: |
+          curl -Lo ./kind "https://kind.sigs.k8s.io/dl/v${KIND_VERSION}/${{ inputs.kind_binary }}"
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+
+      - name: Install kubectl (${{ inputs.arch }})
+        run: |
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${{ inputs.kubectl_arch }}/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/kubectl
+
+      - name: Verify kind installation
+        run: kind version
+
+      - name: Deploy Konflux using deploy-local.sh
+        working-directory: ${{ github.workspace }}
+        env:
+          KIND_CLUSTER: ${{ env.KIND_CLUSTER }}
+          OPERATOR_INSTALL_METHOD: "build"
+          OPERATOR_IMAGE: ${{ env.OPERATOR_IMAGE }}
+
+          # MutatingAdmissionPolicy: default pipeline checks on; true mutates PR builds to skip-checks (flaky on GHA).
+          # SET_SKIP_CHECKS: "true"
+
+          KONFLUX_CR: ${{ inputs.konflux_cr }}
+
+          GITHUB_PRIVATE_KEY: ${{ secrets[inputs.github_private_key_secret] }}
+          GITHUB_APP_ID: ${{ secrets[inputs.github_app_id_secret] }}
+          WEBHOOK_SECRET: ${{ secrets[inputs.webhook_secret_name] }}
+
+          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+          QUAY_ORGANIZATION: ${{ secrets.QUAY_ORG }}
+
+          SMEE_CHANNEL: ${{ inputs.test_scope == 'integration+e2e' && secrets[inputs.smee_channel_secret] || '' }}
+
+          SKIP_PROMETHEUS_OPERATOR_CRDS: "false"
+        run: ./scripts/deploy-local.sh
+
+      - name: Show version information
+        working-directory: operator
+        run: |
+          kubectl version
+          kind version
+
+      - name: List namespaces
+        run: |
+          kubectl get namespace
+
+      - name: Run go-tests pkg unit tests
+        working-directory: ${{ github.workspace }}
+        run: |
+          cd test/go-tests
+          go test ./pkg/...
+
+      - name: Set build pipeline bundle (min)
+        if: inputs.test_scope == 'integration+e2e'
+        working-directory: ${{ github.workspace }}
+        run: |
+          BUNDLE=$(yq eval-all 'select(.kind == "ConfigMap" and .metadata.name == "build-pipeline-config") | .data["config.yaml"]' operator/pkg/manifests/build-service/manifests.yaml | yq eval '.pipelines[] | select(.name == "docker-build-oci-ta-min") | .bundle' -)
+          echo "CUSTOM_DOCKER_BUILD_OCI_TA_MIN_PIPELINE_BUNDLE=$BUNDLE" >>"${GITHUB_ENV}"
+
+      - name: Run E2E tests
+        if: inputs.test_scope == 'integration+e2e'
+        working-directory: ${{ github.workspace }}
+        env:
+          GH_ORG: ${{ secrets.GH_ORG }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          # Test framework reads GITHUB_TOKEN and MY_GITHUB_ORG (see pkg/clients/common/controller.go, e2e.env.template)
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          MY_GITHUB_ORG: ${{ secrets.GH_ORG }}
+          E2E_APPLICATIONS_NAMESPACE: default-tenant
+          E2E_DEPLOY_TEST_RESOURCES: "true"
+        run: |
+          ./test/e2e/run-e2e.sh \
+            -ginkgo.github-output \
+            -ginkgo.junit-report=${{ github.workspace }}/junit-conformance-${{ inputs.arch }}.xml
+
+      - name: Generate error logs
+        if: ${{ !cancelled() }}
+        working-directory: ${{ github.workspace }}
+        run: |
+          echo "Konflux CR:"
+          kubectl get konflux konflux -o yaml || :
+          ./generate-err-logs.sh
+
+      - name: Collect JUnit report
+        if: ${{ !cancelled() }}
+        working-directory: ${{ github.workspace }}
+        run: |
+          mkdir -p logs/junit
+          cp junit-conformance-${{ inputs.arch }}.xml logs/junit/ 2>/dev/null || true
+
+      - name: Archive logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: logs-${{ inputs.arch }}
+          path: logs
