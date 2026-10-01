@@ -241,18 +241,11 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Ensure UI secrets are created before applying manifests so the
-	// oauth2-proxy-client-secret hash can be read and injected into the
+	// oauth2-proxy-client-secret hash can be injected into the
 	// pod template annotations on the same reconcile pass.
-	if err := r.ensureUISecrets(ctx, tc); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonSecretCreationFailed, "ensure UI secrets")
-	}
-
-	// Read the oauth2-proxy-client-secret content hash for pod annotation injection.
-	// When the hash changes (due to secret rotation), both the dex and proxy
-	// deployments get a new pod template annotation, triggering a rolling restart.
-	clientSecretHash, err := r.reconcileOAuth2ProxyClientSecretHash(ctx)
+	clientSecretHash, err := r.ensureUISecrets(ctx, tc)
 	if err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonSecretCreationFailed, "reconcile oauth2-proxy client secret hash")
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonSecretCreationFailed, "ensure UI secrets")
 	}
 
 	// Apply all embedded manifests
@@ -379,8 +372,8 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 }
 
 // applyUIDeploymentCustomizations applies user-defined customizations to UI deployments.
-// clientSecretHash is injected as a pod-template annotation on all UI deployments so that
-// a change to oauth2-proxy-client-secret (consumed via secretKeyRef) triggers a rolling restart.
+// clientSecretHash is passed to overlay builders so that a change to
+// oauth2-proxy-client-secret (consumed via secretKeyRef) triggers a rolling restart.
 func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv1alpha1.KonfluxUI, clusterInfo *clusterinfo.Info, dexConfigMapName, segmentSecretName, clientSecretHash string, endpoint *url.URL) error {
 	switch deployment.Name {
 	case proxyDeploymentName:
@@ -394,30 +387,15 @@ func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv
 		// OpenShift SCCs inject a numeric UID automatically so this is only
 		// needed on non-OpenShift (e.g. Kind).
 		needsRunAsUser := clusterInfo == nil || !clusterInfo.IsOpenShift()
-		proxyOverlay, err := buildProxyOverlay(ui.Spec.Proxy, ui.Spec.RuntimeConfig, segmentSecretName, needsRunAsUser, oauth2ProxyOpts...)
+		proxyOverlay, err := buildProxyOverlay(ui.Spec.Proxy, ui.Spec.RuntimeConfig, segmentSecretName, clientSecretHash, needsRunAsUser, oauth2ProxyOpts...)
 		if err != nil {
 			return err
 		}
-		if err := proxyOverlay.ApplyToDeployment(deployment); err != nil {
-			return err
-		}
+		return proxyOverlay.ApplyToDeployment(deployment)
 	case dexDeploymentName:
 		dexSpec := ui.Spec.GetDex()
 		deployment.Spec.Replicas = &dexSpec.Replicas
-		if err := buildDexOverlay(ui.Spec.Dex, dexConfigMapName).ApplyToDeployment(deployment); err != nil {
-			return err
-		}
-	}
-
-	// Inject the client-secret hash as a pod-template annotation so that Kubernetes
-	// performs a rolling restart when the oauth2-proxy-client-secret content changes.
-	// The hash is empty on the very first reconcile (before the secret exists); the
-	// annotation is omitted in that case and added on the next reconcile pass.
-	if clientSecretHash != "" {
-		if deployment.Spec.Template.Annotations == nil {
-			deployment.Spec.Template.Annotations = make(map[string]string)
-		}
-		deployment.Spec.Template.Annotations[oauth2ProxyClientSecretHashAnnotation] = clientSecretHash
+		return buildDexOverlay(ui.Spec.Dex, dexConfigMapName, clientSecretHash).ApplyToDeployment(deployment)
 	}
 	return nil
 }
@@ -467,9 +445,10 @@ func applyUIServiceAccountCustomizations(serviceAccount *corev1.ServiceAccount, 
 // buildProxyOverlay builds the pod overlay for the proxy deployment.
 // runtimeConfig sets RUNTIME_* env vars on the generate-proxy-config init container.
 // segmentSecretName is the content-hashed Secret name (empty if segment is not configured).
+// clientSecretHash is the content hash of oauth2-proxy-client-secret (empty if not configured).
 // needsRunAsUser injects runAsUser on the reverse-proxy container for non-OpenShift clusters.
 // oauth2ProxyOpts are applied to the oauth2-proxy container before user-provided overrides.
-func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, runtimeConfig *konfluxv1alpha1.RuntimeConfigSpec, segmentSecretName string, needsRunAsUser bool, oauth2ProxyOpts ...customization.ContainerOption) (*customization.PodOverlay, error) {
+func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, runtimeConfig *konfluxv1alpha1.RuntimeConfigSpec, segmentSecretName, clientSecretHash string, needsRunAsUser bool, oauth2ProxyOpts ...customization.ContainerOption) (*customization.PodOverlay, error) {
 	// Create CA bundle volume that will be mounted in oauth2-proxy container.
 	// The Secret is created by cert-manager from the oauth2-proxy-cert Certificate resource
 	// (see operator/upstream-kustomizations/ui/dex/dex.yaml).
@@ -502,6 +481,12 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, runtimeConfig 
 	// Build the list of pod-level options
 	podOpts := []customization.PodOverlayOption{
 		customization.WithVolumes(caVolume),
+	}
+
+	// Inject the client-secret hash as a pod-template annotation so that Kubernetes
+	// performs a rolling restart when the oauth2-proxy-client-secret content changes.
+	if clientSecretHash != "" {
+		podOpts = append(podOpts, customization.WithAnnotation(oauth2ProxyClientSecretHashAnnotation, clientSecretHash))
 	}
 
 	// Update the segment-bridge-config volume's Secret name when segment is configured.
@@ -662,10 +647,16 @@ func buildOAuth2ProxyOptions(endpoint *url.URL, openShiftLoginEnabled bool) []cu
 }
 
 // buildDexOverlay builds the pod overlay for the dex deployment.
-// openShiftLoginEnabled controls whether the OPENSHIFT_LOGIN_ENABLED env var is added.
-func buildDexOverlay(spec *konfluxv1alpha1.DexDeploymentSpec, configMapName string) *customization.PodOverlay {
+// clientSecretHash is the content hash of oauth2-proxy-client-secret (empty if not configured).
+func buildDexOverlay(spec *konfluxv1alpha1.DexDeploymentSpec, configMapName, clientSecretHash string) *customization.PodOverlay {
 	opts := []customization.PodOverlayOption{
 		customization.WithConfigMapVolumeUpdate(dexConfigMapVolumeName, configMapName),
+	}
+
+	// Inject the client-secret hash as a pod-template annotation so that Kubernetes
+	// performs a rolling restart when the oauth2-proxy-client-secret content changes.
+	if clientSecretHash != "" {
+		opts = append(opts, customization.WithAnnotation(oauth2ProxyClientSecretHashAnnotation, clientSecretHash))
 	}
 
 	// Build container options
@@ -694,9 +685,12 @@ func buildDexOverlay(spec *konfluxv1alpha1.DexDeploymentSpec, configMapName stri
 // ensureUISecrets ensures that UI secrets exist and are properly configured.
 // Only generates secret values if they don't already exist (preserves existing secrets).
 // Uses the tracking client so secrets are tracked and not orphaned during cleanup.
-func (r *KonfluxUIReconciler) ensureUISecrets(ctx context.Context, tc *tracking.Client) error {
+// It returns the content hash of the oauth2-proxy-client-secret directly from the in-memory
+// Secret populated by CreateOrUpdate, avoiding an asynchronous cached client read that would
+// miss the freshly written secret on initial reconciliation.
+func (r *KonfluxUIReconciler) ensureUISecrets(ctx context.Context, tc *tracking.Client) (string, error) {
 	// Helper for the actual reconciliation logic
-	ensureSecret := func(name, key string, length int, urlSafe bool) error {
+	ensureSecret := func(name, key string, length int, urlSafe bool) (*corev1.Secret, error) {
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
@@ -726,45 +720,27 @@ func (r *KonfluxUIReconciler) ensureUISecrets(ctx context.Context, tc *tracking.
 			}
 			return nil
 		})
-		return err
+		return secret, err
 	}
 
 	// Execute for both secrets
-	if err := ensureSecret(oauth2ProxyClientSecretName, "client-secret", 20, true); err != nil {
-		return fmt.Errorf("client-secret: %w", err)
+	clientSecret, err := ensureSecret(oauth2ProxyClientSecretName, "client-secret", 20, true)
+	if err != nil {
+		return "", fmt.Errorf("client-secret: %w", err)
 	}
-	return ensureSecret(oauth2ProxyCookieSecretName, "cookie-secret", 16, false)
+	if _, err := ensureSecret(oauth2ProxyCookieSecretName, "cookie-secret", 16, false); err != nil {
+		return "", fmt.Errorf("cookie-secret: %w", err)
+	}
+	return hashSecretData(clientSecret.Data), nil
 }
 
-// reconcileOAuth2ProxyClientSecretHash reads the oauth2-proxy-client-secret Secret and
-// returns a short content hash of its data. The hash is injected as a pod-template
-// annotation on the dex and proxy deployments so that Kubernetes automatically performs
-// a rolling restart whenever the secret is rotated.
-//
-// Returns an empty string (without error) when the Secret does not yet exist; this
-// happens on the very first reconcile before ensureUISecrets has written to the API
-// server and the informer cache has caught up. The annotation will be absent until the
-// next reconcile, which is acceptable for initial deployment.
-func (r *KonfluxUIReconciler) reconcileOAuth2ProxyClientSecretHash(ctx context.Context) (string, error) {
-	secret := &corev1.Secret{}
-	err := r.Get(ctx, client.ObjectKey{
-		Name:      oauth2ProxyClientSecretName,
-		Namespace: uiNamespace,
-	}, secret)
-	if err != nil {
-		if client.IgnoreNotFound(err) == nil {
-			// Secret not yet in the informer cache — skip hash annotation this pass.
-			return "", nil
-		}
-		return "", fmt.Errorf("failed to get %s secret: %w", oauth2ProxyClientSecretName, err)
-	}
-
-	// Convert binary secret data to strings for deterministic hashing via contenthash.Map.
-	strData := make(map[string]string, len(secret.Data))
-	for k, v := range secret.Data {
+// hashSecretData computes a short deterministic hash of secret binary data.
+func hashSecretData(data map[string][]byte) string {
+	strData := make(map[string]string, len(data))
+	for k, v := range data {
 		strData[k] = string(v)
 	}
-	return contenthash.Map(strData), nil
+	return contenthash.Map(strData)
 }
 
 // generateRandomBytes generates a random secret value with the specified encoding.

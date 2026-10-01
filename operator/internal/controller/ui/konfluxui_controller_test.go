@@ -55,6 +55,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/kubernetes"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/segment"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
 )
 
 const (
@@ -2760,7 +2761,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 			}).WithTimeout(3 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
 		})
 
-		It("should handle reconcileOAuth2ProxyClientSecretHash directly when secret exists or is missing", func(ctx context.Context) {
+		It("should return client-secret hash from ensureUISecrets", func(ctx context.Context) {
 			r := &KonfluxUIReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
@@ -2771,41 +2772,48 @@ var _ = Describe("KonfluxUI Controller", func() {
 				_ = k8sClient.Create(ctx, ns)
 			}
 
-			// Ensure secret does not exist initially for the NotFound check
+			// Clean up any lingering secrets from previous tests
 			existingSecret := &corev1.Secret{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: oauth2ProxyClientSecretName, Namespace: uiNamespace}, existingSecret); err == nil {
-				Expect(k8sClient.Delete(ctx, existingSecret)).To(Succeed())
+				testutil.DeleteAndWait(ctx, k8sClient, existingSecret)
+			}
+			existingCookieSecret := &corev1.Secret{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: oauth2ProxyCookieSecretName, Namespace: uiNamespace}, existingCookieSecret); err == nil {
+				testutil.DeleteAndWait(ctx, k8sClient, existingCookieSecret)
 			}
 
-			By("returning an empty string when the secret does not exist")
-			hash, err := r.reconcileOAuth2ProxyClientSecretHash(ctx)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(hash).To(BeEmpty())
-
-			By("returning a valid content hash when the secret exists")
-			secret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      oauth2ProxyClientSecretName,
-					Namespace: uiNamespace,
-				},
-				Data: map[string][]byte{
-					"client-secret": []byte("direct-test-secret-value"),
-				},
+			ui := &konfluxv1alpha1.KonfluxUI{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, ui); err != nil {
+				ui = &konfluxv1alpha1.KonfluxUI{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				}
+				Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+				DeferCleanup(func(ctx context.Context) {
+					testutil.DeleteAndWait(ctx, k8sClient, ui)
+				})
 			}
-			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
-			DeferCleanup(func(ctx context.Context) {
-				testutil.DeleteAndWait(ctx, k8sClient, secret)
+
+			tc := tracking.NewClientWithOwnership(k8sClient, tracking.OwnershipConfig{
+				Owner:             ui,
+				OwnerLabelKey:     constant.KonfluxOwnerLabel,
+				ComponentLabelKey: constant.KonfluxComponentLabel,
+				Component:         string(manifests.UI),
+				FieldManager:      FieldManager,
 			})
 
-			hash, err = r.reconcileOAuth2ProxyClientSecretHash(ctx)
+			By("generating secrets and returning the content hash")
+			hash, err := r.ensureUISecrets(ctx, tc)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(hash).NotTo(BeEmpty())
 
-			By("returning an error when client Get fails with an error other than NotFound")
-			canceledCtx, cancel := context.WithCancel(ctx)
-			cancel()
-			_, err = r.reconcileOAuth2ProxyClientSecretHash(canceledCtx)
-			Expect(err).To(HaveOccurred())
+			secret := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: oauth2ProxyClientSecretName, Namespace: uiNamespace}, secret)).To(Succeed())
+			Expect(hash).To(Equal(hashSecretData(secret.Data)))
+			DeferCleanup(func(ctx context.Context) {
+				testutil.DeleteAndWait(ctx, k8sClient, secret)
+				cookieSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: oauth2ProxyCookieSecretName, Namespace: uiNamespace}}
+				testutil.DeleteAndWait(ctx, k8sClient, cookieSecret)
+			})
 		})
 
 		It("should handle applyUIDeploymentCustomizations with different clientSecretHash inputs", func() {
@@ -2832,6 +2840,14 @@ var _ = Describe("KonfluxUI Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(dep.Spec.Template.Annotations["other-annotation"]).To(Equal("value"))
 			Expect(dep.Spec.Template.Annotations[oauth2ProxyClientSecretHashAnnotation]).To(Equal("test-hash-2"))
+
+			By("setting hash annotation on dex deployment as well")
+			dexDep := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: dexDeploymentName},
+			}
+			err = applyUIDeploymentCustomizations(dexDep, &konfluxv1alpha1.KonfluxUI{}, nil, "dex-cm", "", "dex-hash", endpoint)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(dexDep.Spec.Template.Annotations[oauth2ProxyClientSecretHashAnnotation]).To(Equal("dex-hash"))
 		})
 
 	})

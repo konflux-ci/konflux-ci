@@ -513,13 +513,13 @@ var _ = Describe("Test Proxy endpoints", func() {
 				return ExtractToken(proxyClient)
 			}
 
-			By("1. Baseline auth check before rotation")
+			By("Baseline auth check before rotation")
 			token, err := getToken()
 			Expect(err).NotTo(HaveOccurred(), "failed baseline token acquisition before rotation")
 			Expect(token).NotTo(BeEmpty())
 			expectProxyGETWithBearer("/api/k8s/api/v1/namespaces", token, http.StatusOK)
 
-			By("2. Rotating oauth2-proxy-client-secret in konflux-ui namespace")
+			By("Rotating oauth2-proxy-client-secret in konflux-ui namespace")
 			secret := &v1.Secret{}
 			err = proxyClient.Get(ctx, crclient.ObjectKey{Namespace: "konflux-ui", Name: "oauth2-proxy-client-secret"}, secret)
 			Expect(err).NotTo(HaveOccurred(), "failed to read oauth2-proxy-client-secret")
@@ -557,7 +557,7 @@ var _ = Describe("Test Proxy endpoints", func() {
 						s.Data = make(map[string][]byte)
 					}
 					s.Data["client-secret"] = originalSecretVal
-					_ = proxyClient.Update(cleanupCtx, s)
+					Expect(proxyClient.Update(cleanupCtx, s)).To(Succeed(), "failed to restore oauth2-proxy-client-secret")
 					waitForDeploymentsWithHash(cleanupCtx, originalHash, "rollback after secret restoration")
 				}
 			})
@@ -571,10 +571,10 @@ var _ = Describe("Test Proxy endpoints", func() {
 			err = proxyClient.Update(ctx, secret)
 			Expect(err).NotTo(HaveOccurred(), "failed to update oauth2-proxy-client-secret")
 
-			By("3. Waiting for deployment rollouts of dex and proxy to complete with rotated hash")
+			By("Waiting for deployment rollouts of dex and proxy to complete with rotated hash")
 			waitForDeploymentsWithHash(ctx, rotatedHash, "rollout after secret rotation")
 
-			By("4. Post-rotation auth check with rotated secret")
+			By("Post-rotation auth check with rotated secret")
 			newToken, err := getToken()
 			Expect(err).NotTo(HaveOccurred(), "failed token acquisition after secret rotation")
 			Expect(newToken).NotTo(BeEmpty())
