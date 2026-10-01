@@ -99,7 +99,9 @@ these paths (and whose author passes step 1) is companion-eligible:
 
 - A PR by `red-hat-konflux[bot]` changing only `test/go-tests/go.mod`
   and `test/go-tests/go.sum` → all files are on the allowlist →
-  **companion-eligible, skip review.**
+  **companion-eligible, skip review.** (No companion PR is created for
+  test-only changes; the PR is resolved by auto-merge or closure — see
+  the rationale above.)
 - A PR by `renovate[bot]` changing `operator/go.mod`,
   `operator/go.sum`, `test/go-tests/go.mod`, and
   `test/go-tests/go.sum` → all files are on the allowlist →
