@@ -1,5 +1,5 @@
 ---
-name: pr-review
+name: konflux-pr-review
 description: >-
   Use when reviewing pull requests in konflux-ci/konflux-ci. Covers
   upstream/downstream hygiene and other repo-wide review checks that are easy
@@ -25,7 +25,7 @@ This repo is upstream. Diffs must not name specific downstream consumers.
 ```bash
 # Flag only occurrences introduced by this PR (covers .github/, .tekton/, etc.).
 # Allow AGENTS.md and this skill (they document the ban by example).
-git diff origin/main...HEAD -- . ':!AGENTS.md' ':!skills/pr-review/**' \
+git diff origin/main...HEAD -- . ':!AGENTS.md' ':!skills/konflux-pr-review/**' \
   | rg -n '^\+.*infra-deployments'
 ```
 
