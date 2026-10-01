@@ -37,16 +37,18 @@ spec:
       value: ""
     - name: konflux-ready-timeout
       value: 15m
-    # OCI artifact prefix for kind-aws provision/deprovision (tag = PipelineRun name). Credentials secret must allow push/pull to this repo.
+    # OCI artifact prefix for kind-ibm provision/deprovision (tag = PipelineRun name). Credentials secret must allow push/pull to this repo.
     - name: oci-container-repo
       value: quay.io/konflux-vanguard/konflux-operator-e2e-artifacts
     # Secret in this namespace: registry creds for oci-container-repo above (not a pipeline default).
     - name: oci-container-repo-credentials-secret
       value: konflux-test-infra
-    - name: aws-credentials-secret
-      value: konflux-mapt-us-east-1
-    - name: deprovision-aws-credentials-secret
-      value: konflux-mapt-us-east-1
+    - name: ibmcloud-credentials-secret
+      value: ibmcloud-mapt-credentials
+    - name: region
+      value: us-south
+    - name: zone
+      value: us-south-2
     - name: release-ta-oci-storage
       value: ""
     # Built in parallel by conformance-tests-on-pull-request
@@ -62,6 +64,6 @@ spec:
       - name: pathInRepo
         value: .tekton/pipelines/operator-e2e/pipeline.yaml
   taskRunTemplate:
-    # kind-aws provision creates/patches Secret kfg-<PipelineRun name>; konflux-integration-runner has secrets create/patch (build-pipeline-* SAs do not).
+    # kind-ibm provision creates/patches Secret kfg-<PipelineRun name>; konflux-integration-runner has secrets create/patch (build-pipeline-* SAs do not).
     serviceAccountName: konflux-integration-runner
 status: {}
