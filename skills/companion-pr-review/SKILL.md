@@ -83,12 +83,17 @@ these paths (and whose author passes step 1) is companion-eligible:
   derived from `github.com/openshift/api`; the companion workflow
   regenerates the corresponding test CRDs.
 - **`test/go-tests/go.mod` / `test/go-tests/go.sum`** — these files do
-  not affect manifest regeneration. Renovate bumps them when a shared
-  dependency (e.g. `application-api`) is updated in both Go modules, or
-  independently for test-only dependencies. Because these paths are not
-  in the companion workflow's trigger list, no companion PR is created
-  and no noop marker is posted; these PRs are resolved by Renovate
-  auto-merge or MintMaker closure.
+  not affect manifest regeneration and are not in the companion
+  workflow's trigger list. Renovate bumps them in two scenarios:
+  1. **Shared dependency** (e.g. `application-api`) updated in both Go
+     modules — the PR also changes `operator/go.mod` and
+     `operator/go.sum`, which ARE companion workflow triggers, so a
+     companion PR is created normally. The test/go-tests files are
+     carried along.
+  2. **Test-only dependency** updated independently — the PR changes
+     only `test/go-tests` files. No companion PR is created and no noop
+     marker is posted; these PRs are resolved by Renovate auto-merge or
+     MintMaker closure.
 
 ### Examples
 
