@@ -1,6 +1,6 @@
 # `operator-e2e-pipeline`
 
-Tekton pipeline for operator E2E that provisions Kind on AWS, deploys Konflux, runs E2E tests, and deprovisions.
+Tekton pipeline for operator E2E that provisions Kind on an IBM VSI, deploys Konflux, runs E2E tests, and deprovisions.
 
 ## Scope
 
@@ -25,10 +25,11 @@ The current conformance suite is written for that model: it exercises deployed s
 - `konflux-cr-configmap-key` (default: `konflux-cr.yaml`): data key holding the Konflux CR YAML.
 - `konflux-cr-relative-path` (default: `operator/config/samples/konflux-e2e.yaml`): CR path relative to the konflux-ci repo root when the ConfigMap is absent or the key is unset.
 - `konflux-ready-timeout` (default: `30m`): readiness timeout for Konflux CR.
-- `oci-container-repo` (required): OCI registry/repo prefix for kind-aws provision/deprovision artifacts (logs/state); no tag suffix—the pipeline appends `:$(context.pipelineRun.name)` for provision/deprovision. The deploy task also pushes **post-prep** `operator/pkg/manifests` to the **same repo** with tag `$(context.pipelineRun.name).pkg-manifests` so it does not replace the provision artifact.
-- `oci-container-repo-credentials-secret` (required): name of a Secret with registry credentials for `oci-container-repo` (kind-aws `oci-credentials`). This repo’s PAC PipelineRun uses `konflux-test-infra`.
-- `aws-credentials-secret` (default: `konflux-mapt-us-east-1`): AWS credentials for provision task.
-- `deprovision-aws-credentials-secret` (default: `konflux-mapt-us-east-1`): AWS credentials for deprovision task.
+- `oci-container-repo` (required): OCI registry/repo prefix for kind-ibm provision/deprovision artifacts (logs/state); no tag suffix—the pipeline appends `:$(context.pipelineRun.name)` for provision/deprovision. The deploy task also pushes **post-prep** `operator/pkg/manifests` to the **same repo** with tag `$(context.pipelineRun.name).pkg-manifests` so it does not replace the provision artifact.
+- `oci-container-repo-credentials-secret` (required): name of a Secret with registry credentials for `oci-container-repo` (kind-ibm `oci-credentials`). This repo’s PAC PipelineRun uses `konflux-test-infra`.
+- `ibmcloud-credentials-secret` (default: `ibmcloud-mapt-credentials`): Secret containing IBM Cloud API and COS HMAC credentials.
+- `region` (default: `us-south`): IBM Cloud region for the VSI.
+- `zone` (default: `us-south-2`): IBM Cloud zone for the VSI.
 - `release-ta-oci-storage` (default: empty): optional OCI ref for conformance trusted-artifacts flow.
 - `integration-go-test-extra-args` (default: empty): optional space-separated extra flags appended to integration `go test . ./pkg/...` (e.g. `-run=TestFoo -count=1`).
 - `conformance-go-test-extra-args` (default: empty): optional space-separated extra flags appended to conformance `go test` after the fixed Ginkgo options (e.g. `-ginkgo.focus=Subsuite`), same idea as `./test/e2e/run-e2e.sh` forwarding `"$@"`.
@@ -81,7 +82,9 @@ Params are a **single string**; the Task passes them into the shell **without ex
 
 ## Expected Secret shapes
 
-The pipeline passes **Secret names** as parameters. The **keys and formats** below match what **kind-aws-provision 0.2** and **kind-aws-deprovision 0.1** expect; open those task files at the same Git commit as `catalog-revision` in `pipeline.yaml` (for example [provision 0.2](https://github.com/konflux-ci/tekton-integration-catalog/blob/489cd0a413f52fd3fac90f38694f8fe51871be4a/tasks/mapt-oci/kind-aws-spot/provision/0.2/kind-aws-provision.yaml) and [deprovision 0.1](https://github.com/konflux-ci/tekton-integration-catalog/blob/489cd0a413f52fd3fac90f38694f8fe51871be4a/tasks/mapt-oci/kind-aws-spot/deprovision/0.1/kind-aws-deprovision.yaml) at the default pin). Re-verify whenever you bump `catalog-revision`.
+The pipeline passes **Secret names** as parameters. The IBM task expects an `Opaque` Secret with the keys below; the same Secret is used for provision and deprovision.
+
+The pipeline generates a short IBM-safe cluster ID from the PipelineRun UID. The same generated ID is used for the VSI name, resource tags, and the IBM COS state path, so concurrent runs across repositories do not collide.
 
 ### `oci-container-repo-credentials-secret` (registry auth for `oci-container-repo`)
 
@@ -102,16 +105,14 @@ stringData:
   oci-storage-dockerconfigjson: '{"auths":{"quay.io":{"auth":"<base64(username:password)>"}}}'
 ```
 
-### `aws-credentials-secret` and `deprovision-aws-credentials-secret`
-
-Both reference the **same shape** of Secret unless your deprovision catalog task differs (this pipeline uses the same catalog family for both).
+### `ibmcloud-credentials-secret`
 
 - **Type:** `Opaque`
 - **Required data keys** (values are plain strings in `stringData`, or base64 in `data`):
-  - `access-key` — AWS access key ID
-  - `secret-key` — AWS secret access key
-  - `region` — AWS region name (e.g. `us-east-1`)
-  - `bucket` — S3 bucket name used by Mapt for this flow
+  - `IBMCLOUD_API_KEY` — IBM Cloud API key
+  - `IBMCLOUD_COS_ACCESS_KEY_ID` — COS HMAC access key
+  - `IBMCLOUD_COS_SECRET_ACCESS_KEY` — COS HMAC secret key
+  - `IBMCLOUD_COS_ENDPOINT` — optional COS endpoint override
 
 Example:
 
@@ -119,13 +120,13 @@ Example:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: konflux-mapt-us-east-1
+  name: ibmcloud-mapt-credentials
 type: Opaque
 stringData:
-  access-key: AKIA...
-  secret-key: ...
-  region: us-east-1
-  bucket: my-mapt-bucket
+  IBMCLOUD_API_KEY: ...
+  IBMCLOUD_COS_ACCESS_KEY_ID: ...
+  IBMCLOUD_COS_SECRET_ACCESS_KEY: ...
+  IBMCLOUD_COS_ENDPOINT: ...
 ```
 
 ## Verifying task or pipeline changes

@@ -1,4 +1,4 @@
-# Kind on AWS (tekton-integration-catalog) -> clone inside deploy/e2e Tasks -> operator E2E
+# Kind on IBM VSI (tekton-integration-catalog) -> clone inside deploy/e2e Tasks -> operator E2E
 # (overrides optional) -> deprovision.
 #
 # The deploy Task builds and runs bin/manager in-process
@@ -30,7 +30,7 @@ metadata:
   name: operator-e2e-pipeline
 spec:
   description: >-
-    Provision Kind (AWS), clone konflux-ci inside Tasks, deploy Konflux to Ready (skip in-cluster Kind),
+    Provision Kind on IBM VSI, clone konflux-ci inside Tasks, deploy Konflux to Ready (skip in-cluster Kind),
     run e2e integration + conformance in a separate Task, then deprovision.
   params:
     - name: SNAPSHOT
@@ -96,21 +96,25 @@ spec:
     - name: oci-container-repo
       type: string
       description: >-
-        OCI registry/repo prefix for kind-aws provision/deprovision artifacts (logs/state); no tag
+        OCI registry/repo prefix for kind-ibm provision/deprovision artifacts (logs/state); no tag
         suffix (PipelineRun name is appended). Must be set by the PipelineRun.
     - name: oci-container-repo-credentials-secret
       type: string
       description: >-
         Name of a Secret in the PipelineRun namespace with registry credentials for the
-        oci-container-repo prefix (kind-aws oci-credentials for artifact push/pull). Must be set by the PipelineRun.
-    - name: aws-credentials-secret
+        oci-container-repo prefix (kind-ibm oci-credentials for artifact push/pull). Must be set by the PipelineRun.
+    - name: ibmcloud-credentials-secret
       type: string
-      description: AWS credentials secret name for kind-aws-provision
-      default: konflux-mapt-us-east-1
-    - name: deprovision-aws-credentials-secret
+      description: IBM Cloud API and COS HMAC credentials Secret name.
+      default: ibmcloud-mapt-credentials
+    - name: region
       type: string
-      description: AWS secret for kind-aws-deprovision (often same as provision; override if your catalog differs)
-      default: konflux-mapt-us-east-1
+      description: IBM Cloud region in which to provision the VSI.
+      default: us-south
+    - name: zone
+      type: string
+      description: IBM Cloud zone in which to provision the VSI.
+      default: us-south-2
     - name: release-ta-oci-storage
       type: string
       description: Optional OCI ref for conformance trusted-artifacts
@@ -140,10 +144,26 @@ spec:
     - name: catalog-revision
       type: string
       description: >-
-        Pinned commit of tekton-integration-catalog for kind-aws and other catalog tasks (bump when upgrading tasks).
+        Pinned commit of tekton-integration-catalog for kind-ibm and other catalog tasks (bump when upgrading tasks).
       # renovate: datasource=git-refs depName=https://github.com/konflux-ci/tekton-integration-catalog
-      default: 5d9486140df10bc8a0b8e78b6ee6a6138de5bf53
+      default: 24ed4b2be4ff378d2d688b7bc380e47ef99a3eba
   tasks:
+    # IBM VSI instance names are limited to 40 characters. PipelineRun names are
+    # too long and PR numbers can collide across repositories, so derive a short
+    # run-unique ID from the PipelineRun UID and reuse it for provision/deprovision.
+    - name: generate-cluster-id
+      taskSpec:
+        results:
+          - name: cluster-id
+            description: Short globally unique IBM-safe cluster identifier.
+        steps:
+          - name: hash-pipeline-run-uid
+            image: registry.access.redhat.com/ubi10/go-toolset@sha256:290ba654458e9a269b1509d10e6ebbd3c2b2456570e73e73201adb3ee54fb244
+            script: |
+              #!/usr/bin/env bash
+              set -o errexit -o nounset -o pipefail
+              suffix="$(printf '%s' '$(context.pipelineRun.uid)' | sha256sum | cut -c1-16)"
+              printf 'ibm-%s' "${suffix}" > "$(results.cluster-id.path)"
     - name: test-metadata
       when:
         - input: $(params.SNAPSHOT)
@@ -162,6 +182,8 @@ spec:
         - name: SNAPSHOT
           value: $(params.SNAPSHOT)
     - name: provision-kind-cluster
+      runAfter:
+        - generate-cluster-id
       taskRef:
         resolver: git
         params:
@@ -170,16 +192,16 @@ spec:
           - name: revision
             value: $(params.catalog-revision)
           - name: pathInRepo
-            value: tasks/mapt-oci/kind-aws-spot/provision/0.2/kind-aws-provision.yaml
+            value: tasks/mapt-oci/kind-ibm-provision/0.1/kind-ibm-provision.yaml
       params:
-        - name: secret-aws-credentials
-          value: $(params.aws-credentials-secret)
+        - name: secret-ibmcloud-credentials
+          value: $(params.ibmcloud-credentials-secret)
         - name: cluster-access-secret-name
           value: kfg-$(context.pipelineRun.name)
         - name: id
-          value: $(context.pipelineRun.name)
+          value: $(tasks.generate-cluster-id.results.cluster-id)
         - name: tags
-          value: owner=konflux-ci,project=konflux-ci,created-by=operator-e2e-pipeline
+          value: owner=konflux-ci,project=konflux-ci,created-by=operator-e2e-pipeline,component=konflux-operator
         - name: debug
           value: "false"
         - name: ownerKind
@@ -193,14 +215,17 @@ spec:
         - name: oci-credentials
           value: $(params.oci-container-repo-credentials-secret)
         - name: extra-port-mappings
-          value: >-
-            '[{\"containerPort\":30012,\"hostPort\":8180,\"protocol\":\"TCP\"}]'
+          value: '[{"containerPort":30012,"hostPort":8180,"protocol":"TCP"}]'
+        - name: region
+          value: $(params.region)
+        - name: zone
+          value: $(params.zone)
+        - name: backed-url
+          value: s3://konflux-mapt-state/mapt/kind/$(tasks.generate-cluster-id.results.cluster-id)
         - name: cpus
-          value: "16"
-        - name: memory
           value: "32"
-        - name: spot
-          value: "false"
+        - name: memory
+          value: "64"
         - name: harden-control-plane
           value: "true"
     - name: deploy-konflux-pac
@@ -358,12 +383,16 @@ spec:
           - name: revision
             value: $(params.catalog-revision)
           - name: pathInRepo
-            value: tasks/mapt-oci/kind-aws-spot/deprovision/0.1/kind-aws-deprovision.yaml
+            value: tasks/mapt-oci/kind-ibm-deprovision/0.1/kind-ibm-deprovision.yaml
       params:
-        - name: secret-aws-credentials
-          value: $(params.deprovision-aws-credentials-secret)
+        - name: secret-ibmcloud-credentials
+          value: $(params.ibmcloud-credentials-secret)
         - name: id
-          value: $(context.pipelineRun.name)
+          value: $(tasks.generate-cluster-id.results.cluster-id)
+        - name: region
+          value: $(params.region)
+        - name: backed-url
+          value: s3://konflux-mapt-state/mapt/kind/$(tasks.generate-cluster-id.results.cluster-id)
         - name: cluster-access-secret
           value: kfg-$(context.pipelineRun.name)
         - name: oci-container
