@@ -138,14 +138,9 @@ var _ = Describe("Sample YAML Files", func() {
 					// This validates that the object structure is correct according to CRD validation
 					ctx := context.Background()
 					err = k8sClient.Create(ctx, clientObj, &client.CreateOptions{DryRun: []string{"All"}})
-					if err != nil {
-						// Some validation errors are expected (e.g., Konflux must be named "konflux")
-						// But we should still log them
-						GinkgoWriter.Printf("  ⚠ Dry-run failed (may be expected due to validation): %v\n", err)
-						// Don't fail the test - validation errors are okay, we just want to catch structural issues
-					} else {
-						GinkgoWriter.Printf("  ✓ Dry-run successful\n")
-					}
+					Expect(err).NotTo(HaveOccurred(), "Sample file %s should pass dry-run validation. "+
+						"If this is a singleton CR, ensure metadata.name matches the CEL validation rule.", entry.Name())
+					GinkgoWriter.Printf("  ✓ Dry-run successful\n")
 					appliedAny = true
 				}
 
