@@ -226,7 +226,8 @@ ISSUES=$(gh issue list \
   2>/dev/null || echo "[]")
 
 # Find issue with matching title (same as issues.find(issue => issue.title === title))
-EXISTING_ISSUE=$(echo "$ISSUES" | jq -r ".[] | select(.title == \"${ISSUE_TITLE}\") | .number" | head -n1)
+EXISTING_ISSUE=$(echo "$ISSUES" | jq -r --arg title "$ISSUE_TITLE" \
+  '.[] | select(.title == $title) | .number' | head -n1)
 
 if [ -n "$EXISTING_ISSUE" ]; then
   # Append to existing issue body instead of adding a comment
