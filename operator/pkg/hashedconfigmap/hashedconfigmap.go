@@ -43,8 +43,8 @@ import (
 const HashSuffixLength = 10
 
 // HashedConfigMap handles ConfigMaps with content-based hash suffixes.
-// It creates new ConfigMaps when content changes (with new hash suffixes) and
-// cleans up old ConfigMaps that are no longer in use.
+// Apply creates a new ConfigMap when the content changes; Prune removes the old ones.
+// They are separate so callers can repoint the referencing workloads in between.
 type HashedConfigMap struct {
 	client       client.Client
 	scheme       *runtime.Scheme
@@ -88,13 +88,13 @@ type Result struct {
 }
 
 // Apply creates or updates a ConfigMap with a content-based hash suffix using server-side apply.
-// It also cleans up old ConfigMaps that are no longer in use.
 //
 // The function:
 // 1. Generates a hash suffix from the content
 // 2. Creates or updates a ConfigMap with the hashed name using server-side apply
 // 3. Sets the owner reference for garbage collection
-// 4. Cleans up old ConfigMaps with the same base name but different hash suffixes
+//
+// Older revisions are left alone; call Prune once the workloads point at the new name.
 func (h *HashedConfigMap) Apply(ctx context.Context, content string, owner client.Object) (*Result, error) {
 	log := logf.FromContext(ctx)
 
@@ -133,20 +133,22 @@ func (h *HashedConfigMap) Apply(ctx context.Context, content string, owner clien
 		return nil, fmt.Errorf("failed to apply ConfigMap %s: %w", configMapName, err)
 	}
 
-	// Clean up old ConfigMaps
-	if err := h.cleanupOld(ctx, configMapName); err != nil {
-		log.Error(err, "Failed to cleanup old ConfigMaps")
-		// Don't return error - cleanup failure shouldn't block
-	}
-
 	return &Result{
 		ConfigMapName: configMapName,
 		ConfigMap:     configMap,
 	}, nil
 }
 
-// cleanupOld removes old ConfigMaps that are no longer in use.
-func (h *HashedConfigMap) cleanupOld(ctx context.Context, currentConfigMapName string) error {
+// Prune deletes the revisions this handler manages, except currentConfigMapName.
+// Only ConfigMaps in this namespace carrying the managed label and the base-name prefix
+// are considered.
+//
+// Call it after the workloads have been patched to currentConfigMapName, never before: a
+// running pod keeps its already-projected volume, but the next one to start fails with
+// CreateContainerConfigError on a ConfigMap that is gone.
+//
+// Failing here only leaves a stale ConfigMap behind, so callers can log and carry on.
+func (h *HashedConfigMap) Prune(ctx context.Context, currentConfigMapName string) error {
 	log := logf.FromContext(ctx)
 
 	// List all ConfigMaps with the managed label

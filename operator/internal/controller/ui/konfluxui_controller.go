@@ -236,6 +236,13 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return errHandler.HandleApplyError(ctx, err)
 	}
 
+	// Only now does the dex Deployment reference dexConfigMapName, so the old revisions are
+	// safe to drop. Pruning any earlier strands the Deployment on a deleted ConfigMap if a
+	// step in between fails. Non-fatal: the next reconcile retries.
+	if err := r.dexConfigMaps().Prune(ctx, dexConfigMapName); err != nil {
+		log.Error(err, "Failed to prune superseded Dex ConfigMaps", "current", dexConfigMapName)
+	}
+
 	// Reconcile Ingress if enabled (tracked automatically, deleted if not applied)
 	// On OpenShift, also creates a ConsoleLink for the application menu
 	if err := r.reconcileIngress(ctx, tc, ui, endpoint); err != nil {
@@ -714,9 +721,24 @@ func generateRandomBytes(length int, urlSafe bool) ([]byte, error) {
 	return []byte(base64.StdEncoding.EncodeToString(b)), nil
 }
 
+// dexConfigMaps returns the handler for the content-hashed Dex ConfigMap revisions.
+// Apply and Prune happen at different points in the reconcile, so both go through here.
+func (r *KonfluxUIReconciler) dexConfigMaps() *hashedconfigmap.HashedConfigMap {
+	return hashedconfigmap.New(
+		r.Client,
+		r.Scheme,
+		dexConfigMapBaseName,
+		uiNamespace,
+		dexConfigKey,
+		dexConfigMapLabel,
+		FieldManager,
+	)
+}
+
 // reconcileDexConfigMap creates or updates the Dex ConfigMap based on the DexConfig in the CR.
-// It generates a content-based hash suffix for the ConfigMap name (like kustomize),
-// cleans up old ConfigMaps, and returns the new ConfigMap name.
+// It generates a content-based hash suffix for the ConfigMap name (like kustomize) and
+// returns the new ConfigMap name. Old revisions are pruned later, once the dex Deployment
+// references that name.
 // endpoint is used for the dex issuer URL configuration.
 func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *konfluxv1alpha1.KonfluxUI, endpoint *url.URL) (string, error) {
 	// Resolve whether OpenShift login should be enabled
@@ -747,17 +769,7 @@ func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *kon
 	}
 
 	// Use hashedconfigmap to apply the ConfigMap with content-based hash suffix
-	hcm := hashedconfigmap.New(
-		r.Client,
-		r.Scheme,
-		dexConfigMapBaseName,
-		uiNamespace,
-		dexConfigKey,
-		dexConfigMapLabel,
-		FieldManager,
-	)
-
-	result, err := hcm.Apply(ctx, string(configYAML), ui)
+	result, err := r.dexConfigMaps().Apply(ctx, string(configYAML), ui)
 	if err != nil {
 		return "", err
 	}

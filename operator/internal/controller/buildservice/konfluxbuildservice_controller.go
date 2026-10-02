@@ -227,6 +227,13 @@ func (r *KonfluxBuildServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		return errHandler.HandleApplyError(ctx, err)
 	}
 
+	// Only now does the controller-manager Deployment reference webhookConfigMapName, so the
+	// old revisions are safe to drop. Pruning any earlier strands the Deployment on a deleted
+	// ConfigMap if a step in between fails. Non-fatal: the next reconcile retries.
+	if err := r.webhookConfigMaps().Prune(ctx, webhookConfigMapName); err != nil {
+		log.Error(err, "Failed to prune superseded webhook config ConfigMaps", "current", webhookConfigMapName)
+	}
+
 	scrapeResult := reconcile.Result{}
 	if buildService.Spec.ComponentMetrics.IsEnabled() && r.TokenCreator != nil {
 		// Deferred ServiceMonitor apply: mint scrape token, wait for metrics TLS, apply SM.
@@ -603,10 +610,25 @@ func (r *KonfluxBuildServiceReconciler) mapTrustedCAConfigMap(ctx context.Contex
 	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: CRName}}}
 }
 
+// webhookConfigMaps returns the handler for the content-hashed webhook config ConfigMap
+// revisions. Apply and Prune happen at different points in the reconcile, so both go here.
+func (r *KonfluxBuildServiceReconciler) webhookConfigMaps() *hashedconfigmap.HashedConfigMap {
+	return hashedconfigmap.New(
+		r.Client,
+		r.Scheme,
+		webhookConfigBaseName,
+		webhookConfigNamespace,
+		webhookConfigDataKey,
+		webhookConfigLabel,
+		FieldManager,
+	)
+}
+
 // reconcileWebhookConfig ensures the webhook config ConfigMap exists.
 // The ConfigMap is always created: with the webhookURLs mapping when configured,
 // or with an empty JSON object when not configured. This guarantees the
 // -webhook-config-path flag (baked into the manifest) always points to a valid file.
+// Old revisions are pruned later, once the Deployment references the returned name.
 func (r *KonfluxBuildServiceReconciler) reconcileWebhookConfig(ctx context.Context, owner *konfluxv1alpha1.KonfluxBuildService) (string, error) {
 	log := logf.FromContext(ctx)
 
@@ -620,17 +642,7 @@ func (r *KonfluxBuildServiceReconciler) reconcileWebhookConfig(ctx context.Conte
 		return "", fmt.Errorf("failed to marshal webhookURLs to JSON: %w", err)
 	}
 
-	hcm := hashedconfigmap.New(
-		r.Client,
-		r.Scheme,
-		webhookConfigBaseName,
-		webhookConfigNamespace,
-		webhookConfigDataKey,
-		webhookConfigLabel,
-		FieldManager,
-	)
-
-	result, err := hcm.Apply(ctx, string(jsonData), owner)
+	result, err := r.webhookConfigMaps().Apply(ctx, string(jsonData), owner)
 	if err != nil {
 		return "", err
 	}

@@ -31,6 +31,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -41,6 +42,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/segmentbridge"
 	"github.com/konflux-ci/konflux-ci/operator/internal/controller/testutil"
@@ -1517,6 +1519,134 @@ var _ = Describe("KonfluxUI Controller", func() {
 					client.MatchingLabels{dexConfigMapLabel: "true"},
 				)).To(Succeed())
 				g.Expect(cmList.Items).NotTo(BeEmpty())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
+	Context("Dex ConfigMap rotation", func() {
+		// mountedDexConfigMap returns the ConfigMap the dex Deployment currently mounts.
+		mountedDexConfigMap := func(ctx context.Context, g Gomega) string {
+			dep := &appsv1.Deployment{}
+			g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: dexDeploymentName, Namespace: uiNamespace,
+			}, dep)).To(Succeed())
+			vol := kubernetes.FindVolume(dep.Spec.Template.Spec.Volumes, dexConfigMapVolumeName)
+			g.Expect(vol).NotTo(BeNil())
+			g.Expect(vol.ConfigMap).NotTo(BeNil())
+			return vol.ConfigMap.Name
+		}
+
+		// setPasswordConnector changes the Dex config so its content hash rotates. It retries
+		// because the reconciler writes status concurrently.
+		setPasswordConnector := func(ctx context.Context, ui *konfluxv1alpha1.KonfluxUI) {
+			EventuallyWithOffset(1, func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, ui)).To(Succeed())
+				ui.Spec.Dex = &konfluxv1alpha1.DexDeploymentSpec{
+					Config: &dex.DexParams{PasswordConnector: "local"},
+				}
+				g.Expect(k8sClient.Update(ctx, ui)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		}
+
+		// The dex volume is not optional, so the ConfigMap it names must always exist -
+		// otherwise the next dex pod to start fails with CreateContainerConfigError.
+		// A reconcile that changes the Dex config and then fails before the Deployment is
+		// patched used to break this by pruning the old revision too early.
+		It("keeps the mounted ConfigMap alive when a later reconcile step fails", func(ctx context.Context) {
+			startManager(nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			By("waiting for the dex Deployment to mount an existing ConfigMap")
+			var initialCM string
+			Eventually(func(g Gomega) {
+				initialCM = mountedDexConfigMap(ctx, g)
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: initialCM, Namespace: uiNamespace,
+				}, &corev1.ConfigMap{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("making every later reconcile fail on an unresolvable segmentKeySecretRef")
+			bridge := &konfluxv1alpha1.KonfluxSegmentBridge{
+				ObjectMeta: metav1.ObjectMeta{Name: segmentbridge.CRName},
+			}
+			Expect(k8sClient.Create(ctx, bridge)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, bridge)
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: segmentbridge.CRName}, bridge)).To(Succeed())
+			bridge.Spec.SegmentKeySecretRef = &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "missing-segment-secret"},
+				Key:                  "write-key",
+			}
+			Expect(k8sClient.Update(ctx, bridge)).To(Succeed())
+
+			// Wait for the failure to show up in status before rotating the Dex config. The
+			// reconciler reads the Bridge from its own cache, so without this it could still
+			// see the pre-update spec, resolve no write key without erroring, and go on to
+			// patch the Deployment.
+			By("waiting for the reconciler to observe the unresolvable ref")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.KonfluxUI{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
+				readyCond := meta.FindStatusCondition(updated.Status.Conditions, condition.TypeReady)
+				g.Expect(readyCond).NotTo(BeNil())
+				g.Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+				g.Expect(readyCond.Reason).To(Equal(condition.ReasonSecretCreationFailed))
+				g.Expect(readyCond.Message).To(ContainSubstring("missing-segment-secret"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("changing the Dex config so the ConfigMap hash rotates")
+			setPasswordConnector(ctx, ui)
+
+			By("waiting for the rotated revision to be applied")
+			Eventually(func(g Gomega) {
+				cmList := &corev1.ConfigMapList{}
+				g.Expect(k8sClient.List(ctx, cmList,
+					client.InNamespace(uiNamespace),
+					client.MatchingLabels{dexConfigMapLabel: "true"},
+				)).To(Succeed())
+				var rotated string
+				for _, cm := range cmList.Items {
+					if cm.Name != initialCM {
+						rotated = cm.Name
+					}
+				}
+				g.Expect(rotated).NotTo(BeEmpty(), "expected a rotated Dex ConfigMap revision")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the Deployment still mounts a ConfigMap that exists")
+			Consistently(func(g Gomega) {
+				mounted := mountedDexConfigMap(ctx, g)
+				g.Expect(mounted).To(Equal(initialCM), "the reconcile failed before the Deployment patch")
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: mounted, Namespace: uiNamespace,
+				}, &corev1.ConfigMap{})).To(Succeed(), "the mounted ConfigMap was pruned out from under the Deployment")
+			}).WithTimeout(3 * time.Second).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("prunes the superseded revision once the Deployment is patched", func(ctx context.Context) {
+			startManager(nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			By("waiting for the dex Deployment to mount an existing ConfigMap")
+			var initialCM string
+			Eventually(func(g Gomega) {
+				initialCM = mountedDexConfigMap(ctx, g)
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("changing the Dex config so the ConfigMap hash rotates")
+			setPasswordConnector(ctx, ui)
+
+			By("verifying the Deployment moves to the new revision and the old one is removed")
+			Eventually(func(g Gomega) {
+				g.Expect(mountedDexConfigMap(ctx, g)).NotTo(Equal(initialCM))
+				g.Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
+					Name: initialCM, Namespace: uiNamespace,
+				}, &corev1.ConfigMap{}))).To(BeTrue())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})
