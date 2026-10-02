@@ -317,6 +317,43 @@ func TestNewDexConfig_CustomConnectors(t *testing.T) {
 		g.Expect(config.Connectors[1].Type).To(gomega.Equal("openshift"))
 	})
 
+	t.Run("preserves OIDC connector options", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
+		params := &DexParams{
+			Connectors: []Connector{
+				{
+					Type: "oidc",
+					ID:   "rh-sso",
+					Name: "Red Hat SSO",
+					Config: &ConnectorConfig{ //nolint:gosec // test fixture, not a real credential
+						ClientID:             "konflux",
+						ClientSecret:         "$OIDC_CLIENT_SECRET",
+						Issuer:               "https://sso.example.com/auth/realms/example",
+						Scopes:               []string{"profile", "email", "groups"},
+						InsecureEnableGroups: true,
+						ClaimModifications: &OIDCClaimModifications{
+							ModifyGroupNames: &OIDCModifyGroupNames{Prefix: "konflux-"},
+						},
+					},
+				},
+			},
+		}
+
+		config := NewDexConfig(endpoint, params)
+
+		g.Expect(config.Connectors).To(gomega.HaveLen(1))
+		g.Expect(config.Connectors[0].Config.InsecureEnableGroups).To(gomega.BeTrue())
+		g.Expect(config.Connectors[0].Config.Scopes).To(gomega.Equal([]string{"profile", "email", "groups"}))
+		g.Expect(config.Connectors[0].Config.ClaimModifications.ModifyGroupNames.Prefix).To(gomega.Equal("konflux-"))
+
+		yamlData, err := config.ToYAML()
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(string(yamlData)).To(gomega.ContainSubstring("insecureEnableGroups: true"))
+		g.Expect(string(yamlData)).To(gomega.ContainSubstring("prefix: konflux-"))
+	})
+
 	t.Run("supports multiple custom connectors", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 

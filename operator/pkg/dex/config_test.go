@@ -353,4 +353,144 @@ func TestConnector_Serialization(t *testing.T) {
 		g.Expect(string(yamlData)).To(gomega.ContainSubstring("name: my-org"))
 		g.Expect(string(yamlData)).To(gomega.ContainSubstring("teams:"))
 	})
+
+	t.Run("serializes the Dex OIDC connector options", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		basicAuthUnsupported := false
+		original := &Config{
+			Connectors: []Connector{
+				{
+					Type: "oidc",
+					ID:   "rh-sso",
+					Name: "Red Hat SSO",
+					Config: &ConnectorConfig{
+						Issuer:                    "https://sso.example.com/auth/realms/example",
+						IssuerAlias:               "https://sso.example.com/auth/realms/example",
+						ClientID:                  "konflux",
+						ClientSecret:              "$OIDC_CLIENT_SECRET",
+						RedirectURI:               "https://konflux.example.com/idp/callback",
+						BasicAuthUnsupported:      &basicAuthUnsupported,
+						Scopes:                    []string{"openid", "profile", "email", "groups"},
+						InsecureSkipEmailVerified: true,
+						InsecureEnableGroups:      true,
+						AllowedGroups:             []string{"engineering"},
+						GetUserInfo:               true,
+						UserIDKey:                 "sub",
+						UserNameKey:               "preferred_username",
+						AcrValues:                 []string{"phr"},
+						PromptType:                "login",
+						ClaimMapping: &OIDCClaimMapping{
+							PreferredUsername: "preferred_username",
+							Email:             "mail",
+							Groups:            "groups",
+						},
+						ClaimModifications: &OIDCClaimModifications{
+							NewGroupFromClaims: []OIDCNewGroupFromClaims{{
+								Prefix:         "example",
+								Delimiter:      "::",
+								ClearDelimiter: true,
+								Claims:         []string{"organization", "email"},
+							}},
+							FilterGroupClaims: &OIDCFilterGroupClaims{
+								GroupsFilter: "^konflux-.*",
+							},
+							ModifyGroupNames: &OIDCModifyGroupNames{
+								Prefix: "konflux-",
+								Suffix: "-users",
+							},
+						},
+						OverrideClaimMapping: true,
+						ProviderDiscoveryOverrides: &OIDCProviderDiscoveryOverrides{
+							TokenURL: "https://sso.example.com/token",
+							AuthURL:  "https://sso.example.com/auth",
+						},
+						RootCA:             "/etc/ssl/certs/ca.crt",
+						InsecureSkipVerify: true,
+					},
+				},
+			},
+		}
+
+		yamlData, err := original.ToYAML()
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		rendered := string(yamlData)
+		// Keys must match Dex's config file, including claim names Dex does not camel-case.
+		for _, key := range []string{
+			"issuerAlias:",
+			"basicAuthUnsupported: false",
+			"scopes:",
+			"insecureSkipEmailVerified: true",
+			"insecureEnableGroups: true",
+			"allowedGroups:",
+			"getUserInfo: true",
+			"userIDKey: sub",
+			"userNameKey: preferred_username",
+			"acrValues:",
+			"promptType: login",
+			"preferred_username: preferred_username",
+			"claimModifications:",
+			"newGroupFromClaims:",
+			"clearDelimiter: true",
+			"groupsFilter: ^konflux-.*",
+			"modifyGroupNames:",
+			"prefix: konflux-",
+			"overrideClaimMapping: true",
+			"providerDiscoveryOverrides:",
+			"tokenURL: https://sso.example.com/token",
+			"authURL: https://sso.example.com/auth",
+			"rootCA: /etc/ssl/certs/ca.crt",
+			"insecureSkipVerify: true",
+		} {
+			g.Expect(rendered).To(gomega.ContainSubstring(key), "rendered Dex config missing %q", key)
+		}
+
+		var restored Config
+		err = yaml.Unmarshal(yamlData, &restored)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(restored).To(gomega.Equal(*original))
+	})
+
+	t.Run("omits unset OIDC connector options", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		config := &Config{
+			Connectors: []Connector{
+				{
+					Type: "oidc",
+					ID:   "google",
+					Name: "Google",
+					Config: &ConnectorConfig{
+						ClientID:     "google-client",
+						ClientSecret: "$GOOGLE_SECRET",
+						Issuer:       "https://accounts.google.com",
+					},
+				},
+			},
+		}
+
+		yamlData, err := config.ToYAML()
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		rendered := string(yamlData)
+		for _, key := range []string{
+			"issuerAlias:",
+			"basicAuthUnsupported:",
+			"scopes:",
+			"insecureSkipEmailVerified:",
+			"insecureEnableGroups:",
+			"allowedGroups:",
+			"getUserInfo:",
+			"userIDKey:",
+			"userNameKey:",
+			"acrValues:",
+			"promptType:",
+			"claimMapping:",
+			"claimModifications:",
+			"overrideClaimMapping:",
+			"providerDiscoveryOverrides:",
+		} {
+			g.Expect(rendered).NotTo(gomega.ContainSubstring(key), "unset OIDC option %q was rendered", key)
+		}
+	})
 }
