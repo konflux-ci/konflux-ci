@@ -232,7 +232,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 					Name:      buildControllerManagerDeploymentName,
 					Namespace: buildServiceNamespace,
 				}, dep)).To(Succeed())
-				vol := kubernetes.FindVolume(dep.Spec.Template.Spec.Volumes, trustedCAVolumeName)
+				vol := kubernetes.FindVolume(dep.Spec.Template.Spec.Volumes, common.TrustedCAVolumeName)
 				g.Expect(vol).NotTo(BeNil())
 				g.Expect(vol.ConfigMap).NotTo(BeNil())
 				g.Expect(vol.ConfigMap.Name).To(Equal(name))
@@ -254,7 +254,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 					Name:      buildControllerManagerDeploymentName,
 					Namespace: buildServiceNamespace,
 				}, dep)).To(Succeed())
-				vol := kubernetes.FindVolume(dep.Spec.Template.Spec.Volumes, trustedCAVolumeName)
+				vol := kubernetes.FindVolume(dep.Spec.Template.Spec.Volumes, common.TrustedCAVolumeName)
 				g.Expect(vol).NotTo(BeNil())
 				g.Expect(vol.ConfigMap).NotTo(BeNil())
 				g.Expect(vol.ConfigMap.Name).To(Equal(configMapName))
@@ -262,13 +262,13 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				g.Expect(*vol.ConfigMap.Optional).To(Equal(optional))
 				g.Expect(vol.ConfigMap.Items).To(ConsistOf(corev1.KeyToPath{
 					Key:  key,
-					Path: trustedCADefaultFileVolumePath,
+					Path: common.TrustedCADefaultFileVolumePath,
 				}))
 				if contentHash == nil {
-					g.Expect(dep.Spec.Template.Annotations).NotTo(HaveKey(trustedCAHashAnnotation))
+					g.Expect(dep.Spec.Template.Annotations).NotTo(HaveKey(common.TrustedCAHashAnnotation))
 					return
 				}
-				g.Expect(dep.Spec.Template.Annotations).To(HaveKeyWithValue(trustedCAHashAnnotation, *contentHash))
+				g.Expect(dep.Spec.Template.Annotations).To(HaveKeyWithValue(common.TrustedCAHashAnnotation, *contentHash))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		}
 
@@ -313,12 +313,12 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 
 			By("mounting trusted-ca with no checksum until ca-bundle.crt exists")
 			Eventually(trustedCAHasInjectionLabel).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			expectTrustedCAMount(common.TrustedCAConfigMapName, trustedCADefaultFileVolumePath, true, nil)
+			expectTrustedCAMount(common.TrustedCAConfigMapName, common.TrustedCADefaultFileVolumePath, true, nil)
 
 			By("stamping the checksum once the cluster bundle is written")
-			setConfigMapKey(common.TrustedCAConfigMapName, trustedCADefaultFileVolumePath, platformPEM)
+			setConfigMapKey(common.TrustedCAConfigMapName, common.TrustedCADefaultFileVolumePath, platformPEM)
 			platformHash := contenthash.String(platformPEM)
-			expectTrustedCAMount(common.TrustedCAConfigMapName, trustedCADefaultFileVolumePath, true, &platformHash)
+			expectTrustedCAMount(common.TrustedCAConfigMapName, common.TrustedCADefaultFileVolumePath, true, &platformHash)
 		})
 
 		It("Should NOT create trusted-ca ConfigMap when NOT running on OpenShift", func() {
@@ -452,9 +452,9 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 			Eventually(trustedCAHasInjectionLabel).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			By("stamping the platform checksum before the field is set")
-			setConfigMapKey(common.TrustedCAConfigMapName, trustedCADefaultFileVolumePath, platformPEM)
+			setConfigMapKey(common.TrustedCAConfigMapName, common.TrustedCADefaultFileVolumePath, platformPEM)
 			platformHash := contenthash.String(platformPEM)
-			expectTrustedCAMount(common.TrustedCAConfigMapName, trustedCADefaultFileVolumePath, true, &platformHash)
+			expectTrustedCAMount(common.TrustedCAConfigMapName, common.TrustedCADefaultFileVolumePath, true, &platformHash)
 
 			userCM := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{Name: "custom-ca-bundle", Namespace: buildServiceNamespace},
@@ -484,9 +484,9 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 			Eventually(trustedCAHasInjectionLabel).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			By("stamping the platform checksum before the name is reused")
-			setConfigMapKey(common.TrustedCAConfigMapName, trustedCADefaultFileVolumePath, platformPEM)
+			setConfigMapKey(common.TrustedCAConfigMapName, common.TrustedCADefaultFileVolumePath, platformPEM)
 			platformHash := contenthash.String(platformPEM)
-			expectTrustedCAMount(common.TrustedCAConfigMapName, trustedCADefaultFileVolumePath, true, &platformHash)
+			expectTrustedCAMount(common.TrustedCAConfigMapName, common.TrustedCADefaultFileVolumePath, true, &platformHash)
 
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, buildService)).To(Succeed())
 			buildService.Spec.TrustedCA = &konfluxv1alpha1.TrustedCAConfigMap{
@@ -589,7 +589,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 					Name:      buildControllerManagerDeploymentName,
 					Namespace: buildServiceNamespace,
 				}, dep)).To(Succeed())
-				g.Expect(dep.Spec.Template.Annotations).NotTo(HaveKey(trustedCAHashAnnotation))
+				g.Expect(dep.Spec.Template.Annotations).NotTo(HaveKey(common.TrustedCAHashAnnotation))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			setPlatformBundle := func(pem string) {
@@ -602,7 +602,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 					if got.Data == nil {
 						got.Data = map[string]string{}
 					}
-					got.Data[trustedCADefaultFileVolumePath] = pem
+					got.Data[common.TrustedCADefaultFileVolumePath] = pem
 					g.Expect(k8sClient.Update(ctx, got)).To(Succeed())
 				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 			}
@@ -614,14 +614,14 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 						Name:      buildControllerManagerDeploymentName,
 						Namespace: buildServiceNamespace,
 					}, dep)).To(Succeed())
-					vol := kubernetes.FindVolume(dep.Spec.Template.Spec.Volumes, trustedCAVolumeName)
+					vol := kubernetes.FindVolume(dep.Spec.Template.Spec.Volumes, common.TrustedCAVolumeName)
 					g.Expect(vol).NotTo(BeNil())
 					g.Expect(vol.ConfigMap).NotTo(BeNil())
 					g.Expect(vol.ConfigMap.Name).To(Equal(common.TrustedCAConfigMapName))
 					g.Expect(vol.ConfigMap.Optional).NotTo(BeNil())
 					g.Expect(*vol.ConfigMap.Optional).To(BeTrue())
 					g.Expect(dep.Spec.Template.Annotations).To(HaveKeyWithValue(
-						trustedCAHashAnnotation, contenthash.String(pem)))
+						common.TrustedCAHashAnnotation, contenthash.String(pem)))
 				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 			}
 
@@ -652,11 +652,11 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 			if manager == nil {
 				return nil
 			}
-			return kubernetes.FindVolumeMount(manager.VolumeMounts, trustedCAVolumeName)
+			return kubernetes.FindVolumeMount(manager.VolumeMounts, common.TrustedCAVolumeName)
 		}
 
 		findTrustedCAVolume := func(dep *appsv1.Deployment) *corev1.Volume {
-			return kubernetes.FindVolume(dep.Spec.Template.Spec.Volumes, trustedCAVolumeName)
+			return kubernetes.FindVolume(dep.Spec.Template.Spec.Volumes, common.TrustedCAVolumeName)
 		}
 
 		BeforeEach(func() {
@@ -676,7 +676,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				g.Expect(vol).NotTo(BeNil())
 				g.Expect(vol.ConfigMap).NotTo(BeNil())
 				g.Expect(vol.ConfigMap.Name).To(Equal(common.TrustedCAConfigMapName))
-				g.Expect(dep.Spec.Template.Annotations).NotTo(HaveKey(trustedCAHashAnnotation))
+				g.Expect(dep.Spec.Template.Annotations).NotTo(HaveKey(common.TrustedCAHashAnnotation))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
@@ -685,8 +685,8 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				dep := getDeployment(g)
 				mount := findTrustedCAMount(dep)
 				g.Expect(mount).NotTo(BeNil())
-				g.Expect(mount.MountPath).To(Equal(trustedCADefaultFileMountPath))
-				g.Expect(mount.SubPath).To(Equal(trustedCADefaultFileVolumePath))
+				g.Expect(mount.MountPath).To(Equal(common.TrustedCADefaultFileMountPath))
+				g.Expect(mount.SubPath).To(Equal(common.TrustedCADefaultFileVolumePath))
 
 				vol := findTrustedCAVolume(dep)
 				g.Expect(vol).NotTo(BeNil())
@@ -695,10 +695,10 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				g.Expect(vol.ConfigMap.Optional).NotTo(BeNil())
 				g.Expect(*vol.ConfigMap.Optional).To(BeTrue())
 				g.Expect(vol.ConfigMap.Items).To(ConsistOf(corev1.KeyToPath{
-					Key:  trustedCADefaultFileVolumePath,
-					Path: trustedCADefaultFileVolumePath,
+					Key:  common.TrustedCADefaultFileVolumePath,
+					Path: common.TrustedCADefaultFileVolumePath,
 				}))
-				g.Expect(dep.Spec.Template.Annotations).NotTo(HaveKey(trustedCAHashAnnotation))
+				g.Expect(dep.Spec.Template.Annotations).NotTo(HaveKey(common.TrustedCAHashAnnotation))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
@@ -721,8 +721,8 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				dep := getDeployment(g)
 				mount := findTrustedCAMount(dep)
 				g.Expect(mount).NotTo(BeNil())
-				g.Expect(mount.MountPath).To(Equal(trustedCADefaultFileMountPath))
-				g.Expect(mount.SubPath).To(Equal(trustedCADefaultFileVolumePath))
+				g.Expect(mount.MountPath).To(Equal(common.TrustedCADefaultFileMountPath))
+				g.Expect(mount.SubPath).To(Equal(common.TrustedCADefaultFileVolumePath))
 
 				vol := findTrustedCAVolume(dep)
 				g.Expect(vol).NotTo(BeNil())
@@ -732,10 +732,10 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				g.Expect(*vol.ConfigMap.Optional).To(BeFalse())
 				g.Expect(vol.ConfigMap.Items).To(ConsistOf(corev1.KeyToPath{
 					Key:  "tls.pem",
-					Path: trustedCADefaultFileVolumePath,
+					Path: common.TrustedCADefaultFileVolumePath,
 				}))
 				g.Expect(dep.Spec.Template.Annotations).To(HaveKeyWithValue(
-					trustedCAHashAnnotation,
+					common.TrustedCAHashAnnotation,
 					contenthash.String("-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n"),
 				))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
@@ -772,8 +772,8 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				dep := getDeployment(g)
 				mount := findTrustedCAMount(dep)
 				g.Expect(mount).NotTo(BeNil())
-				g.Expect(mount.MountPath).To(Equal(trustedCADefaultFileMountPath))
-				g.Expect(mount.SubPath).To(Equal(trustedCADefaultFileVolumePath))
+				g.Expect(mount.MountPath).To(Equal(common.TrustedCADefaultFileMountPath))
+				g.Expect(mount.SubPath).To(Equal(common.TrustedCADefaultFileVolumePath))
 
 				vol := findTrustedCAVolume(dep)
 				g.Expect(vol).NotTo(BeNil())
@@ -782,10 +782,10 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				g.Expect(vol.ConfigMap.Optional).NotTo(BeNil())
 				g.Expect(*vol.ConfigMap.Optional).To(BeTrue())
 				g.Expect(vol.ConfigMap.Items).To(ConsistOf(corev1.KeyToPath{
-					Key:  trustedCADefaultFileVolumePath,
-					Path: trustedCADefaultFileVolumePath,
+					Key:  common.TrustedCADefaultFileVolumePath,
+					Path: common.TrustedCADefaultFileVolumePath,
 				}))
-				g.Expect(dep.Spec.Template.Annotations).NotTo(HaveKey(trustedCAHashAnnotation))
+				g.Expect(dep.Spec.Template.Annotations).NotTo(HaveKey(common.TrustedCAHashAnnotation))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
@@ -810,7 +810,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := getDeployment(g)
 				g.Expect(dep.Spec.Template.Annotations).To(HaveKeyWithValue(
-					trustedCAHashAnnotation, contenthash.String(originalPEM)))
+					common.TrustedCAHashAnnotation, contenthash.String(originalPEM)))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cm.Name, Namespace: cm.Namespace}, cm)).To(Succeed())
@@ -820,7 +820,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 			Eventually(func(g Gomega) {
 				dep := getDeployment(g)
 				g.Expect(dep.Spec.Template.Annotations).To(HaveKeyWithValue(
-					trustedCAHashAnnotation, contenthash.String(rotatedPEM)))
+					common.TrustedCAHashAnnotation, contenthash.String(rotatedPEM)))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
@@ -840,7 +840,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				g.Expect(vol.ConfigMap.Name).To(Equal("custom-ca-bundle"))
 				g.Expect(vol.ConfigMap.Optional).NotTo(BeNil())
 				g.Expect(*vol.ConfigMap.Optional).To(BeFalse())
-				g.Expect(dep.Spec.Template.Annotations).NotTo(HaveKey(trustedCAHashAnnotation))
+				g.Expect(dep.Spec.Template.Annotations).NotTo(HaveKey(common.TrustedCAHashAnnotation))
 
 				current := &konfluxv1alpha1.KonfluxBuildService{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, current)).To(Succeed())
@@ -867,7 +867,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 			wantHash := contenthash.String(pem)
 			Eventually(func(g Gomega) {
 				dep := getDeployment(g)
-				g.Expect(dep.Spec.Template.Annotations).To(HaveKeyWithValue(trustedCAHashAnnotation, wantHash))
+				g.Expect(dep.Spec.Template.Annotations).To(HaveKeyWithValue(common.TrustedCAHashAnnotation, wantHash))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			Expect(k8sClient.Delete(ctx, cm)).To(Succeed())
@@ -878,7 +878,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 
 			Consistently(func(g Gomega) {
 				dep := getDeployment(g)
-				g.Expect(dep.Spec.Template.Annotations).To(HaveKeyWithValue(trustedCAHashAnnotation, wantHash))
+				g.Expect(dep.Spec.Template.Annotations).To(HaveKeyWithValue(common.TrustedCAHashAnnotation, wantHash))
 				vol := findTrustedCAVolume(dep)
 				g.Expect(vol).NotTo(BeNil())
 				g.Expect(vol.ConfigMap).NotTo(BeNil())
@@ -917,7 +917,7 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				g.Expect(vol.ConfigMap.Name).To(Equal(cmA.Name))
 				g.Expect(vol.ConfigMap.Items).To(ConsistOf(corev1.KeyToPath{
 					Key:  "tls.pem",
-					Path: trustedCADefaultFileVolumePath,
+					Path: common.TrustedCADefaultFileVolumePath,
 				}))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
@@ -938,10 +938,10 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 				g.Expect(*vol.ConfigMap.Optional).To(BeFalse())
 				g.Expect(vol.ConfigMap.Items).To(ConsistOf(corev1.KeyToPath{
 					Key:  "ca.pem",
-					Path: trustedCADefaultFileVolumePath,
+					Path: common.TrustedCADefaultFileVolumePath,
 				}))
 				g.Expect(dep.Spec.Template.Annotations).To(HaveKeyWithValue(
-					trustedCAHashAnnotation,
+					common.TrustedCAHashAnnotation,
 					contenthash.String(cmB.Data["ca.pem"]),
 				))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())

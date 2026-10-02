@@ -82,6 +82,23 @@ type KonfluxIntegrationServiceConfigSpec struct {
 	// +optional
 	// +kubebuilder:validation:Pattern=`^[0-9]+$`
 	MinSnapshotsToKeepPerComponent string `json:"minSnapshotsToKeepPerComponent,omitempty"`
+
+	// TrustedCA retargets the baked-in extra-file CA mount to a ConfigMap in
+	// the integration-service namespace. Additional CAs are added at
+	// /etc/ssl/certs/ca-custom-bundle.crt; the image trust store is not
+	// replaced.
+	//
+	// When omitted, the volume stays optional and points at ConfigMap
+	// trusted-ca / key ca-bundle.crt (platform-injected on OpenShift).
+	//
+	// When set, the volume uses spec.name and spec.key with optional: false
+	// so the pod will not start until the ConfigMap exists. The mount path
+	// is unchanged. spec.name may be trusted-ca. On OpenShift the operator
+	// does not create ConfigMap trusted-ca while this field is set; it
+	// deletes a leftover operator-owned trusted-ca so the name can be reused.
+	// Clearing the field restores the platform-injected ConfigMap.
+	// +optional
+	TrustedCA *TrustedCAConfigMap `json:"trustedCA,omitempty"`
 }
 
 // KonfluxIntegrationServiceSpec defines the desired state of KonfluxIntegrationService.

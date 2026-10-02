@@ -90,9 +90,13 @@ const (
 )
 
 // IntegrationServiceCleanupGVKs defines which resource types should be cleaned up when they are
-// no longer part of the desired state. Metrics scrape resources may be skipped during apply
-// (componentMetrics disabled) or removed across releases while metrics stay enabled.
-var IntegrationServiceCleanupGVKs = append([]schema.GroupVersionKind(nil), kubernetes.ComponentMetricsOrphanCleanupGVKs...)
+// no longer part of the desired state. ConfigMap trusted-ca is skipped when spec.trustedCA
+// is set, so leftover operator-owned objects must be listed here. Always-applied ConfigMaps
+// stay tracked. Metrics scrape resources may be skipped during apply (componentMetrics disabled)
+// or removed across releases while metrics stay enabled.
+var IntegrationServiceCleanupGVKs = append([]schema.GroupVersionKind{
+	corev1.SchemeGroupVersion.WithKind("ConfigMap"),
+}, kubernetes.ComponentMetricsOrphanCleanupGVKs...)
 
 // IntegrationServiceClusterScopedAllowList restricts which cluster-scoped resources can be deleted
 // during orphan cleanup. Only metrics scrape ClusterRoles and ClusterRoleBindings are listed;
@@ -188,10 +192,14 @@ func (r *KonfluxIntegrationServiceReconciler) Reconcile(ctx context.Context, req
 
 	// On OpenShift, create the trusted-ca ConfigMap with the injection label so
 	// the cluster network operator populates it with the cluster CA bundle.
-	// This runs before applyManifests so the ConfigMap is present when Deployments
-	// that mount it are applied.
-	if err := common.EnsureTrustedCAConfigMap(ctx, integrationServiceNamespace, tc, r.ClusterInfo); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonConfigMapFailed, "ensure trusted-ca ConfigMap")
+	// When spec.trustedCA is set (including when spec.trustedCA.name is
+	// "trusted-ca") skip creation and mount that ConfigMap instead. A leftover
+	// operator-owned trusted-ca is then deleted by CleanupOrphans. Clearing
+	// the field restores the platform-injected object on the next reconcile.
+	if integrationService.Spec.TrustedCA == nil {
+		if err := common.EnsureTrustedCAConfigMap(ctx, integrationServiceNamespace, tc, r.ClusterInfo); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonConfigMapFailed, "ensure trusted-ca ConfigMap")
+		}
 	}
 
 	// Apply all embedded manifests (namespace is already ensured above).
@@ -259,6 +267,11 @@ func (r *KonfluxIntegrationServiceReconciler) Reconcile(ctx context.Context, req
 
 // applyManifests loads and applies all embedded manifests to the cluster using the tracking client.
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
+// The trustedCA content hash is resolved once before applying objects so a
+// Get error fails the reconcile without mutating Deployments. When a user
+// ConfigMap or key is missing, a live annotation is reused so SSA cannot
+// prune it and roll running pods. When spec.trustedCA is omitted on
+// OpenShift, the hash is of the platform trusted-ca bundle instead.
 func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxIntegrationService, consoleURL string) error {
 	log := logf.FromContext(ctx)
 
@@ -268,6 +281,11 @@ func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context
 	objects, err := r.ObjectStore.GetForComponent(manifests.Integration)
 	if err != nil {
 		return fmt.Errorf("failed to get parsed manifests for Integration: %w", err)
+	}
+
+	trustedCAHash, err := common.TrustedCAHashForApply(ctx, r.Client, r.ClusterInfo, owner.Spec.TrustedCA, integrationServiceTrustedCATarget)
+	if err != nil {
+		return fmt.Errorf("lookup trusted CA hash: %w", err)
 	}
 
 	for _, obj := range objects {
@@ -292,7 +310,7 @@ func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context
 
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
-			if err := applyIntegrationServiceDeploymentCustomizations(deployment, owner.Spec.KonfluxIntegrationServiceConfigSpec, consoleURL); err != nil {
+			if err := applyIntegrationServiceDeploymentCustomizations(deployment, owner.Spec.KonfluxIntegrationServiceConfigSpec, consoleURL, trustedCAHash); err != nil {
 				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
 			}
 		}
@@ -318,13 +336,17 @@ func (r *KonfluxIntegrationServiceReconciler) applyManifests(ctx context.Context
 }
 
 // applyIntegrationServiceDeploymentCustomizations applies user-defined customizations to IntegrationService deployments.
-func applyIntegrationServiceDeploymentCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec, consoleURL string) error {
+// trustedCAHash is stamped on the controller-manager pod template. An empty hash omits the annotation.
+func applyIntegrationServiceDeploymentCustomizations(deployment *appsv1.Deployment, spec konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec, consoleURL, trustedCAHash string) error {
 	switch deployment.Name {
 	case controllerManagerDeploymentName:
 		if spec.IntegrationControllerManager != nil {
 			deployment.Spec.Replicas = &spec.IntegrationControllerManager.Replicas
 		}
 		if err := buildControllerManagerOverlay(spec.IntegrationControllerManager, consoleURL, spec).ApplyToDeployment(deployment); err != nil {
+			return err
+		}
+		if err := common.ApplyTrustedCAMount(deployment, spec.TrustedCA, trustedCAHash, managerContainerName); err != nil {
 			return err
 		}
 	}
@@ -407,6 +429,23 @@ func (r *KonfluxIntegrationServiceReconciler) mapKonfluxUIToIntegrationService(_
 	return []ctrl.Request{{NamespacedName: types.NamespacedName{Name: CRName}}}
 }
 
+var integrationServiceTrustedCATarget = common.TrustedCATarget{
+	Namespace:      integrationServiceNamespace,
+	DeploymentName: controllerManagerDeploymentName,
+	ContainerName:  managerContainerName,
+	CRName:         CRName,
+}
+
+// integrationTrustedCASpecLookup returns the TrustedCA spec from the singleton
+// KonfluxIntegrationService CR.
+func (r *KonfluxIntegrationServiceReconciler) integrationTrustedCASpecLookup(ctx context.Context, crName string) (*konfluxv1alpha1.TrustedCAConfigMap, error) {
+	is := &konfluxv1alpha1.KonfluxIntegrationService{}
+	if err := r.Get(ctx, types.NamespacedName{Name: crName}, is); err != nil {
+		return nil, err
+	}
+	return is.Spec.TrustedCA, nil
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonfluxIntegrationServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	crdMapFunc, err := crdhandler.MapCRDToRequest(r.ObjectStore, manifests.Integration, CRName)
@@ -422,6 +461,12 @@ func (r *KonfluxIntegrationServiceReconciler) SetupWithManager(mgr ctrl.Manager)
 		Owns(&batchv1.CronJob{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
+		// User-owned trustedCA ConfigMap is not CR-owned; watch it so content
+		// changes stamp a new pod-template hash and roll the Deployment.
+		Watches(
+			&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(common.NewTrustedCAConfigMapMapper(integrationServiceTrustedCATarget, r.integrationTrustedCASpecLookup)),
+		).
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&corev1.Namespace{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&rbacv1.Role{}).
