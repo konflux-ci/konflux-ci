@@ -728,7 +728,6 @@ func (r *KonfluxReconciler) applyKonfluxCertManager(ctx context.Context, tc *tra
 
 	var spec konfluxv1alpha1.KonfluxCertManagerSpec
 	if owner.Spec.CertManager != nil {
-		spec.CreateClusterIssuer = owner.Spec.CertManager.CreateClusterIssuer
 		spec.DistributeClusterCABundle = owner.Spec.CertManager.DistributeClusterCABundle
 	}
 
