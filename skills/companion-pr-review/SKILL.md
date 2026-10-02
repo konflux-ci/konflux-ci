@@ -27,7 +27,7 @@ closes them on its next run when the dependency is superseded — do not propose
 workflows to close them earlier.
 
 **Note:** Lock-file-only PRs are not companion-eligible — see
-[pr-review](../pr-review/SKILL.md).
+[pr-review](../konflux-pr-review/SKILL.md).
 
 ## Classify the PR first
 
