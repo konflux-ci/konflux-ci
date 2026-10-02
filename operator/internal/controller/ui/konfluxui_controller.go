@@ -50,6 +50,7 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/consolelink"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/contenthash"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/customization"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/hashedconfigmap"
@@ -97,6 +98,14 @@ const (
 	// OAuth2 proxy secret names
 	oauth2ProxyClientSecretName = "oauth2-proxy-client-secret" //nolint:gosec // not credentials, just resource names
 	oauth2ProxyCookieSecretName = "oauth2-proxy-cookie-secret" //nolint:gosec // not credentials, just resource names
+
+	// oauth2ProxyClientSecretHashAnnotation is the pod-template annotation key used to
+	// signal a rolling restart of the dex and proxy deployments when the
+	// oauth2-proxy-client-secret content changes. Because the secret is consumed via
+	// secretKeyRef (not as a volume), a name change alone is insufficient; instead the
+	// reconciler injects this hash so Kubernetes sees a new pod template and performs
+	// a rolling update automatically.
+	oauth2ProxyClientSecretHashAnnotation = "konflux.konflux-ci.dev/oauth2-proxy-client-secret-hash" //nolint:gosec // annotation key, not a secret value
 
 	// Segment Secret constants
 	segmentSecretBaseName = "segment-bridge-config"
@@ -231,8 +240,16 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return errHandler.HandleWithReason(ctx, err, condition.ReasonSecretCreationFailed, "reconcile segment config secret")
 	}
 
+	// Ensure UI secrets are created before applying manifests so the
+	// oauth2-proxy-client-secret hash can be injected into the
+	// pod template annotations on the same reconcile pass.
+	clientSecretHash, err := r.ensureUISecrets(ctx, tc)
+	if err != nil {
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonSecretCreationFailed, "ensure UI secrets")
+	}
+
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, tc, ui, dexConfigMapName, segmentSecretName, endpoint); err != nil {
+	if err := r.applyManifests(ctx, tc, ui, dexConfigMapName, segmentSecretName, clientSecretHash, endpoint); err != nil {
 		return errHandler.HandleApplyError(ctx, err)
 	}
 
@@ -240,11 +257,6 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// On OpenShift, also creates a ConsoleLink for the application menu
 	if err := r.reconcileIngress(ctx, tc, ui, endpoint); err != nil {
 		return errHandler.HandleWithReason(ctx, err, condition.ReasonIngressReconcileFailed, "reconcile Ingress")
-	}
-
-	// Ensure UI secrets are created
-	if err := r.ensureUISecrets(ctx, tc); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonSecretCreationFailed, "ensure UI secrets")
 	}
 
 	// Cleanup orphaned resources - delete any resources with our owner label
@@ -308,8 +320,10 @@ func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, tc *tra
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
 // dexConfigMapName is the name of the Dex ConfigMap to use (empty if not configured).
 // segmentSecretName is the name of the content-hashed Segment Secret (empty if not configured).
+// clientSecretHash is the content hash of oauth2-proxy-client-secret (empty on first reconcile
+// before the secret exists); injected into pod-template annotations to trigger rollouts on rotation.
 // endpoint is the base URL used to configure oauth2-proxy.
-func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, dexConfigMapName, segmentSecretName string, endpoint *url.URL) error {
+func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, dexConfigMapName, segmentSecretName, clientSecretHash string, endpoint *url.URL) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.UI)
@@ -334,7 +348,7 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
-			if err := applyUIDeploymentCustomizations(deployment, ui, r.ClusterInfo, dexConfigMapName, segmentSecretName, endpoint); err != nil {
+			if err := applyUIDeploymentCustomizations(deployment, ui, r.ClusterInfo, dexConfigMapName, segmentSecretName, clientSecretHash, endpoint); err != nil {
 				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
 			}
 		}
@@ -358,7 +372,9 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 }
 
 // applyUIDeploymentCustomizations applies user-defined customizations to UI deployments.
-func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv1alpha1.KonfluxUI, clusterInfo *clusterinfo.Info, dexConfigMapName, segmentSecretName string, endpoint *url.URL) error {
+// clientSecretHash is passed to overlay builders so that a change to
+// oauth2-proxy-client-secret (consumed via secretKeyRef) triggers a rolling restart.
+func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv1alpha1.KonfluxUI, clusterInfo *clusterinfo.Info, dexConfigMapName, segmentSecretName, clientSecretHash string, endpoint *url.URL) error {
 	switch deployment.Name {
 	case proxyDeploymentName:
 		proxySpec := ui.Spec.GetProxy()
@@ -371,19 +387,15 @@ func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv
 		// OpenShift SCCs inject a numeric UID automatically so this is only
 		// needed on non-OpenShift (e.g. Kind).
 		needsRunAsUser := clusterInfo == nil || !clusterInfo.IsOpenShift()
-		proxyOverlay, err := buildProxyOverlay(ui.Spec.Proxy, ui.Spec.RuntimeConfig, segmentSecretName, needsRunAsUser, oauth2ProxyOpts...)
+		proxyOverlay, err := buildProxyOverlay(ui.Spec.Proxy, ui.Spec.RuntimeConfig, segmentSecretName, clientSecretHash, needsRunAsUser, oauth2ProxyOpts...)
 		if err != nil {
 			return err
 		}
-		if err := proxyOverlay.ApplyToDeployment(deployment); err != nil {
-			return err
-		}
+		return proxyOverlay.ApplyToDeployment(deployment)
 	case dexDeploymentName:
 		dexSpec := ui.Spec.GetDex()
 		deployment.Spec.Replicas = &dexSpec.Replicas
-		if err := buildDexOverlay(ui.Spec.Dex, dexConfigMapName).ApplyToDeployment(deployment); err != nil {
-			return err
-		}
+		return buildDexOverlay(ui.Spec.Dex, dexConfigMapName, clientSecretHash).ApplyToDeployment(deployment)
 	}
 	return nil
 }
@@ -433,9 +445,10 @@ func applyUIServiceAccountCustomizations(serviceAccount *corev1.ServiceAccount, 
 // buildProxyOverlay builds the pod overlay for the proxy deployment.
 // runtimeConfig sets RUNTIME_* env vars on the generate-proxy-config init container.
 // segmentSecretName is the content-hashed Secret name (empty if segment is not configured).
+// clientSecretHash is the content hash of oauth2-proxy-client-secret (empty if not configured).
 // needsRunAsUser injects runAsUser on the reverse-proxy container for non-OpenShift clusters.
 // oauth2ProxyOpts are applied to the oauth2-proxy container before user-provided overrides.
-func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, runtimeConfig *konfluxv1alpha1.RuntimeConfigSpec, segmentSecretName string, needsRunAsUser bool, oauth2ProxyOpts ...customization.ContainerOption) (*customization.PodOverlay, error) {
+func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, runtimeConfig *konfluxv1alpha1.RuntimeConfigSpec, segmentSecretName, clientSecretHash string, needsRunAsUser bool, oauth2ProxyOpts ...customization.ContainerOption) (*customization.PodOverlay, error) {
 	// Create CA bundle volume that will be mounted in oauth2-proxy container.
 	// The Secret is created by cert-manager from the oauth2-proxy-cert Certificate resource
 	// (see operator/upstream-kustomizations/ui/dex/dex.yaml).
@@ -468,6 +481,12 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, runtimeConfig 
 	// Build the list of pod-level options
 	podOpts := []customization.PodOverlayOption{
 		customization.WithVolumes(caVolume),
+	}
+
+	// Inject the client-secret hash as a pod-template annotation so that Kubernetes
+	// performs a rolling restart when the oauth2-proxy-client-secret content changes.
+	if clientSecretHash != "" {
+		podOpts = append(podOpts, customization.WithAnnotation(oauth2ProxyClientSecretHashAnnotation, clientSecretHash))
 	}
 
 	// Update the segment-bridge-config volume's Secret name when segment is configured.
@@ -628,10 +647,16 @@ func buildOAuth2ProxyOptions(endpoint *url.URL, openShiftLoginEnabled bool) []cu
 }
 
 // buildDexOverlay builds the pod overlay for the dex deployment.
-// openShiftLoginEnabled controls whether the OPENSHIFT_LOGIN_ENABLED env var is added.
-func buildDexOverlay(spec *konfluxv1alpha1.DexDeploymentSpec, configMapName string) *customization.PodOverlay {
+// clientSecretHash is the content hash of oauth2-proxy-client-secret (empty if not configured).
+func buildDexOverlay(spec *konfluxv1alpha1.DexDeploymentSpec, configMapName, clientSecretHash string) *customization.PodOverlay {
 	opts := []customization.PodOverlayOption{
 		customization.WithConfigMapVolumeUpdate(dexConfigMapVolumeName, configMapName),
+	}
+
+	// Inject the client-secret hash as a pod-template annotation so that Kubernetes
+	// performs a rolling restart when the oauth2-proxy-client-secret content changes.
+	if clientSecretHash != "" {
+		opts = append(opts, customization.WithAnnotation(oauth2ProxyClientSecretHashAnnotation, clientSecretHash))
 	}
 
 	// Build container options
@@ -660,9 +685,12 @@ func buildDexOverlay(spec *konfluxv1alpha1.DexDeploymentSpec, configMapName stri
 // ensureUISecrets ensures that UI secrets exist and are properly configured.
 // Only generates secret values if they don't already exist (preserves existing secrets).
 // Uses the tracking client so secrets are tracked and not orphaned during cleanup.
-func (r *KonfluxUIReconciler) ensureUISecrets(ctx context.Context, tc *tracking.Client) error {
+// It returns the content hash of the oauth2-proxy-client-secret directly from the in-memory
+// Secret populated by CreateOrUpdate, avoiding an asynchronous cached client read that would
+// miss the freshly written secret on initial reconciliation.
+func (r *KonfluxUIReconciler) ensureUISecrets(ctx context.Context, tc *tracking.Client) (string, error) {
 	// Helper for the actual reconciliation logic
-	ensureSecret := func(name, key string, length int, urlSafe bool) error {
+	ensureSecret := func(name, key string, length int, urlSafe bool) (*corev1.Secret, error) {
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
@@ -692,14 +720,27 @@ func (r *KonfluxUIReconciler) ensureUISecrets(ctx context.Context, tc *tracking.
 			}
 			return nil
 		})
-		return err
+		return secret, err
 	}
 
 	// Execute for both secrets
-	if err := ensureSecret(oauth2ProxyClientSecretName, "client-secret", 20, true); err != nil {
-		return fmt.Errorf("client-secret: %w", err)
+	clientSecret, err := ensureSecret(oauth2ProxyClientSecretName, "client-secret", 20, true)
+	if err != nil {
+		return "", fmt.Errorf("client-secret: %w", err)
 	}
-	return ensureSecret(oauth2ProxyCookieSecretName, "cookie-secret", 16, false)
+	if _, err := ensureSecret(oauth2ProxyCookieSecretName, "cookie-secret", 16, false); err != nil {
+		return "", fmt.Errorf("cookie-secret: %w", err)
+	}
+	return hashSecretData(clientSecret.Data), nil
+}
+
+// hashSecretData computes a short deterministic hash of secret binary data.
+func hashSecretData(data map[string][]byte) string {
+	strData := make(map[string]string, len(data))
+	for k, v := range data {
+		strData[k] = string(v)
+	}
+	return contenthash.Map(strData)
 }
 
 // generateRandomBytes generates a random secret value with the specified encoding.
