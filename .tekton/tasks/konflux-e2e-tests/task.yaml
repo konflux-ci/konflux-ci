@@ -76,7 +76,7 @@ spec:
         mountPath: /mnt/e2e-shared
   steps:
     - name: clone-repository
-      image: quay.io/konflux-ci/task-runner:v3@sha256:ba5789d2bc04146431e492083c67b86de26d5b17891dc27f67db850a397b66d3
+      image: quay.io/konflux-ci/task-runner:v3@sha256:0428af436f6942544009e38ef452a6b747e9ec79ab22fd402a3d59585984cf81
       env:
         - name: GIT_URL
           value: $(params.git-url)
@@ -98,7 +98,7 @@ spec:
         git -C "${REPO_ROOT}" fetch --depth "${GIT_DEPTH}" origin "${GIT_REVISION}"
         git -C "${REPO_ROOT}" checkout -q FETCH_HEAD
     - name: fetch-kubeconfig
-      image: quay.io/konflux-ci/task-runner:v3@sha256:ba5789d2bc04146431e492083c67b86de26d5b17891dc27f67db850a397b66d3
+      image: quay.io/konflux-ci/task-runner:v3@sha256:0428af436f6942544009e38ef452a6b747e9ec79ab22fd402a3d59585984cf81
       workingDir: /mnt/konflux-ci/repo
       env:
         - name: POD_NAMESPACE
@@ -111,7 +111,7 @@ spec:
         cd /mnt/konflux-ci/repo
         exec bash scripts/operator-e2e/tekton-fetch-kubeconfig.sh "$(params.cluster-access-secret)" "$(params.kubeconfig-secret-key)"
     - name: copy-shared-tools
-      image: quay.io/konflux-ci/task-runner:v3@sha256:ba5789d2bc04146431e492083c67b86de26d5b17891dc27f67db850a397b66d3
+      image: quay.io/konflux-ci/task-runner:v3@sha256:0428af436f6942544009e38ef452a6b747e9ec79ab22fd402a3d59585984cf81
       workingDir: /mnt/konflux-ci/repo
       script: |
         #!/bin/bash
