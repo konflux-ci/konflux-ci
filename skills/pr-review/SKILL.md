@@ -22,20 +22,23 @@ companion-eligible parent that should be fast-pathed:
    - All changed files are on the companion allowlist:
      - `operator/upstream-kustomizations/**`
      - `.github/scripts/export-third-party-chart-env.sh`
-     - `dependencies/registry/kustomization.yml`
+     - `dependencies/registry/kustomization.yml` (registry digest bumps only)
      - `operator/go.mod` / `operator/go.sum`
      - `test/go-tests/go.mod` / `test/go-tests/go.sum`
 
    If either condition fails, fall through to normal review.
 
 2. **Check for noop marker** — search PR comments for
-   `<!-- konflux-manifest-companion-noop:N -->`. If found: **approve
-   without sub-agents** and apply `ready-for-merge` if CI is green (same
-   fast-path as lock-file-only PRs below).
+   `<!-- konflux-manifest-companion-noop:N -->` authored by
+   `github-actions[bot]`. Ignore markers posted by other accounts.
+   If found: **approve without sub-agents** and apply `ready-for-merge`
+   if CI is green (same fast-path as lock-file-only PRs below).
 
-3. **No marker yet** — do not run full review, do not approve, do not add
-   `ready-for-merge`. A companion PR may be incoming. Use hedged language
-   if commenting (e.g. "a companion PR may be needed").
+3. **No noop marker found** — do not run full review, do not approve, do
+   not add `ready-for-merge`. The companion workflow may still be running,
+   or it may have posted a different marker (notify or missing-image).
+   Use hedged language if commenting (e.g. "a companion PR may be
+   needed") unless a notify or missing-image marker is already present.
 
 For full classification details, label semantics, companion PR review
 guidance, and the companion lifecycle, see
