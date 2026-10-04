@@ -68,7 +68,10 @@ the table above instead.
 ## Check companion workflow state before commenting
 
 Before asserting that a companion PR will be created, check existing PR
-comments for HTML markers posted by `renovate-manifest-companion.sh`:
+comments for HTML markers posted by the companion workflow
+(`renovate-manifest-companion.sh`), which runs as `github-actions[bot]`.
+Verify the comment author is `github-actions[bot]`; ignore markers posted
+by other accounts.
 
 | Marker | Meaning |
 |--------|---------|

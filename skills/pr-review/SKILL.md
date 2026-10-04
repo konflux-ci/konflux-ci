@@ -28,17 +28,26 @@ companion-eligible parent that should be fast-pathed:
 
    If either condition fails, fall through to normal review.
 
-2. **Check for noop marker** — search PR comments for
-   `<!-- konflux-manifest-companion-noop:N -->` authored by
-   `github-actions[bot]`. Ignore markers posted by other accounts.
-   If found: **approve without sub-agents** and apply `ready-for-merge`
-   if CI is green (same fast-path as lock-file-only PRs below).
+2. **Check for companion workflow markers** — search PR comments
+   authored by `github-actions[bot]` for any of the companion workflow
+   HTML markers (ignore markers posted by other accounts):
+   - `<!-- konflux-manifest-companion-noop:N -->` — no manifest diff
+   - `<!-- konflux-manifest-companion-notify:N -->` — companion PR exists
+   - `<!-- konflux-manifest-companion-missing-image:N -->` — companion blocked
+
+   If a **noop** marker is found: **approve without sub-agents** and
+   apply `ready-for-merge` if CI is green (same fast-path as lock-file-only
+   PRs below). If a notify or missing-image marker is found, skip to step 3.
 
 3. **No noop marker found** — do not run full review, do not approve, do
-   not add `ready-for-merge`. The companion workflow may still be running,
-   or it may have posted a different marker (notify or missing-image).
-   Use hedged language if commenting (e.g. "a companion PR may be
-   needed") unless a notify or missing-image marker is already present.
+   not add `ready-for-merge`. Adjust commentary based on what markers
+   are present:
+   - **notify marker present:** a companion PR exists — do not say "a
+     companion PR may be needed"; instead note which companion to review.
+   - **missing-image marker present:** the companion is blocked on an
+     upstream image — do not speculate about companion status.
+   - **no markers at all:** the companion workflow may still be running —
+     use hedged language (e.g. "a companion PR may be needed").
 
 For full classification details, label semantics, companion PR review
 guidance, and the companion lifecycle, see
