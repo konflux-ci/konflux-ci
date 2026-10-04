@@ -31,7 +31,8 @@ companion-eligible parent that should be fast-pathed:
    If either condition fails, fall through to normal review.
 
 2. **Check for companion workflow markers** — search PR comments
-   authored by `github-actions[bot]` for any of the companion workflow
+   authored by `konflux-ci-update-bot` (primary, GitHub App token) or
+   `github-actions[bot]` (fallback) for any of the companion workflow
    HTML markers (ignore markers posted by other accounts):
    - `<!-- konflux-manifest-companion-noop:N -->` — no manifest diff
    - `<!-- konflux-manifest-companion-notify:N -->` — companion PR exists
@@ -43,6 +44,7 @@ companion-eligible parent that should be fast-pathed:
    below). If any non-noop marker is present (even alongside a noop
    marker), skip to step 3 — coexistence indicates ambiguity, so the
    conservative path avoids approving on a potentially stale noop.
+   If no markers are found, proceed to step 3.
 
 3. **Noop fast-path not taken** — do not run full review, do not approve, do
    not add `ready-for-merge`. Adjust commentary based on what markers
