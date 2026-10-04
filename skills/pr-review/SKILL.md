@@ -41,10 +41,10 @@ companion-eligible parent that should be fast-pathed:
    is also present**: **approve without sub-agents** and apply
    `ready-for-merge` if CI is green (same fast-path as lock-file-only PRs
    below). If any non-noop marker is present (even alongside a noop
-   marker), skip to step 3 — the non-noop marker reflects a later
-   workflow run and takes precedence.
+   marker), skip to step 3 — coexistence indicates ambiguity, so the
+   conservative path avoids approving on a potentially stale noop.
 
-3. **No noop marker found** — do not run full review, do not approve, do
+3. **Noop fast-path not taken** — do not run full review, do not approve, do
    not add `ready-for-merge`. Adjust commentary based on what markers
    are present:
    - **notify marker present:** a companion PR exists — do not say "a
