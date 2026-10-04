@@ -23,8 +23,10 @@ companion-eligible parent that should be fast-pathed:
      - `operator/upstream-kustomizations/**`
      - `.github/scripts/export-third-party-chart-env.sh`
      - `dependencies/registry/kustomization.yml` (registry digest bumps only)
-     - `operator/go.mod` / `operator/go.sum`
-     - `test/go-tests/go.mod` / `test/go-tests/go.sum`
+     - `operator/go.mod` / `operator/go.sum` (OpenShift envtest CRDs from
+       `github.com/openshift/api`)
+     - `test/go-tests/go.mod` / `test/go-tests/go.sum` (sidecar when Renovate
+       bumps a shared dependency in both Go modules)
 
    If either condition fails, fall through to normal review.
 
@@ -35,9 +37,12 @@ companion-eligible parent that should be fast-pathed:
    - `<!-- konflux-manifest-companion-notify:N -->` — companion PR exists
    - `<!-- konflux-manifest-companion-missing-image:N -->` — companion blocked
 
-   If a **noop** marker is found: **approve without sub-agents** and
-   apply `ready-for-merge` if CI is green (same fast-path as lock-file-only
-   PRs below). If a notify or missing-image marker is found, skip to step 3.
+   If a **noop** marker is found **and no notify or missing-image marker
+   is also present**: **approve without sub-agents** and apply
+   `ready-for-merge` if CI is green (same fast-path as lock-file-only PRs
+   below). If any non-noop marker is present (even alongside a noop
+   marker), skip to step 3 — the non-noop marker reflects a later
+   workflow run and takes precedence.
 
 3. **No noop marker found** — do not run full review, do not approve, do
    not add `ready-for-merge`. Adjust commentary based on what markers
