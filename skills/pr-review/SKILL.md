@@ -9,7 +9,36 @@ description: >-
 # PR Review
 
 Apply these checks on every PR, including ones opened by agents (for example
-fullsend). Skip companion-eligible MintMaker/Renovate parents — see
+fullsend). Skip companion-eligible MintMaker/Renovate parents and lock-file-only
+PRs (see fast-path sections below) before dispatching sub-agents.
+
+## Companion-eligible MintMaker/Renovate parents
+
+Before running any sub-agent review pipeline, check whether the PR is a
+companion-eligible parent that should be fast-pathed:
+
+1. **Check conditions** — both must be true:
+   - Author is `renovate[bot]` or `red-hat-konflux[bot]`
+   - All changed files are on the companion allowlist:
+     - `operator/upstream-kustomizations/**`
+     - `.github/scripts/export-third-party-chart-env.sh`
+     - `dependencies/registry/kustomization.yml`
+     - `operator/go.mod` / `operator/go.sum`
+     - `test/go-tests/go.mod` / `test/go-tests/go.sum`
+
+   If either condition fails, fall through to normal review.
+
+2. **Check for noop marker** — search PR comments for
+   `<!-- konflux-manifest-companion-noop:N -->`. If found: **approve
+   without sub-agents** and apply `ready-for-merge` if CI is green (same
+   fast-path as lock-file-only PRs below).
+
+3. **No marker yet** — do not run full review, do not approve, do not add
+   `ready-for-merge`. A companion PR may be incoming. Use hedged language
+   if commenting (e.g. "a companion PR may be needed").
+
+For full classification details, label semantics, companion PR review
+guidance, and the companion lifecycle, see
 [companion-pr-review](../companion-pr-review/SKILL.md).
 
 ## Lock-file-only PRs
