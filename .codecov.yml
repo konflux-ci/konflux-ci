@@ -19,8 +19,8 @@ coverage:
         informational: true
     patch:
       default:
-        target: 80%
-        informational: true
+        target: 85%
+        informational: false
 
 comment:
   layout: "reach,diff,flags,files,footer"
