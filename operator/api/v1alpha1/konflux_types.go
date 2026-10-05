@@ -161,11 +161,6 @@ type EnterpriseContractConfig struct {
 
 // CertManagerConfig defines the configuration for the cert-manager component.
 type CertManagerConfig struct {
-	// CreateClusterIssuer controls whether cluster issuer resources are created.
-	// Defaults to true if not specified.
-	// +optional
-	CreateClusterIssuer *bool `json:"createClusterIssuer,omitempty"`
-
 	// DistributeClusterCABundle controls whether the operator applies the
 	// trust-manager Bundle that populates cluster-wide trusted-ca ConfigMaps.
 	// When nil, the effective default is platform-aware:
