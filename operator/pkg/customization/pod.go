@@ -42,6 +42,8 @@ type PodOverlay struct {
 	// argReplacements holds args that replace (not append) base args with the same
 	// flag key. Key is the container name, value is the list of replacement args.
 	argReplacements map[string][]string
+	// annotations holds annotations to inject into the pod template metadata
+	annotations map[string]string
 }
 
 // PodOverlayOption is a functional option for configuring a PodOverlay.
@@ -205,6 +207,31 @@ func WithTopologySpreadConstraints(constraints ...corev1.TopologySpreadConstrain
 	}
 }
 
+// WithAnnotations sets annotations on the pod template metadata.
+func WithAnnotations(annotations map[string]string) PodOverlayOption {
+	return func(p *PodOverlay) {
+		if len(annotations) == 0 {
+			return
+		}
+		if p.annotations == nil {
+			p.annotations = make(map[string]string)
+		}
+		for k, v := range annotations {
+			p.annotations[k] = v
+		}
+	}
+}
+
+// WithAnnotation sets a single annotation on the pod template metadata.
+func WithAnnotation(key, value string) PodOverlayOption {
+	return func(p *PodOverlay) {
+		if p.annotations == nil {
+			p.annotations = make(map[string]string)
+		}
+		p.annotations[key] = value
+	}
+}
+
 // ApplyToPodTemplateSpec applies customizations to a PodTemplateSpec.
 // This is the core method that all workload-specific methods use.
 func (p *PodOverlay) ApplyToPodTemplateSpec(template *corev1.PodTemplateSpec) error {
@@ -239,6 +266,16 @@ func (p *PodOverlay) ApplyToPodTemplateSpec(template *corev1.PodTemplateSpec) er
 
 	// Apply Secret volume updates
 	applySecretVolumeUpdates(template.Spec.Volumes, p.secretVolumeUpdates)
+
+	// Apply annotations
+	if len(p.annotations) > 0 {
+		if template.Annotations == nil {
+			template.Annotations = make(map[string]string)
+		}
+		for k, v := range p.annotations {
+			template.Annotations[k] = v
+		}
+	}
 
 	return nil
 }
