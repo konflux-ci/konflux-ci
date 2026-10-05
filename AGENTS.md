@@ -60,7 +60,7 @@ Read the matching skill before acting; do not load unrelated skills.
 
 - PR review (human- or agent-authored; skip companion-eligible MintMaker/Renovate parents; skip lock-file-only PRs): `skills/pr-review/SKILL.md`.
 - `go.mod` / Go pins / `go.mod requires go` CI: `skills/go-toolchain-upgrade/SKILL.md`.
-- MintMaker/Renovate companion flow; do not apply `deps-only`, `superseded-by-companion`, `pending-upstream-image`: `skills/companion-pr-review/SKILL.md`.
+- Reviewing or triaging MintMaker/Renovate parent PRs (`deps-only`, `superseded-by-companion`) AND manifest companion PRs (branch `bot/manifest-companion-pr-*`, author `konflux-ci-update-bot`) — review depth, approval, skip, and label guidance for both PR types: `skills/companion-pr-review/SKILL.md`.
 - Open a PR / fork `/allow`: `skills/create-pr/SKILL.md`.
 - Failed e2e / Prow / GHA (title contains e2e/E2E, labels `ci` or `workflow-failure`, Prow or GHA run URLs): `skills/debug-e2e-tests/SKILL.md`.
 - Upstream SHA bumps: `skills/update-upstream-deps/SKILL.md`.
