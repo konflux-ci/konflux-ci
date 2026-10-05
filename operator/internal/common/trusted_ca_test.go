@@ -911,4 +911,18 @@ func TestNewTrustedCAConfigMapMapper(t *testing.T) {
 		})
 		g.Expect(mapper(context.Background(), matchingCM)).To(gomega.BeNil())
 	})
+
+	t.Run("skips lookup for ConfigMaps outside target namespace", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		lookupCalled := false
+		mapper := NewTrustedCAConfigMapMapper(target, func(_ context.Context, _ string) (*konfluxv1alpha1.TrustedCAConfigMap, error) {
+			lookupCalled = true
+			return spec, nil
+		})
+		otherNsCM := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+			Name: "custom-ca-bundle", Namespace: "other-namespace",
+		}}
+		g.Expect(mapper(context.Background(), otherNsCM)).To(gomega.BeNil())
+		g.Expect(lookupCalled).To(gomega.BeFalse(), "lookup should not be called for ConfigMaps outside target namespace")
+	})
 }
