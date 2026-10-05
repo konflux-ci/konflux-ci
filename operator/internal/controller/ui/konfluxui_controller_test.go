@@ -2604,6 +2604,256 @@ var _ = Describe("KonfluxUI Controller", func() {
 			}).WithTimeout(3 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
 		})
 	})
+
+	Context("Dex Secret Content Hashing via Reconcile", Serial, func() {
+		cleanupSecrets := func(ctx context.Context, names ...string) {
+			for _, name := range names {
+				_ = k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name: name, Namespace: uiNamespace,
+				}})
+			}
+		}
+
+		cleanupDeployments := func(ctx context.Context) {
+			_ = client.IgnoreNotFound(k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: dexDeploymentName, Namespace: uiNamespace}}))
+			_ = client.IgnoreNotFound(k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: proxyDeploymentName, Namespace: uiNamespace}}))
+			Eventually(func(g Gomega) {
+				g.Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: dexDeploymentName, Namespace: uiNamespace}, &appsv1.Deployment{}))).To(BeTrue())
+				g.Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: proxyDeploymentName, Namespace: uiNamespace}, &appsv1.Deployment{}))).To(BeTrue())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		}
+
+		BeforeEach(func(ctx context.Context) {
+			By("ensuring the UI namespace exists")
+			uiNs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: uiNamespace}}
+			err := k8sClient.Create(ctx, uiNs)
+			if err != nil && !errors.IsAlreadyExists(err) {
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			cleanupSecrets(ctx, oauth2ProxyClientSecretName, "github-connector-creds", "oidc-connector-creds", "unrelated-test-secret")
+			cleanupDeployments(ctx)
+		})
+
+		It("stamps dex-secret-content-hash annotation on Dex deployment and updates when oauth2-proxy-client-secret changes", func(ctx context.Context) {
+			startManager(nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				testutil.DeleteAndWait(ctx, k8sClient, ui)
+				cleanupSecrets(ctx, oauth2ProxyClientSecretName)
+				cleanupDeployments(ctx)
+			})
+
+			waitForReconcile(ctx)
+
+			dexDep := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: dexDeploymentName, Namespace: uiNamespace,
+			}, dexDep)).To(Succeed())
+
+			initialHash := dexDep.Spec.Template.Annotations[dexSecretHashAnnotation]
+			Expect(initialHash).NotTo(BeEmpty())
+
+			By("updating oauth2-proxy-client-secret data")
+			sec := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: oauth2ProxyClientSecretName, Namespace: uiNamespace,
+			}, sec)).To(Succeed())
+			sec.Data["client-secret"] = []byte("rotated-client-secret-value-12345")
+			Expect(k8sClient.Update(ctx, sec)).To(Succeed())
+
+			By("verifying the Dex deployment template annotation hash updates")
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: dexDeploymentName, Namespace: uiNamespace,
+				}, dep)).To(Succeed())
+				currentHash := dep.Spec.Template.Annotations[dexSecretHashAnnotation]
+				g.Expect(currentHash).NotTo(BeEmpty())
+				g.Expect(currentHash).NotTo(Equal(initialHash))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("tracks connector secrets referenced in spec.dex.dex.env and updates Dex hash on secret change", func(ctx context.Context) {
+			startManager(nil)
+
+			connSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "github-connector-creds",
+					Namespace: uiNamespace,
+				},
+				Data: map[string][]byte{
+					"clientSecret": []byte("initial-connector-secret-val"),
+				},
+			}
+			Expect(k8sClient.Create(ctx, connSecret)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, connSecret)
+
+			ui := &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			ui.Spec.Dex = &konfluxv1alpha1.DexDeploymentSpec{
+				Dex: &konfluxv1alpha1.ContainerSpec{
+					Env: []corev1.EnvVar{
+						{
+							Name: "GITHUB_CLIENT_SECRET",
+							ValueFrom: &corev1.EnvVarSource{
+								SecretKeyRef: &corev1.SecretKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "github-connector-creds",
+									},
+									Key: "clientSecret",
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				testutil.DeleteAndWait(ctx, k8sClient, ui)
+				cleanupSecrets(ctx, oauth2ProxyClientSecretName, "github-connector-creds")
+				cleanupDeployments(ctx)
+			})
+
+			waitForReconcile(ctx)
+
+			dexDep := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: dexDeploymentName, Namespace: uiNamespace,
+			}, dexDep)).To(Succeed())
+
+			initialHash := dexDep.Spec.Template.Annotations[dexSecretHashAnnotation]
+			Expect(initialHash).NotTo(BeEmpty())
+
+			By("updating the referenced connector secret")
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: "github-connector-creds", Namespace: uiNamespace,
+			}, connSecret)).To(Succeed())
+			connSecret.Data["clientSecret"] = []byte("updated-connector-secret-val")
+			Expect(k8sClient.Update(ctx, connSecret)).To(Succeed())
+
+			By("verifying the Dex deployment template annotation hash updates")
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: dexDeploymentName, Namespace: uiNamespace,
+				}, dep)).To(Succeed())
+				currentHash := dep.Spec.Template.Annotations[dexSecretHashAnnotation]
+				g.Expect(currentHash).NotTo(BeEmpty())
+				g.Expect(currentHash).NotTo(Equal(initialHash))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("handles missing referenced secret gracefully and updates hash once secret is created", func(ctx context.Context) {
+			startManager(nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			ui.Spec.Dex = &konfluxv1alpha1.DexDeploymentSpec{
+				Dex: &konfluxv1alpha1.ContainerSpec{
+					Env: []corev1.EnvVar{
+						{
+							Name: "OIDC_CLIENT_SECRET",
+							ValueFrom: &corev1.EnvVarSource{
+								SecretKeyRef: &corev1.SecretKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "oidc-connector-creds",
+									},
+									Key: "clientSecret",
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				testutil.DeleteAndWait(ctx, k8sClient, ui)
+				cleanupSecrets(ctx, oauth2ProxyClientSecretName, "oidc-connector-creds")
+				cleanupDeployments(ctx)
+			})
+
+			waitForReconcile(ctx)
+
+			dexDep := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: dexDeploymentName, Namespace: uiNamespace,
+			}, dexDep)).To(Succeed())
+
+			initialHash := dexDep.Spec.Template.Annotations[dexSecretHashAnnotation]
+			Expect(initialHash).NotTo(BeEmpty())
+
+			By("creating the previously missing connector secret")
+			oidcSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "oidc-connector-creds",
+					Namespace: uiNamespace,
+				},
+				Data: map[string][]byte{
+					"clientSecret": []byte("newly-created-secret-data"),
+				},
+			}
+			Expect(k8sClient.Create(ctx, oidcSecret)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, oidcSecret)
+
+			By("verifying the Dex deployment template annotation hash updates")
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: dexDeploymentName, Namespace: uiNamespace,
+				}, dep)).To(Succeed())
+				currentHash := dep.Spec.Template.Annotations[dexSecretHashAnnotation]
+				g.Expect(currentHash).NotTo(BeEmpty())
+				g.Expect(currentHash).NotTo(Equal(initialHash))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("preserves hash when an unrelated secret in the namespace changes", func(ctx context.Context) {
+			startManager(nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: CRName}}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				testutil.DeleteAndWait(ctx, k8sClient, ui)
+				cleanupSecrets(ctx, oauth2ProxyClientSecretName, "unrelated-test-secret")
+				cleanupDeployments(ctx)
+			})
+
+			waitForReconcile(ctx)
+
+			dexDep := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: dexDeploymentName, Namespace: uiNamespace,
+			}, dexDep)).To(Succeed())
+
+			initialHash := dexDep.Spec.Template.Annotations[dexSecretHashAnnotation]
+			Expect(initialHash).NotTo(BeEmpty())
+
+			By("creating an unrelated secret in the ui namespace")
+			unrelatedSec := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "unrelated-test-secret",
+					Namespace: uiNamespace,
+				},
+				Data: map[string][]byte{"random-key": []byte("random-val")},
+			}
+			Expect(k8sClient.Create(ctx, unrelatedSec)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, unrelatedSec)
+
+			By("verifying hash consistently remains unchanged")
+			Consistently(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: dexDeploymentName, Namespace: uiNamespace,
+				}, dep)).To(Succeed())
+				g.Expect(dep.Spec.Template.Annotations[dexSecretHashAnnotation]).To(Equal(initialHash))
+			}).WithTimeout(3 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
+		})
+	})
 })
 
 // mockDiscoveryClient implements clusterinfo.DiscoveryClient for testing.
