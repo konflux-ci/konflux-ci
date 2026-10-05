@@ -51,6 +51,7 @@ Controller-runtime:
 - Operator envtest: `make test` from `operator/` (`operator/internal/controller/testutil/`).
 - Manager-role RBAC contract (`operator/internal/rbac/`, also in `make test`): forbids unscoped `escalate`/`bind` on clusterroles and unscoped `bind` on clusterrolebindings; requires `escalate` for embedded component ClusterRoles; every named `escalate`/`bind` target must be known.
 - CRD self-healing/drift tests: `skills/ginkgo-testing/SKILL.md`.
+- Pattern-replication PRs: when a change mirrors an existing controller's feature (PR description or commit message references a sibling controller or prior PR), compare the new controller's test suite against the source controller's tests. Check for: matching cleanup patterns (`DeferCleanupParentAndChildren` for cluster-scoped resources), reuse of existing test helpers defined in the same Describe, and coverage of equivalent subtests (error paths, side-effect preservation, resource rotation).
 
 Local Kind / operator loop: `skills/local-dev-setup/SKILL.md`, `skills/dev-verify-loop/SKILL.md`.
 
