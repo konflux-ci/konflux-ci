@@ -538,10 +538,16 @@ func expectEndpointRouted(path, token string) {
 func echoGetG(g Gomega, path, token string) map[string][]string {
 	request, err := http.NewRequest("GET", proxyURL(path), nil)
 	g.Expect(err).NotTo(HaveOccurred())
+	if err != nil {
+		return nil // prevent nil-pointer dereference on request
+	}
 	request.Header.Set("Authorization", "Bearer "+token)
 
 	response, err := proxyHTTPClient.Do(request)
 	g.Expect(err).NotTo(HaveOccurred())
+	if err != nil {
+		return nil // prevent nil-pointer dereference on response
+	}
 	defer response.Body.Close()
 
 	body, err := io.ReadAll(response.Body)
