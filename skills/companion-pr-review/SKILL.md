@@ -40,17 +40,80 @@ workflows to close them earlier.
 
 ## Parent PR heuristics (use before labels land)
 
-Skip review and retro when **both**:
+### Classification algorithm
 
-1. Author is `renovate[bot]` or `red-hat-konflux[bot]`
-2. Diff is limited to the companion allowlist:
-   - `operator/upstream-kustomizations/**`
-   - `.github/scripts/export-third-party-chart-env.sh`
-   - `dependencies/registry/kustomization.yml` (registry digest bumps only)
-   - `operator/go.mod` / `operator/go.sum` (OpenShift envtest CRDs from
-     `github.com/openshift/api`)
-   - `test/go-tests/go.mod` / `test/go-tests/go.sum` (sidecar when Renovate
-     bumps a shared dependency in both Go modules)
+Follow these steps in order to decide whether a parent PR is
+companion-eligible:
+
+1. **Check author.** Is the PR author `renovate[bot]` or
+   `red-hat-konflux[bot]`? If not → **not companion-eligible**, review
+   normally.
+2. **List every changed file** in the PR diff.
+3. **Compare each file against the companion allowlist below.** If
+   **every** changed file appears on the allowlist → the PR is
+   **companion-eligible**. Skip review — do not dispatch sub-agents, do
+   not approve, do not add `ready-for-merge`.
+4. If **any** changed file is not on the allowlist → **not
+   companion-eligible**, proceed with normal review.
+
+### Companion allowlist
+
+These paths are unconditionally allowed. A PR whose diff is limited to
+these paths (and whose author passes step 1) is companion-eligible:
+
+- `operator/upstream-kustomizations/**`
+- `.github/scripts/export-third-party-chart-env.sh`
+- `dependencies/registry/kustomization.yml`
+- `operator/go.mod`
+- `operator/go.sum`
+- `test/go-tests/go.mod`
+- `test/go-tests/go.sum`
+
+#### Why each path is on the list
+
+- **`operator/upstream-kustomizations/**`** — pin-only digest/SHA/tag
+  changes that trigger a companion PR with regenerated manifests.
+- **`.github/scripts/export-third-party-chart-env.sh`** — chart version
+  bumps that trigger companion manifest regeneration.
+- **`dependencies/registry/kustomization.yml`** — registry digest bumps
+  only. In practice MintMaker always bumps this file together with
+  `operator/upstream-kustomizations/registry`, so it does not appear
+  alone in a PR diff.
+- **`operator/go.mod` / `operator/go.sum`** — OpenShift envtest CRDs
+  derived from `github.com/openshift/api`; the companion workflow
+  regenerates the corresponding test CRDs.
+- **`test/go-tests/go.mod` / `test/go-tests/go.sum`** — these files do
+  not affect manifest regeneration and are not in the companion
+  workflow's trigger list. Renovate bumps them in two scenarios:
+  1. **Shared dependency** (e.g. `application-api`) updated in both Go
+     modules — the PR also changes `operator/go.mod` and
+     `operator/go.sum`, which ARE companion workflow triggers, so a
+     companion PR is created normally. The test/go-tests files are
+     carried along.
+  2. **Test-only dependency** updated independently — the PR changes
+     only `test/go-tests` files. No companion PR is created and no noop
+     marker is posted; these PRs are resolved by Renovate auto-merge or
+     MintMaker closure.
+
+### Examples
+
+- A PR by `red-hat-konflux[bot]` changing only `test/go-tests/go.mod`
+  and `test/go-tests/go.sum` → all files are on the allowlist →
+  **companion-eligible, skip review.** (No companion PR is created for
+  test-only changes; the PR is resolved by auto-merge or closure — see
+  the rationale above.)
+- A PR by `renovate[bot]` changing `operator/go.mod`,
+  `operator/go.sum`, `test/go-tests/go.mod`, and
+  `test/go-tests/go.sum` → all files are on the allowlist →
+  **companion-eligible, skip review.**
+- A PR by `renovate[bot]` changing `operator/docs/go.mod` → file is
+  **not** on the allowlist → **not companion-eligible, review normally.**
+- A PR by a human author changing
+  `operator/upstream-kustomizations/pipeline-service/kustomization.yaml`
+  → author is not a bot (step 1 fails) → **not companion-eligible,
+  review normally.**
+
+### Applying the classification
 
 Apply this **even before** `deps-only` / `superseded-by-companion` labels land.
 Do not run full review, do not approve, do not add `ready-for-merge`.
@@ -59,11 +122,6 @@ does not need human escalation.
 
 **Exception:** once a noop marker appears, follow the **Parent (noop)** row in
 the table above instead.
-
-**Not companion-eligible** (review normally):
-
-- Changes to `operator/docs/go.mod` or other non-allowlist paths
-- Human-authored PRs touching upstream kustomizations
 
 ## Check companion workflow state before commenting
 
