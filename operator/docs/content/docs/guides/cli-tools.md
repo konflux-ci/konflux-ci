@@ -13,7 +13,7 @@ compatible with the installed operator version and services.
 
 | ConfigMap | Script | Purpose |
 |-----------|--------|---------|
-| `create-tenant` | `create-tenant.sh` | Create a new tenant namespace with all required RBAC resources |
+| `create-tenant` | `create-tenant.sh` | Create a new tenant namespace with an admin RoleBinding |
 | `setup-release` | `setup-release.sh` | Set up a managed namespace with release pipeline resources |
 
 ## Downloading the scripts
