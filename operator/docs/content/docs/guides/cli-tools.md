@@ -32,8 +32,7 @@ chmod +x setup-release.sh
 
 ## create-tenant.sh
 
-Creates a new tenant namespace with RoleBindings for the integration pipeline
-runner and an admin user.
+Creates a new tenant namespace with a RoleBinding for an admin user.
 
 ```bash
 ./create-tenant.sh -n <namespace> -u <admin-user>
