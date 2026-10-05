@@ -227,6 +227,9 @@ type TrustedCASpecLookup func(ctx context.Context, crName string) (*konfluxv1alp
 // ConfigMaps outside target.Namespace are ignored.
 func NewTrustedCAConfigMapMapper(target TrustedCATarget, lookup TrustedCASpecLookup) func(ctx context.Context, obj client.Object) []reconcile.Request {
 	return func(ctx context.Context, obj client.Object) []reconcile.Request {
+		if obj.GetNamespace() != target.Namespace {
+			return nil
+		}
 		spec, err := lookup(ctx, target.CRName)
 		return mapTrustedCAConfigMap(obj, target, spec, err)
 	}
