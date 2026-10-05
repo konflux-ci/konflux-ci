@@ -66,6 +66,29 @@ Import via `apierrors "k8s.io/apimachinery/pkg/api/errors"` (some files import t
 
 The same principle applies to other typed API error checks — prefer `apierrors.IsAlreadyExists()`, `apierrors.IsConflict()`, etc. over string matching.
 
+## Manager lifecycle in envtest
+
+Start the controller manager inside each spec (or `BeforeEach`), **not** in `BeforeSuite`. `BeforeSuite` should only set up the envtest environment (`testutil.SetupTestEnv`) — it must not start a manager. A suite-level manager races per-spec managers: for example, the suite manager (without per-test options like `TokenCreator`) may apply resources immediately, while the spec manager (with those options) defers them, causing `Consistently(NotFound)` assertions to fail non-deterministically.
+
+The established pattern across release-service, build-service, image-controller, and namespace-lister suites:
+
+```go
+// suite_test.go — environment only, no manager
+var _ = BeforeSuite(func() {
+    testEnv = testutil.SetupTestEnv("../../..")
+    ctx = testEnv.Ctx
+    k8sClient = testEnv.K8sClient
+    objectStore = testEnv.ObjectStore
+})
+
+// *_controller_test.go — manager started per spec
+BeforeEach(func() {
+    startManager()
+})
+```
+
+When reviewing or writing controller tests, flag any `BeforeSuite` that calls `ctrl.NewManager`, `testutil.NewTestManager`, or `mgr.Start` — these should be moved into `BeforeEach` or the individual spec.
+
 ## CRD self-healing and drift tests
 
 For `Watches(&CRD{}, MapCRDToRequest)` tests:
