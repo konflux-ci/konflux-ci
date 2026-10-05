@@ -58,7 +58,7 @@ Local Kind / operator loop: `skills/local-dev-setup/SKILL.md`, `skills/dev-verif
 
 Read the matching skill before acting; do not load unrelated skills.
 
-- PR review (human- or agent-authored; skip companion-eligible MintMaker/Renovate parents; skip lock-file-only PRs): `skills/pr-review/SKILL.md`.
+- PR review (human- or agent-authored; skip companion-eligible MintMaker/Renovate parents; skip lock-file-only PRs): `skills/konflux-pr-review/SKILL.md`.
 - `go.mod` / Go pins / `go.mod requires go` CI: `skills/go-toolchain-upgrade/SKILL.md`.
 - MintMaker/Renovate companion flow; do not apply `deps-only`, `superseded-by-companion`, `pending-upstream-image`: `skills/companion-pr-review/SKILL.md`.
 - Open a PR / fork `/allow`: `skills/create-pr/SKILL.md`.
