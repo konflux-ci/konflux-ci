@@ -63,16 +63,6 @@ metadata:
     konflux-ci.dev/type: tenant
 EOF
 
-# Create the konflux-integration-runner ServiceAccount
-echo "👤 Creating konflux-integration-runner ServiceAccount..."
-kubectl apply -f - <<EOF
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: konflux-integration-runner
-  namespace: ${NAMESPACE}
-EOF
-
 # Create RoleBinding for konflux-integration-runner ServiceAccount
 echo "🔗 Creating RoleBinding for konflux-integration-runner..."
 kubectl apply -f - <<EOF
@@ -113,6 +103,5 @@ echo "✅ Tenant namespace '${NAMESPACE}' created successfully!"
 echo ""
 echo "Resources created:"
 echo "  - Namespace: ${NAMESPACE} (with label konflux-ci.dev/type: tenant)"
-echo "  - ServiceAccount: konflux-integration-runner"
 echo "  - RoleBinding: konflux-integration-runner -> ClusterRole/konflux-integration-runner"
 echo "  - RoleBinding: ${ADMIN_USER%%@*}-konflux-admin -> ClusterRole/konflux-admin-user-actions"
