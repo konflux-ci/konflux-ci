@@ -179,23 +179,23 @@ data:
     Strip any client-supplied impersonation and proxy-auth headers to\n\t# prevent
     spoofing. This runs at the server level, before any\n\t# handle/route blocks.\n\trequest_header
     -Impersonate-User\n\trequest_header -Impersonate-Group\n\trequest_header -Impersonate-Uid\n\trequest_header
-    -Impersonate-Extra-*\n\trequest_header -X-User\n\trequest_header -X-Group\n\n\t#
-    Health endpoint for liveness/readiness probes\n\thandle /health {\n\t\trespond
-    200\n\t}\n\n\t# Segment bridge files\n\thandle /segment/* {\n\t\troot * /opt/app-root/src\n\t\theader
-    Content-Type text/plain\n\t\tfile_server\n\t}\n\n\t# OAuth2 proxy - browser-facing
-    auth UI/callback\n\thandle /oauth2/* {\n\t\treverse_proxy 127.0.0.1:6000\n\t}\n\n\t#
-    Namespace lister (GET only on exact paths)\n\t# The namespace-lister performs
-    in-memory RBAC authorization: it checks\n\t# RoleBindings for the user AND their
-    groups to decide which namespaces\n\t# to return. Without group headers, a user
-    only sees namespaces where\n\t# they are bound individually — group-based bindings
-    are invisible.\n\t@nsListGet {\n\t\tmethod GET\n\t\tpath /api/k8s/api/v1/namespaces
-    /api/k8s/api/v1/namespaces/\n\t}\n\thandle @nsListGet {\n\t\troute {\n\t\t\tforward_auth
-    127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\theader_up Authorization {http.request.header.Authorization}\n\t\t\t\tcopy_headers
-    X-Auth-Request-Email X-Auth-Request-Groups\n\t\t\t}\n\t\t\timpersonate {\n\t\t\t\ttarget_user
-    X-User\n\t\t\t\ttarget_group X-Group\n\t\t\t}\n\t\t\t# Drop the client Dex JWT
-    after forward_auth. reverse_proxy copies\n\t\t\t# incoming headers; this backend
-    authenticates via X-User/X-Group.\n\t\t\trequest_header -Authorization\n\t\t\trewrite
-    * /api/v1/namespaces\n\t\t\treverse_proxy https://namespace-lister.namespace-lister.svc.cluster.local:8080
+    -Impersonate-Extra-*\n\trequest_header -X-User\n\trequest_header -X-Group\n\trequest_header
+    -X-Auth-Request-*\n\n\t# Health endpoint for liveness/readiness probes\n\thandle
+    /health {\n\t\trespond 200\n\t}\n\n\t# Segment bridge files\n\thandle /segment/*
+    {\n\t\troot * /opt/app-root/src\n\t\theader Content-Type text/plain\n\t\tfile_server\n\t}\n\n\t#
+    OAuth2 proxy - browser-facing auth UI/callback\n\thandle /oauth2/* {\n\t\treverse_proxy
+    127.0.0.1:6000\n\t}\n\n\t# Namespace lister (GET only on exact paths)\n\t# The
+    namespace-lister performs in-memory RBAC authorization: it checks\n\t# RoleBindings
+    for the user AND their groups to decide which namespaces\n\t# to return. Without
+    group headers, a user only sees namespaces where\n\t# they are bound individually
+    — group-based bindings are invisible.\n\t@nsListGet {\n\t\tmethod GET\n\t\tpath
+    /api/k8s/api/v1/namespaces /api/k8s/api/v1/namespaces/\n\t}\n\thandle @nsListGet
+    {\n\t\troute {\n\t\t\tforward_auth 127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\theader_up
+    Authorization {http.request.header.Authorization}\n\t\t\t\tcopy_headers X-Auth-Request-Email
+    X-Auth-Request-Groups\n\t\t\t}\n\t\t\timpersonate {\n\t\t\t\ttarget_user X-User\n\t\t\t\ttarget_group
+    X-Group\n\t\t\t}\n\t\t\t# Drop the client Dex JWT after forward_auth. reverse_proxy
+    copies\n\t\t\t# incoming headers; this backend authenticates via X-User/X-Group.\n\t\t\trequest_header
+    -Authorization\n\t\t\trewrite * /api/v1/namespaces\n\t\t\treverse_proxy https://namespace-lister.namespace-lister.svc.cluster.local:8080
     {\n\t\t\t\theader_down -X-Correlation-ID\n\t\t\t\ttransport http {\n\t\t\t\t\tread_timeout
     30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool file /mnt/cluster-ca/ca-bundle.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
     Backend snippets (tekton-results, kubearchive, etc.) loaded from init-generated
@@ -225,7 +225,7 @@ data:
     {path} /index.html\n\t\tfile_server\n\t}\n}\n"
 kind: ConfigMap
 metadata:
-  name: proxy-caddyfile-76hgkmbm4t
+  name: proxy-caddyfile-5d5b8824c2
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -760,7 +760,7 @@ spec:
           items:
           - key: Caddyfile
             path: Caddyfile
-          name: proxy-caddyfile-76hgkmbm4t
+          name: proxy-caddyfile-5d5b8824c2
         name: proxy-caddyfile
       - configMap:
           defaultMode: 420
