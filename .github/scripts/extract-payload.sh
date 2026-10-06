@@ -51,6 +51,35 @@ if [ -z "${IMAGE_TAG}" ]; then
   exit 1
 fi
 
+# Character allowlist. These values originate outside this workflow — a git tag
+# name (via the Release CR annotation) or a workflow_dispatch input — and a git
+# ref may legally contain $(), backticks, ';', '|', '&' and quotes, while a
+# repository_dispatch client_payload is not bound by git ref rules at all and
+# may contain spaces, ':' and newlines. Callers must bind these to env vars
+# rather than interpolate them into a run: block, and this allowlist is the
+# second layer: it rejects shell metacharacters, a leading '-' (which would be
+# parsed as an option by git/gh), and newlines (which would inject extra
+# key=value lines into $GITHUB_OUTPUT below).
+validate_field() {
+  local name="$1" value="$2" pattern="$3"
+
+  if (( ${#value} > 256 )); then
+    echo "Error: ${name} is too long (${#value} characters, max 256)" >&2
+    exit 1
+  fi
+  if [[ ! "${value}" =~ ${pattern} ]]; then
+    echo "Error: ${name} contains disallowed characters: '${value}'" >&2
+    echo "       Expected pattern: ${pattern}" >&2
+    exit 1
+  fi
+}
+
+# Tags/branches/SHAs: must start alphanumeric; '.', '_', '-', '/' allowed after.
+validate_field "version" "${VERSION}" '^[A-Za-z0-9][A-Za-z0-9._/+-]*$'
+validate_field "git_ref" "${GIT_REF}" '^[A-Za-z0-9][A-Za-z0-9._/-]*$'
+# OCI tag grammar: [A-Za-z0-9_][A-Za-z0-9._-]{0,127}
+validate_field "image_tag" "${IMAGE_TAG}" '^[A-Za-z0-9_][A-Za-z0-9._-]*$'
+
 echo "All required inputs validated:" >&2
 echo "  version: ${VERSION}" >&2
 echo "  git_ref: ${GIT_REF}" >&2
