@@ -15,7 +15,7 @@ set -euo pipefail
 #
 # Environment:
 #   CERT_MANAGER_VERSION          - Required. cert-manager chart version (use vX.Y.Z; from CI or
-#                                   eval "$(bash .github/scripts/export-third-party-chart-env.sh)").
+#                                   source .github/scripts/export-third-party-chart-env.sh).
 #   TRUST_MANAGER_VERSION         - Required. trust-manager chart version (same pattern).
 #   PROMETHEUS_OPERATOR_VERSION   - Required. prometheus-operator release tag (e.g. v0.91.0).
 #
