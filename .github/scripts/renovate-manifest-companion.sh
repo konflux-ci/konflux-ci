@@ -27,7 +27,7 @@ REPO_ROOT="${1:-${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel)}}"
 REPO_ROOT="$(cd "${REPO_ROOT}" && pwd)"
 cd "${REPO_ROOT}"
 
-eval "$(bash "${REPO_ROOT}/.github/scripts/export-third-party-chart-env.sh" "${REPO_ROOT}")"
+source "${REPO_ROOT}/.github/scripts/export-third-party-chart-env.sh"
 
 SOURCE_PR="${SOURCE_PR:?SOURCE_PR (dependency bump PR number) is required}"
 GITHUB_REPOSITORY="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
