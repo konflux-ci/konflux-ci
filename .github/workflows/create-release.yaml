@@ -23,6 +23,13 @@ on:
         type: boolean
         default: false
 
+# Release inputs (client_payload from the in-cluster release pipeline, or
+# workflow_dispatch inputs) are untrusted free text: a git tag name may legally
+# contain $(), backticks, ';', '|', '&' and quotes. They are therefore bound to
+# env vars and referenced as "$VAR" — never written as a template expression
+# inside a run: block, which would substitute them into the script text before
+# bash parses it.
+# extract-payload.sh additionally enforces a character allowlist.
 jobs:
   create-release:
     name: Create Release
@@ -43,15 +50,24 @@ jobs:
       - name: Extract event payload
         id: payload
         working-directory: ${{ github.workspace }}
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
+          INPUT_GIT_REF: ${{ inputs.git_ref }}
+          PAYLOAD_VERSION: ${{ github.event.client_payload.version }}
+          PAYLOAD_IMAGE_TAG: ${{ github.event.client_payload.image_tag }}
+          PAYLOAD_GIT_REF: ${{ github.event.client_payload.git_ref }}
+          EVENT_JSON: ${{ toJSON(github.event) }}
         run: |
           result=$(.github/scripts/extract-payload.sh \
-            "${{ github.event_name }}" \
-            "${{ inputs.version }}" \
-            "${{ inputs.image_tag }}" \
-            "${{ inputs.git_ref }}" \
-            "${{ github.event.client_payload.version }}" \
-            "${{ github.event.client_payload.image_tag }}" \
-            "${{ github.event.client_payload.git_ref }}")
+            "${EVENT_NAME}" \
+            "${INPUT_VERSION}" \
+            "${INPUT_IMAGE_TAG}" \
+            "${INPUT_GIT_REF}" \
+            "${PAYLOAD_VERSION}" \
+            "${PAYLOAD_IMAGE_TAG}" \
+            "${PAYLOAD_GIT_REF}")
           echo "${result}" | grep "^version=" >> $GITHUB_OUTPUT
           echo "${result}" | grep "^image_tag=" >> $GITHUB_OUTPUT
           echo "${result}" | grep "^git_ref=" >> $GITHUB_OUTPUT
@@ -61,12 +77,13 @@ jobs:
           echo "${result}"
           echo ""
           echo "=== Full Event JSON (for debugging) ==="
-          echo '${{ toJSON(github.event) }}' | jq '.' || echo "Event data not available"
+          printf '%s\n' "${EVENT_JSON}" | jq '.' || echo "Event data not available"
 
       - name: Checkout target commit
         working-directory: ${{ github.workspace }}
+        env:
+          TARGET_REF: ${{ steps.payload.outputs.git_ref }}
         run: |
-          TARGET_REF="${{ steps.payload.outputs.git_ref }}"
           CURRENT_SHA=$(git rev-parse HEAD)
           TARGET_SHA=$(git rev-parse "${TARGET_REF}")
           if [ "${TARGET_SHA}" != "${CURRENT_SHA}" ]; then
@@ -79,8 +96,10 @@ jobs:
       - name: Set version
         id: version
         working-directory: ${{ github.workspace }}
+        env:
+          PAYLOAD_VERSION: ${{ steps.payload.outputs.version }}
         run: |
-          VERSION="${{ steps.payload.outputs.version }}"
+          VERSION="${PAYLOAD_VERSION}"
           # Ensure version starts with 'v' prefix
           if [[ ! "${VERSION}" =~ ^v ]]; then
             VERSION="v${VERSION}"
@@ -95,21 +114,27 @@ jobs:
 
       - name: Generate release artifacts
         working-directory: ${{ github.workspace }}
+        env:
+          IMAGE_TAG: ${{ steps.payload.outputs.image_tag }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           .github/scripts/generate-release-artifacts.sh \
-            "${{ steps.payload.outputs.image_tag }}" \
-            "${{ steps.version.outputs.version }}"
+            "${IMAGE_TAG}" \
+            "${VERSION}"
 
       - name: Prepare release notes
         id: release-notes
         working-directory: ${{ github.workspace }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          IMAGE_TAG: ${{ steps.payload.outputs.image_tag }}
+          GIT_REF: ${{ steps.payload.outputs.git_ref }}
         run: |
           .github/scripts/prepare-release-notes.sh \
-            "${{ steps.version.outputs.version }}" \
-            "${{ steps.payload.outputs.image_tag }}" \
-            "${{ steps.payload.outputs.git_ref }}" \
+            "${VERSION}" \
+            "${IMAGE_TAG}" \
+            "${GIT_REF}" \
             /tmp/release-notes.md
           echo "notes_file=/tmp/release-notes.md" >> $GITHUB_OUTPUT
 
@@ -129,13 +154,16 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          GIT_REF: ${{ steps.payload.outputs.git_ref }}
+          DRAFT: ${{ inputs.draft || false }}
         run: |
           .github/scripts/create-release.sh \
-            "${{ steps.version.outputs.version }}" \
-            "${{ steps.payload.outputs.git_ref }}" \
+            "${VERSION}" \
+            "${GIT_REF}" \
             /tmp/release-notes.md \
             operator/dist \
-            "${{ inputs.draft || false }}"
+            "${DRAFT}"
 
       - name: Create issue on release failure
         if: failure()

@@ -52,6 +52,15 @@ if [ -z "$RELEASE_TAG" ]; then
   exit 0
 fi
 
+# The tag is scraped from a PR body in UPSTREAM_REPO, so it is untrusted text and
+# the grep above admits shell metacharacters. Require a plain tag name before it
+# reaches $GITHUB_OUTPUT and the PAT-bearing step that consumes it.
+if [[ ! "$RELEASE_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._/+-]*$ ]]; then
+  log "Release tag parsed from PR #${PR_NUMBER} contains disallowed characters: '${RELEASE_TAG}'. Skipping."
+  write_output "count=0"
+  exit 0
+fi
+
 # Only one non-draft (ready) PR at a time to avoid catalog-update PR conflicts.
 OPEN_READY=$(GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN}}" gh pr list --repo "${UPSTREAM_REPO}" \
   --author "@me" --state open --json number,isDraft -q '[.[] | select(.isDraft == false)] | length')
