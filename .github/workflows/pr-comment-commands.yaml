@@ -112,6 +112,36 @@ jobs:
               per_page: 100
             });
 
+            // Diagnostic only: checks.create on the later dispatch run attaches to the
+            // oldest Actions suite on this SHA. Log the inventory so we can see which
+            // suite that was without changing dispatch behavior.
+            try {
+              const suites = [...(suitesData.check_suites || [])].sort(
+                (a, b) => new Date(a.created_at) - new Date(b.created_at)
+              );
+              core.info(`e2e-diag check suites on HEAD: total_count=${suitesData.total_count} returned=${suites.length}`);
+              if (suitesData.total_count > suites.length) {
+                core.warning(
+                  `e2e-diag suite inventory incomplete: total_count=${suitesData.total_count} returned=${suites.length}; ` +
+                  `oldest_gha_suite may not be the true oldest on this SHA`
+                );
+              }
+              for (const s of suites) {
+                const app = s.app || {};
+                core.info(
+                  `e2e-diag suite id=${s.id} created=${s.created_at} app=${app.id}/${app.slug} ` +
+                  `status=${s.status}/${s.conclusion} latest_runs=${s.latest_check_runs_count} ` +
+                  `head_branch=${s.head_branch}`
+                );
+              }
+              const gha = suites.filter(s => (s.app || {}).slug === 'github-actions');
+              if (gha.length) {
+                core.info(`e2e-diag oldest github-actions suite (likely checks.create target): id=${gha[0].id} created=${gha[0].created_at}`);
+              }
+            } catch (err) {
+              core.warning(`e2e-diag suite inventory logging failed: ${err.message}`);
+            }
+
             let shaFirstSeenAt;
             if (suitesData.total_count > 0 && suitesData.check_suites.length > 0) {
               const createdDates = suitesData.check_suites.map(s => new Date(s.created_at).getTime());
@@ -121,7 +151,7 @@ jobs:
             }
 
             const commentTime = new Date(context.payload.comment.created_at);
-            console.log(`Comment: ${commentTime.toISOString()}, SHA first seen: ${shaFirstSeenAt.toISOString()}`);
+            core.info(`Comment: ${commentTime.toISOString()}, SHA first seen: ${shaFirstSeenAt.toISOString()}`);
 
             if (shaFirstSeenAt > new Date(commentTime.getTime() + 2000)) {
               await github.rest.issues.createComment({

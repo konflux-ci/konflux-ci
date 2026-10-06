@@ -33,10 +33,14 @@ jobs:
               echo "Tests are not run automatically from forks."
               echo "**Action Required:** A maintainer must comment \`/allow <commit-sha>\` on this PR to trigger tests."
             } >>"${GITHUB_STEP_SUMMARY}"
+            # Diagnostics stay in the step log (not the job summary fork authors see).
+            echo "e2e-diag event=${EVENT_NAME} run_e2e=false run_id=${GITHUB_RUN_ID} github_sha=${GITHUB_SHA} job=${GITHUB_JOB}"
+            echo "e2e-diag test/test-skip will be skipped; GitHub often records those skipped jobs as name=matrix.job_name instead of Run Operator E2E Tests (AMD64|ARM64)."
             exit 0
           fi
 
           echo "run_e2e=true" >>"${GITHUB_OUTPUT}"
+          echo "e2e-diag event=${EVENT_NAME} run_e2e=true run_id=${GITHUB_RUN_ID} github_sha=${GITHUB_SHA} job=${GITHUB_JOB}"
 
       - name: Checkout
         if: steps.e2e-gate.outputs.run_e2e == 'true'
@@ -56,6 +60,7 @@ jobs:
     permissions:
       contents: read
       checks: write
+      actions: read   # getWorkflowRun.check_suite_id for /allow attachment diagnostics
     outputs:
       operator: ${{ steps.changed-files.outputs.any_changed }}
       check_run_id: ${{ steps.create-check.outputs.check_run_id }}
@@ -71,29 +76,116 @@ jobs:
           esac
           echo "ref=$ref" >> $GITHUB_OUTPUT
           echo "Trigger: ${{ github.event_name }} → checkout ref: $ref"
+          echo "e2e-diag event=${{ github.event_name }} run_id=${{ github.run_id }} ref=$ref"
       - name: Create check run (comment-triggered)
         if: github.event_name == 'repository_dispatch'
         id: create-check
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9
         with:
           script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
             const head_sha = '${{ steps.set-ref.outputs.ref }}';
+            const names = ['Run Operator E2E Tests (AMD64)', 'Run Operator E2E Tests (ARM64)'];
+
+            const logCheck = (label, c) => {
+              const suite = (c.check_suite || {});
+              const prs = (c.pull_requests || []).map(p => p.number).join(',') || '(none)';
+              core.info(
+                `${label} id=${c.id} name=${JSON.stringify(c.name)} status=${c.status}/${c.conclusion} ` +
+                `head_sha=${c.head_sha} suite=${suite.id} external_id=${JSON.stringify(c.external_id || '')} ` +
+                `prs=[${prs}] html=${c.html_url}`
+              );
+            };
+
+            // This dispatch run's suite (from Actions API). checks.create often attaches to a
+            // different (older) Actions suite on the PR head SHA — that mismatch is the bug.
+            let thisRunSuiteId;
+            try {
+              const { data: thisRun } = await github.rest.actions.getWorkflowRun({
+                owner, repo, run_id: context.runId
+              });
+              thisRunSuiteId = thisRun.check_suite_id;
+              core.info(`e2e-diag this_run_id=${thisRun.id} this_run_suite=${thisRunSuiteId} event=${thisRun.event} head_sha=${thisRun.head_sha}`);
+            } catch (err) {
+              core.warning(`e2e-diag getWorkflowRun failed: ${err.message}`);
+            }
+
+            let oldestGhaSuiteId;
+            try {
+              const { data: suitesData } = await github.rest.checks.listSuitesForRef({
+                owner, repo, ref: head_sha, per_page: 100
+              });
+              const suites = [...(suitesData.check_suites || [])].sort(
+                (a, b) => new Date(a.created_at) - new Date(b.created_at)
+              );
+              if (suitesData.total_count > suites.length) {
+                core.warning(
+                  `e2e-diag suite inventory incomplete: total_count=${suitesData.total_count} returned=${suites.length}; ` +
+                  `oldest_gha_suite may not be the true oldest on this SHA`
+                );
+              }
+              const gha = suites.filter(s => (s.app || {}).slug === 'github-actions');
+              oldestGhaSuiteId = gha.length ? gha[0].id : undefined;
+              core.info(
+                `e2e-diag suites before create: total=${suitesData.total_count} returned=${suites.length} ` +
+                `oldest_gha_suite=${oldestGhaSuiteId ?? '(none)'} this_run_suite=${thisRunSuiteId ?? '(unknown)'}`
+              );
+              for (const s of suites) {
+                const app = s.app || {};
+                core.info(
+                  `e2e-diag suite id=${s.id} created=${s.created_at} app=${app.id}/${app.slug} ` +
+                  `status=${s.status}/${s.conclusion} latest_runs=${s.latest_check_runs_count} ` +
+                  `head_branch=${s.head_branch}`
+                );
+              }
+            } catch (err) {
+              core.warning(`e2e-diag listSuitesForRef failed: ${err.message}`);
+            }
+
             const { data: e2e } = await github.rest.checks.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              name: 'Run Operator E2E Tests (AMD64)',
+              owner, repo,
+              name: names[0],
               head_sha,
               status: 'in_progress'
             });
             const { data: arm64 } = await github.rest.checks.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              name: 'Run Operator E2E Tests (ARM64)',
+              owner, repo,
+              name: names[1],
               head_sha,
               status: 'in_progress'
             });
+            // Publish IDs before any logging so a log throw cannot skip
+            // report-operator-e2e-status and leave these runs in_progress.
             core.setOutput('check_run_id', e2e.id);
             core.setOutput('check_run_id_arm64', arm64.id);
+            try {
+              logCheck('e2e-diag created AMD64', e2e);
+              logCheck('e2e-diag created ARM64', arm64);
+              const createdSuite = (e2e.check_suite || {}).id;
+              // Avoid undefined === undefined → true when either side failed to resolve.
+              const sameSuite = (a, b) => (a == null || b == null) ? 'unknown' : String(a === b);
+              core.info(
+                `e2e-diag attachment: created_suite=${createdSuite ?? '(unknown)'} ` +
+                `on_this_run_suite=${sameSuite(createdSuite, thisRunSuiteId)} ` +
+                `on_oldest_gha_suite=${sameSuite(createdSuite, oldestGhaSuiteId)} ` +
+                `this_run_suite=${thisRunSuiteId ?? '(unknown)'} oldest_gha_suite=${oldestGhaSuiteId ?? '(none)'}`
+              );
+            } catch (err) {
+              core.warning(`e2e-diag post-create logging failed: ${err.message}`);
+            }
+
+            try {
+              for (const name of names) {
+                const { data } = await github.rest.checks.listForRef({
+                  owner, repo, ref: head_sha, check_name: name, per_page: 100, filter: 'all'
+                });
+                core.info(`e2e-diag existing '${name}' on SHA: ${data.total_count}`);
+                for (const c of data.check_runs || []) logCheck('e2e-diag listed', c);
+              }
+            } catch (err) {
+              core.warning(`e2e-diag listForRef failed: ${err.message}`);
+            }
       - name: Checkout PR branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
@@ -152,6 +244,9 @@ jobs:
             webhook_secret: APP_WEBHOOK_SECRET_ARM64
             smee_channel: SMEE_CHANNEL_ARM64
     steps:
+      - name: Log job identity
+        run: |
+          echo "e2e-diag github.job=${{ github.job }} matrix.job_name=${{ matrix.job_name }} event=${{ github.event_name }} run_id=${{ github.run_id }} arch=${{ matrix.arch }}"
       - name: Skip test - no operator changes
         run: |
           echo "No operator-related changes detected. Skipping tests."
@@ -228,6 +323,7 @@ jobs:
           esac
           echo "ref=$ref" >> $GITHUB_OUTPUT
           echo "Trigger: ${{ github.event_name }} → checkout ref: $ref"
+          echo "e2e-diag github.job=${{ github.job }} matrix.job_name=${{ matrix.job_name }} event=${{ github.event_name }} run_id=${{ github.run_id }} arch=${{ matrix.arch }} ref=$ref"
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6  # v2.0.0
         with:
@@ -361,11 +457,14 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       checks: write
+      actions: read   # getWorkflowRun.check_suite_id for /allow attachment diagnostics
     steps:
       - name: Update check runs
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9
         with:
           script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
             const checkRunId = parseInt(process.env.CHECK_RUN_ID);
             const checkRunIdArm64 = parseInt(process.env.CHECK_RUN_ID_ARM64);
             const testResult = process.env.TEST_RESULT;
@@ -373,9 +472,40 @@ jobs:
             let conclusion = 'failure';
             if (testResult === 'success' || testSkipResult === 'success') conclusion = 'success';
             else if (testResult === 'cancelled' || testSkipResult === 'cancelled') conclusion = 'cancelled';
-            const update = { owner: context.repo.owner, repo: context.repo.repo, status: 'completed', conclusion };
-            await github.rest.checks.update({ ...update, check_run_id: checkRunId });
-            await github.rest.checks.update({ ...update, check_run_id: checkRunIdArm64 });
+
+            let thisRunSuiteId;
+            try {
+              const { data: thisRun } = await github.rest.actions.getWorkflowRun({
+                owner, repo, run_id: context.runId
+              });
+              thisRunSuiteId = thisRun.check_suite_id;
+            } catch (err) {
+              core.warning(`e2e-diag getWorkflowRun failed: ${err.message}`);
+            }
+            core.info(
+              `e2e-diag finalize test=${testResult} test-skip=${testSkipResult} conclusion=${conclusion} ` +
+              `amd64_id=${checkRunId} arm64_id=${checkRunIdArm64} this_run=${context.runId} ` +
+              `this_run_suite=${thisRunSuiteId ?? '(unknown)'}`
+            );
+
+            const update = { owner, repo, status: 'completed', conclusion };
+            const { data: amd } = await github.rest.checks.update({ ...update, check_run_id: checkRunId });
+            const { data: arm } = await github.rest.checks.update({ ...update, check_run_id: checkRunIdArm64 });
+            try {
+              // Avoid undefined === undefined → true when either side failed to resolve.
+              const sameSuite = (a, b) => (a == null || b == null) ? 'unknown' : String(a === b);
+              for (const [label, c] of [['AMD64', amd], ['ARM64', arm]]) {
+                const suite = c.check_suite || {};
+                const prs = (c.pull_requests || []).map(p => p.number).join(',') || '(none)';
+                core.info(
+                  `e2e-diag updated ${label} id=${c.id} name=${JSON.stringify(c.name)} ` +
+                  `status=${c.status}/${c.conclusion} suite=${suite.id ?? '(unknown)'} ` +
+                  `on_this_run_suite=${sameSuite(suite.id, thisRunSuiteId)} prs=[${prs}] html=${c.html_url}`
+                );
+              }
+            } catch (err) {
+              core.warning(`e2e-diag post-update logging failed: ${err.message}`);
+            }
         env:
           CHECK_RUN_ID: ${{ needs.check-changes.outputs.check_run_id }}
           CHECK_RUN_ID_ARM64: ${{ needs.check-changes.outputs.check_run_id_arm64 }}
