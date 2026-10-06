@@ -53,26 +53,15 @@ data:
     tenant namespace: ${NAMESPACE}\"\n\n# Create the namespace with tenant label\necho
     \"\U0001F4E6 Creating namespace...\"\nkubectl apply -f - <<EOF\napiVersion: v1\nkind:
     Namespace\nmetadata:\n  name: ${NAMESPACE}\n  labels:\n    konflux-ci.dev/type:
-    tenant\nEOF\n\n# Create the konflux-integration-runner ServiceAccount\necho \"\U0001F464
-    Creating konflux-integration-runner ServiceAccount...\"\nkubectl apply -f - <<EOF\napiVersion:
-    v1\nkind: ServiceAccount\nmetadata:\n  name: konflux-integration-runner\n  namespace:
-    ${NAMESPACE}\nEOF\n\n# Create RoleBinding for konflux-integration-runner ServiceAccount\necho
-    \"\U0001F517 Creating RoleBinding for konflux-integration-runner...\"\nkubectl
-    apply -f - <<EOF\napiVersion: rbac.authorization.k8s.io/v1\nkind: RoleBinding\nmetadata:\n
-    \ name: konflux-integration-runner\n  namespace: ${NAMESPACE}\nroleRef:\n  apiGroup:
-    rbac.authorization.k8s.io\n  kind: ClusterRole\n  name: konflux-integration-runner\nsubjects:\n-
-    kind: ServiceAccount\n  name: konflux-integration-runner\n  namespace: ${NAMESPACE}\nEOF\n\n#
-    Create RoleBinding for admin user\necho \"\U0001F451 Creating RoleBinding for
-    admin user: ${ADMIN_USER}...\"\nkubectl apply -f - <<EOF\napiVersion: rbac.authorization.k8s.io/v1\nkind:
-    RoleBinding\nmetadata:\n  name: ${ADMIN_USER%%@*}-konflux-admin\n  namespace:
-    ${NAMESPACE}\nroleRef:\n  apiGroup: rbac.authorization.k8s.io\n  kind: ClusterRole\n
-    \ name: konflux-admin-user-actions\nsubjects:\n- kind: User\n  name: ${ADMIN_USER}\n
-    \ apiGroup: rbac.authorization.k8s.io\nEOF\n\necho \"✅ Tenant namespace '${NAMESPACE}'
-    created successfully!\"\necho \"\"\necho \"Resources created:\"\necho \"  - Namespace:
-    ${NAMESPACE} (with label konflux-ci.dev/type: tenant)\"\necho \"  - ServiceAccount:
-    konflux-integration-runner\"\necho \"  - RoleBinding: konflux-integration-runner
-    -> ClusterRole/konflux-integration-runner\"\necho \"  - RoleBinding: ${ADMIN_USER%%@*}-konflux-admin
-    -> ClusterRole/konflux-admin-user-actions\"\n"
+    tenant\nEOF\n\n# Create RoleBinding for admin user\necho \"\U0001F451 Creating
+    RoleBinding for admin user: ${ADMIN_USER}...\"\nkubectl apply -f - <<EOF\napiVersion:
+    rbac.authorization.k8s.io/v1\nkind: RoleBinding\nmetadata:\n  name: ${ADMIN_USER%%@*}-konflux-admin\n
+    \ namespace: ${NAMESPACE}\nroleRef:\n  apiGroup: rbac.authorization.k8s.io\n  kind:
+    ClusterRole\n  name: konflux-admin-user-actions\nsubjects:\n- kind: User\n  name:
+    ${ADMIN_USER}\n  apiGroup: rbac.authorization.k8s.io\nEOF\n\necho \"✅ Tenant namespace
+    '${NAMESPACE}' created successfully!\"\necho \"\"\necho \"Resources created:\"\necho
+    \"  - Namespace: ${NAMESPACE} (with label konflux-ci.dev/type: tenant)\"\necho
+    \"  - RoleBinding: ${ADMIN_USER%%@*}-konflux-admin -> ClusterRole/konflux-admin-user-actions\"\n"
 kind: ConfigMap
 metadata:
   name: create-tenant
