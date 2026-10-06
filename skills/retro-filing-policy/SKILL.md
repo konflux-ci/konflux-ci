@@ -6,7 +6,7 @@ description: >-
   or deciding whether a review-process finding belongs in this repo.
 ---
 
-# Retro filing policy
+# Retro Filing Policy
 
 Keep retro comments on the originating PR.
 
