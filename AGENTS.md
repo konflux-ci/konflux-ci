@@ -24,6 +24,14 @@ Layout: `operator/` (controllers, `config/`, `upstream-kustomizations/`, embedde
 - Markdown: `npx markdown-toc -i` if structure changes.
 - This repo is upstream. Do not name downstream consumers (e.g. `infra-deployments`) in code or comments. Use "in some environments" or "by external policies".
 
+## Tekton pipeline changes
+
+`.tekton/` pipeline YAML affects all CI runs for all contributors. Apply extra scrutiny to changes in this directory.
+
+- **Prefer root-cause fixes over retry budgets.** Do not add or increase `retries:` fields on Tekton tasks as a first-line fix for CI reliability issues. Investigate failure logs and propose fixes to the underlying infrastructure, task, or configuration. If the root cause requires infrastructure access or monitoring data not available to the agent, flag the limitation in the PR description and recommend human investigation rather than masking failures with retries.
+- **Validate PipelineRun parameter overrides.** When a PipelineRun overrides a Pipeline parameter default (e.g., a timeout), check whether the override was intentional and document the reasoning for any change. Compare against the upstream pipeline definition to avoid silently tightening or loosening defaults.
+- **Scope changes conservatively.** Pipeline changes must be evidence-based, citing specific failure logs or metrics. Do not propose inference-based changes (e.g., "this timeout looks low"). If evidence is unavailable, recommend human investigation instead.
+
 ## Operator work
 
 From `operator/`: `make test`, `make lint`, `make manifests generate` (after API/RBAC marker changes; CI `operator-verify-generated-files` fails if stale), `make run`. Other targets (`test-e2e`, `lint-fix`, `install`, `docker-build`, `docs-serve`, ...): `operator/Makefile`. golangci-lint version is the single semver line in `operator/.golangci-lint-version` (shared with CI `operator-lint`). CI workflow names: `skills/create-pr/SKILL.md`.
