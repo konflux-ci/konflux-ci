@@ -470,7 +470,7 @@ spec:
             secretKeyRef:
               key: client-secret
               name: oauth2-proxy-client-secret
-        image: quay.io/konflux-ci/dex@sha256:63bfa21f272baebc752ecf0ec17a69bd7af4bb2a577236893bd16c53904b4aa6
+        image: quay.io/konflux-ci/dex@sha256:ebefa206963f6dbc677cf52a7a02d8087df7676e50976fa66320e90c89072fa2
         livenessProbe:
           httpGet:
             path: /healthz/ready
@@ -574,7 +574,7 @@ spec:
         - /etc/caddy/Caddyfile
         - --adapter
         - caddyfile
-        image: quay.io/konflux-ci/reverse-proxy@sha256:4b0f6072b8ed05009d64a7cb821a53eb15e5a9d73164de05dfcffc0c39fcb5c4
+        image: quay.io/konflux-ci/reverse-proxy@sha256:dbfc2d6c1dbc07e986dd6d9a19cec94f68a022e85616cf4e4ea1afa121e60985
         livenessProbe:
           failureThreshold: 3
           httpGet:
@@ -680,7 +680,7 @@ spec:
         - -R
         - /opt/app-root/src/.
         - /mnt/static-content/
-        image: quay.io/konflux-ci/konflux-ui@sha256:9f9662b4fd824133daaf9494e95e3d77b7752a653d79e9ff3ed2f92d280300f2
+        image: quay.io/konflux-ci/konflux-ui@sha256:bca123f70c85c9646619011aa07157a1aaf23280d5d787768b38ce978de47180
         name: copy-static-content
         resources:
           limits:
@@ -698,7 +698,7 @@ spec:
       - command:
         - sh
         - /var/run/scripts/konflux-ci.dev/generate-proxy-config.sh
-        image: quay.io/konflux-ci/konflux-ui@sha256:9f9662b4fd824133daaf9494e95e3d77b7752a653d79e9ff3ed2f92d280300f2
+        image: quay.io/konflux-ci/konflux-ui@sha256:bca123f70c85c9646619011aa07157a1aaf23280d5d787768b38ce978de47180
         name: generate-proxy-config
         resources:
           limits:

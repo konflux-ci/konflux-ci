@@ -14,7 +14,7 @@ require (
 	github.com/h2non/gock v1.2.0
 	github.com/konflux-ci/application-api v0.0.0-20260927062134-a189c1676a85
 	github.com/konflux-ci/build-service v0.0.0-20261002173949-219047153566
-	github.com/konflux-ci/image-controller v0.0.0-20260922140956-1775f73cc0f9
+	github.com/konflux-ci/image-controller v0.0.0-20261002141002-0eb5ecdc9324
 	github.com/konflux-ci/integration-service v0.0.0-20260908121035-278281fdf582
 	github.com/konflux-ci/konflux-ci/operator v0.0.0
 	github.com/konflux-ci/operator-toolkit v0.0.0-20260921214948-0f252ff98994
@@ -24,7 +24,7 @@ require (
 	github.com/onsi/gomega v1.44.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/openshift-pipelines/pipelines-as-code v0.48.0
-	github.com/openshift/api v0.0.0-20261005181437-18d5eb0e5ecb
+	github.com/openshift/api v0.0.0-20261006163836-502232e87aad
 	github.com/openshift/client-go v0.0.0-20261005205656-df0bf2958957
 	github.com/openshift/library-go v0.0.0-20261001144932-192662696fc7
 	github.com/redhat-appstudio/jvm-build-service v0.0.0-20250301023318-b47170d413c5

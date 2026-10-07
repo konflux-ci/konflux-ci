@@ -241,8 +241,8 @@ github.com/konflux-ci/application-api v0.0.0-20260927062134-a189c1676a85 h1:/BWO
 github.com/konflux-ci/application-api v0.0.0-20260927062134-a189c1676a85/go.mod h1:948Z+a1IbfRT0RtoHzWWSN9YEucSbMJTHaMhz7dVICc=
 github.com/konflux-ci/build-service v0.0.0-20261002173949-219047153566 h1:ewOhvvJQSQ5SX3UjlfVmDgG+U5SrwLpvkzvOKXVNtqA=
 github.com/konflux-ci/build-service v0.0.0-20261002173949-219047153566/go.mod h1:2PMnMSxhpEd8Hx/Ut+H9XG3O4ETUGKtxixbZw8IWTLQ=
-github.com/konflux-ci/image-controller v0.0.0-20260922140956-1775f73cc0f9 h1:RV79Gg4rlflMlRSQlERVHXw7c7s6CbdjZuCFpfVd9C4=
-github.com/konflux-ci/image-controller v0.0.0-20260922140956-1775f73cc0f9/go.mod h1:ac1emWUU+fCuX5HUHaA4oW2HeKoxqFFlkcC8OCwQqms=
+github.com/konflux-ci/image-controller v0.0.0-20261002141002-0eb5ecdc9324 h1:KbfBpBMJc6mybOARU8lRW+o552UomGZs24KVQVWw4Sk=
+github.com/konflux-ci/image-controller v0.0.0-20261002141002-0eb5ecdc9324/go.mod h1:ac1emWUU+fCuX5HUHaA4oW2HeKoxqFFlkcC8OCwQqms=
 github.com/konflux-ci/integration-service v0.0.0-20260908121035-278281fdf582 h1:Mns75Gog894C8WQ9HlonVCqQN9spOBZUprd/jP4v4io=
 github.com/konflux-ci/integration-service v0.0.0-20260908121035-278281fdf582/go.mod h1:WloJMYPvLGvkNdLu8Xd3nrQPFA4uo7V0TfT4r9gCHmg=
 github.com/konflux-ci/operator-toolkit v0.0.0-20260921214948-0f252ff98994 h1:2kqYlCABRhsO2w91PiEksivowISBmCE0B7zTCG4c1Tk=
@@ -296,8 +296,8 @@ github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJw
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
 github.com/openshift-pipelines/pipelines-as-code v0.48.0 h1:9lhLcJ3x2uZGc35wqyo8aop61xdmLVN4+bi1Veb5pWU=
 github.com/openshift-pipelines/pipelines-as-code v0.48.0/go.mod h1:laJi+ID5tCIai2XOf6i7ESHD7hthIUFj/z/FyTbwhtc=
-github.com/openshift/api v0.0.0-20261005181437-18d5eb0e5ecb h1:FwC9lJyO8vEgnJIYCwBtY4WwjQMh+Lu4305ETN9VdCg=
-github.com/openshift/api v0.0.0-20261005181437-18d5eb0e5ecb/go.mod h1:2oI3aXQFDjjl7l4xA9ZPSkB+l+lyfWLg7P2sWg9yEvM=
+github.com/openshift/api v0.0.0-20261006163836-502232e87aad h1:1GLjeuqWV5BUEGivixoIblqID+0Ptebe7nS4VxgpLBg=
+github.com/openshift/api v0.0.0-20261006163836-502232e87aad/go.mod h1:2oI3aXQFDjjl7l4xA9ZPSkB+l+lyfWLg7P2sWg9yEvM=
 github.com/openshift/client-go v0.0.0-20261005205656-df0bf2958957 h1:HJVpQufaICRViyT5yDxCM6kMjQWo8A/UJcjdrm3/zIM=
 github.com/openshift/client-go v0.0.0-20261005205656-df0bf2958957/go.mod h1:v+Wcu0Fqa7Mlh8kVlwtM/RWw60G0aLdAhtpA7/vtQeI=
 github.com/openshift/library-go v0.0.0-20261001144932-192662696fc7 h1:PDH/v+jap31Eb4N9q+Q3X05QHIXZA4sVyr4zb/n+Cv0=
