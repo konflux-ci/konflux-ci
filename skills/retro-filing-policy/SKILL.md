@@ -1,21 +1,22 @@
 ---
 name: retro-filing-policy
 description: >-
-  Filing rules for the fullsend retro agent after PRs merge or close.
-  Use when writing retro proposals, filing issues from a retrospective,
-  or deciding whether a review-process finding belongs in this repo.
+  Filing rules for the fullsend retro agent. Use when writing retro
+  output after a PR closes or on /fs-retro.
 ---
 
 # Retro Filing Policy
 
-Keep retro comments on the originating PR.
+Keep the retrospective on the originating PR.
 
-Do **not** file issues in `konflux-ci/konflux-ci` that optimize how review
-runs (fast-paths, skip/classify routing, harness skill names, sub-agent
-depth, effort/cost, AGENTS.md review cross-references). Leave those notes
-on the originating PR. A `fullsend-ai/fullsend` issue is only for a change
-in the fullsend review harness — not for tuning this repo's skills or
-AGENTS.md.
+Required `agent-result.json` for an automatic PR-closed retro, and for
+`/fs-retro` unless the human comment explicitly says to file issues:
 
-OK to file here only for product/test conventions (code, tests, docs that
-humans and agents should follow) — not review-process changes.
+- `proposals` must be `[]`
+- Do not add proposal objects for this repository or any `target_repo`
+- Put findings only in `summary`
+
+When a `/fs-retro` comment explicitly says to file issues, add proposal
+objects only for what that comment asks to file.
+
+An empty `proposals` array is a valid retro result.

@@ -59,7 +59,7 @@ Local Kind / operator loop: `skills/local-dev-setup/SKILL.md`, `skills/dev-verif
 Read the matching skill before acting; do not load unrelated skills.
 
 - PR review (human- or agent-authored; skip companion-eligible MintMaker/Renovate parents; skip lock-file-only PRs): `skills/pr-review/SKILL.md`.
-- Retro issue filing (do not file review-process optimizations here): `skills/retro-filing-policy/SKILL.md`.
+- Retro output (PR close or `/fs-retro`). Keep `proposals` empty unless the human comment explicitly says to file issues: `skills/retro-filing-policy/SKILL.md`.
 - `go.mod` / Go pins / `go.mod requires go` CI: `skills/go-toolchain-upgrade/SKILL.md`.
 - MintMaker/Renovate companion flow; do not apply `deps-only`, `superseded-by-companion`, `pending-upstream-image`: `skills/companion-pr-review/SKILL.md`.
 - Open a PR / fork `/allow`: `skills/create-pr/SKILL.md`.
