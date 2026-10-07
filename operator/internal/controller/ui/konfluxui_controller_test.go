@@ -19,6 +19,7 @@ package ui
 import (
 	"context"
 	"encoding/base64"
+	"strings"
 	"time"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -132,10 +133,11 @@ var _ = Describe("KonfluxUI Controller", func() {
 				cmList := &corev1.ConfigMapList{}
 				g.Expect(k8sClient.List(ctx, cmList,
 					client.InNamespace(uiNamespace),
-					client.MatchingLabels{dexConfigMapLabel: "true"},
+					client.MatchingLabels{constant.KonfluxOwnerLabel: CRName},
 				)).To(Succeed())
-				g.Expect(cmList.Items).NotTo(BeEmpty(), "expected a Dex ConfigMap")
-				yamlData := cmList.Items[0].Data[dexConfigKey]
+				dexCMs := filterDexRevisions(cmList.Items)
+				g.Expect(dexCMs).NotTo(BeEmpty(), "expected a Dex ConfigMap")
+				yamlData := dexCMs[0].Data[dexConfigKey]
 				g.Expect(yamlData).NotTo(BeEmpty())
 
 				var cfg dex.Config
@@ -1500,10 +1502,11 @@ var _ = Describe("KonfluxUI Controller", func() {
 				cmList := &corev1.ConfigMapList{}
 				g.Expect(k8sClient.List(ctx, cmList,
 					client.InNamespace(uiNamespace),
-					client.MatchingLabels{dexConfigMapLabel: "true"},
+					client.MatchingLabels{constant.KonfluxOwnerLabel: CRName},
 				)).To(Succeed())
-				g.Expect(cmList.Items).NotTo(BeEmpty(), "expected at least one dex ConfigMap")
-				cmName = cmList.Items[0].Name
+				dexCMs := filterDexRevisions(cmList.Items)
+				g.Expect(dexCMs).NotTo(BeEmpty(), "expected at least one dex ConfigMap")
+				cmName = dexCMs[0].Name
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			By("deleting the ConfigMap")
@@ -1511,12 +1514,12 @@ var _ = Describe("KonfluxUI Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: cmName, Namespace: uiNamespace},
 			})).To(Succeed())
 
-			By("verifying a ConfigMap with the managed label is recreated")
+			By("verifying a Dex ConfigMap revision is recreated")
 			Eventually(func(g Gomega) {
 				cmList := &corev1.ConfigMapList{}
 				g.Expect(k8sClient.List(ctx, cmList,
 					client.InNamespace(uiNamespace),
-					client.MatchingLabels{dexConfigMapLabel: "true"},
+					client.MatchingLabels{constant.KonfluxOwnerLabel: CRName},
 				)).To(Succeed())
 				g.Expect(cmList.Items).NotTo(BeEmpty())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
@@ -1524,6 +1527,21 @@ var _ = Describe("KonfluxUI Controller", func() {
 	})
 
 	Context("Dex ConfigMap rotation", func() {
+		// envtest runs no garbage collector, so a revision owned by a CR that an
+		// earlier spec deleted survives into the next one. CleanupOrphans then
+		// skips it: its owner UID no longer matches the freshly created CR. Clear
+		// the revisions between specs so each starts from a clean namespace.
+		AfterEach(func(ctx SpecContext) {
+			cmList := &corev1.ConfigMapList{}
+			Expect(k8sClient.List(ctx, cmList, client.InNamespace(uiNamespace))).To(Succeed())
+			for i := range cmList.Items {
+				cm := &cmList.Items[i]
+				if strings.HasPrefix(cm.Name, dexConfigMapBaseName+"-") {
+					Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, cm))).To(Succeed())
+				}
+			}
+		})
+
 		// mountedDexConfigMap returns the ConfigMap the dex Deployment currently mounts.
 		mountedDexConfigMap := func(ctx context.Context, g Gomega) string {
 			dep := &appsv1.Deployment{}
@@ -1604,7 +1622,7 @@ var _ = Describe("KonfluxUI Controller", func() {
 				cmList := &corev1.ConfigMapList{}
 				g.Expect(k8sClient.List(ctx, cmList,
 					client.InNamespace(uiNamespace),
-					client.MatchingLabels{dexConfigMapLabel: "true"},
+					client.MatchingLabels{constant.KonfluxOwnerLabel: CRName},
 				)).To(Succeed())
 				var rotated string
 				for _, cm := range cmList.Items {
@@ -2751,4 +2769,18 @@ func (m *mockDiscoveryClient) ServerResourcesForGroupVersion(groupVersion string
 
 func (m *mockDiscoveryClient) ServerVersion() (*version.Info, error) {
 	return m.serverVersion, nil
+}
+
+// filterDexRevisions picks the content-hashed Dex ConfigMap revisions out of a
+// namespace listing. The revisions carry the standard Konflux owner label now that
+// they are applied through the tracking client, so they are no longer separable by
+// a bespoke label alone; the base name identifies them.
+func filterDexRevisions(items []corev1.ConfigMap) []corev1.ConfigMap {
+	var out []corev1.ConfigMap
+	for _, cm := range items {
+		if strings.HasPrefix(cm.Name, dexConfigMapBaseName+"-") {
+			out = append(out, cm)
+		}
+	}
+	return out
 }
