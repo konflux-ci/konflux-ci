@@ -49,6 +49,17 @@ if [ "${KITE_ENABLED:-}" = "true" ] && [ -f "${TEMPLATES_DIR}/kite.caddy" ]; the
   hostname="${KITE_HOSTNAME:-konflux-kite.konflux-kite.svc.cluster.local}"
   sed "s/__KITE_HOSTNAME__/${hostname}/g" \
     "${TEMPLATES_DIR}/kite.caddy" > "${SNIPPETS_DIR}/kite.caddy"
+
+  if [ -f "${SERVICE_CA_PATH}" ]; then
+    printf 'transport http {\n    tls_trust_pool file %s\n}\n' "${SERVICE_CA_PATH}" \
+      > "${SNIPPETS_DIR}/konflux-kite-tls.conf"
+    log "kite TLS: service CA (in-cluster override)"
+  else
+    printf 'transport http {\n    tls_insecure_skip_verify\n}\n' \
+      > "${SNIPPETS_DIR}/konflux-kite-tls.conf"
+    log "kite TLS: insecure (in-cluster, no service CA)"
+  fi
+
   log "kite endpoint enabled (${hostname})"
 fi
 
