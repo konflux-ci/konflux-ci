@@ -30,6 +30,7 @@ The current conformance suite is written for that model: it exercises deployed s
 - `ibmcloud-credentials-secret` (default: `ibmcloud-mapt-credentials`): Secret containing IBM Cloud API and COS HMAC credentials.
 - `region` (default: `us-south`): IBM Cloud region for the VSI.
 - `zone` (default: `us-south-2`): IBM Cloud zone for the VSI.
+- `provision-timeout` (default: `4h`): auto-destroy timeout for the IBM VSI. The provision task schedules destruction after this duration regardless of pipeline outcome, preventing orphaned resources when a PipelineRun is interrupted before the `finally` deprovision task runs (e.g., OOM, node eviction, manual cancellation). Choose a value that covers expected test duration plus buffer.
 - `release-ta-oci-storage` (default: empty): optional OCI ref for conformance trusted-artifacts flow.
 - `integration-go-test-extra-args` (default: empty): optional space-separated extra flags appended to integration `go test . ./pkg/...` (e.g. `-run=TestFoo -count=1`).
 - `conformance-go-test-extra-args` (default: empty): optional space-separated extra flags appended to conformance `go test` after the fixed Ginkgo options (e.g. `-ginkgo.focus=Subsuite`), same idea as `./test/e2e/run-e2e.sh` forwarding `"$@"`.

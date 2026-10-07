@@ -138,6 +138,14 @@ spec:
         the pre-built image as a Kubernetes pod with credentials injected, instead of
         compiling from source.
       default: ""
+    - name: provision-timeout
+      type: string
+      description: >-
+        Auto-destroy timeout for the IBM VSI. The provision task schedules
+        destruction after this duration regardless of pipeline outcome,
+        preventing orphaned resources when a PipelineRun is interrupted
+        before the finally deprovision task runs.
+      default: "4h"
     - name: catalog-url
       type: string
       default: https://github.com/konflux-ci/tekton-integration-catalog.git
@@ -232,6 +240,8 @@ spec:
           value: "64"
         - name: harden-control-plane
           value: "true"
+        - name: timeout
+          value: $(params.provision-timeout)
     - name: deploy-konflux-pac
       runAfter:
         - provision-kind-cluster
