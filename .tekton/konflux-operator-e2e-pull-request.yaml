@@ -36,7 +36,7 @@ spec:
       # Optional; See example in .tekton/pipelines/operator-e2e/pipeline.yaml.
       value: ""
     - name: konflux-ready-timeout
-      value: 15m
+      value: 25m
     # OCI artifact prefix for kind-aws provision/deprovision (tag = PipelineRun name). Credentials secret must allow push/pull to this repo.
     - name: oci-container-repo
       value: quay.io/konflux-vanguard/konflux-operator-e2e-artifacts

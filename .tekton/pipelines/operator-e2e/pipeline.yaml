@@ -162,6 +162,7 @@ spec:
         - name: SNAPSHOT
           value: $(params.SNAPSHOT)
     - name: provision-kind-cluster
+      retries: 1
       taskRef:
         resolver: git
         params:
