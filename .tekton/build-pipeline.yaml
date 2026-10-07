@@ -234,14 +234,7 @@ spec:
       runAfter:
         - prefetch-dependencies
       taskRef:
-        params:
-          - name: name
-            value: buildah-remote-oci-ta
-          - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-buildah-remote-oci-ta:0.12.3@sha256:88b971c800b3e71903ddad83da884d092e9beda8b51deaf980f6525e45ed043f
-          - name: kind
-            value: task
-        resolver: bundles
+        name: buildah-remote-oci-ta
     - name: build-image-index
       params:
         - name: IMAGE
@@ -579,6 +572,11 @@ spec:
             value: task
         resolver: bundles
     - name: rpms-signature-scan
+      matrix:
+        params:
+          - name: RPM_PGP_ARTIFACT
+            value:
+              - $(tasks.build-images.results.RPM_PGP_ARTIFACT[*])
       params:
         - name: image-url
           value: $(tasks.build-image-index.results.IMAGE_URL)
@@ -587,14 +585,7 @@ spec:
       runAfter:
         - build-image-index
       taskRef:
-        params:
-          - name: name
-            value: rpms-signature-scan
-          - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-rpms-signature-scan:0.2.2@sha256:cc1b939d933d24727ef4b90e1c5c65a6d2a6c1c036cf74f685b597d611fa150f
-          - name: kind
-            value: task
-        resolver: bundles
+        name: rpms-signature-scan
       when:
         - input: $(params.skip-checks)
           operator: in

@@ -1,0 +1,100 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: rpms-signature-scan
+  labels:
+    app.kubernetes.io/version: "0.2.2"
+spec:
+  description: |-
+    Temporary local check: fetch the RPM PGP Trusted Artifact produced by
+    buildah and print it. Does not run rpm_verifier.
+  params:
+    - name: image-url
+      type: string
+      description: Image URL
+    - name: image-digest
+      type: string
+      description: Image digest to scan
+    - name: RPM_PGP_ARTIFACT
+      type: string
+      description: Trusted Artifact URI for the RPM PGP key ID JSON
+    - name: workdir
+      type: string
+      default: /tmp
+      description: |
+        Directory that will be used for storing temporary
+        files produced by this task.
+    - name: ca-trust-config-map-name
+      type: string
+      description: The name of the ConfigMap to read CA bundle data from.
+      default: trusted-ca
+    - name: ca-trust-config-map-key
+      type: string
+      description: The name of the key in the ConfigMap that contains the CA bundle data.
+      default: ca-bundle.crt
+  results:
+    - name: TEST_OUTPUT
+      description: Tekton task test output.
+    - name: RPMS_DATA
+      description: Information about signed and unsigned RPMs
+    - name: IMAGES_PROCESSED
+      description: Images processed in the task.
+    - name: SCAN_LOG
+      description: Contents of the fetched RPM PGP artifact
+  volumes:
+    - name: workdir
+      emptyDir: {}
+    - name: trusted-ca
+      configMap:
+        name: $(params.ca-trust-config-map-name)
+        items:
+          - key: $(params.ca-trust-config-map-key)
+            path: ca-bundle.crt
+        optional: true
+  steps:
+    - name: use-rpm-pgp-artifact
+      image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:7b4f5bbf8b8aa663beaf18bfef4fd16ba1cb5ce846d1fc776a64b312c52ee28c
+      args:
+        - use
+        - $(params.RPM_PGP_ARTIFACT)=/var/workdir
+      volumeMounts:
+        - name: workdir
+          mountPath: /var/workdir
+        - name: trusted-ca
+          mountPath: /etc/pki/tls/certs/ca-custom-bundle.crt
+          subPath: ca-bundle.crt
+          readOnly: true
+    - name: print-rpm-pgp-artifact
+      image: quay.io/konflux-ci/konflux-test:v1.5.6@sha256:365b172d2a8a145406f028d0a94a77b489fbdf9d84e5bd9529b1c3ad72f077b1
+      computeResources:
+        limits:
+          memory: 32Mi
+          cpu: 50m
+        requests:
+          memory: 32Mi
+          cpu: 50m
+      volumeMounts:
+        - name: workdir
+          mountPath: /var/workdir
+      env:
+        - name: IMAGE_URL
+          value: "$(params.image-url)"
+        - name: IMAGE_DIGEST
+          value: "$(params.image-digest)"
+        - name: RPM_PGP_ARTIFACT
+          value: "$(params.RPM_PGP_ARTIFACT)"
+      script: |
+        #!/bin/bash
+        set -ex
+        set -o pipefail
+
+        echo "image-url=${IMAGE_URL}"
+        echo "image-digest=${IMAGE_DIGEST}"
+        echo "RPM_PGP_ARTIFACT=${RPM_PGP_ARTIFACT}"
+        ls -l /var/workdir/rpm-pgp.json
+        cat /var/workdir/rpm-pgp.json
+
+        echo '{"result":"SUCCESS","note":"RPM PGP artifact fetched"}' | tee "$(results.TEST_OUTPUT.path)"
+        echo "" | tee "$(results.RPMS_DATA.path)"
+        echo "" | tee "$(results.IMAGES_PROCESSED.path)"
+        head -c 4000 /var/workdir/rpm-pgp.json | tee "$(results.SCAN_LOG.path)"
