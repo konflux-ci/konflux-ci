@@ -31,7 +31,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
 FROM quay.io/konflux-ci/task-runner@sha256:e272c1e1c60a4ecc72ff9c8d65bc48da534de6f1ce0d5aba79db3ac532d11c35 AS tools
 
 # Runtime image — ubi10-minimal, no Go toolchain, no source code.
-FROM registry.access.redhat.com/ubi10/ubi-minimal@sha256:204e1531cee54562b107fb31e0b327062fc3d5d67af7cc0d2e66b2c572b9044f
+FROM registry.access.redhat.com/ubi10/ubi-minimal@sha256:295f32b566834844b98ca6b51152b0a8a43d9d1d85d9bfd1cc6ce97748ef55d8
 ARG REVISION
 
 COPY --from=tools /usr/local/bin/oc /usr/local/bin/oc
