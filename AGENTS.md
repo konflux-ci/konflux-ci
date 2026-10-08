@@ -18,7 +18,7 @@ Layout: `operator/` (controllers, `config/`, `upstream-kustomizations/`, embedde
 ## Code style
 
 - Shell: `set -euo pipefail`, quote variables. Host-run scripts (deploy, CLI helpers, ConfigMap scripts users run locally) must work on Linux and macOS: POSIX constructs, no GNU-only flags, test GNU and BSD `sed`/`date`/`readlink`.
-- CI scripts needing git authentication: use the scoped in-memory credential helper (`git config --local credential.https://github.com.helper '!f() { ... }; f'`), never `credential.helper store` with `~/.git-credentials`. Ref: GHSA-vp54-x7hx-6q7v.
+- CI scripts needing git authentication: use the scoped in-memory credential helper (`git config --local credential.https://github.com.helper '!f() { ... }; f'`), never `credential.helper store` with `~/.git-credentials`. Security advisory: GHSA-vp54-x7hx-6q7v.
 - Go tests: match the file, then neighbors; default Ginkgo/Gomega only if no established style. Do not convert packages to another framework. Ginkgo patterns: `skills/ginkgo-testing/SKILL.md`.
 - `test/go-tests/` GitHub clients: nil-safe `Get*()` getters, never dereference pointer fields.
 - Kustomizations: pin exact SHAs, not branches.
