@@ -227,11 +227,11 @@ spec:
         - name: backed-url
           value: s3://konflux-mapt-state/mapt/kind/$(tasks.generate-cluster-id.results.cluster-id)
         - name: cpus
-          value: "32"
+          value: "16"
         - name: memory
-          value: "64"
+          value: "32"
         - name: harden-control-plane
-          value: "true"
+          value: "false"
     - name: deploy-konflux-pac
       runAfter:
         - provision-kind-cluster
