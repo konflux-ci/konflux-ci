@@ -67,3 +67,4 @@ Read the matching skill before acting; do not load unrelated skills.
 - Upstream SHA bumps: `skills/update-upstream-deps/SKILL.md`.
 - `.tekton` `deploy-konflux-its` and `konflux-e2e-tests-its` pin `taskRef.revision: main`; point at the PR ref to verify, restore `main` before merge (`.tekton/pipelines/operator-e2e/README.md`).
 - `integrations/` is not covered by e2e; recommend a local-cluster check for script/version changes.
+- `.github/scripts/` and `.github/workflows/` are not exercised by PR CI (they trigger on push, schedule, or workflow_dispatch). For non-trivial changes, add a temporary `pull_request`-triggered smoke workflow that exercises the modified logic, verify it passes, then remove it before merge.
