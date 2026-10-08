@@ -28,8 +28,8 @@ BRANCH="$1"
 
 # Configure git to use token for authentication (if GH_TOKEN is set)
 if [ -n "${GH_TOKEN:-}" ]; then
-  git config --local credential.helper store
-  echo "https://x-access-token:${GH_TOKEN}@github.com" > ~/.git-credentials
+  # shellcheck disable=SC2016 # GH_TOKEN must expand when git invokes the helper, not now.
+  git config --local credential.https://github.com.helper '!f() { echo "username=x-access-token"; echo "password=${GH_TOKEN}"; }; f'
 fi
 
 # Version tags: vX.Y.Z or vX.Y.Z-rc.W

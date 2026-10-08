@@ -52,8 +52,7 @@ jobs:
           # Configure git to use app token for authentication (so pushes trigger CI)
           # This ensures pushes are authenticated as the app, which triggers synchronize events
           if [ -n "${GH_TOKEN}" ]; then
-            git config --local credential.helper store
-            echo "https://x-access-token:${GH_TOKEN}@github.com" > ~/.git-credentials
+            git config --local credential.https://github.com.helper '!f() { echo "username=x-access-token"; echo "password=${GH_TOKEN}"; }; f'
           fi
 
           # Ensure we're on main branch and up to date
