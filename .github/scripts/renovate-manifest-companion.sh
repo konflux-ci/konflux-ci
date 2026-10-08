@@ -112,8 +112,8 @@ if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
   git config --local user.email "github-actions[bot]@users.noreply.github.com"
   git config --local user.name "github-actions[bot]"
   if [[ -n "${GH_TOKEN:-}" ]]; then
-    git config --local credential.helper store
-    echo "https://x-access-token:${GH_TOKEN}@github.com" >~/.git-credentials
+    # shellcheck disable=SC2016 # GH_TOKEN must expand when git invokes the helper, not now.
+    git config --local credential.https://github.com.helper '!f() { echo "username=x-access-token"; echo "password=${GH_TOKEN}"; }; f'
   fi
 fi
 
