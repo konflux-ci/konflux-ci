@@ -990,9 +990,60 @@ spec:
           metadata:
             type: object
           spec:
-            description: NudgeConfigSpec defines the desired nudging relationships
-              between components.
+            description: |-
+              NudgeConfigSpec defines the desired nudging relationships between components
+              and optional namespace-wide batch defaults.
             properties:
+              batchDefaults:
+                description: |-
+                  BatchDefaults sets default debounce, max wait, and failure policy for batched nudges
+                  to shared targets in this namespace (see BatchDefaults). Reserved until batching is implemented.
+                properties:
+                  debounceTimeout:
+                    description: |-
+                      DebounceTimeout is how long to wait after the last incoming build before firing the batch.
+                      Range: 1m–24h. Runtime default when unset: 30m.
+                      When MaxWaitTime is also specified, DebounceTimeout must be strictly less than MaxWaitTime.
+                      When MaxWaitTime is omitted, DebounceTimeout must be strictly less than the 4h runtime default.
+                    format: duration
+                    type: string
+                    x-kubernetes-validations:
+                    - message: debounceTimeout must be between 1m and 24h
+                      rule: duration(self) >= duration('1m') && duration(self) <=
+                        duration('24h')
+                  failurePolicy:
+                    description: |-
+                      FailurePolicy controls whether a failed member build blocks the batch or allows a partial fire.
+                      Runtime default when unset: Block.
+                    enum:
+                    - Block
+                    - ProceedWithPartial
+                    type: string
+                  maxWaitTime:
+                    description: |-
+                      MaxWaitTime is the hard deadline from the first build event, regardless of debounce resets.
+                      Range: 1m–24h. Runtime default when unset: 4h.
+                      When both MaxWaitTime and DebounceTimeout are set, MaxWaitTime must exceed DebounceTimeout.
+                      When DebounceTimeout is omitted, MaxWaitTime must exceed the 30m runtime default.
+                    format: duration
+                    type: string
+                    x-kubernetes-validations:
+                    - message: maxWaitTime must be between 1m and 24h
+                      rule: duration(self) >= duration('1m') && duration(self) <=
+                        duration('24h')
+                type: object
+                x-kubernetes-validations:
+                - message: maxWaitTime must exceed debounceTimeout
+                  rule: '!has(self.debounceTimeout) || !has(self.maxWaitTime) || duration(self.maxWaitTime)
+                    > duration(self.debounceTimeout)'
+                - message: debounceTimeout must be less than the 4h runtime default
+                    for maxWaitTime when maxWaitTime is omitted
+                  rule: '!has(self.debounceTimeout) || has(self.maxWaitTime) || duration(self.debounceTimeout)
+                    < duration(''4h'')'
+                - message: maxWaitTime must exceed the 30m runtime default for debounceTimeout
+                    when debounceTimeout is omitted
+                  rule: '!has(self.maxWaitTime) || has(self.debounceTimeout) || duration(self.maxWaitTime)
+                    > duration(''30m'')'
               nudges:
                 description: Nudges is the list of component nudge relationships.
                 items:
@@ -1033,6 +1084,71 @@ spec:
                   type: object
                 maxItems: 360
                 type: array
+              targetConfig:
+                description: TargetConfig lists per-target batch policies. Targets
+                  without batchPolicy are not batched.
+                items:
+                  description: TargetConfig declares per-target batch behavior. Presence
+                    of batchPolicy opts the target into batching.
+                  properties:
+                    batchPolicy:
+                      description: |-
+                        BatchPolicy defines per-target batch timing and failure behavior overrides.
+                        When omitted, the target is not batched. An empty object opts into batching with inherited defaults.
+                      properties:
+                        debounceTimeout:
+                          description: |-
+                            DebounceTimeout is how long to wait after the last incoming build before firing the batch.
+                            Range: 1m–24h. Inherits from batchDefaults or 30m runtime default when unset.
+                          format: duration
+                          type: string
+                          x-kubernetes-validations:
+                          - message: debounceTimeout must be between 1m and 24h
+                            rule: duration(self) >= duration('1m') && duration(self)
+                              <= duration('24h')
+                        failurePolicy:
+                          description: |-
+                            FailurePolicy controls whether a failed member build blocks the batch or allows a partial fire.
+                            Inherits from batchDefaults or Block runtime default when unset.
+                          enum:
+                          - Block
+                          - ProceedWithPartial
+                          type: string
+                        maxWaitTime:
+                          description: |-
+                            MaxWaitTime is the hard deadline from the first build event, regardless of debounce resets.
+                            Range: 1m–24h. Inherits from batchDefaults or 4h runtime default when unset.
+                          format: duration
+                          type: string
+                          x-kubernetes-validations:
+                          - message: maxWaitTime must be between 1m and 24h
+                            rule: duration(self) >= duration('1m') && duration(self)
+                              <= duration('24h')
+                      type: object
+                      x-kubernetes-validations:
+                      - message: maxWaitTime must exceed debounceTimeout
+                        rule: '!has(self.debounceTimeout) || !has(self.maxWaitTime)
+                          || duration(self.maxWaitTime) > duration(self.debounceTimeout)'
+                      - message: debounceTimeout must be less than the 4h runtime
+                          default for maxWaitTime when maxWaitTime is omitted
+                        rule: '!has(self.debounceTimeout) || has(self.maxWaitTime)
+                          || duration(self.debounceTimeout) < duration(''4h'')'
+                      - message: maxWaitTime must exceed the 30m runtime default for
+                          debounceTimeout when debounceTimeout is omitted
+                        rule: '!has(self.maxWaitTime) || has(self.debounceTimeout)
+                          || duration(self.maxWaitTime) > duration(''30m'')'
+                    target:
+                      description: Target is the downstream component name that may
+                        receive batched nudges.
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                  required:
+                  - target
+                  type: object
+                maxItems: 360
+                type: array
             type: object
             x-kubernetes-validations:
             - message: 'self-nudge not allowed: from and to must be different'
@@ -1040,6 +1156,9 @@ spec:
             - message: duplicate (from, to) pair not allowed
               rule: '!has(self.nudges) || self.nudges.all(i, self.nudges.exists_one(j,
                 i.from == j.from && i.to == j.to))'
+            - message: duplicate target not allowed in targetConfig
+              rule: '!has(self.targetConfig) || self.targetConfig.all(i, self.targetConfig.exists_one(j,
+                i.target == j.target))'
           status:
             description: NudgeConfigStatus defines the observed state of NudgeConfig.
             properties:
@@ -1192,8 +1311,12 @@ spec:
                 - batchId
                 x-kubernetes-list-type: map
               conditions:
-                description: Conditions represent the latest available observations
-                  of the NudgeConfig's state.
+                description: |-
+                  Conditions represent the latest available observations of the NudgeConfig's state.
+                  Known condition types:
+                  - StaleReferences: True when spec.nudges reference missing Components (set by the build pipeline controller).
+                  - BatchDefaultsSupported: False with reason NotImplemented when spec.batchDefaults is set but not yet applied.
+                    The validating webhook also warns on create/update when batchDefaults is present.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -2055,7 +2178,7 @@ spec:
         - --leader-elector-retry-period=5s
         command:
         - /manager
-        image: quay.io/konflux-ci/integration-service:96c1de4fd8c260d31049fe2bb12aa6b0d807797c
+        image: quay.io/konflux-ci/integration-service:0dd6380fe7a8ae037e618ebe577fbaf2deed9d6d
         livenessProbe:
           httpGet:
             path: /healthz
@@ -2139,7 +2262,7 @@ spec:
             - --zap-log-level=debug
             - --pr-snapshots-to-keep=70
             - --non-pr-snapshots-to-keep=640
-            image: quay.io/konflux-ci/integration-service:96c1de4fd8c260d31049fe2bb12aa6b0d807797c
+            image: quay.io/konflux-ci/integration-service:0dd6380fe7a8ae037e618ebe577fbaf2deed9d6d
             imagePullPolicy: Always
             name: test-gc
             resources:
@@ -2362,7 +2485,7 @@ webhooks:
       name: integration-service-webhook-service
       namespace: integration-service
       path: /validate-appstudio-redhat-com-v1alpha1-snapshot
-  failurePolicy: Ignore
+  failurePolicy: Fail
   name: vsnapshot.kb.io
   rules:
   - apiGroups:
