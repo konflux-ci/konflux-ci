@@ -88,15 +88,14 @@ const (
 	webhookConfigBaseName  = "webhook-config"
 	webhookConfigNamespace = "build-service"
 	webhookConfigDataKey   = "webhook-config.json"
-	webhookConfigLabel     = "konflux.konflux-ci.dev/webhook-config"
 	webhookConfigVolName   = "webhook-config"
 )
 
 // BuildServiceCleanupGVKs defines which resource types should be cleaned up when they are
 // no longer part of the desired state. ConfigMap trusted-ca is skipped when spec.trustedCA
 // is set, so leftover operator-owned objects must be listed here. Always-applied ConfigMaps
-// (build-pipeline-config) stay tracked. Hashed webhook ConfigMaps are not labeled with
-// KonfluxOwnerLabel, so CleanupOrphans does not list them. Metrics scrape resources may
+// (build-pipeline-config) stay tracked. Superseded revisions of the content-hashed
+// webhook ConfigMap are reaped here too. Metrics scrape resources may
 // be skipped during apply (componentMetrics disabled) or removed across releases while
 // metrics stay enabled.
 var BuildServiceCleanupGVKs = append([]schema.GroupVersionKind{
@@ -202,7 +201,7 @@ func (r *KonfluxBuildServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	// Reconcile webhook config ConfigMap.
 	// Must happen before applyManifests so the hashed ConfigMap name is available for the volume reference.
-	webhookConfigMapName, err := r.reconcileWebhookConfig(ctx, buildService)
+	webhookConfigMapName, err := r.reconcileWebhookConfig(ctx, tc, buildService)
 	if err != nil {
 		return errHandler.HandleWithReason(ctx, err, condition.ReasonConfigMapFailed, "reconcile webhook config")
 	}
@@ -472,7 +471,10 @@ func (r *KonfluxBuildServiceReconciler) buildTrustedCASpecLookup(ctx context.Con
 // The ConfigMap is always created: with the webhookURLs mapping when configured,
 // or with an empty JSON object when not configured. This guarantees the
 // -webhook-config-path flag (baked into the manifest) always points to a valid file.
-func (r *KonfluxBuildServiceReconciler) reconcileWebhookConfig(ctx context.Context, owner *konfluxv1alpha1.KonfluxBuildService) (string, error) {
+// Old revisions are pruned later, once the Deployment references the returned name.
+func (r *KonfluxBuildServiceReconciler) reconcileWebhookConfig(
+	ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxBuildService,
+) (string, error) {
 	log := logf.FromContext(ctx)
 
 	data := owner.Spec.WebhookURLs
@@ -485,23 +487,15 @@ func (r *KonfluxBuildServiceReconciler) reconcileWebhookConfig(ctx context.Conte
 		return "", fmt.Errorf("failed to marshal webhookURLs to JSON: %w", err)
 	}
 
-	hcm := hashedconfigmap.New(
-		r.Client,
-		r.Scheme,
-		webhookConfigBaseName,
-		webhookConfigNamespace,
-		webhookConfigDataKey,
-		webhookConfigLabel,
-		FieldManager,
-	)
-
-	result, err := hcm.Apply(ctx, string(jsonData), owner)
-	if err != nil {
-		return "", err
+	// Apply through the tracking client so the revision is labelled and tracked;
+	// CleanupOrphans then reaps any revision that is no longer applied.
+	cm := hashedconfigmap.Build(webhookConfigBaseName, webhookConfigNamespace, webhookConfigDataKey, string(jsonData))
+	if err := tc.ApplyOwned(ctx, cm); err != nil {
+		return "", fmt.Errorf("failed to apply webhook config ConfigMap: %w", err)
 	}
 
-	log.Info("Applied webhook config ConfigMap", "name", result.ConfigMapName)
-	return result.ConfigMapName, nil
+	log.Info("Applied webhook config ConfigMap", "name", cm.Name)
+	return cm.Name, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
