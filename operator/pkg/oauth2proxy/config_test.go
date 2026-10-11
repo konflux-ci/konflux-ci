@@ -59,9 +59,11 @@ func TestWithProvider(t *testing.T) {
 
 func TestWithOIDCURLs(t *testing.T) {
 	tests := []struct {
-		name     string
-		endpoint *url.URL
-		want     map[string]string
+		name             string
+		endpoint         *url.URL
+		relativeRedirect bool
+		want             map[string]string
+		wantAbsent       []string
 	}{
 		{
 			name:     "with hostname and port",
@@ -71,6 +73,7 @@ func TestWithOIDCURLs(t *testing.T) {
 				"OAUTH2_PROXY_OIDC_ISSUER_URL": "https://example.com:9443/idp/",
 				"OAUTH2_PROXY_LOGIN_URL":       "https://example.com:9443/idp/auth",
 			},
+			wantAbsent: []string{"OAUTH2_PROXY_REVERSE_PROXY"},
 		},
 		{
 			name:     "with hostname only (no port)",
@@ -80,6 +83,7 @@ func TestWithOIDCURLs(t *testing.T) {
 				"OAUTH2_PROXY_OIDC_ISSUER_URL": "https://konflux.example.com/idp/",
 				"OAUTH2_PROXY_LOGIN_URL":       "https://konflux.example.com/idp/auth",
 			},
+			wantAbsent: []string{"OAUTH2_PROXY_REVERSE_PROXY"},
 		},
 		{
 			name:     "localhost default",
@@ -89,6 +93,18 @@ func TestWithOIDCURLs(t *testing.T) {
 				"OAUTH2_PROXY_OIDC_ISSUER_URL": "https://localhost:9443/idp/",
 				"OAUTH2_PROXY_LOGIN_URL":       "https://localhost:9443/idp/auth",
 			},
+			wantAbsent: []string{"OAUTH2_PROXY_REVERSE_PROXY"},
+		},
+		{
+			name:             "relative redirect for additional FQDNs",
+			endpoint:         &url.URL{Scheme: "https", Host: "konflux.example.com"},
+			relativeRedirect: true,
+			want: map[string]string{
+				"OAUTH2_PROXY_REDIRECT_URL":    "/oauth2/callback",
+				"OAUTH2_PROXY_REVERSE_PROXY":   "true",
+				"OAUTH2_PROXY_OIDC_ISSUER_URL": "https://konflux.example.com/idp/",
+				"OAUTH2_PROXY_LOGIN_URL":       "https://konflux.example.com/idp/auth",
+			},
 		},
 	}
 
@@ -96,11 +112,14 @@ func TestWithOIDCURLs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewGomegaWithT(t)
 
-			envVars := applyOption(WithOIDCURLs(tt.endpoint))
+			envVars := applyOption(WithOIDCURLs(tt.endpoint, tt.relativeRedirect))
 			envMap := envVarsToMap(envVars)
 
 			for key, wantValue := range tt.want {
 				g.Expect(envMap[key]).To(Equal(wantValue), "env var %s", key)
+			}
+			for _, key := range tt.wantAbsent {
+				g.Expect(envMap).NotTo(HaveKey(key), "env var %s", key)
 			}
 		})
 	}
@@ -167,21 +186,26 @@ func TestWithAllowUnverifiedEmail(t *testing.T) {
 	g.Expect(envMap["OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL"]).To(Equal("true"))
 }
 
-func TestWithWhitelistDomain(t *testing.T) {
+func TestWithWhitelistDomains(t *testing.T) {
 	tests := []struct {
-		name     string
-		endpoint *url.URL
-		want     string
+		name  string
+		hosts []string
+		want  string
 	}{
 		{
-			name:     "with port",
-			endpoint: &url.URL{Scheme: "https", Host: "example.com:9443"},
-			want:     "example.com:9443",
+			name:  "single host with port",
+			hosts: []string{"example.com:9443"},
+			want:  "example.com:9443",
 		},
 		{
-			name:     "without port",
-			endpoint: &url.URL{Scheme: "https", Host: "example.com"},
-			want:     "example.com",
+			name:  "single host without port",
+			hosts: []string{"example.com"},
+			want:  "example.com",
+		},
+		{
+			name:  "multiple hosts",
+			hosts: []string{"primary.example.com", "alias-a.example.com", "alias-b.example.com"},
+			want:  "primary.example.com,alias-a.example.com,alias-b.example.com",
 		},
 	}
 
@@ -189,7 +213,7 @@ func TestWithWhitelistDomain(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewGomegaWithT(t)
 
-			envVars := applyOption(WithWhitelistDomain(tt.endpoint))
+			envVars := applyOption(WithWhitelistDomains(tt.hosts...))
 			envMap := envVarsToMap(envVars)
 
 			g.Expect(envMap["OAUTH2_PROXY_WHITELIST_DOMAINS"]).To(Equal(tt.want))
@@ -207,7 +231,7 @@ func TestOptionsAreComposable(t *testing.T) {
 	// Apply multiple options
 	endpoint := &url.URL{Scheme: "https", Host: "example.com:8443"}
 	WithProvider()(c, ctx)
-	WithOIDCURLs(endpoint)(c, ctx)
+	WithOIDCURLs(endpoint, false)(c, ctx)
 	WithCookieConfig()(c, ctx)
 
 	envMap := envVarsToMap(c.Env)

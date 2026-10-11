@@ -86,7 +86,29 @@ esac
 cd "${REPO_ROOT}/test/go-tests"
 echo "Running proxy integration tests..."
 GINKGO_ARGS=()
-if [[ "${KONFLUX_PROXY_AUTH}" == "openshift" ]]; then
-	GINKGO_ARGS+=(-ginkgo.label-filter='!proxy-dex')
-fi
-go test -mod=mod . -v -timeout 10m "${GINKGO_ARGS[@]}"
+case "${KONFLUX_PROXY_AUTH}" in
+openshift)
+	# Dex static-password specs are Kind-only.
+	# additional-FQDN specs (label proxy-additional-fqdn) patch the Konflux CR and
+	# create a sibling Ingress. Safe only when the CR is applied imperatively —
+	# konflux-ci OpenShift CI sets REPO_NAME=konflux-ci. Environments where the
+	# Konflux CR is managed externally must skip unless
+	# KONFLUX_PROXY_TEST_ADDITIONAL_FQDN=true (live patches would be reverted).
+	# Match Go's proxyAdditionalFQDNTestsEnabled: trim whitespace, case-insensitive true.
+	additional_fqdn_flag="$(printf '%s' "${KONFLUX_PROXY_TEST_ADDITIONAL_FQDN:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+	# tr keeps this Bash 3.2 / macOS-compatible (avoid ${var,,}).
+	additional_fqdn_flag="$(printf '%s' "${additional_fqdn_flag}" | tr '[:upper:]' '[:lower:]')"
+	if [[ "${REPO_NAME:-}" == "konflux-ci" || "${additional_fqdn_flag}" == "true" ]]; then
+		echo "Proxy label filter: !proxy-dex (additional-FQDN specs enabled)"
+		GINKGO_ARGS+=(-ginkgo.label-filter='!proxy-dex')
+	else
+		echo "Proxy label filter: !proxy-dex && !proxy-additional-fqdn (additional-FQDN specs disabled; set REPO_NAME=konflux-ci or KONFLUX_PROXY_TEST_ADDITIONAL_FQDN=true to enable)"
+		GINKGO_ARGS+=(-ginkgo.label-filter='!proxy-dex && !proxy-additional-fqdn')
+	fi
+	;;
+dex)
+	# additional-FQDN specs require OpenShift OAuth + apps-domain Ingress and patch the CR.
+	GINKGO_ARGS+=(-ginkgo.label-filter='!proxy-additional-fqdn')
+	;;
+esac
+go test -mod=mod . -v -timeout 15m "${GINKGO_ARGS[@]}"
