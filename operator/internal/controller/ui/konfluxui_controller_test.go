@@ -165,6 +165,222 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 	})
 
+	Context("additionalFQDNs", func() {
+		It("should extend Dex redirect URIs and oauth2-proxy whitelist with relative redirect", func(ctx context.Context) {
+			startManager(nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxUISpec{
+					KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+						Ingress: &konfluxv1alpha1.IngressSpec{
+							Enabled: ptr.To(false),
+							FQDN:    "primary.example.com",
+							AdditionalFQDNs: []string{
+								"alias-a.example.com",
+								"alias-b.example.com",
+								"primary.example.com", // duplicate of primary; ignored
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			waitForReconcile(ctx)
+
+			Eventually(func(g Gomega) {
+				cmList := &corev1.ConfigMapList{}
+				g.Expect(k8sClient.List(ctx, cmList,
+					client.InNamespace(uiNamespace),
+					client.MatchingLabels{dexConfigMapLabel: "true"},
+				)).To(Succeed())
+				g.Expect(cmList.Items).NotTo(BeEmpty(), "expected a Dex ConfigMap")
+
+				var cfg dex.Config
+				g.Expect(yaml.Unmarshal([]byte(cmList.Items[0].Data[dexConfigKey]), &cfg)).To(Succeed())
+				g.Expect(cfg.Issuer).To(Equal("https://primary.example.com/idp/"))
+
+				var oauth2Client *dex.Client
+				for i := range cfg.StaticClients {
+					if cfg.StaticClients[i].ID == dex.OAuth2ProxyClientID {
+						oauth2Client = &cfg.StaticClients[i]
+						break
+					}
+				}
+				g.Expect(oauth2Client).NotTo(BeNil())
+				g.Expect(oauth2Client.RedirectURIs).To(Equal([]string{
+					"https://primary.example.com/oauth2/callback",
+					"https://alias-a.example.com/oauth2/callback",
+					"https://alias-b.example.com/oauth2/callback",
+				}))
+
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: proxyDeploymentName, Namespace: uiNamespace,
+				}, dep)).To(Succeed())
+				oauth2 := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
+				g.Expect(oauth2).NotTo(BeNil())
+
+				envMap := make(map[string]string, len(oauth2.Env))
+				for _, env := range oauth2.Env {
+					envMap[env.Name] = env.Value
+				}
+				g.Expect(envMap["OAUTH2_PROXY_REDIRECT_URL"]).To(Equal("/oauth2/callback"))
+				g.Expect(envMap["OAUTH2_PROXY_REVERSE_PROXY"]).To(Equal("true"))
+				g.Expect(envMap["OAUTH2_PROXY_OIDC_ISSUER_URL"]).To(Equal("https://primary.example.com/idp/"))
+				g.Expect(envMap["OAUTH2_PROXY_WHITELIST_DOMAINS"]).To(Equal(
+					"primary.example.com,alias-a.example.com,alias-b.example.com",
+				))
+
+				// Operator-managed Ingress stays off; aliases are user-routed.
+				ing := &networkingv1.Ingress{}
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name: ingress.IngressName, Namespace: uiNamespace,
+				}, ing)
+				g.Expect(errors.IsNotFound(err)).To(BeTrue())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("keeps Dex issuer on hostname override while oauth2-proxy callbacks use the UI host", func(ctx context.Context) {
+			startManager(nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxUISpec{
+					KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+						Ingress: &konfluxv1alpha1.IngressSpec{
+							Enabled: ptr.To(false),
+							// Mixed case + :443: relative redirect matches browser Host spelling.
+							FQDN: "UI.Example.COM:443",
+							AdditionalFQDNs: []string{
+								"alias.example.com",
+							},
+						},
+						Dex: &konfluxv1alpha1.DexDeploymentSpec{
+							Config: &dex.DexParams{
+								Hostname: "dex-override.example.com",
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			waitForReconcile(ctx)
+
+			Eventually(func(g Gomega) {
+				cmList := &corev1.ConfigMapList{}
+				g.Expect(k8sClient.List(ctx, cmList,
+					client.InNamespace(uiNamespace),
+					client.MatchingLabels{dexConfigMapLabel: "true"},
+				)).To(Succeed())
+				g.Expect(cmList.Items).NotTo(BeEmpty(), "expected a Dex ConfigMap")
+
+				var cfg dex.Config
+				g.Expect(yaml.Unmarshal([]byte(cmList.Items[0].Data[dexConfigKey]), &cfg)).To(Succeed())
+				g.Expect(cfg.Issuer).To(Equal("https://dex-override.example.com/idp/"))
+
+				var oauth2Client *dex.Client
+				for i := range cfg.StaticClients {
+					if cfg.StaticClients[i].ID == dex.OAuth2ProxyClientID {
+						oauth2Client = &cfg.StaticClients[i]
+						break
+					}
+				}
+				g.Expect(oauth2Client).NotTo(BeNil())
+				g.Expect(oauth2Client.RedirectURIs).To(Equal([]string{
+					"https://ui.example.com/oauth2/callback",
+					"https://alias.example.com/oauth2/callback",
+				}))
+
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: proxyDeploymentName, Namespace: uiNamespace,
+				}, dep)).To(Succeed())
+				oauth2 := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
+				g.Expect(oauth2).NotTo(BeNil())
+
+				envMap := make(map[string]string, len(oauth2.Env))
+				for _, env := range oauth2.Env {
+					envMap[env.Name] = env.Value
+				}
+				// oauth2-proxy still uses the UI endpoint for login/issuer URLs.
+				g.Expect(envMap["OAUTH2_PROXY_OIDC_ISSUER_URL"]).To(Equal("https://UI.Example.COM:443/idp/"))
+				g.Expect(envMap["OAUTH2_PROXY_REDIRECT_URL"]).To(Equal("/oauth2/callback"))
+				g.Expect(envMap["OAUTH2_PROXY_WHITELIST_DOMAINS"]).To(Equal(
+					"ui.example.com,alias.example.com",
+				))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("reverts oauth2-proxy to absolute redirect when additionalFQDNs are cleared", func(ctx context.Context) {
+			startManager(nil)
+
+			ui := &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxUISpec{
+					KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+						Ingress: &konfluxv1alpha1.IngressSpec{
+							Enabled:         ptr.To(false),
+							FQDN:            "primary.example.com",
+							AdditionalFQDNs: []string{"alias.example.com"},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+
+			waitForReconcile(ctx)
+
+			By("waiting for relative redirect mode with the alias configured")
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: proxyDeploymentName, Namespace: uiNamespace,
+				}, dep)).To(Succeed())
+				oauth2 := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
+				g.Expect(oauth2).NotTo(BeNil())
+				envMap := make(map[string]string, len(oauth2.Env))
+				for _, env := range oauth2.Env {
+					envMap[env.Name] = env.Value
+				}
+				g.Expect(envMap["OAUTH2_PROXY_REDIRECT_URL"]).To(Equal("/oauth2/callback"))
+				g.Expect(envMap["OAUTH2_PROXY_REVERSE_PROXY"]).To(Equal("true"))
+				g.Expect(envMap["OAUTH2_PROXY_WHITELIST_DOMAINS"]).To(Equal(
+					"primary.example.com,alias.example.com",
+				))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("clearing additionalFQDNs")
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, ui)).To(Succeed())
+			ui.Spec.Ingress.AdditionalFQDNs = []string{}
+			Expect(k8sClient.Update(ctx, ui)).To(Succeed())
+
+			By("waiting for absolute redirect mode without reverse-proxy env")
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: proxyDeploymentName, Namespace: uiNamespace,
+				}, dep)).To(Succeed())
+				oauth2 := kubernetes.FindContainer(dep.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
+				g.Expect(oauth2).NotTo(BeNil())
+				envMap := make(map[string]string, len(oauth2.Env))
+				for _, env := range oauth2.Env {
+					envMap[env.Name] = env.Value
+				}
+				g.Expect(envMap["OAUTH2_PROXY_REDIRECT_URL"]).To(Equal(
+					"https://primary.example.com/oauth2/callback",
+				))
+				g.Expect(envMap).NotTo(HaveKey("OAUTH2_PROXY_REVERSE_PROXY"))
+				g.Expect(envMap["OAUTH2_PROXY_WHITELIST_DOMAINS"]).To(Equal("primary.example.com"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
 	Context("ensureUISecrets", func() {
 		cleanupSecrets := func(ctx context.Context) {
 			_ = k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{

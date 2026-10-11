@@ -70,6 +70,27 @@ type IngressSpec struct {
 	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 	Hostname string `json:"hostname,omitempty"`
+	// AdditionalFQDNs lists optional alternate public hostnames for the UI.
+	// When set, the operator adds matching oauth2-proxy whitelist domains and Dex
+	// oauth2-proxy client redirect URIs, and configures oauth2-proxy to use a
+	// relative redirect URL so the OAuth callback returns to the hostname the user
+	// accessed. Dex login (/idp/auth) and the oauth2-proxy OIDC issuer stay on the
+	// primary UI endpoint (from fqdn/hostname). spec.dex.config.hostname (and
+	// optional port) only changes the Dex ConfigMap issuer and the OpenShift
+	// connector callback. Browsers on an alias must be able to reach the primary
+	// UI host over HTTPS. The primary endpoint also remains the managed Ingress
+	// host and ConsoleLink target.
+	// The operator does not create Ingress, Route, or certificate resources for these
+	// hostnames; you must provide external routing (and TLS) yourself for the UI and
+	// /oauth2/* on each alias. Routing /idp on aliases is not required for login.
+	// Each entry uses the same format as fqdn (host or host:port). Entries that match
+	// the resolved primary host are ignored.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=16
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:Pattern=`^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?$`
+	AdditionalFQDNs []string `json:"additionalFQDNs,omitempty"`
 	// Annotations to add to the ingress resource.
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`

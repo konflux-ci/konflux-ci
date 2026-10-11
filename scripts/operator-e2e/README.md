@@ -107,13 +107,23 @@ Use **one token per flag** where possible (e.g. `-ginkgo.skip=Flaky`). Values wi
 | `KONFLUX_PROXY_AUTH` | `openshift` or `dex`. Default: `dex` when `TEST_ENVIRONMENT=upstream`; otherwise `openshift` if the cluster serves `route.openshift.io` (a kubeadmin password is then required, and a missing one is a hard error, because the OpenShift CR has no Dex static passwords); otherwise `openshift` if `OPENSHIFT_PASSWORD`, `KUBEADMIN_PASSWORD_FILE`, or `SHARED_DIR/kubeadmin-password` is set; else `dex` |
 | `KONFLUX_PROXY_AUTH_METHOD` | Set by the runner: `openshift-oauth` or `dex-password-grant` |
 | `OPENSHIFT_PASSWORD` / `KUBEADMIN_PASSWORD_FILE` / `SHARED_DIR/kubeadmin-password` | Kubeadmin password for OpenShift OAuth (file or env; see runner script) |
+| `OPENSHIFT_IDP` | Identity provider name to select on clusters with an IDP chooser; if unset, auto-selects the single non-`kube:admin` provider when exactly one is present |
 | `KONFLUX_PROXY_ID_TOKEN` | Optional override: skip OAuth and use a pre-obtained Dex `id_token` |
 | `KONFLUX_PROXY_ID_TOKEN_USER1` / `KONFLUX_PROXY_ID_TOKEN_USER2` | Optional per-user tokens for Dex-only specs |
 | `KONFLUX_PROXY_URL` | Proxy base URL (default: `konflux/konflux` `status.uiURL`) |
 | `KONFLUX_PROXY_WAIT_UI_ONLY` | When `true`, `BeforeSuite` waits for `ui.Ready` instead of full Konflux Ready |
 | `KONFLUX_PROXY_TEST_NAMESPACE` | Tenant namespace for proxied API paths (default: `default-tenant`) |
+| `KONFLUX_PROXY_TEST_ADDITIONAL_FQDN` | When `true`, enable CR-mutating additional-FQDN specs even if `REPO_NAME` is not `konflux-ci` |
+| `REPO_NAME` | Prow repo under test; `konflux-ci` enables additional-FQDN specs on OpenShift auth |
 
 On OpenShift CI, Dex-only specs are skipped via `-ginkgo.label-filter='!proxy-dex'`.
+On Dex/Kind runs, CR-mutating additional-FQDN specs (label `proxy-additional-fqdn`)
+are skipped via `-ginkgo.label-filter='!proxy-additional-fqdn'`.
+
+Additional-FQDN specs (`proxy-additional-fqdn`) patch the live Konflux CR, so they
+run only when `REPO_NAME=konflux-ci` (konflux-ci OpenShift Prow) or when
+`KONFLUX_PROXY_TEST_ADDITIONAL_FQDN=true`. Environments where the Konflux CR is
+managed externally keep them filtered out with `!proxy-additional-fqdn`.
 
 ## Override YAML schema
 

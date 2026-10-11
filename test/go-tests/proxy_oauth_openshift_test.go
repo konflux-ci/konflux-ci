@@ -75,6 +75,103 @@ func TestParseLoginForm(t *testing.T) {
 	}
 }
 
+func TestSelectIdentityProviderURL(t *testing.T) {
+	t.Parallel()
+	pageURL := "https://oauth.example.com/login"
+	chooser := []byte(`
+		<a href="/oauth/authorize?client_id=console&amp;idp=kube%3Aadmin">kube:admin</a>
+		<a href="/oauth/authorize?client_id=console&idp=e2e-htpasswd">e2e-htpasswd</a>
+		<a href="/oauth/authorize?client_id=console&idp=e2e-htpasswd">duplicate</a>
+	`)
+
+	t.Run("prefers OPENSHIFT_IDP match", func(t *testing.T) {
+		got, ok := selectIdentityProviderURL(pageURL, chooser, "e2e-htpasswd")
+		if !ok {
+			t.Fatal("expected a match")
+		}
+		if want := "https://oauth.example.com/oauth/authorize?client_id=console&idp=e2e-htpasswd"; got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("preferred missing returns false", func(t *testing.T) {
+		if _, ok := selectIdentityProviderURL(pageURL, chooser, "missing-idp"); ok {
+			t.Fatal("expected no match for missing preferred IDP")
+		}
+	})
+
+	t.Run("defaults to kube:admin when listed (kubeadmin credentials)", func(t *testing.T) {
+		// Default OPENSHIFT_USERNAME is kubeadmin; do not post that password to
+		// the sole non-kube provider when kube:admin is also on the chooser.
+		got, ok := selectIdentityProviderURL(pageURL, chooser, "")
+		if !ok {
+			t.Fatal("expected a match")
+		}
+		if want := "https://oauth.example.com/oauth/authorize?client_id=console&idp=kube%3Aadmin"; got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("auto-selects sole non-kube:admin provider when kube:admin is absent", func(t *testing.T) {
+		body := []byte(`<a href="/oauth/authorize?client_id=console&idp=e2e-htpasswd">e2e-htpasswd</a>`)
+		got, ok := selectIdentityProviderURL(pageURL, body, "")
+		if !ok {
+			t.Fatal("expected a match")
+		}
+		if want := "https://oauth.example.com/oauth/authorize?client_id=console&idp=e2e-htpasswd"; got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("ambiguous non-kube providers without kube:admin return false", func(t *testing.T) {
+		body := []byte(`
+			<a href="/oauth/authorize?idp=htpasswd">htpasswd</a>
+			<a href="/oauth/authorize?idp=ldap">ldap</a>
+		`)
+		if _, ok := selectIdentityProviderURL(pageURL, body, ""); ok {
+			t.Fatal("expected no auto-select when multiple non-kube providers exist")
+		}
+	})
+
+	t.Run("kube:admin plus multiple non-kube still selects kube:admin", func(t *testing.T) {
+		body := []byte(`
+			<a href="/oauth/authorize?idp=kube%3Aadmin">kube:admin</a>
+			<a href="/oauth/authorize?idp=htpasswd">htpasswd</a>
+			<a href="/oauth/authorize?idp=ldap">ldap</a>
+		`)
+		got, ok := selectIdentityProviderURL(pageURL, body, "")
+		if !ok {
+			t.Fatal("expected a match")
+		}
+		if !strings.Contains(got, "idp=kube%3Aadmin") && !strings.Contains(got, "idp=kube:admin") {
+			t.Fatalf("expected kube:admin link, got %q", got)
+		}
+	})
+
+	t.Run("empty chooser returns false", func(t *testing.T) {
+		if _, ok := selectIdentityProviderURL(pageURL, []byte(`<html>no links</html>`), ""); ok {
+			t.Fatal("expected no match")
+		}
+	})
+}
+
+func TestParseLoginFormIDPSpecificAction(t *testing.T) {
+	t.Parallel()
+	body := []byte(`<html><form action="/login/htpasswd" method="post">
+	<input name="csrf" type="hidden" value="tok456">
+	</form></html>`)
+	action, csrf, err := parseLoginForm("https://oauth.example.com/login?then=%2Foauth%2Fauthorize", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if csrf != "tok456" {
+		t.Fatalf("csrf = %q", csrf)
+	}
+	if action != "https://oauth.example.com/login/htpasswd?then=%2Foauth%2Fauthorize" {
+		t.Fatalf("action = %q", action)
+	}
+}
+
 func TestParseGrantForm(t *testing.T) {
 	t.Parallel()
 	body := []byte(`<form action="approve">
@@ -198,6 +295,81 @@ func TestOpenShiftOAuthClient_ObtainIDToken(t *testing.T) {
 	}
 	if token != "eyJ.test.token" {
 		t.Fatalf("token = %q", token)
+	}
+}
+
+func TestOpenShiftOAuthClient_ObtainIDTokenAliasCallback(t *testing.T) {
+	const clientSecret = "test-client-secret"
+	var issuerURL, aliasURL string
+	var sawRedirectURI string
+
+	issuerMux := http.NewServeMux()
+	issuerMux.HandleFunc("/idp/auth/openshift", func(w http.ResponseWriter, r *http.Request) {
+		sawRedirectURI = r.URL.Query().Get("redirect_uri")
+		http.Redirect(w, r, issuerURL+"/login", http.StatusFound)
+	})
+	issuerMux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			fmt.Fprint(w, `<form action="/login"><input name="csrf" value="csrf-login"></form>`)
+			return
+		}
+		http.Redirect(w, r, aliasURL+"/oauth2/callback?code=auth-code-alias", http.StatusFound)
+	})
+	issuerMux.HandleFunc("/idp/token", func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if r.Form.Get("redirect_uri") != aliasURL+"/oauth2/callback" {
+			http.Error(w, "bad redirect_uri", http.StatusBadRequest)
+			return
+		}
+		if r.Form.Get("code") != "auth-code-alias" {
+			http.Error(w, "bad code", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"id_token":"eyJ.alias.token"}`)
+	})
+
+	issuerServer := httptest.NewTLSServer(issuerMux)
+	defer issuerServer.Close()
+	issuerURL = strings.TrimRight(issuerServer.URL, "/")
+
+	aliasMux := http.NewServeMux()
+	aliasMux.HandleFunc("/oauth2/callback", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	aliasServer := httptest.NewTLSServer(aliasMux)
+	defer aliasServer.Close()
+	aliasURL = strings.TrimRight(aliasServer.URL, "/")
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{
+		Transport:     issuerServer.Client().Transport,
+		Jar:           jar,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+
+	oauth := &OpenShiftOAuthClient{http: client}
+	token, err := oauth.ObtainIDToken(context.Background(), OpenShiftOAuthConfig{
+		UIURL:        aliasURL,
+		IssuerURL:    issuerURL,
+		Username:     "kubeadmin",
+		Password:     "pass",
+		ClientSecret: clientSecret,
+	})
+	if err != nil {
+		t.Fatalf("ObtainIDToken: %v", err)
+	}
+	if token != "eyJ.alias.token" {
+		t.Fatalf("token = %q", token)
+	}
+	if sawRedirectURI != aliasURL+"/oauth2/callback" {
+		t.Fatalf("redirect_uri = %q, want alias callback", sawRedirectURI)
 	}
 }
 
