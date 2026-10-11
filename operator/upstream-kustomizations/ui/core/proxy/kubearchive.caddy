@@ -9,8 +9,10 @@ handle_path /api/k8s/plugins/kubearchive/* {
 		inject_cached_vars
 		request_header -Authorization
         reverse_proxy https://__KUBEARCHIVE_HOSTNAME__:8081 {
-            header_up Authorization "Bearer {http.vars.kube_token}"
-            import /mnt/caddy-snippets/backend-tls.conf
+            transport http {
+                header_up Authorization "Bearer {http.vars.kube_token}"
+                import /mnt/caddy-snippets/kubearchive-tls.conf
+          }
         }
     }
 }

@@ -14,6 +14,7 @@
 		watch /var/run/secrets/kubernetes.io/serviceaccount
 		watch /mnt/cluster-ca
 		watch /mnt/service-ca
+		watch /mnt/kubearchive-ca
 		watch /mnt/serving-cert
 	}
 }

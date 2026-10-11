@@ -5,6 +5,7 @@ set -eu
 TEMPLATES_DIR=/mnt/caddy-templates
 SNIPPETS_DIR=/mnt/caddy-snippets
 SERVICE_CA_PATH=/mnt/service-ca/service-ca.crt
+KUBEARCHIVE_CA_PATH=/mnt/kubearchive-ca/ca-bundle.crt
 
 for cmd in sed getent printf; do
   command -v "${cmd}" >/dev/null 2>&1 || { echo "required command not found: ${cmd}"; exit 1; }
@@ -54,10 +55,30 @@ fi
 
 # Process kubearchive template
 if [ "${KUBEARCHIVE_ENABLED:-}" = "true" ] && [ -f "${TEMPLATES_DIR}/kubearchive.caddy" ]; then
-  hostname="${KUBEARCHIVE_HOSTNAME:-kubearchive-api-server.product-kubearchive.svc.cluster.local}"
-  sed "s/__KUBEARCHIVE_HOSTNAME__/${hostname}/g" \
+  kubearchive_hostname="${KUBEARCHIVE_HOSTNAME:-kubearchive-api-server.product-kubearchive.svc.cluster.local}"
+  sed "s/__KUBEARCHIVE_HOSTNAME__/${kubearchive_hostname}/g" \
     "${TEMPLATES_DIR}/kubearchive.caddy" > "${SNIPPETS_DIR}/kubearchive.caddy"
-  log "kubearchive endpoint enabled (${hostname})"
+
+  # Trust both issuers during migration so the proxy works before and after
+  # KubeArchive's serving certificate switches from service-ca to cert-manager.
+  if [ -f "${KUBEARCHIVE_CA_PATH}" ] && [ -f "${SERVICE_CA_PATH}" ]; then
+    printf 'transport http {\n    tls_trust_pool file %s %s\n}\n' \
+      "${SERVICE_CA_PATH}" "${KUBEARCHIVE_CA_PATH}" \
+      > "${SNIPPETS_DIR}/kubearchive-tls.conf"
+    log "kubearchive TLS: service and cert-manager CAs"
+  elif [ -f "${SERVICE_CA_PATH}" ]; then
+    printf 'transport http {\n    tls_trust_pool file %s\n}\n' "${SERVICE_CA_PATH}" \
+      > "${SNIPPETS_DIR}/kubearchive-tls.conf"
+    log "kubearchive TLS: service CA (cert-manager bundle not present)"
+  else
+    # Keep the existing fallback if service-ca is absent; the live backend may
+    # still use it during migration, even when the cert-manager CA is mounted.
+    printf 'transport http {\n    tls_insecure_skip_verify\n}\n' \
+      > "${SNIPPETS_DIR}/kubearchive-tls.conf"
+    log "kubearchive TLS: verification disabled (service CA not mounted)"
+  fi
+
+  log "kubearchive endpoint enabled (${kubearchive_hostname})"
 fi
 
 # Process watson template.
