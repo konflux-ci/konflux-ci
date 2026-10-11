@@ -70,12 +70,15 @@ if [ "${KUBEARCHIVE_ENABLED:-}" = "true" ] && [ -f "${TEMPLATES_DIR}/kubearchive
     printf 'transport http {\n    tls_trust_pool file %s\n}\n' "${SERVICE_CA_PATH}" \
       > "${SNIPPETS_DIR}/kubearchive-tls.conf"
     log "kubearchive TLS: service CA (cert-manager bundle not present)"
+  elif [ -f "${KUBEARCHIVE_CA_PATH}" ]; then
+    printf 'transport http {\n    tls_trust_pool file %s\n}\n' "${KUBEARCHIVE_CA_PATH}" \
+      > "${SNIPPETS_DIR}/kubearchive-tls.conf"
+    log "kubearchive TLS: cert-manager CA (service CA not present)"
   else
-    # Keep the existing fallback if service-ca is absent; the live backend may
-    # still use it during migration, even when the cert-manager CA is mounted.
+    # Fall back only when neither trust bundle is mounted.
     printf 'transport http {\n    tls_insecure_skip_verify\n}\n' \
       > "${SNIPPETS_DIR}/kubearchive-tls.conf"
-    log "kubearchive TLS: verification disabled (service CA not mounted)"
+    log "kubearchive TLS: verification disabled (no CA bundles mounted)"
   fi
 
   log "kubearchive endpoint enabled (${kubearchive_hostname})"

@@ -251,13 +251,13 @@ spec:
           configMap:
             name: openshift-service-ca.crt
             optional: true
-        # trust-manager publishes only KubeArchive's public CA in this ConfigMap.
+        # trust-manager publishes the CA bundle used to verify KubeArchive.
         # If it is created after this pod starts, roll the Deployment before
         # switching KubeArchive's serving certificate; the init container reads
         # the available trust files only at startup.
         - name: kubearchive-ca
           configMap:
-            name: kubearchive-ca-bundle
+            name: trusted-ca
             optional: true
             items:
               - key: ca-bundle.crt
