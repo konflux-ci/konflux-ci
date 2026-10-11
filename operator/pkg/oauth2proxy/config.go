@@ -24,6 +24,7 @@ package oauth2proxy
 
 import (
 	"net/url"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -78,12 +79,25 @@ func WithProvider() customization.ContainerOption {
 
 // WithOIDCURLs configures the external-facing OIDC URLs based on the endpoint URL.
 // These URLs are used by browsers to interact with the OIDC flow.
-func WithOIDCURLs(endpoint *url.URL) customization.ContainerOption {
-	return customization.WithEnv(
-		corev1.EnvVar{Name: "OAUTH2_PROXY_REDIRECT_URL", Value: endpoint.JoinPath("/oauth2/callback").String()},
-		corev1.EnvVar{Name: "OAUTH2_PROXY_OIDC_ISSUER_URL", Value: endpoint.JoinPath("/idp/").String()},
-		corev1.EnvVar{Name: "OAUTH2_PROXY_LOGIN_URL", Value: endpoint.JoinPath("/idp/auth").String()},
-	)
+// When relativeRedirect is true, OAUTH2_PROXY_REDIRECT_URL is set to the path-only
+// callback and reverse-proxy mode is enabled so the callback host follows the
+// request Host header (required when serving the UI on additional FQDNs).
+func WithOIDCURLs(endpoint *url.URL, relativeRedirect bool) customization.ContainerOption {
+	env := []corev1.EnvVar{
+		{Name: "OAUTH2_PROXY_OIDC_ISSUER_URL", Value: endpoint.JoinPath("/idp/").String()},
+		{Name: "OAUTH2_PROXY_LOGIN_URL", Value: endpoint.JoinPath("/idp/auth").String()},
+	}
+	if relativeRedirect {
+		env = append([]corev1.EnvVar{
+			{Name: "OAUTH2_PROXY_REDIRECT_URL", Value: "/oauth2/callback"},
+			{Name: "OAUTH2_PROXY_REVERSE_PROXY", Value: "true"},
+		}, env...)
+	} else {
+		env = append([]corev1.EnvVar{
+			{Name: "OAUTH2_PROXY_REDIRECT_URL", Value: endpoint.JoinPath("/oauth2/callback").String()},
+		}, env...)
+	}
+	return customization.WithEnv(env...)
 }
 
 // WithInternalDexURLs configures the internal URLs for direct Dex communication.
@@ -160,10 +174,10 @@ func WithAllowUnverifiedEmail() customization.ContainerOption {
 
 // --- Domain Whitelist ---
 
-// WithWhitelistDomain configures the allowed redirect domains.
-func WithWhitelistDomain(endpoint *url.URL) customization.ContainerOption {
-	// endpoint.Host contains "hostname:port" or just "hostname" if port is default
+// WithWhitelistDomains configures the allowed redirect domains.
+// Multiple hosts are joined with commas for OAUTH2_PROXY_WHITELIST_DOMAINS.
+func WithWhitelistDomains(hosts ...string) customization.ContainerOption {
 	return customization.WithEnv(
-		corev1.EnvVar{Name: "OAUTH2_PROXY_WHITELIST_DOMAINS", Value: endpoint.Host},
+		corev1.EnvVar{Name: "OAUTH2_PROXY_WHITELIST_DOMAINS", Value: strings.Join(hosts, ",")},
 	)
 }

@@ -18,7 +18,6 @@ package dex
 
 import (
 	"fmt"
-
 	"net/url"
 
 	"k8s.io/utils/ptr"
@@ -102,10 +101,27 @@ type DexParams struct {
 // This configuration uses Kubernetes storage, HTTPS with TLS, an oauth2-proxy
 // confidential client, and a public CLI client for kubectl and other OIDC tools.
 // endpoint is the base URL for the Dex issuer (e.g., https://dex.example.com).
-func NewDexConfig(endpoint *url.URL, params *DexParams) *Config {
+// primaryOAuth2Host, when non-empty, is the host for the primary oauth2-proxy
+// redirect URI (https://<host>/oauth2/callback) instead of endpoint. Callers that
+// enable additionalFQDNs should pass a host already normalized to browser Host
+// header spelling (lowercase, default HTTPS port stripped). Issuer and connector
+// callbacks remain tied to endpoint only.
+// additionalFQDNs are optional alternate UI hostnames; each adds an oauth2-proxy
+// client redirect URI (https://<fqdn>/oauth2/callback).
+func NewDexConfig(endpoint *url.URL, params *DexParams, primaryOAuth2Host string, additionalFQDNs []string) *Config {
 	baseURL := endpoint.String()
 
 	defaultRedirectURI := fmt.Sprintf("%s/idp/callback", baseURL)
+	oauth2ProxyRedirectURIs := make([]string, 0, 1+len(additionalFQDNs))
+	primaryOAuth2Callback := fmt.Sprintf("%s/oauth2/callback", baseURL)
+	if primaryOAuth2Host != "" {
+		primaryOAuth2Callback = fmt.Sprintf("https://%s/oauth2/callback", primaryOAuth2Host)
+	}
+	oauth2ProxyRedirectURIs = append(oauth2ProxyRedirectURIs, primaryOAuth2Callback)
+	for _, fqdn := range additionalFQDNs {
+		oauth2ProxyRedirectURIs = append(oauth2ProxyRedirectURIs,
+			fmt.Sprintf("https://%s/oauth2/callback", fqdn))
+	}
 
 	// Start with provided connectors, setting default RedirectURI if not provided
 	connectors := make([]Connector, len(params.Connectors))
@@ -180,12 +196,10 @@ func NewDexConfig(endpoint *url.URL, params *DexParams) *Config {
 		},
 		StaticClients: []Client{
 			{
-				ID:        OAuth2ProxyClientID,
-				SecretEnv: "CLIENT_SECRET",
-				Name:      "oauth2-proxy",
-				RedirectURIs: []string{
-					fmt.Sprintf("%s/oauth2/callback", baseURL),
-				},
+				ID:           OAuth2ProxyClientID,
+				SecretEnv:    "CLIENT_SECRET",
+				Name:         "oauth2-proxy",
+				RedirectURIs: oauth2ProxyRedirectURIs,
 			},
 			{
 				ID:           CLIClientID,

@@ -78,12 +78,29 @@ func (k kubeOAuth2ProxySecretSource) OAuth2ProxyClientSecret(ctx context.Context
 
 // OpenShiftOAuthConfig holds inputs for the authorization-code flow.
 type OpenShiftOAuthConfig struct {
-	UIURL        string
+	// UIURL is the public UI base used for oauth2-proxy's redirect_uri
+	// (…/oauth2/callback). For additionalFQDNs this is the alias host.
+	UIURL string
+	// IssuerURL is the Dex issuer base used for /idp/auth and /idp/token.
+	// When empty, UIURL is used (single-host installs). For additionalFQDNs
+	// this must stay on the primary UI host — Dex rejects issuer requests on aliases.
+	IssuerURL    string
 	Username     string
 	Password     string
 	ClientSecret string
 	Scope        string
 	MaxRedirects int
+}
+
+func (cfg OpenShiftOAuthConfig) issuerBase() string {
+	if s := strings.TrimRight(strings.TrimSpace(cfg.IssuerURL), "/"); s != "" {
+		return s
+	}
+	return strings.TrimRight(strings.TrimSpace(cfg.UIURL), "/")
+}
+
+func (cfg OpenShiftOAuthConfig) uiBase() string {
+	return strings.TrimRight(strings.TrimSpace(cfg.UIURL), "/")
 }
 
 // OpenShiftOAuthClient runs the browser-less OpenShift → Dex OAuth flow.
@@ -118,11 +135,7 @@ func obtainOpenShiftProxyIDToken(ctx context.Context, baseHTTP *http.Client, kub
 	if err != nil {
 		return "", err
 	}
-	ns := strings.TrimSpace(os.Getenv("KONFLUX_UI_NAMESPACE"))
-	if ns == "" {
-		ns = "konflux-ui"
-	}
-	secret, err := (kubeOAuth2ProxySecretSource{client: kube, namespace: ns}).OAuth2ProxyClientSecret(ctx)
+	secret, err := (kubeOAuth2ProxySecretSource{client: kube, namespace: uiNamespaceForProxyTests()}).OAuth2ProxyClientSecret(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -141,6 +154,38 @@ func obtainOpenShiftProxyIDToken(ctx context.Context, baseHTTP *http.Client, kub
 	return oauthHTTP.ObtainIDToken(ctx, cfg)
 }
 
+// obtainOpenShiftProxyIDTokenForUI obtains a Dex id_token for uiURL's oauth2-proxy
+// callback while performing Dex authorization against issuerURL. Use this when
+// uiURL is an additionalFQDN alias and issuerURL is the primary UI host.
+func obtainOpenShiftProxyIDTokenForUI(ctx context.Context, baseHTTP *http.Client, kube crclient.Client, issuerURL, uiURL string) (string, error) {
+	oauthHTTP, err := newOpenShiftOAuthClient(baseHTTP)
+	if err != nil {
+		return "", err
+	}
+	password, err := (envOpenShiftPasswordSource{}).OpenShiftPassword()
+	if err != nil {
+		return "", err
+	}
+	secret, err := (kubeOAuth2ProxySecretSource{client: kube, namespace: uiNamespaceForProxyTests()}).OAuth2ProxyClientSecret(ctx)
+	if err != nil {
+		return "", err
+	}
+	username := strings.TrimSpace(os.Getenv("OPENSHIFT_USERNAME"))
+	if username == "" {
+		username = "kubeadmin"
+	}
+	cfg := OpenShiftOAuthConfig{
+		UIURL:        strings.TrimRight(strings.TrimSpace(uiURL), "/"),
+		IssuerURL:    strings.TrimRight(strings.TrimSpace(issuerURL), "/"),
+		Username:     username,
+		Password:     password,
+		ClientSecret: secret,
+		Scope:        openShiftOAuthScope,
+		MaxRedirects: openShiftOAuthMaxRedirects,
+	}
+	return oauthHTTP.ObtainIDToken(ctx, cfg)
+}
+
 // ObtainIDToken completes the OAuth authorization-code flow and returns a Dex id_token.
 func (c *OpenShiftOAuthClient) ObtainIDToken(ctx context.Context, cfg OpenShiftOAuthConfig) (string, error) {
 	if cfg.Scope == "" {
@@ -149,7 +194,7 @@ func (c *OpenShiftOAuthClient) ObtainIDToken(ctx context.Context, cfg OpenShiftO
 	if cfg.MaxRedirects <= 0 {
 		cfg.MaxRedirects = openShiftOAuthMaxRedirects
 	}
-	redirectURI := cfg.UIURL + "/oauth2/callback"
+	redirectURI := cfg.uiBase() + "/oauth2/callback"
 	authCode, err := c.obtainAuthorizationCode(ctx, cfg, redirectURI)
 	if err != nil {
 		return "", err
@@ -158,7 +203,7 @@ func (c *OpenShiftOAuthClient) ObtainIDToken(ctx context.Context, cfg OpenShiftO
 }
 
 func (c *OpenShiftOAuthClient) obtainAuthorizationCode(ctx context.Context, cfg OpenShiftOAuthConfig, redirectURI string) (string, error) {
-	start, err := url.Parse(cfg.UIURL + "/idp/auth/openshift")
+	start, err := url.Parse(cfg.issuerBase() + "/idp/auth/openshift")
 	if err != nil {
 		return "", err
 	}
@@ -225,6 +270,15 @@ func (c *OpenShiftOAuthClient) obtainAuthorizationCode(ctx context.Context, cfg 
 			continue
 		}
 
+		// OpenShift shows an IDP chooser at /oauth/authorize when multiple providers exist.
+		if status == http.StatusOK && strings.Contains(current, "/oauth/authorize") {
+			if next, ok := selectIdentityProviderURL(current, body, preferredOpenShiftIDP()); ok {
+				pendingAuthorize = next
+				current = next
+				continue
+			}
+		}
+
 		return "", fmt.Errorf("unexpected OAuth response (http=%d, url=%s)", status, redactOAuthURL(current))
 	}
 	return "", fmt.Errorf("too many redirects during OpenShift OAuth flow")
@@ -249,7 +303,18 @@ func (c *OpenShiftOAuthClient) submitLoginAndFollow(ctx context.Context, pageURL
 		return "", err
 	}
 	if status >= 300 && status < 400 && location != "" {
-		return resolveURL(action, location)
+		next, err := resolveURL(action, location)
+		if err != nil {
+			return "", err
+		}
+		// Some OpenShift login responses redirect to "/" instead of back to
+		// /oauth/authorize; resume the pending authorize URL in that case.
+		if pendingAuthorize != "" {
+			if u, err := url.Parse(next); err == nil && (u.Path == "" || u.Path == "/") {
+				return pendingAuthorize, nil
+			}
+		}
+		return next, nil
 	}
 	if pendingAuthorize != "" {
 		return pendingAuthorize, nil
@@ -278,7 +343,7 @@ func (c *OpenShiftOAuthClient) submitGrant(ctx context.Context, pageURL string, 
 }
 
 func (c *OpenShiftOAuthClient) exchangeAuthorizationCode(ctx context.Context, cfg OpenShiftOAuthConfig, redirectURI, authCode string) (string, error) {
-	tokenURL := cfg.UIURL + "/idp/token"
+	tokenURL := cfg.issuerBase() + "/idp/token"
 	auth := base64.StdEncoding.EncodeToString([]byte("oauth2-proxy:" + cfg.ClientSecret))
 	form := url.Values{}
 	form.Set("grant_type", "authorization_code")
@@ -346,7 +411,74 @@ var (
 	reHiddenInput  = regexp.MustCompile(`(?i)<input type="hidden" name="([^"]*)" value="([^"]*)"`)
 	reCheckedScope = regexp.MustCompile(`(?i)<input type="checkbox"[^>]*checked[^>]*name="scope" value="([^"]*)"`)
 	reApproveValue = regexp.MustCompile(`(?i)name="approve"[^>]*value="([^"]*)"`)
+	reIDPHref      = regexp.MustCompile(`(?i)href="([^"]*idp=[^"]*)"`)
 )
+
+// preferredOpenShiftIDP returns OPENSHIFT_IDP when set (e.g. e2e-htpasswd on
+// clusters that show an identity-provider chooser alongside kube:admin).
+func preferredOpenShiftIDP() string {
+	return strings.TrimSpace(os.Getenv("OPENSHIFT_IDP"))
+}
+
+// selectIdentityProviderURL finds an /oauth/authorize?...&idp=... link on the
+// OpenShift login chooser. Prefer matches preferred when set (OPENSHIFT_IDP).
+// Otherwise prefer kube:admin when listed — obtainOpenShiftProxyIDToken defaults
+// to kubeadmin credentials. If kube:admin is absent, fall back to a sole
+// non-kube:admin provider (e.g. htpasswd-only choosers).
+func selectIdentityProviderURL(pageURL string, body []byte, preferred string) (string, bool) {
+	matches := reIDPHref.FindAllStringSubmatch(string(body), -1)
+	if len(matches) == 0 {
+		return "", false
+	}
+	type choice struct {
+		name string
+		href string
+	}
+	var choices []choice
+	seen := map[string]struct{}{}
+	for _, m := range matches {
+		href := htmlpkg.UnescapeString(m[1])
+		abs, err := resolveURL(pageURL, href)
+		if err != nil {
+			continue
+		}
+		idpName := queryParam(abs, "idp")
+		if idpName == "" {
+			continue
+		}
+		if _, ok := seen[idpName]; ok {
+			continue
+		}
+		seen[idpName] = struct{}{}
+		choices = append(choices, choice{name: idpName, href: abs})
+	}
+	if len(choices) == 0 {
+		return "", false
+	}
+	if preferred != "" {
+		for _, c := range choices {
+			if c.name == preferred {
+				return c.href, true
+			}
+		}
+		return "", false
+	}
+	for _, c := range choices {
+		if c.name == "kube:admin" {
+			return c.href, true
+		}
+	}
+	var nonKube []choice
+	for _, c := range choices {
+		if c.name != "kube:admin" {
+			nonKube = append(nonKube, c)
+		}
+	}
+	if len(nonKube) == 1 {
+		return nonKube[0].href, true
+	}
+	return "", false
+}
 
 func parseLoginForm(pageURL string, body []byte) (actionURL, csrf string, err error) {
 	pageHTML := string(body)
@@ -360,14 +492,31 @@ func parseLoginForm(pageURL string, body []byte) (actionURL, csrf string, err er
 	if err != nil {
 		return "", "", err
 	}
-	if action == "/login" || action == "login" {
-		base := pageURL
-		if i := strings.Index(base, "?"); i >= 0 {
-			base = base[:i]
+	// Preserve ?then=... from the login page. OpenShift IDP-specific forms use
+	// action="/login/<idp>") without the query string; posting without then=
+	// drops the user on "/" instead of returning to /oauth/authorize.
+	// Keep the form action path (do not rewrite /login/<idp> back to /login).
+	actionPath := action
+	if u, err := url.Parse(actionURL); err == nil && u.Path != "" {
+		actionPath = u.Path
+	}
+	if actionPath == "/login" || actionPath == "login" || strings.HasPrefix(actionPath, "/login/") {
+		pageU, err := url.Parse(pageURL)
+		if err != nil {
+			return "", "", err
 		}
-		actionURL = base
-		if strings.Contains(pageURL, "?") {
-			actionURL = pageURL
+		then := pageU.Query().Get("then")
+		if then != "" {
+			actionU, err := url.Parse(actionURL)
+			if err != nil {
+				return "", "", err
+			}
+			if actionU.Query().Get("then") == "" {
+				q := actionU.Query()
+				q.Set("then", then)
+				actionU.RawQuery = q.Encode()
+				actionURL = actionU.String()
+			}
 		}
 	}
 	return actionURL, htmlpkg.UnescapeString(csrfMatch[1]), nil
