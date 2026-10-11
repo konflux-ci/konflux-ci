@@ -14,6 +14,11 @@ Contributing Guidelines
   * [Automated E2E Tests](#automated-e2e-tests)
   * [OpenShift CI Periodic Tests](#openshift-ci-periodic-tests)
   * [ARM64 Testing](#arm64-testing)
+  * [Triggering CI Tests on Pull Requests](#triggering-ci-tests-on-pull-requests)
+    + [Tekton Pipelines as Code (PaC) — automatic](#tekton-pipelines-as-code-pac--automatic)
+    + [OpenShift CI (Prow) — manual with `/test`](#openshift-ci-prow--manual-with-test)
+    + [GitHub Actions workflows](#github-actions-workflows)
+    + [Quick reference](#quick-reference)
 - [Running E2E test](#running-e2e-test)
   * [Prerequisites](#prerequisites)
   * [Setup](#setup)
@@ -251,6 +256,58 @@ The ARM64 workflows use architecture-specific binaries:
 The operator container image is built natively for ARM64 using the multi-arch
 Containerfile which automatically detects the build architecture via
 `TARGETARCH` and `TARGETOS` build arguments.
+
+## Triggering CI Tests on Pull Requests
+
+This repository uses two independent CI systems that run on pull requests.
+Understanding which system runs each test — and how to trigger them — avoids
+failed `/test` commands.
+
+### Tekton Pipelines as Code (PaC) — automatic
+
+Tekton PaC pipelines trigger **automatically** on pull request events (open,
+synchronize). You do not need to run any command to start them. The pipeline
+names (defined in `.tekton/`) are:
+
+- `conformance-tests-on-pull-request` — conformance test suite
+- `konflux-operator-on-pull-request` — operator build and unit tests
+- `konflux-operator-e2e-on-pull-request` — operator E2E tests
+
+These names are **not valid `/test` targets**. Using `/test conformance-tests-on-pull-request`
+or `/test konflux-operator-on-pull-request` in a PR comment will fail because
+`/test` is a Prow command and these are Tekton PaC pipelines.
+
+### OpenShift CI (Prow) — manual with `/test`
+
+Optional Prow presubmit jobs can be triggered manually by posting a comment on
+the PR:
+
+```
+/test konflux-e2e-v420-optional
+```
+
+```
+/test konflux-e2e-v420-arm64-optional
+```
+
+These are the only valid `/test` targets for this repository. They run Konflux
+E2E tests on OCP 4.20 clusters (x86_64 and ARM64 respectively) via
+[OpenShift CI](https://prow.ci.openshift.org/) infrastructure.
+
+### GitHub Actions workflows
+
+GitHub Actions workflows (e.g., Operator Tests, Operator Lint, Operator E2E
+Tests) also run automatically on pull requests. They are visible in the PR
+Checks tab and can be re-run from the GitHub Actions UI. They are not triggered
+by `/test`.
+
+### Quick reference
+
+| CI System | Trigger | Example names |
+|---|---|---|
+| Tekton PaC | Automatic on PR events | `conformance-tests-on-pull-request`, `konflux-operator-on-pull-request` |
+| Prow (OpenShift CI) | `/test <job-name>` comment | `konflux-e2e-v420-optional`, `konflux-e2e-v420-arm64-optional` |
+| GitHub Actions | Automatic on PR events | Operator Tests, Operator Lint, Operator E2E Tests |
 
 # Running E2E test
 To validate changes more quickly, run the E2E test, which validates that:
