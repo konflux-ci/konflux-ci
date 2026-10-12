@@ -23,13 +23,23 @@ jobs:
           set -euo pipefail
           ref=$(yq '.images[] | select(.name == "quay.io/konflux-ci/reverse-proxy") | .newName + "@" + .digest' \
             operator/upstream-kustomizations/ui/core/proxy/kustomization.yaml)
+          # This workflow runs on pull_request, so the kustomization.yaml above is
+          # PR-controlled content: a crafted .digest would otherwise be substituted
+          # into the docker run command line below. Require a pinned digest ref.
+          if [[ ! "${ref}" =~ ^quay\.io/konflux-ci/reverse-proxy@sha256:[0-9a-f]{64}$ ]]; then
+            echo "ERROR: unexpected reverse-proxy image reference: '${ref}'" >&2
+            echo "       Expected quay.io/konflux-ci/reverse-proxy@sha256:<64 hex>" >&2
+            exit 1
+          fi
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
 
       - name: Verify Caddyfile is formatted
+        env:
+          IMAGE_REF: ${{ steps.image.outputs.ref }}
         run: |
           set -euo pipefail
           caddyfile="operator/upstream-kustomizations/ui/core/proxy/Caddyfile"
-          formatted=$(docker run --rm -i "${{ steps.image.outputs.ref }}" fmt - < "$caddyfile")
+          formatted=$(docker run --rm -i "${IMAGE_REF}" fmt - < "$caddyfile")
           if ! diff -u "$caddyfile" <(echo "$formatted"); then
             echo "ERROR: Caddyfile is not formatted. Run the following to fix:" >&2
             echo "  docker run --rm -i <caddy-image> fmt - < $caddyfile > /tmp/Caddyfile && mv /tmp/Caddyfile $caddyfile" >&2

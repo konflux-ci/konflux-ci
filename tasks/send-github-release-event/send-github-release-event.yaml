@@ -70,6 +70,11 @@ spec:
           mountPath: "/etc/secrets/app"
           readOnly: true
       env:
+        # Params are bound to env vars rather than substituted into the script
+        # body below: Tekton expands $(params.*) into the script text before bash
+        # parses it, so a param value is script source wherever it appears there.
+        - name: RELEASE_REF
+          value: $(params.release)
         - name: GITHUB_TOKEN_KEY
           value: $(params.githubTokenSecretKey)
         - name: GITHUB_REPO
@@ -193,8 +198,33 @@ spec:
         set -x
         echo "Authentication successful for repository: ${GITHUB_REPO}"
 
+        # Reject values that are not plain tag/ref/image-tag names before they are
+        # put on the wire. Everything below is read out of the Release CR, so it is
+        # untrusted: a git tag name may legally contain $(), backticks, ';', '|' and
+        # quotes, and .status.artifacts is written by another controller. The
+        # consumer of this payload (.github/workflows/create-release.yaml) must bind
+        # it to env vars rather than interpolate it, but a malformed value should
+        # never leave the cluster in the first place.
+        #
+        # This fails the task rather than exiting 0: the pipeline's finally block
+        # notifies Slack on status Failed, so a rejected value is reported instead
+        # of silently dropping the release event.
+        validate_field() {
+          local name="$1" value="$2" pattern="$3"
+
+          if [ "${#value}" -gt 256 ]; then
+            echo "Error: ${name} is too long (${#value} characters, max 256)" >&2
+            exit 1
+          fi
+          if [[ ! "${value}" =~ ${pattern} ]]; then
+            echo "Error: ${name} contains disallowed characters: '${value}'" >&2
+            echo "       Expected pattern: ${pattern}" >&2
+            exit 1
+          fi
+        }
+
         # Parse release namespace and name
-        IFS='/' read -r RELEASE_NAMESPACE RELEASE_NAME <<< "$(params.release)"
+        IFS='/' read -r RELEASE_NAMESPACE RELEASE_NAME <<< "${RELEASE_REF}"
 
         # Get Release CR
         RELEASE=$(kubectl get release "$RELEASE_NAME" -n "$RELEASE_NAMESPACE" -o json)
@@ -220,6 +250,9 @@ spec:
 
         # Extract version directly from source-branch (remove "refs/tags/" prefix)
         VERSION="${SOURCE_BRANCH#refs/tags/}"
+        # Must start alphanumeric: a leading '-' would be parsed as an option by
+        # git/gh on the GitHub Actions side.
+        validate_field "version" "${VERSION}" '^[A-Za-z0-9][A-Za-z0-9._/+-]*$'
 
         # Extract git SHA
         GIT_SHA=$(jq -r '.metadata.labels."pac.test.appstudio.openshift.io/sha"' <<< "$RELEASE")
@@ -227,6 +260,7 @@ spec:
           echo "Warning: git sha not found in Release labels, skipping GitHub event"
           exit 0
         fi
+        validate_field "git_ref" "${GIT_SHA}" '^[0-9a-fA-F]{7,40}$'
 
         # Extract image tag (find the release-sha-* format)
         IMAGE_TAG=$(jq -r '.status.artifacts.images[0].urls[] | select(contains("release-sha-"))' <<< "$RELEASE" | head -1)
@@ -237,6 +271,10 @@ spec:
 
         # Extract just the tag part: release-sha-80669c7
         IMAGE_TAG_VALUE=$(echo "$IMAGE_TAG" | sed 's/.*:\(release-sha-[^@]*\).*/\1/')
+        # The sed capture group is [^@]*, which admits shell metacharacters, and
+        # sed echoes the line unchanged when the pattern does not match (leaving
+        # the whole image URL here). Require the documented release-sha-<sha> form.
+        validate_field "image_tag" "${IMAGE_TAG_VALUE}" '^release-sha-[A-Za-z0-9._-]+$'
 
         echo "Sending GitHub repository_dispatch event:"
         echo "  version: $VERSION"
