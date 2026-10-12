@@ -146,7 +146,7 @@ spec:
       description: >-
         Pinned commit of tekton-integration-catalog for kind-ibm and other catalog tasks (bump when upgrading tasks).
       # renovate: datasource=git-refs depName=https://github.com/konflux-ci/tekton-integration-catalog
-      default: 24ed4b2be4ff378d2d688b7bc380e47ef99a3eba
+      default: 261d274c4fc897bb1564d7c832ae120a21762269
   tasks:
     # IBM VSI instance names are limited to 40 characters. PipelineRun names are
     # too long and PR numbers can collide across repositories, so derive a short
@@ -192,7 +192,7 @@ spec:
           - name: revision
             value: $(params.catalog-revision)
           - name: pathInRepo
-            value: tasks/mapt-oci/kind-ibm-provision/0.1/kind-ibm-provision.yaml
+            value: tasks/mapt-oci/kind-ibm-provision/0.2/kind-ibm-provision.yaml
       params:
         - name: secret-ibmcloud-credentials
           value: $(params.ibmcloud-credentials-secret)
@@ -226,10 +226,8 @@ spec:
           value: $(params.zone)
         - name: backed-url
           value: s3://konflux-mapt-state/mapt/kind/$(tasks.generate-cluster-id.results.cluster-id)
-        - name: cpus
-          value: "16"
-        - name: memory
-          value: "32"
+        - name: compute-sizes
+          value: cxf-24x48
         - name: harden-control-plane
           value: "false"
     - name: deploy-konflux-pac
