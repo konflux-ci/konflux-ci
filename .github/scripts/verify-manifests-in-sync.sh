@@ -26,7 +26,7 @@ for dir in "${REPO_ROOT}/operator/upstream-kustomizations"/*; do
   component="$(basename "${dir}")"
   committed="${REPO_ROOT}/operator/pkg/manifests/${component}/manifests.yaml"
   if [[ ! -f "${committed}" ]]; then
-    echo "❌ Missing committed manifest: ${committed}" >&2
+    echo "❌ Missing committed manifest: ${committed} (run rebuild-upstream-manifests.sh and commit)." >&2
     fail=true
     continue
   fi
@@ -40,7 +40,7 @@ for dir in "${REPO_ROOT}/operator/upstream-kustomizations"/*; do
   fi
   rm -f /tmp/kustomize.err
   if ! diff -u "${committed}" "${tmp}" >/tmp/diff.out 2>&1; then
-    echo "❌ Upstream manifest drift for component: ${component}" >&2
+    echo "❌ Upstream manifest drift for component: ${component} (run rebuild-upstream-manifests.sh and commit)." >&2
     head -n 80 /tmp/diff.out >&2 || cat /tmp/diff.out >&2
     fail=true
   else
