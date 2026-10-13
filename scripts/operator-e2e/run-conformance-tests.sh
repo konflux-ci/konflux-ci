@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Run Ginkgo conformance tests. Requires GH_ORG, GH_TOKEN.
-# QUAY_TOKEN is cleared for this invocation. Optional: RELEASE_TA_OCI_STORAGE, E2E_APPLICATIONS_NAMESPACE.
+# QUAY_TOKEN is cleared for this invocation. Optional: RELEASE_TA_OCI_STORAGE, E2E_APPLICATIONS_NAMESPACE,
+# E2E_CONFORMANCE_TEST_TIMEOUT (go test -timeout; default 45m), E2E_RELEASE_PIPELINE_TIMEOUT (Go;
+# default 15m when unset — Tekton Kind sets 30m via the konflux-e2e-tests Task).
 #
 # Two modes: source (default, "go test" from the repo) or image (set E2E_CONFORMANCE_IMAGE
 # to run the pre-built container as a pod with credentials + kubeconfig injected — same
@@ -15,6 +17,9 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "${1:?usage: $0 REPO_ROOT [JUNIT_REPORT_PATH]}" && pwd)"
 JUNIT="${2:-${JUNIT_REPORT_PATH:-${GITHUB_WORKSPACE:-$REPO_ROOT}/junit-conformance.xml}}"
+
+# Suite wall-clock ceiling (-test.timeout / go test -timeout). Tekton Kind sets 75m.
+E2E_CONFORMANCE_TEST_TIMEOUT="${E2E_CONFORMANCE_TEST_TIMEOUT:-45m}"
 
 export GITHUB_TOKEN="${GH_TOKEN:?GH_TOKEN required}"
 export MY_GITHUB_ORG="${GH_ORG:?GH_ORG required}"
@@ -58,13 +63,14 @@ if [[ -n "${E2E_CONFORMANCE_IMAGE:-}" ]]; then
     "containers": [{
       "name": "${POD_NAME}",
       "image": "${E2E_CONFORMANCE_IMAGE}",
-      "args": ["-ginkgo.vv", "-test.timeout", "45m", "-test.count", "1"${EXTRA_ARGS_JSON}],
+      "args": ["-ginkgo.vv", "-test.timeout", "${E2E_CONFORMANCE_TEST_TIMEOUT}", "-test.count", "1"${EXTRA_ARGS_JSON}],
       "env": [
         {"name": "GITHUB_TOKEN", "valueFrom": {"secretKeyRef": {"name": "${CREDS_SECRET}", "key": "GITHUB_TOKEN"}}},
         {"name": "MY_GITHUB_ORG", "valueFrom": {"secretKeyRef": {"name": "${CREDS_SECRET}", "key": "MY_GITHUB_ORG"}}},
         {"name": "QUAY_TOKEN", "value": ""},
         {"name": "E2E_APPLICATIONS_NAMESPACE", "value": "${E2E_APPLICATIONS_NAMESPACE}"},
         {"name": "CUSTOM_DOCKER_BUILD_OCI_TA_MIN_PIPELINE_BUNDLE", "value": "${CUSTOM_DOCKER_BUILD_OCI_TA_MIN_PIPELINE_BUNDLE:-}"},
+        {"name": "E2E_RELEASE_PIPELINE_TIMEOUT", "value": "${E2E_RELEASE_PIPELINE_TIMEOUT:-}"},
         {"name": "KUBECONFIG", "value": "/etc/creds/kubeconfig"}
       ],
       "volumeMounts": [
@@ -109,7 +115,7 @@ OVERRIDES
 else
   cd "${REPO_ROOT}/test/go-tests"
   # shellcheck disable=SC2086
-  go test ./tests/conformance -v -timeout 45m \
+  go test ./tests/conformance -v -timeout "${E2E_CONFORMANCE_TEST_TIMEOUT}" \
     -ginkgo.vv \
     -ginkgo.github-output \
     -ginkgo.junit-report="$JUNIT" \

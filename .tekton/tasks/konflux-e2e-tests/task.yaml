@@ -68,6 +68,18 @@ spec:
         from source. Used to validate the conformance image as part of CI.
       type: string
       default: ""
+    - name: release-pipeline-timeout
+      description: >-
+        Per-attempt wait for the managed release PipelineRun in conformance
+        (E2E_RELEASE_PIPELINE_TIMEOUT). Kind on IBM is slower to schedule TaskRuns than GHA.
+      type: string
+      default: "30m"
+    - name: conformance-test-timeout
+      description: >-
+        Conformance suite wall-clock ceiling (go test -timeout / -test.timeout;
+        E2E_CONFORMANCE_TEST_TIMEOUT). Must exceed release-pipeline-timeout plus earlier suite steps.
+      type: string
+      default: "75m"
   stepTemplate:
     volumeMounts:
       - name: repo
@@ -151,4 +163,6 @@ spec:
         exec env \
           E2E_KONFLUX_READY_TIMEOUT="$(params.konflux-ready-timeout)" \
           E2E_RELEASE_TA_OCI_STORAGE="$(params.release-ta-oci-storage)" \
+          E2E_RELEASE_PIPELINE_TIMEOUT="$(params.release-pipeline-timeout)" \
+          E2E_CONFORMANCE_TEST_TIMEOUT="$(params.conformance-test-timeout)" \
           bash scripts/operator-e2e/tekton-run-e2e-tests.sh /mnt/konflux-ci/repo

@@ -64,6 +64,8 @@ The Tekton Task sets optional env vars from pipeline params (empty by default). 
 | `E2E_INTEGRATION_GO_TEST_EXTRA_ARGS` | `integration-go-test-extra-args` | `go test . ./pkg/...` |
 | `E2E_CONFORMANCE_GO_TEST_EXTRA_ARGS` | `conformance-go-test-extra-args` | `go test ./tests/conformance ...` (after fixed Ginkgo flags) |
 | `E2E_CONFORMANCE_IMAGE` | `conformance-image` | When set, runs the pre-built conformance image as a pod instead of `go test` from source. |
+| `E2E_RELEASE_PIPELINE_TIMEOUT` | `release-pipeline-timeout` (default `30m` on Tekton Kind) | Per-attempt wait for managed release PipelineRun in conformance (Go default `15m` when unset). |
+| `E2E_CONFORMANCE_TEST_TIMEOUT` | `conformance-test-timeout` (default `75m` on Tekton Kind) | Conformance `go test -timeout` / `-test.timeout` (script default `45m` when unset). |
 
 **Local / ad hoc** (from repo root, same semantics as the Task):
 

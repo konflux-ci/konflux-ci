@@ -4,6 +4,9 @@
 # Optional env (space-separated extra go test flags):
 #   E2E_INTEGRATION_GO_TEST_EXTRA_ARGS — appended to: go test . ./pkg/...
 #   E2E_CONFORMANCE_GO_TEST_EXTRA_ARGS — forwarded to run-conformance-tests.sh (conformance suite only).
+# Optional timeouts (forwarded into conformance):
+#   E2E_RELEASE_PIPELINE_TIMEOUT — per-attempt managed release PipelineRun wait (Go; default 15m).
+#   E2E_CONFORMANCE_TEST_TIMEOUT — conformance go test -timeout (default 45m; Tekton Kind uses 75m).
 set -euo pipefail
 
 REPO_ROOT="$(cd "${1:?usage: $0 REPO_ROOT}" && pwd)"
