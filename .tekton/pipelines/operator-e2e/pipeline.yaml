@@ -146,7 +146,7 @@ spec:
       description: >-
         Pinned commit of tekton-integration-catalog for kind-ibm and other catalog tasks (bump when upgrading tasks).
       # renovate: datasource=git-refs depName=https://github.com/konflux-ci/tekton-integration-catalog
-      default: 24ed4b2be4ff378d2d688b7bc380e47ef99a3eba
+      default: 261d274c4fc897bb1564d7c832ae120a21762269
   tasks:
     # IBM VSI instance names are limited to 40 characters. PipelineRun names are
     # too long and PR numbers can collide across repositories, so derive a short
