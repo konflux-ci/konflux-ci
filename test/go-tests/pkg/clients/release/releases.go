@@ -3,6 +3,7 @@ package release
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -314,7 +315,7 @@ func (r *Controller) WaitForReleasePipelineToBeFinishedWithRetry(
 		err := wait.PollUntilContextTimeout(
 			context.Background(),
 			constants.PipelineRunPollingInterval,
-			releasePipelineTimeout,
+			releasePipelineTimeout(),
 			true,
 			func(ctx context.Context) (bool, error) {
 				pr, getErr := r.GetPipelineRunInNamespace(managedNamespace, current.Name, current.Namespace)
@@ -405,4 +406,16 @@ func (r *Controller) WaitForReleasePipelineToBeFinishedWithRetry(
 	}
 }
 
-const releasePipelineTimeout = 15 * time.Minute
+const defaultReleasePipelineTimeout = 15 * time.Minute
+
+// releasePipelineTimeout is how long each attempt waits for the managed release
+// PipelineRun to finish. Override with E2E_RELEASE_PIPELINE_TIMEOUT (Go duration,
+// e.g. 30m); invalid or empty values use the default.
+func releasePipelineTimeout() time.Duration {
+	if s := strings.TrimSpace(os.Getenv("E2E_RELEASE_PIPELINE_TIMEOUT")); s != "" {
+		if d, err := time.ParseDuration(s); err == nil && d > 0 {
+			return d
+		}
+	}
+	return defaultReleasePipelineTimeout
+}

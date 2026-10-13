@@ -138,6 +138,18 @@ spec:
         the pre-built image as a Kubernetes pod with credentials injected, instead of
         compiling from source.
       default: ""
+    - name: release-pipeline-timeout
+      type: string
+      description: >-
+        Per-attempt wait for the managed release PipelineRun in conformance
+        (E2E_RELEASE_PIPELINE_TIMEOUT). Default is higher than local/GHA (15m) for Kind on IBM.
+      default: "30m"
+    - name: conformance-test-timeout
+      type: string
+      description: >-
+        Conformance suite wall-clock ceiling (E2E_CONFORMANCE_TEST_TIMEOUT / go test -timeout).
+        Default is higher than local/GHA (45m) so it covers the longer release wait on Kind.
+      default: "75m"
     - name: catalog-url
       type: string
       default: https://github.com/konflux-ci/tekton-integration-catalog.git
@@ -342,6 +354,10 @@ spec:
           value: $(params.conformance-go-test-extra-args)
         - name: conformance-image
           value: $(params.conformance-image)
+        - name: release-pipeline-timeout
+          value: $(params.release-pipeline-timeout)
+        - name: conformance-test-timeout
+          value: $(params.conformance-test-timeout)
     - name: konflux-e2e-tests-its
       runAfter:
         - deploy-konflux-its
@@ -375,6 +391,10 @@ spec:
           value: $(params.conformance-go-test-extra-args)
         - name: conformance-image
           value: $(params.conformance-image)
+        - name: release-pipeline-timeout
+          value: $(params.release-pipeline-timeout)
+        - name: conformance-test-timeout
+          value: $(params.conformance-test-timeout)
   finally:
     - name: deprovision-kind-cluster
       taskRef:
