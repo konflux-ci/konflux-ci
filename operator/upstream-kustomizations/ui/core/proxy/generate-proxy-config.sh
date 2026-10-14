@@ -55,6 +55,16 @@ fi
 
 # Process kubearchive template
 if [ "${KUBEARCHIVE_ENABLED:-}" = "true" ] && [ -f "${TEMPLATES_DIR}/kubearchive.caddy" ]; then
+  # The transport snippet is generated once by this init container. Wait for
+  # trust-manager's optional ConfigMap so a new proxy pod starts with its CA.
+  if [ ! -f "${KUBEARCHIVE_CA_PATH}" ]; then
+    log "waiting for kubearchive CA bundle at ${KUBEARCHIVE_CA_PATH}"
+    while [ ! -f "${KUBEARCHIVE_CA_PATH}" ]; do
+      sleep 5
+    done
+    log "kubearchive CA bundle is available"
+  fi
+
   kubearchive_hostname="${KUBEARCHIVE_HOSTNAME:-kubearchive-api-server.product-kubearchive.svc.cluster.local}"
   sed "s/__KUBEARCHIVE_HOSTNAME__/${kubearchive_hostname}/g" \
     "${TEMPLATES_DIR}/kubearchive.caddy" > "${SNIPPETS_DIR}/kubearchive.caddy"
