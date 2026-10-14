@@ -52,8 +52,8 @@ kubectl get enterprisecontractpolicy default -n enterprise-contract-service -o y
 
 When you create an application through the Konflux UI, an `IntegrationTestScenario`
 that runs the Conforma pipeline is created automatically. It references the
-[enterprise-contract pipeline](https://github.com/konflux-ci/build-definitions/blob/main/pipelines/enterprise-contract.yaml)
-from the `konflux-ci/build-definitions` repository and uses the `default` policy.
+[enterprise-contract pipeline](https://github.com/conforma/tekton-catalog/blob/main/pipelines/enterprise-contract/0.1/enterprise-contract.yaml)
+from the `conforma/tekton-catalog` repository and uses the `default` policy.
 
 You can inspect the integration test scenarios in your namespace:
 
