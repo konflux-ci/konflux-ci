@@ -231,6 +231,8 @@ spec:
           value: $(params.omit-history)
         - name: BUILD_ARGS_FILE
           value: $(params.build-args-file)
+        - name: SBOM_SYFT_SELECT_CATALOGERS
+          value: "-rpm-db-cataloger"
       runAfter:
         - prefetch-dependencies
       taskRef:
@@ -578,13 +580,17 @@ spec:
           value: $(tasks.build-image-index.results.IMAGE_URL)
         - name: image-digest
           value: $(tasks.build-image-index.results.IMAGE_DIGEST)
-        - name: rpmsig-blob-url
-          value:
-            - $(tasks.build-images.results.RPMSIG_BLOB_URL[*])
       runAfter:
         - build-image-index
       taskRef:
-        name: rpms-signature-scan
+        params:
+          - name: name
+            value: rpms-signature-scan
+          - name: bundle
+            value: quay.io/konflux-ci/tekton-catalog/task-rpms-signature-scan:0.2.2@sha256:cc1b939d933d24727ef4b90e1c5c65a6d2a6c1c036cf74f685b597d611fa150f
+          - name: kind
+            value: task
+        resolver: bundles
       when:
         - input: $(params.skip-checks)
           operator: in
