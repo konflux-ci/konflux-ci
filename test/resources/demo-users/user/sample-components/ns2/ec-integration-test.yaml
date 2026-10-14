@@ -17,9 +17,9 @@ spec:
   resolverRef:
     params:
       - name: url
-        value: 'https://github.com/konflux-ci/build-definitions'
+        value: 'https://github.com/conforma/tekton-catalog'
       - name: revision
-        value: 872d5a620a90fbec2210a24323554de7d26380a6
+        value: 4f1262352e7ad9ca96534a7935eba8316941df06
       - name: pathInRepo
-        value: pipelines/enterprise-contract.yaml
+        value: pipelines/enterprise-contract/0.1/enterprise-contract.yaml
     resolver: git
