@@ -326,7 +326,7 @@ spec:
           - name: name
             value: roxctl-scan
           - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-roxctl-scan:0.1@sha256:423a729c49ba1f2585003b67346d6631eef65fcadc17a76d6b385bcdb1e84493
+            value: quay.io/konflux-ci/tekton-catalog/task-roxctl-scan:0.1.1@sha256:041ca86ca37e33fd4a9c53072d7dad4862c67f726097717cdfe28ec22352d9c2
           - name: kind
             value: task
         resolver: bundles
@@ -351,7 +351,7 @@ spec:
           - name: name
             value: ecosystem-cert-preflight-checks
           - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-ecosystem-cert-preflight-checks:0.2@sha256:439014132f4521ea3221ea29b1fd83e48f9728c071db6edaf6b870550e5d89a6
+            value: quay.io/konflux-ci/tekton-catalog/task-ecosystem-cert-preflight-checks:0.2@sha256:cc7d71d9be01e9221d8753a1f1a7caaf0fb93048df69e9a95c359068dc730578
           - name: kind
             value: task
         resolver: bundles
@@ -524,7 +524,7 @@ spec:
           - name: name
             value: sast-unicode-check-oci-ta
           - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-sast-unicode-check-oci-ta:0.4.1@sha256:16d5f31f26ae52efb0f16b4d592f09f9056d7b9ee5b6186b8220ab64e8527ef2
+            value: quay.io/konflux-ci/tekton-catalog/task-sast-unicode-check-oci-ta:0.4.1@sha256:2ee89730856f542d851d99b5d945963583a840c295354dc4257a0052841e35ab
           - name: kind
             value: task
         resolver: bundles
