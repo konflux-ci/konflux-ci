@@ -158,7 +158,7 @@ spec:
       description: >-
         Pinned commit of tekton-integration-catalog for kind-ibm and other catalog tasks (bump when upgrading tasks).
       # renovate: datasource=git-refs depName=https://github.com/konflux-ci/tekton-integration-catalog
-      default: 261d274c4fc897bb1564d7c832ae120a21762269
+      default: a650f5b72e4d1b523b7f15b21383cadb56f8dca3
   tasks:
     # IBM VSI instance names are limited to 40 characters. PipelineRun names are
     # too long and PR numbers can collide across repositories, so derive a short
@@ -204,7 +204,7 @@ spec:
           - name: revision
             value: $(params.catalog-revision)
           - name: pathInRepo
-            value: tasks/mapt-oci/kind-ibm-provision/0.2/kind-ibm-provision.yaml
+            value: tasks/mapt-oci/kind-ibm-provision/0.3/kind-ibm-provision.yaml
       params:
         - name: secret-ibmcloud-credentials
           value: $(params.ibmcloud-credentials-secret)
@@ -241,7 +241,41 @@ spec:
         - name: compute-sizes
           value: cxf-24x48
         - name: harden-control-plane
-          value: "false"
+          value: "true"
+        - name: apiserver-cpu
+          value: "1500m"
+        - name: apiserver-memory
+          value: "3Gi"
+        - name: apiserver-max-inflight
+          value: "400"
+        - name: apiserver-max-mutating-inflight
+          value: "200"
+        - name: controller-manager-cpu
+          value: "1000m"
+        - name: controller-manager-memory
+          value: "2Gi"
+        - name: scheduler-cpu
+          value: "500m"
+        - name: scheduler-memory
+          value: "1Gi"
+        - name: etcd-cpu
+          value: "2000m"
+        - name: etcd-memory
+          value: "4Gi"
+        - name: containerd-memory-min
+          value: "4G"
+        - name: containerd-gomaxprocs
+          value: "6"
+        - name: containerd-gomemlimit
+          value: "8GiB"
+        - name: containerd-max-concurrent-downloads
+          value: "30"
+        - name: max-pods
+          value: "250"
+        - name: max-parallel-image-pulls
+          value: "10"
+        - name: coredns-replicas
+          value: "2"
     - name: deploy-konflux-pac
       runAfter:
         - provision-kind-cluster
