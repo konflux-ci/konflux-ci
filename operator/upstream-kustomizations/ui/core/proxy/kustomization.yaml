@@ -13,7 +13,7 @@ configMapGenerator:
   - generate-proxy-config.sh
   name: proxy-generate-config
 images:
-- digest: sha256:2405146020d3ef81f8795626e1674fea84dc35c99950f8ee2072a6a576ef2c1f
+- digest: sha256:4f9e9f8adfc7c44646057a94e1d62ee3b326bb4f1fc8bfd8ed80b694fa83a62d
   name: quay.io/konflux-ci/konflux-ui
   newName: quay.io/konflux-ci/konflux-ui
 - digest: sha256:215c7f0b9a2c18da2205522a7ad0bf3f3d87af1324a730347a08f4ca12f71180
