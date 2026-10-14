@@ -232,6 +232,8 @@ spec:
         - name: BUILD_ARGS_FILES
           value:
           - $(params.build-args-file)
+        - name: SBOM_SYFT_SELECT_CATALOGERS
+          value: "-rpm-db-cataloger"
       runAfter:
         - prefetch-dependencies
       taskRef:
