@@ -326,7 +326,7 @@ spec:
           - name: name
             value: roxctl-scan
           - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-roxctl-scan:0.1.1@sha256:041ca86ca37e33fd4a9c53072d7dad4862c67f726097717cdfe28ec22352d9c2
+            value: quay.io/konflux-ci/tekton-catalog/task-roxctl-scan:0.1.1@sha256:2fafbf5439702731ad24a09bed677c371fda1f8a7ecf5ed53f7b7f3c71079980
           - name: kind
             value: task
         resolver: bundles
@@ -498,7 +498,7 @@ spec:
           - name: name
             value: sast-shell-check-oci-ta
           - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-sast-shell-check-oci-ta:0.1.1@sha256:777ded0dc919de8251fce17d0b003ea08fd72a181453148fa8cf8c49c977e5e9
+            value: quay.io/konflux-ci/tekton-catalog/task-sast-shell-check-oci-ta:0.1.1@sha256:83722286ec3297e3f66b0c220cec8895e0f745337e464c1d1c038ed737cf69fd
           - name: kind
             value: task
         resolver: bundles
@@ -586,7 +586,7 @@ spec:
           - name: name
             value: rpms-signature-scan
           - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-rpms-signature-scan:0.2.2@sha256:860d262d199fc45b8a3a717278897f680fa96f841fbfd4a3c1fc23bc3cdaf373
+            value: quay.io/konflux-ci/tekton-catalog/task-rpms-signature-scan:0.2.2@sha256:177402926b7bfd66d3a42b628a30759adb3d8b01ed0079ba502c37cb6b63f759
           - name: kind
             value: task
         resolver: bundles
