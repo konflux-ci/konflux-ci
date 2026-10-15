@@ -507,6 +507,7 @@ rules:
   - integration-service-nudgeconfig-viewer-role
   - integration-service-snapshot-garbage-collector
   - integration-service-tekton-editor-role
+  - its-pipeline-runner
   - konflux-integration-runner
   resources:
   - clusterroles

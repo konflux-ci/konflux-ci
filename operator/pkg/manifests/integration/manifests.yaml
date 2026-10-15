@@ -1947,6 +1947,77 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
+  name: its-pipeline-runner
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - create
+  - watch
+  - update
+  - patch
+- apiGroups:
+  - security.openshift.io
+  resourceNames:
+  - appstudio-pipelines-scc
+  resources:
+  - securitycontextconstraints
+  verbs:
+  - use
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - enterprisecontractpolicies
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - eaas.konflux-ci.dev
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - create
+  - delete
+  - list
+  - watch
+- apiGroups:
+  - tekton.dev
+  resources:
+  - pipelineruns
+  - taskruns
+  verbs:
+  - get
+  - list
+  - create
+  - watch
+  - update
+  - patch
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - snapshots
+  verbs:
+  - get
+  - list
+  - create
+  - watch
+  - update
+  - patch
+- apiGroups:
+  - ci.openshift.org
+  resources:
+  - testplatformclusters
+  verbs:
+  - '*'
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
   name: konflux-integration-runner
 rules:
 - apiGroups:
