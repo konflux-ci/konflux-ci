@@ -18,7 +18,7 @@ package releaseservice
 
 import (
 	"context"
-
+	"slices"
 	"time"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -100,10 +100,21 @@ func rsCRDEntries() []TableEntry {
 	return entries
 }
 
-func rsCRDEntriesNameOnly() []TableEntry {
-	entries := make([]TableEntry, len(rsManagedCRDs))
-	for i, c := range rsManagedCRDs {
-		entries[i] = Entry(c.kind, c.name)
+// rsCRDEntriesNameOnlyForServedDisable returns managed CRDs safe to use in the
+// "restores CRD spec when version is disabled" table. ReleaseServiceConfig is
+// omitted: the controller Owns it via an unstructured informer, so setting
+// served=false removes the API, the informer cannot sync, workers never start,
+// and the reconciler cannot restore the CRD (self-deadlock). That failure also
+// poisons later specs in the suite. RSC CRD drift uses a non-serving tamper in
+// "restores ReleaseServiceConfig CRD spec when shortNames are cleared"; RSC
+// object drift is covered by "restores ReleaseServiceConfig spec when modified".
+func rsCRDEntriesNameOnlyForServedDisable() []TableEntry {
+	entries := make([]TableEntry, 0, len(rsManagedCRDs))
+	for _, c := range rsManagedCRDs {
+		if c.kind == releaseServiceConfigKind {
+			continue
+		}
+		entries = append(entries, Entry(c.kind, c.name))
 	}
 	return entries
 }
@@ -1304,6 +1315,64 @@ var _ = Describe("KonfluxReleaseService Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
+		// ReleaseServiceConfig is Owns()'d via an unstructured informer, so the
+		// served=false CRD drift table skips it (self-deadlock). Tamper shortNames
+		// instead: same CRD watch → SSA restore path, without unserving the API.
+		It("restores ReleaseServiceConfig CRD spec when shortNames are cleared", func(ctx context.Context) {
+			cr := &konfluxv1alpha1.KonfluxReleaseService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+
+			crdNN := types.NamespacedName{Name: "releaseserviceconfigs.appstudio.redhat.com"}
+
+			By("waiting for CRD creation with expected shortNames")
+			var originalShortNames []string
+			Eventually(func(g Gomega) {
+				crd := &apiextensionsv1.CustomResourceDefinition{}
+				g.Expect(k8sClient.Get(ctx, crdNN, crd)).To(Succeed())
+				g.Expect(crd.Spec.Names.ShortNames).NotTo(BeEmpty())
+				originalShortNames = append([]string(nil), crd.Spec.Names.ShortNames...)
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			// If restore fails or the suite is interrupted, put shortNames back so
+			// later specs are not poisoned by a tampered shared CRD.
+			DeferCleanup(func(ctx context.Context) {
+				Eventually(func(g Gomega) {
+					crd := &apiextensionsv1.CustomResourceDefinition{}
+					err := k8sClient.Get(ctx, crdNN, crd)
+					if errors.IsNotFound(err) {
+						return
+					}
+					g.Expect(err).NotTo(HaveOccurred())
+					if slices.Equal(crd.Spec.Names.ShortNames, originalShortNames) {
+						return
+					}
+					crd.Spec.Names.ShortNames = append([]string(nil), originalShortNames...)
+					g.Expect(k8sClient.Update(ctx, crd)).To(Succeed())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			})
+
+			By("clearing the CRD shortNames")
+			var afterTamperRV string
+			Eventually(func(g Gomega) {
+				crd := &apiextensionsv1.CustomResourceDefinition{}
+				g.Expect(k8sClient.Get(ctx, crdNN, crd)).To(Succeed())
+				crd.Spec.Names.ShortNames = nil
+				g.Expect(k8sClient.Update(ctx, crd)).To(Succeed())
+				afterTamperRV = crd.ResourceVersion
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying SSA restores shortNames")
+			Eventually(func(g Gomega) {
+				crd := &apiextensionsv1.CustomResourceDefinition{}
+				g.Expect(k8sClient.Get(ctx, crdNN, crd)).To(Succeed())
+				g.Expect(crd.ResourceVersion).NotTo(Equal(afterTamperRV), "controller has not reconciled yet")
+				g.Expect(crd.Spec.Names.ShortNames).To(Equal(originalShortNames))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
 		DescribeTable("restores CRD spec when version is disabled",
 			func(ctx context.Context, crdName string) {
 				cr := &konfluxv1alpha1.KonfluxReleaseService{
@@ -1313,6 +1382,24 @@ var _ = Describe("KonfluxReleaseService Controller", func() {
 				DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
 
 				crdNN := types.NamespacedName{Name: crdName}
+
+				// If restore fails or the suite is interrupted, re-enable serving so
+				// later specs are not poisoned by an unserved managed CRD.
+				DeferCleanup(func(ctx context.Context) {
+					Eventually(func(g Gomega) {
+						crd := &apiextensionsv1.CustomResourceDefinition{}
+						err := k8sClient.Get(ctx, crdNN, crd)
+						if errors.IsNotFound(err) {
+							return
+						}
+						g.Expect(err).NotTo(HaveOccurred())
+						if len(crd.Spec.Versions) == 0 || crd.Spec.Versions[0].Served {
+							return
+						}
+						crd.Spec.Versions[0].Served = true
+						g.Expect(k8sClient.Update(ctx, crd)).To(Succeed())
+					}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+				})
 
 				By("waiting for CRD creation with served=true")
 				Eventually(func(g Gomega) {
@@ -1340,7 +1427,7 @@ var _ = Describe("KonfluxReleaseService Controller", func() {
 					g.Expect(crd.Spec.Versions[0].Served).To(BeTrue())
 				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 			},
-			rsCRDEntriesNameOnly(),
+			rsCRDEntriesNameOnlyForServedDisable(),
 		)
 	})
 
