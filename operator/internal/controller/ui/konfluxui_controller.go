@@ -22,7 +22,9 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
+	"strings"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	consolev1 "github.com/openshift/api/console/v1"
@@ -217,9 +219,11 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	log.Info("Determined endpoint for KonfluxUI", "url", endpoint.String())
 
+	additionalFQDNs := uniqueAdditionalFQDNs(ctx, endpoint.Host, ui.Spec.GetIngress().AdditionalFQDNs)
+
 	// Reconcile Dex ConfigMap first (if configured) to get the ConfigMap name
 	// This must happen before applyManifests so we can set the correct ConfigMap reference
-	dexConfigMapName, err := r.reconcileDexConfigMap(ctx, ui, endpoint)
+	dexConfigMapName, err := r.reconcileDexConfigMap(ctx, ui, endpoint, additionalFQDNs)
 	if err != nil {
 		return errHandler.HandleWithReason(ctx, err, condition.ReasonConfigMapFailed, "reconcile Dex ConfigMap")
 	}
@@ -232,7 +236,7 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, tc, ui, dexConfigMapName, segmentSecretName, endpoint); err != nil {
+	if err := r.applyManifests(ctx, tc, ui, dexConfigMapName, segmentSecretName, endpoint, additionalFQDNs); err != nil {
 		return errHandler.HandleApplyError(ctx, err)
 	}
 
@@ -309,7 +313,8 @@ func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, tc *tra
 // dexConfigMapName is the name of the Dex ConfigMap to use (empty if not configured).
 // segmentSecretName is the name of the content-hashed Segment Secret (empty if not configured).
 // endpoint is the base URL used to configure oauth2-proxy.
-func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, dexConfigMapName, segmentSecretName string, endpoint *url.URL) error {
+// additionalFQDNs are normalized alias hosts (already de-duplicated against the primary host).
+func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, dexConfigMapName, segmentSecretName string, endpoint *url.URL, additionalFQDNs []string) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.UI)
@@ -334,7 +339,7 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
-			if err := applyUIDeploymentCustomizations(deployment, ui, r.ClusterInfo, dexConfigMapName, segmentSecretName, endpoint); err != nil {
+			if err := applyUIDeploymentCustomizations(deployment, ui, r.ClusterInfo, dexConfigMapName, segmentSecretName, endpoint, additionalFQDNs); err != nil {
 				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
 			}
 		}
@@ -358,14 +363,14 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 }
 
 // applyUIDeploymentCustomizations applies user-defined customizations to UI deployments.
-func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv1alpha1.KonfluxUI, clusterInfo *clusterinfo.Info, dexConfigMapName, segmentSecretName string, endpoint *url.URL) error {
+func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv1alpha1.KonfluxUI, clusterInfo *clusterinfo.Info, dexConfigMapName, segmentSecretName string, endpoint *url.URL, additionalFQDNs []string) error {
 	switch deployment.Name {
 	case proxyDeploymentName:
 		proxySpec := ui.Spec.GetProxy()
 		deployment.Spec.Replicas = &proxySpec.Replicas
 		// Build oauth2-proxy options based on endpoint URL and OpenShift login state
 		openShiftLoginEnabled := isOpenShiftLoginEnabled(ui, clusterInfo)
-		oauth2ProxyOpts := buildOAuth2ProxyOptions(endpoint, openShiftLoginEnabled)
+		oauth2ProxyOpts := buildOAuth2ProxyOptions(endpoint, openShiftLoginEnabled, additionalFQDNs)
 		// The Caddy image uses a non-numeric USER directive ("caddy"), which
 		// prevents Kubernetes from verifying runAsNonRoot on vanilla clusters.
 		// OpenShift SCCs inject a numeric UID automatically so this is only
@@ -607,15 +612,28 @@ func runtimeConfigOverlays(
 
 // buildOAuth2ProxyOptions builds the container options for oauth2-proxy configuration.
 // openShiftLoginEnabled controls whether to allow unverified emails (needed for OpenShift OAuth).
-func buildOAuth2ProxyOptions(endpoint *url.URL, openShiftLoginEnabled bool) []customization.ContainerOption {
+// additionalFQDNs must already be normalized (unique, excluding the primary host).
+// When aliases are present, oauth2-proxy uses a relative callback built from the
+// request Host header (lowercased, default HTTPS port omitted). The primary
+// whitelist entry is normalized the same way so it matches that browser host.
+func buildOAuth2ProxyOptions(
+	endpoint *url.URL,
+	openShiftLoginEnabled bool,
+	additionalFQDNs []string,
+) []customization.ContainerOption {
+	primaryHost := endpoint.Host
+	if len(additionalFQDNs) > 0 {
+		primaryHost = normalizeFQDNHost(endpoint.Host)
+	}
+	whitelist := append([]string{primaryHost}, additionalFQDNs...)
 	opts := []customization.ContainerOption{
 		oauth2proxy.WithProvider(),
-		oauth2proxy.WithOIDCURLs(endpoint),
+		oauth2proxy.WithOIDCURLs(endpoint, len(additionalFQDNs) > 0),
 		oauth2proxy.WithInternalDexURLs(),
 		oauth2proxy.WithCookieConfig(),
 		oauth2proxy.WithAuthSettings(),
 		oauth2proxy.WithCABundle(),
-		oauth2proxy.WithWhitelistDomain(endpoint),
+		oauth2proxy.WithWhitelistDomains(whitelist...),
 	}
 
 	// Allow unverified emails when using OpenShift OAuth
@@ -625,6 +643,55 @@ func buildOAuth2ProxyOptions(endpoint *url.URL, openShiftLoginEnabled bool) []cu
 	}
 
 	return opts
+}
+
+// uniqueAdditionalFQDNs returns de-duplicated additional FQDNs that are not
+// empty and not equal to the primary host. Hosts are normalized to lowercase
+// and the default HTTPS port (:443) is stripped so DNS-equivalent spellings
+// collapse. When equivalent entries are dropped, an Info log is emitted so
+// misconfiguration is visible rather than silently collapsed.
+func uniqueAdditionalFQDNs(ctx context.Context, primaryHost string, additional []string) []string {
+	primaryNorm := normalizeFQDNHost(primaryHost)
+	seen := map[string]struct{}{primaryNorm: {}}
+	out := make([]string, 0, len(additional))
+	var ignored []string
+	for _, provided := range additional {
+		provided = strings.TrimSpace(provided)
+		normalized := normalizeFQDNHost(provided)
+		if normalized == "" {
+			continue
+		}
+		if _, ok := seen[normalized]; ok {
+			ignored = append(ignored, provided)
+			continue
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, normalized)
+	}
+	if len(ignored) > 0 {
+		logf.FromContext(ctx).Info("Equivalent ingress.additionalFQDNs entries were provided and were deduplicated",
+			"primaryHost", primaryNorm, "ignored", ignored, "kept", out)
+	}
+	return out
+}
+
+// normalizeFQDNHost lowercases a host[:port] value and strips the default HTTPS
+// port so "Example.COM:443" and "example.com" compare equal. Non-443 ports
+// (including :80) are kept so they are not collapsed into HTTPS Dex callbacks.
+func normalizeFQDNHost(host string) string {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return ""
+	}
+	host = strings.ToLower(host)
+	h, port, err := net.SplitHostPort(host)
+	if err != nil {
+		return host
+	}
+	if port == "443" {
+		return h
+	}
+	return net.JoinHostPort(h, port)
 }
 
 // buildDexOverlay builds the pod overlay for the dex deployment.
@@ -717,20 +784,29 @@ func generateRandomBytes(length int, urlSafe bool) ([]byte, error) {
 // reconcileDexConfigMap creates or updates the Dex ConfigMap based on the DexConfig in the CR.
 // It generates a content-based hash suffix for the ConfigMap name (like kustomize),
 // cleans up old ConfigMaps, and returns the new ConfigMap name.
-// endpoint is used for the dex issuer URL configuration.
-func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *konfluxv1alpha1.KonfluxUI, endpoint *url.URL) (string, error) {
+// endpoint is the UI endpoint; the Dex issuer may use ResolveDexEndpoint(endpoint).
+// additionalFQDNs are normalized alias hosts used for Dex redirect URIs.
+func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *konfluxv1alpha1.KonfluxUI, endpoint *url.URL, additionalFQDNs []string) (string, error) {
 	// Resolve whether OpenShift login should be enabled
 	openShiftLoginEnabled := isOpenShiftLoginEnabled(ui, r.ClusterInfo)
 
 	// Determine the effective endpoint: use CR spec values if provided, otherwise use the determined endpoint
 	effectiveEndpoint := ui.ResolveDexEndpoint(endpoint)
 
+	// When aliases are set, oauth2-proxy builds callbacks from the browser Host
+	// header on the UI host. Pass that host already normalized so Dex's exact
+	// redirect_uri match succeeds; the issuer stays on effectiveEndpoint.
+	primaryOAuth2Host := ""
+	if len(additionalFQDNs) > 0 {
+		primaryOAuth2Host = normalizeFQDNHost(endpoint.Host)
+	}
+
 	var dexConfig *dex.Config
 	if ui.HasDexConfig() {
 		dexParams := ui.Spec.GetDex().Config.DeepCopy()
 		// Set the resolved OpenShift login value
 		dexParams.ConfigureLoginWithOpenShift = &openShiftLoginEnabled
-		dexConfig = dex.NewDexConfig(effectiveEndpoint, dexParams)
+		dexConfig = dex.NewDexConfig(effectiveEndpoint, dexParams, primaryOAuth2Host, additionalFQDNs)
 	} else {
 		dexConfig = dex.NewDexConfig(
 			effectiveEndpoint,
@@ -738,6 +814,8 @@ func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *kon
 				// EnablePasswordDB defaults to true when no connectors are configured
 				ConfigureLoginWithOpenShift: &openShiftLoginEnabled,
 			},
+			primaryOAuth2Host,
+			additionalFQDNs,
 		)
 	}
 
