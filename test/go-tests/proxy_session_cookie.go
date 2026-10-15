@@ -10,10 +10,13 @@ import (
 	"net/url"
 	"os"
 	"strings"
+
+	"github.com/konflux-ci/konflux-ci/operator/pkg/oauth2proxy"
 )
 
 const (
-	proxySessionCookieName = "__Host-konflux-ci-cookie"
+	// proxySessionCookieName is OAUTH2_PROXY_COOKIE_NAME from oauth2proxy.WithCookieConfig.
+	proxySessionCookieName = oauth2proxy.SessionCookieName
 	proxyLoginMaxHops      = 20
 )
 

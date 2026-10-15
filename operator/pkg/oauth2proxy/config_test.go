@@ -124,7 +124,7 @@ func TestWithCookieConfig(t *testing.T) {
 	envMap := envVarsToMap(envVars)
 
 	g.Expect(envMap["OAUTH2_PROXY_COOKIE_SECURE"]).To(Equal("true"))
-	g.Expect(envMap["OAUTH2_PROXY_COOKIE_NAME"]).To(Equal("__Host-konflux-ci-cookie"))
+	g.Expect(envMap["OAUTH2_PROXY_COOKIE_NAME"]).To(Equal(SessionCookieName))
 }
 
 func TestWithAuthSettings(t *testing.T) {

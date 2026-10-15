@@ -9,9 +9,11 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/coder/websocket"
@@ -131,33 +133,42 @@ var _ = Describe("Test bearer credentials", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(token).NotTo(BeEmpty())
 
-		path := proxyNamespacesPath + "?access_token=" + url.QueryEscape(token)
-		expectProxyGET(path, nil, http.StatusUnauthorized)
+		requestPath := proxyNamespacesPath + "?access_token=" + url.QueryEscape(token)
+		reportPath := proxyNamespacesPath + "?access_token=REDACTED"
+		expectProxyGETSecret(requestPath, reportPath, token, nil, http.StatusUnauthorized)
 	})
 })
 
 func expectProxyGET(path string, set func(*http.Request), expected int) {
 	GinkgoHelper()
+	expectProxyGETSecret(path, path, "", set, expected)
+}
+
+// expectProxyGETSecret sends requestPath and reports reportPath. secret is removed
+// from assertion failures so a live token in the query string is not printed.
+func expectProxyGETSecret(requestPath, reportPath, secret string, set func(*http.Request), expected int) {
+	GinkgoHelper()
 	Eventually(func(g Gomega) {
-		req, err := http.NewRequest(http.MethodGet, proxyURL(path), nil)
-		g.Expect(err).NotTo(HaveOccurred())
+		req, err := http.NewRequest(http.MethodGet, proxyURL(requestPath), nil)
+		g.Expect(redactErr(err, secret)).NotTo(HaveOccurred())
 		if set != nil {
 			set(req)
 		}
 
 		resp, err := proxyHTTPClient.Do(req)
-		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(redactErr(err, secret)).NotTo(HaveOccurred())
 		defer resp.Body.Close()
 
 		body, err := io.ReadAll(resp.Body)
-		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(redactErr(err, secret)).NotTo(HaveOccurred())
 
 		if proxyTransientHTTPStatus(resp.StatusCode) {
 			g.Expect(resp.StatusCode).To(Equal(expected),
-				"%s: transient HTTP %d, retrying", path, resp.StatusCode)
+				fmt.Sprintf("%s: transient HTTP %d, retrying", reportPath, resp.StatusCode))
 			return
 		}
-		g.Expect(resp.StatusCode).To(Equal(expected), proxyHTTPStatusMismatch(resp, body, expected, path))
+		msg := redactSecrets(proxyHTTPStatusMismatch(resp, body, expected, reportPath), secret)
+		g.Expect(resp.StatusCode).To(Equal(expected), msg)
 	}).WithTimeout(proxyAPITransientRetryTimeout).WithPolling(konfluxReadyPollInterval).Should(Succeed())
 }
 
@@ -175,7 +186,7 @@ func expectProxyWebSocketStatus(wsPath string, header http.Header, expected int)
 		if resp != nil && proxyTransientHTTPStatus(resp.StatusCode) {
 			proxyDrainResponseBody(resp)
 			g.Expect(resp.StatusCode).To(Equal(expected),
-				"%s: transient HTTP %d on WebSocket upgrade, retrying", wsPath, resp.StatusCode)
+				fmt.Sprintf("%s: transient HTTP %d on WebSocket upgrade, retrying", wsPath, resp.StatusCode))
 			return
 		}
 		if conn != nil {
@@ -228,6 +239,7 @@ func forgedAlgNoneJWT(aud string) string {
 }
 
 func forgedRS256JWT(aud string) string {
+	GinkgoHelper()
 	header, payload := signedJWTParts("RS256", plausibleIDTokenClaims(aud))
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	Expect(err).NotTo(HaveOccurred())
@@ -238,6 +250,7 @@ func forgedRS256JWT(aud string) string {
 }
 
 func forgedHS256JWT(aud string) string {
+	GinkgoHelper()
 	header, payload := signedJWTParts("HS256", plausibleIDTokenClaims(aud))
 	mac := hmac.New(sha256.New, []byte("not-the-dex-signing-key"))
 	_, _ = mac.Write([]byte(header + "." + payload))
@@ -254,7 +267,23 @@ func signedJWTParts(alg string, claims map[string]any) (string, string) {
 }
 
 func b64JSON(v any) string {
+	GinkgoHelper()
 	raw, err := json.Marshal(v)
 	Expect(err).NotTo(HaveOccurred())
 	return base64.RawURLEncoding.EncodeToString(raw)
+}
+
+func redactErr(err error, secret string) error {
+	if err == nil || secret == "" {
+		return err
+	}
+	return fmt.Errorf("%s", redactSecrets(err.Error(), secret))
+}
+
+func redactSecrets(s, secret string) string {
+	if secret == "" {
+		return s
+	}
+	s = strings.ReplaceAll(s, secret, "REDACTED")
+	return strings.ReplaceAll(s, url.QueryEscape(secret), "REDACTED")
 }
