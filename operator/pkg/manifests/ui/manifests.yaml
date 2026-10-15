@@ -131,7 +131,7 @@ data:
     X-Auth-Request-Groups\n        }\n\t\timpersonate\n\t\tinject_cached_vars\n\t\trequest_header
     -Authorization\n        reverse_proxy https://__KUBEARCHIVE_HOSTNAME__:8081 {\n
     \           header_up Authorization \"Bearer {http.vars.kube_token}\"\n            import
-    /mnt/caddy-snippets/backend-tls.conf\n        }\n    }\n}\n"
+    /mnt/caddy-snippets/kubearchive-tls.conf\n        }\n    }\n}\n"
   tekton-results.caddy: "handle_path /api/k8s/plugins/tekton-results/* {\n    route
     {\n        forward_auth 127.0.0.1:6000 {\n            uri /oauth2/auth\n            header_up
     Authorization {http.request.header.Authorization}\n            copy_headers X-Auth-Request-Email
@@ -161,7 +161,7 @@ data:
     }
 kind: ConfigMap
 metadata:
-  name: proxy-caddy-templates-fm8mc86t87
+  name: proxy-caddy-templates-2k9695bt98
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -172,30 +172,30 @@ data:
     {\n\t\tcache kube_token /var/run/secrets/konflux-ci.dev/serviceaccount/token\n\t\tcache
     backend_token /var/run/secrets/konflux-ci.dev/backend/token\n\t\tcache watson_auth
     /mnt/watson-config/API_KEY {\n\t\t\tdefault \"\"\n\t\t}\n\t\twatch /var/run/secrets/kubernetes.io/serviceaccount\n\t\twatch
-    /mnt/cluster-ca\n\t\twatch /mnt/service-ca\n\t\twatch /mnt/serving-cert\n\t}\n}\n\n#
-    TODO: protect metrics with kube-rbac-proxy sidecar (https://github.com/openshift/kube-rbac-proxy)\n:2112
-    {\n\tmetrics /metrics\n}\n\n:9443 {\n\ttls {\n\t\tget_certificate file {\n\t\t\tcert
-    /mnt/serving-cert/tls.crt\n\t\t\tkey /mnt/serving-cert/tls.key\n\t\t}\n\t}\n\n\t#
-    Strip any client-supplied impersonation and proxy-auth headers to\n\t# prevent
-    spoofing. This runs at the server level, before any\n\t# handle/route blocks.\n\trequest_header
-    -Impersonate-User\n\trequest_header -Impersonate-Group\n\trequest_header -Impersonate-Uid\n\trequest_header
-    -Impersonate-Extra-*\n\trequest_header -X-User\n\trequest_header -X-Group\n\n\t#
-    Health endpoint for liveness/readiness probes\n\thandle /health {\n\t\trespond
-    200\n\t}\n\n\t# Segment bridge files\n\thandle /segment/* {\n\t\troot * /opt/app-root/src\n\t\theader
-    Content-Type text/plain\n\t\tfile_server\n\t}\n\n\t# OAuth2 proxy - browser-facing
-    auth UI/callback\n\thandle /oauth2/* {\n\t\treverse_proxy 127.0.0.1:6000\n\t}\n\n\t#
-    Namespace lister (GET only on exact paths)\n\t# The namespace-lister performs
-    in-memory RBAC authorization: it checks\n\t# RoleBindings for the user AND their
-    groups to decide which namespaces\n\t# to return. Without group headers, a user
-    only sees namespaces where\n\t# they are bound individually — group-based bindings
-    are invisible.\n\t@nsListGet {\n\t\tmethod GET\n\t\tpath /api/k8s/api/v1/namespaces
-    /api/k8s/api/v1/namespaces/\n\t}\n\thandle @nsListGet {\n\t\troute {\n\t\t\tforward_auth
-    127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\theader_up Authorization {http.request.header.Authorization}\n\t\t\t\tcopy_headers
-    X-Auth-Request-Email X-Auth-Request-Groups\n\t\t\t}\n\t\t\timpersonate {\n\t\t\t\ttarget_user
-    X-User\n\t\t\t\ttarget_group X-Group\n\t\t\t}\n\t\t\t# Drop the client Dex JWT
-    after forward_auth. reverse_proxy copies\n\t\t\t# incoming headers; this backend
-    authenticates via X-User/X-Group.\n\t\t\trequest_header -Authorization\n\t\t\trewrite
-    * /api/v1/namespaces\n\t\t\treverse_proxy https://namespace-lister.namespace-lister.svc.cluster.local:8080
+    /mnt/cluster-ca\n\t\twatch /mnt/service-ca\n\t\twatch /mnt/kubearchive-ca\n\t\twatch
+    /mnt/serving-cert\n\t}\n}\n\n# TODO: protect metrics with kube-rbac-proxy sidecar
+    (https://github.com/openshift/kube-rbac-proxy)\n:2112 {\n\tmetrics /metrics\n}\n\n:9443
+    {\n\ttls {\n\t\tget_certificate file {\n\t\t\tcert /mnt/serving-cert/tls.crt\n\t\t\tkey
+    /mnt/serving-cert/tls.key\n\t\t}\n\t}\n\n\t# Strip any client-supplied impersonation
+    and proxy-auth headers to\n\t# prevent spoofing. This runs at the server level,
+    before any\n\t# handle/route blocks.\n\trequest_header -Impersonate-User\n\trequest_header
+    -Impersonate-Group\n\trequest_header -Impersonate-Uid\n\trequest_header -Impersonate-Extra-*\n\trequest_header
+    -X-User\n\trequest_header -X-Group\n\n\t# Health endpoint for liveness/readiness
+    probes\n\thandle /health {\n\t\trespond 200\n\t}\n\n\t# Segment bridge files\n\thandle
+    /segment/* {\n\t\troot * /opt/app-root/src\n\t\theader Content-Type text/plain\n\t\tfile_server\n\t}\n\n\t#
+    OAuth2 proxy - browser-facing auth UI/callback\n\thandle /oauth2/* {\n\t\treverse_proxy
+    127.0.0.1:6000\n\t}\n\n\t# Namespace lister (GET only on exact paths)\n\t# The
+    namespace-lister performs in-memory RBAC authorization: it checks\n\t# RoleBindings
+    for the user AND their groups to decide which namespaces\n\t# to return. Without
+    group headers, a user only sees namespaces where\n\t# they are bound individually
+    — group-based bindings are invisible.\n\t@nsListGet {\n\t\tmethod GET\n\t\tpath
+    /api/k8s/api/v1/namespaces /api/k8s/api/v1/namespaces/\n\t}\n\thandle @nsListGet
+    {\n\t\troute {\n\t\t\tforward_auth 127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\theader_up
+    Authorization {http.request.header.Authorization}\n\t\t\t\tcopy_headers X-Auth-Request-Email
+    X-Auth-Request-Groups\n\t\t\t}\n\t\t\timpersonate {\n\t\t\t\ttarget_user X-User\n\t\t\t\ttarget_group
+    X-Group\n\t\t\t}\n\t\t\t# Drop the client Dex JWT after forward_auth. reverse_proxy
+    copies\n\t\t\t# incoming headers; this backend authenticates via X-User/X-Group.\n\t\t\trequest_header
+    -Authorization\n\t\t\trewrite * /api/v1/namespaces\n\t\t\treverse_proxy https://namespace-lister.namespace-lister.svc.cluster.local:8080
     {\n\t\t\t\theader_down -X-Correlation-ID\n\t\t\t\ttransport http {\n\t\t\t\t\tread_timeout
     30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool file /mnt/cluster-ca/ca-bundle.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
     Backend snippets (tekton-results, kubearchive, etc.) loaded from init-generated
@@ -225,7 +225,7 @@ data:
     {path} /index.html\n\t\tfile_server\n\t}\n}\n"
 kind: ConfigMap
 metadata:
-  name: proxy-caddyfile-76hgkmbm4t
+  name: proxy-caddyfile-mft7m2h5gf
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -238,6 +238,7 @@ data:
     TEMPLATES_DIR=/mnt/caddy-templates
     SNIPPETS_DIR=/mnt/caddy-snippets
     SERVICE_CA_PATH=/mnt/service-ca/service-ca.crt
+    KUBEARCHIVE_CA_PATH=/mnt/kubearchive-ca/ca-bundle.crt
 
     for cmd in sed getent printf; do
       command -v "${cmd}" >/dev/null 2>&1 || { echo "required command not found: ${cmd}"; exit 1; }
@@ -287,10 +288,43 @@ data:
 
     # Process kubearchive template
     if [ "${KUBEARCHIVE_ENABLED:-}" = "true" ] && [ -f "${TEMPLATES_DIR}/kubearchive.caddy" ]; then
-      hostname="${KUBEARCHIVE_HOSTNAME:-kubearchive-api-server.product-kubearchive.svc.cluster.local}"
-      sed "s/__KUBEARCHIVE_HOSTNAME__/${hostname}/g" \
+      # The transport snippet is generated once by this init container. Wait for
+      # trust-manager's optional ConfigMap so a new proxy pod starts with its CA.
+      if [ ! -f "${KUBEARCHIVE_CA_PATH}" ]; then
+        log "waiting for kubearchive CA bundle at ${KUBEARCHIVE_CA_PATH}"
+        while [ ! -f "${KUBEARCHIVE_CA_PATH}" ]; do
+          sleep 5
+        done
+        log "kubearchive CA bundle is available"
+      fi
+
+      kubearchive_hostname="${KUBEARCHIVE_HOSTNAME:-kubearchive-api-server.product-kubearchive.svc.cluster.local}"
+      sed "s/__KUBEARCHIVE_HOSTNAME__/${kubearchive_hostname}/g" \
         "${TEMPLATES_DIR}/kubearchive.caddy" > "${SNIPPETS_DIR}/kubearchive.caddy"
-      log "kubearchive endpoint enabled (${hostname})"
+
+      # Trust both issuers during migration so the proxy works before and after
+      # KubeArchive's serving certificate switches from service-ca to cert-manager.
+      if [ -f "${KUBEARCHIVE_CA_PATH}" ] && [ -f "${SERVICE_CA_PATH}" ]; then
+        printf 'transport http {\n    tls_trust_pool file %s %s\n}\n' \
+          "${SERVICE_CA_PATH}" "${KUBEARCHIVE_CA_PATH}" \
+          > "${SNIPPETS_DIR}/kubearchive-tls.conf"
+        log "kubearchive TLS: service and cert-manager CAs"
+      elif [ -f "${SERVICE_CA_PATH}" ]; then
+        printf 'transport http {\n    tls_trust_pool file %s\n}\n' "${SERVICE_CA_PATH}" \
+          > "${SNIPPETS_DIR}/kubearchive-tls.conf"
+        log "kubearchive TLS: service CA (cert-manager bundle not present)"
+      elif [ -f "${KUBEARCHIVE_CA_PATH}" ]; then
+        printf 'transport http {\n    tls_trust_pool file %s\n}\n' "${KUBEARCHIVE_CA_PATH}" \
+          > "${SNIPPETS_DIR}/kubearchive-tls.conf"
+        log "kubearchive TLS: cert-manager CA (service CA not present)"
+      else
+        # Fall back only when neither trust bundle is mounted.
+        printf 'transport http {\n    tls_insecure_skip_verify\n}\n' \
+          > "${SNIPPETS_DIR}/kubearchive-tls.conf"
+        log "kubearchive TLS: verification disabled (no CA bundles mounted)"
+      fi
+
+      log "kubearchive endpoint enabled (${kubearchive_hostname})"
     fi
 
     # Process watson template.
@@ -354,7 +388,7 @@ data:
     log "done"
 kind: ConfigMap
 metadata:
-  name: proxy-generate-config-hf55g9gkh2
+  name: proxy-generate-config-b6hmf69cm2
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -636,6 +670,9 @@ spec:
         - mountPath: /mnt/service-ca
           name: service-ca
           readOnly: true
+        - mountPath: /mnt/kubearchive-ca
+          name: kubearchive-ca
+          readOnly: true
         - mountPath: /opt/app-root/src/static-content
           name: static-content
         - mountPath: /opt/app-root/src/segment
@@ -722,6 +759,9 @@ spec:
         - mountPath: /mnt/service-ca
           name: service-ca
           readOnly: true
+        - mountPath: /mnt/kubearchive-ca
+          name: kubearchive-ca
+          readOnly: true
         - mountPath: /opt/app-root/src/static-content
           name: static-content
       serviceAccountName: proxy
@@ -738,7 +778,7 @@ spec:
           items:
           - key: generate-proxy-config.sh
             path: generate-proxy-config.sh
-          name: proxy-generate-config-hf55g9gkh2
+          name: proxy-generate-config-b6hmf69cm2
         name: generate-proxy-config-script
       - name: kube-api-token
         projected:
@@ -760,11 +800,11 @@ spec:
           items:
           - key: Caddyfile
             path: Caddyfile
-          name: proxy-caddyfile-76hgkmbm4t
+          name: proxy-caddyfile-mft7m2h5gf
         name: proxy-caddyfile
       - configMap:
           defaultMode: 420
-          name: proxy-caddy-templates-fm8mc86t87
+          name: proxy-caddy-templates-2k9695bt98
         name: caddy-templates
       - emptyDir: {}
         name: caddy-snippets
@@ -785,6 +825,13 @@ spec:
           name: openshift-service-ca.crt
           optional: true
         name: service-ca
+      - configMap:
+          items:
+          - key: ca-bundle.crt
+            path: ca-bundle.crt
+          name: trusted-ca
+          optional: true
+        name: kubearchive-ca
       - emptyDir: {}
         name: static-content
       - name: segment-bridge-config
