@@ -108,13 +108,19 @@ func rsCRDEntriesNameOnly() []TableEntry {
 }
 
 var _ = Describe("KonfluxReleaseService Controller", func() {
+	// cachedClient is the manager's cache-backed client, set by startManager.
+	// Use it for cache-warmth assertions that confirm the informer has observed
+	// a state written via the direct k8sClient before asserting controller behavior.
+	var cachedClient client.Client
+
 	// startManager starts a per-test manager and registers a DeferCleanup to stop it.
 	// Per-test managers avoid races with scrape-token tests that wire TokenCreator.
 	startManager := func() {
 		mgrCtx, mgrCancel := context.WithCancel(testEnv.Ctx)
 		mgr := testutil.NewTestManager(testEnv)
+		cachedClient = mgr.GetClient()
 		Expect((&KonfluxReleaseServiceReconciler{
-			Client:      mgr.GetClient(),
+			Client:      cachedClient,
 			Scheme:      mgr.GetScheme(),
 			ObjectStore: objectStore,
 		}).SetupWithManager(mgr)).To(Succeed())
@@ -1322,20 +1328,25 @@ var _ = Describe("KonfluxReleaseService Controller", func() {
 				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 				By("disabling the served version")
-				var afterTamperRV string
 				Eventually(func(g Gomega) {
 					crd := &apiextensionsv1.CustomResourceDefinition{}
 					g.Expect(k8sClient.Get(ctx, crdNN, crd)).To(Succeed())
 					crd.Spec.Versions[0].Served = false
 					g.Expect(k8sClient.Update(ctx, crd)).To(Succeed())
-					afterTamperRV = crd.ResourceVersion
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("waiting for informer cache to observe tampered CRD")
+				Eventually(func(g Gomega) {
+					crd := &apiextensionsv1.CustomResourceDefinition{}
+					g.Expect(cachedClient.Get(ctx, crdNN, crd)).To(Succeed())
+					g.Expect(crd.Spec.Versions[0].Served).To(BeFalse(),
+						"informer cache has not observed the tampered CRD yet")
 				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 				By("verifying SSA restores served=true")
 				Eventually(func(g Gomega) {
 					crd := &apiextensionsv1.CustomResourceDefinition{}
 					g.Expect(k8sClient.Get(ctx, crdNN, crd)).To(Succeed())
-					g.Expect(crd.ResourceVersion).NotTo(Equal(afterTamperRV), "controller has not reconciled yet")
 					g.Expect(crd.Spec.Versions[0].Served).To(BeTrue())
 				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 			},
@@ -1402,6 +1413,14 @@ var _ = Describe("KonfluxReleaseService Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, releaseService)).To(Succeed())
 			testutil.DeferCleanupParentAndChildren(k8sClient, releaseService, metricsScrapeChildren()...)
+
+			By("waiting for informer cache to observe the CR")
+			Eventually(func(g Gomega) {
+				cr := &konfluxv1alpha1.KonfluxReleaseService{}
+				g.Expect(cachedClient.Get(ctx, types.NamespacedName{Name: CRName}, cr)).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			waitForReconcile(ctx)
 
 			Eventually(func(g Gomega) {
 				_, err := getServiceMonitor(ctx)
