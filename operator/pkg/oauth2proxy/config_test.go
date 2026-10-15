@@ -136,6 +136,7 @@ func TestWithAuthSettings(t *testing.T) {
 	g.Expect(envMap["OAUTH2_PROXY_EMAIL_DOMAINS"]).To(Equal("*"))
 	g.Expect(envMap["OAUTH2_PROXY_SET_XAUTHREQUEST"]).To(Equal("true"))
 	g.Expect(envMap["OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS"]).To(Equal("true"))
+	g.Expect(envMap["OAUTH2_PROXY_BEARER_TOKEN_LOGIN_FALLBACK"]).To(Equal("false"))
 	g.Expect(envMap["OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES"]).To(Equal(dex.CLIClientID))
 	g.Expect(envMap["OAUTH2_PROXY_SCOPE"]).To(Equal("openid email profile groups"))
 }
