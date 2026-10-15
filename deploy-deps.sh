@@ -186,11 +186,14 @@ test_pvc_binding(){
     collect_storage_diagnostics "(Initial State)" "false"
 
     sleep 10  # Retries are not enough to ensure the default SA is created, see https://github.com/konflux-ci/konflux-ci/issues/161
-    retry "kubectl apply -k ${pvc_resources}" "Error while creating pre-deployment-pvc-binding"
+    retry "Error while creating pre-deployment-pvc-binding" kubectl apply -k "${pvc_resources}"
 
     # Try to wait for PVC binding, capture full diagnostics on failure
-    if ! retry "kubectl wait --for=jsonpath={status.phase}=Bound pvc/test-pvc -n test-pvc-ns --timeout=20s" \
-          "Test PVC unable to bind on default storage class"; then
+    # The {status.phase} below is a literal jsonpath expression, not brace expansion
+    # (no comma/range inside the braces, so bash leaves it untouched).
+    # shellcheck disable=SC1083
+    if ! retry "Test PVC unable to bind on default storage class" \
+          kubectl wait --for=jsonpath={status.phase}=Bound pvc/test-pvc -n test-pvc-ns --timeout=20s; then
         collect_storage_diagnostics "(Failure State)" "true"
         # Clean up before exiting
         kubectl delete -k "$pvc_resources" 2>/dev/null || true
@@ -204,8 +207,8 @@ test_pvc_binding(){
 wait_for_chains_signing_secret() {
     local namespace="$1"
     echo "  ⏳ Waiting for tekton-chains-signing-secret Job in ${namespace}..." >&2
-    if ! retry "kubectl wait --for=condition=complete job/tekton-chains-signing-secret -n ${namespace} --timeout=120s" \
-          "tekton-chains-signing-secret Job did not complete in ${namespace}"; then
+    if ! retry "tekton-chains-signing-secret Job did not complete in ${namespace}" \
+          kubectl wait --for=condition=complete job/tekton-chains-signing-secret -n "${namespace}" --timeout=120s; then
         kubectl logs -n "${namespace}" -l job-name=tekton-chains-signing-secret --tail=50 >&2 || true
         return 1
     fi
@@ -251,8 +254,8 @@ deploy_openshift_pipelines() {
         sleep 10
         config_waited=$((config_waited + 10))
     done
-    retry "kubectl wait --for=condition=Ready tektonconfig/config --timeout=600s" \
-          "TektonConfig did not become ready within the allocated time"
+    retry "TektonConfig did not become ready within the allocated time" \
+          kubectl wait --for=condition=Ready tektonconfig/config --timeout=600s
 
     # Wait for Tekton webhook services (timeout: 5 minutes)
     echo "  ⏳ Waiting for Tekton webhook services..." >&2
@@ -266,8 +269,8 @@ deploy_openshift_pipelines() {
         sleep 10
         webhook_waited=$((webhook_waited + 10))
     done
-    retry "kubectl wait --for=condition=Available deployment/tekton-operator-proxy-webhook -n openshift-pipelines --timeout=120s" \
-          "Tekton webhook did not become available within the allocated time"
+    retry "Tekton webhook did not become available within the allocated time" \
+          kubectl wait --for=condition=Available deployment/tekton-operator-proxy-webhook -n openshift-pipelines --timeout=120s
 
     # Apply Tekton Chains RBAC for OpenShift Pipelines (uses openshift-pipelines namespace)
     echo "  🔐 Setting up Tekton Chains RBAC..." >&2
@@ -280,20 +283,20 @@ deploy_openshift_pipelines() {
 deploy_upstream_tekton() {
     # Operator
     kubectl apply -k "${script_path}/dependencies/tekton-operator"
-    retry "kubectl wait --for=condition=Ready -l app=tekton-operator -n tekton-operator pod --timeout=240s" \
-          "Tekton Operator did not become available within the allocated time"
+    retry "Tekton Operator did not become available within the allocated time" \
+          kubectl wait --for=condition=Ready -l app=tekton-operator -n tekton-operator pod --timeout=240s
     # Wait for the operator to create configs for the first time before applying configs
-    retry "kubectl wait --for=condition=Ready tektonconfig/config --timeout=360s" \
-          "Tekton Config resource was not created within the allocated time"
+    retry "Tekton Config resource was not created within the allocated time" \
+          kubectl wait --for=condition=Ready tektonconfig/config --timeout=360s
     echo "  ⚙️  Configuring Tekton..." >&2
-    retry "kubectl apply -k ${script_path}/dependencies/tekton-config" \
-          "The Tekton Config resource was not updated within the allocated time"
+    retry "The Tekton Config resource was not updated within the allocated time" \
+          kubectl apply -k "${script_path}/dependencies/tekton-config"
 
     # Wait for the operator to reconcile after applying the configs.
     # PAC is deployed by the Tekton operator via TektonConfig pipelinesAsCode.enable: true;
     # on a cold image cache the new pods may take longer than 60s to start.
-    retry "kubectl wait --for=condition=Ready tektonconfig/config --timeout=120s" \
-          "TektonConfig did not become ready after config update"
+    retry "TektonConfig did not become ready after config update" \
+          kubectl wait --for=condition=Ready tektonconfig/config --timeout=120s
 
     echo "  🔐 Setting up Tekton Chains RBAC..." >&2
     kubectl apply -k "${script_path}/dependencies/tekton-chains-rbac"
@@ -339,8 +342,8 @@ deploy_openshift_certmanager() {
         sleep 10
         deploy_waited=$((deploy_waited + 10))
     done
-    retry "kubectl wait --for=condition=Available --timeout=300s deployment -l app.kubernetes.io/instance=cert-manager -n cert-manager" \
-          "cert-manager did not become available within the allocated time"
+    retry "cert-manager did not become available within the allocated time" \
+          kubectl wait --for=condition=Available --timeout=300s deployment -l app.kubernetes.io/instance=cert-manager -n cert-manager
 
     # Wait for CA bundle to be injected into webhook configuration
     # The x509 errors occur when the API server doesn't have the CA bundle to verify the webhook's certificate.
@@ -378,8 +381,8 @@ deploy_openshift_certmanager() {
 deploy_upstream_certmanager() {
     kubectl apply -k "${script_path}/dependencies/cert-manager"
     sleep 5
-    retry "kubectl wait --for=condition=Available --timeout=120s deployment -l app.kubernetes.io/instance=cert-manager -n cert-manager" \
-          "Cert manager did not become available within the allocated time"
+    retry "Cert manager did not become available within the allocated time" \
+          kubectl wait --for=condition=Available --timeout=120s deployment -l app.kubernetes.io/instance=cert-manager -n cert-manager
 }
 
 deploy_prometheus_operator_crds() {
@@ -404,8 +407,8 @@ deploy_trust_manager() {
     fi
     kubectl apply -k "${script_path}/dependencies/trust-manager"
     sleep 5
-    retry "kubectl wait --for=condition=Ready --timeout=60s -l app.kubernetes.io/instance=trust-manager -n cert-manager pod" \
-          "Trust manager did not become available within the allocated time"
+    retry "Trust manager did not become available within the allocated time" \
+          kubectl wait --for=condition=Ready --timeout=60s -l app.kubernetes.io/instance=trust-manager -n cert-manager pod
 }
 
 deploy_cluster_issuer() {
@@ -434,8 +437,8 @@ deploy_registry() {
         return 1
     fi
     kubectl apply -k "${script_path}/dependencies/registry"
-    retry "kubectl wait --for=condition=Ready --timeout=240s -n kind-registry -l run=registry pod" \
-          "The local registry did not become available within the allocated time"
+    retry "The local registry did not become available within the allocated time" \
+          kubectl wait --for=condition=Ready --timeout=240s -n kind-registry -l run=registry pod
 }
 
 deploy_smee() {
@@ -479,10 +482,8 @@ deploy_admission_policies() {
         policy_dir="${script_path}/dependencies/admission-policies/policy-with-skip-checks-mutation"
     fi
     echo "  🛡️  Applying MutatingAdmissionPolicies from ${policy_dir}" >&2
-    local apply_cmd
-    apply_cmd=$(printf 'kubectl apply -k %q' "${policy_dir}")
-    retry "${apply_cmd}" \
-          "Failed to apply MutatingAdmissionPolicies"
+    retry "Failed to apply MutatingAdmissionPolicies" \
+          kubectl apply -k "${policy_dir}"
 }
 
 deploy_konflux_info() {
@@ -528,12 +529,12 @@ deploy_quay() {
             --from-literal=config.yaml="$config"
     fi
 
-    retry "kubectl wait --for=condition=Ready --timeout=240s -n quay -l app=quay-postgres pod" \
-          "Quay Postgres did not become available within the allocated time"
-    retry "kubectl wait --for=condition=Ready --timeout=240s -n quay -l app=quay-redis pod" \
-          "Quay Redis did not become available within the allocated time"
-    retry "kubectl wait --for=condition=Ready --timeout=240s -n quay -l app=quay pod" \
-          "Quay did not become available within the allocated time"
+    retry "Quay Postgres did not become available within the allocated time" \
+          kubectl wait --for=condition=Ready --timeout=240s -n quay -l app=quay-postgres pod
+    retry "Quay Redis did not become available within the allocated time" \
+          kubectl wait --for=condition=Ready --timeout=240s -n quay -l app=quay-redis pod
+    retry "Quay did not become available within the allocated time" \
+          kubectl wait --for=condition=Ready --timeout=240s -n quay -l app=quay pod
 
     init_quay_admin
 }
@@ -609,9 +610,11 @@ init_quay_admin() {
 }
 
 retry() {
+    local msg="$1"
+    shift
     for i in {1..3}; do
         local ret=0
-        $1 || ret="$?"
+        "$@" || ret="$?"
         if [[ "$ret" -eq 0 ]]; then
             return 0
         fi
@@ -621,7 +624,7 @@ retry() {
         fi
     done
 
-    echo "$1": "$2."
+    echo "$*: ${msg}."
     return "$ret"
 }
 
