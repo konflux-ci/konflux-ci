@@ -240,6 +240,11 @@ spec:
           value: s3://konflux-mapt-state/mapt/kind/$(tasks.generate-cluster-id.results.cluster-id)
         - name: compute-sizes
           value: cxf-24x48
+        # Override catalog default v1.34. mapt v0.14.5 maps v1.37 → Kind 0.33
+        # (same as GHA); K8s ≥1.36 enables MutatingAdmissionPolicy for Tekton
+        # TaskRun request shrinking in deploy-deps.sh.
+        - name: version
+          value: v1.37
         - name: harden-control-plane
           value: "true"
         - name: apiserver-cpu
