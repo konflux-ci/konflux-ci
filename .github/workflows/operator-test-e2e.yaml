@@ -203,6 +203,15 @@ jobs:
             kind-config.yaml
             generate-err-logs.sh
             .github/workflows/operator-test-e2e.yaml
+            scripts/deploy-local.sh
+            scripts/deploy-secrets.sh
+            scripts/resolve-konflux-cr.sh
+            scripts/setup-kind-local-cluster.sh
+            scripts/operator-e2e/**
+            deploy-deps.sh
+            deploy-test-resources.sh
+            wait-for-all.sh
+            .github/scripts/check-operator-e2e-prerequisites.sh
 
   # Lightweight jobs that create status checks when tests are skipped
   # These use the same matrix structure and job names as the test jobs to ensure
