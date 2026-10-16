@@ -70,9 +70,11 @@ Browser ──HTTPS──▶ Caddy (:9443)
                      │
                      ├─ forward_auth ──▶ oauth2-proxy (:6000)
                      │                    │
-                     │                    ├─ Has valid session cookie? ──▶ 200 + X-Auth-Request-Email
-                     │                    │                                    + X-Auth-Request-Groups
-                     │                    └─ No cookie? ──▶ 401 (Caddy returns login redirect)
+                     │                    ├─ Authorization present, JWT not verified by Dex?
+                     │                    │     ──▶ 403 (cookie is not used as a fallback)
+                     │                    ├─ Verified Dex JWT, or session cookie and no Authorization?
+                     │                    │     ──▶ 200 + X-Auth-Request-Email + X-Auth-Request-Groups
+                     │                    └─ No cookie and no bearer? ──▶ 401 (Caddy returns login redirect)
                      │
                      ├─ impersonate: set Impersonate-User / Impersonate-Group headers
                      │

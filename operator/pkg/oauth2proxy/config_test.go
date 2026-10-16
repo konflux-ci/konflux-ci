@@ -124,7 +124,7 @@ func TestWithCookieConfig(t *testing.T) {
 	envMap := envVarsToMap(envVars)
 
 	g.Expect(envMap["OAUTH2_PROXY_COOKIE_SECURE"]).To(Equal("true"))
-	g.Expect(envMap["OAUTH2_PROXY_COOKIE_NAME"]).To(Equal("__Host-konflux-ci-cookie"))
+	g.Expect(envMap["OAUTH2_PROXY_COOKIE_NAME"]).To(Equal(SessionCookieName))
 }
 
 func TestWithAuthSettings(t *testing.T) {
@@ -136,6 +136,7 @@ func TestWithAuthSettings(t *testing.T) {
 	g.Expect(envMap["OAUTH2_PROXY_EMAIL_DOMAINS"]).To(Equal("*"))
 	g.Expect(envMap["OAUTH2_PROXY_SET_XAUTHREQUEST"]).To(Equal("true"))
 	g.Expect(envMap["OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS"]).To(Equal("true"))
+	g.Expect(envMap["OAUTH2_PROXY_BEARER_TOKEN_LOGIN_FALLBACK"]).To(Equal("false"))
 	g.Expect(envMap["OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES"]).To(Equal(dex.CLIClientID))
 	g.Expect(envMap["OAUTH2_PROXY_SCOPE"]).To(Equal("openid email profile groups"))
 }

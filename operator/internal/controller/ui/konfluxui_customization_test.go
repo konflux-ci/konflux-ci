@@ -75,6 +75,7 @@ var requiredOAuth2ProxyEnvVars = []string{
 	"OAUTH2_PROXY_EMAIL_DOMAINS",
 	"OAUTH2_PROXY_SET_XAUTHREQUEST",
 	"OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS",
+	"OAUTH2_PROXY_BEARER_TOKEN_LOGIN_FALLBACK",
 	"OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES",
 	"OAUTH2_PROXY_PROVIDER_CA_FILES",
 	"OAUTH2_PROXY_WHITELIST_DOMAINS",
@@ -342,6 +343,7 @@ func TestBuildOAuth2ProxyOptions(t *testing.T) {
 		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_EMAIL_DOMAINS"))
 		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_SET_XAUTHREQUEST"))
 		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS"))
+		g.Expect(envMap).To(gomega.HaveKeyWithValue("OAUTH2_PROXY_BEARER_TOKEN_LOGIN_FALLBACK", "false"))
 		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES"))
 		g.Expect(envMap["OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES"]).To(gomega.Equal(dex.CLIClientID))
 		g.Expect(envMap).To(gomega.HaveKey("OAUTH2_PROXY_PROVIDER_CA_FILES"))
