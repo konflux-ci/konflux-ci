@@ -72,14 +72,16 @@ create_secret() {
 
 wait() {
     echo "⏳ Waiting for Image Controller pods to be ready..." >&2
-    retry "kubectl wait --for=condition=Ready --timeout=240s -l control-plane=controller-manager -n image-controller pod" \
-          "Image-Controller did not become available within the allocated time"
+    retry "Image-Controller did not become available within the allocated time" \
+          kubectl wait --for=condition=Ready --timeout=240s -l control-plane=controller-manager -n image-controller pod
 }
 
 retry() {
+    local msg="$1"
+    shift
     for _ in {1..3}; do
         local ret=0
-        $1 || ret="$?"
+        "$@" || ret="$?"
         if [[ "$ret" -eq 0 ]]; then
             return 0
         fi
@@ -87,7 +89,7 @@ retry() {
         sleep 3
     done
 
-    echo "$1": "$2."
+    echo "$*: ${msg}."
     return "$ret"
 }
 
