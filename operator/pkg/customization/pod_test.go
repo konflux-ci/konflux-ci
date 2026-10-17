@@ -221,6 +221,32 @@ func TestWithTopologySpreadConstraints(t *testing.T) {
 	})
 }
 
+func TestWithAnnotation(t *testing.T) {
+	t.Run("sets annotation", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		p := NewPodOverlay(WithAnnotation("example.com/key", "value"))
+		g.Expect(p.annotations).To(gomega.HaveKeyWithValue("example.com/key", "value"))
+	})
+}
+
+func TestWithAnnotations(t *testing.T) {
+	t.Run("sets multiple annotations", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		p := NewPodOverlay(WithAnnotations(map[string]string{
+			"key1": "val1",
+			"key2": "val2",
+		}))
+		g.Expect(p.annotations).To(gomega.HaveKeyWithValue("key1", "val1"))
+		g.Expect(p.annotations).To(gomega.HaveKeyWithValue("key2", "val2"))
+	})
+
+	t.Run("empty annotations is no-op", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		p := NewPodOverlay(WithAnnotations(nil))
+		g.Expect(p.annotations).To(gomega.BeNil())
+	})
+}
+
 func TestApplyToPodTemplateSpec(t *testing.T) {
 	t.Run("nil overlay is safe", func(t *testing.T) {
 		g := gomega.NewWithT(t)
@@ -255,6 +281,30 @@ func TestApplyToPodTemplateSpec(t *testing.T) {
 
 		g.Expect(template.Spec.ServiceAccountName).To(gomega.Equal("custom-sa"))
 		g.Expect(template.Spec.NodeSelector["node"]).To(gomega.Equal("worker"))
+	})
+
+	t.Run("applies annotations to pod template", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		p := NewPodOverlay(
+			WithAnnotation("example.com/hash", "abc123"),
+			WithAnnotation("example.com/clear", ""),
+		)
+
+		template := &corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{
+				Annotations: map[string]string{
+					"example.com/existing": "existing-val",
+					"example.com/clear":    "old-val",
+				},
+			},
+		}
+
+		err := p.ApplyToPodTemplateSpec(template)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(template.Annotations).To(gomega.HaveKeyWithValue("example.com/hash", "abc123"))
+		g.Expect(template.Annotations).To(gomega.HaveKeyWithValue("example.com/existing", "existing-val"))
+		g.Expect(template.Annotations).NotTo(gomega.HaveKey("example.com/clear"))
 	})
 
 	t.Run("applies container customizations by name", func(t *testing.T) {
