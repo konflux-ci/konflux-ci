@@ -23,28 +23,6 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-func TestShouldCreateClusterIssuer(t *testing.T) {
-	t.Parallel()
-
-	t.Run("defaults to true when nil", func(t *testing.T) {
-		g := gomega.NewWithT(t)
-		spec := &KonfluxCertManagerSpec{}
-		g.Expect(spec.ShouldCreateClusterIssuer()).To(gomega.BeTrue())
-	})
-
-	t.Run("returns true when explicitly set to true", func(t *testing.T) {
-		g := gomega.NewWithT(t)
-		spec := &KonfluxCertManagerSpec{CreateClusterIssuer: ptr.To(true)}
-		g.Expect(spec.ShouldCreateClusterIssuer()).To(gomega.BeTrue())
-	})
-
-	t.Run("returns false when explicitly set to false", func(t *testing.T) {
-		g := gomega.NewWithT(t)
-		spec := &KonfluxCertManagerSpec{CreateClusterIssuer: ptr.To(false)}
-		g.Expect(spec.ShouldCreateClusterIssuer()).To(gomega.BeFalse())
-	})
-}
-
 func TestShouldDistributeClusterCABundle(t *testing.T) {
 	t.Parallel()
 
