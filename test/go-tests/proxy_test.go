@@ -10,14 +10,17 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/coder/websocket"
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/pkg/contenthash"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -494,7 +497,101 @@ var _ = Describe("Test Proxy endpoints", func() {
 			}
 		})
 	})
+
+	Context("Secret Rotation", func() {
+		It("should update Dex and oauth2-proxy when oauth2-proxy-client-secret is rotated", func() {
+			if os.Getenv("KONFLUX_PROXY_TEST_SECRET_ROTATION") != "1" {
+				Skip("Skipping secret rotation test (set KONFLUX_PROXY_TEST_SECRET_ROTATION=1 to enable)")
+			}
+
+			ctx := context.TODO()
+
+			getToken := func() (string, error) {
+				if isProxyOpenShiftAuth() {
+					return obtainOpenShiftProxyIDToken(ctx, proxyHTTPClient, proxyClient, proxyHome)
+				}
+				return ExtractToken(proxyClient)
+			}
+
+			By("Baseline auth check before rotation")
+			token, err := getToken()
+			Expect(err).NotTo(HaveOccurred(), "failed baseline token acquisition before rotation")
+			Expect(token).NotTo(BeEmpty())
+			expectProxyGETWithBearer("/api/k8s/api/v1/namespaces", token, http.StatusOK)
+
+			By("Rotating oauth2-proxy-client-secret in konflux-ui namespace")
+			secret := &v1.Secret{}
+			err = proxyClient.Get(ctx, crclient.ObjectKey{Namespace: "konflux-ui", Name: "oauth2-proxy-client-secret"}, secret)
+			Expect(err).NotTo(HaveOccurred(), "failed to read oauth2-proxy-client-secret")
+
+			deploymentsToWait := []string{"proxy", "dex"}
+			originalSecretVal := make([]byte, len(secret.Data["client-secret"]))
+			copy(originalSecretVal, secret.Data["client-secret"])
+			originalHash := hashSecretData(secret.Data)
+
+			waitForDeploymentsWithHash := func(c context.Context, targetHash, actionDesc string) {
+				for _, depName := range deploymentsToWait {
+					Eventually(func(g Gomega) {
+						dep := &appsv1.Deployment{}
+						g.Expect(proxyClient.Get(c, crclient.ObjectKey{Namespace: "konflux-ui", Name: depName}, dep)).To(Succeed())
+						g.Expect(dep.Spec.Template.Annotations).To(HaveKeyWithValue(
+							oauth2ProxyClientSecretHashAnnotation, targetHash),
+							"deployment %s pod template annotation does not yet match expected secret hash", depName)
+
+						replicas := int32(1)
+						if dep.Spec.Replicas != nil {
+							replicas = *dep.Spec.Replicas
+						}
+						g.Expect(dep.Status.ObservedGeneration).To(Equal(dep.Generation))
+						g.Expect(dep.Status.UpdatedReplicas).To(Equal(replicas))
+						g.Expect(dep.Status.AvailableReplicas).To(Equal(replicas))
+					}).WithTimeout(3*time.Minute).WithPolling(3*time.Second).Should(Succeed(),
+						"timed out waiting for %s of deployment %s", actionDesc, depName)
+				}
+			}
+
+			DeferCleanup(func(cleanupCtx context.Context) {
+				s := &v1.Secret{}
+				if getErr := proxyClient.Get(cleanupCtx, crclient.ObjectKey{Namespace: "konflux-ui", Name: "oauth2-proxy-client-secret"}, s); getErr == nil {
+					if s.Data == nil {
+						s.Data = make(map[string][]byte)
+					}
+					s.Data["client-secret"] = originalSecretVal
+					Expect(proxyClient.Update(cleanupCtx, s)).To(Succeed(), "failed to restore oauth2-proxy-client-secret")
+					waitForDeploymentsWithHash(cleanupCtx, originalHash, "rollback after secret restoration")
+				}
+			})
+
+			if secret.Data == nil {
+				secret.Data = make(map[string][]byte)
+			}
+			newSecretVal := fmt.Sprintf("rotated-secret-%d", time.Now().UnixNano())
+			secret.Data["client-secret"] = []byte(newSecretVal)
+			rotatedHash := hashSecretData(secret.Data)
+			err = proxyClient.Update(ctx, secret)
+			Expect(err).NotTo(HaveOccurred(), "failed to update oauth2-proxy-client-secret")
+
+			By("Waiting for deployment rollouts of dex and proxy to complete with rotated hash")
+			waitForDeploymentsWithHash(ctx, rotatedHash, "rollout after secret rotation")
+
+			By("Post-rotation auth check with rotated secret")
+			newToken, err := getToken()
+			Expect(err).NotTo(HaveOccurred(), "failed token acquisition after secret rotation")
+			Expect(newToken).NotTo(BeEmpty())
+			expectProxyGETWithBearer("/api/k8s/api/v1/namespaces", newToken, http.StatusOK)
+		})
+	})
 })
+
+const oauth2ProxyClientSecretHashAnnotation = "konflux.konflux-ci.dev/oauth2-proxy-client-secret-hash"
+
+func hashSecretData(data map[string][]byte) string {
+	strData := make(map[string]string, len(data))
+	for k, v := range data {
+		strData[k] = string(v)
+	}
+	return contenthash.Map(strData)
+}
 
 type echoResponseBody struct {
 	Method  string              `json:"method"`

@@ -104,7 +104,7 @@ func assertNoConflictingEnvVars(g *gomega.WithT, container *corev1.Container) {
 func TestBuildProxyOverlay(t *testing.T) {
 	t.Run("nil spec returns overlay with oauth2-proxy config", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		overlay, err := buildProxyOverlay(nil, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(nil, nil, "", "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(overlay).NotTo(gomega.BeNil())
 
@@ -121,7 +121,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 	t.Run("empty spec returns overlay with oauth2-proxy config", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := &konfluxv1alpha1.ProxyDeploymentSpec{}
-		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(overlay).NotTo(gomega.BeNil())
 
@@ -135,9 +135,22 @@ func TestBuildProxyOverlay(t *testing.T) {
 		assertOAuth2ProxyEnvVarsSet(g, container)
 	})
 
+	t.Run("injects clientSecretHash annotation when set", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		overlay, err := buildProxyOverlay(nil, nil, "", "test-hash-proxy", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		deployment := getUIDeployment(t, proxyDeploymentName)
+		err = overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(deployment.Spec.Template.Annotations).To(gomega.HaveKeyWithValue(
+			oauth2ProxyClientSecretHashAnnotation, "test-hash-proxy"))
+	})
+
 	t.Run("adds CA bundle volume and mount", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		overlay, err := buildProxyOverlay(nil, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(nil, nil, "", "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(overlay).NotTo(gomega.BeNil())
 
@@ -185,7 +198,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -212,7 +225,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -246,7 +259,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -280,7 +293,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		g.Expect(rpContainer).NotTo(gomega.BeNil(), "reverse-proxy container must exist in proxy deployment")
 		originalImage := rpContainer.Image
 
-		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -394,15 +407,26 @@ func TestBuildOAuth2ProxyOptions(t *testing.T) {
 func TestBuildDexOverlay(t *testing.T) {
 	t.Run("nil spec returns overlay with configmap update", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		overlay := buildDexOverlay(nil, "dex-config-abc123")
+		overlay := buildDexOverlay(nil, "dex-config-abc123", "")
 		g.Expect(overlay).NotTo(gomega.BeNil())
 	})
 
 	t.Run("empty spec returns overlay with configmap update", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := &konfluxv1alpha1.DexDeploymentSpec{}
-		overlay := buildDexOverlay(spec, "dex-config-abc123")
+		overlay := buildDexOverlay(spec, "dex-config-abc123", "")
 		g.Expect(overlay).NotTo(gomega.BeNil())
+	})
+
+	t.Run("injects clientSecretHash annotation when set", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		overlay := buildDexOverlay(nil, "dex-config-abc123", "test-hash-dex")
+		deployment := getUIDeployment(t, dexDeploymentName)
+		err := overlay.ApplyToDeployment(deployment)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(deployment.Spec.Template.Annotations).To(gomega.HaveKeyWithValue(
+			oauth2ProxyClientSecretHashAnnotation, "test-hash-dex"))
 	})
 
 	t.Run("dex resources are applied", func(t *testing.T) {
@@ -423,7 +447,7 @@ func TestBuildDexOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, dexDeploymentName)
-		overlay := buildDexOverlay(spec, "dex-config-abc123")
+		overlay := buildDexOverlay(spec, "dex-config-abc123", "")
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -453,7 +477,7 @@ func TestBuildDexOverlay(t *testing.T) {
 		originalImage := dexContainer.Image
 		originalArgs := dexContainer.Args
 
-		overlay := buildDexOverlay(spec, "dex-config-abc123")
+		overlay := buildDexOverlay(spec, "dex-config-abc123", "")
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -467,7 +491,7 @@ func TestBuildDexOverlay(t *testing.T) {
 		g := gomega.NewWithT(t)
 		deployment := getUIDeployment(t, dexDeploymentName)
 
-		overlay := buildDexOverlay(nil, "dex-newconfig-xyz789")
+		overlay := buildDexOverlay(nil, "dex-newconfig-xyz789", "")
 		err := overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -591,7 +615,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		})
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		rpContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
@@ -616,7 +640,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		})
 
 		deployment := getUIDeployment(t, dexDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		dexContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, dexContainerName)
@@ -653,7 +677,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 			},
 		}
 
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic and container should be unchanged
@@ -669,7 +693,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		})
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
@@ -686,7 +710,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		})
 
 		deployment := getUIDeployment(t, dexDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
@@ -699,7 +723,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Should not panic
@@ -717,7 +741,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		})
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).NotTo(gomega.BeNil())
@@ -735,7 +759,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		})
 
 		deployment := getUIDeployment(t, dexDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).NotTo(gomega.BeNil())
@@ -753,7 +777,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		})
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).NotTo(gomega.BeNil())
@@ -770,7 +794,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
 		originalReplicas := deployment.Spec.Replicas
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deployment.Spec.Replicas).To(gomega.Equal(originalReplicas))
@@ -794,7 +818,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		})
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Check replicas
@@ -812,7 +836,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
 
 		deployment := getUIDeployment(t, dexDeploymentName)
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, "dex-custom-config-abc", "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, "dex-custom-config-abc", "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Find the dex volume and verify ConfigMap name was updated
@@ -828,7 +852,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
 		hashedSecretName := "segment-bridge-config-abc1234567"
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, hashedSecretName, testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, hashedSecretName, "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Find the segment-bridge-config volume and verify Secret name was updated
@@ -850,7 +874,7 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g.Expect(origVol.Secret).NotTo(gomega.BeNil())
 		originalSecretName := origVol.Secret.SecretName
 
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Volume should retain its original secret name
@@ -858,6 +882,72 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g.Expect(segmentVolume).NotTo(gomega.BeNil(), "segment-bridge-config volume must exist")
 		g.Expect(segmentVolume.Secret).NotTo(gomega.BeNil())
 		g.Expect(segmentVolume.Secret.SecretName).To(gomega.Equal(originalSecretName))
+	})
+}
+
+func TestApplyUIDeploymentCustomizations_ClientSecretHash(t *testing.T) {
+	const testConfigMapName = "dex-config-test123"
+
+	t.Run("sets hash annotation on proxy deployment when clientSecretHash is provided", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
+		deployment := getUIDeployment(t, proxyDeploymentName)
+
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "abc1234567", testEndpoint)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(deployment.Spec.Template.Annotations).NotTo(gomega.BeNil())
+		g.Expect(deployment.Spec.Template.Annotations[oauth2ProxyClientSecretHashAnnotation]).
+			To(gomega.Equal("abc1234567"))
+	})
+
+	t.Run("sets hash annotation on dex deployment when clientSecretHash is provided", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
+		deployment := getUIDeployment(t, dexDeploymentName)
+
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "dex9876543", testEndpoint)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(deployment.Spec.Template.Annotations).NotTo(gomega.BeNil())
+		g.Expect(deployment.Spec.Template.Annotations[oauth2ProxyClientSecretHashAnnotation]).
+			To(gomega.Equal("dex9876543"))
+	})
+
+	t.Run("does not set hash annotation when clientSecretHash is empty", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
+
+		for _, name := range []string{proxyDeploymentName, dexDeploymentName} {
+			deployment := getUIDeployment(t, name)
+			// Ensure no pre-existing annotation
+			delete(deployment.Spec.Template.Annotations, oauth2ProxyClientSecretHashAnnotation)
+
+			err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+
+			g.Expect(deployment.Spec.Template.Annotations).
+				NotTo(gomega.HaveKey(oauth2ProxyClientSecretHashAnnotation),
+					"annotation must not be set when hash is empty for deployment %s", name)
+		}
+	})
+
+	t.Run("updates existing hash annotation when clientSecretHash changes", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
+		deployment := getUIDeployment(t, proxyDeploymentName)
+
+		// Set an initial hash
+		if deployment.Spec.Template.Annotations == nil {
+			deployment.Spec.Template.Annotations = make(map[string]string)
+		}
+		deployment.Spec.Template.Annotations[oauth2ProxyClientSecretHashAnnotation] = "oldhash1234"
+
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "newhash5678", testEndpoint)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(deployment.Spec.Template.Annotations[oauth2ProxyClientSecretHashAnnotation]).
+			To(gomega.Equal("newhash5678"))
 	})
 }
 
@@ -890,7 +980,7 @@ func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
 			},
 		})
 
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		rpContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
@@ -926,7 +1016,7 @@ func TestApplyUIDeploymentCustomizations_ResourceMerging(t *testing.T) {
 			},
 		})
 
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		rpContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
@@ -1026,7 +1116,7 @@ func TestProxyDeploymentRunAsUser(t *testing.T) {
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
 		deployment := getUIDeployment(t, proxyDeploymentName)
 
-		err := applyUIDeploymentCustomizations(deployment, ui, newDefaultInfo(t), testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, newDefaultInfo(t), testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		rpContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
@@ -1041,7 +1131,7 @@ func TestProxyDeploymentRunAsUser(t *testing.T) {
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
 		deployment := getUIDeployment(t, proxyDeploymentName)
 
-		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		rpContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
@@ -1056,7 +1146,7 @@ func TestProxyDeploymentRunAsUser(t *testing.T) {
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
 		deployment := getUIDeployment(t, proxyDeploymentName)
 
-		err := applyUIDeploymentCustomizations(deployment, ui, newOpenShiftInfo(t), testConfigMapName, "", testEndpoint)
+		err := applyUIDeploymentCustomizations(deployment, ui, newOpenShiftInfo(t), testConfigMapName, "", "", testEndpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		rpContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, reverseProxyContainerName)
@@ -1244,7 +1334,7 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -1269,7 +1359,7 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -1344,7 +1434,7 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -1372,7 +1462,7 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		deployment := getUIDeployment(t, proxyDeploymentName)
 		oauthOpts := buildOAuth2ProxyOptions(testEndpoint, false)
 
-		overlay, err := buildProxyOverlay(withHostname, nil, "", false, oauthOpts...)
+		overlay, err := buildProxyOverlay(withHostname, nil, "", "", false, oauthOpts...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(overlay.ApplyToDeployment(deployment)).To(gomega.Succeed())
 
@@ -1380,7 +1470,7 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		g.Expect(initContainer).NotTo(gomega.BeNil())
 		g.Expect(envToMap(initContainer.Env)).To(gomega.HaveKey("TEKTON_RESULTS_HOSTNAME"))
 
-		overlay, err = buildProxyOverlay(cleared, nil, "", false, oauthOpts...)
+		overlay, err = buildProxyOverlay(cleared, nil, "", "", false, oauthOpts...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(overlay.ApplyToDeployment(deployment)).To(gomega.Succeed())
 
@@ -1487,7 +1577,7 @@ func TestRuntimeConfigOverlays(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay, err := buildProxyOverlay(nil, rc, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(nil, rc, "", "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -1511,7 +1601,7 @@ func TestRuntimeConfigOverlays(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay, err := buildProxyOverlay(spec, rc, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, rc, "", "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())

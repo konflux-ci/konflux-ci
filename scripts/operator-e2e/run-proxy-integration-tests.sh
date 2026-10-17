@@ -83,6 +83,8 @@ dex)
 	;;
 esac
 
+export KONFLUX_PROXY_TEST_SECRET_ROTATION="${KONFLUX_PROXY_TEST_SECRET_ROTATION:-1}"
+
 cd "${REPO_ROOT}/test/go-tests"
 echo "Running proxy integration tests..."
 GINKGO_ARGS=()
