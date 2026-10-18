@@ -322,6 +322,133 @@ spec:
                     minimum: 1
                     type: integer
                 type: object
+              retryablePipelines:
+                description: |-
+                  RetryablePipelines is a list of pipelines that are safe to automatically retry on failure.
+                  Applied to the ReleaseServiceConfig CR managed by the operator.
+                items:
+                  description: RetryablePipeline is a pipeline that is safe to automatically
+                    retry on failure.
+                  properties:
+                    pathInRepo:
+                      description: PathInRepo is the path within the git repository
+                        where the Pipeline definition can be found.
+                      type: string
+                    retryPolicy:
+                      description: RetryPolicy defines how and when the pipeline is
+                        retried after a failure.
+                      properties:
+                        disableOn:
+                          description: DisableOn defines conditions that disable automatic
+                            retries.
+                          properties:
+                            tags:
+                              description: |-
+                                Tags is a list of values which disable retries when present in the ReleasePlan or
+                                ReleasePlanAdmission mapping data.
+                              items:
+                                type: string
+                              type: array
+                          type: object
+                        maxRetries:
+                          description: MaxRetries is the maximum number of retries
+                            allowed for a pipeline.
+                          minimum: 0
+                          type: integer
+                        mitigations:
+                          description: Mitigations defines adjustment strategies to
+                            apply on retry based on failure type.
+                          properties:
+                            oomKill:
+                              description: OOMKill defines adjustment for out-of-memory
+                                failures.
+                              properties:
+                                maxComputeResources:
+                                  description: MaxComputeResources sets an upper limit
+                                    on resources across retries.
+                                  properties:
+                                    limits:
+                                      additionalProperties:
+                                        anyOf:
+                                        - type: integer
+                                        - type: string
+                                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                        x-kubernetes-int-or-string: true
+                                      description: Limits describes the maximum amount
+                                        of compute resources allowed.
+                                      type: object
+                                    requests:
+                                      additionalProperties:
+                                        anyOf:
+                                        - type: integer
+                                        - type: string
+                                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                        x-kubernetes-int-or-string: true
+                                      description: Requests describes the minimum
+                                        amount of compute resources required.
+                                      type: object
+                                  type: object
+                                multiplier:
+                                  description: Multiplier is a factor used to multiply
+                                    memory limits on each retry.
+                                  pattern: ^[0-9]+(\.[0-9]+)?$
+                                  type: string
+                              required:
+                              - multiplier
+                              type: object
+                            timeout:
+                              description: Timeout defines adjustment for timeout
+                                failures.
+                              properties:
+                                pipeline:
+                                  description: Pipeline defines the timeout adjustment
+                                    for PipelineRun timeouts.
+                                  properties:
+                                    increment:
+                                      description: Increment is the duration to add
+                                        to the timeout on each retry.
+                                      type: string
+                                    maxTimeout:
+                                      description: MaxTimeout is the maximum time
+                                        allowed across retries.
+                                      type: string
+                                  required:
+                                  - increment
+                                  type: object
+                                task:
+                                  description: Task defines the timeout adjustment
+                                    for TaskRun timeouts.
+                                  properties:
+                                    increment:
+                                      description: Increment is the duration to add
+                                        to the timeout on each retry.
+                                      type: string
+                                    maxTimeout:
+                                      description: MaxTimeout is the maximum time
+                                        allowed across retries.
+                                      type: string
+                                  required:
+                                  - increment
+                                  type: object
+                              type: object
+                          type: object
+                      required:
+                      - maxRetries
+                      type: object
+                    revision:
+                      description: Revision is the git revision where the Pipeline
+                        definition can be found.
+                      type: string
+                    url:
+                      description: URL is the URL of the git repository.
+                      type: string
+                  required:
+                  - pathInRepo
+                  - retryPolicy
+                  - revision
+                  - url
+                  type: object
+                type: array
             type: object
           status:
             description: KonfluxReleaseServiceStatus defines the observed state of

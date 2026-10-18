@@ -1,6 +1,6 @@
 # Title: Konflux Release Service Configuration
 # Description: KonfluxReleaseService configuration with custom resource limits, environment variables,
-# and ReleaseServiceConfig overrides (debug mode, emptyDir pipeline overrides).
+# and ReleaseServiceConfig overrides (debug mode, emptyDir pipeline overrides, retryable pipelines).
 apiVersion: konflux.konflux-ci.dev/v1alpha1
 kind: KonfluxReleaseService
 metadata:
@@ -17,6 +17,27 @@ spec:
     - url: ".*"
       revision: ".*"
       pathInRepo: "pipelines/managed/rh-advisories/rh-advisories.yaml"
+  retryablePipelines:
+    - url: "https://github.com/konflux-ci/release-service-catalog.git"
+      revision: ".*"
+      pathInRepo: "pipelines/managed/fbc-release/fbc-release.yaml"
+      retryPolicy:
+        maxRetries: 1
+        mitigations:
+          oomKill:
+            multiplier: "2"
+            maxComputeResources:
+              limits:
+                memory: 8Gi
+              requests:
+                memory: 8Gi
+          timeout:
+            pipeline:
+              increment: 30m
+              maxTimeout: 12h
+            task:
+              increment: 15m
+              maxTimeout: 7h
   releaseControllerManager:
     replicas: 3
     manager:

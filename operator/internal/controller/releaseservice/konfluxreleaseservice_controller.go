@@ -317,7 +317,7 @@ func isReleaseServiceConfig(obj client.Object) bool {
 
 // applyReleaseServiceConfigCustomizations applies user-defined customizations to the
 // ReleaseServiceConfig CR. It modifies the unstructured object's spec based on
-// the KonfluxReleaseServiceSpec fields (debug, emptyDirOverrides).
+// the KonfluxReleaseServiceSpec fields (debug, emptyDirOverrides, retryablePipelines).
 func applyReleaseServiceConfigCustomizations(obj client.Object, spec konfluxv1alpha1.KonfluxReleaseServiceSpec) error {
 	u, ok := obj.(*unstructured.Unstructured)
 	if !ok {
@@ -345,8 +345,29 @@ func applyReleaseServiceConfigCustomizations(obj client.Object, spec konfluxv1al
 		delete(currentSpec, "EmptyDirOverrides")
 	}
 
+	if len(spec.RetryablePipelines) > 0 {
+		pipelines := make([]interface{}, len(spec.RetryablePipelines))
+		for i, p := range spec.RetryablePipelines {
+			converted, err := retryablePipelineToUnstructured(p)
+			if err != nil {
+				return fmt.Errorf("failed to convert retryablePipeline[%d] to unstructured: %w", i, err)
+			}
+			pipelines[i] = converted
+		}
+		currentSpec["retryablePipelines"] = pipelines
+	} else {
+		delete(currentSpec, "retryablePipelines")
+	}
+
 	u.Object["spec"] = currentSpec
 	return nil
+}
+
+// retryablePipelineToUnstructured converts a RetryablePipeline to an unstructured map
+// using the Kubernetes generic converter. The output respects json/omitempty tags and
+// is deep-copy-safe for the tracking client.
+func retryablePipelineToUnstructured(p konfluxv1alpha1.RetryablePipeline) (map[string]interface{}, error) {
+	return runtime.DefaultUnstructuredConverter.ToUnstructured(&p)
 }
 
 // SetupWithManager sets up the controller with the Manager.

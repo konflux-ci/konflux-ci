@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -35,9 +36,96 @@ type KonfluxReleaseServiceConfigSpec struct {
 	// +optional
 	EmptyDirOverrides []EmptyDirOverride `json:"emptyDirOverrides,omitempty"`
 
+	// RetryablePipelines is a list of pipelines that are safe to automatically retry on failure.
+	// Applied to the ReleaseServiceConfig CR managed by the operator.
+	// +optional
+	RetryablePipelines []RetryablePipeline `json:"retryablePipelines,omitempty"`
+
 	// ReleaseControllerManager defines customizations for the controller-manager deployment.
 	// +optional
 	ReleaseControllerManager *ControllerManagerDeploymentSpec `json:"releaseControllerManager,omitempty"`
+}
+
+// RetryablePipeline is a pipeline that is safe to automatically retry on failure.
+type RetryablePipeline struct {
+	// URL is the URL of the git repository.
+	URL string `json:"url"`
+	// Revision is the git revision where the Pipeline definition can be found.
+	Revision string `json:"revision"`
+	// PathInRepo is the path within the git repository where the Pipeline definition can be found.
+	PathInRepo string `json:"pathInRepo"`
+	// RetryPolicy defines how and when the pipeline is retried after a failure.
+	RetryPolicy RetryPolicy `json:"retryPolicy"`
+}
+
+// RetryPolicy defines how and when the pipeline is retried after a failure.
+type RetryPolicy struct {
+	// MaxRetries is the maximum number of retries allowed for a pipeline.
+	// +kubebuilder:validation:Minimum=0
+	MaxRetries int `json:"maxRetries"`
+	// DisableOn defines conditions that disable automatic retries.
+	// +optional
+	DisableOn *RetryDisableOn `json:"disableOn,omitempty"`
+	// Mitigations defines adjustment strategies to apply on retry based on failure type.
+	// +optional
+	Mitigations *RetryMitigations `json:"mitigations,omitempty"`
+}
+
+// RetryDisableOn defines conditions that disable automatic retries.
+type RetryDisableOn struct {
+	// Tags is a list of values which disable retries when present in the ReleasePlan or
+	// ReleasePlanAdmission mapping data.
+	// +optional
+	Tags []string `json:"tags,omitempty"`
+}
+
+// RetryMitigations defines adjustment strategies to apply on retry based on failure type.
+type RetryMitigations struct {
+	// OOMKill defines adjustment for out-of-memory failures.
+	// +optional
+	OOMKill *OOMKillMitigation `json:"oomKill,omitempty"`
+	// Timeout defines adjustment for timeout failures.
+	// +optional
+	Timeout *TimeoutMitigation `json:"timeout,omitempty"`
+}
+
+// OOMKillMitigation defines adjustment for out-of-memory failures.
+type OOMKillMitigation struct {
+	// Multiplier is a factor used to multiply memory limits on each retry.
+	// +kubebuilder:validation:Pattern=`^[0-9]+(\.[0-9]+)?$`
+	Multiplier string `json:"multiplier"`
+	// MaxComputeResources sets an upper limit on resources across retries.
+	// +optional
+	MaxComputeResources *ComputeResources `json:"maxComputeResources,omitempty"`
+}
+
+// ComputeResources defines limits and requests for compute resources.
+type ComputeResources struct {
+	// Limits describes the maximum amount of compute resources allowed.
+	// +optional
+	Limits corev1.ResourceList `json:"limits,omitempty"`
+	// Requests describes the minimum amount of compute resources required.
+	// +optional
+	Requests corev1.ResourceList `json:"requests,omitempty"`
+}
+
+// TimeoutMitigation defines adjustment for timeout failures.
+type TimeoutMitigation struct {
+	// Pipeline defines the timeout adjustment for PipelineRun timeouts.
+	// +optional
+	Pipeline *TimeoutAdjustment `json:"pipeline,omitempty"`
+	// Task defines the timeout adjustment for TaskRun timeouts.
+	// +optional
+	Task *TimeoutAdjustment `json:"task,omitempty"`
+}
+
+// TimeoutAdjustment defines how to adjust a timeout on each retry.
+type TimeoutAdjustment struct {
+	// Increment is the duration to add to the timeout on each retry.
+	Increment string `json:"increment"`
+	// MaxTimeout is the maximum time allowed across retries.
+	// +optional
+	MaxTimeout string `json:"maxTimeout,omitempty"`
 }
 
 // KonfluxReleaseServiceSpec defines the desired state of KonfluxReleaseService.
