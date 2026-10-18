@@ -149,6 +149,17 @@ type PipelineSpec struct {
 	// +optional
 	Description string `json:"description,omitempty"`
 
+	// AdditionalParams lists Tekton pipeline parameter names whose defaults
+	// should be copied into generated PipelineRuns (e.g. build-platforms).
+	// When overriding a default pipeline, omit this field to preserve any
+	// default additional-params; setting a non-empty list replaces them.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=253
+	AdditionalParams []string `json:"additionalParams,omitempty"`
+
 	// Removed excludes this pipeline from the final configuration.
 	// Use to remove a specific operator-provided default pipeline.
 	// When true, bundle must not be set.
@@ -166,9 +177,10 @@ type PipelineConfigData struct {
 
 // PipelineEntryData represents a single pipeline entry in the config.yaml.
 type PipelineEntryData struct {
-	Name        string `json:"name"`
-	Bundle      string `json:"bundle"`
-	Description string `json:"description,omitempty"`
+	Name             string   `json:"name"`
+	Bundle           string   `json:"bundle"`
+	Description      string   `json:"description,omitempty"`
+	AdditionalParams []string `json:"additional-params,omitempty"`
 }
 
 // KonfluxBuildServiceStatus defines the observed state of KonfluxBuildService

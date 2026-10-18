@@ -68,7 +68,8 @@ spec:
 ### Add a custom pipeline
 
 Provide a `name` and `bundle` for a pipeline that does not exist in the defaults.
-You can optionally include a `description`:
+You can optionally include a `description` and `additionalParams` (Tekton parameter
+names whose defaults are copied into generated PipelineRuns, e.g. `build-platforms`):
 
 ```yaml
 spec:
@@ -79,7 +80,14 @@ spec:
           - name: my-custom-pipeline
             bundle: quay.io/my-org/my-pipeline@sha256:def456...
             description: "Internal pipeline for containerized builds"
+          - name: docker-build-multi-platform-oci-ta
+            bundle: quay.io/my-org/multi-platform@sha256:abc123...
+            additionalParams:
+              - build-platforms
 ```
+
+When overriding a default pipeline, omit `additionalParams` to preserve any
+values from the default entry; setting a non-empty list replaces them.
 
 ### Change the default pipeline
 

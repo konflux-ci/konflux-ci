@@ -94,7 +94,7 @@ func mergePipelines(defaults []konfluxv1alpha1.PipelineEntryData, spec *konfluxv
 
 		// Upsert: replace existing or append.
 		// When overriding an existing entry, preserve the default description
-		// unless the user supplied their own.
+		// and additional-params unless the user supplied their own.
 		found := false
 		for i, r := range result {
 			if r.Name == p.Name {
@@ -102,17 +102,46 @@ func mergePipelines(defaults []konfluxv1alpha1.PipelineEntryData, spec *konfluxv
 				if desc == "" {
 					desc = r.Description
 				}
-				result[i] = konfluxv1alpha1.PipelineEntryData{Name: p.Name, Bundle: p.Bundle, Description: desc}
+				result[i] = konfluxv1alpha1.PipelineEntryData{
+					Name:             p.Name,
+					Bundle:           p.Bundle,
+					Description:      desc,
+					AdditionalParams: resolveAdditionalParams(p.AdditionalParams, r.AdditionalParams),
+				}
 				found = true
 				break
 			}
 		}
 		if !found {
-			result = append(result, konfluxv1alpha1.PipelineEntryData{Name: p.Name, Bundle: p.Bundle, Description: p.Description})
+			result = append(result, konfluxv1alpha1.PipelineEntryData{
+				Name:             p.Name,
+				Bundle:           p.Bundle,
+				Description:      p.Description,
+				AdditionalParams: copyStringSlice(p.AdditionalParams),
+			})
 		}
 	}
 
 	return result
+}
+
+// resolveAdditionalParams returns user params when the field is set (non-nil).
+// When the user omits the field (nil), the existing params from the default
+// entry are preserved. Clearing via an empty list is not a supported API.
+func resolveAdditionalParams(user, existing []string) []string {
+	if len(user) > 0 {
+		return copyStringSlice(user)
+	}
+	return copyStringSlice(existing)
+}
+
+func copyStringSlice(in []string) []string {
+	if in == nil {
+		return nil
+	}
+	out := make([]string, len(in))
+	copy(out, in)
+	return out
 }
 
 // ensureDefaultPipeline verifies that the default pipeline exists in the
