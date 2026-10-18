@@ -527,6 +527,245 @@ func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
 		g.Expect(overrides).To(gomega.HaveLen(1))
 	})
 
+	t.Run("sets retryablePipelines when provided", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		rsc := getReleaseServiceConfig(t)
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
+			KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+				RetryablePipelines: []konfluxv1alpha1.RetryablePipeline{
+					{
+						URL:        "https://github.com/konflux-ci/release-service-catalog.git",
+						Revision:   ".*",
+						PathInRepo: "pipelines/managed/fbc-release/fbc-release.yaml",
+						RetryPolicy: konfluxv1alpha1.RetryPolicy{
+							MaxRetries: 1,
+							DisableOn: &konfluxv1alpha1.RetryDisableOn{
+								Tags: []string{`.*\{\{\s*incrementer\s*\}\}.*`},
+							},
+							Mitigations: &konfluxv1alpha1.RetryMitigations{
+								OOMKill: &konfluxv1alpha1.OOMKillMitigation{
+									Multiplier: "2",
+									MaxComputeResources: &konfluxv1alpha1.ComputeResources{
+										Limits: corev1.ResourceList{
+											corev1.ResourceMemory: resource.MustParse("8Gi"),
+										},
+										Requests: corev1.ResourceList{
+											corev1.ResourceMemory: resource.MustParse("8Gi"),
+										},
+									},
+								},
+								Timeout: &konfluxv1alpha1.TimeoutMitigation{
+									Pipeline: &konfluxv1alpha1.TimeoutAdjustment{
+										Increment:  "30m",
+										MaxTimeout: "12h",
+									},
+									Task: &konfluxv1alpha1.TimeoutAdjustment{
+										Increment:  "15m",
+										MaxTimeout: "7h",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := applyReleaseServiceConfigCustomizations(rsc, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
+		g.Expect(rscSpec).NotTo(gomega.BeNil())
+		pipelines, ok := rscSpec["retryablePipelines"].([]interface{})
+		g.Expect(ok).To(gomega.BeTrue())
+		g.Expect(pipelines).To(gomega.HaveLen(1))
+
+		first, _ := pipelines[0].(map[string]interface{})
+		g.Expect(first["url"]).To(gomega.Equal("https://github.com/konflux-ci/release-service-catalog.git"))
+		g.Expect(first["revision"]).To(gomega.Equal(".*"))
+		g.Expect(first["pathInRepo"]).To(gomega.Equal("pipelines/managed/fbc-release/fbc-release.yaml"))
+
+		policy, _ := first["retryPolicy"].(map[string]interface{})
+		g.Expect(policy["maxRetries"]).To(gomega.Equal(int64(1)))
+
+		disableOn, _ := policy["disableOn"].(map[string]interface{})
+		tags, _ := disableOn["tags"].([]interface{})
+		g.Expect(tags).To(gomega.HaveLen(1))
+
+		mitigations, _ := policy["mitigations"].(map[string]interface{})
+		oomKill, _ := mitigations["oomKill"].(map[string]interface{})
+		g.Expect(oomKill["multiplier"]).To(gomega.Equal("2"))
+
+		maxResources, _ := oomKill["maxComputeResources"].(map[string]interface{})
+		limits, _ := maxResources["limits"].(map[string]interface{})
+		g.Expect(limits["memory"]).To(gomega.Equal("8Gi"))
+		requests, _ := maxResources["requests"].(map[string]interface{})
+		g.Expect(requests["memory"]).To(gomega.Equal("8Gi"))
+
+		timeout, _ := mitigations["timeout"].(map[string]interface{})
+		pipelineTimeout, _ := timeout["pipeline"].(map[string]interface{})
+		g.Expect(pipelineTimeout["increment"]).To(gomega.Equal("30m"))
+		g.Expect(pipelineTimeout["maxTimeout"]).To(gomega.Equal("12h"))
+		taskTimeout, _ := timeout["task"].(map[string]interface{})
+		g.Expect(taskTimeout["increment"]).To(gomega.Equal("15m"))
+		g.Expect(taskTimeout["maxTimeout"]).To(gomega.Equal("7h"))
+	})
+
+	t.Run("omits disableOn when tags are empty", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		rsc := getReleaseServiceConfig(t)
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
+			KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+				RetryablePipelines: []konfluxv1alpha1.RetryablePipeline{
+					{
+						URL:        "https://example.com/repo.git",
+						Revision:   "main",
+						PathInRepo: "pipeline.yaml",
+						RetryPolicy: konfluxv1alpha1.RetryPolicy{
+							MaxRetries: 2,
+							DisableOn:  &konfluxv1alpha1.RetryDisableOn{Tags: nil},
+						},
+					},
+				},
+			},
+		}
+
+		err := applyReleaseServiceConfigCustomizations(rsc, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
+		pipelines, _ := rscSpec["retryablePipelines"].([]interface{})
+		first, _ := pipelines[0].(map[string]interface{})
+		policy, _ := first["retryPolicy"].(map[string]interface{})
+		g.Expect(policy).To(gomega.HaveKey("disableOn"), "disableOn should be present as empty map when non-nil but tags are empty")
+	})
+
+	t.Run("omits mitigations sub-fields when both are nil", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		rsc := getReleaseServiceConfig(t)
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
+			KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+				RetryablePipelines: []konfluxv1alpha1.RetryablePipeline{
+					{
+						URL:        "https://example.com/repo.git",
+						Revision:   "main",
+						PathInRepo: "pipeline.yaml",
+						RetryPolicy: konfluxv1alpha1.RetryPolicy{
+							MaxRetries:  1,
+							Mitigations: &konfluxv1alpha1.RetryMitigations{},
+						},
+					},
+				},
+			},
+		}
+
+		err := applyReleaseServiceConfigCustomizations(rsc, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
+		pipelines, _ := rscSpec["retryablePipelines"].([]interface{})
+		first, _ := pipelines[0].(map[string]interface{})
+		policy, _ := first["retryPolicy"].(map[string]interface{})
+		g.Expect(policy).To(gomega.HaveKey("mitigations"), "mitigations should be present as empty map when non-nil but sub-fields are nil")
+	})
+
+	t.Run("omits timeout when both pipeline and task are nil", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		rsc := getReleaseServiceConfig(t)
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
+			KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+				RetryablePipelines: []konfluxv1alpha1.RetryablePipeline{
+					{
+						URL:        "https://example.com/repo.git",
+						Revision:   "main",
+						PathInRepo: "pipeline.yaml",
+						RetryPolicy: konfluxv1alpha1.RetryPolicy{
+							MaxRetries: 1,
+							Mitigations: &konfluxv1alpha1.RetryMitigations{
+								OOMKill: &konfluxv1alpha1.OOMKillMitigation{Multiplier: "2"},
+								Timeout: &konfluxv1alpha1.TimeoutMitigation{},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := applyReleaseServiceConfigCustomizations(rsc, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
+		pipelines, _ := rscSpec["retryablePipelines"].([]interface{})
+		first, _ := pipelines[0].(map[string]interface{})
+		policy, _ := first["retryPolicy"].(map[string]interface{})
+		mitigations, _ := policy["mitigations"].(map[string]interface{})
+		g.Expect(mitigations).To(gomega.HaveKey("oomKill"), "oomKill should still be present")
+		g.Expect(mitigations).To(gomega.HaveKey("timeout"), "timeout should be present as empty map when non-nil but sub-fields are nil")
+	})
+
+	t.Run("omits maxComputeResources when limits and requests are empty", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		rsc := getReleaseServiceConfig(t)
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
+			KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+				RetryablePipelines: []konfluxv1alpha1.RetryablePipeline{
+					{
+						URL:        "https://example.com/repo.git",
+						Revision:   "main",
+						PathInRepo: "pipeline.yaml",
+						RetryPolicy: konfluxv1alpha1.RetryPolicy{
+							MaxRetries: 1,
+							Mitigations: &konfluxv1alpha1.RetryMitigations{
+								OOMKill: &konfluxv1alpha1.OOMKillMitigation{
+									Multiplier:          "2",
+									MaxComputeResources: &konfluxv1alpha1.ComputeResources{},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := applyReleaseServiceConfigCustomizations(rsc, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
+		pipelines, _ := rscSpec["retryablePipelines"].([]interface{})
+		first, _ := pipelines[0].(map[string]interface{})
+		policy, _ := first["retryPolicy"].(map[string]interface{})
+		mitigations, _ := policy["mitigations"].(map[string]interface{})
+		oomKill, _ := mitigations["oomKill"].(map[string]interface{})
+		g.Expect(oomKill["multiplier"]).To(gomega.Equal("2"))
+		g.Expect(oomKill).To(gomega.HaveKey("maxComputeResources"), "maxComputeResources should be present as empty map when non-nil but empty")
+	})
+
+	t.Run("removes retryablePipelines when not provided", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		rsc := getReleaseServiceConfig(t)
+		rsc.Object["spec"] = map[string]interface{}{
+			"debug": false,
+			"retryablePipelines": []interface{}{
+				map[string]interface{}{"url": ".*", "revision": ".*", "pathInRepo": "test.yaml",
+					"retryPolicy": map[string]interface{}{"maxRetries": int64(1)}},
+			},
+		}
+
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
+			KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+				RetryablePipelines: nil,
+			},
+		}
+
+		err := applyReleaseServiceConfigCustomizations(rsc, spec)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
+		g.Expect(rscSpec).NotTo(gomega.BeNil())
+		_, exists := rscSpec["retryablePipelines"]
+		g.Expect(exists).To(gomega.BeFalse())
+	})
+
 	t.Run("handles non-unstructured object gracefully", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		deployment := &appsv1.Deployment{

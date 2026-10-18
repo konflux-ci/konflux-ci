@@ -30,6 +30,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -1341,6 +1342,121 @@ var _ = Describe("KonfluxReleaseService Controller", func() {
 			},
 			rsCRDEntriesNameOnly(),
 		)
+	})
+
+	Context("Customization propagation", func() {
+		It("writes retryablePipelines onto ReleaseServiceConfig when set on the CR", func(ctx context.Context) {
+			cr := &konfluxv1alpha1.KonfluxReleaseService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxReleaseServiceSpec{
+					KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+						RetryablePipelines: []konfluxv1alpha1.RetryablePipeline{
+							{
+								URL:        "https://github.com/konflux-ci/release-service-catalog.git",
+								Revision:   ".*",
+								PathInRepo: "pipelines/managed/fbc-release/fbc-release.yaml",
+								RetryPolicy: konfluxv1alpha1.RetryPolicy{
+									MaxRetries: 1,
+									DisableOn: &konfluxv1alpha1.RetryDisableOn{
+										Tags: []string{`.*\{\{\s*incrementer\s*\}\}.*`},
+									},
+									Mitigations: &konfluxv1alpha1.RetryMitigations{
+										OOMKill: &konfluxv1alpha1.OOMKillMitigation{
+											Multiplier: "2",
+											MaxComputeResources: &konfluxv1alpha1.ComputeResources{
+												Limits: corev1.ResourceList{
+													corev1.ResourceMemory: resource.MustParse("8Gi"),
+												},
+												Requests: corev1.ResourceList{
+													corev1.ResourceMemory: resource.MustParse("8Gi"),
+												},
+											},
+										},
+										Timeout: &konfluxv1alpha1.TimeoutMitigation{
+											Pipeline: &konfluxv1alpha1.TimeoutAdjustment{
+												Increment:  "30m",
+												MaxTimeout: "12h",
+											},
+											Task: &konfluxv1alpha1.TimeoutAdjustment{
+												Increment:  "15m",
+												MaxTimeout: "7h",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, rsClusterScopedChildren()...)
+
+			rscNN := types.NamespacedName{
+				Name:      releaseServiceConfigName,
+				Namespace: releaseServiceNamespace,
+			}
+
+			Eventually(func(g Gomega) {
+				rsc := newReleaseServiceConfig()
+				g.Expect(k8sClient.Get(ctx, rscNN, rsc)).To(Succeed())
+				spec, ok := rsc.Object["spec"].(map[string]interface{})
+				g.Expect(ok).To(BeTrue())
+				pipelines, ok := spec["retryablePipelines"].([]interface{})
+				g.Expect(ok).To(BeTrue(), "retryablePipelines must be present")
+				g.Expect(pipelines).To(HaveLen(1))
+
+				first, _ := pipelines[0].(map[string]interface{})
+				g.Expect(first["url"]).To(Equal("https://github.com/konflux-ci/release-service-catalog.git"))
+				g.Expect(first["pathInRepo"]).To(Equal("pipelines/managed/fbc-release/fbc-release.yaml"))
+
+				policy, _ := first["retryPolicy"].(map[string]interface{})
+				g.Expect(policy["maxRetries"]).To(BeNumerically("==", 1))
+
+				disableOn, _ := policy["disableOn"].(map[string]interface{})
+				tags, _ := disableOn["tags"].([]interface{})
+				g.Expect(tags).To(HaveLen(1))
+
+				mitigations, _ := policy["mitigations"].(map[string]interface{})
+				oomKill, _ := mitigations["oomKill"].(map[string]interface{})
+				g.Expect(oomKill["multiplier"]).To(Equal("2"))
+
+				maxResources, _ := oomKill["maxComputeResources"].(map[string]interface{})
+				limits, _ := maxResources["limits"].(map[string]interface{})
+				g.Expect(limits["memory"]).To(Equal("8Gi"))
+				requests, _ := maxResources["requests"].(map[string]interface{})
+				g.Expect(requests["memory"]).To(Equal("8Gi"))
+
+				timeout, _ := mitigations["timeout"].(map[string]interface{})
+				pipelineTimeout, _ := timeout["pipeline"].(map[string]interface{})
+				g.Expect(pipelineTimeout["increment"]).To(Equal("30m"))
+				g.Expect(pipelineTimeout["maxTimeout"]).To(Equal("12h"))
+				taskTimeout, _ := timeout["task"].(map[string]interface{})
+				g.Expect(taskTimeout["increment"]).To(Equal("15m"))
+				g.Expect(taskTimeout["maxTimeout"]).To(Equal("7h"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("omits retryablePipelines from ReleaseServiceConfig when not set", func(ctx context.Context) {
+			cr := &konfluxv1alpha1.KonfluxReleaseService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, rsClusterScopedChildren()...)
+
+			rscNN := types.NamespacedName{
+				Name:      releaseServiceConfigName,
+				Namespace: releaseServiceNamespace,
+			}
+
+			Eventually(func(g Gomega) {
+				rsc := newReleaseServiceConfig()
+				g.Expect(k8sClient.Get(ctx, rscNN, rsc)).To(Succeed())
+				spec, ok := rsc.Object["spec"].(map[string]interface{})
+				g.Expect(ok).To(BeTrue())
+				g.Expect(spec).NotTo(HaveKey("retryablePipelines"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
 	})
 
 	Context("Component metrics gating via Reconcile", Serial, func() {
