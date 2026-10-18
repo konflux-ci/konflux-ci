@@ -91,7 +91,6 @@ const (
 	// Dex ConfigMap constants
 	dexConfigMapBaseName   = "dex"
 	dexConfigKey           = "config.yaml"
-	dexConfigMapLabel      = "app.kubernetes.io/managed-by-konflux-ui-reconciler"
 	dexConfigMapVolumeName = "dex"
 
 	// OAuth2 proxy secret names
@@ -120,6 +119,9 @@ var UICleanupGVKs = append([]schema.GroupVersionKind{
 	{Group: "", Version: "v1", Kind: "ServiceAccount"},
 	// Secret is optional - only created for OpenShift OAuth when configureLoginWithOpenShift is true
 	{Group: "", Version: "v1", Kind: "Secret"},
+	// The Dex ConfigMap is content-hashed, so a superseded revision stops being
+	// applied and becomes an orphan (same as the hashed Secret above).
+	{Group: "", Version: "v1", Kind: "ConfigMap"},
 }, kubernetes.ComponentMetricsOrphanCleanupGVKs...)
 
 // UIClusterScopedAllowList restricts which cluster-scoped resources can be deleted
@@ -219,7 +221,7 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Reconcile Dex ConfigMap first (if configured) to get the ConfigMap name
 	// This must happen before applyManifests so we can set the correct ConfigMap reference
-	dexConfigMapName, err := r.reconcileDexConfigMap(ctx, ui, endpoint)
+	dexConfigMapName, err := r.reconcileDexConfigMap(ctx, tc, ui, endpoint)
 	if err != nil {
 		return errHandler.HandleWithReason(ctx, err, condition.ReasonConfigMapFailed, "reconcile Dex ConfigMap")
 	}
@@ -715,10 +717,13 @@ func generateRandomBytes(length int, urlSafe bool) ([]byte, error) {
 }
 
 // reconcileDexConfigMap creates or updates the Dex ConfigMap based on the DexConfig in the CR.
-// It generates a content-based hash suffix for the ConfigMap name (like kustomize),
-// cleans up old ConfigMaps, and returns the new ConfigMap name.
+// It generates a content-based hash suffix for the ConfigMap name (like kustomize) and
+// returns the new ConfigMap name. Old revisions are pruned later, once the dex Deployment
+// references that name.
 // endpoint is used for the dex issuer URL configuration.
-func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *konfluxv1alpha1.KonfluxUI, endpoint *url.URL) (string, error) {
+func (r *KonfluxUIReconciler) reconcileDexConfigMap(
+	ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, endpoint *url.URL,
+) (string, error) {
 	// Resolve whether OpenShift login should be enabled
 	openShiftLoginEnabled := isOpenShiftLoginEnabled(ui, r.ClusterInfo)
 
@@ -746,23 +751,14 @@ func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *kon
 		return "", fmt.Errorf("failed to marshal Dex config to YAML: %w", err)
 	}
 
-	// Use hashedconfigmap to apply the ConfigMap with content-based hash suffix
-	hcm := hashedconfigmap.New(
-		r.Client,
-		r.Scheme,
-		dexConfigMapBaseName,
-		uiNamespace,
-		dexConfigKey,
-		dexConfigMapLabel,
-		FieldManager,
-	)
-
-	result, err := hcm.Apply(ctx, string(configYAML), ui)
-	if err != nil {
-		return "", err
+	// Apply through the tracking client so the revision is labelled and tracked;
+	// CleanupOrphans then reaps any revision that is no longer applied.
+	cm := hashedconfigmap.Build(dexConfigMapBaseName, uiNamespace, dexConfigKey, string(configYAML))
+	if err := tc.ApplyOwned(ctx, cm); err != nil {
+		return "", fmt.Errorf("failed to apply Dex ConfigMap: %w", err)
 	}
 
-	return result.ConfigMapName, nil
+	return cm.Name, nil
 }
 
 // reconcileSegmentSecret creates a content-hashed Secret in the konflux-ui namespace
