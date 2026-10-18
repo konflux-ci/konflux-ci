@@ -1293,6 +1293,68 @@ var _ = Describe("KonfluxBuildService Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
+		It("Should add additionalParams to a default pipeline from manifests", func(ctx context.Context) {
+			startManagerWithClusterInfo(nil)
+
+			buildService := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.NewKonfluxBuildServiceSpec(konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
+					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
+						Pipelines: []konfluxv1alpha1.PipelineSpec{
+							{
+								Name:             "fbc-builder",
+								Bundle:           "quay.io/custom/fbc-builder@sha256:override123",
+								AdditionalParams: []string{"build-platforms"},
+							},
+						},
+					},
+				}, testutil.DefaultComponentMetricsConfig()),
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+
+			Eventually(func(g Gomega) {
+				pipelines := getPipelines(g, ctx)
+				fbc := findPipelineByName(pipelines, "fbc-builder")
+				g.Expect(fbc).NotTo(BeNil())
+				g.Expect(fbc["bundle"]).To(Equal("quay.io/custom/fbc-builder@sha256:override123"))
+				g.Expect(fbc["additional-params"]).To(Equal([]interface{}{"build-platforms"}))
+				g.Expect(findPipelineByName(pipelines, "docker-build-oci-ta-min")).NotTo(BeNil(), "defaults should remain")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("Should add additionalParams to a custom pipeline not in manifests", func(ctx context.Context) {
+			startManagerWithClusterInfo(nil)
+
+			buildService := &konfluxv1alpha1.KonfluxBuildService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.NewKonfluxBuildServiceSpec(konfluxv1alpha1.KonfluxBuildServiceConfigSpec{
+					PipelineConfig: &konfluxv1alpha1.PipelineConfigSpec{
+						Pipelines: []konfluxv1alpha1.PipelineSpec{
+							{
+								Name:             "docker-build-multi-platform-oci-ta",
+								Bundle:           "quay.io/custom/multi-platform@sha256:multi123",
+								Description:      "multi-platform build",
+								AdditionalParams: []string{"build-platforms"},
+							},
+						},
+					},
+				}, testutil.DefaultComponentMetricsConfig()),
+			}
+			Expect(k8sClient.Create(ctx, buildService)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, buildService)
+
+			Eventually(func(g Gomega) {
+				pipelines := getPipelines(g, ctx)
+				multi := findPipelineByName(pipelines, "docker-build-multi-platform-oci-ta")
+				g.Expect(multi).NotTo(BeNil())
+				g.Expect(multi["bundle"]).To(Equal("quay.io/custom/multi-platform@sha256:multi123"))
+				g.Expect(multi["description"]).To(Equal("multi-platform build"))
+				g.Expect(multi["additional-params"]).To(Equal([]interface{}{"build-platforms"}))
+				g.Expect(findPipelineByName(pipelines, "docker-build-oci-ta-min")).NotTo(BeNil(), "defaults should remain")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
 		It("Should auto-select first pipeline when current default is removed", func(ctx context.Context) {
 			startManagerWithClusterInfo(nil)
 

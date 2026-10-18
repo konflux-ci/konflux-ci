@@ -341,6 +341,19 @@ spec:
                       description: PipelineSpec defines a single pipeline entry in
                         the build-pipeline-config ConfigMap.
                       properties:
+                        additionalParams:
+                          description: |-
+                            AdditionalParams lists Tekton pipeline parameter names whose defaults
+                            should be copied into generated PipelineRuns (e.g. build-platforms).
+                            When overriding a default pipeline, omit this field to preserve any
+                            default additional-params; setting a non-empty list replaces them.
+                          items:
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                          maxItems: 64
+                          type: array
+                          x-kubernetes-list-type: atomic
                         bundle:
                           description: Bundle is the Tekton bundle reference for this
                             pipeline.
