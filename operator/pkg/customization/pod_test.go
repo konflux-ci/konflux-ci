@@ -221,6 +221,37 @@ func TestWithTopologySpreadConstraints(t *testing.T) {
 	})
 }
 
+func TestWithAnnotations(t *testing.T) {
+	t.Run("adds multiple annotations", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		p := NewPodOverlay(WithAnnotations(map[string]string{
+			"key1": "val1",
+			"key2": "val2",
+		}))
+
+		g.Expect(p.annotations).To(gomega.HaveKeyWithValue("key1", "val1"))
+		g.Expect(p.annotations).To(gomega.HaveKeyWithValue("key2", "val2"))
+	})
+
+	t.Run("handles empty map safely", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		p := NewPodOverlay(WithAnnotations(nil))
+		g.Expect(p.annotations).To(gomega.BeNil())
+	})
+}
+
+func TestWithAnnotation(t *testing.T) {
+	t.Run("adds single annotation and merges into pod template", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		p := NewPodOverlay(WithAnnotation("konflux.dev/test", "test-hash"))
+
+		template := &corev1.PodTemplateSpec{}
+		err := p.ApplyToPodTemplateSpec(template)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(template.Annotations).To(gomega.HaveKeyWithValue("konflux.dev/test", "test-hash"))
+	})
+}
+
 func TestApplyToPodTemplateSpec(t *testing.T) {
 	t.Run("nil overlay is safe", func(t *testing.T) {
 		g := gomega.NewWithT(t)
