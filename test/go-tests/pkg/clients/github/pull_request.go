@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-github/v92/github"
+	"github.com/google/go-github/v93/github"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/utils"
 )
 
@@ -177,7 +177,7 @@ func (c *Client) getMergeResultFromPR(repository string, prNumber int) (*github.
 // UpdatePullRequestBranch updates the PR branch with the latest changes from the base branch.
 // This is useful when the PR branch is out of date and GitHub returns 409 on merge.
 func (c *Client) UpdatePullRequestBranch(repository string, prNumber int) error {
-	_, _, err := c.client.PullRequests.UpdateBranch(context.Background(), c.organization, repository, prNumber, nil)
+	_, _, err := c.client.PullRequests.UpdateBranch(context.Background(), c.organization, repository, prNumber, github.UpdatePullRequestBranchRequest{})
 	if err != nil {
 		// UpdateBranch returns AcceptedError (HTTP 202) when the update is queued -- that's fine
 		if _, ok := err.(*github.AcceptedError); ok {
