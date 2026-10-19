@@ -1437,6 +1437,77 @@ var _ = Describe("KonfluxReleaseService Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
+		It("writes EmptyDirOverrides onto ReleaseServiceConfig when set on the CR", func(ctx context.Context) {
+			cr := &konfluxv1alpha1.KonfluxReleaseService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxReleaseServiceSpec{
+					KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+						EmptyDirOverrides: []konfluxv1alpha1.EmptyDirOverride{
+							{
+								URL:        ".*",
+								Revision:   "main",
+								PathInRepo: "pipelines/managed/fbc-release/fbc-release.yaml",
+							},
+							{
+								URL:        "https://github.com/example/repo",
+								Revision:   ".*",
+								PathInRepo: "pipelines/test.yaml",
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, rsClusterScopedChildren()...)
+
+			rscNN := types.NamespacedName{
+				Name:      releaseServiceConfigName,
+				Namespace: releaseServiceNamespace,
+			}
+
+			Eventually(func(g Gomega) {
+				rsc := newReleaseServiceConfig()
+				g.Expect(k8sClient.Get(ctx, rscNN, rsc)).To(Succeed())
+				spec, ok := rsc.Object["spec"].(map[string]interface{})
+				g.Expect(ok).To(BeTrue())
+				overrides, ok := spec["EmptyDirOverrides"].([]interface{})
+				g.Expect(ok).To(BeTrue(), "EmptyDirOverrides must be present")
+				g.Expect(overrides).To(HaveLen(2))
+
+				first, _ := overrides[0].(map[string]interface{})
+				g.Expect(first["url"]).To(Equal(".*"))
+				g.Expect(first["revision"]).To(Equal("main"))
+				g.Expect(first["pathInRepo"]).To(Equal("pipelines/managed/fbc-release/fbc-release.yaml"))
+
+				second, _ := overrides[1].(map[string]interface{})
+				g.Expect(second["url"]).To(Equal("https://github.com/example/repo"))
+				g.Expect(second["revision"]).To(Equal(".*"))
+				g.Expect(second["pathInRepo"]).To(Equal("pipelines/test.yaml"))
+				g.Expect(spec).NotTo(HaveKey("retryablePipelines"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("omits EmptyDirOverrides from ReleaseServiceConfig when not set", func(ctx context.Context) {
+			cr := &konfluxv1alpha1.KonfluxReleaseService{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, rsClusterScopedChildren()...)
+
+			rscNN := types.NamespacedName{
+				Name:      releaseServiceConfigName,
+				Namespace: releaseServiceNamespace,
+			}
+
+			Eventually(func(g Gomega) {
+				rsc := newReleaseServiceConfig()
+				g.Expect(k8sClient.Get(ctx, rscNN, rsc)).To(Succeed())
+				spec, ok := rsc.Object["spec"].(map[string]interface{})
+				g.Expect(ok).To(BeTrue())
+				g.Expect(spec).NotTo(HaveKey("EmptyDirOverrides"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
 		It("omits retryablePipelines from ReleaseServiceConfig when not set", func(ctx context.Context) {
 			cr := &konfluxv1alpha1.KonfluxReleaseService{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
