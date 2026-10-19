@@ -17,6 +17,7 @@ limitations under the License.
 package releaseservice
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/onsi/gomega"
@@ -766,6 +767,83 @@ func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
 		g.Expect(exists).To(gomega.BeFalse())
 	})
 
+	t.Run("returns error and keeps previous EmptyDirOverrides when conversion fails", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		stubUnstructuredConverter(t, 1)
+		rsc := getReleaseServiceConfig(t)
+		rsc.Object["spec"] = map[string]interface{}{
+			"debug": false,
+			"EmptyDirOverrides": []interface{}{
+				map[string]interface{}{"url": "kept", "revision": "kept", "pathInRepo": "kept.yaml"},
+			},
+			"retryablePipelines": []interface{}{
+				map[string]interface{}{"url": "kept-pipeline"},
+			},
+		}
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
+			KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+				EmptyDirOverrides: []konfluxv1alpha1.EmptyDirOverride{
+					{URL: "first", Revision: "main", PathInRepo: "a.yaml"},
+					{URL: "second", Revision: "main", PathInRepo: "b.yaml"},
+				},
+				RetryablePipelines: []konfluxv1alpha1.RetryablePipeline{
+					{
+						URL: "https://example.com/repo.git", Revision: "main", PathInRepo: "pipeline.yaml",
+						RetryPolicy: konfluxv1alpha1.RetryPolicy{MaxRetries: 1},
+					},
+				},
+			},
+		}
+
+		err := applyReleaseServiceConfigCustomizations(rsc, spec)
+		g.Expect(err).To(gomega.MatchError(gomega.ContainSubstring("failed to convert EmptyDirOverrides[1] to unstructured")))
+		g.Expect(err).To(gomega.MatchError(gomega.ContainSubstring("conversion failed")))
+
+		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
+		overrides, _ := rscSpec["EmptyDirOverrides"].([]interface{})
+		g.Expect(overrides).To(gomega.HaveLen(1))
+		first, _ := overrides[0].(map[string]interface{})
+		g.Expect(first["url"]).To(gomega.Equal("kept"), "a failed conversion must not replace the previous list")
+		pipelines, _ := rscSpec["retryablePipelines"].([]interface{})
+		g.Expect(pipelines).To(gomega.HaveLen(1))
+	})
+
+	t.Run("returns error and keeps previous retryablePipelines when conversion fails", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		stubUnstructuredConverter(t, 1)
+		rsc := getReleaseServiceConfig(t)
+		rsc.Object["spec"] = map[string]interface{}{
+			"debug": false,
+			"retryablePipelines": []interface{}{
+				map[string]interface{}{"url": "kept-pipeline"},
+			},
+		}
+		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
+			KonfluxReleaseServiceConfigSpec: konfluxv1alpha1.KonfluxReleaseServiceConfigSpec{
+				EmptyDirOverrides: []konfluxv1alpha1.EmptyDirOverride{
+					{URL: ".*", Revision: ".*", PathInRepo: "ok.yaml"},
+				},
+				RetryablePipelines: []konfluxv1alpha1.RetryablePipeline{
+					{
+						URL: "https://example.com/repo.git", Revision: "main", PathInRepo: "pipeline.yaml",
+						RetryPolicy: konfluxv1alpha1.RetryPolicy{MaxRetries: 1},
+					},
+				},
+			},
+		}
+
+		err := applyReleaseServiceConfigCustomizations(rsc, spec)
+		g.Expect(err).To(gomega.MatchError(gomega.ContainSubstring("failed to convert retryablePipelines[0] to unstructured")))
+
+		rscSpec, _ := rsc.Object["spec"].(map[string]interface{})
+		overrides, ok := rscSpec["EmptyDirOverrides"].([]interface{})
+		g.Expect(ok).To(gomega.BeTrue(), "EmptyDirOverrides converted before the failure should be written")
+		g.Expect(overrides).To(gomega.HaveLen(1))
+		pipelines, _ := rscSpec["retryablePipelines"].([]interface{})
+		first, _ := pipelines[0].(map[string]interface{})
+		g.Expect(first["url"]).To(gomega.Equal("kept-pipeline"))
+	})
+
 	t.Run("handles non-unstructured object gracefully", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		deployment := &appsv1.Deployment{
@@ -856,4 +934,37 @@ func TestApplyReleaseServiceDeploymentCustomizations_ResourceMerging(t *testing.
 		g.Expect(managerContainer.Resources.Limits.Memory().String()).To(gomega.Equal("512Mi"))
 		g.Expect(managerContainer.Resources.Requests.Cpu().String()).To(gomega.Equal("100m"))
 	})
+}
+
+// stubUnstructuredConverter fails the failOn-th conversion (0-based) and delegates the rest
+// to the real Kubernetes converter.
+func stubUnstructuredConverter(t *testing.T, failOn int) {
+	t.Helper()
+	original := toUnstructured
+	t.Cleanup(func() { toUnstructured = original })
+	calls := 0
+	toUnstructured = func(obj interface{}) (map[string]interface{}, error) {
+		idx := calls
+		calls++
+		if idx == failOn {
+			return nil, fmt.Errorf("conversion failed")
+		}
+		return original(obj)
+	}
+}
+
+func TestApplyUnstructuredListRealConverterFailure(t *testing.T) {
+	g := gomega.NewWithT(t)
+
+	type unconvertible struct {
+		Ch chan struct{} `json:"ch"`
+	}
+	spec := map[string]interface{}{
+		"kept": true,
+	}
+	err := applyUnstructuredList(spec, "items", []unconvertible{{Ch: make(chan struct{})}})
+	g.Expect(err).To(gomega.MatchError(gomega.ContainSubstring("failed to convert items[0] to unstructured")))
+	g.Expect(err).To(gomega.MatchError(gomega.ContainSubstring("unrecognized type")))
+	g.Expect(spec).NotTo(gomega.HaveKey("items"), "a failed conversion must not write a partial list")
+	g.Expect(spec["kept"]).To(gomega.BeTrue())
 }

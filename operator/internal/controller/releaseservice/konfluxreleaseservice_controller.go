@@ -331,43 +331,40 @@ func applyReleaseServiceConfigCustomizations(obj client.Object, spec konfluxv1al
 
 	currentSpec["debug"] = spec.Debug
 
-	if len(spec.EmptyDirOverrides) > 0 {
-		overrides := make([]interface{}, len(spec.EmptyDirOverrides))
-		for i, o := range spec.EmptyDirOverrides {
-			overrides[i] = map[string]interface{}{
-				"url":        o.URL,
-				"revision":   o.Revision,
-				"pathInRepo": o.PathInRepo,
-			}
-		}
-		currentSpec["EmptyDirOverrides"] = overrides
-	} else {
-		delete(currentSpec, "EmptyDirOverrides")
+	// EmptyDirOverrides keeps the upstream ReleaseServiceConfig field name (PascalCase).
+	if err := applyUnstructuredList(currentSpec, "EmptyDirOverrides", spec.EmptyDirOverrides); err != nil {
+		return err
 	}
-
-	if len(spec.RetryablePipelines) > 0 {
-		pipelines := make([]interface{}, len(spec.RetryablePipelines))
-		for i, p := range spec.RetryablePipelines {
-			converted, err := retryablePipelineToUnstructured(p)
-			if err != nil {
-				return fmt.Errorf("failed to convert retryablePipeline[%d] to unstructured: %w", i, err)
-			}
-			pipelines[i] = converted
-		}
-		currentSpec["retryablePipelines"] = pipelines
-	} else {
-		delete(currentSpec, "retryablePipelines")
+	if err := applyUnstructuredList(currentSpec, "retryablePipelines", spec.RetryablePipelines); err != nil {
+		return err
 	}
 
 	u.Object["spec"] = currentSpec
 	return nil
 }
 
-// retryablePipelineToUnstructured converts a RetryablePipeline to an unstructured map
-// using the Kubernetes generic converter. The output respects json/omitempty tags and
-// is deep-copy-safe for the tracking client.
-func retryablePipelineToUnstructured(p konfluxv1alpha1.RetryablePipeline) (map[string]interface{}, error) {
-	return runtime.DefaultUnstructuredConverter.ToUnstructured(&p)
+// toUnstructured converts a value to an unstructured map.
+// Tests replace it to simulate conversion failures.
+var toUnstructured = runtime.DefaultUnstructuredConverter.ToUnstructured
+
+// applyUnstructuredList writes items under key using the Kubernetes unstructured converter.
+// An empty list removes key so a previously applied value does not linger.
+// The same path is used for EmptyDirOverrides and retryablePipelines.
+func applyUnstructuredList[T any](spec map[string]interface{}, key string, items []T) error {
+	if len(items) == 0 {
+		delete(spec, key)
+		return nil
+	}
+	converted := make([]interface{}, len(items))
+	for i := range items {
+		item, err := toUnstructured(&items[i])
+		if err != nil {
+			return fmt.Errorf("failed to convert %s[%d] to unstructured: %w", key, i, err)
+		}
+		converted[i] = item
+	}
+	spec[key] = converted
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
