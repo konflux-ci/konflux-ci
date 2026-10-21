@@ -308,7 +308,7 @@ A Konflux microservice is broken. Identify which service from the logs, then map
 | Integration Service | `konflux-ci/integration-service` | `operator/upstream-kustomizations/integration/` |
 | Release Service | `konflux-ci/release-service` | `operator/upstream-kustomizations/release/` |
 | Image Controller | `konflux-ci/image-controller` | `operator/upstream-kustomizations/image-controller/` |
-| Application API (CRDs) | `redhat-appstudio/application-api` | `operator/upstream-kustomizations/application-api/` |
+| Application API (CRDs) | `konflux-ci/application-api` | `operator/upstream-kustomizations/application-api/` |
 | Enterprise Contract | `conforma/crds` | `operator/upstream-kustomizations/enterprise-contract/` |
 
 Check the pinned commit SHA in the kustomization to identify which upstream version is deployed, then inspect that repo for relevant issues or recent changes.
