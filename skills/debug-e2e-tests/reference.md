@@ -90,7 +90,7 @@ gh api "repos/konflux-ci/<service>/commits?sha=main&per_page=10" \
 | `integration/core/` | `konflux-ci/integration-service` | `quay.io/konflux-ci/integration-service` |
 | `release/core/` | `konflux-ci/release-service` | `quay.io/konflux-ci/release-service` |
 | `image-controller/core/` | `konflux-ci/image-controller` | `quay.io/konflux-ci/image-controller` |
-| `application-api/` | `redhat-appstudio/application-api` | (CRDs only) |
+| `application-api/` | `konflux-ci/application-api` | (CRDs only) |
 | `enterprise-contract/core/` | `conforma/crds` | (CRDs only) |
 | `release/internal-services/` | `redhat-appstudio/internal-services` | (CRDs only) |
 | `segment-bridge/` | `konflux-ci/segment-bridge` | `quay.io/konflux-ci/segment-bridge` |

@@ -69,7 +69,7 @@ shift 2
 #
 # Add new components here to extend changelog coverage.
 declare -A COMPONENT_CONFIG=(
-  ["application-api"]="operator/upstream-kustomizations/application-api/kustomization.yaml|redhat-appstudio/application-api|konflux-ci/application-api|Application API|ref"
+  ["application-api"]="operator/upstream-kustomizations/application-api/kustomization.yaml|konflux-ci/application-api|konflux-ci/application-api|Application API|ref"
   ["build-service"]="operator/upstream-kustomizations/build-service/core/kustomization.yaml|konflux-ci/build-service|konflux-ci/build-service|Build Service|ref"
   ["enterprise-contract"]="operator/upstream-kustomizations/enterprise-contract/core/kustomization.yaml|conforma/crds|conforma/crds|Enterprise Contract|ref"
   ["image-controller"]="operator/upstream-kustomizations/image-controller/core/kustomization.yaml|konflux-ci/image-controller|konflux-ci/image-controller|Image Controller|ref"

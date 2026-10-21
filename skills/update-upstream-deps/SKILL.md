@@ -19,7 +19,7 @@ Each `operator/upstream-kustomizations/<component>/core/kustomization.yaml` pins
 | integration | `konflux-ci/integration-service` |
 | release | `konflux-ci/release-service` |
 | image-controller | `konflux-ci/image-controller` |
-| application-api | `redhat-appstudio/application-api` |
+| application-api | `konflux-ci/application-api` |
 | enterprise-contract | `conforma/crds` |
 
 Other components (cli, ui, registry, namespace-lister, etc.) have local-only configs or different structures.
