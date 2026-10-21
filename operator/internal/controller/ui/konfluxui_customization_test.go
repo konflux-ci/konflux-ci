@@ -838,6 +838,62 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g.Expect(segmentVolume.Secret.SecretName).To(gomega.Equal(hashedSecretName))
 	})
 
+	t.Run("uses resolved Dex endpoint for oauth2-proxy OIDC URLs when hostname is overridden", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{
+			KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+				Dex: &konfluxv1alpha1.DexDeploymentSpec{
+					Config: &dex.DexParams{
+						Hostname: "dex-override.example.com",
+					},
+				},
+			},
+		})
+
+		uiEndpoint := &url.URL{Scheme: "https", Host: "UI.Example.COM:443"}
+		deployment := getUIDeployment(t, proxyDeploymentName)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", uiEndpoint)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+		envMap := envToMap(container.Env)
+
+		// OAUTH2_PROXY_OIDC_ISSUER_URL must use the Dex override host,
+		// not the UI host, so it matches the Dex ConfigMap issuer.
+		g.Expect(envMap["OAUTH2_PROXY_OIDC_ISSUER_URL"]).To(
+			gomega.Equal("https://dex-override.example.com/idp/"),
+			"OIDC issuer URL must match the Dex ConfigMap issuer host",
+		)
+		g.Expect(envMap["OAUTH2_PROXY_LOGIN_URL"]).To(
+			gomega.Equal("https://dex-override.example.com/idp/auth"),
+		)
+		g.Expect(envMap["OAUTH2_PROXY_REDIRECT_URL"]).To(
+			gomega.Equal("https://dex-override.example.com/oauth2/callback"),
+		)
+	})
+
+	t.Run("uses default endpoint for oauth2-proxy OIDC URLs when no hostname override", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})
+
+		deployment := getUIDeployment(t, proxyDeploymentName)
+		err := applyUIDeploymentCustomizations(deployment, ui, nil, testConfigMapName, "", testEndpoint)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		container := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, oauth2ProxyContainerName)
+		g.Expect(container).NotTo(gomega.BeNil())
+		envMap := envToMap(container.Env)
+
+		// Without a Dex hostname override, OIDC URLs use the default endpoint.
+		g.Expect(envMap["OAUTH2_PROXY_OIDC_ISSUER_URL"]).To(
+			gomega.Equal("https://localhost:9443/idp/"),
+		)
+		g.Expect(envMap["OAUTH2_PROXY_LOGIN_URL"]).To(
+			gomega.Equal("https://localhost:9443/idp/auth"),
+		)
+	})
+
 	t.Run("does not update segment secret volume when not configured", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		ui := buildUIFromSpec(konfluxv1alpha1.KonfluxUISpec{})

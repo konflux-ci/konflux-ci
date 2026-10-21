@@ -363,9 +363,12 @@ func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv
 	case proxyDeploymentName:
 		proxySpec := ui.Spec.GetProxy()
 		deployment.Spec.Replicas = &proxySpec.Replicas
-		// Build oauth2-proxy options based on endpoint URL and OpenShift login state
+		// Build oauth2-proxy options based on the resolved Dex endpoint and OpenShift login state.
+		// ResolveDexEndpoint returns the Dex hostname override when configured,
+		// ensuring OAUTH2_PROXY_OIDC_ISSUER_URL matches the Dex ConfigMap issuer.
 		openShiftLoginEnabled := isOpenShiftLoginEnabled(ui, clusterInfo)
-		oauth2ProxyOpts := buildOAuth2ProxyOptions(endpoint, openShiftLoginEnabled)
+		dexEndpoint := ui.ResolveDexEndpoint(endpoint)
+		oauth2ProxyOpts := buildOAuth2ProxyOptions(dexEndpoint, openShiftLoginEnabled)
 		// The Caddy image uses a non-numeric USER directive ("caddy"), which
 		// prevents Kubernetes from verifying runAsNonRoot on vanilla clusters.
 		// OpenShift SCCs inject a numeric UID automatically so this is only
