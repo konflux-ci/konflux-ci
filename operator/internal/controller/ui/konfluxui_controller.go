@@ -363,12 +363,13 @@ func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv
 	case proxyDeploymentName:
 		proxySpec := ui.Spec.GetProxy()
 		deployment.Spec.Replicas = &proxySpec.Replicas
-		// Build oauth2-proxy options based on the resolved Dex endpoint and OpenShift login state.
-		// ResolveDexEndpoint returns the Dex hostname override when configured,
-		// ensuring OAUTH2_PROXY_OIDC_ISSUER_URL matches the Dex ConfigMap issuer.
+		// Build oauth2-proxy options using separate endpoints for Dex OIDC URLs
+		// and UI-hosted URLs. ResolveDexEndpoint returns the Dex hostname override
+		// when configured; the original endpoint stays as the UI host for the
+		// callback and whitelist domain.
 		openShiftLoginEnabled := isOpenShiftLoginEnabled(ui, clusterInfo)
 		dexEndpoint := ui.ResolveDexEndpoint(endpoint)
-		oauth2ProxyOpts := buildOAuth2ProxyOptions(dexEndpoint, openShiftLoginEnabled)
+		oauth2ProxyOpts := buildOAuth2ProxyOptions(dexEndpoint, endpoint, openShiftLoginEnabled)
 		// The Caddy image uses a non-numeric USER directive ("caddy"), which
 		// prevents Kubernetes from verifying runAsNonRoot on vanilla clusters.
 		// OpenShift SCCs inject a numeric UID automatically so this is only
@@ -609,16 +610,19 @@ func runtimeConfigOverlays(
 }
 
 // buildOAuth2ProxyOptions builds the container options for oauth2-proxy configuration.
+// dexEndpoint is the resolved Dex endpoint (may differ from the UI host when
+// dex.config.hostname is set); uiEndpoint is where oauth2-proxy is deployed.
 // openShiftLoginEnabled controls whether to allow unverified emails (needed for OpenShift OAuth).
-func buildOAuth2ProxyOptions(endpoint *url.URL, openShiftLoginEnabled bool) []customization.ContainerOption {
+func buildOAuth2ProxyOptions(dexEndpoint, uiEndpoint *url.URL, openShiftLoginEnabled bool) []customization.ContainerOption {
 	opts := []customization.ContainerOption{
 		oauth2proxy.WithProvider(),
-		oauth2proxy.WithOIDCURLs(endpoint),
+		oauth2proxy.WithOIDCIssuerURLs(dexEndpoint),
+		oauth2proxy.WithRedirectURL(uiEndpoint),
 		oauth2proxy.WithInternalDexURLs(),
 		oauth2proxy.WithCookieConfig(),
 		oauth2proxy.WithAuthSettings(),
 		oauth2proxy.WithCABundle(),
-		oauth2proxy.WithWhitelistDomain(endpoint),
+		oauth2proxy.WithWhitelistDomain(uiEndpoint),
 	}
 
 	// Allow unverified emails when using OpenShift OAuth

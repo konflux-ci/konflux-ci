@@ -57,38 +57,30 @@ func TestWithProvider(t *testing.T) {
 	g.Expect(envMap["OAUTH2_PROXY_PROMPT"]).To(Equal("login"))
 }
 
-func TestWithOIDCURLs(t *testing.T) {
+func TestWithOIDCIssuerURLs(t *testing.T) {
 	tests := []struct {
-		name     string
-		endpoint *url.URL
-		want     map[string]string
+		name        string
+		dexEndpoint *url.URL
+		wantIssuer  string
+		wantLogin   string
 	}{
 		{
-			name:     "with hostname and port",
-			endpoint: &url.URL{Scheme: "https", Host: "example.com:9443"},
-			want: map[string]string{
-				"OAUTH2_PROXY_REDIRECT_URL":    "https://example.com:9443/oauth2/callback",
-				"OAUTH2_PROXY_OIDC_ISSUER_URL": "https://example.com:9443/idp/",
-				"OAUTH2_PROXY_LOGIN_URL":       "https://example.com:9443/idp/auth",
-			},
+			name:        "with hostname and port",
+			dexEndpoint: &url.URL{Scheme: "https", Host: "example.com:9443"},
+			wantIssuer:  "https://example.com:9443/idp/",
+			wantLogin:   "https://example.com:9443/idp/auth",
 		},
 		{
-			name:     "with hostname only (no port)",
-			endpoint: &url.URL{Scheme: "https", Host: "konflux.example.com"},
-			want: map[string]string{
-				"OAUTH2_PROXY_REDIRECT_URL":    "https://konflux.example.com/oauth2/callback",
-				"OAUTH2_PROXY_OIDC_ISSUER_URL": "https://konflux.example.com/idp/",
-				"OAUTH2_PROXY_LOGIN_URL":       "https://konflux.example.com/idp/auth",
-			},
+			name:        "with hostname only (no port)",
+			dexEndpoint: &url.URL{Scheme: "https", Host: "konflux.example.com"},
+			wantIssuer:  "https://konflux.example.com/idp/",
+			wantLogin:   "https://konflux.example.com/idp/auth",
 		},
 		{
-			name:     "localhost default",
-			endpoint: &url.URL{Scheme: "https", Host: "localhost:9443"},
-			want: map[string]string{
-				"OAUTH2_PROXY_REDIRECT_URL":    "https://localhost:9443/oauth2/callback",
-				"OAUTH2_PROXY_OIDC_ISSUER_URL": "https://localhost:9443/idp/",
-				"OAUTH2_PROXY_LOGIN_URL":       "https://localhost:9443/idp/auth",
-			},
+			name:        "localhost default",
+			dexEndpoint: &url.URL{Scheme: "https", Host: "localhost:9443"},
+			wantIssuer:  "https://localhost:9443/idp/",
+			wantLogin:   "https://localhost:9443/idp/auth",
 		},
 	}
 
@@ -96,12 +88,46 @@ func TestWithOIDCURLs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewGomegaWithT(t)
 
-			envVars := applyOption(WithOIDCURLs(tt.endpoint))
+			envVars := applyOption(WithOIDCIssuerURLs(tt.dexEndpoint))
 			envMap := envVarsToMap(envVars)
 
-			for key, wantValue := range tt.want {
-				g.Expect(envMap[key]).To(Equal(wantValue), "env var %s", key)
-			}
+			g.Expect(envMap["OAUTH2_PROXY_OIDC_ISSUER_URL"]).To(Equal(tt.wantIssuer))
+			g.Expect(envMap["OAUTH2_PROXY_LOGIN_URL"]).To(Equal(tt.wantLogin))
+		})
+	}
+}
+
+func TestWithRedirectURL(t *testing.T) {
+	tests := []struct {
+		name       string
+		uiEndpoint *url.URL
+		want       string
+	}{
+		{
+			name:       "with hostname and port",
+			uiEndpoint: &url.URL{Scheme: "https", Host: "example.com:9443"},
+			want:       "https://example.com:9443/oauth2/callback",
+		},
+		{
+			name:       "with hostname only (no port)",
+			uiEndpoint: &url.URL{Scheme: "https", Host: "konflux.example.com"},
+			want:       "https://konflux.example.com/oauth2/callback",
+		},
+		{
+			name:       "localhost default",
+			uiEndpoint: &url.URL{Scheme: "https", Host: "localhost:9443"},
+			want:       "https://localhost:9443/oauth2/callback",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewGomegaWithT(t)
+
+			envVars := applyOption(WithRedirectURL(tt.uiEndpoint))
+			envMap := envVarsToMap(envVars)
+
+			g.Expect(envMap["OAUTH2_PROXY_REDIRECT_URL"]).To(Equal(tt.want))
 		})
 	}
 }
@@ -205,17 +231,21 @@ func TestOptionsAreComposable(t *testing.T) {
 	ctx := customization.DeploymentContext{}
 
 	// Apply multiple options
-	endpoint := &url.URL{Scheme: "https", Host: "example.com:8443"}
+	dexEndpoint := &url.URL{Scheme: "https", Host: "dex.example.com:8443"}
+	uiEndpoint := &url.URL{Scheme: "https", Host: "ui.example.com:8443"}
 	WithProvider()(c, ctx)
-	WithOIDCURLs(endpoint)(c, ctx)
+	WithOIDCIssuerURLs(dexEndpoint)(c, ctx)
+	WithRedirectURL(uiEndpoint)(c, ctx)
 	WithCookieConfig()(c, ctx)
 
 	envMap := envVarsToMap(c.Env)
 
 	// Verify provider settings
 	g.Expect(envMap["OAUTH2_PROXY_PROVIDER"]).To(Equal("oidc"))
-	// Verify OIDC URLs with custom port
-	g.Expect(envMap["OAUTH2_PROXY_REDIRECT_URL"]).To(Equal("https://example.com:8443/oauth2/callback"))
+	// Verify OIDC issuer uses Dex endpoint
+	g.Expect(envMap["OAUTH2_PROXY_OIDC_ISSUER_URL"]).To(Equal("https://dex.example.com:8443/idp/"))
+	// Verify redirect URL uses UI endpoint
+	g.Expect(envMap["OAUTH2_PROXY_REDIRECT_URL"]).To(Equal("https://ui.example.com:8443/oauth2/callback"))
 	// Verify cookie config
 	g.Expect(envMap["OAUTH2_PROXY_COOKIE_SECURE"]).To(Equal("true"))
 }

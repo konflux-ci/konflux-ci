@@ -73,13 +73,23 @@ func WithProvider() customization.ContainerOption {
 
 // --- OIDC URL Configuration ---
 
-// WithOIDCURLs configures the external-facing OIDC URLs based on the endpoint URL.
-// These URLs are used by browsers to interact with the OIDC flow.
-func WithOIDCURLs(endpoint *url.URL) customization.ContainerOption {
+// WithOIDCIssuerURLs configures the Dex-facing OIDC issuer and login URLs.
+// These must point at the Dex host so the issuer URL matches the Dex token's
+// iss claim. When dex.config.hostname is set, dexEndpoint differs from the UI
+// endpoint.
+func WithOIDCIssuerURLs(dexEndpoint *url.URL) customization.ContainerOption {
 	return customization.WithEnv(
-		corev1.EnvVar{Name: "OAUTH2_PROXY_REDIRECT_URL", Value: endpoint.JoinPath("/oauth2/callback").String()},
-		corev1.EnvVar{Name: "OAUTH2_PROXY_OIDC_ISSUER_URL", Value: endpoint.JoinPath("/idp/").String()},
-		corev1.EnvVar{Name: "OAUTH2_PROXY_LOGIN_URL", Value: endpoint.JoinPath("/idp/auth").String()},
+		corev1.EnvVar{Name: "OAUTH2_PROXY_OIDC_ISSUER_URL", Value: dexEndpoint.JoinPath("/idp/").String()},
+		corev1.EnvVar{Name: "OAUTH2_PROXY_LOGIN_URL", Value: dexEndpoint.JoinPath("/idp/auth").String()},
+	)
+}
+
+// WithRedirectURL configures the oauth2-proxy callback URL.
+// This must point at the UI host where oauth2-proxy is deployed, not the Dex
+// host, so the browser can reach the callback endpoint after authentication.
+func WithRedirectURL(uiEndpoint *url.URL) customization.ContainerOption {
+	return customization.WithEnv(
+		corev1.EnvVar{Name: "OAUTH2_PROXY_REDIRECT_URL", Value: uiEndpoint.JoinPath("/oauth2/callback").String()},
 	)
 }
 

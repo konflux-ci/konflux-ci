@@ -104,7 +104,7 @@ func assertNoConflictingEnvVars(g *gomega.WithT, container *corev1.Container) {
 func TestBuildProxyOverlay(t *testing.T) {
 	t.Run("nil spec returns overlay with oauth2-proxy config", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		overlay, err := buildProxyOverlay(nil, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(nil, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(overlay).NotTo(gomega.BeNil())
 
@@ -121,7 +121,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 	t.Run("empty spec returns overlay with oauth2-proxy config", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		spec := &konfluxv1alpha1.ProxyDeploymentSpec{}
-		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(overlay).NotTo(gomega.BeNil())
 
@@ -137,7 +137,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 
 	t.Run("adds CA bundle volume and mount", func(t *testing.T) {
 		g := gomega.NewWithT(t)
-		overlay, err := buildProxyOverlay(nil, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(nil, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(overlay).NotTo(gomega.BeNil())
 
@@ -185,7 +185,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -212,7 +212,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -246,7 +246,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -280,7 +280,7 @@ func TestBuildProxyOverlay(t *testing.T) {
 		g.Expect(rpContainer).NotTo(gomega.BeNil(), "reverse-proxy container must exist in proxy deployment")
 		originalImage := rpContainer.Image
 
-		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -295,7 +295,7 @@ func TestBuildOAuth2ProxyOptions(t *testing.T) {
 	t.Run("returns default options for empty spec", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
-		opts := buildOAuth2ProxyOptions(testEndpoint, false)
+		opts := buildOAuth2ProxyOptions(testEndpoint, testEndpoint, false)
 
 		// Apply options to a container to verify
 		c := &corev1.Container{}
@@ -316,7 +316,7 @@ func TestBuildOAuth2ProxyOptions(t *testing.T) {
 	t.Run("returns all required options", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
-		opts := buildOAuth2ProxyOptions(testEndpoint, false)
+		opts := buildOAuth2ProxyOptions(testEndpoint, testEndpoint, false)
 
 		// Apply options to a container
 		c := &corev1.Container{}
@@ -352,7 +352,7 @@ func TestBuildOAuth2ProxyOptions(t *testing.T) {
 	t.Run("includes allow unverified email when OpenShift login enabled", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
-		opts := buildOAuth2ProxyOptions(testEndpoint, true)
+		opts := buildOAuth2ProxyOptions(testEndpoint, testEndpoint, true)
 
 		// Apply options to a container
 		c := &corev1.Container{}
@@ -373,7 +373,7 @@ func TestBuildOAuth2ProxyOptions(t *testing.T) {
 	t.Run("does not include allow unverified email when OpenShift login disabled", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
-		opts := buildOAuth2ProxyOptions(testEndpoint, false)
+		opts := buildOAuth2ProxyOptions(testEndpoint, testEndpoint, false)
 
 		// Apply options to a container
 		c := &corev1.Container{}
@@ -859,8 +859,8 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g.Expect(container).NotTo(gomega.BeNil())
 		envMap := envToMap(container.Env)
 
-		// OAUTH2_PROXY_OIDC_ISSUER_URL must use the Dex override host,
-		// not the UI host, so it matches the Dex ConfigMap issuer.
+		// OAUTH2_PROXY_OIDC_ISSUER_URL and LOGIN_URL must use the Dex override host
+		// so the issuer matches the Dex ConfigMap issuer.
 		g.Expect(envMap["OAUTH2_PROXY_OIDC_ISSUER_URL"]).To(
 			gomega.Equal("https://dex-override.example.com/idp/"),
 			"OIDC issuer URL must match the Dex ConfigMap issuer host",
@@ -868,8 +868,16 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g.Expect(envMap["OAUTH2_PROXY_LOGIN_URL"]).To(
 			gomega.Equal("https://dex-override.example.com/idp/auth"),
 		)
+		// OAUTH2_PROXY_REDIRECT_URL must stay on the UI host where oauth2-proxy
+		// is deployed, not the Dex override host.
 		g.Expect(envMap["OAUTH2_PROXY_REDIRECT_URL"]).To(
-			gomega.Equal("https://dex-override.example.com/oauth2/callback"),
+			gomega.Equal("https://UI.Example.COM:443/oauth2/callback"),
+			"redirect URL must use the UI host, not the Dex host",
+		)
+		// Whitelist domain must also reflect the UI host.
+		g.Expect(envMap["OAUTH2_PROXY_WHITELIST_DOMAINS"]).To(
+			gomega.Equal("UI.Example.COM:443"),
+			"whitelist domain must use the UI host, not the Dex host",
 		)
 	})
 
@@ -885,12 +893,15 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g.Expect(container).NotTo(gomega.BeNil())
 		envMap := envToMap(container.Env)
 
-		// Without a Dex hostname override, OIDC URLs use the default endpoint.
+		// Without a Dex hostname override, all OIDC URLs use the default endpoint.
 		g.Expect(envMap["OAUTH2_PROXY_OIDC_ISSUER_URL"]).To(
 			gomega.Equal("https://localhost:9443/idp/"),
 		)
 		g.Expect(envMap["OAUTH2_PROXY_LOGIN_URL"]).To(
 			gomega.Equal("https://localhost:9443/idp/auth"),
+		)
+		g.Expect(envMap["OAUTH2_PROXY_REDIRECT_URL"]).To(
+			gomega.Equal("https://localhost:9443/oauth2/callback"),
 		)
 	})
 
@@ -1300,7 +1311,7 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -1325,7 +1336,7 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -1400,7 +1411,7 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -1426,7 +1437,7 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		oauthOpts := buildOAuth2ProxyOptions(testEndpoint, false)
+		oauthOpts := buildOAuth2ProxyOptions(testEndpoint, testEndpoint, false)
 
 		overlay, err := buildProxyOverlay(withHostname, nil, "", false, oauthOpts...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -1543,7 +1554,7 @@ func TestRuntimeConfigOverlays(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay, err := buildProxyOverlay(nil, rc, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(nil, rc, "", false, buildOAuth2ProxyOptions(testEndpoint, testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -1567,7 +1578,7 @@ func TestRuntimeConfigOverlays(t *testing.T) {
 		}
 
 		deployment := getUIDeployment(t, proxyDeploymentName)
-		overlay, err := buildProxyOverlay(spec, rc, "", false, buildOAuth2ProxyOptions(testEndpoint, false)...)
+		overlay, err := buildProxyOverlay(spec, rc, "", false, buildOAuth2ProxyOptions(testEndpoint, testEndpoint, false)...)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		err = overlay.ApplyToDeployment(deployment)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
