@@ -43,7 +43,10 @@ With this configuration:
   `konflux-ui` namespace.
 - **`ingress.fqdn`** — the operator configures oauth2-proxy, dex, and all
   related components to use this hostname for OIDC redirect URLs, issuer URLs,
-  and allowed redirect domains. This ensures authentication flows work correctly
+  and allowed redirect domains. When `spec.ui.spec.dex.config.hostname` is
+  configured, the OIDC issuer and login URLs use that override host instead;
+  see the [Dex Hostname Override]({{< relref "oidc-configuration#dex-hostname-override" >}})
+  section in the OIDC guide. This ensures authentication flows work correctly
   with your custom URL. An optional `:port` suffix (for example
   `konflux.example.com:8443`) is supported in this endpoint-only mode. Do **not**
   include `:port` when ingress is effectively enabled (explicit `true`, or unset on

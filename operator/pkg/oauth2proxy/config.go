@@ -73,15 +73,27 @@ func WithProvider() customization.ContainerOption {
 
 // --- OIDC URL Configuration ---
 
-// WithOIDCIssuerURLs configures the Dex-facing OIDC issuer and login URLs.
+// WithDexFacingURLs configures the Dex-facing OIDC issuer and login URLs.
 // These must point at the Dex host so the issuer URL matches the Dex token's
 // iss claim. When dex.config.hostname is set, dexEndpoint differs from the UI
 // endpoint.
-func WithOIDCIssuerURLs(dexEndpoint *url.URL) customization.ContainerOption {
+func WithDexFacingURLs(dexEndpoint *url.URL) customization.ContainerOption {
 	return customization.WithEnv(
 		corev1.EnvVar{Name: "OAUTH2_PROXY_OIDC_ISSUER_URL", Value: dexEndpoint.JoinPath("/idp/").String()},
 		corev1.EnvVar{Name: "OAUTH2_PROXY_LOGIN_URL", Value: dexEndpoint.JoinPath("/idp/auth").String()},
 	)
+}
+
+// WithOIDCURLs configures OIDC URLs from a single endpoint that serves both Dex
+// and the UI callback. Use WithDexFacingURLs + WithRedirectURL when the Dex host
+// differs from the UI host.
+//
+// Deprecated: Use WithDexFacingURLs and WithRedirectURL instead.
+func WithOIDCURLs(endpoint *url.URL) customization.ContainerOption {
+	return func(c *corev1.Container, ctx customization.DeploymentContext) {
+		WithDexFacingURLs(endpoint)(c, ctx)
+		WithRedirectURL(endpoint)(c, ctx)
+	}
 }
 
 // WithRedirectURL configures the oauth2-proxy callback URL.

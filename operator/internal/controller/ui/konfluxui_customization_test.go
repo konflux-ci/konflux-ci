@@ -903,6 +903,10 @@ func TestApplyUIDeploymentCustomizations(t *testing.T) {
 		g.Expect(envMap["OAUTH2_PROXY_REDIRECT_URL"]).To(
 			gomega.Equal("https://localhost:9443/oauth2/callback"),
 		)
+		g.Expect(envMap["OAUTH2_PROXY_WHITELIST_DOMAINS"]).To(
+			gomega.Equal("localhost:9443"),
+			"whitelist domain must use the default endpoint host",
+		)
 	})
 
 	t.Run("does not update segment secret volume when not configured", func(t *testing.T) {

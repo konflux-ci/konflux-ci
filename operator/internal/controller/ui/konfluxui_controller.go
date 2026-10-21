@@ -616,7 +616,7 @@ func runtimeConfigOverlays(
 func buildOAuth2ProxyOptions(dexEndpoint, uiEndpoint *url.URL, openShiftLoginEnabled bool) []customization.ContainerOption {
 	opts := []customization.ContainerOption{
 		oauth2proxy.WithProvider(),
-		oauth2proxy.WithOIDCIssuerURLs(dexEndpoint),
+		oauth2proxy.WithDexFacingURLs(dexEndpoint),
 		oauth2proxy.WithRedirectURL(uiEndpoint),
 		oauth2proxy.WithInternalDexURLs(),
 		oauth2proxy.WithCookieConfig(),

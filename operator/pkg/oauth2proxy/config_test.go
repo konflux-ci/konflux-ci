@@ -57,7 +57,7 @@ func TestWithProvider(t *testing.T) {
 	g.Expect(envMap["OAUTH2_PROXY_PROMPT"]).To(Equal("login"))
 }
 
-func TestWithOIDCIssuerURLs(t *testing.T) {
+func TestWithDexFacingURLs(t *testing.T) {
 	tests := []struct {
 		name        string
 		dexEndpoint *url.URL
@@ -88,7 +88,7 @@ func TestWithOIDCIssuerURLs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewGomegaWithT(t)
 
-			envVars := applyOption(WithOIDCIssuerURLs(tt.dexEndpoint))
+			envVars := applyOption(WithDexFacingURLs(tt.dexEndpoint))
 			envMap := envVarsToMap(envVars)
 
 			g.Expect(envMap["OAUTH2_PROXY_OIDC_ISSUER_URL"]).To(Equal(tt.wantIssuer))
@@ -234,7 +234,7 @@ func TestOptionsAreComposable(t *testing.T) {
 	dexEndpoint := &url.URL{Scheme: "https", Host: "dex.example.com:8443"}
 	uiEndpoint := &url.URL{Scheme: "https", Host: "ui.example.com:8443"}
 	WithProvider()(c, ctx)
-	WithOIDCIssuerURLs(dexEndpoint)(c, ctx)
+	WithDexFacingURLs(dexEndpoint)(c, ctx)
 	WithRedirectURL(uiEndpoint)(c, ctx)
 	WithCookieConfig()(c, ctx)
 
