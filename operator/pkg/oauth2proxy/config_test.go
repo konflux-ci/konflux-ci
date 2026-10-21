@@ -132,6 +132,20 @@ func TestWithRedirectURL(t *testing.T) {
 	}
 }
 
+func TestWithOIDCURLs(t *testing.T) {
+	g := NewGomegaWithT(t)
+
+	endpoint := &url.URL{Scheme: "https", Host: "example.com:9443"}
+	envVars := applyOption(WithOIDCURLs(endpoint))
+	envMap := envVarsToMap(envVars)
+
+	// The deprecated alias must delegate to WithDexFacingURLs + WithRedirectURL,
+	// setting all three env vars from the single endpoint argument.
+	g.Expect(envMap["OAUTH2_PROXY_OIDC_ISSUER_URL"]).To(Equal("https://example.com:9443/idp/"))
+	g.Expect(envMap["OAUTH2_PROXY_LOGIN_URL"]).To(Equal("https://example.com:9443/idp/auth"))
+	g.Expect(envMap["OAUTH2_PROXY_REDIRECT_URL"]).To(Equal("https://example.com:9443/oauth2/callback"))
+}
+
 func TestWithInternalDexURLs(t *testing.T) {
 	g := NewGomegaWithT(t)
 

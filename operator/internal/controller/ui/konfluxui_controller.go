@@ -737,10 +737,11 @@ func (r *KonfluxUIReconciler) reconcileDexConfigMap(ctx context.Context, ui *kon
 		dexParams := ui.Spec.GetDex().Config.DeepCopy()
 		// Set the resolved OpenShift login value
 		dexParams.ConfigureLoginWithOpenShift = &openShiftLoginEnabled
-		dexConfig = dex.NewDexConfig(effectiveEndpoint, dexParams)
+		dexConfig = dex.NewDexConfig(effectiveEndpoint, endpoint, dexParams)
 	} else {
 		dexConfig = dex.NewDexConfig(
 			effectiveEndpoint,
+			endpoint,
 			&dex.DexParams{
 				// EnablePasswordDB defaults to true when no connectors are configured
 				ConfigureLoginWithOpenShift: &openShiftLoginEnabled,

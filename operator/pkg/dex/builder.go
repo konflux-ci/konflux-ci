@@ -102,8 +102,13 @@ type DexParams struct {
 // This configuration uses Kubernetes storage, HTTPS with TLS, an oauth2-proxy
 // confidential client, and a public CLI client for kubectl and other OIDC tools.
 // endpoint is the base URL for the Dex issuer (e.g., https://dex.example.com).
-func NewDexConfig(endpoint *url.URL, params *DexParams) *Config {
+// callbackEndpoint is the base URL where oauth2-proxy is deployed (the UI host);
+// it is used for the oauth2-proxy client's RedirectURIs so that Dex accepts the
+// redirect_uri that oauth2-proxy sends during the authorization code flow.
+// When there is no hostname override, both endpoints are the same URL.
+func NewDexConfig(endpoint, callbackEndpoint *url.URL, params *DexParams) *Config {
 	baseURL := endpoint.String()
+	callbackBaseURL := callbackEndpoint.String()
 
 	defaultRedirectURI := fmt.Sprintf("%s/idp/callback", baseURL)
 
@@ -184,7 +189,7 @@ func NewDexConfig(endpoint *url.URL, params *DexParams) *Config {
 				SecretEnv: "CLIENT_SECRET",
 				Name:      "oauth2-proxy",
 				RedirectURIs: []string{
-					fmt.Sprintf("%s/oauth2/callback", baseURL),
+					fmt.Sprintf("%s/oauth2/callback", callbackBaseURL),
 				},
 			},
 			{
