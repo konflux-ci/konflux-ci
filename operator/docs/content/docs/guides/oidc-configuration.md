@@ -58,7 +58,7 @@ kubectl config set-credentials oidc \
   --exec-command=kubectl \
   --exec-arg=oidc-login \
   --exec-arg=get-token \
-  --exec-arg=--oidc-issuer-url=https://<konflux-host>/idp/ \
+  --exec-arg=--oidc-issuer-url=https://<dex-or-konflux-host>/idp/ \
   --exec-arg=--oidc-client-id=cli \
   --exec-arg=--oidc-extra-scope=email \
   --exec-arg=--oidc-extra-scope=profile \
@@ -71,6 +71,11 @@ kubectl config set-cluster konflux-ui \
 kubectl config set-context konflux-ui --cluster=konflux-ui --user=oidc
 kubectl --context=konflux-ui get ns
 ```
+
+Replace `<dex-or-konflux-host>` with the Dex hostname override
+(`spec.ui.spec.dex.config.hostname`) if one is configured, otherwise use
+your Konflux UI hostname. The issuer URL must match the Dex token's `iss`
+claim.
 
 kubectl sends the Dex **ID token** as `Authorization: Bearer`. Opaque access
 tokens are not accepted by oauth2-proxy.
@@ -115,10 +120,11 @@ When registering the app, set the **Authorization callback URL** to:
 https://<your-konflux-hostname>/idp/callback
 ```
 
-Dex is not exposed at a separate hostname — it runs behind the Konflux proxy at the `/idp/`
-path of your Konflux UI URL. The operator derives this URL automatically from `ingress.fqdn`
-(or `ingress.hostname` composed with the OpenShift ingress domain, or the OpenShift
-default ingress naming if neither is set).
+By default Dex runs behind the Konflux proxy at the `/idp/` path of your Konflux UI URL.
+The operator derives this URL automatically from `ingress.fqdn` (or `ingress.hostname`
+composed with the OpenShift ingress domain, or the OpenShift default ingress naming if
+neither is set). When `dex.config.hostname` is configured, Dex is exposed at that
+separate hostname instead (see [Dex Hostname Override](#dex-hostname-override) below).
 
 Once created, note the **Client ID** and generate a **Client Secret** — you will need both in the next step.
 
@@ -401,6 +407,46 @@ it grants access to anyone who finds the cluster.
 Static passwords only take effect while the password database is enabled. If
 `enablePasswordDB` is `false`, or it is unset and at least one connector is configured,
 the operator omits `staticPasswords` from the rendered Dex configuration entirely.
+
+## Dex Hostname Override
+
+By default, Dex shares the Konflux UI hostname and is accessed via the
+`/idp/` path behind the Konflux proxy. If your deployment requires Dex to
+be reachable at a different hostname (for example, when TLS or DNS
+constraints prevent the UI ingress from serving the Dex issuer), you can
+override the hostname and port in `spec.ui.spec.dex.config`:
+
+| Field | Description |
+|-------|-------------|
+| `hostname` | The hostname where Dex is exposed. When set, the operator uses this host for the Dex issuer URL and OIDC login URL instead of the UI hostname. |
+| `port` | Optional port for the Dex endpoint. Appended to `hostname` when set. |
+
+```yaml
+apiVersion: konflux.konflux-ci.dev/v1alpha1
+kind: Konflux
+metadata:
+  name: konflux
+spec:
+  ui:
+    spec:
+      dex:
+        config:
+          hostname: dex.example.com
+          port: "443"
+```
+
+When `hostname` is configured:
+
+- The Dex ConfigMap issuer is set to `https://<hostname>/idp/`.
+- `OAUTH2_PROXY_OIDC_ISSUER_URL` and `OAUTH2_PROXY_LOGIN_URL` use the
+  override host, so oauth2-proxy validates tokens against the correct issuer.
+- `OAUTH2_PROXY_REDIRECT_URL` and `OAUTH2_PROXY_WHITELIST_DOMAINS` remain
+  on the UI host, because the oauth2-proxy callback must be reachable where
+  the proxy is deployed.
+- CLI tools (kubelogin) must use the override hostname for the
+  `--oidc-issuer-url` flag.
+
+When `hostname` is not set, all URLs use the UI hostname.
 
 ## Combining Multiple Connectors
 
