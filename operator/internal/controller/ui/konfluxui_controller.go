@@ -106,6 +106,10 @@ const (
 
 	// Watson endpoint constants
 	watsonConfigVolumeName = "watson-config"
+
+	// KubeArchive CA ConfigMap and proxy rollout annotation.
+	kubeArchiveCAConfigMapName  = "kubearchive-ca-bundle"
+	kubeArchiveCAHashAnnotation = "konflux.konflux-ci.dev/kubearchive-ca-hash"
 )
 
 // UICleanupGVKs defines which resource types should be cleaned up when they are
@@ -231,8 +235,15 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return errHandler.HandleWithReason(ctx, err, condition.ReasonSecretCreationFailed, "reconcile segment config secret")
 	}
 
+	// Read the externally managed CA bundle before applying the Deployment. A
+	// lookup error must not remove the current hash and trigger a proxy rollout.
+	kubeArchiveCAHash, err := r.getKubeArchiveCAHash(ctx)
+	if err != nil {
+		return errHandler.HandleWithReason(ctx, err, condition.ReasonConfigMapFailed, "read KubeArchive CA bundle")
+	}
+
 	// Apply all embedded manifests
-	if err := r.applyManifests(ctx, tc, ui, dexConfigMapName, segmentSecretName, endpoint); err != nil {
+	if err := r.applyManifests(ctx, tc, ui, dexConfigMapName, segmentSecretName, kubeArchiveCAHash, endpoint); err != nil {
 		return errHandler.HandleApplyError(ctx, err)
 	}
 
@@ -308,8 +319,9 @@ func (r *KonfluxUIReconciler) ensureNamespaceExists(ctx context.Context, tc *tra
 // Manifests are parsed once and cached; deep copies are used during reconciliation.
 // dexConfigMapName is the name of the Dex ConfigMap to use (empty if not configured).
 // segmentSecretName is the name of the content-hashed Segment Secret (empty if not configured).
+// kubeArchiveCAHash rolls the proxy when its externally managed CA bundle changes.
 // endpoint is the base URL used to configure oauth2-proxy.
-func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, dexConfigMapName, segmentSecretName string, endpoint *url.URL) error {
+func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.Client, ui *konfluxv1alpha1.KonfluxUI, dexConfigMapName, segmentSecretName, kubeArchiveCAHash string, endpoint *url.URL) error {
 	log := logf.FromContext(ctx)
 
 	objects, err := r.ObjectStore.GetForComponent(manifests.UI)
@@ -334,7 +346,7 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 
 		// Apply customizations for deployments
 		if deployment, ok := obj.(*appsv1.Deployment); ok {
-			if err := applyUIDeploymentCustomizations(deployment, ui, r.ClusterInfo, dexConfigMapName, segmentSecretName, endpoint); err != nil {
+			if err := applyUIDeploymentCustomizations(deployment, ui, r.ClusterInfo, dexConfigMapName, segmentSecretName, kubeArchiveCAHash, endpoint); err != nil {
 				return fmt.Errorf("failed to apply customizations to deployment %s: %w", deployment.Name, err)
 			}
 		}
@@ -358,9 +370,19 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 }
 
 // applyUIDeploymentCustomizations applies user-defined customizations to UI deployments.
-func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv1alpha1.KonfluxUI, clusterInfo *clusterinfo.Info, dexConfigMapName, segmentSecretName string, endpoint *url.URL) error {
+func applyUIDeploymentCustomizations(deployment *appsv1.Deployment, ui *konfluxv1alpha1.KonfluxUI, clusterInfo *clusterinfo.Info, dexConfigMapName, segmentSecretName, kubeArchiveCAHash string, endpoint *url.URL) error {
 	switch deployment.Name {
 	case proxyDeploymentName:
+		if kubeArchiveCAHash != "" {
+			if deployment.Spec.Template.Annotations == nil {
+				deployment.Spec.Template.Annotations = map[string]string{}
+			}
+			deployment.Spec.Template.Annotations[kubeArchiveCAHashAnnotation] = kubeArchiveCAHash
+		} else {
+			// Fresh embedded manifests omit this annotation, allowing server-side
+			// apply to remove it when the external bundle is deleted.
+			delete(deployment.Spec.Template.Annotations, kubeArchiveCAHashAnnotation)
+		}
 		proxySpec := ui.Spec.GetProxy()
 		deployment.Spec.Replicas = &proxySpec.Replicas
 		// Build oauth2-proxy options based on endpoint URL and OpenShift login state
@@ -828,6 +850,24 @@ func (r *KonfluxUIReconciler) reconcileSegmentSecret(ctx context.Context, tc *tr
 	return secret.Name, nil
 }
 
+// getKubeArchiveCAHash reads the public CA bundle mounted by the proxy. Missing
+// ConfigMaps or keys return an empty hash; other lookup errors stop reconciliation.
+func (r *KonfluxUIReconciler) getKubeArchiveCAHash(ctx context.Context) (string, error) {
+	return common.LookupTrustedCAHash(ctx, r.Client, uiNamespace, &konfluxv1alpha1.TrustedCAConfigMap{
+		Name: kubeArchiveCAConfigMapName,
+		Key:  common.TrustedCADefaultFileVolumePath,
+	})
+}
+
+// mapKubeArchiveCAConfigMapToUI watches the external bundle without taking ownership.
+func (r *KonfluxUIReconciler) mapKubeArchiveCAConfigMapToUI(_ context.Context, obj client.Object) []ctrl.Request {
+	_, ok := obj.(*corev1.ConfigMap)
+	if !ok || obj.GetNamespace() != uiNamespace || obj.GetName() != kubeArchiveCAConfigMapName {
+		return nil
+	}
+	return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: CRName}}}
+}
+
 // mapSegmentBridgeToUI maps KonfluxSegmentBridge events to KonfluxUI reconcile requests
 // so that changes to the Segment configuration trigger a UI reconcile.
 func (r *KonfluxUIReconciler) mapSegmentBridgeToUI(_ context.Context, _ client.Object) []ctrl.Request {
@@ -873,6 +913,8 @@ func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&networkingv1.Ingress{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&certmanagerv1.Certificate{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
 		Owns(&certmanagerv1.Issuer{}, builder.WithPredicates(predicate.IgnoreStatusUpdatesPredicate)).
+		Watches(&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(r.mapKubeArchiveCAConfigMapToUI)).
 		// Watch KonfluxSegmentBridge CR so Segment config changes trigger a UI reconcile
 		Watches(&konfluxv1alpha1.KonfluxSegmentBridge{},
 			handler.EnqueueRequestsFromMapFunc(r.mapSegmentBridgeToUI),

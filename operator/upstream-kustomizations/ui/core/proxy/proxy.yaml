@@ -251,8 +251,8 @@ spec:
           configMap:
             name: openshift-service-ca.crt
             optional: true
-        # Publish before proxy startup, or restart the proxy after publication
-        # so the init container includes this CA in its transport snippet.
+        # Externally managed public CA bundle. The UI controller rolls the proxy
+        # when its contents change so the init container regenerates TLS trust.
         - name: kubearchive-ca
           configMap:
             name: kubearchive-ca-bundle
