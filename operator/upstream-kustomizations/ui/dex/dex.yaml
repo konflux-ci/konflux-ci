@@ -85,16 +85,30 @@ spec:
           mountPath: /etc/dex/cfg
         - name: tls
           mountPath: /etc/dex/tls
+        startupProbe:
+          httpGet:
+            path: /healthz/ready
+            port: telemetry
+          failureThreshold: 20   # 20 × 2s = 40s cold start
+          periodSeconds: 2
+          successThreshold: 1
+          timeoutSeconds: 1
         livenessProbe:
-          initialDelaySeconds: 10
           httpGet:
             path: /healthz/ready
             port: telemetry
+          failureThreshold: 24   # 24 × 5s = 120s ≈ HALT_TIMEOUT + restart margin
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 1
         readinessProbe:
-          initialDelaySeconds: 10
           httpGet:
             path: /healthz/ready
             port: telemetry
+          failureThreshold: 1    # drop from endpoints ~3s into reload
+          periodSeconds: 3
+          successThreshold: 1
+          timeoutSeconds: 2
         env:
         - name: TOKEN_PATH
           value: /var/run/secrets/konflux-ci.dev/serviceaccount/token
