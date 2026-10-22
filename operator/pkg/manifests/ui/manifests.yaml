@@ -472,10 +472,14 @@ spec:
               name: oauth2-proxy-client-secret
         image: quay.io/konflux-ci/dex@sha256:2efbbba6d4ba63d318f7468f65d5ce8d421fdec25ba42177a6206ceea56997cb
         livenessProbe:
+          failureThreshold: 3
           httpGet:
             path: /healthz/ready
             port: telemetry
-          initialDelaySeconds: 10
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 1
         name: dex
         ports:
         - containerPort: 9443
@@ -484,10 +488,14 @@ spec:
           name: telemetry
           protocol: TCP
         readinessProbe:
+          failureThreshold: 3
           httpGet:
             path: /healthz/ready
             port: telemetry
-          initialDelaySeconds: 10
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 2
         resources:
           limits:
             cpu: 50m
