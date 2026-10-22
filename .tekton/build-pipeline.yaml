@@ -320,7 +320,7 @@ spec:
       - name: name
         value: roxctl-scan
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-roxctl-scan:0.1.1@sha256:3841b3d56dad2fad1feebf03af775ac4f0baa627808db0621b52decea658bd7b
+        value: quay.io/konflux-ci/tekton-catalog/task-roxctl-scan:0.1.1@sha256:4d2c2edcfa0e3616ceb3fe67534aa1955f73fc14209acf734f2d9c9f1f47de27
       - name: kind
         value: task
       resolver: bundles
@@ -398,7 +398,7 @@ spec:
       - name: name
         value: clamav-scan
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-clamav-scan:0.3.4@sha256:6c7e4e239cb7f81b6e1bbfdfe6bda77c6902dd801afcad05a315c247ec5e7f88
+        value: quay.io/konflux-ci/tekton-catalog/task-clamav-scan:0.3.4@sha256:6406168c03f83558b4ff454fec2503269ee8f522ea2cd2d1b293cc75d37df32a
       - name: kind
         value: task
       resolver: bundles
