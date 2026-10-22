@@ -45,6 +45,9 @@ const (
 	// CABundleMountPath is the full path where the CA bundle file is located in the container
 	// The file is projected into a directory mount to enable automatic rotation
 	CABundleMountPath = CABundleMountDir + "/" + CABundleFilename
+	// SessionCookieName is the oauth2-proxy session cookie (OAUTH2_PROXY_COOKIE_NAME).
+	// The __Host- prefix requires Secure, Path=/, and no Domain attribute.
+	SessionCookieName = "__Host-konflux-ci-cookie"
 )
 
 var (
@@ -99,7 +102,7 @@ func WithInternalDexURLs() customization.ContainerOption {
 func WithCookieConfig() customization.ContainerOption {
 	return customization.WithEnv(
 		corev1.EnvVar{Name: "OAUTH2_PROXY_COOKIE_SECURE", Value: "true"},
-		corev1.EnvVar{Name: "OAUTH2_PROXY_COOKIE_NAME", Value: "__Host-konflux-ci-cookie"},
+		corev1.EnvVar{Name: "OAUTH2_PROXY_COOKIE_NAME", Value: SessionCookieName},
 	)
 }
 
@@ -109,11 +112,14 @@ func WithCookieConfig() customization.ContainerOption {
 // Sets email domain restrictions, X-Auth-Request header, JWT handling,
 // registers the public CLI client as an extra accepted audience,
 // and requests the "groups" scope so Dex includes group memberships in the ID token.
+// An Authorization header that is not a verified Dex JWT is rejected. oauth2-proxy
+// must not fall back to the session cookie in that case.
 func WithAuthSettings() customization.ContainerOption {
 	return customization.WithEnv(
 		corev1.EnvVar{Name: "OAUTH2_PROXY_EMAIL_DOMAINS", Value: "*"},
 		corev1.EnvVar{Name: "OAUTH2_PROXY_SET_XAUTHREQUEST", Value: "true"},
 		corev1.EnvVar{Name: "OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS", Value: "true"},
+		corev1.EnvVar{Name: "OAUTH2_PROXY_BEARER_TOKEN_LOGIN_FALLBACK", Value: "false"},
 		corev1.EnvVar{Name: "OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES", Value: dex.CLIClientID},
 		corev1.EnvVar{Name: "OAUTH2_PROXY_SCOPE", Value: "openid email profile groups"},
 	)

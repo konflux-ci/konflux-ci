@@ -106,16 +106,20 @@ var _ = AfterSuite(func() {
 	}
 })
 
+// proxyWaitUIOnly reports whether BeforeSuite should wait only for ui.Ready.
+// Set KONFLUX_PROXY_WAIT_UI_ONLY to 1, true, or yes.
 func proxyWaitUIOnly() bool {
 	v := strings.ToLower(strings.TrimSpace(os.Getenv("KONFLUX_PROXY_WAIT_UI_ONLY")))
 	return v == "1" || v == "true" || v == "yes"
 }
 
+// konfluxUIReady reports whether status condition ui.Ready is True.
 func konfluxUIReady(konflux *konfluxv1alpha1.Konflux) bool {
 	cond := apimeta.FindStatusCondition(konflux.Status.Conditions, "ui.Ready")
 	return cond != nil && cond.Status == metav1.ConditionTrue
 }
 
+// konfluxUIReadyMessage formats the ui.Ready condition for a failed wait.
 func konfluxUIReadyMessage(konflux *konfluxv1alpha1.Konflux) string {
 	cond := apimeta.FindStatusCondition(konflux.Status.Conditions, "ui.Ready")
 	if cond == nil {
@@ -124,6 +128,7 @@ func konfluxUIReadyMessage(konflux *konfluxv1alpha1.Konflux) string {
 	return fmt.Sprintf("konflux ui.Ready=%s reason=%s message=%s", cond.Status, cond.Reason, cond.Message)
 }
 
+// setProxyBase stores the UI origin used to build request URLs. raw must be https with a host.
 func setProxyBase(raw string) error {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
@@ -145,6 +150,7 @@ func setProxyBase(raw string) error {
 	return nil
 }
 
+// proxyTenantNamespace returns KONFLUX_PROXY_TEST_NAMESPACE, or default-tenant.
 func proxyTenantNamespace() string {
 	if ns := strings.TrimSpace(os.Getenv("KONFLUX_PROXY_TEST_NAMESPACE")); ns != "" {
 		return ns
@@ -211,6 +217,7 @@ func expectProxyHTTPStatus(resp *http.Response, body []byte, expected int, path 
 	Expect(resp.StatusCode).To(Equal(expected), proxyHTTPStatusMismatch(resp, body, expected, path))
 }
 
+// proxyHTTPStatusMismatch formats an unexpected status. Bodies for secret paths are omitted.
 func proxyHTTPStatusMismatch(resp *http.Response, body []byte, expected int, path string) string {
 	if strings.Contains(path, "/secrets") {
 		return fmt.Sprintf("%s: expected %d, got %d (%d bytes, body omitted)", path, expected, resp.StatusCode, len(body))
@@ -222,16 +229,100 @@ func proxyHTTPStatusMismatch(resp *http.Response, body []byte, expected int, pat
 	return fmt.Sprintf("%s: expected %d, got %d: %s", path, expected, resp.StatusCode, snippet)
 }
 
+// proxyTransientHTTPStatus reports API responses that should be retried (429 and 503).
 func proxyTransientHTTPStatus(code int) bool {
 	return code == http.StatusTooManyRequests || code == http.StatusServiceUnavailable
 }
 
+// proxyDrainResponseBody discards and closes resp.Body so the connection can be reused.
 func proxyDrainResponseBody(resp *http.Response) {
 	if resp == nil || resp.Body == nil {
 		return
 	}
 	_, _ = io.Copy(io.Discard, resp.Body)
 	_ = resp.Body.Close()
+}
+
+// expectProxyGET GETs path, lets set mutate the request, and retries transient statuses.
+func expectProxyGET(path string, set func(*http.Request), expected int) {
+	GinkgoHelper()
+	expectProxyGETSecret(path, path, "", set, expected)
+}
+
+// expectProxyGETSecret sends requestPath and reports reportPath. secret is removed
+// from assertion failures so a live token in the query string is not printed.
+func expectProxyGETSecret(requestPath, reportPath, secret string, set func(*http.Request), expected int) {
+	GinkgoHelper()
+	Eventually(func(g Gomega) {
+		req, err := http.NewRequest(http.MethodGet, proxyURL(requestPath), nil)
+		g.Expect(redactErr(err, secret)).NotTo(HaveOccurred())
+		if set != nil {
+			set(req)
+		}
+
+		resp, err := proxyHTTPClient.Do(req)
+		g.Expect(redactErr(err, secret)).NotTo(HaveOccurred())
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		g.Expect(redactErr(err, secret)).NotTo(HaveOccurred())
+
+		if proxyTransientHTTPStatus(resp.StatusCode) {
+			g.Expect(resp.StatusCode).To(Equal(expected),
+				fmt.Sprintf("%s: transient HTTP %d, retrying", reportPath, resp.StatusCode))
+			return
+		}
+		msg := redactSecrets(proxyHTTPStatusMismatch(resp, body, expected, reportPath), secret)
+		g.Expect(resp.StatusCode).To(Equal(expected), msg)
+	}).WithTimeout(proxyAPITransientRetryTimeout).WithPolling(konfluxReadyPollInterval).Should(Succeed())
+}
+
+// expectProxyWebSocketStatus dials wsPath and expects the upgrade to fail with expected.
+// Transient upgrade responses are retried.
+func expectProxyWebSocketStatus(wsPath string, header http.Header, expected int) {
+	GinkgoHelper()
+	Eventually(func(g Gomega) {
+		ctx, cancel := context.WithTimeout(context.Background(), proxyHTTPRequestTimeout)
+		defer cancel()
+
+		conn, resp, err := websocket.Dial(ctx, proxyWebSocketURL(wsPath), &websocket.DialOptions{
+			HTTPClient:   proxyWebSocketHTTPClient,
+			Subprotocols: []string{"base64.binary.k8s.io"},
+			HTTPHeader:   header,
+		})
+		if resp != nil && proxyTransientHTTPStatus(resp.StatusCode) {
+			proxyDrainResponseBody(resp)
+			g.Expect(resp.StatusCode).To(Equal(expected),
+				fmt.Sprintf("%s: transient HTTP %d on WebSocket upgrade, retrying", wsPath, resp.StatusCode))
+			return
+		}
+		if conn != nil {
+			_ = conn.Close(websocket.StatusNormalClosure, "test complete")
+		}
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(resp).NotTo(BeNil())
+		if resp != nil {
+			g.Expect(resp.StatusCode).To(Equal(expected))
+			proxyDrainResponseBody(resp)
+		}
+	}).WithTimeout(proxyAPITransientRetryTimeout).WithPolling(konfluxReadyPollInterval).Should(Succeed())
+}
+
+// redactErr replaces secret in err so a failure does not print a live token.
+func redactErr(err error, secret string) error {
+	if err == nil || secret == "" {
+		return err
+	}
+	return fmt.Errorf("%s", redactSecrets(err.Error(), secret))
+}
+
+// redactSecrets replaces secret and its query-escaped form with REDACTED.
+func redactSecrets(s, secret string) string {
+	if secret == "" {
+		return s
+	}
+	s = strings.ReplaceAll(s, secret, "REDACTED")
+	return strings.ReplaceAll(s, url.QueryEscape(secret), "REDACTED")
 }
 
 // expectProxyGETWithBearer GETs a proxied Kubernetes API path with retries on transient
@@ -294,6 +385,7 @@ func expectProxyWebSocketDialWithBearer(wsPath, token string) {
 	}).WithTimeout(proxyAPITransientRetryTimeout).WithPolling(konfluxReadyPollInterval).Should(Succeed())
 }
 
+// proxyURL returns the absolute UI URL for path. An empty path is the UI origin.
 func proxyURL(path string) string {
 	if path == "" {
 		return proxyBase.String()
@@ -301,12 +393,14 @@ func proxyURL(path string) string {
 	return proxyBase.ResolveReference(mustParseProxyPath(path)).String()
 }
 
+// proxyWebSocketURL returns path on the UI origin with the wss scheme.
 func proxyWebSocketURL(path string) string {
 	wsBase := *proxyBase
 	wsBase.Scheme = "wss"
 	return wsBase.ResolveReference(mustParseProxyPath(path)).String()
 }
 
+// mustParseProxyPath parses path as a URL reference. An invalid path stops the test process.
 func mustParseProxyPath(path string) *url.URL {
 	ref, err := url.Parse(path)
 	if err != nil {
