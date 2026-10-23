@@ -39,7 +39,7 @@ The current conformance suite is written for that model: it exercises deployed s
 - `catalog-url` (default: `https://github.com/konflux-ci/tekton-integration-catalog.git`): integration catalog repository.
 - `catalog-revision` (default: pinned commit SHA): `tekton-integration-catalog` ref for catalog tasks; override to move to a different commit.
 
-The IBM Kind provision step uses catalog Task `kind-ibm-provision` v0.3 with the `cxf-24x48` Flex profile (24 vCPUs, 48 GiB memory). The catalog revision is pinned to the commit that introduced v0.3; deprovision remains on v0.1 because no v0.2 deprovision task is published. The pipeline sets `version: v1.37` (catalog default is `v1.34`) so mapt installs Kind 0.33 / Kubernetes 1.37 — aligned with GHA operator e2e and required for MutatingAdmissionPolicies that shrink Tekton TaskRun resource requests. It also enables `harden-control-plane` and passes the matching 24-vCPU / 48-GiB tuning values.
+The IBM Kind provision step uses catalog Task `kind-ibm-provision` v0.3 with the `cxf-24x48` Flex profile (24 vCPUs, 48 GiB memory). The catalog revision is pinned to `69d836c1f9206e684dba6f997f3520cf6e94c52d`, which includes the hardened `protect-control-plane` StepAction v0.3; deprovision remains on v0.1 because no v0.2 deprovision task is published. The pipeline sets `version: v1.37` (catalog default is `v1.34`) so mapt installs Kind 0.33 / Kubernetes 1.37 — aligned with GHA operator e2e and required for MutatingAdmissionPolicies that shrink Tekton TaskRun resource requests. It also enables `harden-control-plane` and passes the matching 24-vCPU / 48-GiB tuning values.
 
 ### Examples: Konflux CR (ConfigMap vs sample file)
 
