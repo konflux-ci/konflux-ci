@@ -158,7 +158,7 @@ spec:
       description: >-
         Pinned commit of tekton-integration-catalog for kind-ibm and other catalog tasks (bump when upgrading tasks).
       # renovate: datasource=git-refs depName=https://github.com/konflux-ci/tekton-integration-catalog
-      default: 69d836c1f9206e684dba6f997f3520cf6e94c52d
+      default: 8dac65d534e3b2d2851dbcf696172edd9068d5bd
   tasks:
     # IBM VSI instance names are limited to 40 characters. PipelineRun names are
     # too long and PR numbers can collide across repositories, so derive a short
@@ -204,7 +204,7 @@ spec:
           - name: revision
             value: $(params.catalog-revision)
           - name: pathInRepo
-            value: tasks/mapt-oci/kind-ibm-provision/0.3/kind-ibm-provision.yaml
+            value: tasks/mapt-oci/kind-ibm-provision/0.4/kind-ibm-provision.yaml
       params:
         - name: secret-ibmcloud-credentials
           value: $(params.ibmcloud-credentials-secret)
@@ -240,7 +240,7 @@ spec:
           value: s3://konflux-mapt-state/mapt/kind/$(tasks.generate-cluster-id.results.cluster-id)
         - name: compute-sizes
           value: cxf-24x48
-        # Override catalog default v1.34. mapt v0.14.5 maps v1.37 → Kind 0.33
+        # Pin v1.37 (also the catalog 0.4 default). mapt v0.14.5 maps it to Kind 0.33
         # (same as GHA); K8s ≥1.36 enables MutatingAdmissionPolicy for Tekton
         # TaskRun request shrinking in deploy-deps.sh.
         - name: version
