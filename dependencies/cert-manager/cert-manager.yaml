@@ -14,6 +14,7 @@ metadata:
     app.kubernetes.io/version: "v1.21.2"
     app.kubernetes.io/managed-by: Helm
     helm.sh/chart: cert-manager-v1.21.2
+
 ---
 # Source: cert-manager/templates/serviceaccount.yaml
 apiVersion: v1
@@ -30,6 +31,7 @@ metadata:
     app.kubernetes.io/version: "v1.21.2"
     app.kubernetes.io/managed-by: Helm
     helm.sh/chart: cert-manager-v1.21.2
+
 ---
 # Source: cert-manager/templates/webhook-serviceaccount.yaml
 apiVersion: v1
@@ -46,6 +48,7 @@ metadata:
     app.kubernetes.io/version: "v1.21.2"
     app.kubernetes.io/managed-by: Helm
     helm.sh/chart: cert-manager-v1.21.2
+
 ---
 # Source: cert-manager/templates/crd-acme.cert-manager.io_challenges.yaml
 apiVersion: apiextensions.k8s.io/v1
@@ -3379,6 +3382,7 @@ spec:
       storage: true
       subresources:
         status: {}
+
 ---
 # Source: cert-manager/templates/crd-acme.cert-manager.io_orders.yaml
 apiVersion: apiextensions.k8s.io/v1
@@ -3670,6 +3674,7 @@ spec:
       storage: true
       subresources:
         status: {}
+
 ---
 # Source: cert-manager/templates/crd-cert-manager.io_certificaterequests.yaml
 apiVersion: apiextensions.k8s.io/v1
@@ -3997,6 +4002,7 @@ spec:
       storage: true
       subresources:
         status: {}
+
 ---
 # Source: cert-manager/templates/crd-cert-manager.io_certificates.yaml
 apiVersion: apiextensions.k8s.io/v1
@@ -4912,6 +4918,7 @@ spec:
       storage: true
       subresources:
         status: {}
+
 ---
 # Source: cert-manager/templates/crd-cert-manager.io_clusterissuers.yaml
 apiVersion: apiextensions.k8s.io/v1
@@ -8866,6 +8873,7 @@ spec:
       storage: true
       subresources:
         status: {}
+
 ---
 # Source: cert-manager/templates/crd-cert-manager.io_issuers.yaml
 apiVersion: apiextensions.k8s.io/v1
@@ -12819,6 +12827,7 @@ spec:
       storage: true
       subresources:
         status: {}
+
 ---
 # Source: cert-manager/templates/cainjector-rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -12852,6 +12861,7 @@ rules:
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
     verbs: ["get", "list", "watch", "update", "patch"]
+
 ---
 # Source: cert-manager/templates/rbac.yaml
 # Issuer controller role
@@ -12880,6 +12890,7 @@ rules:
   - apiGroups: [""]
     resources: ["events"]
     verbs: ["create", "patch"]
+
 ---
 # Source: cert-manager/templates/rbac.yaml
 # ClusterIssuer controller role
@@ -12908,6 +12919,8 @@ rules:
   - apiGroups: [""]
     resources: ["events"]
     verbs: ["create", "patch"]
+
+
 ---
 # Source: cert-manager/templates/rbac.yaml
 # Certificates controller role
@@ -12945,6 +12958,8 @@ rules:
   - apiGroups: [""]
     resources: ["events"]
     verbs: ["create", "patch"]
+
+
 ---
 # Source: cert-manager/templates/rbac.yaml
 # Orders controller role
@@ -12988,6 +13003,8 @@ rules:
   - apiGroups: [""]
     resources: ["events"]
     verbs: ["create", "patch"]
+
+
 ---
 # Source: cert-manager/templates/rbac.yaml
 # Challenges controller role
@@ -13050,6 +13067,8 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get", "list", "watch"]
+
+
 ---
 # Source: cert-manager/templates/rbac.yaml
 # ingress-shim controller role
@@ -13090,6 +13109,8 @@ rules:
   - apiGroups: [""]
     resources: ["events"]
     verbs: ["create", "patch"]
+
+
 ---
 # Source: cert-manager/templates/rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -13109,6 +13130,7 @@ rules:
   - apiGroups: ["cert-manager.io"]
     resources: ["clusterissuers"]
     verbs: ["get", "list", "watch"]
+
 ---
 # Source: cert-manager/templates/rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -13134,6 +13156,9 @@ rules:
   - apiGroups: ["acme.cert-manager.io"]
     resources: ["challenges", "orders"]
     verbs: ["get", "list", "watch"]
+
+
+
 ---
 # Source: cert-manager/templates/rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -13163,6 +13188,8 @@ rules:
   - apiGroups: ["acme.cert-manager.io"]
     resources: ["orders"]
     verbs: ["delete", "deletecollection"]
+
+
 ---
 # Source: cert-manager/templates/rbac.yaml
 # Permission to approve CertificateRequests referencing cert-manager.io Issuers and ClusterIssuers
@@ -13185,6 +13212,8 @@ rules:
     resourceNames:
     - "issuers.cert-manager.io/*"
     - "clusterissuers.cert-manager.io/*"
+
+
 ---
 # Source: cert-manager/templates/rbac.yaml
 # Permission to:
@@ -13216,6 +13245,8 @@ rules:
   - apiGroups: ["authorization.k8s.io"]
     resources: ["subjectaccessreviews"]
     verbs: ["create"]
+
+
 ---
 # Source: cert-manager/templates/webhook-rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -13234,6 +13265,7 @@ rules:
 - apiGroups: ["authorization.k8s.io"]
   resources: ["subjectaccessreviews"]
   verbs: ["create"]
+
 ---
 # Source: cert-manager/templates/cainjector-rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -13256,6 +13288,8 @@ subjects:
   - name: cert-manager-cainjector
     namespace: cert-manager
     kind: ServiceAccount
+
+
 ---
 # Source: cert-manager/templates/rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -13278,6 +13312,8 @@ subjects:
   - name: cert-manager
     namespace: cert-manager
     kind: ServiceAccount
+
+
 ---
 # Source: cert-manager/templates/rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -13300,6 +13336,8 @@ subjects:
   - name: cert-manager
     namespace: cert-manager
     kind: ServiceAccount
+
+
 ---
 # Source: cert-manager/templates/rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -13322,6 +13360,8 @@ subjects:
   - name: cert-manager
     namespace: cert-manager
     kind: ServiceAccount
+
+
 ---
 # Source: cert-manager/templates/rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -13344,6 +13384,8 @@ subjects:
   - name: cert-manager
     namespace: cert-manager
     kind: ServiceAccount
+
+
 ---
 # Source: cert-manager/templates/rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -13366,6 +13408,8 @@ subjects:
   - name: cert-manager
     namespace: cert-manager
     kind: ServiceAccount
+
+
 ---
 # Source: cert-manager/templates/rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -13388,6 +13432,7 @@ subjects:
   - name: cert-manager
     namespace: cert-manager
     kind: ServiceAccount
+
 ---
 # Source: cert-manager/templates/rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -13410,6 +13455,8 @@ subjects:
   - name: cert-manager
     namespace: cert-manager
     kind: ServiceAccount
+
+
 ---
 # Source: cert-manager/templates/rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -13432,6 +13479,7 @@ subjects:
   - name: cert-manager
     namespace: cert-manager
     kind: ServiceAccount
+
 ---
 # Source: cert-manager/templates/webhook-rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -13454,6 +13502,7 @@ subjects:
 - kind: ServiceAccount
   name: cert-manager-webhook
   namespace: cert-manager
+
 ---
 # Source: cert-manager/templates/cainjector-rbac.yaml
 # leader election rules
@@ -13483,6 +13532,8 @@ rules:
   - apiGroups: ["coordination.k8s.io"]
     resources: ["leases"]
     verbs: ["create"]
+
+
 ---
 # Source: cert-manager/templates/rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -13506,6 +13557,8 @@ rules:
   - apiGroups: ["coordination.k8s.io"]
     resources: ["leases"]
     verbs: ["create"]
+
+
 ---
 # Source: cert-manager/templates/webhook-rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -13531,6 +13584,7 @@ rules:
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["create"]
+
 ---
 # Source: cert-manager/templates/cainjector-rbac.yaml
 # grant cert-manager permission to manage the leaderelection configmap in the
@@ -13556,6 +13610,7 @@ subjects:
   - kind: ServiceAccount
     name: cert-manager-cainjector
     namespace: cert-manager
+
 ---
 # Source: cert-manager/templates/rbac.yaml
 # grant cert-manager permission to manage the leaderelection configmap in the
@@ -13581,6 +13636,8 @@ subjects:
   - kind: ServiceAccount
     name: cert-manager
     namespace: cert-manager
+
+
 ---
 # Source: cert-manager/templates/webhook-rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -13604,6 +13661,8 @@ subjects:
 - kind: ServiceAccount
   name: cert-manager-webhook
   namespace: cert-manager
+
+
 ---
 # Source: cert-manager/templates/cainjector-service.yaml
 apiVersion: v1
@@ -13629,6 +13688,7 @@ spec:
     app.kubernetes.io/name: cainjector
     app.kubernetes.io/instance: cert-manager
     app.kubernetes.io/component: "cainjector"
+
 ---
 # Source: cert-manager/templates/service.yaml
 apiVersion: v1
@@ -13654,6 +13714,7 @@ spec:
     app.kubernetes.io/name: cert-manager
     app.kubernetes.io/instance: cert-manager
     app.kubernetes.io/component: "controller"
+
 ---
 # Source: cert-manager/templates/webhook-service.yaml
 apiVersion: v1
@@ -13684,6 +13745,7 @@ spec:
     app.kubernetes.io/name: webhook
     app.kubernetes.io/instance: cert-manager
     app.kubernetes.io/component: "webhook"
+
 ---
 # Source: cert-manager/templates/cainjector-deployment.yaml
 apiVersion: apps/v1
@@ -13758,6 +13820,7 @@ spec:
               memory: 90Mi
       nodeSelector:
         kubernetes.io/os: "linux"
+
 ---
 # Source: cert-manager/templates/deployment.yaml
 apiVersion: apps/v1
@@ -13851,6 +13914,7 @@ spec:
             failureThreshold: 8
       nodeSelector:
         kubernetes.io/os: "linux"
+
 ---
 # Source: cert-manager/templates/webhook-deployment.yaml
 apiVersion: apps/v1
@@ -13956,6 +14020,7 @@ spec:
               memory: 90Mi
       nodeSelector:
         kubernetes.io/os: "linux"
+
 ---
 # Source: cert-manager/templates/webhook-mutating-webhook.yaml
 apiVersion: admissionregistration.k8s.io/v1
@@ -14065,6 +14130,7 @@ metadata:
     app.kubernetes.io/version: "v1.21.2"
     app.kubernetes.io/managed-by: Helm
     helm.sh/chart: cert-manager-v1.21.2
+
 ---
 # Source: cert-manager/templates/startupapicheck-rbac.yaml
 # create certificate role
@@ -14089,6 +14155,7 @@ rules:
   - apiGroups: ["cert-manager.io"]
     resources: ["certificaterequests"]
     verbs: ["create"]
+
 ---
 # Source: cert-manager/templates/startupapicheck-rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -14116,6 +14183,7 @@ subjects:
   - kind: ServiceAccount
     name: cert-manager-startupapicheck
     namespace: cert-manager
+
 ---
 # Source: cert-manager/templates/startupapicheck-job.yaml
 apiVersion: batch/v1
@@ -14182,3 +14250,4 @@ spec:
               cpu: 10m
       nodeSelector:
         kubernetes.io/os: "linux"
+
