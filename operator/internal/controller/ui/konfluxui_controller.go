@@ -963,9 +963,11 @@ func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				}),
 			))
 
-	// ConsoleLink CRD only exists on OpenShift; skip watch on non-OpenShift clusters
-	// to avoid informer startup failures when the CRD is absent.
-	if r.ClusterInfo != nil && r.ClusterInfo.IsOpenShift() {
+	// The ConsoleLink CRD ships with the OpenShift web console, which is an
+	// optional cluster capability: it can be absent while IsOpenShift() is true.
+	// Gate on the CRD being served, not on the platform, because a watch that
+	// can never sync stops this controller from reconciling at all.
+	if common.ConsoleLinkCRDInstalled(mgr.GetRESTMapper()) {
 		b = b.Owns(&consolev1.ConsoleLink{})
 	}
 	if sm, ok := common.OperandServiceMonitorWatchObjectIfInstalled(mgr.GetRESTMapper()); ok {
@@ -999,8 +1001,11 @@ func (r *KonfluxUIReconciler) reconcileIngress(ctx context.Context, tc *tracking
 		return fmt.Errorf("failed to apply ingress: %w", err)
 	}
 
-	// On OpenShift, also create a ConsoleLink for the application menu
-	if isOnOpenShift {
+	// On OpenShift, also create a ConsoleLink for the application menu. The
+	// console is an optional cluster capability, so check the CRD is served
+	// rather than relying on IsOpenShift(): on a cluster installed without the
+	// console the apply would fail and take the whole reconcile with it.
+	if isOnOpenShift && common.ConsoleLinkCRDInstalled(r.RESTMapper()) {
 		consoleLinkResource := consolelink.Build(endpoint)
 		if err := tc.ApplyOwned(ctx, consoleLinkResource); err != nil {
 			return fmt.Errorf("failed to apply ConsoleLink: %w", err)
