@@ -612,7 +612,7 @@ func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
 		g.Expect(taskTimeout["maxTimeout"]).To(gomega.Equal("7h"))
 	})
 
-	t.Run("omits disableOn when tags are empty", func(t *testing.T) {
+	t.Run("disableOn is present as an empty map when tags are empty", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		rsc := getReleaseServiceConfig(t)
 		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
@@ -641,7 +641,7 @@ func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
 		g.Expect(policy).To(gomega.HaveKey("disableOn"), "disableOn should be present as empty map when non-nil but tags are empty")
 	})
 
-	t.Run("omits mitigations sub-fields when both are nil", func(t *testing.T) {
+	t.Run("mitigations is present as an empty map when both sub-fields are nil", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		rsc := getReleaseServiceConfig(t)
 		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
@@ -670,7 +670,7 @@ func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
 		g.Expect(policy).To(gomega.HaveKey("mitigations"), "mitigations should be present as empty map when non-nil but sub-fields are nil")
 	})
 
-	t.Run("omits timeout when both pipeline and task are nil", func(t *testing.T) {
+	t.Run("timeout is present as an empty map when both pipeline and task are nil", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		rsc := getReleaseServiceConfig(t)
 		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
@@ -704,7 +704,7 @@ func TestApplyReleaseServiceConfigCustomizations(t *testing.T) {
 		g.Expect(mitigations).To(gomega.HaveKey("timeout"), "timeout should be present as empty map when non-nil but sub-fields are nil")
 	})
 
-	t.Run("omits maxComputeResources when limits and requests are empty", func(t *testing.T) {
+	t.Run("maxComputeResources is present as an empty map when limits and requests are empty", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		rsc := getReleaseServiceConfig(t)
 		spec := konfluxv1alpha1.KonfluxReleaseServiceSpec{
