@@ -24,13 +24,27 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
 
+      # The release tag is untrusted free text: a git tag name may legally contain
+      # $(), backticks, ';', '|' and quotes, and workflow_dispatch inputs are
+      # unconstrained. Bind both to env vars and reference them as "$VAR" — a
+      # template expression inside a run: block is substituted into the script
+      # before bash parses it, and the PR step below runs with the bot PAT in
+      # scope. The tag format is validated here before it is used.
       - name: Determine release tag
         id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG_EVENT: ${{ github.event.release.tag_name }}
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
         run: |
-          if [ "${{ github.event_name }}" == "release" ]; then
-            RELEASE_TAG="${{ github.event.release.tag_name }}"
+          if [ "${EVENT_NAME}" == "release" ]; then
+            RELEASE_TAG="${RELEASE_TAG_EVENT}"
           else
-            RELEASE_TAG="${{ inputs.release_tag }}"
+            RELEASE_TAG="${RELEASE_TAG_INPUT}"
+          fi
+          if [[ ! "${RELEASE_TAG}" =~ ^[A-Za-z0-9][A-Za-z0-9._/+-]*$ ]]; then
+            echo "Error: release tag contains disallowed characters: '${RELEASE_TAG}'" >&2
+            exit 1
           fi
           echo "tag=${RELEASE_TAG}" >> $GITHUB_OUTPUT
           echo "Using release tag: ${RELEASE_TAG}"
@@ -38,8 +52,9 @@ jobs:
       - name: Create Community Operator PR
         env:
           GITHUB_TOKEN: ${{ secrets.KONFLUX_CI_BOT_PAT }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
-          .github/scripts/create-community-operator-pr.sh "${{ steps.release.outputs.tag }}" --draft
+          .github/scripts/create-community-operator-pr.sh "${RELEASE_TAG}" --draft
 
       - name: Create issue on failure
         if: failure()
