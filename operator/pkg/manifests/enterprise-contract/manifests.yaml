@@ -391,7 +391,7 @@ data:
   verify_conforma_task_ta_git_pathInRepo: tasks/verify-conforma-konflux-ta/0.1/verify-conforma-konflux-ta.yaml
   verify_ec_task_bundle: quay.io/conforma/tekton-task:latest@sha256:8f430bda391c8ba8bfbe6addd9937335b3d994ab8f5fc500ca2beb18f36d939c
   verify_ec_task_git_pathInRepo: tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml
-  verify_ec_task_git_revision: 1976246fb8228d05f601683e5c5bfda6e8569bc4
+  verify_ec_task_git_revision: 5d22a0b518446fb00a5fc0fd81430866b385c9b8
   verify_ec_task_git_url: https://github.com/conforma/cli.git
 kind: ConfigMap
 metadata:
