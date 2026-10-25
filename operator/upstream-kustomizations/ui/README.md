@@ -291,6 +291,15 @@ Backend TLS is determined at init time by `generate-proxy-config.sh`:
   proper verification, deploy cert-manager and configure it to issue
   certificates trusted by the proxy.
 
+KubeArchive also trusts `ca-bundle.crt` from the externally managed ConfigMap
+`konflux-ui/kubearchive-ca-bundle` when it is available. The UI controller
+watches this ConfigMap and stamps a content hash on the proxy pod template.
+Creating, changing, or removing the bundle triggers a rollout so the init
+container regenerates the KubeArchive TLS transport configuration. Caddy's
+directory watch reloads trust files already listed in that configuration;
+it does not rerun the init container. Publishing the public CA into this
+ConfigMap remains the responsibility of the deployment configuration.
+
 ## Metrics
 
 Caddy exposes native Prometheus metrics on `:2112/metrics`. A TODO exists
