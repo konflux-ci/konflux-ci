@@ -1,6 +1,6 @@
 module github.com/konflux-ci/konflux-ci/test/go-tests
 
-go 1.26.0
+go 1.27.3
 
 require (
 	github.com/coder/websocket v1.8.15
@@ -30,7 +30,7 @@ require (
 	github.com/redhat-appstudio/jvm-build-service v0.0.0-20250301023318-b47170d413c5
 	github.com/stretchr/testify v1.12.1
 	github.com/tektoncd/cli v0.45.0
-	github.com/tektoncd/pipeline v1.13.1
+	github.com/tektoncd/pipeline v1.17.1
 	github.com/xanzy/go-gitlab v0.115.0
 	golang.org/x/oauth2 v0.37.0
 	k8s.io/api v0.37.1
@@ -80,6 +80,7 @@ replace (
 )
 
 require (
+	cel.dev/cel-go v0.32.0 // indirect
 	cel.dev/expr v0.25.3 // indirect
 	codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
@@ -132,7 +133,6 @@ require (
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/btree v1.1.3 // indirect
-	github.com/google/cel-go v0.31.0 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-github/v45 v45.2.0 // indirect
