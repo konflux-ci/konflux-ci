@@ -30,17 +30,26 @@ func TestConsoleLinkCRDInstalled(t *testing.T) {
 
 	t.Run("nil mapper", func(t *testing.T) {
 		t.Parallel()
-		if ConsoleLinkCRDInstalled(nil) {
-			t.Fatal("expected nil mapper to skip the watch")
+		installed, err := ConsoleLinkCRDInstalled(nil)
+		if err != nil {
+			t.Fatalf("expected no error for a nil mapper, got %v", err)
+		}
+		if installed {
+			t.Fatal("expected nil mapper to report the CRD absent")
 		}
 	})
 
 	// A cluster installed with the console capability disabled: ConsoleLink is
-	// absent even though IsOpenShift() is true, so the watch must be skipped.
+	// absent even though IsOpenShift() is true. NoMatch is a definitive answer,
+	// so it is absence, not an error.
 	t.Run("CRD absent", func(t *testing.T) {
 		t.Parallel()
-		if ConsoleLinkCRDInstalled(meta.NewDefaultRESTMapper(nil)) {
-			t.Fatal("expected absent ConsoleLink CRD to skip the watch")
+		installed, err := ConsoleLinkCRDInstalled(meta.NewDefaultRESTMapper(nil))
+		if err != nil {
+			t.Fatalf("expected NoMatch to be reported as absence, got error %v", err)
+		}
+		if installed {
+			t.Fatal("expected absent ConsoleLink CRD to report the CRD absent")
 		}
 	})
 
@@ -49,15 +58,28 @@ func TestConsoleLinkCRDInstalled(t *testing.T) {
 		gvk := consolev1.GroupVersion.WithKind("ConsoleLink")
 		mapper := meta.NewDefaultRESTMapper([]schema.GroupVersion{consolev1.GroupVersion})
 		mapper.Add(gvk, meta.RESTScopeRoot)
-		if !ConsoleLinkCRDInstalled(mapper) {
-			t.Fatal("expected watch when the ConsoleLink CRD is mapped")
+		installed, err := ConsoleLinkCRDInstalled(mapper)
+		if err != nil {
+			t.Fatalf("expected no error when the CRD is mapped, got %v", err)
+		}
+		if !installed {
+			t.Fatal("expected a mapped ConsoleLink CRD to report the CRD present")
 		}
 	})
 
+	// Anything other than NoMatch means the lookup did not answer the question.
+	// Returning absence here would drop the watch for the process lifetime and,
+	// mid-reconcile, make an applied ConsoleLink look like an orphan, so the
+	// error has to reach the caller.
 	t.Run("non-NoMatch mapping error", func(t *testing.T) {
 		t.Parallel()
-		if ConsoleLinkCRDInstalled(errRESTMapper{err: errors.New("discovery unavailable")}) {
-			t.Fatal("expected non-NoMatch mapping error to skip the watch")
+		discoveryErr := errors.New("discovery unavailable")
+		installed, err := ConsoleLinkCRDInstalled(errRESTMapper{err: discoveryErr})
+		if !errors.Is(err, discoveryErr) {
+			t.Fatalf("expected the mapping error to be returned, got %v", err)
+		}
+		if installed {
+			t.Fatal("expected a failed lookup not to report the CRD present")
 		}
 	})
 }

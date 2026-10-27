@@ -17,9 +17,10 @@ limitations under the License.
 package common
 
 import (
+	"fmt"
+
 	consolev1 "github.com/openshift/api/console/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var consoleLinkGroupKind = consolev1.GroupVersion.WithKind("ConsoleLink").GroupKind()
@@ -31,22 +32,25 @@ var consoleLinkGroupKind = consolev1.GroupVersion.WithKind("ConsoleLink").GroupK
 // waits for every source to sync before starting workers, so watching a kind the
 // API server does not serve stops the controller from reconciling at all.
 // Pass mgr.GetRESTMapper() from SetupWithManager.
-func ConsoleLinkCRDInstalled(mapper meta.RESTMapper) bool {
+//
+// Only a NoMatch answer counts as absence. Any other lookup failure — discovery
+// briefly unavailable, RBAC — leaves the question unanswered and is returned, so
+// callers can retry instead of acting on a guess: a controller that treats it as
+// absence drops the watch for the rest of the process lifetime, and a reconcile
+// that does so skips the ConsoleLink apply and lets orphan cleanup delete the
+// live link. A nil mapper has no discovery to ask and is reported as absent.
+func ConsoleLinkCRDInstalled(mapper meta.RESTMapper) (bool, error) {
 	if mapper == nil {
-		return false
+		return false, nil
 	}
 	// RESTMapper discovery is backed by the API server discovery endpoints.
 	// Use RESTMapping here to gate watch registration on runtime CRD availability
 	// without wiring a dedicated discovery client into each controller.
 	if _, err := mapper.RESTMapping(consoleLinkGroupKind, consolev1.GroupVersion.Version); err != nil {
-		// NoMatch means the console capability is disabled (or this is not
-		// OpenShift) — expected. Other errors (discovery/RBAC) still skip the
-		// watch, but log so setup failures are visible rather than silently
-		// permanent.
-		if !meta.IsNoMatchError(err) {
-			logf.Log.Error(err, "failed to resolve ConsoleLink REST mapping; skipping watch registration")
+		if meta.IsNoMatchError(err) {
+			return false, nil
 		}
-		return false
+		return false, fmt.Errorf("failed to resolve ConsoleLink REST mapping: %w", err)
 	}
-	return true
+	return true, nil
 }
