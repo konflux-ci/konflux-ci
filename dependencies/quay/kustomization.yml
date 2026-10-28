@@ -11,6 +11,6 @@ images:
   - name: quay.io/projectquay/quay
     newTag: "3.18.2@sha256:4456201ca6bfdc0bbe78ca7cfe262887df41147ddbf452dd8d51f8d330a41acb"
   - name: quay.io/sclorg/postgresql-15-c9s
-    newTag: "20261021@sha256:ac1ac9aa8ba2ef0bf312beee2b713dc2386fb179176137d11019009a52903ad4"
+    newTag: "20261027@sha256:e48d7f8be29a8bc4607a5ad4302b26cfa377020937cb5f672a6a57b4a45ca0d1"
   - name: quay.io/sclorg/redis-7-c9s
     newTag: "20250108@sha256:d772acab11507231a2b152850f47c8b9b859dedb6652ca624949e97cb28c5e6f"
