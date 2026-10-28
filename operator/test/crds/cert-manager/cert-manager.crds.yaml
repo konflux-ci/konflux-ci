@@ -10,9 +10,9 @@ metadata:
     app.kubernetes.io/name: "cert-manager"
     app.kubernetes.io/instance: "cert-manager"
     app.kubernetes.io/component: "crds"
-    app.kubernetes.io/version: "v1.21.2"
+    app.kubernetes.io/version: "v1.21.3"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: cert-manager-v1.21.2
+    helm.sh/chart: cert-manager-v1.21.3
 spec:
   group: acme.cert-manager.io
   names:
@@ -3343,9 +3343,9 @@ metadata:
     app.kubernetes.io/name: "cert-manager"
     app.kubernetes.io/instance: "cert-manager"
     app.kubernetes.io/component: "crds"
-    app.kubernetes.io/version: "v1.21.2"
+    app.kubernetes.io/version: "v1.21.3"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: cert-manager-v1.21.2
+    helm.sh/chart: cert-manager-v1.21.3
 spec:
   group: acme.cert-manager.io
   names:
@@ -3634,9 +3634,9 @@ metadata:
     app.kubernetes.io/name: "cert-manager"
     app.kubernetes.io/instance: "cert-manager"
     app.kubernetes.io/component: "crds"
-    app.kubernetes.io/version: "v1.21.2"
+    app.kubernetes.io/version: "v1.21.3"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: cert-manager-v1.21.2
+    helm.sh/chart: cert-manager-v1.21.3
 spec:
   group: cert-manager.io
   names:
@@ -3961,9 +3961,9 @@ metadata:
     app.kubernetes.io/name: "cert-manager"
     app.kubernetes.io/instance: "cert-manager"
     app.kubernetes.io/component: "crds"
-    app.kubernetes.io/version: "v1.21.2"
+    app.kubernetes.io/version: "v1.21.3"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: cert-manager-v1.21.2
+    helm.sh/chart: cert-manager-v1.21.3
 spec:
   group: cert-manager.io
   names:
@@ -4708,6 +4708,12 @@ spec:
                         ARI stores the ACME Renewal Information that is fetched from the ACME server
                         in accordance with RFC 9773. This is only populated if the ARI feature gate is enabled.
                       properties:
+                        certID:
+                          description: |-
+                            CertID is the ARI CertID (RFC 9773) of the certificate this renewal information was
+                            fetched for. This is used to determine if we need to re-fetch the renewal information
+                            as changed cert id means that ARI fetched before is stale.
+                          type: string
                         explanationURL:
                           description: |-
                             ExplanationURL is a human-readable URL that may explain why the suggested window
@@ -4876,9 +4882,9 @@ metadata:
     app.kubernetes.io/name: "cert-manager"
     app.kubernetes.io/instance: "cert-manager"
     app.kubernetes.io/component: "crds"
-    app.kubernetes.io/version: "v1.21.2"
+    app.kubernetes.io/version: "v1.21.3"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: cert-manager-v1.21.2
+    helm.sh/chart: cert-manager-v1.21.3
 spec:
   group: cert-manager.io
   names:
@@ -8830,9 +8836,9 @@ metadata:
     app.kubernetes.io/name: "cert-manager"
     app.kubernetes.io/instance: "cert-manager"
     app.kubernetes.io/component: "crds"
-    app.kubernetes.io/version: "v1.21.2"
+    app.kubernetes.io/version: "v1.21.3"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: cert-manager-v1.21.2
+    helm.sh/chart: cert-manager-v1.21.3
 spec:
   group: cert-manager.io
   names:
