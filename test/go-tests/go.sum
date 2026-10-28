@@ -531,8 +531,8 @@ knative.dev/pkg v0.0.0-20261013193643-0795cb87d2bd h1:z6f9oaPeMBaxQSbqLix2xF0AR0
 knative.dev/pkg v0.0.0-20261013193643-0795cb87d2bd/go.mod h1:Y0IP1sZCnEcIrKXcM9tSqO0a5326ISSngHWc/iCbzlo=
 knative.dev/serving v0.39.4 h1:9IlFE7GsORKhI92DIZbF88hplQYM73T1l4W50UxZwF8=
 knative.dev/serving v0.39.4/go.mod h1:bWylSgwnRZeL659qy7m3/TZioYk25TIfusPUEeR695A=
-oras.land/oras-go/v2 v2.6.4 h1:l4uv+UT7QK4Hju+KOEZ/c8iOjq3iZH7cULoRpUnSDAU=
-oras.land/oras-go/v2 v2.6.4/go.mod h1:imXEFiYkTZUVVYkfv/r5GVmWeiLkGtNQA8FU4F/sjKs=
+oras.land/oras-go/v2 v2.7.0 h1:0bXRBBSqYgPSjZRrhJbT71Rb465c+rdlft2xdQPxLtQ=
+oras.land/oras-go/v2 v2.7.0/go.mod h1:imXEFiYkTZUVVYkfv/r5GVmWeiLkGtNQA8FU4F/sjKs=
 sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.37.0 h1:NWrO5vJ1Dw7gy2JS/iY98JEEvtmQ3lXqNwwCzzOC1gk=
 sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.37.0/go.mod h1:x/fWe7nc0XDKUqK5XZ5nqmWKdQxvouWB7OmEAsxltiI=
 sigs.k8s.io/controller-runtime v0.25.2 h1:bEkK3PVOIVK9X8QWLGVhJgmFc++47vfT6wakSzAOLsQ=
