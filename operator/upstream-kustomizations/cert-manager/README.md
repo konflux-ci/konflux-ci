@@ -204,8 +204,7 @@ The UI namespace has two trust domains:
 ## Operator management
 
 The `KonfluxCertManager` controller (reconciling the `KonfluxCertManager` CR)
-manages the bootstrap resources in this directory. When
-`spec.createClusterIssuer` is true (the default), it applies
+manages the bootstrap resources in this directory. It applies
 `konflux-bootstrap-issuer`, `konflux-ca` Certificate, and `konflux-issuer`
 ClusterIssuer. Component controllers then apply their own leaf Certificates
 (and any namespace Issuers they need, e.g. UI or webhook self-signed). Operand

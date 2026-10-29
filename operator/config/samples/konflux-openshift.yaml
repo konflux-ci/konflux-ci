@@ -111,11 +111,10 @@ spec:
       publicInfo:
         environment: development
         visibility: public
-  certManager:
-    createClusterIssuer: true
-    # OpenShift injects trusted CA bundles natively, so the trust-manager Bundle
-    # is not required. The operator already defaults this to false on OpenShift.
-    # distributeClusterCABundle: false
+  # certManager:
+  #   # OpenShift injects trusted CA bundles natively, so the trust-manager Bundle
+  #   # is not required. The operator already defaults this to false on OpenShift.
+  #   # distributeClusterCABundle: false
   internalRegistry:
     # OpenShift ships an integrated registry; the Kind samples enable this instead.
     enabled: false
