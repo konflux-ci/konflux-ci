@@ -21,6 +21,7 @@ import (
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -63,43 +64,92 @@ const (
 )
 
 var (
-	// Optional sub-CRs shared by cleanup and cluster-scoped allow-list tables.
-	imageControllerGVK  = konfluxv1alpha1.GroupVersion.WithKind("KonfluxImageController")
-	internalRegistryGVK = konfluxv1alpha1.GroupVersion.WithKind("KonfluxInternalRegistry")
-	defaultTenantGVK    = konfluxv1alpha1.GroupVersion.WithKind("KonfluxDefaultTenant")
-	segmentBridgeGVK    = konfluxv1alpha1.GroupVersion.WithKind("KonfluxSegmentBridge")
+	// Sub-CR GVKs shared by cleanup and cluster-scoped allow-list tables.
+	// All component sub-CRs are conditional: each is created only when its
+	// corresponding enabled field is true (or defaults to true).
+	applicationAPIGVK     = konfluxv1alpha1.GroupVersion.WithKind("KonfluxApplicationAPI")
+	buildServiceGVK       = konfluxv1alpha1.GroupVersion.WithKind("KonfluxBuildService")
+	integrationServiceGVK = konfluxv1alpha1.GroupVersion.WithKind("KonfluxIntegrationService")
+	releaseServiceGVK     = konfluxv1alpha1.GroupVersion.WithKind("KonfluxReleaseService")
+	uiGVK                 = konfluxv1alpha1.GroupVersion.WithKind("KonfluxUI")
+	rbacGVK               = konfluxv1alpha1.GroupVersion.WithKind("KonfluxRBAC")
+	infoGVK               = konfluxv1alpha1.GroupVersion.WithKind("KonfluxInfo")
+	namespaceListerGVK    = konfluxv1alpha1.GroupVersion.WithKind("KonfluxNamespaceLister")
+	enterpriseContractGVK = konfluxv1alpha1.GroupVersion.WithKind("KonfluxEnterpriseContract")
+	certManagerGVK        = konfluxv1alpha1.GroupVersion.WithKind("KonfluxCertManager")
+	cliGVK                = konfluxv1alpha1.GroupVersion.WithKind("KonfluxCLI")
+	imageControllerGVK    = konfluxv1alpha1.GroupVersion.WithKind("KonfluxImageController")
+	internalRegistryGVK   = konfluxv1alpha1.GroupVersion.WithKind("KonfluxInternalRegistry")
+	defaultTenantGVK      = konfluxv1alpha1.GroupVersion.WithKind("KonfluxDefaultTenant")
+	segmentBridgeGVK      = konfluxv1alpha1.GroupVersion.WithKind("KonfluxSegmentBridge")
 )
 
 // konfluxCleanupGVKs defines which sub-CR types should be cleaned up when they are
-// no longer part of the desired state. Only optional/conditional sub-CRs are listed here.
-// Always-applied sub-CRs don't need cleanup (they're always tracked and never become orphans).
+// no longer part of the desired state. All component sub-CRs are conditional and
+// may become orphans when their enabled field changes from true to false.
 var konfluxCleanupGVKs = []schema.GroupVersionKind{
-	// KonfluxImageController is optional - only created when spec.imageController.enabled is true
+	applicationAPIGVK,
+	buildServiceGVK,
+	integrationServiceGVK,
+	releaseServiceGVK,
+	uiGVK,
+	rbacGVK,
+	infoGVK,
+	namespaceListerGVK,
+	enterpriseContractGVK,
+	certManagerGVK,
+	cliGVK,
 	imageControllerGVK,
-	// KonfluxInternalRegistry is optional - only created when spec.internalRegistry.enabled is true
 	internalRegistryGVK,
-	// KonfluxDefaultTenant is optional - only created when spec.defaultTenant.enabled is true (default)
 	defaultTenantGVK,
-	// KonfluxSegmentBridge is optional - only created when spec.segmentBridge.enabled is true
 	segmentBridgeGVK,
 }
 
 // konfluxClusterScopedAllowList restricts which cluster-scoped sub-CRs can be deleted
-// during orphan cleanup. Only conditionally-created sub-CRs need to be listed here.
+// during orphan cleanup. All component sub-CRs are conditional and listed here.
 var konfluxClusterScopedAllowList = tracking.ClusterScopedAllowList{
-	// KonfluxImageController is optional - only created when spec.imageController.enabled is true
+	applicationAPIGVK: sets.New(
+		"konflux-application-api",
+	),
+	buildServiceGVK: sets.New(
+		"konflux-build-service",
+	),
+	integrationServiceGVK: sets.New(
+		"konflux-integration-service",
+	),
+	releaseServiceGVK: sets.New(
+		"konflux-release-service",
+	),
+	uiGVK: sets.New(
+		"konflux-ui",
+	),
+	rbacGVK: sets.New(
+		"konflux-rbac",
+	),
+	infoGVK: sets.New(
+		"konflux-info",
+	),
+	namespaceListerGVK: sets.New(
+		"konflux-namespace-lister",
+	),
+	enterpriseContractGVK: sets.New(
+		"konflux-enterprise-contract",
+	),
+	certManagerGVK: sets.New(
+		"konflux-cert-manager",
+	),
+	cliGVK: sets.New(
+		"konflux-cli",
+	),
 	imageControllerGVK: sets.New(
 		"konflux-image-controller",
 	),
-	// KonfluxInternalRegistry is optional - only created when spec.internalRegistry.enabled is true
 	internalRegistryGVK: sets.New(
 		"konflux-internal-registry",
 	),
-	// KonfluxDefaultTenant is optional - only created when spec.defaultTenant.enabled is true (default)
 	defaultTenantGVK: sets.New(
 		"konflux-default-tenant",
 	),
-	// KonfluxSegmentBridge is optional - only created when spec.segmentBridge.enabled is true
 	segmentBridgeGVK: sets.New(
 		"konflux-segment-bridge",
 	),
@@ -191,64 +241,84 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		FieldManager:      FieldManager,
 	})
 
-	// Apply the KonfluxApplicationAPI CR
-	if err := r.applyKonfluxApplicationAPI(ctx, tc); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxApplicationAPI")
+	// Apply the KonfluxApplicationAPI CR (enabled by default)
+	if konflux.Spec.IsApplicationAPIEnabled() {
+		if err := r.applyKonfluxApplicationAPI(ctx, tc); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxApplicationAPI")
+		}
 	}
 
-	// Apply the KonfluxBuildService CR
-	if err := r.applyKonfluxBuildService(ctx, tc, konflux); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxBuildService")
+	// Apply the KonfluxBuildService CR (enabled by default)
+	if konflux.Spec.IsBuildServiceEnabled() {
+		if err := r.applyKonfluxBuildService(ctx, tc, konflux); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxBuildService")
+		}
 	}
 
-	// Apply the KonfluxIntegrationService CR
-	if err := r.applyKonfluxIntegrationService(ctx, tc, konflux); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxIntegrationService")
+	// Apply the KonfluxIntegrationService CR (enabled by default)
+	if konflux.Spec.IsIntegrationServiceEnabled() {
+		if err := r.applyKonfluxIntegrationService(ctx, tc, konflux); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxIntegrationService")
+		}
 	}
 
-	// Apply the KonfluxReleaseService CR
-	if err := r.applyKonfluxReleaseService(ctx, tc, konflux); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxReleaseService")
+	// Apply the KonfluxReleaseService CR (enabled by default)
+	if konflux.Spec.IsReleaseServiceEnabled() {
+		if err := r.applyKonfluxReleaseService(ctx, tc, konflux); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxReleaseService")
+		}
 	}
 
-	// Apply the KonfluxUI CR
-	if err := r.applyKonfluxUI(ctx, tc, konflux); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxUI")
+	// Apply the KonfluxUI CR (enabled by default)
+	if konflux.Spec.IsUIEnabled() {
+		if err := r.applyKonfluxUI(ctx, tc, konflux); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxUI")
+		}
 	}
 
-	// Apply the KonfluxRBAC CR
-	if err := r.applyKonfluxRBAC(ctx, tc); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxRBAC")
+	// Apply the KonfluxRBAC CR (enabled by default)
+	if konflux.Spec.IsRBACEnabled() {
+		if err := r.applyKonfluxRBAC(ctx, tc); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxRBAC")
+		}
 	}
 
-	// Apply the KonfluxInfo CR
-	if err := r.applyKonfluxInfo(ctx, tc, konflux); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxInfo")
+	// Apply the KonfluxInfo CR (enabled by default)
+	if konflux.Spec.IsInfoEnabled() {
+		if err := r.applyKonfluxInfo(ctx, tc, konflux); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxInfo")
+		}
 	}
 
-	// Apply the KonfluxNamespaceLister CR
-	if err := r.applyKonfluxNamespaceLister(ctx, tc, konflux); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxNamespaceLister")
+	// Apply the KonfluxNamespaceLister CR (enabled by default)
+	if konflux.Spec.IsNamespaceListerEnabled() {
+		if err := r.applyKonfluxNamespaceLister(ctx, tc, konflux); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxNamespaceLister")
+		}
 	}
 
-	// Apply the KonfluxEnterpriseContract CR
-	if err := r.applyKonfluxEnterpriseContract(ctx, tc, konflux); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxEnterpriseContract")
+	// Apply the KonfluxEnterpriseContract CR (enabled by default)
+	if konflux.Spec.IsEnterpriseContractEnabled() {
+		if err := r.applyKonfluxEnterpriseContract(ctx, tc, konflux); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxEnterpriseContract")
+		}
 	}
 
-	// Apply the KonfluxImageController CR (only if enabled)
+	// Apply the KonfluxImageController CR (only if enabled, defaults to false)
 	if konflux.Spec.IsImageControllerEnabled() {
 		if err := r.applyKonfluxImageController(ctx, tc, konflux); err != nil {
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxImageController")
 		}
 	}
 
-	// Apply the KonfluxCertManager CR
-	if err := r.applyKonfluxCertManager(ctx, tc, konflux); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxCertManager")
+	// Apply the KonfluxCertManager CR (enabled by default)
+	if konflux.Spec.IsCertManagerEnabled() {
+		if err := r.applyKonfluxCertManager(ctx, tc, konflux); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxCertManager")
+		}
 	}
 
-	// Apply the KonfluxInternalRegistry CR (only if enabled)
+	// Apply the KonfluxInternalRegistry CR (only if enabled, defaults to false)
 	if konflux.Spec.IsInternalRegistryEnabled() {
 		if err := r.applyKonfluxInternalRegistry(ctx, tc); err != nil {
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxInternalRegistry")
@@ -262,16 +332,18 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
-	// Apply the KonfluxSegmentBridge CR (only if enabled)
+	// Apply the KonfluxSegmentBridge CR (only if enabled, defaults to false)
 	if konflux.Spec.IsTelemetryEnabled() {
 		if err := r.applyKonfluxSegmentBridge(ctx, tc, konflux); err != nil {
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxSegmentBridge")
 		}
 	}
 
-	// Apply the KonfluxCLI CR
-	if err := r.applyKonfluxCLI(ctx, tc); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxCLI")
+	// Apply the KonfluxCLI CR (enabled by default)
+	if konflux.Spec.IsCLIEnabled() {
+		if err := r.applyKonfluxCLI(ctx, tc); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonApplyFailed, "apply KonfluxCLI")
+		}
 	}
 
 	// Cleanup orphaned sub-CRs - delete any sub-CRs with our owner label
@@ -281,85 +353,109 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return errHandler.HandleCleanupError(ctx, err)
 	}
 
-	// Collect status from all sub-CRs.
+	// Collect status from all enabled sub-CRs.
 	// All component deployments are managed by their respective reconcilers,
 	// so we aggregate readiness by checking each sub-CR's Ready condition.
+	// Only enabled components are included in readiness aggregation.
 	var subCRStatuses []condition.SubCRStatus
 
-	// Get and copy status from the KonfluxBuildService CR
-	buildService := &konfluxv1alpha1.KonfluxBuildService{}
-	if err := r.Get(ctx, client.ObjectKey{Name: buildservice.CRName}, buildService); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxBuildService status")
-	}
-	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, buildService, "build-service"))
-
-	// Get and copy status from the KonfluxIntegrationService CR
-	integrationService := &konfluxv1alpha1.KonfluxIntegrationService{}
-	if err := r.Get(ctx, client.ObjectKey{Name: integrationservice.CRName}, integrationService); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxIntegrationService status")
-	}
-	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, integrationService, "integration-service"))
-
-	// Get and copy status from the KonfluxReleaseService CR
-	releaseService := &konfluxv1alpha1.KonfluxReleaseService{}
-	if err := r.Get(ctx, client.ObjectKey{Name: releaseservice.CRName}, releaseService); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxReleaseService status")
-	}
-	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, releaseService, "release-service"))
-
-	// Get and copy status from the KonfluxUI CR
-	ui := &konfluxv1alpha1.KonfluxUI{}
-	if err := r.Get(ctx, client.ObjectKey{Name: uictrl.CRName}, ui); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxUI status")
-	}
-	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, ui, "ui"))
-
-	// Propagate UI URL from KonfluxUI status to Konflux status
-	if ui.Status.Ingress != nil {
-		konflux.Status.UIURL = ui.Status.Ingress.URL
+	// Get and copy status from the KonfluxBuildService CR (if enabled)
+	if konflux.Spec.IsBuildServiceEnabled() {
+		buildService := &konfluxv1alpha1.KonfluxBuildService{}
+		if err := r.Get(ctx, client.ObjectKey{Name: buildservice.CRName}, buildService); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxBuildService status")
+		}
+		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, buildService, "build-service"))
 	}
 
-	// Get and copy status from the KonfluxRBAC CR
-	konfluxRBAC := &konfluxv1alpha1.KonfluxRBAC{}
-	if err := r.Get(ctx, client.ObjectKey{Name: rbac.CRName}, konfluxRBAC); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxRBAC status")
+	// Get and copy status from the KonfluxIntegrationService CR (if enabled)
+	if konflux.Spec.IsIntegrationServiceEnabled() {
+		integrationService := &konfluxv1alpha1.KonfluxIntegrationService{}
+		if err := r.Get(ctx, client.ObjectKey{Name: integrationservice.CRName}, integrationService); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxIntegrationService status")
+		}
+		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, integrationService, "integration-service"))
 	}
-	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, konfluxRBAC, "rbac"))
 
-	// Get and copy status from the KonfluxInfo CR
-	konfluxInfo := &konfluxv1alpha1.KonfluxInfo{}
-	if err := r.Get(ctx, client.ObjectKey{Name: info.CRName}, konfluxInfo); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxInfo status")
+	// Get and copy status from the KonfluxReleaseService CR (if enabled)
+	if konflux.Spec.IsReleaseServiceEnabled() {
+		releaseService := &konfluxv1alpha1.KonfluxReleaseService{}
+		if err := r.Get(ctx, client.ObjectKey{Name: releaseservice.CRName}, releaseService); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxReleaseService status")
+		}
+		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, releaseService, "release-service"))
 	}
-	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, konfluxInfo, "info"))
 
-	// Get and copy status from the KonfluxNamespaceLister CR
-	konfluxNamespaceLister := &konfluxv1alpha1.KonfluxNamespaceLister{}
-	if err := r.Get(ctx, client.ObjectKey{Name: namespacelister.CRName}, konfluxNamespaceLister); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxNamespaceLister status")
-	}
-	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, konfluxNamespaceLister, "namespace-lister"))
+	// Get and copy status from the KonfluxUI CR (if enabled)
+	if konflux.Spec.IsUIEnabled() {
+		ui := &konfluxv1alpha1.KonfluxUI{}
+		if err := r.Get(ctx, client.ObjectKey{Name: uictrl.CRName}, ui); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxUI status")
+		}
+		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, ui, "ui"))
 
-	// Get and copy status from the KonfluxEnterpriseContract CR
-	konfluxEnterpriseContract := &konfluxv1alpha1.KonfluxEnterpriseContract{}
-	if err := r.Get(ctx, client.ObjectKey{Name: enterprisecontract.CRName}, konfluxEnterpriseContract); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxEnterpriseContract status")
+		// Propagate UI URL from KonfluxUI status to Konflux status
+		if ui.Status.Ingress != nil {
+			konflux.Status.UIURL = ui.Status.Ingress.URL
+		}
+	} else {
+		// Clear UI URL when UI is disabled
+		konflux.Status.UIURL = ""
 	}
-	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, konfluxEnterpriseContract, "enterprise-contract"))
 
-	// Get and copy status from the KonfluxApplicationAPI CR
-	applicationAPI := &konfluxv1alpha1.KonfluxApplicationAPI{}
-	if err := r.Get(ctx, client.ObjectKey{Name: applicationapi.CRName}, applicationAPI); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxApplicationAPI status")
+	// Get and copy status from the KonfluxRBAC CR (if enabled)
+	if konflux.Spec.IsRBACEnabled() {
+		konfluxRBAC := &konfluxv1alpha1.KonfluxRBAC{}
+		if err := r.Get(ctx, client.ObjectKey{Name: rbac.CRName}, konfluxRBAC); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxRBAC status")
+		}
+		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, konfluxRBAC, "rbac"))
 	}
-	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, applicationAPI, "application-api"))
 
-	// Get and copy status from the KonfluxCLI CR
-	cliCR := &konfluxv1alpha1.KonfluxCLI{}
-	if err := r.Get(ctx, client.ObjectKey{Name: clictrl.CRName}, cliCR); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxCLI status")
+	// Get and copy status from the KonfluxInfo CR (if enabled)
+	if konflux.Spec.IsInfoEnabled() {
+		konfluxInfo := &konfluxv1alpha1.KonfluxInfo{}
+		if err := r.Get(ctx, client.ObjectKey{Name: info.CRName}, konfluxInfo); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxInfo status")
+		}
+		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, konfluxInfo, "info"))
 	}
-	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, cliCR, "cli"))
+
+	// Get and copy status from the KonfluxNamespaceLister CR (if enabled)
+	if konflux.Spec.IsNamespaceListerEnabled() {
+		konfluxNamespaceLister := &konfluxv1alpha1.KonfluxNamespaceLister{}
+		if err := r.Get(ctx, client.ObjectKey{Name: namespacelister.CRName}, konfluxNamespaceLister); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxNamespaceLister status")
+		}
+		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, konfluxNamespaceLister, "namespace-lister"))
+	}
+
+	// Get and copy status from the KonfluxEnterpriseContract CR (if enabled)
+	if konflux.Spec.IsEnterpriseContractEnabled() {
+		konfluxEnterpriseContract := &konfluxv1alpha1.KonfluxEnterpriseContract{}
+		if err := r.Get(ctx, client.ObjectKey{Name: enterprisecontract.CRName}, konfluxEnterpriseContract); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxEnterpriseContract status")
+		}
+		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, konfluxEnterpriseContract, "enterprise-contract"))
+	}
+
+	// Get and copy status from the KonfluxApplicationAPI CR (if enabled)
+	if konflux.Spec.IsApplicationAPIEnabled() {
+		applicationAPI := &konfluxv1alpha1.KonfluxApplicationAPI{}
+		if err := r.Get(ctx, client.ObjectKey{Name: applicationapi.CRName}, applicationAPI); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxApplicationAPI status")
+		}
+		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, applicationAPI, "application-api"))
+	}
+
+	// Get and copy status from the KonfluxCLI CR (if enabled)
+	if konflux.Spec.IsCLIEnabled() {
+		cliCR := &konfluxv1alpha1.KonfluxCLI{}
+		if err := r.Get(ctx, client.ObjectKey{Name: clictrl.CRName}, cliCR); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxCLI status")
+		}
+		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, cliCR, "cli"))
+	}
 
 	// Get and copy status from the KonfluxImageController CR (if enabled)
 	if konflux.Spec.IsImageControllerEnabled() {
@@ -370,12 +466,14 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, imageController, "image-controller"))
 	}
 
-	// Get and copy status from the KonfluxCertManager CR
-	certManager := &konfluxv1alpha1.KonfluxCertManager{}
-	if err := r.Get(ctx, client.ObjectKey{Name: certmanager.CRName}, certManager); err != nil {
-		return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxCertManager status")
+	// Get and copy status from the KonfluxCertManager CR (if enabled)
+	if konflux.Spec.IsCertManagerEnabled() {
+		certManager := &konfluxv1alpha1.KonfluxCertManager{}
+		if err := r.Get(ctx, client.ObjectKey{Name: certmanager.CRName}, certManager); err != nil {
+			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxCertManager status")
+		}
+		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, certManager, "cert-manager"))
 	}
-	subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, certManager, "cert-manager"))
 
 	// Get and copy status from the KonfluxInternalRegistry CR (if enabled)
 	if konflux.Spec.IsInternalRegistryEnabled() {
@@ -404,12 +502,18 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, segmentBridgeCR, "segment-bridge"))
 	}
 
-	// Set overall Ready condition based on all sub-CRs.
-	// All deployments are managed by component-specific reconcilers, so we only aggregate sub-CR statuses.
+	// Set overall Ready condition based on all enabled sub-CRs.
+	// Only enabled components are included in readiness aggregation.
 	condition.SetAggregatedReadyCondition(konflux, subCRStatuses)
 
-	// Check cert-manager availability, set CertManagerAvailable condition, and override Ready if missing.
-	certManagerResult := r.checkCertManagerAvailability(ctx, konflux)
+	// Check cert-manager availability only when the cert-manager component is enabled.
+	// When cert-manager is disabled, skip the check and remove the CertManagerAvailable condition.
+	var certManagerResult ctrl.Result
+	if konflux.Spec.IsCertManagerEnabled() {
+		certManagerResult = r.checkCertManagerAvailability(ctx, konflux)
+	} else {
+		apimeta.RemoveStatusCondition(&konflux.Status.Conditions, constant.ConditionTypeCertManagerAvailable)
+	}
 
 	// Update the status subresource with all collected conditions
 	if err := r.Status().Update(ctx, konflux); err != nil {
