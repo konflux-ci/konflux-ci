@@ -204,7 +204,7 @@ spec:
           - name: revision
             value: $(params.catalog-revision)
           - name: pathInRepo
-            value: tasks/mapt-oci/kind-ibm-provision/0.3/kind-ibm-provision.yaml
+            value: tasks/mapt-oci/kind-ibm-provision/0.4/kind-ibm-provision.yaml
       params:
         - name: secret-ibmcloud-credentials
           value: $(params.ibmcloud-credentials-secret)
@@ -240,7 +240,7 @@ spec:
           value: s3://konflux-mapt-state/mapt/kind/$(tasks.generate-cluster-id.results.cluster-id)
         - name: compute-sizes
           value: cxf-24x48
-        # Override catalog default v1.34. mapt v0.14.5 maps v1.37 → Kind 0.33
+        # Pin v1.37 (also the catalog 0.4 default). mapt v0.14.5 maps it to Kind 0.33
         # (same as GHA); K8s ≥1.36 enables MutatingAdmissionPolicy for Tekton
         # TaskRun request shrinking in deploy-deps.sh.
         - name: version
