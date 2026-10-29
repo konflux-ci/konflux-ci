@@ -10,7 +10,6 @@
   "packageRules": [
     {
       "matchPackageNames": [
-        "ghcr.io/chmouel/gosmee",
         "https://github.com/enterprise-contract/*",
         "https://github.com/conforma/*",
         "https://github.com/konflux-ci/*",
