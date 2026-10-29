@@ -51,11 +51,27 @@ spec:
           spec:
             description: KonfluxSpec defines the desired state of Konflux.
             properties:
+              applicationAPI:
+                description: |-
+                  ApplicationAPI configures the application-api component.
+                  The runtime configuration is copied to the KonfluxApplicationAPI CR by the operator.
+                properties:
+                  enabled:
+                    description: |-
+                      Enabled indicates whether the application-api component should be deployed.
+                      Defaults to true if not specified.
+                    type: boolean
+                type: object
               buildService:
                 description: |-
                   KonfluxBuildService configures the build-service component.
                   The runtime configuration is copied to the KonfluxBuildService CR by the operator.
                 properties:
+                  enabled:
+                    description: |-
+                      Enabled indicates whether the build-service component should be deployed.
+                      Defaults to true if not specified.
+                    type: boolean
                   spec:
                     description: Spec configures the build-service component (excludes
                       componentMetrics; see spec.componentMetrics).
@@ -507,6 +523,22 @@ spec:
                       Set explicitly to override the platform detection.
                       Copied to the KonfluxCertManager CR by the operator.
                     type: boolean
+                  enabled:
+                    description: |-
+                      Enabled indicates whether the cert-manager component should be deployed.
+                      Defaults to true if not specified.
+                    type: boolean
+                type: object
+              cli:
+                description: |-
+                  CLI configures the CLI component.
+                  The runtime configuration is copied to the KonfluxCLI CR by the operator.
+                properties:
+                  enabled:
+                    description: |-
+                      Enabled indicates whether the CLI component should be deployed.
+                      Defaults to true if not specified.
+                    type: boolean
                 type: object
               componentMetrics:
                 description: |-
@@ -540,6 +572,11 @@ spec:
                   EnterpriseContract configures the enterprise-contract component.
                   The runtime configuration is copied to the KonfluxEnterpriseContract CR by the operator.
                 properties:
+                  enabled:
+                    description: |-
+                      Enabled indicates whether the enterprise-contract component should be deployed.
+                      Defaults to true if not specified.
+                    type: boolean
                   skipPolicies:
                     description: |-
                       SkipPolicies disables deployment of EnterpriseContractPolicy resources.
@@ -1300,6 +1337,11 @@ spec:
                   KonfluxInfo configures the info component.
                   The runtime configuration is copied to the KonfluxInfo CR by the operator.
                 properties:
+                  enabled:
+                    description: |-
+                      Enabled indicates whether the info component should be deployed.
+                      Defaults to true if not specified.
+                    type: boolean
                   spec:
                     description: Spec configures the info component.
                     properties:
@@ -1667,6 +1709,11 @@ spec:
                   KonfluxIntegrationService configures the integration-service component.
                   The runtime configuration is copied to the KonfluxIntegrationService CR by the operator.
                 properties:
+                  enabled:
+                    description: |-
+                      Enabled indicates whether the integration-service component should be deployed.
+                      Defaults to true if not specified.
+                    type: boolean
                   spec:
                     description: Spec configures the integration-service component
                       (excludes componentMetrics; see spec.componentMetrics).
@@ -2254,6 +2301,11 @@ spec:
                   NamespaceLister configures the namespace-lister component.
                   The runtime configuration is copied to the KonfluxNamespaceLister CR by the operator.
                 properties:
+                  enabled:
+                    description: |-
+                      Enabled indicates whether the namespace-lister component should be deployed.
+                      Defaults to true if not specified.
+                    type: boolean
                   spec:
                     description: Spec configures the namespace-lister component (excludes
                       componentMetrics; see spec.componentMetrics).
@@ -2523,11 +2575,27 @@ spec:
                         type: object
                     type: object
                 type: object
+              rbac:
+                description: |-
+                  RBAC configures the RBAC component.
+                  The runtime configuration is copied to the KonfluxRBAC CR by the operator.
+                properties:
+                  enabled:
+                    description: |-
+                      Enabled indicates whether the RBAC component should be deployed.
+                      Defaults to true if not specified.
+                    type: boolean
+                type: object
               releaseService:
                 description: |-
                   KonfluxReleaseService configures the release-service component.
                   The runtime configuration is copied to the KonfluxReleaseService CR by the operator.
                 properties:
+                  enabled:
+                    description: |-
+                      Enabled indicates whether the release-service component should be deployed.
+                      Defaults to true if not specified.
+                    type: boolean
                   spec:
                     description: Spec configures the release-service component (excludes
                       componentMetrics; see spec.componentMetrics).
@@ -3245,6 +3313,11 @@ spec:
                   KonfluxUI configures the UI component.
                   The runtime configuration is copied to the KonfluxUI CR by the operator.
                 properties:
+                  enabled:
+                    description: |-
+                      Enabled indicates whether the UI component should be deployed.
+                      Defaults to true if not specified.
+                    type: boolean
                   spec:
                     description: Spec configures the UI component (excludes componentMetrics;
                       see spec.componentMetrics).
