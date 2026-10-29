@@ -7,8 +7,8 @@ resources:
 
 images:
   - name: ghcr.io/chmouel/gosmee
-    newName: ghcr.io/chmouel/gosmee
-    newTag: v0.32.1@sha256:e527886d2134f292ae2c397752d4308f565ad24a61de1b45bad7f9953e138981
+    newName: quay.io/konflux-ci/gosmee
+    newTag: latest@sha256:fe5e47e39201bdb430c7758f88dacbc5e34dc2d65ea60b997275c6bbb72d6b9d
   - name: quay.io/konflux-ci/smee-sidecar
     newName: quay.io/konflux-ci/smee-sidecar
     newTag: latest@sha256:0479cb35f51792f462820aa6d9eef49e93b485dc5d20b3b81c0a06e6fbfa6407
