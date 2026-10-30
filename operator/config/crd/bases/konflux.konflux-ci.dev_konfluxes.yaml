@@ -54,11 +54,11 @@ spec:
               applicationAPI:
                 description: |-
                   ApplicationAPI configures the application-api component.
-                  The runtime configuration is copied to the KonfluxApplicationAPI CR by the operator.
+                  Controls whether the KonfluxApplicationAPI CR is created by the operator.
                 properties:
                   enabled:
                     description: |-
-                      Enabled indicates whether the application-api component should be deployed.
+                      Enabled controls whether the application-api component is deployed.
                       Defaults to true if not specified.
                     type: boolean
                 type: object
@@ -69,7 +69,7 @@ spec:
                 properties:
                   enabled:
                     description: |-
-                      Enabled indicates whether the build-service component should be deployed.
+                      Enabled controls whether the build-service component is deployed.
                       Defaults to true if not specified.
                     type: boolean
                   spec:
@@ -525,18 +525,18 @@ spec:
                     type: boolean
                   enabled:
                     description: |-
-                      Enabled indicates whether the cert-manager component should be deployed.
+                      Enabled controls whether the cert-manager component is deployed.
                       Defaults to true if not specified.
                     type: boolean
                 type: object
               cli:
                 description: |-
                   CLI configures the CLI component.
-                  The runtime configuration is copied to the KonfluxCLI CR by the operator.
+                  Controls whether the KonfluxCLI CR is created by the operator.
                 properties:
                   enabled:
                     description: |-
-                      Enabled indicates whether the CLI component should be deployed.
+                      Enabled controls whether the CLI component is deployed.
                       Defaults to true if not specified.
                     type: boolean
                 type: object
@@ -559,7 +559,7 @@ spec:
                 description: |-
                   DefaultTenant configures the default tenant component.
                   The default tenant provides a namespace accessible by all authenticated users.
-                  The runtime configuration is copied to the KonfluxDefaultTenant CR by the operator.
+                  Controls whether the KonfluxDefaultTenant CR is created by the operator.
                 properties:
                   enabled:
                     description: |-
@@ -574,7 +574,7 @@ spec:
                 properties:
                   enabled:
                     description: |-
-                      Enabled indicates whether the enterprise-contract component should be deployed.
+                      Enabled controls whether the enterprise-contract component is deployed.
                       Defaults to true if not specified.
                     type: boolean
                   skipPolicies:
@@ -1339,7 +1339,7 @@ spec:
                 properties:
                   enabled:
                     description: |-
-                      Enabled indicates whether the info component should be deployed.
+                      Enabled controls whether the info component is deployed.
                       Defaults to true if not specified.
                     type: boolean
                   spec:
@@ -1711,7 +1711,7 @@ spec:
                 properties:
                   enabled:
                     description: |-
-                      Enabled indicates whether the integration-service component should be deployed.
+                      Enabled controls whether the integration-service component is deployed.
                       Defaults to true if not specified.
                     type: boolean
                   spec:
@@ -2288,7 +2288,7 @@ spec:
               internalRegistry:
                 description: |-
                   InternalRegistry configures the internal registry component.
-                  The runtime configuration is copied to the KonfluxInternalRegistry CR by the operator.
+                  Controls whether the KonfluxInternalRegistry CR is created by the operator.
                 properties:
                   enabled:
                     description: |-
@@ -2303,7 +2303,7 @@ spec:
                 properties:
                   enabled:
                     description: |-
-                      Enabled indicates whether the namespace-lister component should be deployed.
+                      Enabled controls whether the namespace-lister component is deployed.
                       Defaults to true if not specified.
                     type: boolean
                   spec:
@@ -2578,11 +2578,11 @@ spec:
               rbac:
                 description: |-
                   RBAC configures the RBAC component.
-                  The runtime configuration is copied to the KonfluxRBAC CR by the operator.
+                  Controls whether the KonfluxRBAC CR is created by the operator.
                 properties:
                   enabled:
                     description: |-
-                      Enabled indicates whether the RBAC component should be deployed.
+                      Enabled controls whether the RBAC component is deployed.
                       Defaults to true if not specified.
                     type: boolean
                 type: object
@@ -2593,7 +2593,7 @@ spec:
                 properties:
                   enabled:
                     description: |-
-                      Enabled indicates whether the release-service component should be deployed.
+                      Enabled controls whether the release-service component is deployed.
                       Defaults to true if not specified.
                     type: boolean
                   spec:
@@ -3315,7 +3315,7 @@ spec:
                 properties:
                   enabled:
                     description: |-
-                      Enabled indicates whether the UI component should be deployed.
+                      Enabled controls whether the UI component is deployed.
                       Defaults to true if not specified.
                     type: boolean
                   spec:

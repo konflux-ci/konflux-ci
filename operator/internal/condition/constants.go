@@ -32,6 +32,9 @@ const (
 	// ReasonComponentsNotReady indicates one or more components are not ready.
 	ReasonComponentsNotReady = "ComponentsNotReady"
 
+	// ReasonNoComponentsEnabled indicates no components are enabled.
+	ReasonNoComponentsEnabled = "NoComponentsEnabled"
+
 	// ReasonDeploymentReady indicates a deployment is ready.
 	ReasonDeploymentReady = "DeploymentReady"
 

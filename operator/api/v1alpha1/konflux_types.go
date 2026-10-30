@@ -26,7 +26,7 @@ import (
 // KonfluxSpec defines the desired state of Konflux.
 type KonfluxSpec struct {
 	// ApplicationAPI configures the application-api component.
-	// The runtime configuration is copied to the KonfluxApplicationAPI CR by the operator.
+	// Controls whether the KonfluxApplicationAPI CR is created by the operator.
 	// +optional
 	ApplicationAPI *ApplicationAPIConfig `json:"applicationAPI,omitempty"`
 
@@ -76,13 +76,13 @@ type KonfluxSpec struct {
 	CertManager *CertManagerConfig `json:"certManager,omitempty"`
 
 	// InternalRegistry configures the internal registry component.
-	// The runtime configuration is copied to the KonfluxInternalRegistry CR by the operator.
+	// Controls whether the KonfluxInternalRegistry CR is created by the operator.
 	// +optional
 	InternalRegistry *InternalRegistryConfig `json:"internalRegistry,omitempty"`
 
 	// DefaultTenant configures the default tenant component.
 	// The default tenant provides a namespace accessible by all authenticated users.
-	// The runtime configuration is copied to the KonfluxDefaultTenant CR by the operator.
+	// Controls whether the KonfluxDefaultTenant CR is created by the operator.
 	// +optional
 	DefaultTenant *DefaultTenantConfig `json:"defaultTenant,omitempty"`
 
@@ -95,12 +95,12 @@ type KonfluxSpec struct {
 	Telemetry *TelemetryConfig `json:"telemetry,omitempty"`
 
 	// RBAC configures the RBAC component.
-	// The runtime configuration is copied to the KonfluxRBAC CR by the operator.
+	// Controls whether the KonfluxRBAC CR is created by the operator.
 	// +optional
 	RBAC *RBACConfig `json:"rbac,omitempty"`
 
 	// CLI configures the CLI component.
-	// The runtime configuration is copied to the KonfluxCLI CR by the operator.
+	// Controls whether the KonfluxCLI CR is created by the operator.
 	// +optional
 	CLI *CLIConfig `json:"cli,omitempty"`
 
@@ -129,7 +129,7 @@ type ImageControllerConfig struct {
 // The Enabled field controls whether the component is deployed (top-level concern).
 // The Spec field is the runtime configuration passed to the component.
 type KonfluxUIConfig struct {
-	// Enabled indicates whether the UI component should be deployed.
+	// Enabled controls whether the UI component is deployed.
 	// Defaults to true if not specified.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
@@ -143,7 +143,7 @@ type KonfluxUIConfig struct {
 // The Enabled field controls whether the component is deployed (top-level concern).
 // The Spec field is the runtime configuration passed to the component.
 type IntegrationServiceConfig struct {
-	// Enabled indicates whether the integration-service component should be deployed.
+	// Enabled controls whether the integration-service component is deployed.
 	// Defaults to true if not specified.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
@@ -157,7 +157,7 @@ type IntegrationServiceConfig struct {
 // The Enabled field controls whether the component is deployed (top-level concern).
 // The Spec field is the runtime configuration passed to the component.
 type ReleaseServiceConfig struct {
-	// Enabled indicates whether the release-service component should be deployed.
+	// Enabled controls whether the release-service component is deployed.
 	// Defaults to true if not specified.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
@@ -171,7 +171,7 @@ type ReleaseServiceConfig struct {
 // The Enabled field controls whether the component is deployed (top-level concern).
 // The Spec field is the runtime configuration passed to the component.
 type BuildServiceConfig struct {
-	// Enabled indicates whether the build-service component should be deployed.
+	// Enabled controls whether the build-service component is deployed.
 	// Defaults to true if not specified.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
@@ -185,7 +185,7 @@ type BuildServiceConfig struct {
 // The Enabled field controls whether the component is deployed (top-level concern).
 // The Spec field is the runtime configuration passed to the component.
 type NamespaceListerConfig struct {
-	// Enabled indicates whether the namespace-lister component should be deployed.
+	// Enabled controls whether the namespace-lister component is deployed.
 	// Defaults to true if not specified.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
@@ -198,7 +198,7 @@ type NamespaceListerConfig struct {
 // EnterpriseContractConfig defines the configuration for the enterprise-contract component.
 // The Enabled field controls whether the component is deployed (top-level concern).
 type EnterpriseContractConfig struct {
-	// Enabled indicates whether the enterprise-contract component should be deployed.
+	// Enabled controls whether the enterprise-contract component is deployed.
 	// Defaults to true if not specified.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
@@ -213,7 +213,7 @@ type EnterpriseContractConfig struct {
 // CertManagerConfig defines the configuration for the cert-manager component.
 // The Enabled field controls whether the component is deployed (top-level concern).
 type CertManagerConfig struct {
-	// Enabled indicates whether the cert-manager component should be deployed.
+	// Enabled controls whether the cert-manager component is deployed.
 	// Defaults to true if not specified.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
@@ -291,7 +291,7 @@ type TelemetryConfig struct {
 // The Enabled field controls whether the component is deployed (top-level concern).
 // The Spec field is the runtime configuration passed to the component.
 type KonfluxInfoConfig struct {
-	// Enabled indicates whether the info component should be deployed.
+	// Enabled controls whether the info component is deployed.
 	// Defaults to true if not specified.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
@@ -302,27 +302,27 @@ type KonfluxInfoConfig struct {
 }
 
 // ApplicationAPIConfig defines the configuration for the application-api component.
-// The Enabled field controls whether the component is deployed (top-level concern).
+// Controls whether the KonfluxApplicationAPI CR is created by the operator.
 type ApplicationAPIConfig struct {
-	// Enabled indicates whether the application-api component should be deployed.
+	// Enabled controls whether the application-api component is deployed.
 	// Defaults to true if not specified.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
 }
 
 // RBACConfig defines the configuration for the RBAC component.
-// The Enabled field controls whether the component is deployed (top-level concern).
+// Controls whether the KonfluxRBAC CR is created by the operator.
 type RBACConfig struct {
-	// Enabled indicates whether the RBAC component should be deployed.
+	// Enabled controls whether the RBAC component is deployed.
 	// Defaults to true if not specified.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
 }
 
 // CLIConfig defines the configuration for the CLI component.
-// The Enabled field controls whether the component is deployed (top-level concern).
+// Controls whether the KonfluxCLI CR is created by the operator.
 type CLIConfig struct {
-	// Enabled indicates whether the CLI component should be deployed.
+	// Enabled controls whether the CLI component is deployed.
 	// Defaults to true if not specified.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
