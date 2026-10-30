@@ -25,6 +25,11 @@ import (
 
 // KonfluxSpec defines the desired state of Konflux.
 type KonfluxSpec struct {
+	// ApplicationAPI configures the application-api component.
+	// Controls whether the KonfluxApplicationAPI CR is created by the operator.
+	// +optional
+	ApplicationAPI *ApplicationAPIConfig `json:"applicationAPI,omitempty"`
+
 	// ImageController configures the image-controller component.
 	// The runtime configuration is copied to the KonfluxImageController CR by the operator.
 	// +optional
@@ -71,13 +76,13 @@ type KonfluxSpec struct {
 	CertManager *CertManagerConfig `json:"certManager,omitempty"`
 
 	// InternalRegistry configures the internal registry component.
-	// The runtime configuration is copied to the KonfluxInternalRegistry CR by the operator.
+	// Controls whether the KonfluxInternalRegistry CR is created by the operator.
 	// +optional
 	InternalRegistry *InternalRegistryConfig `json:"internalRegistry,omitempty"`
 
 	// DefaultTenant configures the default tenant component.
 	// The default tenant provides a namespace accessible by all authenticated users.
-	// The runtime configuration is copied to the KonfluxDefaultTenant CR by the operator.
+	// Controls whether the KonfluxDefaultTenant CR is created by the operator.
 	// +optional
 	DefaultTenant *DefaultTenantConfig `json:"defaultTenant,omitempty"`
 
@@ -88,6 +93,16 @@ type KonfluxSpec struct {
 	// The runtime configuration is copied to the KonfluxSegmentBridge CR by the operator.
 	// +optional
 	Telemetry *TelemetryConfig `json:"telemetry,omitempty"`
+
+	// RBAC configures the RBAC component.
+	// Controls whether the KonfluxRBAC CR is created by the operator.
+	// +optional
+	RBAC *RBACConfig `json:"rbac,omitempty"`
+
+	// CLI configures the CLI component.
+	// Controls whether the KonfluxCLI CR is created by the operator.
+	// +optional
+	CLI *CLIConfig `json:"cli,omitempty"`
 
 	// ComponentMetrics controls Prometheus scrape resources for metrics-enabled components
 	// (see operator/docs/component-monitoring.md#scope). When disabled, those reconcilers
@@ -111,47 +126,83 @@ type ImageControllerConfig struct {
 }
 
 // KonfluxUIConfig defines the configuration for the UI component.
+// The Enabled field controls whether the component is deployed (top-level concern).
 // The Spec field is the runtime configuration passed to the component.
 type KonfluxUIConfig struct {
+	// Enabled controls whether the UI component is deployed.
+	// Defaults to true if not specified.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// Spec configures the UI component (excludes componentMetrics; see spec.componentMetrics).
 	// +optional
 	Spec *KonfluxUIConfigSpec `json:"spec,omitempty"`
 }
 
 // IntegrationServiceConfig defines the configuration for the integration-service component.
+// The Enabled field controls whether the component is deployed (top-level concern).
 // The Spec field is the runtime configuration passed to the component.
 type IntegrationServiceConfig struct {
+	// Enabled controls whether the integration-service component is deployed.
+	// Defaults to true if not specified.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// Spec configures the integration-service component (excludes componentMetrics; see spec.componentMetrics).
 	// +optional
 	Spec *KonfluxIntegrationServiceConfigSpec `json:"spec,omitempty"`
 }
 
 // ReleaseServiceConfig defines the configuration for the release-service component.
+// The Enabled field controls whether the component is deployed (top-level concern).
 // The Spec field is the runtime configuration passed to the component.
 type ReleaseServiceConfig struct {
+	// Enabled controls whether the release-service component is deployed.
+	// Defaults to true if not specified.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// Spec configures the release-service component (excludes componentMetrics; see spec.componentMetrics).
 	// +optional
 	Spec *KonfluxReleaseServiceConfigSpec `json:"spec,omitempty"`
 }
 
 // BuildServiceConfig defines the configuration for the build-service component.
+// The Enabled field controls whether the component is deployed (top-level concern).
 // The Spec field is the runtime configuration passed to the component.
 type BuildServiceConfig struct {
+	// Enabled controls whether the build-service component is deployed.
+	// Defaults to true if not specified.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// Spec configures the build-service component (excludes componentMetrics; see spec.componentMetrics).
 	// +optional
 	Spec *KonfluxBuildServiceConfigSpec `json:"spec,omitempty"`
 }
 
 // NamespaceListerConfig defines the configuration for the namespace-lister component.
+// The Enabled field controls whether the component is deployed (top-level concern).
 // The Spec field is the runtime configuration passed to the component.
 type NamespaceListerConfig struct {
+	// Enabled controls whether the namespace-lister component is deployed.
+	// Defaults to true if not specified.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// Spec configures the namespace-lister component (excludes componentMetrics; see spec.componentMetrics).
 	// +optional
 	Spec *KonfluxNamespaceListerConfigSpec `json:"spec,omitempty"`
 }
 
 // EnterpriseContractConfig defines the configuration for the enterprise-contract component.
+// The Enabled field controls whether the component is deployed (top-level concern).
 type EnterpriseContractConfig struct {
+	// Enabled controls whether the enterprise-contract component is deployed.
+	// Defaults to true if not specified.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// SkipPolicies disables deployment of EnterpriseContractPolicy resources.
 	// When true, only CRDs, namespace, RBAC, and ConfigMap are deployed;
 	// users are expected to manage policies externally.
@@ -160,7 +211,13 @@ type EnterpriseContractConfig struct {
 }
 
 // CertManagerConfig defines the configuration for the cert-manager component.
+// The Enabled field controls whether the component is deployed (top-level concern).
 type CertManagerConfig struct {
+	// Enabled controls whether the cert-manager component is deployed.
+	// Defaults to true if not specified.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// CreateClusterIssuer controls whether cluster issuer resources are created.
 	// Defaults to true if not specified.
 	// +optional
@@ -231,11 +288,44 @@ type TelemetryConfig struct {
 }
 
 // KonfluxInfoConfig defines the configuration for the info component.
+// The Enabled field controls whether the component is deployed (top-level concern).
 // The Spec field is the runtime configuration passed to the component.
 type KonfluxInfoConfig struct {
+	// Enabled controls whether the info component is deployed.
+	// Defaults to true if not specified.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// Spec configures the info component.
 	// +optional
 	Spec *KonfluxInfoSpec `json:"spec,omitempty"`
+}
+
+// ApplicationAPIConfig defines the configuration for the application-api component.
+// Controls whether the KonfluxApplicationAPI CR is created by the operator.
+type ApplicationAPIConfig struct {
+	// Enabled controls whether the application-api component is deployed.
+	// Defaults to true if not specified.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// RBACConfig defines the configuration for the RBAC component.
+// Controls whether the KonfluxRBAC CR is created by the operator.
+type RBACConfig struct {
+	// Enabled controls whether the RBAC component is deployed.
+	// Defaults to true if not specified.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// CLIConfig defines the configuration for the CLI component.
+// Controls whether the KonfluxCLI CR is created by the operator.
+type CLIConfig struct {
+	// Enabled controls whether the CLI component is deployed.
+	// Defaults to true if not specified.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
 }
 
 // ComponentStatus represents the status of a Konflux component.
@@ -349,6 +439,105 @@ func (k *KonfluxSpec) IsDefaultTenantEnabled() bool {
 // Once implemented, unspecified will match the OpenShift console telemetry state.
 func (k *KonfluxSpec) IsTelemetryEnabled() bool {
 	return k.Telemetry != nil && k.Telemetry.Enabled != nil && *k.Telemetry.Enabled
+}
+
+// IsApplicationAPIEnabled returns true if application-api is enabled.
+// Defaults to true if not specified.
+func (k *KonfluxSpec) IsApplicationAPIEnabled() bool {
+	if k.ApplicationAPI == nil || k.ApplicationAPI.Enabled == nil {
+		return true
+	}
+	return *k.ApplicationAPI.Enabled
+}
+
+// IsUIEnabled returns true if the UI component is enabled.
+// Defaults to true if not specified.
+func (k *KonfluxSpec) IsUIEnabled() bool {
+	if k.KonfluxUI == nil || k.KonfluxUI.Enabled == nil {
+		return true
+	}
+	return *k.KonfluxUI.Enabled
+}
+
+// IsIntegrationServiceEnabled returns true if integration-service is enabled.
+// Defaults to true if not specified.
+func (k *KonfluxSpec) IsIntegrationServiceEnabled() bool {
+	if k.KonfluxIntegrationService == nil || k.KonfluxIntegrationService.Enabled == nil {
+		return true
+	}
+	return *k.KonfluxIntegrationService.Enabled
+}
+
+// IsReleaseServiceEnabled returns true if release-service is enabled.
+// Defaults to true if not specified.
+func (k *KonfluxSpec) IsReleaseServiceEnabled() bool {
+	if k.KonfluxReleaseService == nil || k.KonfluxReleaseService.Enabled == nil {
+		return true
+	}
+	return *k.KonfluxReleaseService.Enabled
+}
+
+// IsBuildServiceEnabled returns true if build-service is enabled.
+// Defaults to true if not specified.
+func (k *KonfluxSpec) IsBuildServiceEnabled() bool {
+	if k.KonfluxBuildService == nil || k.KonfluxBuildService.Enabled == nil {
+		return true
+	}
+	return *k.KonfluxBuildService.Enabled
+}
+
+// IsNamespaceListerEnabled returns true if namespace-lister is enabled.
+// Defaults to true if not specified.
+func (k *KonfluxSpec) IsNamespaceListerEnabled() bool {
+	if k.NamespaceLister == nil || k.NamespaceLister.Enabled == nil {
+		return true
+	}
+	return *k.NamespaceLister.Enabled
+}
+
+// IsInfoEnabled returns true if the info component is enabled.
+// Defaults to true if not specified.
+func (k *KonfluxSpec) IsInfoEnabled() bool {
+	if k.KonfluxInfo == nil || k.KonfluxInfo.Enabled == nil {
+		return true
+	}
+	return *k.KonfluxInfo.Enabled
+}
+
+// IsEnterpriseContractEnabled returns true if enterprise-contract is enabled.
+// Defaults to true if not specified.
+func (k *KonfluxSpec) IsEnterpriseContractEnabled() bool {
+	if k.EnterpriseContract == nil || k.EnterpriseContract.Enabled == nil {
+		return true
+	}
+	return *k.EnterpriseContract.Enabled
+}
+
+// IsCertManagerEnabled returns true if the cert-manager component is enabled.
+// Defaults to true if not specified.
+func (k *KonfluxSpec) IsCertManagerEnabled() bool {
+	if k.CertManager == nil || k.CertManager.Enabled == nil {
+		return true
+	}
+	return *k.CertManager.Enabled
+}
+
+// IsRBACEnabled returns true if the RBAC component is enabled.
+// Defaults to true if not specified.
+func (k *KonfluxSpec) IsRBACEnabled() bool {
+	if k.RBAC == nil || k.RBAC.Enabled == nil {
+		return true
+	}
+	return *k.RBAC.Enabled
+}
+
+// IsCLIEnabled returns true if the CLI component is enabled.
+// Defaults to true if not specified.
+func (k *KonfluxSpec) IsCLIEnabled() bool {
+	if k.CLI == nil || k.CLI.Enabled == nil {
+		return true
+	}
+	return *k.CLI.Enabled
 }
 
 // IsComponentMetricsEnabled returns true if component metrics scraping resources should be deployed.
