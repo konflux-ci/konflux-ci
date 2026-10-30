@@ -296,8 +296,8 @@ github.com/openshift-pipelines/pipelines-as-code v0.48.0 h1:9lhLcJ3x2uZGc35wqyo8
 github.com/openshift-pipelines/pipelines-as-code v0.48.0/go.mod h1:laJi+ID5tCIai2XOf6i7ESHD7hthIUFj/z/FyTbwhtc=
 github.com/openshift/api v0.0.0-20261028163820-1f109e9eefc7 h1:hdo1AalEZcD6TG2LTvyeYz1FJngC7ldW6m3Te9WlIvc=
 github.com/openshift/api v0.0.0-20261028163820-1f109e9eefc7/go.mod h1:2oI3aXQFDjjl7l4xA9ZPSkB+l+lyfWLg7P2sWg9yEvM=
-github.com/openshift/client-go v0.0.0-20261014115618-03a1e773ff3d h1:r17aU6USyHX1ru8dkVZR9jCEuhLy3B7QYEo3rWKI81o=
-github.com/openshift/client-go v0.0.0-20261014115618-03a1e773ff3d/go.mod h1:jJt9qm7qyuNMorTWJussOTVdx70omaSE7asKU+J7yHk=
+github.com/openshift/client-go v0.0.0-20261027103500-48133ed95dad h1:KJ8Fs8QpXjtT854HjMLZyIjptLEHm4I6RC2OCZu6DvY=
+github.com/openshift/client-go v0.0.0-20261027103500-48133ed95dad/go.mod h1:g4WVqRD/NuQWnM6lQP+LhLSryRganEdhYq68YghbXi4=
 github.com/openshift/library-go v0.0.0-20261001144932-192662696fc7 h1:PDH/v+jap31Eb4N9q+Q3X05QHIXZA4sVyr4zb/n+Cv0=
 github.com/openshift/library-go v0.0.0-20261001144932-192662696fc7/go.mod h1:k0EA2kHPdvdKgyV38lWS1u1eIgMBgrpWkCl2ei4A3ug=
 github.com/operator-framework/operator-lib v0.19.0 h1:az6ogYj21rtU0SF9uYctRLyKp2dtlqTsmpfehFy6Ce8=
