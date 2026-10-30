@@ -44,8 +44,8 @@ github.com/coder/websocket v1.8.15 h1:6B2JPeOGlpff2Uz6vOEH1Vzpi0iUz20A+lPVhPHtNU
 github.com/coder/websocket v1.8.15/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
 github.com/codeready-toolchain/api v0.0.0-20261023161012-10cbbf2156ff h1:+T1CjMpCv6PJJdERfUL72NH74cBraBqLrfWjzSOd8Zg=
 github.com/codeready-toolchain/api v0.0.0-20261023161012-10cbbf2156ff/go.mod h1:HiVb5pYjvAld5drbFWGzgaPW97BGBYoeEKuWw0QKIeI=
-github.com/conforma/crds/api v0.1.36 h1:g6rEIsl0CQrNJevcmFcIGIuOZMcXtX4jfYpMdmyyExg=
-github.com/conforma/crds/api v0.1.36/go.mod h1:YwbOBu/ZZPi+DMyVsv1wPJOYQJYDtqcZuSmHsJ3eqsU=
+github.com/conforma/crds/api v0.1.41 h1:hAqIWSCZ6AlULIdwIq9tsNF7vLNwQxgalzptIKAfoEg=
+github.com/conforma/crds/api v0.1.41/go.mod h1:lTn9LsN8V9cmjZC7a8LM1hNFz/i3eXfva8OmKcIRZBQ=
 github.com/coreos/go-semver v0.3.1 h1:yi21YpKnrx1gt5R+la8n5WgS0kCrsPp33dmEyHReZr4=
 github.com/coreos/go-semver v0.3.1/go.mod h1:irMmmIw/7yzSRPWryHsK7EYSg09caPQL03VsM8rvUec=
 github.com/coreos/go-systemd/v22 v22.7.0 h1:LAEzFkke61DFROc7zNLX/WA2i5J8gYqe0rSj9KI28KA=

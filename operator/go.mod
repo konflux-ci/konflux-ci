@@ -1,6 +1,6 @@
 module github.com/konflux-ci/konflux-ci/operator
 
-go 1.26.0
+go 1.26.7
 
 require (
 	github.com/cert-manager/cert-manager v1.21.3
