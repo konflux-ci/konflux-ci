@@ -1,11 +1,11 @@
 module github.com/konflux-ci/konflux-ci/test/go-tests
 
-go 1.26.0
+go 1.26.7
 
 require (
 	github.com/coder/websocket v1.8.15
 	github.com/codeready-toolchain/api v0.0.0-20261023161012-10cbbf2156ff
-	github.com/conforma/crds/api v0.1.36
+	github.com/conforma/crds/api v0.1.41
 	github.com/devfile/library/v2 v2.4.0
 	github.com/docker/cli v29.9.2+incompatible
 	github.com/gofri/go-github-ratelimit/v2 v2.0.2
