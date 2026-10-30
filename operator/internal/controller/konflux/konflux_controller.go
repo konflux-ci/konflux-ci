@@ -18,6 +18,7 @@ package konflux
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -357,7 +358,10 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// All component deployments are managed by their respective reconcilers,
 	// so we aggregate readiness by checking each sub-CR's Ready condition.
 	// Only enabled components are included in readiness aggregation.
+	// Track active condition prefixes so we can clean up stale prefixed
+	// conditions from components that were previously enabled but are now disabled.
 	var subCRStatuses []condition.SubCRStatus
+	activeConditionPrefixes := make(map[string]bool)
 
 	// Get and copy status from the KonfluxBuildService CR (if enabled)
 	if konflux.Spec.IsBuildServiceEnabled() {
@@ -366,6 +370,7 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxBuildService status")
 		}
 		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, buildService, "build-service"))
+		activeConditionPrefixes["build-service"] = true
 	}
 
 	// Get and copy status from the KonfluxIntegrationService CR (if enabled)
@@ -375,6 +380,7 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxIntegrationService status")
 		}
 		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, integrationService, "integration-service"))
+		activeConditionPrefixes["integration-service"] = true
 	}
 
 	// Get and copy status from the KonfluxReleaseService CR (if enabled)
@@ -384,6 +390,7 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxReleaseService status")
 		}
 		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, releaseService, "release-service"))
+		activeConditionPrefixes["release-service"] = true
 	}
 
 	// Get and copy status from the KonfluxUI CR (if enabled)
@@ -393,6 +400,7 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxUI status")
 		}
 		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, ui, "ui"))
+		activeConditionPrefixes["ui"] = true
 
 		// Propagate UI URL from KonfluxUI status to Konflux status
 		if ui.Status.Ingress != nil {
@@ -410,6 +418,7 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxRBAC status")
 		}
 		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, konfluxRBAC, "rbac"))
+		activeConditionPrefixes["rbac"] = true
 	}
 
 	// Get and copy status from the KonfluxInfo CR (if enabled)
@@ -419,6 +428,7 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxInfo status")
 		}
 		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, konfluxInfo, "info"))
+		activeConditionPrefixes["info"] = true
 	}
 
 	// Get and copy status from the KonfluxNamespaceLister CR (if enabled)
@@ -428,6 +438,7 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxNamespaceLister status")
 		}
 		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, konfluxNamespaceLister, "namespace-lister"))
+		activeConditionPrefixes["namespace-lister"] = true
 	}
 
 	// Get and copy status from the KonfluxEnterpriseContract CR (if enabled)
@@ -437,6 +448,7 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxEnterpriseContract status")
 		}
 		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, konfluxEnterpriseContract, "enterprise-contract"))
+		activeConditionPrefixes["enterprise-contract"] = true
 	}
 
 	// Get and copy status from the KonfluxApplicationAPI CR (if enabled)
@@ -446,6 +458,7 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxApplicationAPI status")
 		}
 		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, applicationAPI, "application-api"))
+		activeConditionPrefixes["application-api"] = true
 	}
 
 	// Get and copy status from the KonfluxCLI CR (if enabled)
@@ -455,6 +468,7 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxCLI status")
 		}
 		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, cliCR, "cli"))
+		activeConditionPrefixes["cli"] = true
 	}
 
 	// Get and copy status from the KonfluxImageController CR (if enabled)
@@ -464,6 +478,7 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxImageController status")
 		}
 		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, imageController, "image-controller"))
+		activeConditionPrefixes["image-controller"] = true
 	}
 
 	// Get and copy status from the KonfluxCertManager CR (if enabled)
@@ -473,6 +488,7 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxCertManager status")
 		}
 		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, certManager, "cert-manager"))
+		activeConditionPrefixes["cert-manager"] = true
 	}
 
 	// Get and copy status from the KonfluxInternalRegistry CR (if enabled)
@@ -482,6 +498,7 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxInternalRegistry status")
 		}
 		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, registry, "internal-registry"))
+		activeConditionPrefixes["internal-registry"] = true
 	}
 
 	// Get and copy status from the KonfluxDefaultTenant CR (if enabled)
@@ -491,6 +508,7 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxDefaultTenant status")
 		}
 		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, defaultTenantCR, "default-tenant"))
+		activeConditionPrefixes["default-tenant"] = true
 	}
 
 	// Get and copy status from the KonfluxSegmentBridge CR (if enabled)
@@ -500,7 +518,22 @@ func (r *KonfluxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return errHandler.HandleWithReason(ctx, err, condition.ReasonSubCRStatusFailed, "get KonfluxSegmentBridge status")
 		}
 		subCRStatuses = append(subCRStatuses, condition.CopySubCRStatus(konflux, segmentBridgeCR, "segment-bridge"))
+		activeConditionPrefixes["segment-bridge"] = true
 	}
+
+	// Remove stale prefixed conditions from disabled components.
+	// When a component transitions from enabled to disabled, its prefixed
+	// conditions (e.g. "build-service.Ready") would persist indefinitely
+	// because CopySubCRStatus is no longer called for it.
+	condition.CleanupStaleConditions(konflux, func(cond metav1.Condition) bool {
+		// Keep non-prefixed conditions (Ready, CertManagerAvailable, etc.)
+		dotIdx := strings.Index(cond.Type, ".")
+		if dotIdx < 0 {
+			return true
+		}
+		prefix := cond.Type[:dotIdx]
+		return activeConditionPrefixes[prefix]
+	})
 
 	// Set overall Ready condition based on all enabled sub-CRs.
 	// Only enabled components are included in readiness aggregation.

@@ -252,13 +252,14 @@ var _ = Describe("Conditions Helper Functions", func() {
 			Expect(notReadyReasons).To(ContainElement("component-3 is not ready"))
 		})
 
-		It("should handle empty sub-CR list", func() {
+		It("should return not ready when sub-CR list is empty", func() {
 			subCRStatuses := []SubCRStatus{}
 
 			allReady, notReadyReasons := AggregateReadiness(subCRStatuses)
 
-			Expect(allReady).To(BeTrue())
-			Expect(notReadyReasons).To(BeEmpty())
+			Expect(allReady).To(BeFalse())
+			Expect(notReadyReasons).To(HaveLen(1))
+			Expect(notReadyReasons[0]).To(Equal("no components are enabled"))
 		})
 	})
 
@@ -374,6 +375,18 @@ var _ = Describe("Conditions Helper Functions", func() {
 			Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
 			Expect(readyCondition.Reason).To(Equal("DependencyMissing"))
 			Expect(readyCondition.Message).To(Equal("Required dependency is not installed"))
+		})
+
+		It("should set Ready to False with NoComponentsEnabled when sub-CR list is empty", func() {
+			subCRStatuses := []SubCRStatus{}
+
+			SetAggregatedReadyCondition(testObject, subCRStatuses)
+
+			readyCondition := apimeta.FindStatusCondition(testObject.GetConditions(), TypeReady)
+			Expect(readyCondition).NotTo(BeNil())
+			Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(readyCondition.Reason).To(Equal("NoComponentsEnabled"))
+			Expect(readyCondition.Message).To(Equal("No components are enabled"))
 		})
 	})
 

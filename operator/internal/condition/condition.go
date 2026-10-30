@@ -187,7 +187,13 @@ type SubCRStatus struct {
 
 // AggregateReadiness computes the overall readiness from sub-CR statuses.
 // Returns whether all components are ready and a slice of reasons for any not-ready components.
+// An empty slice is treated as not-ready to prevent a misconfiguration where all
+// components are disabled from being reported as healthy.
 func AggregateReadiness(subCRStatuses []SubCRStatus) (allReady bool, notReadyReasons []string) {
+	if len(subCRStatuses) == 0 {
+		return false, []string{"no components are enabled"}
+	}
+
 	allReady = true
 
 	for _, status := range subCRStatuses {
@@ -208,7 +214,14 @@ func SetAggregatedReadyCondition(
 ) {
 	allReady, notReadyReasons := AggregateReadiness(subCRStatuses)
 
-	if allReady {
+	if len(subCRStatuses) == 0 {
+		SetCondition(obj, metav1.Condition{
+			Type:    TypeReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  ReasonNoComponentsEnabled,
+			Message: "No components are enabled",
+		})
+	} else if allReady {
 		// Count total components (sub-CRs)
 		totalComponents := len(subCRStatuses)
 		SetCondition(obj, metav1.Condition{
