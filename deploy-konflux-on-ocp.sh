@@ -21,6 +21,11 @@
 #                         staticPasswords. Refused by default: those demo users have a
 #                         password published in this repository and must never reach a
 #                         cluster that is reachable from the internet.
+#   GITHUB_APP_ID         - GitHub App ID for Pipelines-as-Code integration secrets
+#   WEBHOOK_SECRET        - Webhook secret configured on the GitHub App
+#   GITHUB_PRIVATE_KEY    - GitHub App private key string (or set GITHUB_PRIVATE_KEY_PATH)
+#   GITHUB_PRIVATE_KEY_PATH - Path to the GitHub App private key .pem file
+#   SMEE_CHANNEL          - Smee channel URL or ID for webhook proxying (optional, for non-public clusters)
 #
 # Environment variables (set by OpenShift CI/Prow):
 #   REPO_NAME      - Name of the repository being tested (e.g., "konflux-ci", "release")
@@ -189,7 +194,14 @@ oc apply -f "${KONFLUX_CR}"
 # Step 6: Deploy secrets
 echo ""
 echo "=== Step 6/6: Deploying secrets ==="
-USE_OPENSHIFT_PIPELINES=true "${REPO_ROOT}/scripts/deploy-secrets.sh"
+if [ -n "${GITHUB_APP_ID:-}" ]; then
+    USE_OPENSHIFT_PIPELINES=true "${REPO_ROOT}/scripts/deploy-secrets.sh"
+else
+    echo "NOTICE: GITHUB_APP_ID is not set. Skipping automated secrets deployment."
+    echo "        Build pipelines and PR automation will not function until a GitHub App is configured."
+    echo "        Follow the guide at: operator/docs/content/docs/installation/install-openshift.md#configure-github-integration-secrets"
+    echo "        or run: USE_OPENSHIFT_PIPELINES=true ./scripts/deploy-secrets.sh"
+fi
 
 # Wait for Konflux to be fully ready
 echo ""
