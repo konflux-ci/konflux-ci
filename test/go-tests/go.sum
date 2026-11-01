@@ -15,8 +15,8 @@ github.com/Microsoft/go-winio v0.6.4 h1:kJF2pamtYCWXf0xAT8sAkwKC0pMl2HYBrRPHAqyU
 github.com/Microsoft/go-winio v0.6.4/go.mod h1:1xl5JXG4ze/m74GH6Dc4Mwxfc3VL5siRVQjIAlHH07U=
 github.com/ProtonMail/go-crypto v1.5.2 h1:cucYnvqcY7UOXVD//mSyjeaPY0SSN3v5cDkYPxumINk=
 github.com/ProtonMail/go-crypto v1.5.2/go.mod h1:/RaSu30DaKO4RY+XdV/ACcCcZkGr7AhUIduq5sjzzCo=
-github.com/allegro/bigcache/v3 v3.1.0 h1:H2Vp8VOvxcrB91o86fUSVJFqeuz8kpyyB02eH3bSzwk=
-github.com/allegro/bigcache/v3 v3.1.0/go.mod h1:aPyh7jEvrog9zAwx5N7+JUQX5dZTSGpxF1LAR4dr35I=
+github.com/allegro/bigcache/v3 v3.2.0 h1:B45F9x3iaoBlhzIA+0jqxlThTUoyg+mOk7HUKSbJOL8=
+github.com/allegro/bigcache/v3 v3.2.0/go.mod h1:qvxNn6cSKfWRmfDuPJbZcfxsQXEtoskUqPzT0kuHG5s=
 github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be h1:9AeTilPcZAjCFIImctFaOjnTIavg87rW78vTPkQqLI8=
 github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be/go.mod h1:ySMOLuWl6zY27l47sB3qLNK6tF2fkHG55UZxx8oIVo4=
 github.com/antlr4-go/antlr/v4 v4.13.1 h1:SqQKkuVZ+zWkMMNkjy5FZe5mr5WURWnlpmOuzYWrPrQ=
@@ -356,8 +356,8 @@ github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWD
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 github.com/tektoncd/cli v0.46.1 h1:yJFn5diCuE/3xu7qlEo5OQ2A47K+UbAVZF+6FeciSas=
 github.com/tektoncd/cli v0.46.1/go.mod h1:cMGBmevXoNEw29NBFgum/3jdugN0UbXsRwns1UVWp4U=
-github.com/tektoncd/pipeline v1.15.0 h1:ZGboFUaEdpYurZWqeGT5rn9e6qmomGL/gLSKhHp2vvQ=
-github.com/tektoncd/pipeline v1.15.0/go.mod h1:HghtkZ1D9b91o0YiXABDUd+c2C6R4kbk+PumnHqs3Bk=
+github.com/tektoncd/pipeline v1.16.0 h1:J5RXmYft5Tljjvn+WV0zdfdh7paNw0eh8y6UCqZRNn0=
+github.com/tektoncd/pipeline v1.16.0/go.mod h1:s0AvpOqeqnD8i30nG9H6V4cf01OkG3QBNDzueKpzh+A=
 github.com/tektoncd/triggers v0.36.0 h1:nyNkMN3L+TvpRHQXDIXc8hqicj494Xx9Dv2+8wgjxe8=
 github.com/tektoncd/triggers v0.36.0/go.mod h1:O3kGLFBWDgjgvlGNdGWcrV2rVoRvgousDKhTwCSeakU=
 github.com/tidwall/gjson v1.18.0 h1:FIDeeyB800efLX89e5a8Y0BNH+LOngJyGrIWxG2FKQY=
