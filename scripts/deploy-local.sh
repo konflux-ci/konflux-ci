@@ -327,6 +327,10 @@ else
     echo "Step 1: Creating Kind cluster"
     echo "========================================="
     "${SCRIPT_DIR}/setup-kind-local-cluster.sh"
+    # Select the Kind context before any install. Reusing an existing cluster
+    # does not change the current context on its own.
+    kubectl config use-context "kind-${KIND_CLUSTER}"
+    echo "Using kubectl context kind-${KIND_CLUSTER}"
 fi
 
 # Step 2: Deploy dependencies
