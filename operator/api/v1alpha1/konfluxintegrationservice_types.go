@@ -53,6 +53,13 @@ type KonfluxIntegrationServiceConfigSpec struct {
 	// +kubebuilder:validation:MinLength=2
 	FinallyTimeout string `json:"finallyTimeout,omitempty"`
 
+	// ConsoleName is the display name shown in PR status comments (e.g. "My Konflux").
+	// Maps to the CONSOLE_NAME env var on the controller-manager container.
+	// Takes precedence over any CONSOLE_NAME entry in integrationControllerManager.manager.env.
+	// When omitted, the upstream integration-service default applies.
+	// +optional
+	ConsoleName string `json:"consoleName,omitempty"`
+
 	// SnapshotGarbageCollector defines customizations for the snapshot GC CronJob container
 	// (resources, env vars).
 	// +optional

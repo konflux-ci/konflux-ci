@@ -82,6 +82,9 @@ const (
 	envTasksTimeout    = "TASKS_TIMEOUT"
 	envFinallyTimeout  = "FINALLY_TIMEOUT"
 
+	// Env var name for the console display name shown in PR status comments.
+	envConsoleName = "CONSOLE_NAME"
+
 	// Env var names for snapshot garbage collector retention configuration.
 	// The binary reads these after flag.Parse(), so they override the command-line args.
 	envPRSnapshotsToKeep              = "PR_SNAPSHOTS_TO_KEEP"
@@ -382,6 +385,7 @@ func buildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploy
 			customization.WithOptionalEnvOverride(envPipelineTimeout, integrationSpec.PipelineTimeout),
 			customization.WithOptionalEnvOverride(envTasksTimeout, integrationSpec.TasksTimeout),
 			customization.WithOptionalEnvOverride(envFinallyTimeout, integrationSpec.FinallyTimeout),
+			customization.WithOptionalEnvOverride(envConsoleName, integrationSpec.ConsoleName),
 		),
 		customization.WithLeaderElection(managerContainerName, replicas),
 	)

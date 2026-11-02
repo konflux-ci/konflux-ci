@@ -56,6 +56,13 @@ spec:
                       Defaults to true when unset.
                     type: boolean
                 type: object
+              consoleName:
+                description: |-
+                  ConsoleName is the display name shown in PR status comments (e.g. "My Konflux").
+                  Maps to the CONSOLE_NAME env var on the controller-manager container.
+                  Takes precedence over any CONSOLE_NAME entry in integrationControllerManager.manager.env.
+                  When omitted, the upstream integration-service default applies.
+                type: string
               finallyTimeout:
                 description: |-
                   FinallyTimeout is the timeout for finally tasks (e.g. "2h", "30m").

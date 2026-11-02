@@ -12,6 +12,10 @@ spec:
   #   name: custom-ca-bundle
   #   key: tls.pem
 
+  # Display name shown in PR status comments. Maps to the CONSOLE_NAME env var.
+  # Omit to use the upstream integration-service default ("Integration Service").
+  # consoleName: "My Konflux"
+
   # Pipeline run timeouts. Each field maps to the corresponding env var on the
   # controller-manager container. Omit to use the upstream integration-service defaults.
   pipelineTimeout: "6h"
