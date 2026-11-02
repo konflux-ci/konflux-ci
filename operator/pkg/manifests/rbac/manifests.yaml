@@ -152,6 +152,12 @@ rules:
   verbs:
   - get
 - apiGroups:
+  - project.openshift.io
+  resources:
+  - projects
+  verbs:
+  - get
+- apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - roles
@@ -333,6 +339,12 @@ rules:
   verbs:
   - get
 - apiGroups:
+  - project.openshift.io
+  resources:
+  - projects
+  verbs:
+  - get
+- apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - rolebindings
@@ -486,6 +498,12 @@ rules:
   - ""
   resources:
   - namespaces
+  verbs:
+  - get
+- apiGroups:
+  - project.openshift.io
+  resources:
+  - projects
   verbs:
   - get
 - apiGroups:
@@ -651,6 +669,12 @@ rules:
   - ""
   resources:
   - namespaces
+  verbs:
+  - get
+- apiGroups:
+  - project.openshift.io
+  resources:
+  - projects
   verbs:
   - get
 ---

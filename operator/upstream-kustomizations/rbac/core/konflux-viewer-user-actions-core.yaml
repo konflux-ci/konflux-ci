@@ -100,3 +100,9 @@ rules:
       - ''
     resources:
       - namespaces
+  - verbs:
+      - get
+    apiGroups:
+      - project.openshift.io
+    resources:
+      - projects

@@ -133,6 +133,12 @@ rules:
       - namespaces
   - verbs:
       - get
+    apiGroups:
+      - project.openshift.io
+    resources:
+      - projects
+  - verbs:
+      - get
       - list
       - watch
       - create
