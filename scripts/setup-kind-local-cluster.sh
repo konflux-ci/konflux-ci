@@ -180,6 +180,10 @@ if kind get clusters 2>/dev/null | grep -q "^${KIND_CLUSTER}$"; then
         echo "Kind cluster '${KIND_CLUSTER}' already exists and is usable."
         echo "Skipping cluster creation. Delete it first if you want to recreate:"
         echo "  kind delete cluster --name ${KIND_CLUSTER}"
+        # kind create cluster selects this context. Reuse must do the same so
+        # later kubectl commands target the Kind cluster.
+        kubectl config use-context "kind-${KIND_CLUSTER}"
+        echo "Using kubectl context kind-${KIND_CLUSTER}"
         exit 0
     else
         echo "Kind cluster '${KIND_CLUSTER}' exists but is not responding."
