@@ -849,6 +849,97 @@ func TestBuildControllerManagerOverlay_PipelineTimeouts(t *testing.T) {
 	})
 }
 
+func TestBuildControllerManagerOverlay_ConsoleName(t *testing.T) {
+	t.Run("consoleName is injected as CONSOLE_NAME env var", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		integrationSpec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
+			ConsoleName: "My Konflux",
+		}
+		deployment := getIntegrationServiceDeployment(t)
+		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "", "")).To(gomega.Succeed())
+
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		consoleNameVar := findEnvVar(managerContainer.Env, envConsoleName)
+		g.Expect(consoleNameVar).NotTo(gomega.BeNil())
+		g.Expect(consoleNameVar.Value).To(gomega.Equal("My Konflux"))
+	})
+
+	t.Run("typed CRD field overrides explicit manager.env entry", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		integrationSpec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
+			ConsoleName: "My Konflux",
+			IntegrationControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+				Manager: &konfluxv1alpha1.ContainerSpec{
+					Env: []corev1.EnvVar{
+						{Name: envConsoleName, Value: "Old Name"},
+					},
+				},
+			},
+		}
+		deployment := getIntegrationServiceDeployment(t)
+		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "", "")).To(gomega.Succeed())
+
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		consoleNameVar := findEnvVar(managerContainer.Env, envConsoleName)
+		g.Expect(consoleNameVar).NotTo(gomega.BeNil())
+		g.Expect(consoleNameVar.Value).To(gomega.Equal("My Konflux"))
+	})
+
+	t.Run("empty consoleName does not inject CONSOLE_NAME env var", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		integrationSpec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{}
+		deployment := getIntegrationServiceDeployment(t)
+		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "", "")).To(gomega.Succeed())
+
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		g.Expect(findEnvVar(managerContainer.Env, envConsoleName)).To(gomega.BeNil())
+	})
+
+	t.Run("manager.env CONSOLE_NAME passes through when consoleName is not set", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		integrationSpec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
+			// ConsoleName intentionally omitted — manager.env should pass through
+			IntegrationControllerManager: &konfluxv1alpha1.ControllerManagerDeploymentSpec{
+				Manager: &konfluxv1alpha1.ContainerSpec{
+					Env: []corev1.EnvVar{
+						{Name: envConsoleName, Value: "Env Name"},
+					},
+				},
+			},
+		}
+		deployment := getIntegrationServiceDeployment(t)
+		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "", "")).To(gomega.Succeed())
+
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		consoleNameVar := findEnvVar(managerContainer.Env, envConsoleName)
+		g.Expect(consoleNameVar).NotTo(gomega.BeNil())
+		g.Expect(consoleNameVar.Value).To(gomega.Equal("Env Name"))
+	})
+
+	t.Run("consoleName works together with timeout fields", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		integrationSpec := konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec{
+			ConsoleName:     "My Konflux",
+			PipelineTimeout: "6h",
+		}
+		deployment := getIntegrationServiceDeployment(t)
+		g.Expect(applyIntegrationServiceDeploymentCustomizations(deployment, integrationSpec, "", "")).To(gomega.Succeed())
+
+		managerContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.Containers, managerContainerName)
+		g.Expect(managerContainer).NotTo(gomega.BeNil())
+		consoleNameVar := findEnvVar(managerContainer.Env, envConsoleName)
+		g.Expect(consoleNameVar).NotTo(gomega.BeNil())
+		g.Expect(consoleNameVar.Value).To(gomega.Equal("My Konflux"))
+		pipelineTimeoutVar := findEnvVar(managerContainer.Env, envPipelineTimeout)
+		g.Expect(pipelineTimeoutVar).NotTo(gomega.BeNil())
+		g.Expect(pipelineTimeoutVar.Value).To(gomega.Equal("6h"))
+	})
+}
+
 func TestApplySnapshotGCCustomizations_ContainerNotFound(t *testing.T) {
 	makeEmptyCronJob := func(name string) *batchv1.CronJob {
 		return &batchv1.CronJob{
