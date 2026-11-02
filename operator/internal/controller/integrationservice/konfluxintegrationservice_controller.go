@@ -357,7 +357,7 @@ func applyIntegrationServiceDeploymentCustomizations(deployment *appsv1.Deployme
 }
 
 // buildControllerManagerOverlay builds the pod overlay for the controller-manager deployment.
-// Typed timeout fields (PipelineTimeout, TasksTimeout, FinallyTimeout) are applied last and
+// Typed fields (PipelineTimeout, TasksTimeout, FinallyTimeout, ConsoleName) are applied last and
 // take precedence over any env entry with the same name in integrationControllerManager.manager.env.
 // When not set in the CRD, the upstream integration-service defaults apply.
 func buildControllerManagerOverlay(spec *konfluxv1alpha1.ControllerManagerDeploymentSpec, consoleURL string, integrationSpec konfluxv1alpha1.KonfluxIntegrationServiceConfigSpec) *customization.PodOverlay {
