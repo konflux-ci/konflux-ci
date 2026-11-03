@@ -736,7 +736,9 @@ spec:
                                         description: Selects a key of a ConfigMap.
                                         properties:
                                           key:
-                                            description: The key to select.
+                                            description: |-
+                                              The key to select from the ConfigMap's Data field.
+                                              Keys in the BinaryData field are not currently propagated to container env vars.
                                             type: string
                                           name:
                                             default: ""
@@ -2001,7 +2003,9 @@ spec:
                                         description: Selects a key of a ConfigMap.
                                         properties:
                                           key:
-                                            description: The key to select.
+                                            description: |-
+                                              The key to select from the ConfigMap's Data field.
+                                              Keys in the BinaryData field are not currently propagated to container env vars.
                                             type: string
                                           name:
                                             default: ""
@@ -2909,7 +2913,9 @@ spec:
                                         description: Selects a key of a ConfigMap.
                                         properties:
                                           key:
-                                            description: The key to select.
+                                            description: |-
+                                              The key to select from the ConfigMap's Data field.
+                                              Keys in the BinaryData field are not currently propagated to container env vars.
                                             type: string
                                           name:
                                             default: ""
@@ -5278,7 +5284,7 @@ spec:
               key: token
               name: release-service-github-token
               optional: true
-        image: quay.io/konflux-ci/release-service:e55c5282b48c8619986fc9b9d7d0eab88ad038e1
+        image: quay.io/konflux-ci/release-service:5c67a2aa1153ee9aae931553d6ac7c330592be4f
         livenessProbe:
           httpGet:
             path: /healthz
@@ -5331,6 +5337,87 @@ spec:
             path: tls.key
           optional: false
           secretName: metrics-server-cert
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: release-service-cleanup-timed-out-internal-requests
+  namespace: release-service
+spec:
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - command:
+            - /bin/bash
+            - -c
+            - |
+              set -o pipefail
+              PATH="/bin:/usr/bin:/usr/local/bin"
+              MAX_PROCS=5
+              INTERNAL_REQUESTS_FILE="/var/tmp/internal-requests-to-be-deleted"
+              KUBECTL_OUTPUT=$(mktemp -p /var/tmp)
+              YD=$(date -d 'yesterday' +%s)
+              kubectl get internalrequests --all-namespaces \
+              --sort-by=.status.completionTime \
+              --template '{{range .items}}{{.metadata.name}}{{"\t"}}{{.metadata.namespace}}{{"\t"}}{{.status.completionTime}}{{"\n"}}{{end}}' \
+                | grep -E "[0-9]{4}((-?)[0-9]{2})+T.*Z$" > $KUBECTL_OUTPUT
+              awk -v yesterday=${YD} '{
+                   # parsing the completionTime and converting it to epoch
+                   # so we can compute the precise IRs that should be deleted
+                   gsub("[:\\-TZ]", " ", $3)
+                   t=mktime($3)
+                   completionTime=strftime("%s", t)
+                   #
+                   # completionTime should be smaller than yesterday seconds so it can be deleted
+                   if(yesterday > completionTime) {
+                     args="%s:%s\n"
+                     printf(args, $1, $2)
+                   }
+                }' $KUBECTL_OUTPUT > $INTERNAL_REQUESTS_FILE
+
+              # The deleteAndLog will run the CR deletion and save the operation in a structured way that
+              # can be read easily by kubectl or journalctl
+              function deleteAndLog() {
+                ir=${1%:*}
+                namespace=${1#*:}
+                kubectl delete internalrequest $ir -n $namespace |while read logLine; do
+                  echo "INFO: namespace=${namespace} log=${logLine}"
+                done
+              }
+              export -f deleteAndLog
+              xargs -a ${INTERNAL_REQUESTS_FILE} -i -P ${MAX_PROCS} bash -c 'deleteAndLog "{}"'
+            image: quay.io/konflux-ci/release-service-utils@sha256:081c45278a9061fa03b85307c3f513daf3a4bf0c0357d2e9fb3d0687075961e9
+            imagePullPolicy: IfNotPresent
+            name: ir-cleanup
+            resources:
+              limits:
+                cpu: 200m
+                memory: 300Mi
+              requests:
+                cpu: 100m
+                memory: 200Mi
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+              readOnlyRootFilesystem: true
+              runAsNonRoot: true
+              seccompProfile:
+                type: RuntimeDefault
+            volumeMounts:
+            - mountPath: /var/tmp
+              name: temp-directory
+          restartPolicy: Never
+          serviceAccountName: release-service-controller-manager
+          volumes:
+          - emptyDir: {}
+            name: temp-directory
+  schedule: 10 03 * * *
+  successfulJobsHistoryLimit: 3
 ---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ReleaseServiceConfig
