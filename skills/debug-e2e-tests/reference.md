@@ -92,7 +92,7 @@ gh api "repos/konflux-ci/<service>/commits?sha=main&per_page=10" \
 | `image-controller/core/` | `konflux-ci/image-controller` | `quay.io/konflux-ci/image-controller` |
 | `application-api/` | `konflux-ci/application-api` | (CRDs only) |
 | `enterprise-contract/core/` | `conforma/crds` | (CRDs only) |
-| `release/internal-services/` | `redhat-appstudio/internal-services` | (CRDs only) |
+| `release/internal-services/` | `konflux-ci/internal-services` | (CRDs only) |
 | `segment-bridge/` | `konflux-ci/segment-bridge` | `quay.io/konflux-ci/segment-bridge` |
 
 ### Test code structure
