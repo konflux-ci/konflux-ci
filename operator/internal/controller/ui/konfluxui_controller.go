@@ -963,9 +963,17 @@ func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				}),
 			))
 
-	// ConsoleLink CRD only exists on OpenShift; skip watch on non-OpenShift clusters
-	// to avoid informer startup failures when the CRD is absent.
-	if r.ClusterInfo != nil && r.ClusterInfo.IsOpenShift() {
+	// The ConsoleLink CRD ships with the OpenShift web console, which is an
+	// optional cluster capability: it can be absent while IsOpenShift() is true.
+	// Gate on the CRD being served, not on the platform, because a watch that
+	// can never sync stops this controller from reconciling at all. A lookup
+	// that fails for any other reason fails setup rather than silently omitting
+	// the watch for the lifetime of the process.
+	consoleLinkInstalled, err := common.ConsoleLinkCRDInstalled(mgr.GetRESTMapper())
+	if err != nil {
+		return fmt.Errorf("failed to determine ConsoleLink CRD availability: %w", err)
+	}
+	if consoleLinkInstalled {
 		b = b.Owns(&consolev1.ConsoleLink{})
 	}
 	if sm, ok := common.OperandServiceMonitorWatchObjectIfInstalled(mgr.GetRESTMapper()); ok {
@@ -993,14 +1001,32 @@ func (r *KonfluxUIReconciler) reconcileIngress(ctx context.Context, tc *tracking
 	hostname := endpoint.Hostname()
 	log.Info("Reconciling Ingress", "hostname", hostname)
 
+	// On OpenShift, Konflux also gets a ConsoleLink in the application menu. The
+	// console is an optional cluster capability, so check the CRD is served
+	// rather than relying on IsOpenShift(): on a cluster installed without the
+	// console the apply would fail and take the whole reconcile with it.
+	//
+	// Resolve this before applying anything. A lookup that fails for a reason
+	// other than the CRD being absent has to end the reconcile here, because
+	// CleanupOrphans runs once this returns and deletes any owned ConsoleLink
+	// that was not applied during the reconcile — so carrying on would delete a
+	// live link over a momentary discovery failure.
+	applyConsoleLink := false
+	if isOnOpenShift {
+		installed, err := common.ConsoleLinkCRDInstalled(r.RESTMapper())
+		if err != nil {
+			return fmt.Errorf("failed to determine ConsoleLink CRD availability: %w", err)
+		}
+		applyConsoleLink = installed
+	}
+
 	ingressResource := ingress.BuildForUI(ui, uiNamespace, hostname)
 
 	if err := tc.ApplyOwned(ctx, ingressResource); err != nil {
 		return fmt.Errorf("failed to apply ingress: %w", err)
 	}
 
-	// On OpenShift, also create a ConsoleLink for the application menu
-	if isOnOpenShift {
+	if applyConsoleLink {
 		consoleLinkResource := consolelink.Build(endpoint)
 		if err := tc.ApplyOwned(ctx, consoleLinkResource); err != nil {
 			return fmt.Errorf("failed to apply ConsoleLink: %w", err)
