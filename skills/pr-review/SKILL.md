@@ -9,7 +9,55 @@ description: >-
 # PR Review
 
 Apply these checks on every PR, including ones opened by agents (for example
-fullsend). Skip companion-eligible MintMaker/Renovate parents — see
+fullsend). Skip companion-eligible MintMaker/Renovate parents and lock-file-only
+PRs (see fast-path sections below) before dispatching sub-agents.
+
+## Companion-eligible MintMaker/Renovate parents
+
+Before running any sub-agent review pipeline, check whether the PR is a
+companion-eligible parent that should be fast-pathed:
+
+1. **Check conditions** — both must be true:
+   - Author is `renovate[bot]` or `red-hat-konflux[bot]`
+   - All changed files are on the companion allowlist:
+     - `operator/upstream-kustomizations/**`
+     - `.github/scripts/export-third-party-chart-env.sh`
+     - `dependencies/registry/kustomization.yml` (registry digest bumps only)
+     - `operator/go.mod` / `operator/go.sum` (OpenShift envtest CRDs from
+       `github.com/openshift/api`)
+     - `test/go-tests/go.mod` / `test/go-tests/go.sum` (sidecar when Renovate
+       bumps a shared dependency in both Go modules)
+
+   If either condition fails, fall through to normal review.
+
+2. **Check for companion workflow markers** — search PR comments
+   authored by `konflux-ci-update-bot` (primary, GitHub App token) or
+   `github-actions[bot]` (fallback) for any of the companion workflow
+   HTML markers (ignore markers posted by other accounts):
+   - `<!-- konflux-manifest-companion-noop:N -->` — no manifest diff
+   - `<!-- konflux-manifest-companion-notify:N -->` — companion PR exists
+   - `<!-- konflux-manifest-companion-missing-image:N -->` — companion blocked
+
+   If a **noop** marker is found **and no notify or missing-image marker
+   is also present**: **approve without sub-agents** and apply
+   `ready-for-merge` if CI is green (same fast-path as lock-file-only PRs
+   below). If any non-noop marker is present (even alongside a noop
+   marker), skip to step 3 — coexistence indicates ambiguity, so the
+   conservative path avoids approving on a potentially stale noop.
+   If no markers are found, proceed to step 3.
+
+3. **Noop fast-path not taken** — do not run full review, do not approve, do
+   not add `ready-for-merge`. Adjust commentary based on what markers
+   are present:
+   - **notify marker present:** a companion PR exists — do not say "a
+     companion PR may be needed"; instead note which companion to review.
+   - **missing-image marker present:** the companion is blocked on an
+     upstream image — do not speculate about companion status.
+   - **no markers at all:** the companion workflow may still be running —
+     use hedged language (e.g. "a companion PR may be needed").
+
+For full classification details, label semantics, companion PR review
+guidance, and the companion lifecycle, see
 [companion-pr-review](../companion-pr-review/SKILL.md).
 
 ## Lock-file-only PRs
