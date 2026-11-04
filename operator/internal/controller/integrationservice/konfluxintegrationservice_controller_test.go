@@ -67,9 +67,9 @@ type isCRDInfo struct {
 }
 
 var isManagedCRDs = []isCRDInfo{
-	{"componentgroups.appstudio.redhat.com", "ComponentGroup"},
+	{"componentgroups.konflux-ci.dev", "ComponentGroup"},
 	{"integrationtestscenarios.appstudio.redhat.com", "IntegrationTestScenario"},
-	{"nudgeconfigs.appstudio.redhat.com", "NudgeConfig"},
+	{"nudgeconfigs.konflux-ci.dev", "NudgeConfig"},
 }
 
 func isCRDEntries() []TableEntry {
