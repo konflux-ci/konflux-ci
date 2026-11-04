@@ -18,6 +18,7 @@ package konflux
 
 import (
 	"context"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -1476,6 +1477,120 @@ var _ = Describe("Konflux Controller", func() {
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: tc.crName}, tc.obj())).To(Succeed(),
 						"%s CR should exist after restoring defaults", tc.name)
 				}
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
+	Context("Stale condition cleanup on component disable", func() {
+		const resourceName = "konflux"
+
+		It("should remove prefixed conditions when a component is disabled", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			By("creating Konflux CR with all defaults enabled")
+			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: resourceName}}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			By("waiting for sub-CRs to be created")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: buildservice.CRName}, &konfluxv1alpha1.KonfluxBuildService{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: uictrl.CRName}, &konfluxv1alpha1.KonfluxUI{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("setting Ready condition on the BuildService sub-CR to simulate sub-controller")
+			bs := &konfluxv1alpha1.KonfluxBuildService{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: buildservice.CRName}, bs)).To(Succeed())
+			apimeta.SetStatusCondition(&bs.Status.Conditions, metav1.Condition{
+				Type:               "Ready",
+				Status:             metav1.ConditionTrue,
+				Reason:             "DeploymentReady",
+				Message:            "test condition",
+				ObservedGeneration: bs.Generation,
+			})
+			Expect(k8sClient.Status().Update(ctx, bs)).To(Succeed())
+
+			By("waiting for the reconciler to copy the prefixed condition to the Konflux CR")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+				// CopySubCRStatus should have created a "build-service.Ready" condition
+				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), "build-service.Ready")).NotTo(BeNil(),
+					"build-service.Ready condition should be copied to parent")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("disabling the BuildService component")
+			updatedKonflux := &konfluxv1alpha1.Konflux{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updatedKonflux)).To(Succeed())
+			disabled := false
+			updatedKonflux.Spec.KonfluxBuildService = &konfluxv1alpha1.BuildServiceConfig{Enabled: &disabled}
+			Expect(k8sClient.Update(ctx, updatedKonflux)).To(Succeed())
+
+			By("waiting for the stale build-service.Ready condition to be cleaned up")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+
+				// The prefixed condition should be removed by CleanupStaleConditions
+				for _, cond := range updated.GetConditions() {
+					g.Expect(strings.HasPrefix(cond.Type, "build-service.")).To(BeFalse(),
+						"stale condition %q should have been cleaned up", cond.Type)
+				}
+
+				// Non-prefixed conditions should still exist
+				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)).NotTo(BeNil(),
+					"Ready condition should still exist")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
+	Context("UI URL propagation", func() {
+		const resourceName = "konflux"
+
+		It("should propagate UI URL from KonfluxUI status and clear it when UI is disabled", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			By("creating Konflux CR with defaults (UI enabled)")
+			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: resourceName}}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			By("waiting for KonfluxUI sub-CR to be created")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: uictrl.CRName}, &konfluxv1alpha1.KonfluxUI{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("setting Ingress status on the KonfluxUI sub-CR to simulate UI controller")
+			ui := &konfluxv1alpha1.KonfluxUI{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: uictrl.CRName}, ui)).To(Succeed())
+			ui.Status.Ingress = &konfluxv1alpha1.IngressStatus{
+				Enabled:  true,
+				Hostname: "konflux.example.com",
+				URL:      "https://konflux.example.com",
+			}
+			Expect(k8sClient.Status().Update(ctx, ui)).To(Succeed())
+
+			By("waiting for the reconciler to propagate the URL to the Konflux CR")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+				g.Expect(updated.Status.UIURL).To(Equal("https://konflux.example.com"),
+					"uiURL should be propagated from KonfluxUI status")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("disabling the UI component")
+			updatedKonflux := &konfluxv1alpha1.Konflux{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updatedKonflux)).To(Succeed())
+			disabled := false
+			updatedKonflux.Spec.KonfluxUI = &konfluxv1alpha1.KonfluxUIConfig{Enabled: &disabled}
+			Expect(k8sClient.Update(ctx, updatedKonflux)).To(Succeed())
+
+			By("waiting for the UI URL to be cleared")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+				g.Expect(updated.Status.UIURL).To(BeEmpty(),
+					"uiURL should be cleared when UI is disabled")
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})
