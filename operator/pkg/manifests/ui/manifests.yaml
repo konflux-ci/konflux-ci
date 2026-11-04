@@ -123,7 +123,7 @@ data:
     {http.request.header.Authorization}\n            copy_headers X-Auth-Request-Email
     X-Auth-Request-Groups\n        }\n\t\timpersonate\n\t\tinject_cached_vars\n\t\trequest_header
     -Authorization\n        reverse_proxy https://__KITE_HOSTNAME__ {\n            header_up
-    Authorization \"Bearer {http.vars.kube_token}\"\n            import /mnt/caddy-snippets/backend-tls.conf\n
+    Authorization \"Bearer {http.vars.kube_token}\"\n            import /mnt/caddy-snippets/konflux-kite-tls.conf\n
     \       }\n    }\n}\n"
   kubearchive.caddy: "handle_path /api/k8s/plugins/kubearchive/* {\n    route {\n
     \       forward_auth 127.0.0.1:6000 {\n            uri /oauth2/auth\n            header_up
@@ -161,7 +161,7 @@ data:
     }
 kind: ConfigMap
 metadata:
-  name: proxy-caddy-templates-fm8mc86t87
+  name: proxy-caddy-templates-6t7t74656m
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -282,6 +282,17 @@ data:
       hostname="${KITE_HOSTNAME:-konflux-kite.konflux-kite.svc.cluster.local}"
       sed "s/__KITE_HOSTNAME__/${hostname}/g" \
         "${TEMPLATES_DIR}/kite.caddy" > "${SNIPPETS_DIR}/kite.caddy"
+
+      if [ -f "${SERVICE_CA_PATH}" ]; then
+        printf 'transport http {\n    tls_trust_pool file %s\n}\n' "${SERVICE_CA_PATH}" \
+          > "${SNIPPETS_DIR}/konflux-kite-tls.conf"
+        log "kite TLS: service CA (in-cluster override)"
+      else
+        printf 'transport http {\n    tls_insecure_skip_verify\n}\n' \
+          > "${SNIPPETS_DIR}/konflux-kite-tls.conf"
+        log "kite TLS: insecure (in-cluster, no service CA)"
+      fi
+
       log "kite endpoint enabled (${hostname})"
     fi
 
@@ -354,7 +365,7 @@ data:
     log "done"
 kind: ConfigMap
 metadata:
-  name: proxy-generate-config-hf55g9gkh2
+  name: proxy-generate-config-ktm86kh64k
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -738,7 +749,7 @@ spec:
           items:
           - key: generate-proxy-config.sh
             path: generate-proxy-config.sh
-          name: proxy-generate-config-hf55g9gkh2
+          name: proxy-generate-config-ktm86kh64k
         name: generate-proxy-config-script
       - name: kube-api-token
         projected:
@@ -764,7 +775,7 @@ spec:
         name: proxy-caddyfile
       - configMap:
           defaultMode: 420
-          name: proxy-caddy-templates-fm8mc86t87
+          name: proxy-caddy-templates-6t7t74656m
         name: caddy-templates
       - emptyDir: {}
         name: caddy-snippets
