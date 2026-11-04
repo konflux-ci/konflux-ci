@@ -1,6 +1,6 @@
 module github.com/konflux-ci/konflux-ci/test/go-tests
 
-go 1.26.7
+go 1.26.10
 
 require (
 	github.com/coder/websocket v1.8.15
