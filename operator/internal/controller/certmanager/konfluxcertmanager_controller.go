@@ -66,9 +66,9 @@ var (
 )
 
 // CertManagerCleanupGVKs defines which resource types should be cleaned up when they are
-// no longer part of the desired state. When createClusterIssuer is toggled off, cert-manager
-// resources are automatically deleted. When distributeClusterCABundle is toggled off (or
-// defaults to off on OpenShift), the trust-manager Bundle is deleted.
+// no longer part of the desired state. When distributeClusterCABundle is toggled off (or
+// defaults to off on OpenShift), the trust-manager Bundle is deleted. Legacy PKI resources
+// are also cleaned up on upgrade.
 var CertManagerCleanupGVKs = []schema.GroupVersionKind{
 	clusterIssuerGVK,
 	certificateGVK,
@@ -81,7 +81,7 @@ var CertManagerCleanupGVKs = []schema.GroupVersionKind{
 // Only conditionally-created resources need to be listed here.
 // Resources that are always applied don't need protection (they're always tracked).
 var CertManagerClusterScopedAllowList = tracking.ClusterScopedAllowList{
-	// ClusterIssuers are only created when spec.createClusterIssuer is true
+	// ClusterIssuers: legacy names cleaned up on upgrade; current names tracked when applied
 	clusterIssuerGVK: sets.New(
 		"konflux-bootstrap-issuer",
 		"konflux-issuer",
@@ -146,15 +146,11 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 		FieldManager:      FieldManager,
 	})
 
-	// Apply PKI manifests (Certificate + ClusterIssuers) when createClusterIssuer is enabled.
+	// Apply PKI manifests (Certificate + ClusterIssuers).
 	// The cert-manager namespace must already exist (created by whoever installs cert-manager);
 	// if it does not, applyPKIManifests will fail and the error is reported via the status.
-	if certManager.Spec.ShouldCreateClusterIssuer() {
-		if err := r.applyPKIManifests(ctx, tc); err != nil {
-			return errHandler.HandleApplyError(ctx, err)
-		}
-	} else {
-		log.Info("Skipping PKI manifest application - createClusterIssuer is false")
+	if err := r.applyPKIManifests(ctx, tc); err != nil {
+		return errHandler.HandleApplyError(ctx, err)
 	}
 
 	// Apply the trust-manager Bundle when distributeClusterCABundle is effective.
@@ -166,7 +162,7 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	// Cleanup orphaned resources - delete any resources with our owner label
 	// that weren't applied during this reconcile. This handles toggling
-	// createClusterIssuer or distributeClusterCABundle off.
+	// distributeClusterCABundle off or removing legacy PKI resources.
 	if err := tc.CleanupOrphans(ctx, constant.KonfluxOwnerLabel, certManager.Name, CertManagerCleanupGVKs,
 		tracking.WithClusterScopedAllowList(CertManagerClusterScopedAllowList)); err != nil {
 		return errHandler.HandleCleanupError(ctx, err)

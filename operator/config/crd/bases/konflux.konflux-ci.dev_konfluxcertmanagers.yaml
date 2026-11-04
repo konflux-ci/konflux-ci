@@ -41,12 +41,6 @@ spec:
             default: {}
             description: KonfluxCertManagerSpec defines the desired state of KonfluxCertManager.
             properties:
-              createClusterIssuer:
-                description: |-
-                  CreateClusterIssuer controls whether cluster issuer resources are created.
-                  Defaults to true if not specified.
-                  The cluster-Issuer will be used for generating certificates for the Konflux components
-                type: boolean
               distributeClusterCABundle:
                 description: |-
                   DistributeClusterCABundle controls whether the operator applies the

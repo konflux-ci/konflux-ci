@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"time"
 
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
@@ -147,16 +148,12 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 	// "When the cert-manager namespace does not exist" runs first so the namespace
 	// has never been created by another test's BeforeEach.
 	Context("When the cert-manager namespace does not exist", func() {
-		It("should fail apply and report error when createClusterIssuer is enabled", func() {
+		It("should fail apply and report error", func() {
 			startManager(createNonOpenShiftClusterInfo())
 
-			By("creating the custom resource with createClusterIssuer enabled")
-			enabled := true
+			By("creating the custom resource")
 			resource := &konfluxv1alpha1.KonfluxCertManager{
 				ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				Spec: konfluxv1alpha1.KonfluxCertManagerSpec{
-					CreateClusterIssuer: &enabled,
-				},
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			DeferCleanup(func(ctx context.Context) {
@@ -216,92 +213,18 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 			}
 		}
 
-		Context("with createClusterIssuer unset (defaults to enabled)", func() {
-			It("should successfully reconcile the resource and create ClusterIssuers", func(ctx context.Context) {
-				startManager(createNonOpenShiftClusterInfo())
-				cm := &konfluxv1alpha1.KonfluxCertManager{
-					ObjectMeta: metav1.ObjectMeta{Name: CRName},
-				}
-				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
-				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
-				Eventually(waitForReady).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		It("should successfully reconcile the resource and create ClusterIssuers", func(ctx context.Context) {
+			startManager(createNonOpenShiftClusterInfo())
+			cm := &konfluxv1alpha1.KonfluxCertManager{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+			}
+			Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
+			Eventually(waitForReady).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
-				By("verifying ClusterIssuers were created")
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: bootstrapIssuerName}, newClusterIssuer(bootstrapIssuerName))).To(Succeed())
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: issuerName}, newClusterIssuer(issuerName))).To(Succeed())
-			})
-		})
-
-		Context("with createClusterIssuer explicitly enabled", func() {
-			It("should successfully reconcile the resource and create ClusterIssuers", func(ctx context.Context) {
-				startManager(createNonOpenShiftClusterInfo())
-				enabled := true
-				cm := &konfluxv1alpha1.KonfluxCertManager{
-					ObjectMeta: metav1.ObjectMeta{Name: CRName},
-					Spec:       konfluxv1alpha1.KonfluxCertManagerSpec{CreateClusterIssuer: &enabled},
-				}
-				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
-				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
-				Eventually(waitForReady).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-
-				By("verifying ClusterIssuers were created")
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: bootstrapIssuerName}, newClusterIssuer(bootstrapIssuerName))).To(Succeed())
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: issuerName}, newClusterIssuer(issuerName))).To(Succeed())
-			})
-		})
-
-		Context("with createClusterIssuer disabled", func() {
-			It("should successfully reconcile the resource and not create ClusterIssuers", func(ctx context.Context) {
-				startManager(createNonOpenShiftClusterInfo())
-				disabled := false
-				cm := &konfluxv1alpha1.KonfluxCertManager{
-					ObjectMeta: metav1.ObjectMeta{Name: CRName},
-					Spec:       konfluxv1alpha1.KonfluxCertManagerSpec{CreateClusterIssuer: &disabled},
-				}
-				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
-				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
-				Eventually(waitForReady).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-
-				By("verifying no ClusterIssuers were created")
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: bootstrapIssuerName}, newClusterIssuer(bootstrapIssuerName))
-				Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
-				err = k8sClient.Get(ctx, types.NamespacedName{Name: issuerName}, newClusterIssuer(issuerName))
-				Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
-			})
-		})
-
-		Context("with createClusterIssuer disabled but default bundle on non-OpenShift", func() {
-			It("should skip ClusterIssuers but still create the Bundle", func(ctx context.Context) {
-				startManager(createNonOpenShiftClusterInfo())
-				disabled := false
-				cm := &konfluxv1alpha1.KonfluxCertManager{
-					ObjectMeta: metav1.ObjectMeta{Name: CRName},
-					Spec:       konfluxv1alpha1.KonfluxCertManagerSpec{CreateClusterIssuer: &disabled},
-				}
-				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
-				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
-				Eventually(waitForReady).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-
-				By("verifying no ClusterIssuers were created")
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: bootstrapIssuerName}, newClusterIssuer(bootstrapIssuerName))
-				Expect(errors.IsNotFound(err)).To(BeTrue(), "bootstrap issuer should not exist")
-				err = k8sClient.Get(ctx, types.NamespacedName{Name: issuerName}, newClusterIssuer(issuerName))
-				Expect(errors.IsNotFound(err)).To(BeTrue(), "issuer should not exist")
-
-				By("verifying the Bundle was created (default on non-OpenShift)")
-				Eventually(func(g Gomega) {
-					bundle := newBundle()
-					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: trustedCABundleName}, bundle)).To(Succeed())
-					labels, _, _ := unstructured.NestedStringMap(bundle.Object, "metadata", "labels")
-					g.Expect(labels).To(HaveKey(constant.KonfluxOwnerLabel))
-					g.Expect(labels).To(HaveKey(constant.KonfluxComponentLabel))
-				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-
-				By("verifying BundleDistributed condition")
-				Eventually(func(g Gomega) {
-					waitForBundleCondition(g, metav1.ConditionTrue, condition.ReasonBundleDistributed)
-				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-			})
+			By("verifying ClusterIssuers were created")
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: bootstrapIssuerName}, newClusterIssuer(bootstrapIssuerName))).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: issuerName}, newClusterIssuer(issuerName))).To(Succeed())
 		})
 
 		Context("ClusterCABundleDistributed condition", func() {
@@ -1146,15 +1069,14 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 			Expect(konfluxv1alpha1.AddToScheme(s)).To(Succeed())
 			Expect(appsv1.AddToScheme(s)).To(Succeed())
 			Expect(corev1.AddToScheme(s)).To(Succeed())
+			Expect(certmanagerv1.AddToScheme(s)).To(Succeed())
 
-			disabled := false
 			cm := &konfluxv1alpha1.KonfluxCertManager{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       CRName,
 					UID:        "test-uid",
 					Generation: 1,
 				},
-				Spec: konfluxv1alpha1.KonfluxCertManagerSpec{CreateClusterIssuer: &disabled},
 			}
 
 			cl := fake.NewClientBuilder().
