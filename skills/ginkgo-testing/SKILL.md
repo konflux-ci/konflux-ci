@@ -49,6 +49,40 @@ Eventually(func(g Gomega) {
 }).Should(Succeed())
 ```
 
+### Nil-dereference guards after soft assertions
+
+Because `g.Expect()` records a soft failure **without halting execution**, code
+after a failed soft assertion continues to run with the failure-case values.
+If `err != nil`, any variable paired with the error (e.g., an `*http.Response`)
+is typically nil; likewise, a value that fails a `BeNil()` check is nil by
+definition. Dereferencing either causes a nil-pointer panic — not a soft retry.
+
+**Rule:** After any soft assertion that guards against a nil or error value
+(`g.Expect(err).NotTo(HaveOccurred())` or `g.Expect(val).NotTo(BeNil())`)
+inside an `Eventually` or `Consistently` callback, add an explicit guard return
+before code that dereferences that variable:
+
+```go
+// ✗ Wrong — if err != nil, resp is nil and defer panics
+resp, err := client.Do(request)
+g.Expect(err).NotTo(HaveOccurred())
+defer resp.Body.Close()  // nil-pointer dereference
+
+// ✓ Correct — guard prevents dereference when err != nil
+resp, err := client.Do(request)
+g.Expect(err).NotTo(HaveOccurred())
+if err != nil {
+    return  // prevent nil-pointer dereference on resp
+}
+defer resp.Body.Close()
+```
+
+This pattern applies to any value that can be nil after a soft assertion — both
+error-paired return values (`os.Open`, `tls.Dial`, `sql.Open`, Kubernetes
+client calls that return `(*T, error)`) and standalone nil checks on pointer
+or interface values (e.g., a `websocket.Conn` guarded by `g.Expect(conn).NotTo(BeNil())`).
+See the guards added to `expectProxyGETWithBearer` and `expectProxyWebSocketDialWithBearer` in `test/go-tests/proxy_setup.go` for real-world examples.
+
 ## Kubernetes API error assertions
 
 When asserting that a resource does not exist, use `apierrors.IsNotFound()` — never match error strings:
