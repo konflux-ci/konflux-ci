@@ -164,9 +164,14 @@ companion allowlist, a **companion PR** may be opened automatically
 rendered output. Triggers include upstream kustomization digests,
 `.github/scripts/export-third-party-chart-env.sh`, and `operator/go.mod` /
 `operator/go.sum` (for OpenShift envtest CRDs derived from
-`github.com/openshift/api`). The workflow also permits `test/go-tests/go.mod` and
-`test/go-tests/go.sum` in the same PR when Renovate bumps a shared dependency in
-both Go modules; those files do not affect manifest regeneration. **Prefer merging
+`github.com/openshift/api`). The companion allowlist (which determines whether
+to skip review — distinct from the companion workflow's trigger list) also
+includes `test/go-tests/go.mod`
+and `test/go-tests/go.sum`. Renovate bumps them either alongside
+`operator/go.mod` for shared dependencies (in which case a companion PR is
+created normally because `operator/go.mod` is a trigger), or independently
+for test-only dependencies (in which case no companion PR is created and the
+PR is resolved by Renovate auto-merge or MintMaker closure). **Prefer merging
 the companion PR** (or a single PR that includes both pins and regenerated files)
 so `main` never carries mismatched pins and manifests.
 
