@@ -11,9 +11,9 @@ metadata:
   annotations:
     cert-manager.io/inject-ca-from: integration-service/serving-cert
     controller-gen.kubebuilder.io/version: v0.17.2
-  name: componentgroups.appstudio.redhat.com
+  name: componentgroups.konflux-ci.dev
 spec:
-  group: appstudio.redhat.com
+  group: konflux-ci.dev
   names:
     kind: ComponentGroup
     listKind: ComponentGroupList
@@ -947,9 +947,9 @@ metadata:
   annotations:
     cert-manager.io/inject-ca-from: integration-service/serving-cert
     controller-gen.kubebuilder.io/version: v0.17.2
-  name: nudgeconfigs.appstudio.redhat.com
+  name: nudgeconfigs.konflux-ci.dev
 spec:
-  group: appstudio.redhat.com
+  group: konflux-ci.dev
   names:
     kind: NudgeConfig
     listKind: NudgeConfigList
@@ -994,6 +994,31 @@ spec:
               NudgeConfigSpec defines the desired nudging relationships between components
               and optional namespace-wide batch defaults.
             properties:
+              actions:
+                description: Actions holds one-shot operations processed by the controller
+                  and then cleared from spec.
+                properties:
+                  forceFire:
+                    description: ForceFire immediately fires a batched nudge for the
+                      given target, bypassing debounce timing.
+                    properties:
+                      includePartial:
+                        default: true
+                        description: |-
+                          IncludePartial includes successful members when some batch sources failed and FailurePolicy is Block.
+                          Defaults to true when unset.
+                        type: boolean
+                      target:
+                        description: Target is the downstream component whose active
+                          batch should be force-fired.
+                        maxLength: 63
+                        minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                        type: string
+                    required:
+                    - target
+                    type: object
+                type: object
               batchDefaults:
                 description: |-
                   BatchDefaults sets default debounce, max wait, and failure policy for batched nudges
@@ -1085,8 +1110,10 @@ spec:
                 maxItems: 360
                 type: array
               targetConfig:
-                description: TargetConfig lists per-target batch policies. Targets
-                  without batchPolicy are not batched.
+                description: |-
+                  TargetConfig lists per-target batch policies. Targets without batchPolicy are not batched.
+                  Controllers and operators must patch NudgeConfig spec with merge semantics so targetConfig
+                  and actions are not dropped when updating other spec fields.
                 items:
                   description: TargetConfig declares per-target batch behavior. Presence
                     of batchPolicy opts the target into batching.
@@ -1452,13 +1479,13 @@ metadata:
   name: integration-service-componentgroup-admin-role
 rules:
 - apiGroups:
-  - appstudio.redhat.com
+  - konflux-ci.dev
   resources:
   - componentgroups
   verbs:
   - '*'
 - apiGroups:
-  - appstudio.redhat.com
+  - konflux-ci.dev
   resources:
   - componentgroups/status
   verbs:
@@ -1473,7 +1500,7 @@ metadata:
   name: integration-service-componentgroup-editor-role
 rules:
 - apiGroups:
-  - appstudio.redhat.com
+  - konflux-ci.dev
   resources:
   - componentgroups
   verbs:
@@ -1485,7 +1512,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - appstudio.redhat.com
+  - konflux-ci.dev
   resources:
   - componentgroups/status
   verbs:
@@ -1500,7 +1527,7 @@ metadata:
   name: integration-service-componentgroup-viewer-role
 rules:
 - apiGroups:
-  - appstudio.redhat.com
+  - konflux-ci.dev
   resources:
   - componentgroups
   verbs:
@@ -1508,7 +1535,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - appstudio.redhat.com
+  - konflux-ci.dev
   resources:
   - componentgroups/status
   verbs:
@@ -1635,7 +1662,6 @@ rules:
   - appstudio.redhat.com
   resources:
   - applications/finalizers
-  - componentgroups/finalizers
   - components/finalizers
   - snapshots/finalizers
   verbs:
@@ -1649,7 +1675,6 @@ rules:
 - apiGroups:
   - appstudio.redhat.com
   resources:
-  - componentgroups
   - components
   verbs:
   - get
@@ -1660,7 +1685,6 @@ rules:
 - apiGroups:
   - appstudio.redhat.com
   resources:
-  - componentgroups/status
   - components/status
   - environments/status
   - integrationtestscenarios/status
@@ -1675,19 +1699,37 @@ rules:
   - appstudio.redhat.com
   resources:
   - environments
-  - nudgeconfigs
   - releaseplans
   verbs:
   - get
   - list
   - watch
 - apiGroups:
-  - appstudio.redhat.com
+  - konflux-ci.dev
   resources:
+  - componentgroups
+  - nudgeconfigs
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - konflux-ci.dev
+  resources:
+  - componentgroups/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - konflux-ci.dev
+  resources:
+  - componentgroups/status
   - nudgeconfigs/status
   verbs:
   - get
   - patch
+  - update
 - apiGroups:
   - konflux-ci.dev
   resources:
@@ -1807,13 +1849,13 @@ metadata:
   name: integration-service-nudgeconfig-admin-role
 rules:
 - apiGroups:
-  - appstudio.redhat.com
+  - konflux-ci.dev
   resources:
   - nudgeconfigs
   verbs:
   - '*'
 - apiGroups:
-  - appstudio.redhat.com
+  - konflux-ci.dev
   resources:
   - nudgeconfigs/status
   verbs:
@@ -1828,7 +1870,7 @@ metadata:
   name: integration-service-nudgeconfig-editor-role
 rules:
 - apiGroups:
-  - appstudio.redhat.com
+  - konflux-ci.dev
   resources:
   - nudgeconfigs
   verbs:
@@ -1840,7 +1882,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - appstudio.redhat.com
+  - konflux-ci.dev
   resources:
   - nudgeconfigs/status
   verbs:
@@ -1855,7 +1897,7 @@ metadata:
   name: integration-service-nudgeconfig-viewer-role
 rules:
 - apiGroups:
-  - appstudio.redhat.com
+  - konflux-ci.dev
   resources:
   - nudgeconfigs
   verbs:
@@ -1863,7 +1905,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - appstudio.redhat.com
+  - konflux-ci.dev
   resources:
   - nudgeconfigs/status
   verbs:
@@ -2178,7 +2220,7 @@ spec:
         - --leader-elector-retry-period=5s
         command:
         - /manager
-        image: quay.io/konflux-ci/integration-service:6ef09bf7e0011d667f4212a3c8fb836d842f41eb
+        image: quay.io/konflux-ci/integration-service:c51356fbbdd2da66dbf235a8a57cba34bb707808
         livenessProbe:
           httpGet:
             path: /healthz
@@ -2262,7 +2304,7 @@ spec:
             - --zap-log-level=debug
             - --pr-snapshots-to-keep=70
             - --non-pr-snapshots-to-keep=640
-            image: quay.io/konflux-ci/integration-service:6ef09bf7e0011d667f4212a3c8fb836d842f41eb
+            image: quay.io/konflux-ci/integration-service:c51356fbbdd2da66dbf235a8a57cba34bb707808
             imagePullPolicy: Always
             name: test-gc
             resources:
@@ -2414,7 +2456,7 @@ webhooks:
     service:
       name: integration-service-webhook-service
       namespace: integration-service
-      path: /validate-appstudio-redhat-com-v1beta2-nudgeconfig
+      path: /validate-konflux-ci-dev-v1beta2-nudgeconfig
   failurePolicy: Fail
   name: vnudgeconfig.kb.io
   namespaceSelector:
@@ -2427,7 +2469,7 @@ webhooks:
       - kube-node-lease
   rules:
   - apiGroups:
-    - appstudio.redhat.com
+    - konflux-ci.dev
     apiVersions:
     - v1beta2
     operations:
@@ -2442,12 +2484,12 @@ webhooks:
     service:
       name: integration-service-webhook-service
       namespace: integration-service
-      path: /validate-appstudio-redhat-com-v1beta2-componentgroup
+      path: /validate-konflux-ci-dev-v1beta2-componentgroup
   failurePolicy: Fail
   name: vcomponentgroup.kb.io
   rules:
   - apiGroups:
-    - appstudio.redhat.com
+    - konflux-ci.dev
     apiVersions:
     - v1beta2
     operations:
