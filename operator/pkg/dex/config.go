@@ -172,22 +172,79 @@ type Connector struct {
 
 // ConnectorConfig contains connector-specific configuration.
 // Different connector types use different fields.
+// OIDC fields follow https://dexidp.io/docs/connectors/oidc/ and are copied into the Dex config.
 type ConnectorConfig struct {
 	// Common OIDC/OAuth fields
-	ClientID     string   `json:"clientID,omitempty"`
-	ClientSecret string   `json:"clientSecret,omitempty"`
-	RedirectURI  string   `json:"redirectURI,omitempty"`
-	Issuer       string   `json:"issuer,omitempty"`
-	InsecureCA   bool     `json:"insecureCA,omitempty"`
-	Groups       []string `json:"groups,omitempty"`
+	ClientID     string `json:"clientID,omitempty"`
+	ClientSecret string `json:"clientSecret,omitempty"`
+	RedirectURI  string `json:"redirectURI,omitempty"`
+	Issuer       string `json:"issuer,omitempty"`
+
+	// IssuerAlias overrides the issuer URL from the provider discovery document.
+	// Some providers, such as Azure, publish a discovery issuer that differs from Issuer.
+	IssuerAlias string `json:"issuerAlias,omitempty"`
+
+	// InsecureCA skips TLS verification for connectors that read this field, such as OpenShift.
+	InsecureCA bool `json:"insecureCA,omitempty"`
+
+	// Groups is a static group list for connectors that honor it.
+	// Dex's OIDC connector ignores this field. Enable OIDC groups with InsecureEnableGroups.
+	Groups []string `json:"groups,omitempty"`
 
 	// RootCA is the path to a trusted root certificate for verifying TLS connections.
 	// Used by connectors that need to verify the TLS certificate of the upstream provider.
 	RootCA string `json:"rootCA,omitempty"`
 
+	// BasicAuthUnsupported passes the client secret as POST parameters instead of HTTP basic auth.
+	// Leave unset to let Dex detect known providers. Set false to force basic auth.
+	// +optional
+	// +nullable
+	BasicAuthUnsupported *bool `json:"basicAuthUnsupported,omitempty"`
+
+	// Scopes are the scopes requested from the provider. Dex defaults to profile and email.
+	Scopes []string `json:"scopes,omitempty"`
+
+	// InsecureSkipEmailVerified treats the email as verified when the provider omits email_verified.
+	InsecureSkipEmailVerified bool `json:"insecureSkipEmailVerified,omitempty"`
+
+	// InsecureEnableGroups forwards the provider's groups claim. Dex leaves this off by default.
+	InsecureEnableGroups bool `json:"insecureEnableGroups,omitempty"`
+
+	// AllowedGroups rejects login unless the user belongs to at least one listed group.
+	AllowedGroups []string `json:"allowedGroups,omitempty"`
+
+	// GetUserInfo loads claims from the UserInfo endpoint when the ID token is missing them.
+	GetUserInfo bool `json:"getUserInfo,omitempty"`
+
+	// UserIDKey is the claim used as the user ID. Dex defaults to "sub".
+	UserIDKey string `json:"userIDKey,omitempty"`
+
+	// UserNameKey is the claim used as the user name. Dex defaults to "name".
+	UserNameKey string `json:"userNameKey,omitempty"`
+
+	// AcrValues are Authentication Context Class Reference values sent on the authorization request.
+	AcrValues []string `json:"acrValues,omitempty"`
+
+	// PromptType sets the OIDC prompt parameter. Dex defaults to "consent" when requesting offline_access.
+	PromptType string `json:"promptType,omitempty"`
+
+	// ClaimMapping maps non-standard upstream claims onto Dex's standard claims.
+	ClaimMapping *OIDCClaimMapping `json:"claimMapping,omitempty"`
+
+	// ClaimModifications rewrites claims during login.
+	ClaimModifications *OIDCClaimModifications `json:"claimModifications,omitempty"`
+
+	// OverrideClaimMapping forces Dex to use ClaimMapping even when the standard claim is also present.
+	OverrideClaimMapping bool `json:"overrideClaimMapping,omitempty"`
+
+	// ProviderDiscoveryOverrides replaces URLs discovered from the provider's well-known configuration.
+	ProviderDiscoveryOverrides *OIDCProviderDiscoveryOverrides `json:"providerDiscoveryOverrides,omitempty"`
+
 	// LDAP-specific fields
-	Host               string           `json:"host,omitempty"`
-	InsecureNoSSL      bool             `json:"insecureNoSSL,omitempty"`
+	Host          string `json:"host,omitempty"`
+	InsecureNoSSL bool   `json:"insecureNoSSL,omitempty"`
+	// InsecureSkipVerify disables TLS certificate verification.
+	// LDAP and the Dex OIDC connector both read this field.
 	InsecureSkipVerify bool             `json:"insecureSkipVerify,omitempty"`
 	BindDN             string           `json:"bindDN,omitempty"`
 	BindPW             string           `json:"bindPW,omitempty"`
@@ -196,8 +253,74 @@ type ConnectorConfig struct {
 
 	// GitHub-specific fields
 	Orgs []GitHubOrg `json:"orgs,omitempty"`
+}
 
-	// Additional fields can be added as needed
+// +kubebuilder:object:generate=true
+
+// OIDCClaimMapping maps upstream claim names onto Dex's standard claims.
+type OIDCClaimMapping struct {
+	// PreferredUsername is the claim used as preferred_username. Dex defaults to "preferred_username".
+	PreferredUsername string `json:"preferred_username,omitempty"`
+	// Email is the claim used as email. Dex defaults to "email".
+	Email string `json:"email,omitempty"`
+	// Groups is the claim used as the groups list. Dex defaults to "groups".
+	Groups string `json:"groups,omitempty"`
+}
+
+// +kubebuilder:object:generate=true
+
+// OIDCClaimModifications rewrites claims during OIDC login.
+type OIDCClaimModifications struct {
+	// NewGroupFromClaims builds extra group names by joining other claims.
+	NewGroupFromClaims []OIDCNewGroupFromClaims `json:"newGroupFromClaims,omitempty"`
+	// FilterGroupClaims keeps only groups that match a regular expression.
+	FilterGroupClaims *OIDCFilterGroupClaims `json:"filterGroupClaims,omitempty"`
+	// ModifyGroupNames adds a prefix and/or suffix to every group name from the provider.
+	ModifyGroupNames *OIDCModifyGroupNames `json:"modifyGroupNames,omitempty"`
+}
+
+// +kubebuilder:object:generate=true
+
+// OIDCNewGroupFromClaims builds a group name from other claims.
+type OIDCNewGroupFromClaims struct {
+	// Prefix is placed before the joined claims.
+	Prefix string `json:"prefix,omitempty"`
+	// Delimiter separates the joined claims.
+	Delimiter string `json:"delimiter,omitempty"`
+	// ClearDelimiter removes Delimiter from claim values before joining them.
+	ClearDelimiter bool `json:"clearDelimiter,omitempty"`
+	// Claims are the claim names to join. Only string claims are used.
+	Claims []string `json:"claims,omitempty"`
+}
+
+// +kubebuilder:object:generate=true
+
+// OIDCFilterGroupClaims keeps groups whose names match GroupsFilter.
+// Groups created by NewGroupFromClaims are not filtered.
+type OIDCFilterGroupClaims struct {
+	// GroupsFilter is an RE2 regular expression. Groups that do not match are dropped.
+	GroupsFilter string `json:"groupsFilter,omitempty"`
+}
+
+// +kubebuilder:object:generate=true
+
+// OIDCModifyGroupNames adds a prefix and/or suffix to group names from the provider.
+// Dex applies this before groups from NewGroupFromClaims are added.
+type OIDCModifyGroupNames struct {
+	// Prefix is prepended to each group name.
+	Prefix string `json:"prefix,omitempty"`
+	// Suffix is appended to each group name.
+	Suffix string `json:"suffix,omitempty"`
+}
+
+// +kubebuilder:object:generate=true
+
+// OIDCProviderDiscoveryOverrides replaces endpoints from the provider discovery document.
+type OIDCProviderDiscoveryOverrides struct {
+	// TokenURL overrides the token_endpoint.
+	TokenURL string `json:"tokenURL,omitempty"`
+	// AuthURL overrides the authorization_endpoint.
+	AuthURL string `json:"authURL,omitempty"`
 }
 
 // +kubebuilder:object:generate=true
