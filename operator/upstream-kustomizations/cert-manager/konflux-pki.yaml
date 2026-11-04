@@ -18,6 +18,7 @@ spec:
   privateKey:
     algorithm: ECDSA
     size: 256
+    rotationPolicy: Never
   issuerRef:
     name: konflux-bootstrap-issuer
     kind: ClusterIssuer
