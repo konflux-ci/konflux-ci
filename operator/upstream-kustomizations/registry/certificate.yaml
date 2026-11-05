@@ -12,6 +12,9 @@ spec:
   dnsNames:
   - localhost
   - registry-service.kind-registry
+  # Pinned below konflux-ca renewBefore (4380h); ca.crt is not refreshed when the CA renews.
+  duration: 2160h
+  renewBefore: 720h
   issuerRef:
     kind: ClusterIssuer
     name: konflux-issuer

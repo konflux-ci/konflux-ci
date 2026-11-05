@@ -221,9 +221,11 @@ spec:
   dnsNames:
   - namespace-lister.namespace-lister.svc
   - namespace-lister.namespace-lister.svc.cluster.local
+  duration: 2160h
   issuerRef:
     kind: ClusterIssuer
     name: konflux-issuer
+  renewBefore: 720h
   secretName: namespace-lister-tls
 ---
 apiVersion: monitoring.coreos.com/v1

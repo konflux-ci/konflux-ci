@@ -15,6 +15,9 @@ spec:
   dnsNames:
   - SERVICE_NAME.SERVICE_NAMESPACE.svc
   - SERVICE_NAME.SERVICE_NAMESPACE.svc.cluster.local
+  # Pinned below konflux-ca renewBefore (4380h); ca.crt is not refreshed when the CA renews.
+  duration: 2160h
+  renewBefore: 720h
   issuerRef:
     kind: ClusterIssuer
     group: cert-manager.io

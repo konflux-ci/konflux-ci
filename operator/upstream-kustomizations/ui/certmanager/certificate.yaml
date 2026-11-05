@@ -61,6 +61,9 @@ spec:
   dnsNames:
     - cluster-root-ref.konflux-ui.svc
   secretName: cluster-root-ref
+  # Pinned below konflux-ca renewBefore (4380h); ca.crt is not refreshed when the CA renews.
+  duration: 2160h
+  renewBefore: 720h
   issuerRef:
     name: konflux-issuer
     kind: ClusterIssuer

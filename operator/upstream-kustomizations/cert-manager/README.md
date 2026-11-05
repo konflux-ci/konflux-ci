@@ -52,7 +52,9 @@ metrics-selfsigned-issuer (namespace Issuer, SelfSigned, in konflux-operator)
 
 2. **`konflux-ca` Certificate** — An `isCA: true` Certificate issued by the
    bootstrap issuer. cert-manager generates a key pair and stores it in
-   `konflux-ca-secret` in the `cert-manager` namespace.
+   `konflux-ca-secret` in the `cert-manager` namespace. Renewal keeps that
+   private key and the certificate lifetime is pinned. See
+   [konflux-ca renewal](#konflux-ca-renewal).
 
 3. **`konflux-issuer` ClusterIssuer** — A CA issuer backed by
    `konflux-ca-secret`. This is the issuer most Konflux services reference
@@ -200,6 +202,59 @@ The UI namespace has two trust domains:
    to the cluster root (`konflux-ca-secret`). The proxy verifies namespace-lister
    using `cluster-root-ref`'s `ca.crt` field, which cert-manager populates with
    the cluster root CA (the signing CA of `konflux-issuer`).
+
+### konflux-ca renewal
+
+Verifiers do not read `konflux-ca-secret`. When cert-manager issues a
+certificate it copies the signing CA into that Secret's `ca.crt`, and it does
+not update the copy when `konflux-ca` renews. It also does not reissue a Ready
+certificate when the CA key changes. Upstream tracks both gaps:
+[cert-manager#9076](https://github.com/cert-manager/cert-manager/issues/9076)
+(a new CA key leaves existing certificates with the old authority key id) and
+[cert-manager#5851](https://github.com/cert-manager/cert-manager/issues/5851)
+(a renewed CA certificate is not written back into Secrets that were already
+issued, so the copied `ca.crt` can expire while the leaf is still valid).
+
+The proxy is one of those verifiers. It trusts `ca.crt` from `cluster-root-ref`
+when it connects to namespace-lister. If those two Secrets were issued on
+opposite sides of a renewal that replaced the CA private key, the handshake
+fails with `x509: certificate signed by unknown authority` and namespace
+listing returns 502. On cert-manager 1.18 and later, an unset
+`privateKey.rotationPolicy` means `Always`, so a renewal does replace the key.
+
+`konflux-ca` sets `privateKey.rotationPolicy: Never`. The certificate still
+renews, which moves `notAfter` forward, and the private key in
+`konflux-ca-secret` stays the same. Certificates signed before and after that
+renewal verify against either generation: the public key and the subject key
+id do not change, and verifiers check the key rather than the CA serial. Two
+Secrets may hold different generations of the CA certificate. That stays safe
+while the key is unchanged and the copy in use has not expired.
+
+A new certificate with the same key does not retire a stolen private key. A
+later generation is still that key, so a leaked key keeps verifying until
+someone rotates it on purpose and reissues every `konflux-issuer` certificate.
+Automatic key rotation was rejected because cert-manager replaces the key
+without reissuing those certificates, which is the outage above. Retiring a
+leaked key means trusting the old certificate and the new one together,
+reissuing every `konflux-issuer` certificate, then dropping the old
+certificate. The operator does not do that on a timer.
+
+Lifetimes are set on the manifests instead of left to cert-manager defaults:
+
+| Certificate | `duration` | `renewBefore` |
+|-------------|------------|---------------|
+| `konflux-ca` | `8760h` (365d) | `4380h` (182.5d) |
+| every certificate issued by `konflux-issuer` | `2160h` (90d) | `720h` (30d) |
+
+`renewBefore` on `konflux-ca` is the least remaining life the live CA
+certificate is allowed to have. cert-manager replaces it once remaining life
+falls to `4380h`, so any `ca.crt` copied out of `konflux-ca-secret` has at
+least that long left. `4380h` is longer than the `2160h` lifetime of a
+`konflux-issuer` certificate, so the copy cannot expire while the certificate
+that stored it is still valid. The leaf `duration` and `renewBefore` are
+cert-manager's current default, written explicitly so a later default change
+cannot move the floor. `ui-ca` and the certificates it issues are a separate
+trust domain and are unchanged.
 
 ## Operator management
 

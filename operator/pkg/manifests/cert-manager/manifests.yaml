@@ -5,6 +5,7 @@ metadata:
   namespace: cert-manager
 spec:
   commonName: konflux-ca
+  duration: 8760h
   isCA: true
   issuerRef:
     group: cert-manager.io
@@ -12,7 +13,9 @@ spec:
     name: konflux-bootstrap-issuer
   privateKey:
     algorithm: ECDSA
+    rotationPolicy: Never
     size: 256
+  renewBefore: 4380h
   secretName: konflux-ca-secret
 ---
 apiVersion: cert-manager.io/v1

@@ -534,10 +534,12 @@ spec:
   dnsNames:
   - build-service-controller-manager-metrics-service.build-service.svc
   - build-service-controller-manager-metrics-service.build-service.svc.cluster.local
+  duration: 2160h
   issuerRef:
     group: cert-manager.io
     kind: ClusterIssuer
     name: konflux-issuer
+  renewBefore: 720h
   secretName: metrics-server-cert
 ---
 apiVersion: monitoring.coreos.com/v1

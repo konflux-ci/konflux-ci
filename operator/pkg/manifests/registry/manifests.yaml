@@ -128,10 +128,12 @@ spec:
   dnsNames:
   - localhost
   - registry-service.kind-registry
+  duration: 2160h
   isCA: true
   issuerRef:
     kind: ClusterIssuer
     name: konflux-issuer
+  renewBefore: 720h
   secretName: local-registry-tls
   subject:
     organizations:
