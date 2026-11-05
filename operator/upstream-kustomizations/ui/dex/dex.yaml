@@ -13,6 +13,9 @@ spec:
   - localhost
   - dex.konflux-ui
   - dex.konflux-ui.svc.cluster.local
+  # Pinned below ui-ca renewBefore (4380h); ca.crt is not refreshed when the CA renews.
+  duration: 2160h
+  renewBefore: 720h
   issuerRef:
     kind: Issuer
     name: ui-ca-issuer
@@ -28,6 +31,9 @@ metadata:
   name: oauth2-proxy-cert
 spec:
   secretName: oauth2-proxy-cert
+  # Pinned below ui-ca renewBefore (4380h); ca.crt is not refreshed when the CA renews.
+  duration: 2160h
+  renewBefore: 720h
   issuerRef:
     name: ui-ca-issuer
     kind: Issuer

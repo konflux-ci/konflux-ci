@@ -253,8 +253,25 @@ least that long left. `4380h` is longer than the `2160h` lifetime of a
 `konflux-issuer` certificate, so the copy cannot expire while the certificate
 that stored it is still valid. The leaf `duration` and `renewBefore` are
 cert-manager's current default, written explicitly so a later default change
-cannot move the floor. `ui-ca` and the certificates it issues are a separate
-trust domain and are unchanged.
+cannot move the floor.
+
+### ui-ca renewal
+
+`ui-ca` has the same copied-`ca.crt` gap as `konflux-ca`. The proxy
+verifies Dex using `serving-cert`'s `ca.crt`, which is a copy of the
+`ui-ca` certificate taken when `serving-cert` was issued. cert-manager
+does not update that copy when `ui-ca` renews. If `dex-cert` and
+`serving-cert` were issued on opposite sides of a renewal that changed
+the key, the proxy rejects Dex with `x509: certificate signed by
+unknown authority`.
+
+`ui-ca` sets `privateKey.rotationPolicy: Never` and pins the same
+lifetime table as `konflux-ca`:
+
+| Certificate | `duration` | `renewBefore` |
+|-------------|------------|---------------|
+| `ui-ca` | `8760h` (365d) | `4380h` (182.5d) |
+| every certificate issued by `ui-ca-issuer` | `2160h` (90d) | `720h` (30d) |
 
 ## Operator management
 

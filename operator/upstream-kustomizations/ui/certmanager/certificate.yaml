@@ -13,9 +13,16 @@ spec:
   isCA: true
   commonName: ui-ca
   secretName: ui-ca
+  # Keep the key stable across renewal. cert-manager does not reissue leaves
+  # when the CA key changes, and verifiers trust a copied ca.crt. renewBefore
+  # is the least life the live CA certificate is allowed to have, and it is
+  # longer than the pinned duration of every ui-ca-issuer certificate (2160h).
+  duration: 8760h
+  renewBefore: 4380h
   privateKey:
     algorithm: ECDSA
     size: 256
+    rotationPolicy: Never
   issuerRef:
     name: konflux-bootstrap-issuer
     kind: ClusterIssuer
@@ -43,6 +50,9 @@ spec:
   - localhost
   - proxy.konflux-ui.svc
   - proxy.konflux-ui.svc.cluster.local
+  # Pinned below ui-ca renewBefore (4380h); ca.crt is not refreshed when the CA renews.
+  duration: 2160h
+  renewBefore: 720h
   issuerRef:
     kind: Issuer
     name: ui-ca-issuer
