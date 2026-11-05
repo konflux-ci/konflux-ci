@@ -1227,6 +1227,11 @@ spec:
                               by the build pipeline run.
                             minLength: 1
                             type: string
+                          serviceAccountName:
+                            description: |-
+                              ServiceAccountName is the build PipelineRun service account, captured at accumulation time
+                              so batch firing can resolve registry credentials if the build PLR was pruned.
+                            type: string
                         required:
                         - buildPipelineRun
                         - capturedAt
@@ -2220,7 +2225,7 @@ spec:
         - --leader-elector-retry-period=5s
         command:
         - /manager
-        image: quay.io/konflux-ci/integration-service:c51356fbbdd2da66dbf235a8a57cba34bb707808
+        image: quay.io/konflux-ci/integration-service:da4d57834b79002bca80e0b71866b604309c4bc2
         livenessProbe:
           httpGet:
             path: /healthz
@@ -2304,7 +2309,7 @@ spec:
             - --zap-log-level=debug
             - --pr-snapshots-to-keep=70
             - --non-pr-snapshots-to-keep=640
-            image: quay.io/konflux-ci/integration-service:c51356fbbdd2da66dbf235a8a57cba34bb707808
+            image: quay.io/konflux-ci/integration-service:da4d57834b79002bca80e0b71866b604309c4bc2
             imagePullPolicy: Always
             name: test-gc
             resources:
