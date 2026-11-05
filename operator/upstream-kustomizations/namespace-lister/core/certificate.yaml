@@ -8,6 +8,9 @@ spec:
   dnsNames:
   - namespace-lister.namespace-lister.svc
   - namespace-lister.namespace-lister.svc.cluster.local
+  # Pinned below konflux-ca renewBefore (4380h); ca.crt is not refreshed when the CA renews.
+  duration: 2160h
+  renewBefore: 720h
   issuerRef:
     kind: ClusterIssuer
     name: konflux-issuer
