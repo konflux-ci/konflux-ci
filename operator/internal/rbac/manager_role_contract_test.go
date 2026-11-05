@@ -34,6 +34,7 @@ const rbacAuthzAPIGroup = "rbac.authorization.k8s.io"
 var managerRoleClusterRoleEscalateBindExtras = []string{
 	"konflux-operator-metrics-reader",
 	"konflux-maintainer-user-actions", // aggregate role; default-tenant controller bind only
+	"release-pipeline-resource-role",  // install-time aggregation shell; not in the release manifest
 }
 
 func loadManagerRoleRules(t *testing.T) []rbacv1.PolicyRule {

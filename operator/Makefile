@@ -203,7 +203,7 @@ build: manifests generate fmt vet ## Build manager binary.
 	go build -ldflags "$(LDFLAGS)" -o bin/manager ./cmd/main.go
 
 .PHONY: run
-run: manifests generate fmt vet install-user-rbac ## Run a controller from your host.
+run: manifests generate fmt vet install-user-rbac install-release-rbac ## Run a controller from your host.
 	go run -ldflags "$(LDFLAGS)" ./cmd/main.go
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
@@ -266,6 +266,14 @@ install-user-rbac: manifests kustomize ## Install user-facing RBAC into the K8s 
 .PHONY: uninstall-user-rbac
 uninstall-user-rbac: kustomize ## Uninstall user-facing RBAC from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/default/user-rbac | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
+
+.PHONY: install-release-rbac
+install-release-rbac: manifests kustomize ## Install the release pipeline aggregation shell into the K8s cluster specified in ~/.kube/config.
+	$(KUSTOMIZE) build config/default/release-rbac | $(KUBECTL) apply -f -
+
+.PHONY: uninstall-release-rbac
+uninstall-release-rbac: kustomize ## Uninstall the release pipeline aggregation shell from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
+	$(KUSTOMIZE) build config/default/release-rbac | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.

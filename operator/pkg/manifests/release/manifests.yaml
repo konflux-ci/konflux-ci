@@ -4479,7 +4479,9 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: release-pipeline-resource-role
+  labels:
+    rbac.konflux-ci.dev/aggregate-to-release-pipeline: "true"
+  name: release-pipeline-resource-role-core
 rules:
 - apiGroups:
   - appstudio.redhat.com
