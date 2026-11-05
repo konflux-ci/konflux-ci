@@ -1595,6 +1595,418 @@ var _ = Describe("Konflux Controller", func() {
 		})
 	})
 
+	Context("Sub-CR status aggregation to parent", func() {
+		const resourceName = "konflux"
+
+		boolPtr := func(v bool) *bool { return &v }
+
+		// setSubCRReady sets the Ready condition on a sub-CR to simulate a sub-controller.
+		setSubCRReady := func(ctx context.Context, obj konfluxv1alpha1.ConditionAccessor, ready bool) {
+			status := metav1.ConditionTrue
+			reason := "DeploymentReady"
+			message := "All deployments are ready"
+			if !ready {
+				status = metav1.ConditionFalse
+				reason = "DeploymentNotReady"
+				message = "Deployments not ready"
+			}
+			conditions := obj.GetConditions()
+			apimeta.SetStatusCondition(&conditions, metav1.Condition{
+				Type:               constant.ConditionTypeReady,
+				Status:             status,
+				Reason:             reason,
+				Message:            message,
+				ObservedGeneration: obj.GetGeneration(),
+			})
+			obj.SetConditions(conditions)
+			ExpectWithOffset(1, k8sClient.Status().Update(ctx, obj)).To(Succeed())
+		}
+
+		It("should report Ready=True when all enabled sub-CRs are ready (spoke config)", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			By("creating Konflux CR with spoke configuration (Info+RBAC only)")
+			disabled := false
+			enabled := true
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					ApplicationAPI:            &konfluxv1alpha1.ApplicationAPIConfig{Enabled: &disabled},
+					KonfluxBuildService:       &konfluxv1alpha1.BuildServiceConfig{Enabled: &disabled},
+					KonfluxIntegrationService: &konfluxv1alpha1.IntegrationServiceConfig{Enabled: &disabled},
+					KonfluxReleaseService:     &konfluxv1alpha1.ReleaseServiceConfig{Enabled: &disabled},
+					KonfluxUI:                 &konfluxv1alpha1.KonfluxUIConfig{Enabled: &disabled},
+					NamespaceLister:           &konfluxv1alpha1.NamespaceListerConfig{Enabled: &disabled},
+					EnterpriseContract:        &konfluxv1alpha1.EnterpriseContractConfig{Enabled: &disabled},
+					CertManager:               &konfluxv1alpha1.CertManagerConfig{Enabled: &disabled},
+					DefaultTenant:             &konfluxv1alpha1.DefaultTenantConfig{Enabled: &disabled},
+					CLI:                       &konfluxv1alpha1.CLIConfig{Enabled: &disabled},
+					KonfluxInfo:               &konfluxv1alpha1.KonfluxInfoConfig{Enabled: &enabled},
+					RBAC:                      &konfluxv1alpha1.RBACConfig{Enabled: &enabled},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			By("waiting for Info and RBAC sub-CRs to be created")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: info.CRName}, &konfluxv1alpha1.KonfluxInfo{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: rbac.CRName}, &konfluxv1alpha1.KonfluxRBAC{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("setting Ready=True on both sub-CRs to simulate sub-controllers")
+			infoObj := &konfluxv1alpha1.KonfluxInfo{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: info.CRName}, infoObj)).To(Succeed())
+			setSubCRReady(ctx, infoObj, true)
+
+			rbacObj := &konfluxv1alpha1.KonfluxRBAC{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: rbac.CRName}, rbacObj)).To(Succeed())
+			setSubCRReady(ctx, rbacObj, true)
+
+			By("verifying the parent Konflux CR becomes Ready=True with correct component count")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+
+				readyCond := apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)
+				g.Expect(readyCond).NotTo(BeNil())
+				g.Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
+				g.Expect(readyCond.Reason).To(Equal("AllComponentsReady"))
+				g.Expect(readyCond.Message).To(ContainSubstring("2 components are ready"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should report Ready=False when some enabled sub-CRs are not ready", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			By("creating Konflux CR with spoke configuration (Info+RBAC only)")
+			disabled := false
+			enabled := true
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					ApplicationAPI:            &konfluxv1alpha1.ApplicationAPIConfig{Enabled: &disabled},
+					KonfluxBuildService:       &konfluxv1alpha1.BuildServiceConfig{Enabled: &disabled},
+					KonfluxIntegrationService: &konfluxv1alpha1.IntegrationServiceConfig{Enabled: &disabled},
+					KonfluxReleaseService:     &konfluxv1alpha1.ReleaseServiceConfig{Enabled: &disabled},
+					KonfluxUI:                 &konfluxv1alpha1.KonfluxUIConfig{Enabled: &disabled},
+					NamespaceLister:           &konfluxv1alpha1.NamespaceListerConfig{Enabled: &disabled},
+					EnterpriseContract:        &konfluxv1alpha1.EnterpriseContractConfig{Enabled: &disabled},
+					CertManager:               &konfluxv1alpha1.CertManagerConfig{Enabled: &disabled},
+					DefaultTenant:             &konfluxv1alpha1.DefaultTenantConfig{Enabled: &disabled},
+					CLI:                       &konfluxv1alpha1.CLIConfig{Enabled: &disabled},
+					KonfluxInfo:               &konfluxv1alpha1.KonfluxInfoConfig{Enabled: &enabled},
+					RBAC:                      &konfluxv1alpha1.RBACConfig{Enabled: &enabled},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			By("waiting for Info and RBAC sub-CRs to be created")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: info.CRName}, &konfluxv1alpha1.KonfluxInfo{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: rbac.CRName}, &konfluxv1alpha1.KonfluxRBAC{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("setting Ready=True on Info but leaving RBAC not-ready")
+			infoObj := &konfluxv1alpha1.KonfluxInfo{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: info.CRName}, infoObj)).To(Succeed())
+			setSubCRReady(ctx, infoObj, true)
+
+			By("verifying the parent shows Ready=False with reason identifying the not-ready component")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+
+				readyCond := apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)
+				g.Expect(readyCond).NotTo(BeNil())
+				g.Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+				g.Expect(readyCond.Reason).To(Equal("ComponentsNotReady"))
+				g.Expect(readyCond.Message).To(ContainSubstring("rbac is not ready"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should transition to Ready=True when the not-ready component is disabled", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			By("creating Konflux CR with Info+RBAC enabled")
+			disabled := false
+			enabled := true
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					ApplicationAPI:            &konfluxv1alpha1.ApplicationAPIConfig{Enabled: &disabled},
+					KonfluxBuildService:       &konfluxv1alpha1.BuildServiceConfig{Enabled: &disabled},
+					KonfluxIntegrationService: &konfluxv1alpha1.IntegrationServiceConfig{Enabled: &disabled},
+					KonfluxReleaseService:     &konfluxv1alpha1.ReleaseServiceConfig{Enabled: &disabled},
+					KonfluxUI:                 &konfluxv1alpha1.KonfluxUIConfig{Enabled: &disabled},
+					NamespaceLister:           &konfluxv1alpha1.NamespaceListerConfig{Enabled: &disabled},
+					EnterpriseContract:        &konfluxv1alpha1.EnterpriseContractConfig{Enabled: &disabled},
+					CertManager:               &konfluxv1alpha1.CertManagerConfig{Enabled: &disabled},
+					DefaultTenant:             &konfluxv1alpha1.DefaultTenantConfig{Enabled: &disabled},
+					CLI:                       &konfluxv1alpha1.CLIConfig{Enabled: &disabled},
+					KonfluxInfo:               &konfluxv1alpha1.KonfluxInfoConfig{Enabled: &enabled},
+					RBAC:                      &konfluxv1alpha1.RBACConfig{Enabled: &enabled},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			By("waiting for Info and RBAC sub-CRs to be created")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: info.CRName}, &konfluxv1alpha1.KonfluxInfo{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: rbac.CRName}, &konfluxv1alpha1.KonfluxRBAC{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("setting Info as ready, RBAC as not ready")
+			infoObj := &konfluxv1alpha1.KonfluxInfo{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: info.CRName}, infoObj)).To(Succeed())
+			setSubCRReady(ctx, infoObj, true)
+
+			By("confirming parent is not ready because RBAC is not ready")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+
+				readyCond := apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)
+				g.Expect(readyCond).NotTo(BeNil())
+				g.Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+				g.Expect(readyCond.Message).To(ContainSubstring("rbac is not ready"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("disabling RBAC to remove the not-ready component from aggregation")
+			updatedKonflux := &konfluxv1alpha1.Konflux{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updatedKonflux)).To(Succeed())
+			updatedKonflux.Spec.RBAC = &konfluxv1alpha1.RBACConfig{Enabled: boolPtr(false)}
+			Expect(k8sClient.Update(ctx, updatedKonflux)).To(Succeed())
+
+			By("verifying parent becomes Ready=True with only Info contributing to readiness")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+
+				readyCond := apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)
+				g.Expect(readyCond).NotTo(BeNil())
+				g.Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
+				g.Expect(readyCond.Reason).To(Equal("AllComponentsReady"))
+				g.Expect(readyCond.Message).To(ContainSubstring("1 components are ready"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should copy sub-CR conditions to parent with correct prefixes", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			By("creating Konflux CR with Info+RBAC enabled")
+			disabled := false
+			enabled := true
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					ApplicationAPI:            &konfluxv1alpha1.ApplicationAPIConfig{Enabled: &disabled},
+					KonfluxBuildService:       &konfluxv1alpha1.BuildServiceConfig{Enabled: &disabled},
+					KonfluxIntegrationService: &konfluxv1alpha1.IntegrationServiceConfig{Enabled: &disabled},
+					KonfluxReleaseService:     &konfluxv1alpha1.ReleaseServiceConfig{Enabled: &disabled},
+					KonfluxUI:                 &konfluxv1alpha1.KonfluxUIConfig{Enabled: &disabled},
+					NamespaceLister:           &konfluxv1alpha1.NamespaceListerConfig{Enabled: &disabled},
+					EnterpriseContract:        &konfluxv1alpha1.EnterpriseContractConfig{Enabled: &disabled},
+					CertManager:               &konfluxv1alpha1.CertManagerConfig{Enabled: &disabled},
+					DefaultTenant:             &konfluxv1alpha1.DefaultTenantConfig{Enabled: &disabled},
+					CLI:                       &konfluxv1alpha1.CLIConfig{Enabled: &disabled},
+					KonfluxInfo:               &konfluxv1alpha1.KonfluxInfoConfig{Enabled: &enabled},
+					RBAC:                      &konfluxv1alpha1.RBACConfig{Enabled: &enabled},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			By("waiting for Info and RBAC sub-CRs to be created")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: info.CRName}, &konfluxv1alpha1.KonfluxInfo{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: rbac.CRName}, &konfluxv1alpha1.KonfluxRBAC{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("setting Ready conditions on both sub-CRs")
+			infoObj := &konfluxv1alpha1.KonfluxInfo{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: info.CRName}, infoObj)).To(Succeed())
+			setSubCRReady(ctx, infoObj, true)
+
+			rbacObj := &konfluxv1alpha1.KonfluxRBAC{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: rbac.CRName}, rbacObj)).To(Succeed())
+			setSubCRReady(ctx, rbacObj, false)
+
+			By("verifying prefixed conditions appear on the parent CR")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+
+				// info.Ready should be True (copied from KonfluxInfo sub-CR)
+				infoCond := apimeta.FindStatusCondition(updated.GetConditions(), "info.Ready")
+				g.Expect(infoCond).NotTo(BeNil(), "info.Ready condition should be present on parent")
+				g.Expect(infoCond.Status).To(Equal(metav1.ConditionTrue))
+
+				// rbac.Ready should be False (copied from KonfluxRBAC sub-CR)
+				rbacCond := apimeta.FindStatusCondition(updated.GetConditions(), "rbac.Ready")
+				g.Expect(rbacCond).NotTo(BeNil(), "rbac.Ready condition should be present on parent")
+				g.Expect(rbacCond.Status).To(Equal(metav1.ConditionFalse))
+
+				// Disabled components should NOT have prefixed conditions
+				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), "build-service.Ready")).To(BeNil(),
+					"disabled component should not have prefixed conditions on parent")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should update aggregated readiness when a sub-CR transitions from not-ready to ready", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			By("creating Konflux CR with Info+RBAC enabled")
+			disabled := false
+			enabled := true
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					ApplicationAPI:            &konfluxv1alpha1.ApplicationAPIConfig{Enabled: &disabled},
+					KonfluxBuildService:       &konfluxv1alpha1.BuildServiceConfig{Enabled: &disabled},
+					KonfluxIntegrationService: &konfluxv1alpha1.IntegrationServiceConfig{Enabled: &disabled},
+					KonfluxReleaseService:     &konfluxv1alpha1.ReleaseServiceConfig{Enabled: &disabled},
+					KonfluxUI:                 &konfluxv1alpha1.KonfluxUIConfig{Enabled: &disabled},
+					NamespaceLister:           &konfluxv1alpha1.NamespaceListerConfig{Enabled: &disabled},
+					EnterpriseContract:        &konfluxv1alpha1.EnterpriseContractConfig{Enabled: &disabled},
+					CertManager:               &konfluxv1alpha1.CertManagerConfig{Enabled: &disabled},
+					DefaultTenant:             &konfluxv1alpha1.DefaultTenantConfig{Enabled: &disabled},
+					CLI:                       &konfluxv1alpha1.CLIConfig{Enabled: &disabled},
+					KonfluxInfo:               &konfluxv1alpha1.KonfluxInfoConfig{Enabled: &enabled},
+					RBAC:                      &konfluxv1alpha1.RBACConfig{Enabled: &enabled},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			By("waiting for sub-CRs to be created")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: info.CRName}, &konfluxv1alpha1.KonfluxInfo{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: rbac.CRName}, &konfluxv1alpha1.KonfluxRBAC{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("setting both sub-CRs to not-ready initially")
+			infoObj := &konfluxv1alpha1.KonfluxInfo{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: info.CRName}, infoObj)).To(Succeed())
+			setSubCRReady(ctx, infoObj, false)
+
+			rbacObj := &konfluxv1alpha1.KonfluxRBAC{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: rbac.CRName}, rbacObj)).To(Succeed())
+			setSubCRReady(ctx, rbacObj, false)
+
+			By("confirming parent is not ready")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+
+				readyCond := apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)
+				g.Expect(readyCond).NotTo(BeNil())
+				g.Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+				g.Expect(readyCond.Message).To(ContainSubstring("info is not ready"))
+				g.Expect(readyCond.Message).To(ContainSubstring("rbac is not ready"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("transitioning both sub-CRs to ready")
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: info.CRName}, infoObj)).To(Succeed())
+			setSubCRReady(ctx, infoObj, true)
+
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: rbac.CRName}, rbacObj)).To(Succeed())
+			setSubCRReady(ctx, rbacObj, true)
+
+			By("verifying parent transitions to Ready=True")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+
+				readyCond := apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)
+				g.Expect(readyCond).NotTo(BeNil())
+				g.Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
+				g.Expect(readyCond.Reason).To(Equal("AllComponentsReady"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should correctly aggregate status with a larger set of enabled components", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			By("creating Konflux CR with Info+RBAC+CLI enabled, rest disabled")
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					ApplicationAPI:            &konfluxv1alpha1.ApplicationAPIConfig{Enabled: boolPtr(false)},
+					KonfluxBuildService:       &konfluxv1alpha1.BuildServiceConfig{Enabled: boolPtr(false)},
+					KonfluxIntegrationService: &konfluxv1alpha1.IntegrationServiceConfig{Enabled: boolPtr(false)},
+					KonfluxReleaseService:     &konfluxv1alpha1.ReleaseServiceConfig{Enabled: boolPtr(false)},
+					KonfluxUI:                 &konfluxv1alpha1.KonfluxUIConfig{Enabled: boolPtr(false)},
+					NamespaceLister:           &konfluxv1alpha1.NamespaceListerConfig{Enabled: boolPtr(false)},
+					EnterpriseContract:        &konfluxv1alpha1.EnterpriseContractConfig{Enabled: boolPtr(false)},
+					CertManager:               &konfluxv1alpha1.CertManagerConfig{Enabled: boolPtr(false)},
+					DefaultTenant:             &konfluxv1alpha1.DefaultTenantConfig{Enabled: boolPtr(false)},
+					CLI:                       &konfluxv1alpha1.CLIConfig{Enabled: boolPtr(true)},
+					KonfluxInfo:               &konfluxv1alpha1.KonfluxInfoConfig{Enabled: boolPtr(true)},
+					RBAC:                      &konfluxv1alpha1.RBACConfig{Enabled: boolPtr(true)},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			By("waiting for Info, RBAC, and CLI sub-CRs to be created")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: info.CRName}, &konfluxv1alpha1.KonfluxInfo{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: rbac.CRName}, &konfluxv1alpha1.KonfluxRBAC{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cli.CRName}, &konfluxv1alpha1.KonfluxCLI{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("setting all three sub-CRs to ready")
+			infoObj := &konfluxv1alpha1.KonfluxInfo{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: info.CRName}, infoObj)).To(Succeed())
+			setSubCRReady(ctx, infoObj, true)
+
+			rbacObj := &konfluxv1alpha1.KonfluxRBAC{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: rbac.CRName}, rbacObj)).To(Succeed())
+			setSubCRReady(ctx, rbacObj, true)
+
+			cliObj := &konfluxv1alpha1.KonfluxCLI{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cli.CRName}, cliObj)).To(Succeed())
+			setSubCRReady(ctx, cliObj, true)
+
+			By("verifying parent reports Ready=True with 3 components")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+
+				readyCond := apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)
+				g.Expect(readyCond).NotTo(BeNil())
+				g.Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
+				g.Expect(readyCond.Message).To(ContainSubstring("3 components are ready"))
+
+				// All three prefixed conditions should be present
+				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), "info.Ready")).NotTo(BeNil())
+				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), "rbac.Ready")).NotTo(BeNil())
+				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), "cli.Ready")).NotTo(BeNil())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("making one component (CLI) not-ready")
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cli.CRName}, cliObj)).To(Succeed())
+			setSubCRReady(ctx, cliObj, false)
+
+			By("verifying parent transitions to Ready=False mentioning the not-ready component")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+
+				readyCond := apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)
+				g.Expect(readyCond).NotTo(BeNil())
+				g.Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+				g.Expect(readyCond.Message).To(ContainSubstring("cli is not ready"))
+				// Info and RBAC should not be mentioned as not-ready
+				g.Expect(readyCond.Message).NotTo(ContainSubstring("info is not ready"))
+				g.Expect(readyCond.Message).NotTo(ContainSubstring("rbac is not ready"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+	})
+
 	Context("konflux_up metric", func() {
 		const resourceName = "konflux"
 
