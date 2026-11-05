@@ -234,8 +234,8 @@ github.com/kevinburke/ssh_config v1.6.0 h1:J1FBfmuVosPHf5GRdltRLhPJtJpTlMdKTBjRg
 github.com/kevinburke/ssh_config v1.6.0/go.mod h1:q2RIzfka+BXARoNexmF9gkxEX7DmvbW9P4hIVx2Kg4M=
 github.com/klauspost/compress v1.20.1 h1:T7kKElXUMXrUJ2E9QhQhxFtcK5rPyLdsGZvdbLMPdiQ=
 github.com/klauspost/compress v1.20.1/go.mod h1:LUdAzn7YLVvxLpc7y3V1m40wESHTgc1422pwwBSKYuI=
-github.com/konflux-ci/application-api v0.0.0-20260927062134-a189c1676a85 h1:/BWOJ0uG0iW4zN2lspFIR+ZgYLduijA3gqUy12sITCM=
-github.com/konflux-ci/application-api v0.0.0-20260927062134-a189c1676a85/go.mod h1:948Z+a1IbfRT0RtoHzWWSN9YEucSbMJTHaMhz7dVICc=
+github.com/konflux-ci/application-api v0.0.0-20261101085949-41d2a0ab82ca h1:y6ylZIzlE0XzACuLOvwggdQIwGwLjEX9kBczbckYvik=
+github.com/konflux-ci/application-api v0.0.0-20261101085949-41d2a0ab82ca/go.mod h1:948Z+a1IbfRT0RtoHzWWSN9YEucSbMJTHaMhz7dVICc=
 github.com/konflux-ci/build-service v0.0.0-20261031054504-bdfcb51c6b34 h1:33Zn39SM52iouQYzVKSFuhB8aiWApaTP0/W61h+uO/0=
 github.com/konflux-ci/build-service v0.0.0-20261031054504-bdfcb51c6b34/go.mod h1:h7ZmbD3YUQHSbbqsbt9Hu2rL7Ns+S0JKZE2ZS1VNcEE=
 github.com/konflux-ci/image-controller v0.0.0-20261031001633-550e82b71098 h1:qicjTfPLIFa6XYkH6DpmHafdnJBSeACHLzpiDSDqet8=
