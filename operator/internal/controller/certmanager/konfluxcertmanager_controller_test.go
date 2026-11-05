@@ -81,6 +81,78 @@ func newBundle() *unstructured.Unstructured {
 	return obj
 }
 
+// embeddedTrustedCABundle returns the trusted-ca Bundle from the embedded
+// manifests without ownership labels or ownerRefs.
+func embeddedTrustedCABundle() *unstructured.Unstructured {
+	objects, err := objectStore.GetForComponent(manifests.CertManager)
+	Expect(err).NotTo(HaveOccurred())
+	for _, obj := range objects {
+		if !isTrustManagerResource(obj) {
+			continue
+		}
+		u, ok := obj.(*unstructured.Unstructured)
+		Expect(ok).To(BeTrue(), "trust-manager manifest should be unstructured")
+		bundle := u.DeepCopy()
+		bundle.SetLabels(nil)
+		bundle.SetOwnerReferences(nil)
+		return bundle
+	}
+	Fail("cert-manager manifests should include a trust-manager Bundle")
+	return nil
+}
+
+// foreignTrustedCABundle returns the trusted-ca Bundle as an externally managed
+// object would look: the embedded spec, no Konflux ownership labels, no ownerRefs.
+func foreignTrustedCABundle() *unstructured.Unstructured {
+	return embeddedTrustedCABundle()
+}
+
+// labelOnlyTrustedCABundle returns the trusted-ca Bundle with a Konflux owner
+// label but no ownerRef, to prove a label alone does not allow deletion.
+func labelOnlyTrustedCABundle(ownerName string) *unstructured.Unstructured {
+	bundle := embeddedTrustedCABundle()
+	bundle.SetLabels(map[string]string{constant.KonfluxOwnerLabel: ownerName})
+	return bundle
+}
+
+// controllerOwnedTrustedCABundle returns the trusted-ca Bundle controlled by a
+// KonfluxCertManager with the given name and UID, without ownership labels.
+func controllerOwnedTrustedCABundle(name, uid string) *unstructured.Unstructured {
+	bundle := embeddedTrustedCABundle()
+	ctrl := true
+	bundle.SetOwnerReferences([]metav1.OwnerReference{{
+		APIVersion: "konflux.konflux-ci.dev/v1alpha1",
+		Kind:       "KonfluxCertManager",
+		Name:       name,
+		UID:        types.UID(uid),
+		Controller: &ctrl,
+	}})
+	return bundle
+}
+
+// legacyOwnedTrustedCABundle returns the trusted-ca Bundle with a controller
+// ownerRef to the given pre-rename owner kind/name.
+func legacyOwnedTrustedCABundle(kind, name string) *unstructured.Unstructured {
+	bundle := embeddedTrustedCABundle()
+	ctrl := true
+	bundle.SetOwnerReferences([]metav1.OwnerReference{{
+		APIVersion: "konflux.konflux-ci.dev/v1alpha1",
+		Kind:       kind,
+		Name:       name,
+		UID:        "legacy-owner-uid",
+		Controller: &ctrl,
+	}})
+	return bundle
+}
+
+// testCertManagerOwner returns the KonfluxCertManager object used by the
+// applyTrustBundle unit tests.
+func testCertManagerOwner() *konfluxv1alpha1.KonfluxCertManager {
+	return &konfluxv1alpha1.KonfluxCertManager{
+		ObjectMeta: metav1.ObjectMeta{Name: CRName, UID: "cert-manager-uid"},
+	}
+}
+
 // seedRegistryOwnedTrustedCABundle creates the trusted-ca Bundle the way the
 // InternalRegistry controller used to: embedded spec, registry ownership
 // labels, and a controller ownerRef pointing at registry. registry must
@@ -382,6 +454,27 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 		})
 
 		Context("OpenShift platform defaults", func() {
+			It("should preserve a trusted-ca Bundle that Konflux does not manage", func(ctx context.Context) {
+				By("seeding a trusted-ca Bundle without Konflux ownership labels or ownerRefs")
+				foreignBundle := foreignTrustedCABundle()
+				Expect(k8sClient.Create(ctx, foreignBundle)).To(Succeed())
+				DeferCleanup(testutil.DeleteAndWait, k8sClient, foreignBundle)
+
+				startManager(createOpenShiftClusterInfo())
+				cm := &konfluxv1alpha1.KonfluxCertManager{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				}
+				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
+
+				Eventually(func(g Gomega) {
+					waitForBundleCondition(g, metav1.ConditionFalse, condition.ReasonBundleDistributionDisabled)
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				By("verifying the unmanaged Bundle was left in place")
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: trustedCABundleName}, newBundle())).To(Succeed())
+			})
+
 			It("should default to BundleDistributionDisabled when distributeClusterCABundle is nil on OpenShift", func(ctx context.Context) {
 				startManager(createOpenShiftClusterInfo())
 				cm := &konfluxv1alpha1.KonfluxCertManager{
@@ -945,7 +1038,7 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 				}).
 				Build()
 
-			cond, requeueAfter, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), true)
+			cond, requeueAfter, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), testCertManagerOwner(), true)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(requeueAfter).To(Equal(30 * time.Second))
@@ -971,7 +1064,7 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 				}).
 				Build()
 
-			_, _, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), true)
+			_, _, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), testCertManagerOwner(), true)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("connection refused"))
@@ -981,7 +1074,7 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 		It("should return BundleDistributionDisabled condition when distributeBundle is false", func() {
 			fakeClient := fake.NewClientBuilder().WithScheme(scheme.Scheme).Build()
 
-			cond, requeueAfter, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), false)
+			cond, requeueAfter, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), testCertManagerOwner(), false)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(requeueAfter).To(BeZero())
@@ -996,7 +1089,7 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 				WithObjects(registryOwnedTrustedCABundle()).
 				Build()
 
-			cond, requeueAfter, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), false)
+			cond, requeueAfter, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), testCertManagerOwner(), false)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(requeueAfter).To(BeZero())
@@ -1004,6 +1097,77 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 
 			err = fakeClient.Get(ctx, types.NamespacedName{Name: trustedCABundleName}, newBundle())
 			Expect(errors.IsNotFound(err)).To(BeTrue(), "leftover Bundle should be deleted, got: %v", err)
+		})
+
+		It("should preserve a Bundle not managed by Konflux when distributeBundle is false", func() {
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme.Scheme).
+				WithObjects(foreignTrustedCABundle()).
+				Build()
+
+			cond, requeueAfter, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), testCertManagerOwner(), false)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(requeueAfter).To(BeZero())
+			Expect(cond.Reason).To(Equal(condition.ReasonBundleDistributionDisabled))
+			Expect(cond.Message).To(ContainSubstring("left in place"))
+
+			err = fakeClient.Get(ctx, types.NamespacedName{Name: trustedCABundleName}, newBundle())
+			Expect(err).NotTo(HaveOccurred(), "Bundle not managed by Konflux must be preserved")
+		})
+
+		It("should preserve a Bundle that only carries a matching owner label", func() {
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme.Scheme).
+				WithObjects(labelOnlyTrustedCABundle(CRName)).
+				Build()
+
+			cond, _, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), testCertManagerOwner(), false)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cond.Reason).To(Equal(condition.ReasonBundleDistributionDisabled))
+			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: trustedCABundleName}, newBundle())).
+				To(Succeed(), "an owner label alone must not allow deletion")
+		})
+
+		It("should delete a Bundle controlled by this KonfluxCertManager even without owner labels", func() {
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme.Scheme).
+				WithObjects(controllerOwnedTrustedCABundle(CRName, "cert-manager-uid")).
+				Build()
+
+			cond, _, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), testCertManagerOwner(), false)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cond.Reason).To(Equal(condition.ReasonBundleDistributionDisabled))
+			err = fakeClient.Get(ctx, types.NamespacedName{Name: trustedCABundleName}, newBundle())
+			Expect(errors.IsNotFound(err)).To(BeTrue(), "a Bundle controlled by the CR should be deleted, got: %v", err)
+		})
+
+		It("should preserve a Bundle controlled by a different KonfluxCertManager UID", func() {
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme.Scheme).
+				WithObjects(controllerOwnedTrustedCABundle(CRName, "other-uid")).
+				Build()
+
+			_, _, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), testCertManagerOwner(), false)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: trustedCABundleName}, newBundle())).
+				To(Succeed(), "an ownerRef with a different UID must not allow deletion")
+		})
+
+		It("should preserve a Bundle with a legacy-looking ownerRef and the wrong name", func() {
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme.Scheme).
+				WithObjects(legacyOwnedTrustedCABundle("KonfluxInternalRegistry", "some-other-registry")).
+				Build()
+
+			_, _, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), testCertManagerOwner(), false)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: trustedCABundleName}, newBundle())).
+				To(Succeed(), "a legacy ownerRef must match the singleton name to allow deletion")
 		})
 
 		It("should ignore a missing trust-manager CRD when deleting a leftover Bundle", func() {
@@ -1021,7 +1185,7 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 				}).
 				Build()
 
-			cond, requeueAfter, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), false)
+			cond, requeueAfter, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), testCertManagerOwner(), false)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(requeueAfter).To(BeZero())
@@ -1032,6 +1196,7 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 			deleteErr := fmt.Errorf("delete denied")
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme.Scheme).
+				WithObjects(registryOwnedTrustedCABundle()).
 				WithInterceptorFuncs(interceptor.Funcs{
 					Delete: func(
 						_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.DeleteOption,
@@ -1044,7 +1209,7 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 				}).
 				Build()
 
-			_, requeueAfter, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), false)
+			_, requeueAfter, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), testCertManagerOwner(), false)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to delete trust-manager Bundle"))
@@ -1067,7 +1232,7 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 				}).
 				Build()
 
-			cond, requeueAfter, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), true)
+			cond, requeueAfter, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), testCertManagerOwner(), true)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(requeueAfter).To(Equal(trustManagerCRDRetryInterval))
@@ -1093,7 +1258,7 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 				}).
 				Build()
 
-			_, requeueAfter, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), true)
+			_, requeueAfter, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), testCertManagerOwner(), true)
 
 			Expect(err).To(MatchError(getErr))
 			Expect(requeueAfter).To(BeZero())
@@ -1116,7 +1281,7 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 				}).
 				Build()
 
-			_, requeueAfter, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), true)
+			_, requeueAfter, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), testCertManagerOwner(), true)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to release foreign controller ownerRef"))
@@ -1129,7 +1294,7 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 			fakeClient := fake.NewClientBuilder().WithScheme(scheme.Scheme).Build()
 			tc := newTrackingClient(fakeClient)
 
-			_, requeueAfter, err := reconciler.applyTrustBundle(ctx, tc, true)
+			_, requeueAfter, err := reconciler.applyTrustBundle(ctx, tc, testCertManagerOwner(), true)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to get parsed manifests for CertManager"))
 			Expect(requeueAfter).To(BeZero())

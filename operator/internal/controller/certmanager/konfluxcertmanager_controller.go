@@ -36,6 +36,7 @@ import (
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
+	"github.com/konflux-ci/konflux-ci/operator/internal/controller/internalregistry"
 	"github.com/konflux-ci/konflux-ci/operator/internal/predicate"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/clusterinfo"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
@@ -159,7 +160,7 @@ func (r *KonfluxCertManagerReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	// Apply the trust-manager Bundle when distributeClusterCABundle is effective.
 	// The Bundle populates cluster-wide trusted-ca ConfigMaps consumed by Tekton.
-	bundleCondition, requeueAfter, err := r.applyTrustBundle(ctx, tc, distributeBundle)
+	bundleCondition, requeueAfter, err := r.applyTrustBundle(ctx, tc, certManager, distributeBundle)
 	if err != nil {
 		return errHandler.HandleApplyError(ctx, err)
 	}
@@ -220,22 +221,35 @@ func (r *KonfluxCertManagerReconciler) applyPKIManifests(ctx context.Context, tc
 // applyTrustBundle applies the trust-manager Bundle resources from the embedded manifests.
 // It returns a condition reflecting the outcome, an optional requeue delay, and an error
 // for unexpected apply failures (those should abort reconcile before orphan cleanup):
-//   - Disabled: distributeBundle is false; leftover trusted-ca is deleted if present
+//   - Disabled: distributeBundle is false; a trusted-ca Bundle owned by Konflux is deleted
+//     if present, while a Bundle managed by someone else is left in place
 //   - Distributed: Bundle applied successfully
 //   - NotDistributed: trust-manager CRD is not installed (requeue to retry)
-func (r *KonfluxCertManagerReconciler) applyTrustBundle(ctx context.Context, tc *tracking.Client, distributeBundle bool) (metav1.Condition, time.Duration, error) {
+func (r *KonfluxCertManagerReconciler) applyTrustBundle(
+	ctx context.Context, tc *tracking.Client, owner *konfluxv1alpha1.KonfluxCertManager, distributeBundle bool,
+) (metav1.Condition, time.Duration, error) {
 	log := logf.FromContext(ctx)
 
 	if !distributeBundle {
-		if err := deleteTrustedCABundleIfPresent(ctx, tc); err != nil {
+		preserved, err := deleteTrustedCABundleIfPresent(ctx, tc, owner)
+		if err != nil {
 			return metav1.Condition{}, 0, err
 		}
-		log.Info("Skipping trust-manager Bundle - distributeClusterCABundle is disabled")
+		message := "Trust-manager Bundle distribution is disabled by configuration"
+		if preserved {
+			message = fmt.Sprintf(
+				"Trust-manager Bundle distribution is disabled by configuration; "+
+					"the existing Bundle %q is not managed by Konflux and was left in place",
+				trustedCABundleName,
+			)
+		}
+		log.Info("Skipping trust-manager Bundle - distributeClusterCABundle is disabled",
+			"preservedExistingBundle", preserved)
 		return metav1.Condition{
 			Type:    constant.ConditionTypeClusterCABundleDistributed,
 			Status:  metav1.ConditionFalse,
 			Reason:  condition.ReasonBundleDistributionDisabled,
-			Message: "Trust-manager Bundle distribution is disabled by configuration",
+			Message: message,
 		}, 0, nil
 	}
 
@@ -286,23 +300,83 @@ func (r *KonfluxCertManagerReconciler) applyTrustBundle(ctx context.Context, tc 
 }
 
 // deleteTrustedCABundleIfPresent removes the well-known trusted-ca Bundle when
-// distribution is off. Ignores NotFound and a missing trust-manager CRD so
-// OpenShift (no trust-manager) and clusters with no leftover Bundle stay quiet.
-// Other errors fail reconcile. Deletes regardless of owner so a leftover
-// InternalRegistry-owned Bundle is not left behind.
-func deleteTrustedCABundleIfPresent(ctx context.Context, c client.Client) error {
+// distribution is off, but only if the Bundle is managed by Konflux: it is
+// controlled by this KonfluxCertManager (controller ownerRef matching name and
+// UID, the same rule the tracking package uses for orphan cleanup) or it was
+// left behind by the pre-rename KonfluxInternalRegistry controller. A Bundle
+// managed by someone else (for example a GitOps-managed Bundle on a platform
+// where the native CA injection does not carry the required CAs) is preserved
+// and reported back to the caller via the returned bool.
+// Ignores NotFound and a missing trust-manager CRD so OpenShift (no
+// trust-manager) and clusters with no leftover Bundle stay quiet.
+// Other errors fail reconcile.
+func deleteTrustedCABundleIfPresent(
+	ctx context.Context, c client.Client, owner *konfluxv1alpha1.KonfluxCertManager,
+) (bool, error) {
+	log := logf.FromContext(ctx)
+
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(bundleGVK)
 	obj.SetName(trustedCABundleName)
+	if err := c.Get(ctx, client.ObjectKey{Name: trustedCABundleName}, obj); err != nil {
+		if client.IgnoreNotFound(err) == nil || tracking.IsNoKindMatchError(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to get trust-manager Bundle %s: %w", trustedCABundleName, err)
+	}
+
+	if !isKonfluxManagedTrustedCABundle(obj, owner) {
+		log.Info("Leaving trust-manager Bundle in place - not managed by Konflux, distribution is disabled",
+			"name", trustedCABundleName)
+		return true, nil
+	}
+
 	if err := c.Delete(ctx, obj); err != nil {
 		if client.IgnoreNotFound(err) == nil || tracking.IsNoKindMatchError(err) {
-			return nil
+			return false, nil
 		}
-		return fmt.Errorf("failed to delete trust-manager Bundle %s: %w", trustedCABundleName, err)
+		return false, fmt.Errorf("failed to delete trust-manager Bundle %s: %w", trustedCABundleName, err)
 	}
-	logf.FromContext(ctx).Info("Deleted trust-manager Bundle; distribution is disabled",
+	log.Info("Deleted trust-manager Bundle; distribution is disabled",
 		"name", trustedCABundleName)
-	return nil
+	return false, nil
+}
+
+const (
+	// legacyOwnerAPIVersion is the API version of the CR that owned the
+	// trusted-ca Bundle before the cert-manager component was split out of it.
+	legacyOwnerAPIVersion = "konflux.konflux-ci.dev/v1alpha1"
+	// legacyInternalRegistryKind is the kind of that pre-rename owner. Its
+	// Bundles are leftovers that must still be cleaned up on upgrade.
+	legacyInternalRegistryKind = "KonfluxInternalRegistry"
+)
+
+// isKonfluxManagedTrustedCABundle reports whether the trusted-ca Bundle belongs
+// to Konflux and may therefore be deleted when cluster CA bundle distribution is
+// disabled. It applies the same ownership rule as the tracking package's orphan
+// cleanup: the controller ownerRef must match the owner's name and UID. An owner
+// label alone is not sufficient, as it can be set or left behind by anyone.
+func isKonfluxManagedTrustedCABundle(
+	obj *unstructured.Unstructured, owner *konfluxv1alpha1.KonfluxCertManager,
+) bool {
+	if metav1.IsControlledBy(obj, owner) {
+		return true
+	}
+
+	// Upgrade leftover: the Bundle used to be controlled by the singleton
+	// KonfluxInternalRegistry CR. Its UID is not known to this controller, so
+	// match the controller ownerRef by API version, kind and singleton name.
+	for _, ref := range obj.GetOwnerReferences() {
+		if ref.Controller == nil || !*ref.Controller {
+			continue
+		}
+		if ref.APIVersion == legacyOwnerAPIVersion &&
+			ref.Kind == legacyInternalRegistryKind &&
+			ref.Name == internalregistry.CRName {
+			return true
+		}
+	}
+	return false
 }
 
 func bundleCRDMissingResult(ctx context.Context, name string) (metav1.Condition, time.Duration, error) {

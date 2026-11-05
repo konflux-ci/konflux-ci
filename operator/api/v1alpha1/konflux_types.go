@@ -173,6 +173,11 @@ type CertManagerConfig struct {
 	//   - Non-OpenShift (Kind, upstream): true (trust-manager Bundle needed
 	//     for Tekton git resolver and similar consumers)
 	// Set explicitly to override the platform detection.
+	// When distribution is disabled, a trusted-ca Bundle owned by Konflux is
+	// removed; a Bundle managed by someone else (for example one deployed by
+	// GitOps on a platform where the native CA injection does not carry the
+	// required CAs) is left in place and reported in the
+	// ClusterCABundleDistributed condition.
 	// Copied to the KonfluxCertManager CR by the operator.
 	// +optional
 	DistributeClusterCABundle *bool `json:"distributeClusterCABundle,omitempty"`
