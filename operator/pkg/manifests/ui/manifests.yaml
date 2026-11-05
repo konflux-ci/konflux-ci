@@ -842,10 +842,12 @@ spec:
   - localhost
   - dex.konflux-ui
   - dex.konflux-ui.svc.cluster.local
+  duration: 2160h
   isCA: true
   issuerRef:
     kind: Issuer
     name: ui-ca-issuer
+  renewBefore: 720h
   secretName: dex-cert
   subject:
     organizations:
@@ -859,9 +861,11 @@ metadata:
 spec:
   dnsNames:
   - localhost
+  duration: 2160h
   issuerRef:
     kind: Issuer
     name: ui-ca-issuer
+  renewBefore: 720h
   secretName: oauth2-proxy-cert
 ---
 apiVersion: cert-manager.io/v1
@@ -874,9 +878,11 @@ spec:
   - localhost
   - proxy.konflux-ui.svc
   - proxy.konflux-ui.svc.cluster.local
+  duration: 2160h
   issuerRef:
     kind: Issuer
     name: ui-ca-issuer
+  renewBefore: 720h
   secretName: serving-cert
 ---
 apiVersion: cert-manager.io/v1
@@ -886,6 +892,7 @@ metadata:
   namespace: konflux-ui
 spec:
   commonName: ui-ca
+  duration: 8760h
   isCA: true
   issuerRef:
     group: cert-manager.io
@@ -893,7 +900,9 @@ spec:
     name: konflux-bootstrap-issuer
   privateKey:
     algorithm: ECDSA
+    rotationPolicy: Never
     size: 256
+  renewBefore: 4380h
   secretName: ui-ca
 ---
 apiVersion: cert-manager.io/v1
