@@ -521,6 +521,12 @@ spec:
                         - Non-OpenShift (Kind, upstream): true (trust-manager Bundle needed
                           for Tekton git resolver and similar consumers)
                       Set explicitly to override the platform detection.
+                      When distribution is disabled, this controller does not apply the Bundle.
+                      Orphan cleanup removes a trusted-ca Bundle owned by this controller.
+                      A Bundle it does not own is left in place, including one created earlier
+                      by the internal registry controller and one deployed by GitOps.
+                      On OpenShift, set this field to true for KonfluxCertManager to adopt and
+                      keep managing an existing Bundle.
                       Copied to the KonfluxCertManager CR by the operator.
                     type: boolean
                   enabled:
