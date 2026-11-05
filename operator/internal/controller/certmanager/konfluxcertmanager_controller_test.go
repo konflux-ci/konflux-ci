@@ -143,6 +143,27 @@ func registryOwnedTrustedCABundle() *unstructured.Unstructured {
 	return nil
 }
 
+// unmanagedTrustedCABundle returns trusted-ca from embedded manifests with no Konflux labels or ownerRefs.
+func unmanagedTrustedCABundle() *unstructured.Unstructured {
+	objects, err := objectStore.GetForComponent(manifests.CertManager)
+	Expect(err).NotTo(HaveOccurred())
+	for _, obj := range objects {
+		if !isTrustManagerResource(obj) {
+			continue
+		}
+		u, ok := obj.(*unstructured.Unstructured)
+		Expect(ok).To(BeTrue(), "trust-manager manifest should be unstructured")
+		u = u.DeepCopy()
+		u.SetUID("foreign-bundle-uid")
+		u.SetResourceVersion("1")
+		u.SetLabels(nil)
+		u.SetOwnerReferences(nil)
+		return u
+	}
+	Fail("cert-manager manifests should include a trust-manager Bundle")
+	return nil
+}
+
 var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 	// "When the cert-manager namespace does not exist" runs first so the namespace
 	// has never been created by another test's BeforeEach.
@@ -504,7 +525,7 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 			})
 
-			It("should delete a leftover InternalRegistry-owned Bundle when distribution defaults off on OpenShift", func(ctx context.Context) {
+			It("should leave a leftover InternalRegistry-owned Bundle in place when distribution defaults off on OpenShift", func(ctx context.Context) {
 				By("creating the InternalRegistry CR that previously owned the Bundle")
 				registry := &konfluxv1alpha1.KonfluxInternalRegistry{
 					ObjectMeta: metav1.ObjectMeta{Name: internalregistry.CRName},
@@ -523,15 +544,14 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
 				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
 
-				By("verifying the leftover Bundle is deleted")
+				By("verifying the leftover Bundle is still present")
 				Eventually(func(g Gomega) {
 					waitForBundleCondition(g, metav1.ConditionFalse, condition.ReasonBundleDistributionDisabled)
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: trustedCABundleName}, newBundle())
-					g.Expect(errors.IsNotFound(err)).To(BeTrue(), "leftover Bundle should be deleted when distribution defaults off, got: %v", err)
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: trustedCABundleName}, newBundle())).To(Succeed())
 				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 			})
 
-			It("should delete a leftover InternalRegistry-owned Bundle when distribution is explicitly disabled", func(ctx context.Context) {
+			It("should leave a leftover InternalRegistry-owned Bundle in place when distribution is explicitly disabled", func(ctx context.Context) {
 				By("creating the InternalRegistry CR that previously owned the Bundle")
 				registry := &konfluxv1alpha1.KonfluxInternalRegistry{
 					ObjectMeta: metav1.ObjectMeta{Name: internalregistry.CRName},
@@ -552,11 +572,10 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 				Expect(k8sClient.Create(ctx, cm)).To(Succeed())
 				testutil.DeferCleanupParentAndChildren(k8sClient, cm, certManagerChildren()...)
 
-				By("verifying the leftover Bundle is deleted")
+				By("verifying the leftover Bundle is still present")
 				Eventually(func(g Gomega) {
 					waitForBundleCondition(g, metav1.ConditionFalse, condition.ReasonBundleDistributionDisabled)
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: trustedCABundleName}, newBundle())
-					g.Expect(errors.IsNotFound(err)).To(BeTrue(), "leftover Bundle should be deleted when distribution is disabled, got: %v", err)
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: trustedCABundleName}, newBundle())).To(Succeed())
 				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 			})
 		})
@@ -990,7 +1009,7 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 			Expect(cond.Reason).To(Equal(condition.ReasonBundleDistributionDisabled))
 		})
 
-		It("should delete a leftover Bundle when distributeBundle is false", func() {
+		It("should leave a registry-owned Bundle in place when distributeBundle is false", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme.Scheme).
 				WithObjects(registryOwnedTrustedCABundle()).
@@ -1001,24 +1020,14 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(requeueAfter).To(BeZero())
 			Expect(cond.Reason).To(Equal(condition.ReasonBundleDistributionDisabled))
-
-			err = fakeClient.Get(ctx, types.NamespacedName{Name: trustedCABundleName}, newBundle())
-			Expect(errors.IsNotFound(err)).To(BeTrue(), "leftover Bundle should be deleted, got: %v", err)
+			Expect(cond.Message).To(Equal("Trust-manager Bundle distribution is disabled by configuration"))
+			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: trustedCABundleName}, newBundle())).To(Succeed())
 		})
 
-		It("should ignore a missing trust-manager CRD when deleting a leftover Bundle", func() {
+		It("should preserve a Bundle not managed by Konflux when distributeBundle is false", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme.Scheme).
-				WithInterceptorFuncs(interceptor.Funcs{
-					Delete: func(
-						_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.DeleteOption,
-					) error {
-						if isTrustManagerResource(obj) {
-							return bundleCRDMissingErr()
-						}
-						return fmt.Errorf("unexpected delete on %s", obj.GetObjectKind().GroupVersionKind())
-					},
-				}).
+				WithObjects(unmanagedTrustedCABundle()).
 				Build()
 
 			cond, requeueAfter, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), false)
@@ -1026,30 +1035,8 @@ var _ = Describe("KonfluxCertManager Controller", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(requeueAfter).To(BeZero())
 			Expect(cond.Reason).To(Equal(condition.ReasonBundleDistributionDisabled))
-		})
-
-		It("should return error when deleting a leftover Bundle fails", func() {
-			deleteErr := fmt.Errorf("delete denied")
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(scheme.Scheme).
-				WithInterceptorFuncs(interceptor.Funcs{
-					Delete: func(
-						_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.DeleteOption,
-					) error {
-						if isTrustManagerResource(obj) {
-							return deleteErr
-						}
-						return fmt.Errorf("unexpected delete on %s", obj.GetObjectKind().GroupVersionKind())
-					},
-				}).
-				Build()
-
-			_, requeueAfter, err := reconciler.applyTrustBundle(ctx, newTrackingClient(fakeClient), false)
-
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("failed to delete trust-manager Bundle"))
-			Expect(err.Error()).To(ContainSubstring("delete denied"))
-			Expect(requeueAfter).To(BeZero())
+			Expect(cond.Message).To(Equal("Trust-manager Bundle distribution is disabled by configuration"))
+			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: trustedCABundleName}, newBundle())).To(Succeed())
 		})
 
 		It("should return BundleNotDistributed when Get hits a missing trust-manager CRD", func() {

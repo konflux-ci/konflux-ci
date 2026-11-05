@@ -182,6 +182,8 @@ spec:
     # Platform-aware default when omitted:
     #   OpenShift: false (native per-namespace CA injection)
     #   Non-OpenShift (Kind, upstream): true (trust-manager Bundle required)
+    # An existing trusted-ca Bundle this controller does not own is left in place.
+    # On OpenShift, set this to true to adopt a Bundle created by the internal registry.
     # distributeClusterCABundle: true
   internalRegistry:
     # Enabled controls whether internal registry resources are deployed

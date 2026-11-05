@@ -277,3 +277,20 @@ on OpenShift (where the platform injects trusted CA bundles natively). The
 controller reports a `ClusterCABundleDistributed` status condition reflecting
 whether the Bundle was applied, disabled, or could not be applied because the
 trust-manager CRD is not installed.
+
+### Upgrade from the internal registry Bundle
+
+Releases through v0.2.2 applied `trusted-ca` from the internal registry
+controller when that component was enabled. From this release the
+cert-manager controller does not delete a `trusted-ca` Bundle it does not
+own.
+
+On OpenShift the field defaults to false, so an existing Bundle stays in
+place while the `konflux-internal-registry` custom resource exists. Deleting
+that custom resource garbage-collects the Bundle. Set
+`spec.certManager.distributeClusterCABundle: true` for `KonfluxCertManager`
+to adopt it and recreate it later. A new OpenShift install that only enables
+the internal registry does not get a Bundle.
+
+On non-OpenShift clusters the field defaults to true, and the cert-manager
+controller adopts an existing InternalRegistry-owned Bundle.
