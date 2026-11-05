@@ -28,11 +28,12 @@ cleanup() {
 trap cleanup EXIT
 
 OPERATOR_LOG=/mnt/e2e-shared/operator-manager.log
-echo "Out-of-cluster operator: make install, install-user-rbac, build (foreground)..."
+echo "Out-of-cluster operator: make install, install-user-rbac, install-release-rbac, build (foreground)..."
 (
   cd "${REPO_ROOT}/operator"
   make install
   make install-user-rbac
+  make install-release-rbac
   VERSION="$(git rev-parse HEAD)" make build
 )
 echo "Starting bin/manager (logs: ${OPERATOR_LOG})..."

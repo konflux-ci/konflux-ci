@@ -573,6 +573,7 @@ rules:
   - rbac.authorization.k8s.io
   resourceNames:
   - release-pipeline-resource-role
+  - release-pipeline-resource-role-core
   - release-service-application-role
   - release-service-component-role
   - release-service-environment-viewer-role

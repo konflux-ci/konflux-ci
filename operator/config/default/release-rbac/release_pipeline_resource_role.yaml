@@ -1,0 +1,14 @@
+# Install-time aggregation shell for release pipeline permissions.
+# The release reconciler must not apply this object. A forced apply of rules: []
+# would clear rules the aggregation controller copies in from labeled fragments.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: release-pipeline-resource-role
+  annotations:
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
+aggregationRule:
+  clusterRoleSelectors:
+    - matchLabels:
+        rbac.konflux-ci.dev/aggregate-to-release-pipeline: "true"
+rules: []

@@ -9,6 +9,7 @@ resources:
 - bases/konflux-operator.clusterserviceversion.yaml
 - ../default/operator-rbac
 - ../default/user-rbac
+- ../default/release-rbac
 - ../samples
 - ../scorecard
 

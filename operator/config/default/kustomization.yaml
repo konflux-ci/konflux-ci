@@ -5,11 +5,13 @@ kind: Kustomization
 # This kustomization combines:
 # - operator-rbac: Operator's own RBAC (gets namePrefix)
 # - user-rbac: User-facing ClusterRoles (no namePrefix for stable names)
+# - release-rbac: Release pipeline aggregation shell (no namePrefix; not reconciled)
 # - manager-metrics-certs: install-time metrics TLS (Kind/local/rings; not used by OLM)
 
 resources:
 - operator-rbac
 - user-rbac
+- release-rbac
 
 components:
 - manager-metrics-certs
