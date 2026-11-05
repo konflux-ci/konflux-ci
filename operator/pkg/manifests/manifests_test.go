@@ -73,7 +73,7 @@ func TestGetAllManifests(t *testing.T) {
 	}
 }
 
-func TestKonfluxCAAndIssuerLifetimes(t *testing.T) {
+func TestCAAndIssuerLifetimes(t *testing.T) {
 	const (
 		caDuration      = "8760h"
 		caRenewBefore   = "4380h"
@@ -94,10 +94,20 @@ func TestKonfluxCAAndIssuerLifetimes(t *testing.T) {
 		t.Fatalf("parse leaf duration: %v", err)
 	}
 	if leafDurationParsed >= caRenewBeforeParsed {
-		t.Fatalf("leaf duration %s must be less than konflux-ca renewBefore %s", leafDuration, caRenewBefore)
+		t.Fatalf("leaf duration %s must be less than CA renewBefore %s", leafDuration, caRenewBefore)
 	}
 	if caRenewBeforeParsed >= caDurationParsed {
-		t.Fatalf("konflux-ca renewBefore %s must be less than its duration %s", caRenewBefore, caDuration)
+		t.Fatalf("CA renewBefore %s must be less than its duration %s", caRenewBefore, caDuration)
+	}
+
+	cases := []struct {
+		name        string
+		caName      string
+		caNamespace string
+		issuerName  string
+	}{
+		{"konflux-ca", "konflux-ca", "cert-manager", "konflux-issuer"},
+		{"ui-ca", "ui-ca", "konflux-ui", "ui-ca-issuer"},
 	}
 
 	scheme := testScheme(t)
@@ -106,140 +116,59 @@ func TestKonfluxCAAndIssuerLifetimes(t *testing.T) {
 		t.Fatalf("NewObjectStore() error = %v", err)
 	}
 
-	foundCA := false
-	foundIssuerCert := false
-	for _, component := range AllComponents() {
-		objects, err := store.GetForComponent(component)
-		if err != nil {
-			t.Fatalf("GetForComponent(%s) error = %v", component, err)
-		}
-		for _, obj := range objects {
-			if obj.GetObjectKind().GroupVersionKind().Kind != "Certificate" {
-				continue
-			}
-			u, ok := obj.(*unstructured.Unstructured)
-			if !ok {
-				t.Fatalf("%s/%s Certificate was not decoded as unstructured", obj.GetNamespace(), obj.GetName())
-			}
-			spec, found, err := unstructured.NestedMap(u.Object, "spec")
-			if err != nil || !found {
-				t.Fatalf("%s/%s missing spec: %v", u.GetNamespace(), u.GetName(), err)
-			}
-			issuerName, _, err := unstructured.NestedString(spec, "issuerRef", "name")
-			if err != nil {
-				t.Fatalf("%s/%s issuerRef.name: %v", u.GetNamespace(), u.GetName(), err)
-			}
-
-			if u.GetName() == "konflux-ca" && u.GetNamespace() == "cert-manager" {
-				foundCA = true
-				assertStringField(t, u, spec, "duration", caDuration)
-				assertStringField(t, u, spec, "renewBefore", caRenewBefore)
-				privateKey, found, err := unstructured.NestedMap(spec, "privateKey")
-				if err != nil || !found {
-					t.Fatalf("konflux-ca missing spec.privateKey: %v", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			foundCA := false
+			foundIssuerCert := false
+			for _, component := range AllComponents() {
+				objects, err := store.GetForComponent(component)
+				if err != nil {
+					t.Fatalf("GetForComponent(%s) error = %v", component, err)
 				}
-				assertStringField(t, u, privateKey, "rotationPolicy", "Never")
-			}
+				for _, obj := range objects {
+					if obj.GetObjectKind().GroupVersionKind().Kind != "Certificate" {
+						continue
+					}
+					u, ok := obj.(*unstructured.Unstructured)
+					if !ok {
+						t.Fatalf("%s/%s Certificate was not decoded as unstructured", obj.GetNamespace(), obj.GetName())
+					}
+					spec, found, err := unstructured.NestedMap(u.Object, "spec")
+					if err != nil || !found {
+						t.Fatalf("%s/%s missing spec: %v", u.GetNamespace(), u.GetName(), err)
+					}
+					issuerName, _, err := unstructured.NestedString(spec, "issuerRef", "name")
+					if err != nil {
+						t.Fatalf("%s/%s issuerRef.name: %v", u.GetNamespace(), u.GetName(), err)
+					}
 
-			if issuerName != "konflux-issuer" {
-				continue
-			}
-			foundIssuerCert = true
-			assertStringField(t, u, spec, "duration", leafDuration)
-			assertStringField(t, u, spec, "renewBefore", leafRenewBefore)
-		}
-	}
+					if u.GetName() == tc.caName && u.GetNamespace() == tc.caNamespace {
+						foundCA = true
+						assertStringField(t, u, spec, "duration", caDuration)
+						assertStringField(t, u, spec, "renewBefore", caRenewBefore)
+						privateKey, found, err := unstructured.NestedMap(spec, "privateKey")
+						if err != nil || !found {
+							t.Fatalf("%s missing spec.privateKey: %v", tc.caName, err)
+						}
+						assertStringField(t, u, privateKey, "rotationPolicy", "Never")
+					}
 
-	if !foundCA {
-		t.Fatal("embedded manifests did not include cert-manager/konflux-ca")
-	}
-	if !foundIssuerCert {
-		t.Fatal("embedded manifests did not include a certificate issued by konflux-issuer")
-	}
-}
-
-func TestUICAAndIssuerLifetimes(t *testing.T) {
-	const (
-		caDuration      = "8760h"
-		caRenewBefore   = "4380h"
-		leafDuration    = "2160h"
-		leafRenewBefore = "720h"
-	)
-
-	caDurationParsed, err := time.ParseDuration(caDuration)
-	if err != nil {
-		t.Fatalf("parse CA duration: %v", err)
-	}
-	caRenewBeforeParsed, err := time.ParseDuration(caRenewBefore)
-	if err != nil {
-		t.Fatalf("parse CA renewBefore: %v", err)
-	}
-	leafDurationParsed, err := time.ParseDuration(leafDuration)
-	if err != nil {
-		t.Fatalf("parse leaf duration: %v", err)
-	}
-	if leafDurationParsed >= caRenewBeforeParsed {
-		t.Fatalf("leaf duration %s must be less than ui-ca renewBefore %s", leafDuration, caRenewBefore)
-	}
-	if caRenewBeforeParsed >= caDurationParsed {
-		t.Fatalf("ui-ca renewBefore %s must be less than its duration %s", caRenewBefore, caDuration)
-	}
-
-	scheme := testScheme(t)
-	store, err := NewObjectStore(scheme)
-	if err != nil {
-		t.Fatalf("NewObjectStore() error = %v", err)
-	}
-
-	foundCA := false
-	foundIssuerCert := false
-	for _, component := range AllComponents() {
-		objects, err := store.GetForComponent(component)
-		if err != nil {
-			t.Fatalf("GetForComponent(%s) error = %v", component, err)
-		}
-		for _, obj := range objects {
-			if obj.GetObjectKind().GroupVersionKind().Kind != "Certificate" {
-				continue
-			}
-			u, ok := obj.(*unstructured.Unstructured)
-			if !ok {
-				t.Fatalf("%s/%s Certificate was not decoded as unstructured", obj.GetNamespace(), obj.GetName())
-			}
-			spec, found, err := unstructured.NestedMap(u.Object, "spec")
-			if err != nil || !found {
-				t.Fatalf("%s/%s missing spec: %v", u.GetNamespace(), u.GetName(), err)
-			}
-			issuerName, _, err := unstructured.NestedString(spec, "issuerRef", "name")
-			if err != nil {
-				t.Fatalf("%s/%s issuerRef.name: %v", u.GetNamespace(), u.GetName(), err)
-			}
-
-			if u.GetName() == "ui-ca" && u.GetNamespace() == "konflux-ui" {
-				foundCA = true
-				assertStringField(t, u, spec, "duration", caDuration)
-				assertStringField(t, u, spec, "renewBefore", caRenewBefore)
-				privateKey, found, err := unstructured.NestedMap(spec, "privateKey")
-				if err != nil || !found {
-					t.Fatalf("ui-ca missing spec.privateKey: %v", err)
+					if issuerName != tc.issuerName {
+						continue
+					}
+					foundIssuerCert = true
+					assertStringField(t, u, spec, "duration", leafDuration)
+					assertStringField(t, u, spec, "renewBefore", leafRenewBefore)
 				}
-				assertStringField(t, u, privateKey, "rotationPolicy", "Never")
 			}
 
-			if issuerName != "ui-ca-issuer" {
-				continue
+			if !foundCA {
+				t.Fatalf("embedded manifests did not include %s/%s", tc.caNamespace, tc.caName)
 			}
-			foundIssuerCert = true
-			assertStringField(t, u, spec, "duration", leafDuration)
-			assertStringField(t, u, spec, "renewBefore", leafRenewBefore)
-		}
-	}
-
-	if !foundCA {
-		t.Fatal("embedded manifests did not include konflux-ui/ui-ca")
-	}
-	if !foundIssuerCert {
-		t.Fatal("embedded manifests did not include a certificate issued by ui-ca-issuer")
+			if !foundIssuerCert {
+				t.Fatalf("embedded manifests did not include a certificate issued by %s", tc.issuerName)
+			}
+		})
 	}
 }
 
