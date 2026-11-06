@@ -1,6 +1,6 @@
 module github.com/konflux-ci/konflux-ci/test/go-tests
 
-go 1.26.10
+go 1.27.1
 
 require (
 	github.com/coder/websocket v1.8.15
@@ -23,7 +23,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.33.1
 	github.com/onsi/gomega v1.44.0
 	github.com/opencontainers/image-spec v1.1.1
-	github.com/openshift-pipelines/pipelines-as-code v0.50.0
+	github.com/openshift-pipelines/pipelines-as-code v0.52.0
 	github.com/openshift/api v0.0.0-20261104213817-ae934b7cbfb4
 	github.com/openshift/client-go v0.0.0-20261027103500-48133ed95dad
 	github.com/openshift/library-go v0.0.0-20261030161254-298cf2d19148
