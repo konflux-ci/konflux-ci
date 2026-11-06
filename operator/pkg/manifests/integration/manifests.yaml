@@ -1210,6 +1210,24 @@ spec:
                               PipelineRun that produced this entry.
                             minLength: 1
                             type: string
+                          buildPipelineRunUID:
+                            description: |-
+                              BuildPipelineRunUID is the Kubernetes UID of the build PipelineRun at capture time.
+                              Used for deterministic batched nudge PipelineRun naming when the build PLR is gone.
+                            type: string
+                          buildServiceAccountName:
+                            description: BuildServiceAccountName is the TaskRun service
+                              account from the build PipelineRun at capture time.
+                            type: string
+                          builtImageRepository:
+                            description: |-
+                              BuiltImageRepository is the OCI repository (without tag) from the build at capture time.
+                              Persisted so the batch can fire after the build PipelineRun is pruned.
+                            type: string
+                          builtImageTag:
+                            description: BuiltImageTag is the image tag from the build
+                              at capture time.
+                            type: string
                           capturedAt:
                             description: CapturedAt is the timestamp when this entry
                               was added to the batch.
@@ -1222,15 +1240,18 @@ spec:
                             minLength: 1
                             pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                             type: string
+                          gitRepoAtShaLink:
+                            description: GitRepoAtShaLink is the source git commit
+                              link from the build at capture time.
+                            type: string
                           imageDigest:
                             description: ImageDigest is the OCI image digest produced
                               by the build pipeline run.
                             minLength: 1
                             type: string
-                          serviceAccountName:
-                            description: |-
-                              ServiceAccountName is the build PipelineRun service account, captured at accumulation time
-                              so batch firing can resolve registry credentials if the build PLR was pruned.
+                          nudgeFileMatches:
+                            description: NudgeFileMatches is the Renovate file-match
+                              pattern from the build at capture time.
                             type: string
                         required:
                         - buildPipelineRun
@@ -2225,7 +2246,7 @@ spec:
         - --leader-elector-retry-period=5s
         command:
         - /manager
-        image: quay.io/konflux-ci/integration-service:da4d57834b79002bca80e0b71866b604309c4bc2
+        image: quay.io/konflux-ci/integration-service:13faeee49ac3d866956d1cc08af9919be18f976e
         livenessProbe:
           httpGet:
             path: /healthz
@@ -2309,7 +2330,7 @@ spec:
             - --zap-log-level=debug
             - --pr-snapshots-to-keep=70
             - --non-pr-snapshots-to-keep=640
-            image: quay.io/konflux-ci/integration-service:da4d57834b79002bca80e0b71866b604309c4bc2
+            image: quay.io/konflux-ci/integration-service:13faeee49ac3d866956d1cc08af9919be18f976e
             imagePullPolicy: Always
             name: test-gc
             resources:
