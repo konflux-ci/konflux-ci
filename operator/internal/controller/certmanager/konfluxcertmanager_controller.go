@@ -68,7 +68,9 @@ var (
 // CertManagerCleanupGVKs defines which resource types should be cleaned up when they are
 // no longer part of the desired state. When createClusterIssuer is toggled off, cert-manager
 // resources are automatically deleted. When distributeClusterCABundle is toggled off (or
-// defaults to off on OpenShift), the trust-manager Bundle is deleted.
+// defaults to off on OpenShift), orphan cleanup removes a trusted-ca Bundle only when it
+// carries this controller's owner label and a controller ownerRef for this
+// KonfluxCertManager. A Bundle without those stays.
 var CertManagerCleanupGVKs = []schema.GroupVersionKind{
 	clusterIssuerGVK,
 	certificateGVK,
@@ -224,9 +226,7 @@ func (r *KonfluxCertManagerReconciler) applyPKIManifests(ctx context.Context, tc
 //     removes one owned by this KonfluxCertManager. Any other trusted-ca Bundle stays.
 //   - Distributed: Bundle applied successfully
 //   - NotDistributed: trust-manager CRD is not installed (requeue to retry)
-func (r *KonfluxCertManagerReconciler) applyTrustBundle(
-	ctx context.Context, tc *tracking.Client, distributeBundle bool,
-) (metav1.Condition, time.Duration, error) {
+func (r *KonfluxCertManagerReconciler) applyTrustBundle(ctx context.Context, tc *tracking.Client, distributeBundle bool) (metav1.Condition, time.Duration, error) {
 	log := logf.FromContext(ctx)
 
 	if !distributeBundle {
