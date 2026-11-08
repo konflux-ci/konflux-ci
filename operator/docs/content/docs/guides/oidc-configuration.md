@@ -398,6 +398,39 @@ used by the Kind samples and corresponds to a password published in this reposit
 it grants access to anyone who finds the cluster.
 {{< /alert >}}
 
+### Keeping the hash out of the CR
+
+Each entry takes exactly one of `hash` or `hashFromEnv`. `hashFromEnv` is the name of
+an environment variable in the Dex container that holds the bcrypt hash, so the hash
+does not have to be committed with the CR. Source the variable from a Secret through
+the Dex container `env`:
+
+```yaml
+      dex:
+        dex:
+          env:
+            - name: USER1_PASSWORD_HASH
+              valueFrom:
+                secretKeyRef:
+                  name: dex-user-passwords
+                  key: user1
+        config:
+          enablePasswordDB: true
+          passwordConnector: local
+          staticPasswords:
+            - email: user1@konflux.dev
+              hashFromEnv: USER1_PASSWORD_HASH
+              username: user1
+              userID: "7138d2fe-724e-4e86-af8a-db7c4b080e20"
+```
+
+The Secret must exist in the Dex namespace (`konflux-ui`) before the Dex pod can start.
+The value of the chosen field must be non-empty.
+
+Dex reads the variable only at startup. After changing the Secret, restart Dex so it
+picks up the new hash: `kubectl -n konflux-ui rollout restart deployment/dex`
+(or change the Konflux CR so the Deployment is updated).
+
 Static passwords only take effect while the password database is enabled. If
 `enablePasswordDB` is `false`, or it is unset and at least one connector is configured,
 the operator omits `staticPasswords` from the rendered Dex configuration entirely.

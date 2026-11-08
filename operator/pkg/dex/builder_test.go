@@ -667,6 +667,34 @@ func TestNewDexConfig_PasswordDB(t *testing.T) {
 		g.Expect(config.StaticPasswords[1].Email).To(gomega.Equal("user@example.com"))
 	})
 
+	t.Run("passes hashFromEnv through to the rendered config", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		endpoint := &url.URL{Scheme: "https", Host: "dex.example.com"}
+		params := &DexParams{
+			EnablePasswordDB: ptr.To(true),
+			StaticPasswords: []Password{
+				{
+					Email:       "admin@example.com",
+					HashFromEnv: "ADMIN_PASSWORD_HASH",
+					Username:    "admin",
+					UserID:      "admin-001",
+				},
+			},
+		}
+
+		config := NewDexConfig(endpoint, params, "", nil)
+
+		g.Expect(config.StaticPasswords).To(gomega.HaveLen(1))
+		g.Expect(config.StaticPasswords[0].HashFromEnv).To(gomega.Equal("ADMIN_PASSWORD_HASH"))
+		g.Expect(config.StaticPasswords[0].Hash).To(gomega.BeEmpty())
+
+		yamlData, err := config.ToYAML()
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(string(yamlData)).To(gomega.ContainSubstring("hashFromEnv: ADMIN_PASSWORD_HASH"))
+		g.Expect(string(yamlData)).NotTo(gomega.MatchRegexp(`(?m)^\s+(- )?hash:`))
+	})
+
 	t.Run("configures password connector", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 

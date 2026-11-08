@@ -266,12 +266,23 @@ type Client struct {
 // +kubebuilder:object:generate=true
 
 // Password represents a static user password entry.
+// Exactly one of hash or hashFromEnv must be set.
+// +kubebuilder:validation:XValidation:rule="(has(self.hash) && size(self.hash) > 0) != (has(self.hashFromEnv) && size(self.hashFromEnv) > 0)",message="exactly one of hash or hashFromEnv must be set and non-empty"
 type Password struct {
 	// Email is the user's email address (used as the login identifier).
 	Email string `json:"email,omitempty"`
 
 	// Hash is the bcrypt hash of the user's password.
+	// +kubebuilder:validation:MaxLength=256
 	Hash string `json:"hash,omitempty"`
+
+	// HashFromEnv is the name of an environment variable in the Dex container
+	// that holds the bcrypt hash of the user's password. Use it to keep the hash
+	// out of the CR, e.g. by sourcing the variable from a Secret through
+	// spec.dex.dex.env. Mutually exclusive with hash. The variable is read when
+	// Dex starts: after changing the Secret, restart Dex (kubectl rollout restart).
+	// +kubebuilder:validation:MaxLength=256
+	HashFromEnv string `json:"hashFromEnv,omitempty"`
 
 	// Username is the display name for the user.
 	Username string `json:"username,omitempty"`
