@@ -32,8 +32,10 @@ chmod +x setup-release.sh
 
 ## create-tenant.sh
 
-Creates a new tenant namespace with a ServiceAccount for integration pipelines and
-RoleBindings for both the pipeline runner and an admin user.
+Creates a new tenant namespace with a RoleBinding for the admin user. The
+integration pipeline ServiceAccount and RoleBinding are created by the
+integration-service controller when reconciling an IntegrationTestScenario,
+so the script does not manage them.
 
 ```bash
 ./create-tenant.sh -n <namespace> -u <admin-user>
