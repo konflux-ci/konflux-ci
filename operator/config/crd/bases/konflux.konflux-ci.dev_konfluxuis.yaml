@@ -76,15 +76,112 @@ spec:
                             config:
                               description: Config contains connector-specific configuration.
                               properties:
+                                acrValues:
+                                  description: AcrValues are Authentication Context
+                                    Class Reference values sent on the authorization
+                                    request.
+                                  items:
+                                    type: string
+                                  type: array
+                                allowedGroups:
+                                  description: AllowedGroups rejects login unless
+                                    the user belongs to at least one listed group.
+                                  items:
+                                    type: string
+                                  type: array
+                                basicAuthUnsupported:
+                                  description: |-
+                                    BasicAuthUnsupported passes the client secret as POST parameters instead of HTTP basic auth.
+                                    Leave unset to let Dex detect known providers. Set false to force basic auth.
+                                  nullable: true
+                                  type: boolean
                                 bindDN:
                                   type: string
                                 bindPW:
                                   type: string
+                                claimMapping:
+                                  description: ClaimMapping maps non-standard upstream
+                                    claims onto Dex's standard claims.
+                                  properties:
+                                    email:
+                                      description: Email is the claim used as email.
+                                        Dex defaults to "email".
+                                      type: string
+                                    groups:
+                                      description: Groups is the claim used as the
+                                        groups list. Dex defaults to "groups".
+                                      type: string
+                                    preferred_username:
+                                      description: PreferredUsername is the claim
+                                        used as preferred_username. Dex defaults to
+                                        "preferred_username".
+                                      type: string
+                                  type: object
+                                claimModifications:
+                                  description: ClaimModifications rewrites claims
+                                    during login.
+                                  properties:
+                                    filterGroupClaims:
+                                      description: FilterGroupClaims keeps only groups
+                                        that match a regular expression.
+                                      properties:
+                                        groupsFilter:
+                                          description: GroupsFilter is an RE2 regular
+                                            expression. Groups that do not match are
+                                            dropped.
+                                          type: string
+                                      type: object
+                                    modifyGroupNames:
+                                      description: ModifyGroupNames adds a prefix
+                                        and/or suffix to every group name from the
+                                        provider.
+                                      properties:
+                                        prefix:
+                                          description: Prefix is prepended to each
+                                            group name.
+                                          type: string
+                                        suffix:
+                                          description: Suffix is appended to each
+                                            group name.
+                                          type: string
+                                      type: object
+                                    newGroupFromClaims:
+                                      description: NewGroupFromClaims builds extra
+                                        group names by joining other claims.
+                                      items:
+                                        description: OIDCNewGroupFromClaims builds
+                                          a group name from other claims.
+                                        properties:
+                                          claims:
+                                            description: Claims are the claim names
+                                              to join. Only string claims are used.
+                                            items:
+                                              type: string
+                                            type: array
+                                          clearDelimiter:
+                                            description: ClearDelimiter removes Delimiter
+                                              from claim values before joining them.
+                                            type: boolean
+                                          delimiter:
+                                            description: Delimiter separates the joined
+                                              claims.
+                                            type: string
+                                          prefix:
+                                            description: Prefix is placed before the
+                                              joined claims.
+                                            type: string
+                                        type: object
+                                      type: array
+                                  type: object
                                 clientID:
                                   description: Common OIDC/OAuth fields
                                   type: string
                                 clientSecret:
                                   type: string
+                                getUserInfo:
+                                  description: GetUserInfo loads claims from the UserInfo
+                                    endpoint when the ID token is missing them.
+                                  type: boolean
                                 groupSearch:
                                   description: LDAPGroupSearch configures LDAP group
                                     search settings.
@@ -108,6 +205,9 @@ spec:
                                       type: array
                                   type: object
                                 groups:
+                                  description: |-
+                                    Groups is a static group list for connectors that honor it.
+                                    Dex's OIDC connector ignores this field. Enable OIDC groups with InsecureEnableGroups.
                                   items:
                                     type: string
                                   type: array
@@ -115,12 +215,30 @@ spec:
                                   description: LDAP-specific fields
                                   type: string
                                 insecureCA:
+                                  description: InsecureCA skips TLS verification for
+                                    connectors that read this field, such as OpenShift.
+                                  type: boolean
+                                insecureEnableGroups:
+                                  description: InsecureEnableGroups forwards the provider's
+                                    groups claim. Dex leaves this off by default.
                                   type: boolean
                                 insecureNoSSL:
                                   type: boolean
+                                insecureSkipEmailVerified:
+                                  description: InsecureSkipEmailVerified treats the
+                                    email as verified when the provider omits email_verified.
+                                  type: boolean
                                 insecureSkipVerify:
+                                  description: |-
+                                    InsecureSkipVerify disables TLS certificate verification.
+                                    LDAP and the Dex OIDC connector both read this field.
                                   type: boolean
                                 issuer:
+                                  type: string
+                                issuerAlias:
+                                  description: |-
+                                    IssuerAlias overrides the issuer URL from the provider discovery document.
+                                    Some providers, such as Azure, publish a discovery issuer that differs from Issuer.
                                   type: string
                                 orgs:
                                   description: GitHub-specific fields
@@ -136,12 +254,47 @@ spec:
                                         type: array
                                     type: object
                                   type: array
+                                overrideClaimMapping:
+                                  description: OverrideClaimMapping forces Dex to
+                                    use ClaimMapping even when the standard claim
+                                    is also present.
+                                  type: boolean
+                                promptType:
+                                  description: PromptType sets the OIDC prompt parameter.
+                                    Dex defaults to "consent" when requesting offline_access.
+                                  type: string
+                                providerDiscoveryOverrides:
+                                  description: ProviderDiscoveryOverrides replaces
+                                    URLs discovered from the provider's well-known
+                                    configuration.
+                                  properties:
+                                    authURL:
+                                      description: AuthURL overrides the authorization_endpoint.
+                                      type: string
+                                    tokenURL:
+                                      description: TokenURL overrides the token_endpoint.
+                                      type: string
+                                  type: object
                                 redirectURI:
                                   type: string
                                 rootCA:
                                   description: |-
                                     RootCA is the path to a trusted root certificate for verifying TLS connections.
                                     Used by connectors that need to verify the TLS certificate of the upstream provider.
+                                  type: string
+                                scopes:
+                                  description: Scopes are the scopes requested from
+                                    the provider. Dex defaults to profile and email.
+                                  items:
+                                    type: string
+                                  type: array
+                                userIDKey:
+                                  description: UserIDKey is the claim used as the
+                                    user ID. Dex defaults to "sub".
+                                  type: string
+                                userNameKey:
+                                  description: UserNameKey is the claim used as the
+                                    user name. Dex defaults to "name".
                                   type: string
                                 userSearch:
                                   description: LDAPUserSearch configures LDAP user
