@@ -40,9 +40,6 @@ func newTestScheme() *runtime.Scheme {
 	return s
 }
 
-// boolPtr returns a pointer to a bool value.
-func boolPtr(v bool) *bool { return &v }
-
 // standardSpec returns a KonfluxSpec in standard installation mode.
 // All standard components are enabled; the Patch/Get interceptors target
 // specific kinds, so enabling all components is safe for error testing.
