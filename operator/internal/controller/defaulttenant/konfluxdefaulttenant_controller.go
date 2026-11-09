@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -122,6 +123,16 @@ func (r *KonfluxDefaultTenantReconciler) Reconcile(ctx context.Context, req ctrl
 	if result, err := r.syncInternalRegistryCredentialsSecret(ctx, tc); err != nil {
 		return errHandler.HandleApplyError(ctx, err)
 	} else if result.RequeueAfter > 0 {
+		condition.SetCondition(defaultTenant, metav1.Condition{
+			Type:    condition.TypeReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  condition.ReasonRegistrySecretPending,
+			Message: "Waiting for internal registry credentials secret to become available",
+		})
+		if err := r.Status().Update(ctx, defaultTenant); err != nil {
+			log.Error(err, "Failed to update status")
+			return ctrl.Result{}, err
+		}
 		return result, nil
 	}
 

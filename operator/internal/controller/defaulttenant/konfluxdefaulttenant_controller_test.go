@@ -117,6 +117,25 @@ var _ = Describe("KonfluxDefaultTenant Controller", func() {
 			Expect(k8sClient.Create(ctx, registry)).To(Succeed())
 			testutil.DeferCleanupParentAndChildren(k8sClient, registry)
 
+			// Trigger a reconcile of default-tenant while source secret is still missing.
+			dt := &konfluxv1alpha1.KonfluxDefaultTenant{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, dt)).To(Succeed())
+			if dt.Annotations == nil {
+				dt.Annotations = make(map[string]string)
+			}
+			dt.Annotations["konflux.konflux-ci.dev/reconcile-trigger"] = "waiting-secret-test"
+			Expect(k8sClient.Update(ctx, dt)).To(Succeed())
+
+			// Verify status condition indicates waiting for internal registry credentials secret.
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.KonfluxDefaultTenant{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
+				cond := meta.FindStatusCondition(updated.Status.Conditions, condition.TypeReady)
+				g.Expect(cond).NotTo(BeNil())
+				g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+				g.Expect(cond.Reason).To(Equal(condition.ReasonRegistrySecretPending))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
 			Expect(k8sClient.Create(ctx, &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{Name: RegistrySourceSecretNamespace},
 			})).To(Succeed())
@@ -142,6 +161,13 @@ var _ = Describe("KonfluxDefaultTenant Controller", func() {
 					Namespace: DefaultTenantNamespace,
 				}, got)).To(Succeed())
 				g.Expect(got.Data).To(HaveKey(corev1.DockerConfigJsonKey))
+
+				updated := &konfluxv1alpha1.KonfluxDefaultTenant{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, updated)).To(Succeed())
+				readyCond := meta.FindStatusCondition(updated.Status.Conditions, condition.TypeReady)
+				g.Expect(readyCond).NotTo(BeNil())
+				g.Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
+				g.Expect(readyCond.Reason).To(Equal(condition.ReasonAllComponentsReady))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})
