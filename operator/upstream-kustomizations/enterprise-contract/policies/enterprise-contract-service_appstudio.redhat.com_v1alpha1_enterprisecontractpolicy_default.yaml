@@ -33,7 +33,7 @@ spec:
       include:
       - '@redhat'
     data:
-    - github.com/konflux-ci/konflux-operator-trusted-sources//data?ref=fd235d571b868f2b482035328db4a565afeba0f4
+    - github.com/konflux-ci/konflux-operator-trusted-sources//data?ref=d6b49aeeac78b6c5778758668317af0032f5ff4d
     name: Default
     policy:
     - oci::quay.io/conforma/release-policy:latest@sha256:507e458392399feb78ae4159718cf322800ede3ccf88e477015aa2283331b948
