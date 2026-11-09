@@ -33,9 +33,7 @@ authenticated users automatically receive maintainer permissions. This is conven
 for local development and testing, but not appropriate for production multi-tenant
 environments where strict namespace isolation is required.
 
-Use `spec.installationType` in the `Konflux` CR to control this behaviour.
-The default tenant is deployed under the `standard` installation type (the default)
-and not deployed under the `spoke` type:
+Set `spec.defaultTenant.enabled` in the `Konflux` CR to control this behaviour:
 
 ```yaml
 apiVersion: konflux.konflux-ci.dev/v1alpha1
@@ -43,13 +41,12 @@ kind: Konflux
 metadata:
   name: konflux
 spec:
-  # "standard" (default): deploys all core services including the default tenant.
-  # "spoke": deploys only Info and RBAC; default tenant is not created.
-  installationType: standard
+  defaultTenant:
+    enabled: true   # true (default): creates default-tenant shared namespace
+                    # false: disables it; create per-team namespaces instead
 ```
 
-To disable the default tenant, set `installationType: spoke` and create dedicated
-per-team namespaces as described in the
+When set to `false`, create dedicated per-team namespaces as described in the
 [Creating a tenant namespace](#creating-a-tenant-namespace) section below.
 
 ### Creating a tenant namespace

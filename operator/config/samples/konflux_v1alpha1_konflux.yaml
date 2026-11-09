@@ -198,9 +198,11 @@ spec:
     enabled: true
   # Default tenant creates a shared namespace ("default-tenant") accessible by all authenticated users.
   # All authenticated users get maintainer permissions in this namespace.
-  # Deployment is controlled by installationType (enabled in standard, disabled in spoke).
-  # Appropriate for local development and testing. For production multi-tenant environments,
-  # use spoke installationType which does not deploy the default tenant.
+  # Appropriate for local development and testing. For production multi-tenant environments where
+  # you need strict namespace isolation, set enabled: false and create per-team tenant namespaces.
+  # Defaults to true if not specified.
+  defaultTenant:
+    enabled: true
   # telemetry:
   #   # Enabled controls whether segment-bridge telemetry resources are deployed.
   #   # Defaults to false if not specified.

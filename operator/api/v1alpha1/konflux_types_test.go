@@ -199,3 +199,34 @@ func TestKonfluxSpec_SpokeWithOptionalComponents(t *testing.T) {
 	// Standard-only components remain disabled.
 	g.Expect(spec.IsBuildServiceEnabled()).To(gomega.BeFalse(), "buildService still disabled in spoke")
 }
+
+// TestKonfluxSpec_DefaultTenantEnabled verifies that the default tenant respects
+// its Enabled field in standard mode and is always disabled in spoke mode.
+func TestKonfluxSpec_DefaultTenantEnabled(t *testing.T) {
+	g := gomega.NewWithT(t)
+
+	// nil DefaultTenant config: enabled by default in standard.
+	g.Expect((&KonfluxSpec{}).IsDefaultTenantEnabled()).To(gomega.BeTrue(),
+		"nil DefaultTenant defaults to enabled in standard")
+
+	// Explicitly enabled.
+	enabled := true
+	g.Expect((&KonfluxSpec{
+		DefaultTenant: &DefaultTenantConfig{Enabled: &enabled},
+	}).IsDefaultTenantEnabled()).To(gomega.BeTrue(),
+		"explicit true keeps default tenant enabled")
+
+	// Explicitly disabled in standard.
+	disabled := false
+	g.Expect((&KonfluxSpec{
+		DefaultTenant: &DefaultTenantConfig{Enabled: &disabled},
+	}).IsDefaultTenantEnabled()).To(gomega.BeFalse(),
+		"explicit false disables default tenant in standard")
+
+	// Spoke mode: disabled regardless of Enabled field.
+	g.Expect((&KonfluxSpec{
+		InstallationType: InstallationTypeSpoke,
+		DefaultTenant:    &DefaultTenantConfig{Enabled: &enabled},
+	}).IsDefaultTenantEnabled()).To(gomega.BeFalse(),
+		"default tenant disabled in spoke even when explicitly enabled")
+}

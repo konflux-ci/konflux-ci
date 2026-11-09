@@ -543,7 +543,13 @@ spec:
                 description: |-
                   DefaultTenant configures the default tenant component.
                   The default tenant provides a namespace accessible by all authenticated users.
-                  Deployed in standard installation type.
+                  Controls whether the KonfluxDefaultTenant CR is created by the operator.
+                properties:
+                  enabled:
+                    description: |-
+                      Enabled controls whether the default tenant is created.
+                      Defaults to true if not specified.
+                    type: boolean
                 type: object
               enterpriseContract:
                 description: |-

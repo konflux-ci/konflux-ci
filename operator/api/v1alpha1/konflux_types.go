@@ -104,7 +104,7 @@ type KonfluxSpec struct {
 
 	// DefaultTenant configures the default tenant component.
 	// The default tenant provides a namespace accessible by all authenticated users.
-	// Deployed in standard installation type.
+	// Controls whether the KonfluxDefaultTenant CR is created by the operator.
 	// +optional
 	DefaultTenant *DefaultTenantConfig `json:"defaultTenant,omitempty"`
 
@@ -238,8 +238,12 @@ type InternalRegistryConfig struct {
 
 // DefaultTenantConfig defines the configuration for the default tenant component.
 // The default tenant provides a namespace accessible by all authenticated users.
-// Deployment is controlled by the installationType field on KonfluxSpec.
-type DefaultTenantConfig struct{}
+type DefaultTenantConfig struct {
+	// Enabled controls whether the default tenant is created.
+	// Defaults to true if not specified.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+}
 
 // ComponentMetricsConfig controls Prometheus scrape resources for underlying services.
 type ComponentMetricsConfig struct {
@@ -408,9 +412,15 @@ func (k *KonfluxSpec) IsStandard() bool {
 }
 
 // IsDefaultTenantEnabled returns true if the default tenant should be deployed.
-// Deployed only in standard installation type.
+// Deployed only in standard installation type; defaults to true if not specified.
 func (k *KonfluxSpec) IsDefaultTenantEnabled() bool {
-	return k.IsStandard()
+	if !k.IsStandard() {
+		return false
+	}
+	if k.DefaultTenant == nil || k.DefaultTenant.Enabled == nil {
+		return true
+	}
+	return *k.DefaultTenant.Enabled
 }
 
 // IsTelemetryEnabled returns true if telemetry is enabled.

@@ -174,8 +174,9 @@ spec:
     # For local development on Kind, this provides an OCI registry at localhost:5001
     enabled: true
   # Default tenant creates a shared namespace accessible by all authenticated users.
-  # Deployment is controlled by installationType (enabled in standard, disabled in spoke).
   # Needed for E2E tests. See konflux_v1alpha1_konflux.yaml for detailed documentation.
+  defaultTenant:
+    enabled: true
   # E2E-specific: Enable image-controller for E2E tests
   imageController:
     enabled: true
