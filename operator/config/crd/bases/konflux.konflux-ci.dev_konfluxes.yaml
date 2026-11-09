@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.23.0
+    controller-gen.kubebuilder.io/version: v0.18.0
   name: konfluxes.konflux.konflux-ci.dev
 spec:
   group: konflux.konflux-ci.dev
@@ -54,7 +54,7 @@ spec:
               applicationAPI:
                 description: |-
                   ApplicationAPI configures the application-api component.
-                  Controls whether the KonfluxApplicationAPI CR is created by the operator.
+                  Deployed in standard installation type.
                 type: object
               buildService:
                 description: |-
@@ -522,7 +522,7 @@ spec:
               cli:
                 description: |-
                   CLI configures the CLI component.
-                  Controls whether the KonfluxCLI CR is created by the operator.
+                  Deployed in standard installation type.
                 type: object
               componentMetrics:
                 description: |-
@@ -543,7 +543,7 @@ spec:
                 description: |-
                   DefaultTenant configures the default tenant component.
                   The default tenant provides a namespace accessible by all authenticated users.
-                  Controls whether the KonfluxDefaultTenant CR is created by the operator.
+                  Deployed in standard installation type.
                 type: object
               enterpriseContract:
                 description: |-
@@ -2556,7 +2556,7 @@ spec:
               rbac:
                 description: |-
                   RBAC configures the RBAC component.
-                  Controls whether the KonfluxRBAC CR is created by the operator.
+                  Deployed in both standard and spoke installation types.
                 type: object
               releaseService:
                 description: |-
