@@ -103,7 +103,7 @@ independently of the installation type.
 | **Konflux Info** | standard + spoke | ConfigMap-based cluster configuration consumed by PipelineRuns (OIDC issuer, signing URLs, environment metadata). |
 | **CLI** | standard | CLI tooling resources for the Konflux platform. |
 | **Cert Manager** | standard | Creates a `ClusterIssuer` for TLS certificates across platform components. |
-| **Default Tenant** | standard | A shared `default-tenant` namespace where all authenticated users have maintainer access (convenient for development; use `spoke` type for strict multi-tenancy). |
+| **Default Tenant** | standard | A shared `default-tenant` namespace where all authenticated users have maintainer access (convenient for development; disable for strict multi-tenancy). |
 | **Image Controller** _(opt-in)_ | any (independent) | Automatically provisions Quay.io image repositories when components are onboarded via the UI. |
 | **Internal Registry** _(opt-in)_ | any (independent) | An in-cluster OCI registry for local or air-gapped environments. |
 | **Telemetry** _(opt-in)_ | any (independent) | Segment bridge for usage telemetry reporting. |
