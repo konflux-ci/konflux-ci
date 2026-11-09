@@ -123,6 +123,32 @@ func TestKonfluxSpec_StandardDefaults(t *testing.T) {
 	g.Expect(spec.IsTelemetryEnabled()).To(gomega.BeFalse(), "telemetry defaults to disabled")
 }
 
+// TestKonfluxSpec_ExplicitStandard verifies that explicitly setting
+// InstallationTypeStandard behaves the same as the empty-string default.
+func TestKonfluxSpec_ExplicitStandard(t *testing.T) {
+	g := gomega.NewWithT(t)
+	spec := &KonfluxSpec{InstallationType: InstallationTypeStandard}
+
+	g.Expect(spec.GetInstallationType()).To(gomega.Equal(InstallationTypeStandard))
+	g.Expect(spec.IsStandard()).To(gomega.BeTrue())
+
+	// Standard-type components: enabled.
+	g.Expect(spec.IsApplicationAPIEnabled()).To(gomega.BeTrue(), "applicationAPI enabled")
+	g.Expect(spec.IsUIEnabled()).To(gomega.BeTrue(), "ui enabled")
+	g.Expect(spec.IsIntegrationServiceEnabled()).To(gomega.BeTrue(), "integrationService enabled")
+	g.Expect(spec.IsReleaseServiceEnabled()).To(gomega.BeTrue(), "releaseService enabled")
+	g.Expect(spec.IsBuildServiceEnabled()).To(gomega.BeTrue(), "buildService enabled")
+	g.Expect(spec.IsNamespaceListerEnabled()).To(gomega.BeTrue(), "namespaceLister enabled")
+	g.Expect(spec.IsEnterpriseContractEnabled()).To(gomega.BeTrue(), "enterpriseContract enabled")
+	g.Expect(spec.IsCertManagerEnabled()).To(gomega.BeTrue(), "certManager enabled")
+	g.Expect(spec.IsCLIEnabled()).To(gomega.BeTrue(), "cli enabled")
+	g.Expect(spec.IsDefaultTenantEnabled()).To(gomega.BeTrue(), "defaultTenant enabled")
+
+	// Both-type components: enabled.
+	g.Expect(spec.IsInfoEnabled()).To(gomega.BeTrue(), "info enabled")
+	g.Expect(spec.IsRBACEnabled()).To(gomega.BeTrue(), "rbac enabled")
+}
+
 // TestKonfluxSpec_SpokeType verifies that the spoke installation type enables
 // only Info and RBAC, disabling all standard-only components.
 func TestKonfluxSpec_SpokeType(t *testing.T) {

@@ -106,7 +106,7 @@ spec:
     createClusterIssuer: true
   internalRegistry:
     enabled: false
-  defaultTenant:
-    enabled: true
+  # defaultTenant is deployed automatically in standard installation type.
+  # Set installationType: spoke to disable it for strict multi-tenancy.
   imageController:
     enabled: true
