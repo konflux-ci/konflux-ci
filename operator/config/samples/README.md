@@ -74,16 +74,16 @@ The operator creates a `default-tenant` namespace by default where all authentic
 users have maintainer permissions. This is convenient for local development and testing
 but may not be appropriate for production multi-tenant environments.
 
-For production deployments requiring strict namespace isolation, disable the default
-tenant and create per-team tenant namespaces with appropriate RBAC:
+For production deployments requiring strict namespace isolation, use the `spoke`
+installation type (which does not deploy the default tenant) and create per-team
+tenant namespaces with appropriate RBAC:
 
 ```yaml
 spec:
-  defaultTenant:
-    enabled: false
+  installationType: spoke
 ```
 
-After disabling, create tenant namespaces and rolebindings as desired:
+After switching to spoke, create tenant namespaces and rolebindings as desired:
 
 ```bash
 kubectl create namespace org-user-1-tenant

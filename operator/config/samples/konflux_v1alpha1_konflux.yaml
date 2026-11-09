@@ -16,6 +16,12 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: konflux
 spec:
+  # installationType selects the set of services the operator deploys:
+  #   "standard" (default): deploys all core services.
+  #   "spoke": deploys only Info and RBAC for MultiKueue spoke clusters.
+  # Optional components (imageController, internalRegistry, telemetry) have their
+  # own enabled field and can be toggled independently of the installation type.
+  # installationType: standard
   ui:
     spec:
       # NodePort exposes the UI on the host for Kind clusters.

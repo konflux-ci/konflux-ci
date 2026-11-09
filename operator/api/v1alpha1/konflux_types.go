@@ -48,7 +48,7 @@ type KonfluxSpec struct {
 	InstallationType InstallationType `json:"installationType,omitempty"`
 
 	// ApplicationAPI configures the application-api component.
-	// Controls whether the KonfluxApplicationAPI CR is created by the operator.
+	// Deployed in standard installation type.
 	// +optional
 	ApplicationAPI *ApplicationAPIConfig `json:"applicationAPI,omitempty"`
 
@@ -104,7 +104,7 @@ type KonfluxSpec struct {
 
 	// DefaultTenant configures the default tenant component.
 	// The default tenant provides a namespace accessible by all authenticated users.
-	// Controls whether the KonfluxDefaultTenant CR is created by the operator.
+	// Deployed in standard installation type.
 	// +optional
 	DefaultTenant *DefaultTenantConfig `json:"defaultTenant,omitempty"`
 
@@ -117,12 +117,12 @@ type KonfluxSpec struct {
 	Telemetry *TelemetryConfig `json:"telemetry,omitempty"`
 
 	// RBAC configures the RBAC component.
-	// Controls whether the KonfluxRBAC CR is created by the operator.
+	// Deployed in both standard and spoke installation types.
 	// +optional
 	RBAC *RBACConfig `json:"rbac,omitempty"`
 
 	// CLI configures the CLI component.
-	// Controls whether the KonfluxCLI CR is created by the operator.
+	// Deployed in standard installation type.
 	// +optional
 	CLI *CLIConfig `json:"cli,omitempty"`
 
@@ -402,15 +402,15 @@ func (k *KonfluxSpec) GetInstallationType() InstallationType {
 	return k.InstallationType
 }
 
-// isStandard returns true when the installation type is standard.
-func (k *KonfluxSpec) isStandard() bool {
+// IsStandard returns true when the installation type is standard.
+func (k *KonfluxSpec) IsStandard() bool {
 	return k.GetInstallationType() == InstallationTypeStandard
 }
 
 // IsDefaultTenantEnabled returns true if the default tenant should be deployed.
 // Deployed only in standard installation type.
 func (k *KonfluxSpec) IsDefaultTenantEnabled() bool {
-	return k.isStandard()
+	return k.IsStandard()
 }
 
 // IsTelemetryEnabled returns true if telemetry is enabled.
@@ -422,37 +422,37 @@ func (k *KonfluxSpec) IsTelemetryEnabled() bool {
 // IsApplicationAPIEnabled returns true if application-api should be deployed.
 // Deployed only in standard installation type.
 func (k *KonfluxSpec) IsApplicationAPIEnabled() bool {
-	return k.isStandard()
+	return k.IsStandard()
 }
 
 // IsUIEnabled returns true if the UI component should be deployed.
 // Deployed only in standard installation type.
 func (k *KonfluxSpec) IsUIEnabled() bool {
-	return k.isStandard()
+	return k.IsStandard()
 }
 
 // IsIntegrationServiceEnabled returns true if integration-service should be deployed.
 // Deployed only in standard installation type.
 func (k *KonfluxSpec) IsIntegrationServiceEnabled() bool {
-	return k.isStandard()
+	return k.IsStandard()
 }
 
 // IsReleaseServiceEnabled returns true if release-service should be deployed.
 // Deployed only in standard installation type.
 func (k *KonfluxSpec) IsReleaseServiceEnabled() bool {
-	return k.isStandard()
+	return k.IsStandard()
 }
 
 // IsBuildServiceEnabled returns true if build-service should be deployed.
 // Deployed only in standard installation type.
 func (k *KonfluxSpec) IsBuildServiceEnabled() bool {
-	return k.isStandard()
+	return k.IsStandard()
 }
 
 // IsNamespaceListerEnabled returns true if namespace-lister should be deployed.
 // Deployed only in standard installation type.
 func (k *KonfluxSpec) IsNamespaceListerEnabled() bool {
-	return k.isStandard()
+	return k.IsStandard()
 }
 
 // IsInfoEnabled returns true if the info component should be deployed.
@@ -464,13 +464,13 @@ func (k *KonfluxSpec) IsInfoEnabled() bool {
 // IsEnterpriseContractEnabled returns true if enterprise-contract should be deployed.
 // Deployed only in standard installation type.
 func (k *KonfluxSpec) IsEnterpriseContractEnabled() bool {
-	return k.isStandard()
+	return k.IsStandard()
 }
 
 // IsCertManagerEnabled returns true if the cert-manager component should be deployed.
 // Deployed only in standard installation type.
 func (k *KonfluxSpec) IsCertManagerEnabled() bool {
-	return k.isStandard()
+	return k.IsStandard()
 }
 
 // IsRBACEnabled returns true if the RBAC component should be deployed.
@@ -482,7 +482,7 @@ func (k *KonfluxSpec) IsRBACEnabled() bool {
 // IsCLIEnabled returns true if the CLI component should be deployed.
 // Deployed only in standard installation type.
 func (k *KonfluxSpec) IsCLIEnabled() bool {
-	return k.isStandard()
+	return k.IsStandard()
 }
 
 // IsComponentMetricsEnabled returns true if component metrics scraping resources should be deployed.
