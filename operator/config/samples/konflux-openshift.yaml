@@ -120,5 +120,6 @@ spec:
     # OpenShift ships an integrated registry; the Kind samples enable this instead.
     enabled: false
   # Default tenant creates a shared "default-tenant" namespace that every authenticated
-  # user can use. Deployed in standard installation type (the default).
-  # Set installationType: spoke for a multi-tenant deployment needing strict isolation.
+  # user can use. Set to false for a multi-tenant deployment needing strict isolation.
+  defaultTenant:
+    enabled: true
