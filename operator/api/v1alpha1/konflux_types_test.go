@@ -196,8 +196,79 @@ func TestKonfluxSpec_SpokeWithOptionalComponents(t *testing.T) {
 	g.Expect(spec.IsInternalRegistryEnabled()).To(gomega.BeTrue(), "internalRegistry enabled in spoke when set")
 	g.Expect(spec.IsTelemetryEnabled()).To(gomega.BeTrue(), "telemetry enabled in spoke when set")
 
-	// Standard-only components remain disabled.
+	// Standard-only components remain disabled even with deprecated enabled=true.
 	g.Expect(spec.IsBuildServiceEnabled()).To(gomega.BeFalse(), "buildService still disabled in spoke")
+}
+
+// TestKonfluxSpec_DeprecatedEnabledFieldHonored verifies that the deprecated
+// Enabled field on standard-only components is honored in standard mode.
+// This ensures backward compatibility for existing CRs that set enabled: false.
+func TestKonfluxSpec_DeprecatedEnabledFieldHonored(t *testing.T) {
+	g := gomega.NewWithT(t)
+	disabled := false
+
+	spec := &KonfluxSpec{
+		KonfluxUI:                 &KonfluxUIConfig{Enabled: &disabled},
+		KonfluxIntegrationService: &IntegrationServiceConfig{Enabled: &disabled},
+		KonfluxReleaseService:     &ReleaseServiceConfig{Enabled: &disabled},
+		KonfluxBuildService:       &BuildServiceConfig{Enabled: &disabled},
+		NamespaceLister:           &NamespaceListerConfig{Enabled: &disabled},
+		EnterpriseContract:        &EnterpriseContractConfig{Enabled: &disabled},
+		CertManager:               &CertManagerConfig{Enabled: &disabled},
+		ApplicationAPI:            &ApplicationAPIConfig{Enabled: &disabled},
+		CLI:                       &CLIConfig{Enabled: &disabled},
+	}
+
+	// All standard-only components disabled via deprecated field in standard mode.
+	g.Expect(spec.IsUIEnabled()).To(gomega.BeFalse(), "ui disabled via deprecated enabled=false")
+	g.Expect(spec.IsIntegrationServiceEnabled()).To(gomega.BeFalse(), "integrationService disabled via deprecated enabled=false")
+	g.Expect(spec.IsReleaseServiceEnabled()).To(gomega.BeFalse(), "releaseService disabled via deprecated enabled=false")
+	g.Expect(spec.IsBuildServiceEnabled()).To(gomega.BeFalse(), "buildService disabled via deprecated enabled=false")
+	g.Expect(spec.IsNamespaceListerEnabled()).To(gomega.BeFalse(), "namespaceLister disabled via deprecated enabled=false")
+	g.Expect(spec.IsEnterpriseContractEnabled()).To(gomega.BeFalse(), "enterpriseContract disabled via deprecated enabled=false")
+	g.Expect(spec.IsCertManagerEnabled()).To(gomega.BeFalse(), "certManager disabled via deprecated enabled=false")
+	g.Expect(spec.IsApplicationAPIEnabled()).To(gomega.BeFalse(), "applicationAPI disabled via deprecated enabled=false")
+	g.Expect(spec.IsCLIEnabled()).To(gomega.BeFalse(), "cli disabled via deprecated enabled=false")
+
+	// Always-on components (Info, RBAC) ignore the deprecated Enabled field.
+	g.Expect(spec.IsInfoEnabled()).To(gomega.BeTrue(), "info always enabled regardless of deprecated field")
+	g.Expect(spec.IsRBACEnabled()).To(gomega.BeTrue(), "rbac always enabled regardless of deprecated field")
+}
+
+// TestKonfluxSpec_DeprecatedEnabledFieldIgnoredInSpoke verifies that the
+// deprecated Enabled field cannot override spoke mode — standard-only
+// components remain disabled in spoke mode even with enabled: true.
+func TestKonfluxSpec_DeprecatedEnabledFieldIgnoredInSpoke(t *testing.T) {
+	g := gomega.NewWithT(t)
+	enabled := true
+
+	spec := &KonfluxSpec{
+		InstallationType:          InstallationTypeSpoke,
+		KonfluxUI:                 &KonfluxUIConfig{Enabled: &enabled},
+		KonfluxIntegrationService: &IntegrationServiceConfig{Enabled: &enabled},
+		KonfluxReleaseService:     &ReleaseServiceConfig{Enabled: &enabled},
+		KonfluxBuildService:       &BuildServiceConfig{Enabled: &enabled},
+		NamespaceLister:           &NamespaceListerConfig{Enabled: &enabled},
+		EnterpriseContract:        &EnterpriseContractConfig{Enabled: &enabled},
+		CertManager:               &CertManagerConfig{Enabled: &enabled},
+		ApplicationAPI:            &ApplicationAPIConfig{Enabled: &enabled},
+		CLI:                       &CLIConfig{Enabled: &enabled},
+	}
+
+	// All standard-only components disabled in spoke mode regardless of deprecated field.
+	g.Expect(spec.IsUIEnabled()).To(gomega.BeFalse(), "ui disabled in spoke even with deprecated enabled=true")
+	g.Expect(spec.IsIntegrationServiceEnabled()).To(gomega.BeFalse(), "integrationService disabled in spoke")
+	g.Expect(spec.IsReleaseServiceEnabled()).To(gomega.BeFalse(), "releaseService disabled in spoke")
+	g.Expect(spec.IsBuildServiceEnabled()).To(gomega.BeFalse(), "buildService disabled in spoke")
+	g.Expect(spec.IsNamespaceListerEnabled()).To(gomega.BeFalse(), "namespaceLister disabled in spoke")
+	g.Expect(spec.IsEnterpriseContractEnabled()).To(gomega.BeFalse(), "enterpriseContract disabled in spoke")
+	g.Expect(spec.IsCertManagerEnabled()).To(gomega.BeFalse(), "certManager disabled in spoke")
+	g.Expect(spec.IsApplicationAPIEnabled()).To(gomega.BeFalse(), "applicationAPI disabled in spoke")
+	g.Expect(spec.IsCLIEnabled()).To(gomega.BeFalse(), "cli disabled in spoke")
+
+	// Always-on components still enabled in spoke.
+	g.Expect(spec.IsInfoEnabled()).To(gomega.BeTrue(), "info enabled in spoke")
+	g.Expect(spec.IsRBACEnabled()).To(gomega.BeTrue(), "rbac enabled in spoke")
 }
 
 // TestKonfluxSpec_DefaultTenantEnabled verifies that the default tenant respects

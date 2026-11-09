@@ -54,13 +54,31 @@ spec:
               applicationAPI:
                 description: |-
                   ApplicationAPI configures the application-api component.
-                  Deployed in standard installation type.
+                  Deployed in standard installation type; use installationType to control.
+                properties:
+                  enabled:
+                    description: |-
+                      Deprecated: Use spec.installationType instead. This field is preserved
+                      for backward compatibility and will be removed in a future release.
+                      When installationType is "spoke", the component is always disabled
+                      regardless of this field. In "standard" mode, setting this to false
+                      disables the component.
+                    type: boolean
                 type: object
               buildService:
                 description: |-
                   KonfluxBuildService configures the build-service component.
+                  Deployed in standard installation type; use installationType to control.
                   The runtime configuration is copied to the KonfluxBuildService CR by the operator.
                 properties:
+                  enabled:
+                    description: |-
+                      Deprecated: Use spec.installationType instead. This field is preserved
+                      for backward compatibility and will be removed in a future release.
+                      When installationType is "spoke", the component is always disabled
+                      regardless of this field. In "standard" mode, setting this to false
+                      disables the component.
+                    type: boolean
                   spec:
                     description: Spec configures the build-service component (excludes
                       componentMetrics; see spec.componentMetrics).
@@ -494,8 +512,17 @@ spec:
               certManager:
                 description: |-
                   CertManager configures the cert-manager component.
+                  Deployed in standard installation type; use installationType to control.
                   The runtime configuration is copied to the KonfluxCertManager CR by the operator.
                 properties:
+                  enabled:
+                    description: |-
+                      Deprecated: Use spec.installationType instead. This field is preserved
+                      for backward compatibility and will be removed in a future release.
+                      When installationType is "spoke", the component is always disabled
+                      regardless of this field. In "standard" mode, setting this to false
+                      disables the component.
+                    type: boolean
                   createClusterIssuer:
                     description: |-
                       CreateClusterIssuer controls whether cluster issuer resources are created.
@@ -522,7 +549,16 @@ spec:
               cli:
                 description: |-
                   CLI configures the CLI component.
-                  Deployed in standard installation type.
+                  Deployed in standard installation type; use installationType to control.
+                properties:
+                  enabled:
+                    description: |-
+                      Deprecated: Use spec.installationType instead. This field is preserved
+                      for backward compatibility and will be removed in a future release.
+                      When installationType is "spoke", the component is always disabled
+                      regardless of this field. In "standard" mode, setting this to false
+                      disables the component.
+                    type: boolean
                 type: object
               componentMetrics:
                 description: |-
@@ -543,7 +579,7 @@ spec:
                 description: |-
                   DefaultTenant configures the default tenant component.
                   The default tenant provides a namespace accessible by all authenticated users.
-                  Controls whether the KonfluxDefaultTenant CR is created by the operator.
+                  Deployed in standard installation type; use installationType to control.
                 properties:
                   enabled:
                     description: |-
@@ -554,8 +590,17 @@ spec:
               enterpriseContract:
                 description: |-
                   EnterpriseContract configures the enterprise-contract component.
+                  Deployed in standard installation type; use installationType to control.
                   The runtime configuration is copied to the KonfluxEnterpriseContract CR by the operator.
                 properties:
+                  enabled:
+                    description: |-
+                      Deprecated: Use spec.installationType instead. This field is preserved
+                      for backward compatibility and will be removed in a future release.
+                      When installationType is "spoke", the component is always disabled
+                      regardless of this field. In "standard" mode, setting this to false
+                      disables the component.
+                    type: boolean
                   skipPolicies:
                     description: |-
                       SkipPolicies disables deployment of EnterpriseContractPolicy resources.
@@ -1314,8 +1359,16 @@ spec:
               info:
                 description: |-
                   KonfluxInfo configures the info component.
+                  Deployed in both standard and spoke installation types.
                   The runtime configuration is copied to the KonfluxInfo CR by the operator.
                 properties:
+                  enabled:
+                    description: |-
+                      Deprecated: Info is always deployed in both standard and spoke
+                      installation types. This field is preserved for backward compatibility
+                      and will be removed in a future release. Setting it to false has no
+                      effect.
+                    type: boolean
                   spec:
                     description: Spec configures the info component.
                     properties:
@@ -1694,8 +1747,17 @@ spec:
               integrationService:
                 description: |-
                   KonfluxIntegrationService configures the integration-service component.
+                  Deployed in standard installation type; use installationType to control.
                   The runtime configuration is copied to the KonfluxIntegrationService CR by the operator.
                 properties:
+                  enabled:
+                    description: |-
+                      Deprecated: Use spec.installationType instead. This field is preserved
+                      for backward compatibility and will be removed in a future release.
+                      When installationType is "spoke", the component is always disabled
+                      regardless of this field. In "standard" mode, setting this to false
+                      disables the component.
+                    type: boolean
                   spec:
                     description: Spec configures the integration-service component
                       (excludes componentMetrics; see spec.componentMetrics).
@@ -2288,8 +2350,17 @@ spec:
               namespaceLister:
                 description: |-
                   NamespaceLister configures the namespace-lister component.
+                  Deployed in standard installation type; use installationType to control.
                   The runtime configuration is copied to the KonfluxNamespaceLister CR by the operator.
                 properties:
+                  enabled:
+                    description: |-
+                      Deprecated: Use spec.installationType instead. This field is preserved
+                      for backward compatibility and will be removed in a future release.
+                      When installationType is "spoke", the component is always disabled
+                      regardless of this field. In "standard" mode, setting this to false
+                      disables the component.
+                    type: boolean
                   spec:
                     description: Spec configures the namespace-lister component (excludes
                       componentMetrics; see spec.componentMetrics).
@@ -2563,12 +2634,29 @@ spec:
                 description: |-
                   RBAC configures the RBAC component.
                   Deployed in both standard and spoke installation types.
+                properties:
+                  enabled:
+                    description: |-
+                      Deprecated: RBAC is always deployed in both standard and spoke
+                      installation types. This field is preserved for backward compatibility
+                      and will be removed in a future release. Setting it to false has no
+                      effect.
+                    type: boolean
                 type: object
               releaseService:
                 description: |-
                   KonfluxReleaseService configures the release-service component.
+                  Deployed in standard installation type; use installationType to control.
                   The runtime configuration is copied to the KonfluxReleaseService CR by the operator.
                 properties:
+                  enabled:
+                    description: |-
+                      Deprecated: Use spec.installationType instead. This field is preserved
+                      for backward compatibility and will be removed in a future release.
+                      When installationType is "spoke", the component is always disabled
+                      regardless of this field. In "standard" mode, setting this to false
+                      disables the component.
+                    type: boolean
                   spec:
                     description: Spec configures the release-service component (excludes
                       componentMetrics; see spec.componentMetrics).
@@ -3284,8 +3372,17 @@ spec:
               ui:
                 description: |-
                   KonfluxUI configures the UI component.
+                  Deployed in standard installation type; use installationType to control.
                   The runtime configuration is copied to the KonfluxUI CR by the operator.
                 properties:
+                  enabled:
+                    description: |-
+                      Deprecated: Use spec.installationType instead. This field is preserved
+                      for backward compatibility and will be removed in a future release.
+                      When installationType is "spoke", the component is always disabled
+                      regardless of this field. In "standard" mode, setting this to false
+                      disables the component.
+                    type: boolean
                   spec:
                     description: Spec configures the UI component (excludes componentMetrics;
                       see spec.componentMetrics).

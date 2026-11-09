@@ -48,7 +48,7 @@ type KonfluxSpec struct {
 	InstallationType InstallationType `json:"installationType,omitempty"`
 
 	// ApplicationAPI configures the application-api component.
-	// Deployed in standard installation type.
+	// Deployed in standard installation type; use installationType to control.
 	// +optional
 	ApplicationAPI *ApplicationAPIConfig `json:"applicationAPI,omitempty"`
 
@@ -58,41 +58,49 @@ type KonfluxSpec struct {
 	ImageController *ImageControllerConfig `json:"imageController,omitempty"`
 
 	// KonfluxUI configures the UI component.
+	// Deployed in standard installation type; use installationType to control.
 	// The runtime configuration is copied to the KonfluxUI CR by the operator.
 	// +optional
 	KonfluxUI *KonfluxUIConfig `json:"ui,omitempty"`
 
 	// KonfluxIntegrationService configures the integration-service component.
+	// Deployed in standard installation type; use installationType to control.
 	// The runtime configuration is copied to the KonfluxIntegrationService CR by the operator.
 	// +optional
 	KonfluxIntegrationService *IntegrationServiceConfig `json:"integrationService,omitempty"`
 
 	// KonfluxReleaseService configures the release-service component.
+	// Deployed in standard installation type; use installationType to control.
 	// The runtime configuration is copied to the KonfluxReleaseService CR by the operator.
 	// +optional
 	KonfluxReleaseService *ReleaseServiceConfig `json:"releaseService,omitempty"`
 
 	// KonfluxBuildService configures the build-service component.
+	// Deployed in standard installation type; use installationType to control.
 	// The runtime configuration is copied to the KonfluxBuildService CR by the operator.
 	// +optional
 	KonfluxBuildService *BuildServiceConfig `json:"buildService,omitempty"`
 
 	// NamespaceLister configures the namespace-lister component.
+	// Deployed in standard installation type; use installationType to control.
 	// The runtime configuration is copied to the KonfluxNamespaceLister CR by the operator.
 	// +optional
 	NamespaceLister *NamespaceListerConfig `json:"namespaceLister,omitempty"`
 
 	// KonfluxInfo configures the info component.
+	// Deployed in both standard and spoke installation types.
 	// The runtime configuration is copied to the KonfluxInfo CR by the operator.
 	// +optional
 	KonfluxInfo *KonfluxInfoConfig `json:"info,omitempty"`
 
 	// EnterpriseContract configures the enterprise-contract component.
+	// Deployed in standard installation type; use installationType to control.
 	// The runtime configuration is copied to the KonfluxEnterpriseContract CR by the operator.
 	// +optional
 	EnterpriseContract *EnterpriseContractConfig `json:"enterpriseContract,omitempty"`
 
 	// CertManager configures the cert-manager component.
+	// Deployed in standard installation type; use installationType to control.
 	// The runtime configuration is copied to the KonfluxCertManager CR by the operator.
 	// +optional
 	CertManager *CertManagerConfig `json:"certManager,omitempty"`
@@ -104,7 +112,7 @@ type KonfluxSpec struct {
 
 	// DefaultTenant configures the default tenant component.
 	// The default tenant provides a namespace accessible by all authenticated users.
-	// Controls whether the KonfluxDefaultTenant CR is created by the operator.
+	// Deployed in standard installation type; use installationType to control.
 	// +optional
 	DefaultTenant *DefaultTenantConfig `json:"defaultTenant,omitempty"`
 
@@ -122,7 +130,7 @@ type KonfluxSpec struct {
 	RBAC *RBACConfig `json:"rbac,omitempty"`
 
 	// CLI configures the CLI component.
-	// Deployed in standard installation type.
+	// Deployed in standard installation type; use installationType to control.
 	// +optional
 	CLI *CLIConfig `json:"cli,omitempty"`
 
@@ -151,6 +159,14 @@ type ImageControllerConfig struct {
 // Deployment is controlled by the installationType field on KonfluxSpec.
 // The Spec field is the runtime configuration passed to the component.
 type KonfluxUIConfig struct {
+	// Deprecated: Use spec.installationType instead. This field is preserved
+	// for backward compatibility and will be removed in a future release.
+	// When installationType is "spoke", the component is always disabled
+	// regardless of this field. In "standard" mode, setting this to false
+	// disables the component.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// Spec configures the UI component (excludes componentMetrics; see spec.componentMetrics).
 	// +optional
 	Spec *KonfluxUIConfigSpec `json:"spec,omitempty"`
@@ -160,6 +176,14 @@ type KonfluxUIConfig struct {
 // Deployment is controlled by the installationType field on KonfluxSpec.
 // The Spec field is the runtime configuration passed to the component.
 type IntegrationServiceConfig struct {
+	// Deprecated: Use spec.installationType instead. This field is preserved
+	// for backward compatibility and will be removed in a future release.
+	// When installationType is "spoke", the component is always disabled
+	// regardless of this field. In "standard" mode, setting this to false
+	// disables the component.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// Spec configures the integration-service component (excludes componentMetrics; see spec.componentMetrics).
 	// +optional
 	Spec *KonfluxIntegrationServiceConfigSpec `json:"spec,omitempty"`
@@ -169,6 +193,14 @@ type IntegrationServiceConfig struct {
 // Deployment is controlled by the installationType field on KonfluxSpec.
 // The Spec field is the runtime configuration passed to the component.
 type ReleaseServiceConfig struct {
+	// Deprecated: Use spec.installationType instead. This field is preserved
+	// for backward compatibility and will be removed in a future release.
+	// When installationType is "spoke", the component is always disabled
+	// regardless of this field. In "standard" mode, setting this to false
+	// disables the component.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// Spec configures the release-service component (excludes componentMetrics; see spec.componentMetrics).
 	// +optional
 	Spec *KonfluxReleaseServiceConfigSpec `json:"spec,omitempty"`
@@ -178,6 +210,14 @@ type ReleaseServiceConfig struct {
 // Deployment is controlled by the installationType field on KonfluxSpec.
 // The Spec field is the runtime configuration passed to the component.
 type BuildServiceConfig struct {
+	// Deprecated: Use spec.installationType instead. This field is preserved
+	// for backward compatibility and will be removed in a future release.
+	// When installationType is "spoke", the component is always disabled
+	// regardless of this field. In "standard" mode, setting this to false
+	// disables the component.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// Spec configures the build-service component (excludes componentMetrics; see spec.componentMetrics).
 	// +optional
 	Spec *KonfluxBuildServiceConfigSpec `json:"spec,omitempty"`
@@ -187,6 +227,14 @@ type BuildServiceConfig struct {
 // Deployment is controlled by the installationType field on KonfluxSpec.
 // The Spec field is the runtime configuration passed to the component.
 type NamespaceListerConfig struct {
+	// Deprecated: Use spec.installationType instead. This field is preserved
+	// for backward compatibility and will be removed in a future release.
+	// When installationType is "spoke", the component is always disabled
+	// regardless of this field. In "standard" mode, setting this to false
+	// disables the component.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// Spec configures the namespace-lister component (excludes componentMetrics; see spec.componentMetrics).
 	// +optional
 	Spec *KonfluxNamespaceListerConfigSpec `json:"spec,omitempty"`
@@ -195,6 +243,14 @@ type NamespaceListerConfig struct {
 // EnterpriseContractConfig defines the configuration for the enterprise-contract component.
 // Deployment is controlled by the installationType field on KonfluxSpec.
 type EnterpriseContractConfig struct {
+	// Deprecated: Use spec.installationType instead. This field is preserved
+	// for backward compatibility and will be removed in a future release.
+	// When installationType is "spoke", the component is always disabled
+	// regardless of this field. In "standard" mode, setting this to false
+	// disables the component.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// SkipPolicies disables deployment of EnterpriseContractPolicy resources.
 	// When true, only CRDs, namespace, RBAC, and ConfigMap are deployed;
 	// users are expected to manage policies externally.
@@ -205,6 +261,14 @@ type EnterpriseContractConfig struct {
 // CertManagerConfig defines the configuration for the cert-manager component.
 // Deployment is controlled by the installationType field on KonfluxSpec.
 type CertManagerConfig struct {
+	// Deprecated: Use spec.installationType instead. This field is preserved
+	// for backward compatibility and will be removed in a future release.
+	// When installationType is "spoke", the component is always disabled
+	// regardless of this field. In "standard" mode, setting this to false
+	// disables the component.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// CreateClusterIssuer controls whether cluster issuer resources are created.
 	// Defaults to true if not specified.
 	// +optional
@@ -284,6 +348,13 @@ type TelemetryConfig struct {
 // Info is deployed in both standard and spoke installation types.
 // The Spec field is the runtime configuration passed to the component.
 type KonfluxInfoConfig struct {
+	// Deprecated: Info is always deployed in both standard and spoke
+	// installation types. This field is preserved for backward compatibility
+	// and will be removed in a future release. Setting it to false has no
+	// effect.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// Spec configures the info component.
 	// +optional
 	Spec *KonfluxInfoSpec `json:"spec,omitempty"`
@@ -291,15 +362,38 @@ type KonfluxInfoConfig struct {
 
 // ApplicationAPIConfig defines the configuration for the application-api component.
 // Deployment is controlled by the installationType field on KonfluxSpec.
-type ApplicationAPIConfig struct{}
+type ApplicationAPIConfig struct {
+	// Deprecated: Use spec.installationType instead. This field is preserved
+	// for backward compatibility and will be removed in a future release.
+	// When installationType is "spoke", the component is always disabled
+	// regardless of this field. In "standard" mode, setting this to false
+	// disables the component.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+}
 
 // RBACConfig defines the configuration for the RBAC component.
 // RBAC is deployed in both standard and spoke installation types.
-type RBACConfig struct{}
+type RBACConfig struct {
+	// Deprecated: RBAC is always deployed in both standard and spoke
+	// installation types. This field is preserved for backward compatibility
+	// and will be removed in a future release. Setting it to false has no
+	// effect.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+}
 
 // CLIConfig defines the configuration for the CLI component.
 // Deployment is controlled by the installationType field on KonfluxSpec.
-type CLIConfig struct{}
+type CLIConfig struct {
+	// Deprecated: Use spec.installationType instead. This field is preserved
+	// for backward compatibility and will be removed in a future release.
+	// When installationType is "spoke", the component is always disabled
+	// regardless of this field. In "standard" mode, setting this to false
+	// disables the component.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+}
 
 // ComponentStatus represents the status of a Konflux component.
 type ComponentStatus struct {
@@ -429,70 +523,133 @@ func (k *KonfluxSpec) IsTelemetryEnabled() bool {
 	return k.Telemetry != nil && k.Telemetry.Enabled != nil && *k.Telemetry.Enabled
 }
 
+// isStandardComponentEnabled checks whether a standard-only component is enabled.
+// In spoke mode the component is always disabled. In standard mode the
+// deprecated Enabled field is honored when explicitly set; otherwise the
+// component defaults to enabled.
+func isStandardComponentEnabled(isStandard bool, enabled *bool) bool {
+	if !isStandard {
+		return false
+	}
+	if enabled != nil {
+		return *enabled
+	}
+	return true
+}
+
 // IsApplicationAPIEnabled returns true if application-api should be deployed.
-// Deployed only in standard installation type.
+// Deployed only in standard installation type. The deprecated Enabled field
+// is honored in standard mode for backward compatibility.
 func (k *KonfluxSpec) IsApplicationAPIEnabled() bool {
-	return k.IsStandard()
+	var enabled *bool
+	if k.ApplicationAPI != nil {
+		enabled = k.ApplicationAPI.Enabled
+	}
+	return isStandardComponentEnabled(k.IsStandard(), enabled)
 }
 
 // IsUIEnabled returns true if the UI component should be deployed.
-// Deployed only in standard installation type.
+// Deployed only in standard installation type. The deprecated Enabled field
+// is honored in standard mode for backward compatibility.
 func (k *KonfluxSpec) IsUIEnabled() bool {
-	return k.IsStandard()
+	var enabled *bool
+	if k.KonfluxUI != nil {
+		enabled = k.KonfluxUI.Enabled
+	}
+	return isStandardComponentEnabled(k.IsStandard(), enabled)
 }
 
 // IsIntegrationServiceEnabled returns true if integration-service should be deployed.
-// Deployed only in standard installation type.
+// Deployed only in standard installation type. The deprecated Enabled field
+// is honored in standard mode for backward compatibility.
 func (k *KonfluxSpec) IsIntegrationServiceEnabled() bool {
-	return k.IsStandard()
+	var enabled *bool
+	if k.KonfluxIntegrationService != nil {
+		enabled = k.KonfluxIntegrationService.Enabled
+	}
+	return isStandardComponentEnabled(k.IsStandard(), enabled)
 }
 
 // IsReleaseServiceEnabled returns true if release-service should be deployed.
-// Deployed only in standard installation type.
+// Deployed only in standard installation type. The deprecated Enabled field
+// is honored in standard mode for backward compatibility.
 func (k *KonfluxSpec) IsReleaseServiceEnabled() bool {
-	return k.IsStandard()
+	var enabled *bool
+	if k.KonfluxReleaseService != nil {
+		enabled = k.KonfluxReleaseService.Enabled
+	}
+	return isStandardComponentEnabled(k.IsStandard(), enabled)
 }
 
 // IsBuildServiceEnabled returns true if build-service should be deployed.
-// Deployed only in standard installation type.
+// Deployed only in standard installation type. The deprecated Enabled field
+// is honored in standard mode for backward compatibility.
 func (k *KonfluxSpec) IsBuildServiceEnabled() bool {
-	return k.IsStandard()
+	var enabled *bool
+	if k.KonfluxBuildService != nil {
+		enabled = k.KonfluxBuildService.Enabled
+	}
+	return isStandardComponentEnabled(k.IsStandard(), enabled)
 }
 
 // IsNamespaceListerEnabled returns true if namespace-lister should be deployed.
-// Deployed only in standard installation type.
+// Deployed only in standard installation type. The deprecated Enabled field
+// is honored in standard mode for backward compatibility.
 func (k *KonfluxSpec) IsNamespaceListerEnabled() bool {
-	return k.IsStandard()
+	var enabled *bool
+	if k.NamespaceLister != nil {
+		enabled = k.NamespaceLister.Enabled
+	}
+	return isStandardComponentEnabled(k.IsStandard(), enabled)
 }
 
 // IsInfoEnabled returns true if the info component should be deployed.
-// Deployed in both standard and spoke installation types.
+// Info is always deployed in both standard and spoke installation types.
+// The deprecated Enabled field on KonfluxInfoConfig is preserved for schema
+// compatibility but has no effect.
 func (k *KonfluxSpec) IsInfoEnabled() bool {
 	return true
 }
 
 // IsEnterpriseContractEnabled returns true if enterprise-contract should be deployed.
-// Deployed only in standard installation type.
+// Deployed only in standard installation type. The deprecated Enabled field
+// is honored in standard mode for backward compatibility.
 func (k *KonfluxSpec) IsEnterpriseContractEnabled() bool {
-	return k.IsStandard()
+	var enabled *bool
+	if k.EnterpriseContract != nil {
+		enabled = k.EnterpriseContract.Enabled
+	}
+	return isStandardComponentEnabled(k.IsStandard(), enabled)
 }
 
 // IsCertManagerEnabled returns true if the cert-manager component should be deployed.
-// Deployed only in standard installation type.
+// Deployed only in standard installation type. The deprecated Enabled field
+// is honored in standard mode for backward compatibility.
 func (k *KonfluxSpec) IsCertManagerEnabled() bool {
-	return k.IsStandard()
+	var enabled *bool
+	if k.CertManager != nil {
+		enabled = k.CertManager.Enabled
+	}
+	return isStandardComponentEnabled(k.IsStandard(), enabled)
 }
 
 // IsRBACEnabled returns true if the RBAC component should be deployed.
-// Deployed in both standard and spoke installation types.
+// RBAC is always deployed in both standard and spoke installation types.
+// The deprecated Enabled field on RBACConfig is preserved for schema
+// compatibility but has no effect.
 func (k *KonfluxSpec) IsRBACEnabled() bool {
 	return true
 }
 
 // IsCLIEnabled returns true if the CLI component should be deployed.
-// Deployed only in standard installation type.
+// Deployed only in standard installation type. The deprecated Enabled field
+// is honored in standard mode for backward compatibility.
 func (k *KonfluxSpec) IsCLIEnabled() bool {
-	return k.IsStandard()
+	var enabled *bool
+	if k.CLI != nil {
+		enabled = k.CLI.Enabled
+	}
+	return isStandardComponentEnabled(k.IsStandard(), enabled)
 }
 
 // IsComponentMetricsEnabled returns true if component metrics scraping resources should be deployed.
