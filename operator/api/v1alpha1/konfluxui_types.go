@@ -131,9 +131,12 @@ type ProxyDeploymentSpec struct {
 // TektonResultsSpec configures the Tekton Results proxy route.
 type TektonResultsSpec struct {
 	// Hostname overrides DNS discovery for the Results API service.
+	// It must be a DNS name with an optional numeric port, for example
+	// "results.example.com" or "results.example.com:8080".
 	// When tektonResults is present with an empty hostname, the override is
 	// cleared so DNS discovery is used again.
 	// +optional
+	// +kubebuilder:validation:Pattern=`^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?$`
 	Hostname string `json:"hostname,omitempty"`
 }
 
@@ -160,7 +163,11 @@ type EndpointSpec struct {
 	// +kubebuilder:default=false
 	Enabled bool `json:"enabled,omitempty"`
 	// Hostname overrides the default backend service address.
+	// It must be a DNS name with an optional numeric port, for example
+	// "kite.example.svc.cluster.local" or "archive.example.svc.cluster.local:8081".
+	// Empty uses the default address for that endpoint.
 	// +optional
+	// +kubebuilder:validation:Pattern=`^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?$`
 	Hostname string `json:"hostname,omitempty"`
 }
 
@@ -171,8 +178,10 @@ type WatsonEndpointSpec struct {
 	// +kubebuilder:default=false
 	Enabled bool `json:"enabled,omitempty"`
 	// Hostname overrides the Watson API host.
-	// Defaults to api.us-east.assistant.watson.cloud.ibm.com.
+	// It must be a DNS name with an optional numeric port.
+	// Defaults to api.us-east.assistant.watson.cloud.ibm.com when empty.
 	// +optional
+	// +kubebuilder:validation:Pattern=`^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?$`
 	Hostname string `json:"hostname,omitempty"`
 	// SecretName is the name of the Secret containing the Watson API key.
 	// The Secret must have a key named API_KEY with the pre-encoded Basic auth

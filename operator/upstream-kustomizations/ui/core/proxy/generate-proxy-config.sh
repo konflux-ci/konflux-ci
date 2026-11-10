@@ -1,16 +1,48 @@
-#!/bin/sh
+#!/bin/bash
 
 set -eu
 
-TEMPLATES_DIR=/mnt/caddy-templates
-SNIPPETS_DIR=/mnt/caddy-snippets
-SERVICE_CA_PATH=/mnt/service-ca/service-ca.crt
+# Defaults match the proxy pod mounts. Override them to run the script in a unit test.
+TEMPLATES_DIR=${TEMPLATES_DIR:-/mnt/caddy-templates}
+SNIPPETS_DIR=${SNIPPETS_DIR:-/mnt/caddy-snippets}
+SERVICE_CA_PATH=${SERVICE_CA_PATH:-/mnt/service-ca/service-ca.crt}
+
+# A DNS name with an optional numeric port. Empty is valid: Tekton Results
+# uses it to clear an override. Keep this aligned with the kubebuilder Pattern
+# on the proxy hostname fields and with proxyBackendHostnamePattern in the
+# UI reconciler.
+proxy_hostname_pattern='^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?$'
 
 for cmd in sed getent printf; do
   command -v "${cmd}" >/dev/null 2>&1 || { echo "required command not found: ${cmd}"; exit 1; }
 done
 
 log() { echo "$(date -Iseconds) generate-proxy-config: $*"; }
+
+# require_proxy_hostname rejects a value that must not be copied into a Caddyfile.
+# The failure log names the variable and omits the value.
+require_proxy_hostname() {
+  local name=$1
+  local value=$2
+  if [[ ! ${value} =~ ${proxy_hostname_pattern} ]]; then
+    log "invalid ${name}"
+    exit 1
+  fi
+}
+
+# render_template replaces every placeholder in src. The placeholder is a
+# fixed string. Callers must pass a value that require_proxy_hostname accepted:
+# bash still treats '&' and '\' specially in this expansion.
+render_template() {
+  local placeholder=$1
+  local value=$2
+  local src=$3
+  local dest=$4
+  local template
+  template=$(<"${src}")
+  template=${template//"$placeholder"/$value}
+  printf '%s\n' "${template}" > "${dest}"
+}
 
 # resolve_tekton_results outputs the tekton-results hostname.
 # Env var TEKTON_RESULTS_HOSTNAME takes precedence over DNS probing.
@@ -36,9 +68,10 @@ resolve_tekton_results() {
 # Process tekton-results template
 if [ -f "${TEMPLATES_DIR}/tekton-results.caddy" ]; then
   if hostname=$(resolve_tekton_results); then
+    require_proxy_hostname TEKTON_RESULTS_HOSTNAME "${hostname}"
     log "tekton-results resolved to ${hostname}"
-    sed "s/__TEKTON_RESULTS_HOSTNAME__/${hostname}/" \
-      "${TEMPLATES_DIR}/tekton-results.caddy" > "${SNIPPETS_DIR}/tekton-results.caddy"
+    render_template __TEKTON_RESULTS_HOSTNAME__ "${hostname}" \
+      "${TEMPLATES_DIR}/tekton-results.caddy" "${SNIPPETS_DIR}/tekton-results.caddy"
   else
     log "tekton-results not available, skipping"
   fi
@@ -47,16 +80,18 @@ fi
 # Process kite template
 if [ "${KITE_ENABLED:-}" = "true" ] && [ -f "${TEMPLATES_DIR}/kite.caddy" ]; then
   hostname="${KITE_HOSTNAME:-konflux-kite.konflux-kite.svc.cluster.local}"
-  sed "s/__KITE_HOSTNAME__/${hostname}/g" \
-    "${TEMPLATES_DIR}/kite.caddy" > "${SNIPPETS_DIR}/kite.caddy"
+  require_proxy_hostname KITE_HOSTNAME "${hostname}"
+  render_template __KITE_HOSTNAME__ "${hostname}" \
+    "${TEMPLATES_DIR}/kite.caddy" "${SNIPPETS_DIR}/kite.caddy"
   log "kite endpoint enabled (${hostname})"
 fi
 
 # Process kubearchive template
 if [ "${KUBEARCHIVE_ENABLED:-}" = "true" ] && [ -f "${TEMPLATES_DIR}/kubearchive.caddy" ]; then
   hostname="${KUBEARCHIVE_HOSTNAME:-kubearchive-api-server.product-kubearchive.svc.cluster.local}"
-  sed "s/__KUBEARCHIVE_HOSTNAME__/${hostname}/g" \
-    "${TEMPLATES_DIR}/kubearchive.caddy" > "${SNIPPETS_DIR}/kubearchive.caddy"
+  require_proxy_hostname KUBEARCHIVE_HOSTNAME "${hostname}"
+  render_template __KUBEARCHIVE_HOSTNAME__ "${hostname}" \
+    "${TEMPLATES_DIR}/kubearchive.caddy" "${SNIPPETS_DIR}/kubearchive.caddy"
   log "kubearchive endpoint enabled (${hostname})"
 fi
 
@@ -66,9 +101,10 @@ fi
 if [ "${WATSON_ENABLED:-}" = "true" ] && [ -f "${TEMPLATES_DIR}/watson.caddy" ]; then
   watson_host="${WATSON_HOSTNAME:-api.us-east.assistant.watson.cloud.ibm.com}"
   watson_default_host="api.us-east.assistant.watson.cloud.ibm.com"
+  require_proxy_hostname WATSON_HOSTNAME "${watson_host}"
 
-  sed "s/__WATSON_HOST__/${watson_host}/g" \
-    "${TEMPLATES_DIR}/watson.caddy" > "${SNIPPETS_DIR}/watson.caddy"
+  render_template __WATSON_HOST__ "${watson_host}" \
+    "${TEMPLATES_DIR}/watson.caddy" "${SNIPPETS_DIR}/watson.caddy"
 
   # Generate watson TLS transport config.
   # - Default external host: always use system roots with SNI (never skip verification)
@@ -106,7 +142,7 @@ else
   log "no service CA found, backend TLS verification disabled"
 fi
 
-STATIC_DIR=/opt/app-root/src/static-content
+STATIC_DIR=${STATIC_DIR:-/opt/app-root/src/static-content}
 out="${STATIC_DIR}/runtime-config.js"
 printf 'window.KONFLUX_RUNTIME = window.KONFLUX_RUNTIME || {};\n' > "$out"
 env | grep '^RUNTIME_' | sort | while IFS= read -r var; do
