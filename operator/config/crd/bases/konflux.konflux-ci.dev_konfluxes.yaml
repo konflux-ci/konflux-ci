@@ -1427,6 +1427,12 @@ spec:
                               WARNING: Changing field names or JSON tags is a BREAKING CHANGE that will affect
                               all PipelineRuns reading from the ConfigMap. Field names must remain stable.
                             properties:
+                              additionalCBOMGenerationRulesImage:
+                                description: |-
+                                  AdditionalCBOMGenerationRulesImage is the image used by the CBOM generation task
+                                  for loading additional rules.
+                                  Written as "additional-cbom-generation-rules-image" in the cluster-config ConfigMap.
+                                type: string
                               allowCacheProxy:
                                 description: |-
                                   AllowCacheProxy enables the HTTP caching proxy for builds.
@@ -1448,6 +1454,12 @@ spec:
                                 description: DefaultOIDCIssuer is the default OIDC
                                   issuer URL.
                                 type: string
+                              enableCBOMGenerationTask:
+                                description: |-
+                                  EnableCBOMGenerationTask enables the task which generates a CBOM in build pipelines.
+                                  When true, the "enable-cbom-generation-task" key is set to "true" in the cluster-config ConfigMap.
+                                  When false, the key is set to "false". When nil (omitted), the key is absent.
+                                type: boolean
                               enableKeylessSigning:
                                 description: |-
                                   EnableKeylessSigning determines if pipelines should perform/validate keyless signing.
