@@ -1399,6 +1399,136 @@ func TestKonfluxInfoClusterConfig(t *testing.T) {
 		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyCargoURL))
 	})
 
+	t.Run("should create cluster-config ConfigMap with CBOM fields", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		enableCBOM := true
+
+		resource := &konfluxv1alpha1.KonfluxInfo{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+			},
+			Spec: konfluxv1alpha1.KonfluxInfoSpec{
+				ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+					Data: &konfluxv1alpha1.ClusterConfigData{
+						EnableCBOMGenerationTask:           &enableCBOM,
+						AdditionalCBOMGenerationRulesImage: "quay.io/example/cbom-rules:latest",
+					},
+				},
+			},
+		}
+		err := k8sClient.Create(ctx, resource)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		defer func() {
+			_ = k8sClient.Delete(ctx, resource)
+		}()
+
+		controllerReconciler := &KonfluxInfoReconciler{
+			Client:      k8sClient,
+			Scheme:      k8sClient.Scheme(),
+			ObjectStore: objectStore,
+		}
+		_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: typeNamespacedName,
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		clusterConfigMap := &corev1.ConfigMap{}
+		err = k8sClient.Get(ctx, types.NamespacedName{
+			Name:      clusterConfigMapName,
+			Namespace: infoNamespace,
+		}, clusterConfigMap)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyEnableCBOMGenerationTask, "true"))
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyAdditionalCBOMGenerationRulesImage, "quay.io/example/cbom-rules:latest"))
+	})
+
+	t.Run("should omit CBOM keys from cluster-config ConfigMap when fields are nil/empty", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		resource := &konfluxv1alpha1.KonfluxInfo{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+			},
+			Spec: konfluxv1alpha1.KonfluxInfoSpec{
+				ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+					Data: &konfluxv1alpha1.ClusterConfigData{
+						DefaultOIDCIssuer: "https://oidc.example.com",
+					},
+				},
+			},
+		}
+		err := k8sClient.Create(ctx, resource)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		defer func() {
+			_ = k8sClient.Delete(ctx, resource)
+		}()
+
+		controllerReconciler := &KonfluxInfoReconciler{
+			Client:      k8sClient,
+			Scheme:      k8sClient.Scheme(),
+			ObjectStore: objectStore,
+		}
+		_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: typeNamespacedName,
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		clusterConfigMap := &corev1.ConfigMap{}
+		err = k8sClient.Get(ctx, types.NamespacedName{
+			Name:      clusterConfigMapName,
+			Namespace: infoNamespace,
+		}, clusterConfigMap)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyEnableCBOMGenerationTask))
+		g.Expect(clusterConfigMap.Data).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyAdditionalCBOMGenerationRulesImage))
+	})
+
+	t.Run("should write enable-cbom-generation-task as false when explicitly set to false", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		enableCBOM := false
+
+		resource := &konfluxv1alpha1.KonfluxInfo{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CRName,
+			},
+			Spec: konfluxv1alpha1.KonfluxInfoSpec{
+				ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+					Data: &konfluxv1alpha1.ClusterConfigData{
+						EnableCBOMGenerationTask: &enableCBOM,
+					},
+				},
+			},
+		}
+		err := k8sClient.Create(ctx, resource)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		defer func() {
+			_ = k8sClient.Delete(ctx, resource)
+		}()
+
+		controllerReconciler := &KonfluxInfoReconciler{
+			Client:      k8sClient,
+			Scheme:      k8sClient.Scheme(),
+			ObjectStore: objectStore,
+		}
+		_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: typeNamespacedName,
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		clusterConfigMap := &corev1.ConfigMap{}
+		err = k8sClient.Get(ctx, types.NamespacedName{
+			Name:      clusterConfigMapName,
+			Namespace: infoNamespace,
+		}, clusterConfigMap)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(clusterConfigMap.Data).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyEnableCBOMGenerationTask, "false"))
+	})
+
 	t.Run("should write allow-cache-proxy as false when explicitly set to false", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
@@ -1444,25 +1574,28 @@ func TestKonfluxInfoClusterConfig(t *testing.T) {
 }
 
 func TestClusterConfigDataProxyFieldsIterator(t *testing.T) {
-	t.Run("should yield kebab-case keys for all proxy fields", func(t *testing.T) {
+	t.Run("should yield kebab-case keys for all proxy and CBOM fields", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
 		allowCache := true
 		allowPkgRegistry := true
+		enableCBOM := true
 		noProxy := ""
 
 		data := konfluxv1alpha1.ClusterConfigData{
-			AllowCacheProxy:                &allowCache,
-			HTTPProxy:                      "squid.caching.svc.cluster.local:3128",
-			NoProxy:                        &noProxy,
-			AllowPackageRegistryProxy:      &allowPkgRegistry,
-			PackageRegistryProxyNpmURL:     "https://npm-proxy.example.com",
-			PackageRegistryProxyYarnURL:    "https://yarn-proxy.example.com",
-			PackageRegistryProxyGomodURL:   "https://gomod-proxy.example.com",
-			PackageRegistryProxyPipURL:     "https://pip-proxy.example.com",
-			PackageRegistryProxyPnpmURL:    "https://pnpm-proxy.example.com",
-			PackageRegistryProxyBundlerURL: "https://bundler-proxy.example.com",
-			PackageRegistryProxyCargoURL:   "https://cargo-proxy.example.com",
+			AllowCacheProxy:                    &allowCache,
+			HTTPProxy:                          "squid.caching.svc.cluster.local:3128",
+			NoProxy:                            &noProxy,
+			AllowPackageRegistryProxy:          &allowPkgRegistry,
+			PackageRegistryProxyNpmURL:         "https://npm-proxy.example.com",
+			PackageRegistryProxyYarnURL:        "https://yarn-proxy.example.com",
+			PackageRegistryProxyGomodURL:       "https://gomod-proxy.example.com",
+			PackageRegistryProxyPipURL:         "https://pip-proxy.example.com",
+			PackageRegistryProxyPnpmURL:        "https://pnpm-proxy.example.com",
+			PackageRegistryProxyBundlerURL:     "https://bundler-proxy.example.com",
+			PackageRegistryProxyCargoURL:       "https://cargo-proxy.example.com",
+			EnableCBOMGenerationTask:           &enableCBOM,
+			AdditionalCBOMGenerationRulesImage: "quay.io/example/cbom-rules:latest",
 		}
 
 		collected := make(map[string]string)
@@ -1481,9 +1614,11 @@ func TestClusterConfigDataProxyFieldsIterator(t *testing.T) {
 		g.Expect(collected).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyPnpmURL, "https://pnpm-proxy.example.com"))
 		g.Expect(collected).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyBundlerURL, "https://bundler-proxy.example.com"))
 		g.Expect(collected).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyCargoURL, "https://cargo-proxy.example.com"))
+		g.Expect(collected).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyEnableCBOMGenerationTask, "true"))
+		g.Expect(collected).To(gomega.HaveKeyWithValue(konfluxv1alpha1.ClusterConfigKeyAdditionalCBOMGenerationRulesImage, "quay.io/example/cbom-rules:latest"))
 	})
 
-	t.Run("should not yield proxy keys when fields are nil/empty", func(t *testing.T) {
+	t.Run("should not yield proxy or CBOM keys when fields are nil/empty", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 
 		data := konfluxv1alpha1.ClusterConfigData{
@@ -1507,6 +1642,8 @@ func TestClusterConfigDataProxyFieldsIterator(t *testing.T) {
 		g.Expect(collected).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyPnpmURL))
 		g.Expect(collected).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyBundlerURL))
 		g.Expect(collected).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyPackageRegistryProxyCargoURL))
+		g.Expect(collected).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyEnableCBOMGenerationTask))
+		g.Expect(collected).NotTo(gomega.HaveKey(konfluxv1alpha1.ClusterConfigKeyAdditionalCBOMGenerationRulesImage))
 	})
 
 	t.Run("should yield false for *bool set to false", func(t *testing.T) {
