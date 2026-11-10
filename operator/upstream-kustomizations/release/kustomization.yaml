@@ -68,6 +68,35 @@ patches:
     patch: |-
       - op: remove
         path: /metadata/annotations/service.beta.openshift.io~1serving-cert-secret-name
+  # Spread replicas across zones and nodes (soft constraints)
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: release-service-controller-manager
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: release-service-controller-manager
+        annotations:
+          ignore-check.kube-linter.io/no-anti-affinity: "Using topologySpreadConstraints"
+      spec:
+        template:
+          spec:
+            topologySpreadConstraints:
+              - maxSkew: 1
+                topologyKey: topology.kubernetes.io/zone
+                whenUnsatisfiable: ScheduleAnyway
+                labelSelector:
+                  matchLabels:
+                    control-plane: controller-manager
+              - maxSkew: 1
+                topologyKey: kubernetes.io/hostname
+                whenUnsatisfiable: ScheduleAnyway
+                labelSelector:
+                  matchLabels:
+                    control-plane: controller-manager
 
 replacements:
   - source: # Add cert-manager annotation to ValidatingWebhookConfiguration, MutatingWebhookConfiguration and CRDs

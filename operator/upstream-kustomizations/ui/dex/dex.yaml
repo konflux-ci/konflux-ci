@@ -41,6 +41,8 @@ metadata:
     app: dex
   name: dex
   namespace: dex
+  annotations:
+    ignore-check.kube-linter.io/no-anti-affinity: "Using topologySpreadConstraints"
 spec:
   replicas: 1
   selector:
@@ -52,6 +54,19 @@ spec:
         app: dex
     spec:
       serviceAccountName: dex # This is created below
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: dex
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: dex
       containers:
       - image: quay.io/konflux-ci/dex:latest
         name: dex
