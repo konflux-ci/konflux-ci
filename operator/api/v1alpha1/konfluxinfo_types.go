@@ -349,22 +349,36 @@ type ClusterConfigData struct {
 	// +optional
 	// +kubebuilder:validation:XValidation:rule="!self.contains('@')",message="URL must not contain credentials (userinfo). Use a Secret for proxy authentication."
 	PackageRegistryProxyCargoURL string `json:"packageRegistryProxyCargoUrl,omitempty"`
+
+	// EnableCBOMGenerationTask enables the task which generates a CBOM in build pipelines.
+	// When true, the "enable-cbom-generation-task" key is set to "true" in the cluster-config ConfigMap.
+	// When false, the key is set to "false". When nil (omitted), the key is absent.
+	// +optional
+	EnableCBOMGenerationTask *bool `json:"enableCBOMGenerationTask,omitempty"`
+
+	// AdditionalCBOMGenerationRulesImage is the image used by the CBOM generation task
+	// for loading additional rules.
+	// Written as "additional-cbom-generation-rules-image" in the cluster-config ConfigMap.
+	// +optional
+	AdditionalCBOMGenerationRulesImage string `json:"additionalCBOMGenerationRulesImage,omitempty"`
 }
 
 // ConfigMap key constants for cluster-config proxy fields.
 // These are the kebab-case keys written to the ConfigMap, mapped from camelCase CRD fields.
 const (
-	ClusterConfigKeyAllowCacheProxy                = "allow-cache-proxy"
-	ClusterConfigKeyHTTPProxy                      = "http-proxy"
-	ClusterConfigKeyNoProxy                        = "no-proxy"
-	ClusterConfigKeyAllowPackageRegistryProxy      = "allow-package-registry-proxy"
-	ClusterConfigKeyPackageRegistryProxyNpmURL     = "package-registry-proxy-npm-url"
-	ClusterConfigKeyPackageRegistryProxyYarnURL    = "package-registry-proxy-yarn-url"
-	ClusterConfigKeyPackageRegistryProxyGomodURL   = "package-registry-proxy-gomod-url"
-	ClusterConfigKeyPackageRegistryProxyPipURL     = "package-registry-proxy-pip-url"
-	ClusterConfigKeyPackageRegistryProxyPnpmURL    = "package-registry-proxy-pnpm-url"
-	ClusterConfigKeyPackageRegistryProxyBundlerURL = "package-registry-proxy-bundler-url"
-	ClusterConfigKeyPackageRegistryProxyCargoURL   = "package-registry-proxy-cargo-url"
+	ClusterConfigKeyAllowCacheProxy                    = "allow-cache-proxy"
+	ClusterConfigKeyHTTPProxy                          = "http-proxy"
+	ClusterConfigKeyNoProxy                            = "no-proxy"
+	ClusterConfigKeyAllowPackageRegistryProxy          = "allow-package-registry-proxy"
+	ClusterConfigKeyPackageRegistryProxyNpmURL         = "package-registry-proxy-npm-url"
+	ClusterConfigKeyPackageRegistryProxyYarnURL        = "package-registry-proxy-yarn-url"
+	ClusterConfigKeyPackageRegistryProxyGomodURL       = "package-registry-proxy-gomod-url"
+	ClusterConfigKeyPackageRegistryProxyPipURL         = "package-registry-proxy-pip-url"
+	ClusterConfigKeyPackageRegistryProxyPnpmURL        = "package-registry-proxy-pnpm-url"
+	ClusterConfigKeyPackageRegistryProxyBundlerURL     = "package-registry-proxy-bundler-url"
+	ClusterConfigKeyPackageRegistryProxyCargoURL       = "package-registry-proxy-cargo-url"
+	ClusterConfigKeyEnableCBOMGenerationTask           = "enable-cbom-generation-task"
+	ClusterConfigKeyAdditionalCBOMGenerationRulesImage = "additional-cbom-generation-rules-image"
 )
 
 // All is an iterator that yields all non-empty key-value pairs from ClusterConfigData.
@@ -492,6 +506,16 @@ func (d ClusterConfigData) All(yield func(key, value string) bool) {
 	}
 	if d.PackageRegistryProxyCargoURL != "" {
 		if !yield(ClusterConfigKeyPackageRegistryProxyCargoURL, d.PackageRegistryProxyCargoURL) {
+			return
+		}
+	}
+	if d.EnableCBOMGenerationTask != nil {
+		if !yield(ClusterConfigKeyEnableCBOMGenerationTask, strconv.FormatBool(*d.EnableCBOMGenerationTask)) {
+			return
+		}
+	}
+	if d.AdditionalCBOMGenerationRulesImage != "" {
+		if !yield(ClusterConfigKeyAdditionalCBOMGenerationRulesImage, d.AdditionalCBOMGenerationRulesImage) {
 			return
 		}
 	}
