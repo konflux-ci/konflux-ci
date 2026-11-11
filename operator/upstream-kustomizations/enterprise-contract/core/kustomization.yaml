@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - https://github.com/conforma/crds/config/crd?ref=0ded3421c40b8e62cc9f25633ed99f3f89f9812b
+  - https://github.com/conforma/crds/config/crd?ref=4f8aba44852eae539cfc7831c2cb4044c052c44b
   - ns.yaml
   - configmap-viewer-role.yaml
   - public-ecp-rbac.yaml
@@ -14,9 +14,9 @@ configMapGenerator:
   - name: ec-defaults
     namespace: enterprise-contract-service
     literals:
-      - verify_ec_task_bundle=quay.io/conforma/tekton-task:latest@sha256:ff8e274232df5a496edc864b8358dbc8470dfee843c7bb8b90437a0d1daeac97
+      - verify_ec_task_bundle=quay.io/conforma/tekton-task:latest@sha256:e77ee89012dd5ebbe977a3e1f4a800557238ddc4b554540dbcfae6e4f3e07538
       - verify_ec_task_git_url=https://github.com/conforma/cli.git
-      - verify_ec_task_git_revision=0556e84ae2201db0669e6a5ebf79eb9e70c46414
+      - verify_ec_task_git_revision=4b10dfc1aad7f5cc3e32003fac8ae9993cf338bf
       - verify_ec_task_git_pathInRepo=tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml
       - verify_conforma_task_ta_git_pathInRepo=tasks/verify-conforma-konflux-ta/0.1/verify-conforma-konflux-ta.yaml
 

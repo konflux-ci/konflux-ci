@@ -68,7 +68,9 @@ var (
 // CertManagerCleanupGVKs defines which resource types should be cleaned up when they are
 // no longer part of the desired state. When createClusterIssuer is toggled off, cert-manager
 // resources are automatically deleted. When distributeClusterCABundle is toggled off (or
-// defaults to off on OpenShift), the trust-manager Bundle is deleted.
+// defaults to off on OpenShift), orphan cleanup removes a trusted-ca Bundle only when it
+// carries this controller's owner label and a controller ownerRef for this
+// KonfluxCertManager. A Bundle without those stays.
 var CertManagerCleanupGVKs = []schema.GroupVersionKind{
 	clusterIssuerGVK,
 	certificateGVK,
@@ -220,16 +222,14 @@ func (r *KonfluxCertManagerReconciler) applyPKIManifests(ctx context.Context, tc
 // applyTrustBundle applies the trust-manager Bundle resources from the embedded manifests.
 // It returns a condition reflecting the outcome, an optional requeue delay, and an error
 // for unexpected apply failures (those should abort reconcile before orphan cleanup):
-//   - Disabled: distributeBundle is false; leftover trusted-ca is deleted if present
+//   - Disabled: distributeBundle is false; the Bundle is not applied. Orphan cleanup
+//     removes one owned by this KonfluxCertManager. Any other trusted-ca Bundle stays.
 //   - Distributed: Bundle applied successfully
 //   - NotDistributed: trust-manager CRD is not installed (requeue to retry)
 func (r *KonfluxCertManagerReconciler) applyTrustBundle(ctx context.Context, tc *tracking.Client, distributeBundle bool) (metav1.Condition, time.Duration, error) {
 	log := logf.FromContext(ctx)
 
 	if !distributeBundle {
-		if err := deleteTrustedCABundleIfPresent(ctx, tc); err != nil {
-			return metav1.Condition{}, 0, err
-		}
 		log.Info("Skipping trust-manager Bundle - distributeClusterCABundle is disabled")
 		return metav1.Condition{
 			Type:    constant.ConditionTypeClusterCABundleDistributed,
@@ -283,26 +283,6 @@ func (r *KonfluxCertManagerReconciler) applyTrustBundle(ctx context.Context, tc 
 		Reason:  condition.ReasonBundleDistributed,
 		Message: "Trust-manager Bundle applied successfully",
 	}, 0, nil
-}
-
-// deleteTrustedCABundleIfPresent removes the well-known trusted-ca Bundle when
-// distribution is off. Ignores NotFound and a missing trust-manager CRD so
-// OpenShift (no trust-manager) and clusters with no leftover Bundle stay quiet.
-// Other errors fail reconcile. Deletes regardless of owner so a leftover
-// InternalRegistry-owned Bundle is not left behind.
-func deleteTrustedCABundleIfPresent(ctx context.Context, c client.Client) error {
-	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(bundleGVK)
-	obj.SetName(trustedCABundleName)
-	if err := c.Delete(ctx, obj); err != nil {
-		if client.IgnoreNotFound(err) == nil || tracking.IsNoKindMatchError(err) {
-			return nil
-		}
-		return fmt.Errorf("failed to delete trust-manager Bundle %s: %w", trustedCABundleName, err)
-	}
-	logf.FromContext(ctx).Info("Deleted trust-manager Bundle; distribution is disabled",
-		"name", trustedCABundleName)
-	return nil
 }
 
 func bundleCRDMissingResult(ctx context.Context, name string) (metav1.Condition, time.Duration, error) {

@@ -5,9 +5,9 @@ go 1.26.10
 require (
 	github.com/coder/websocket v1.8.15
 	github.com/codeready-toolchain/api v0.0.0-20261023161012-10cbbf2156ff
-	github.com/conforma/crds/api v0.1.41
+	github.com/conforma/crds/api v0.1.43
 	github.com/devfile/library/v2 v2.4.0
-	github.com/docker/cli v29.9.2+incompatible
+	github.com/docker/cli v29.9.3+incompatible
 	github.com/gofri/go-github-ratelimit/v2 v2.0.2
 	github.com/google/go-containerregistry v0.22.1
 	github.com/google/go-github/v93 v93.0.0
@@ -18,13 +18,13 @@ require (
 	github.com/konflux-ci/integration-service v0.0.0-20261029165049-252be6df555b
 	github.com/konflux-ci/konflux-ci/operator v0.0.0
 	github.com/konflux-ci/operator-toolkit v0.0.0-20260921214948-0f252ff98994
-	github.com/konflux-ci/release-service v0.0.0-20261030152513-5c67a2aa1153
+	github.com/konflux-ci/release-service v0.0.0-20261104100309-18523d720b13
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/onsi/ginkgo/v2 v2.33.1
+	github.com/onsi/ginkgo/v2 v2.34.0
 	github.com/onsi/gomega v1.44.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/openshift-pipelines/pipelines-as-code v0.50.0
-	github.com/openshift/api v0.0.0-20261104213817-ae934b7cbfb4
+	github.com/openshift/api v0.0.0-20261107000926-248dd91956ce
 	github.com/openshift/client-go v0.0.0-20261027103500-48133ed95dad
 	github.com/openshift/library-go v0.0.0-20261030161254-298cf2d19148
 	github.com/redhat-appstudio/jvm-build-service v0.0.0-20250301023318-b47170d413c5
@@ -38,7 +38,7 @@ require (
 	k8s.io/client-go v11.0.0+incompatible
 	k8s.io/klog/v2 v2.140.0
 	k8s.io/utils v0.0.0-20261023123148-ca04ba58ecab
-	knative.dev/pkg v0.0.0-20261026113028-cfa0ac991c5a
+	knative.dev/pkg v0.0.0-20261106011441-a8ce7f3f6f84
 	oras.land/oras-go/v2 v2.7.0
 	sigs.k8s.io/controller-runtime v0.25.2
 	sigs.k8s.io/yaml v1.6.0

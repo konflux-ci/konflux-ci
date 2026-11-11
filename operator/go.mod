@@ -5,9 +5,9 @@ go 1.26.10
 require (
 	github.com/cert-manager/cert-manager v1.21.3
 	github.com/go-logr/logr v1.4.4
-	github.com/onsi/ginkgo/v2 v2.33.1
+	github.com/onsi/ginkgo/v2 v2.34.0
 	github.com/onsi/gomega v1.44.0
-	github.com/openshift/api v0.0.0-20261104213817-ae934b7cbfb4
+	github.com/openshift/api v0.0.0-20261107000926-248dd91956ce
 	github.com/prometheus/client_golang v1.25.0
 	golang.org/x/crypto v0.58.0
 	golang.org/x/sync v0.24.0
