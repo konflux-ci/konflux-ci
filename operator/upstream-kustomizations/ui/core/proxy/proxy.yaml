@@ -54,7 +54,7 @@ spec:
       - name: generate-proxy-config
         image: quay.io/konflux-ci/konflux-ui
         command:
-          - sh
+          - bash
           - /var/run/scripts/konflux-ci.dev/generate-proxy-config.sh
         volumeMounts:
         - name: caddy-templates

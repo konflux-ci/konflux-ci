@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	"maps"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/onsi/gomega"
@@ -154,10 +155,28 @@ func TestKonfluxUIConfigSpec_Accessors(t *testing.T) {
 	g.Expect(cfg.GetDex()).To(gomega.Equal(DexDeploymentSpec{Replicas: 1}))
 }
 
-// Patterns must stay in sync with +kubebuilder:validation:Pattern on IngressSpec.
+// Patterns must stay in sync with +kubebuilder:validation:Pattern markers.
 var (
-	ingressFQDNPattern     = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?$`)
+	// ingressFQDNPattern mirrors the Pattern on IngressSpec.FQDN and AdditionalFQDNs.
+	ingressFQDNPattern = regexp.MustCompile(
+		`^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?` +
+			`(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*` +
+			`\.?(:([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?$`,
+	)
 	ingressHostnamePattern = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
+	// endpointHostnameWithPortPattern mirrors the Pattern on EndpointSpec.Hostname
+	// and WatsonEndpointSpec.Hostname (port allowed).
+	endpointHostnameWithPortPattern = regexp.MustCompile(
+		`^$|^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?` +
+			`(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*` +
+			`\.?(:([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?$`,
+	)
+	// endpointHostnameNoPortPattern mirrors the Pattern on TektonResultsSpec.Hostname
+	// (no port — the Caddy template appends :8080).
+	endpointHostnameNoPortPattern = regexp.MustCompile(
+		`^$|^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?` +
+			`(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.?$`,
+	)
 )
 
 func TestIngressSpecValidationPatterns(t *testing.T) {
@@ -167,7 +186,9 @@ func TestIngressSpecValidationPatterns(t *testing.T) {
 		g := gomega.NewWithT(t)
 		for _, value := range []string{
 			"konflux.example.com",
+			"host.example.com.",
 			"ui.example.com:8443",
+			"host:8443",
 			"localhost",
 			"a",
 		} {
@@ -179,6 +200,13 @@ func TestIngressSpecValidationPatterns(t *testing.T) {
 		g := gomega.NewWithT(t)
 		for _, value := range []string{
 			"",
+			"foo..bar",
+			"-foo.bar",
+			"foo-.bar",
+			"a" + strings.Repeat("b", 63),
+			"host:0",
+			"host:99999",
+			"host:65536",
 			"-bad.example.com",
 			"example.com:",
 			"example.com:port",
@@ -208,6 +236,65 @@ func TestIngressSpecValidationPatterns(t *testing.T) {
 			"",
 		} {
 			g.Expect(ingressHostnamePattern.MatchString(value)).To(gomega.BeFalse(), "hostname %q", value)
+		}
+	})
+}
+
+func TestEndpointHostnameValidationPatterns(t *testing.T) {
+	t.Parallel()
+
+	t.Run("with-port pattern accepts empty, DNS names, trailing dot, and port", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		for _, value := range []string{
+			"",
+			"host.example.com",
+			"host.example.com.",
+			"host:8443",
+			"kite.example.svc:8443",
+			"a",
+		} {
+			g.Expect(endpointHostnameWithPortPattern.MatchString(value)).To(gomega.BeTrue(), "endpoint %q", value)
+		}
+	})
+
+	t.Run("with-port pattern rejects invalid hostnames and ports", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		for _, value := range []string{
+			"foo..bar",
+			"-foo.bar",
+			"foo-.bar",
+			"a" + strings.Repeat("b", 63),
+			"host:0",
+			"host:99999",
+			"host:65536",
+		} {
+			g.Expect(endpointHostnameWithPortPattern.MatchString(value)).To(gomega.BeFalse(), "endpoint %q", value)
+		}
+	})
+
+	t.Run("no-port pattern accepts empty, DNS names, and trailing dot", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		for _, value := range []string{
+			"",
+			"host.example.com",
+			"host.example.com.",
+			"a",
+			"tekton-results-api-service.tekton-pipelines.svc.cluster.local",
+		} {
+			g.Expect(endpointHostnameNoPortPattern.MatchString(value)).To(gomega.BeTrue(), "tekton-results %q", value)
+		}
+	})
+
+	t.Run("no-port pattern rejects ports and invalid hostnames", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		for _, value := range []string{
+			"host:8443",
+			"foo..bar",
+			"-foo.bar",
+			"foo-.bar",
+			"a" + strings.Repeat("b", 63),
+		} {
+			g.Expect(endpointHostnameNoPortPattern.MatchString(value)).To(gomega.BeFalse(), "tekton-results %q", value)
 		}
 	})
 }
