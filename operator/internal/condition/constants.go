@@ -94,4 +94,7 @@ const (
 	// ReasonBundleDistributionDisabled indicates that cluster CA bundle distribution is
 	// intentionally disabled (either explicitly or via platform default).
 	ReasonBundleDistributionDisabled = "BundleDistributionDisabled"
+
+	// ReasonRegistrySecretPending indicates that the internal registry credentials secret is not yet available.
+	ReasonRegistrySecretPending = "RegistrySecretPending"
 )

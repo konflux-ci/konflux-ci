@@ -24,7 +24,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -33,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
+	"github.com/konflux-ci/konflux-ci/operator/internal/condition"
 	"github.com/konflux-ci/konflux-ci/operator/internal/constant"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/manifests"
 	"github.com/konflux-ci/konflux-ci/operator/pkg/tracking"
@@ -122,6 +125,43 @@ var _ = Describe("Secret copy helpers", func() {
 		res, err := r.syncInternalRegistryCredentialsSecret(ctx, tc)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(res.RequeueAfter).To(Equal(10 * time.Second))
+	})
+
+	It("updates status condition to pending and requeues when reconciling with missing registry secret", func() {
+		ctx := context.Background()
+		scheme := runtime.NewScheme()
+		Expect(corev1.AddToScheme(scheme)).To(Succeed())
+		Expect(rbacv1.AddToScheme(scheme)).To(Succeed())
+		Expect(konfluxv1alpha1.AddToScheme(scheme)).To(Succeed())
+
+		store, err := manifests.NewObjectStore(scheme)
+		Expect(err).NotTo(HaveOccurred())
+
+		dt := newDefaultTenant()
+		registry := newInternalRegistry()
+		cl := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(dt, registry).
+			WithStatusSubresource(dt).
+			Build()
+
+		r := &KonfluxDefaultTenantReconciler{
+			Client:      cl,
+			Scheme:      scheme,
+			ObjectStore: store,
+		}
+
+		res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKey{Name: CRName}})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res.RequeueAfter).To(Equal(10 * time.Second))
+
+		updated := &konfluxv1alpha1.KonfluxDefaultTenant{}
+		Expect(cl.Get(ctx, client.ObjectKey{Name: CRName}, updated)).To(Succeed())
+		cond := meta.FindStatusCondition(updated.Status.Conditions, condition.TypeReady)
+		Expect(cond).NotTo(BeNil())
+		Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+		Expect(cond.Reason).To(Equal(condition.ReasonRegistrySecretPending))
+		Expect(cond.Message).To(Equal("Waiting for internal registry credentials secret to become available"))
 	})
 
 	It("copies docker config from source secret into default-tenant", func() {
