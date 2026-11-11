@@ -59,7 +59,7 @@ shift 2
 # =====================================
 # Strong adoption:  release-service, integration-service, ui (konflux-ui)
 # Partial adoption: build-service, image-controller, application-api
-# Not adopted:      enterprise-contract (conforma/crds), internal-services
+# Not adopted:      enterprise-contract (conforma/crds)
 #
 # Components without upstream git references (no changelog possible):
 #   rbac, info, cert-manager, default-tenant, registry
@@ -74,7 +74,6 @@ declare -A COMPONENT_CONFIG=(
   ["enterprise-contract"]="operator/upstream-kustomizations/enterprise-contract/core/kustomization.yaml|conforma/crds|conforma/crds|Enterprise Contract|ref"
   ["image-controller"]="operator/upstream-kustomizations/image-controller/core/kustomization.yaml|konflux-ci/image-controller|konflux-ci/image-controller|Image Controller|ref"
   ["integration-service"]="operator/upstream-kustomizations/integration/core/kustomization.yaml|konflux-ci/integration-service|konflux-ci/integration-service|Integration Service|ref"
-  ["internal-services"]="operator/upstream-kustomizations/release/internal-services/kustomization.yaml|internal-services/config/crd|konflux-ci/internal-services|Internal Services|ref"
   ["namespace-lister"]="operator/upstream-kustomizations/namespace-lister/kustomization.yaml|quay.io/konflux-ci/namespace-lister|konflux-ci/namespace-lister|Namespace Lister|digest"
   ["release-service"]="operator/upstream-kustomizations/release/core/kustomization.yaml|konflux-ci/release-service|konflux-ci/release-service|Release Service|ref"
   ["ui"]="operator/upstream-kustomizations/ui/core/proxy/kustomization.yaml|quay.io/konflux-ci/konflux-ui|konflux-ci/konflux-ui|UI|digest"
