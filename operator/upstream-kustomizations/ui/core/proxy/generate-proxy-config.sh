@@ -7,11 +7,11 @@ TEMPLATES_DIR=${TEMPLATES_DIR:-/mnt/caddy-templates}
 SNIPPETS_DIR=${SNIPPETS_DIR:-/mnt/caddy-snippets}
 SERVICE_CA_PATH=${SERVICE_CA_PATH:-/mnt/service-ca/service-ca.crt}
 
-# A DNS name with an optional numeric port. Empty is valid: Tekton Results
-# uses it to clear an override. Keep this aligned with the kubebuilder Pattern
-# on the proxy hostname fields and with proxyBackendHostnamePattern in the
-# UI reconciler.
-proxy_hostname_pattern='^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?$'
+# A DNS name with an optional trailing dot and an optional numeric port.
+# Empty is valid: Tekton Results uses it to clear an override. Keep this
+# aligned with the kubebuilder Pattern on the proxy hostname fields and with
+# proxyBackendHostnamePattern in the UI reconciler.
+proxy_hostname_pattern='^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.?(:[0-9]{1,5})?$'
 
 for cmd in sed getent printf; do
   command -v "${cmd}" >/dev/null 2>&1 || { echo "required command not found: ${cmd}"; exit 1; }

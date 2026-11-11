@@ -540,12 +540,13 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, runtimeConfig 
 	return customization.NewPodOverlay(podOpts...), nil
 }
 
-// proxyBackendHostnamePattern matches a DNS name with an optional numeric port.
-// Empty is valid so Tekton Results can clear an override and use DNS discovery.
-// Keep this aligned with the kubebuilder Pattern on the proxy hostname fields
-// and with proxy_hostname_pattern in generate-proxy-config.sh.
+// proxyBackendHostnamePattern matches a DNS name with an optional trailing
+// dot and an optional numeric port. Empty is valid so Tekton Results can
+// clear an override and use DNS discovery. Keep this aligned with the
+// kubebuilder Pattern on the proxy hostname fields and with
+// proxy_hostname_pattern in generate-proxy-config.sh.
 var proxyBackendHostnamePattern = regexp.MustCompile(
-	`^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?$`,
+	`^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.?(:[0-9]{1,5})?$`,
 )
 
 func validateProxyHostname(hostname string) error {

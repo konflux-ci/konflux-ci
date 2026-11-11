@@ -570,10 +570,13 @@ spec:
                           hostname:
                             description: |-
                               Hostname overrides the default backend service address.
-                              It must be a DNS name with an optional numeric port, for example
-                              "kite.example.svc.cluster.local" or "archive.example.svc.cluster.local:8081".
+                              It must be a DNS name. An absolute name may end with a dot.
+                              Kite may include a numeric port, for example
+                              "kite.example.svc.cluster.local:8443", because its template does not
+                              append one. KubeArchive's template appends :8081, so that hostname is
+                              the host only, for example "archive.example.svc.cluster.local".
                               Empty uses the default address for that endpoint.
-                            pattern: ^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?$
+                            pattern: ^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.?(:[0-9]{1,5})?$
                             type: string
                         type: object
                       kubearchive:
@@ -589,10 +592,13 @@ spec:
                           hostname:
                             description: |-
                               Hostname overrides the default backend service address.
-                              It must be a DNS name with an optional numeric port, for example
-                              "kite.example.svc.cluster.local" or "archive.example.svc.cluster.local:8081".
+                              It must be a DNS name. An absolute name may end with a dot.
+                              Kite may include a numeric port, for example
+                              "kite.example.svc.cluster.local:8443", because its template does not
+                              append one. KubeArchive's template appends :8081, so that hostname is
+                              the host only, for example "archive.example.svc.cluster.local".
                               Empty uses the default address for that endpoint.
-                            pattern: ^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?$
+                            pattern: ^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.?(:[0-9]{1,5})?$
                             type: string
                         type: object
                       watson:
@@ -608,9 +614,10 @@ spec:
                           hostname:
                             description: |-
                               Hostname overrides the Watson API host.
-                              It must be a DNS name with an optional numeric port.
+                              It must be a DNS name with an optional numeric port. An absolute name
+                              may end with a dot.
                               Defaults to api.us-east.assistant.watson.cloud.ibm.com when empty.
-                            pattern: ^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?$
+                            pattern: ^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.?(:[0-9]{1,5})?$
                             type: string
                           secretName:
                             default: watson-api-key
@@ -1088,11 +1095,12 @@ spec:
                       hostname:
                         description: |-
                           Hostname overrides DNS discovery for the Results API service.
-                          It must be a DNS name with an optional numeric port, for example
-                          "results.example.com" or "results.example.com:8080".
+                          It must be a DNS name, for example "results.example.com". An absolute
+                          name may end with a dot. The proxy template appends :8080, so this
+                          value is the host only.
                           When tektonResults is present with an empty hostname, the override is
                           cleared so DNS discovery is used again.
-                        pattern: ^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?$
+                        pattern: ^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.?(:[0-9]{1,5})?$
                         type: string
                     type: object
                 type: object
