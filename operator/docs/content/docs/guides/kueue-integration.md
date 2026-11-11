@@ -46,7 +46,9 @@ parameter and emit resource requests for platform-specific slots (for example,
 **Multi-cluster load distribution.** Kueue's
 [MultiKueue](https://kueue.sigs.k8s.io/docs/concepts/multikueue/) feature can
 dispatch PipelineRuns to spoke/worker clusters, distributing load across the
-infrastructure.
+infrastructure. When deploying the Konflux operator on a MultiKueue spoke
+cluster, set `spec.installationType: spoke` so that only the services
+required by a spoke cluster (Info and RBAC) are deployed.
 
 **Priority-based scheduling.** Different PipelineRun types — releases,
 post-merge builds, pre-merge tests, dependency updates — carry different

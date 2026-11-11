@@ -302,15 +302,15 @@ var _ = Describe("Konflux Controller", func() {
 	Context("DefaultTenant conditional enablement", func() {
 		const resourceName = "konflux"
 
-		It("should create DefaultTenant CR when defaultTenant is omitted (enabled by default)", func(ctx context.Context) {
+		It("should create DefaultTenant CR in standard installation type (enabled by default)", func(ctx context.Context) {
 			startManager(createTestClusterInfo())
 
-			By("creating Konflux CR without defaultTenant config")
+			By("creating Konflux CR without defaultTenant config (standard type)")
 			cr := &konfluxv1alpha1.Konflux{ObjectMeta: metav1.ObjectMeta{Name: resourceName}}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
 			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
-			By("verifying DefaultTenant CR was created (enabled by default)")
+			By("verifying DefaultTenant CR was created (enabled in standard type)")
 			tenant := &konfluxv1alpha1.KonfluxDefaultTenant{}
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: defaulttenant.CRName}, tenant)).To(Succeed())
@@ -318,36 +318,14 @@ var _ = Describe("Konflux Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
-		It("should create DefaultTenant CR when enabled is explicitly true", func(ctx context.Context) {
+		It("should not create DefaultTenant CR in spoke installation type", func(ctx context.Context) {
 			startManager(createTestClusterInfo())
 
-			By("creating Konflux CR with defaultTenant.enabled=true")
-			enabled := true
+			By("creating Konflux CR with spoke installation type")
 			cr := &konfluxv1alpha1.Konflux{
 				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
-					DefaultTenant: &konfluxv1alpha1.DefaultTenantConfig{Enabled: &enabled},
-				},
-			}
-			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
-
-			By("verifying DefaultTenant CR was created")
-			Eventually(func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: defaulttenant.CRName},
-					&konfluxv1alpha1.KonfluxDefaultTenant{})).To(Succeed())
-			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-		})
-
-		It("should not create DefaultTenant CR when enabled is false", func(ctx context.Context) {
-			startManager(createTestClusterInfo())
-
-			By("creating Konflux CR with defaultTenant.enabled=false")
-			disabled := false
-			cr := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
-				Spec: konfluxv1alpha1.KonfluxSpec{
-					DefaultTenant: &konfluxv1alpha1.DefaultTenantConfig{Enabled: &disabled},
+					InstallationType: konfluxv1alpha1.InstallationTypeSpoke,
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
@@ -363,19 +341,15 @@ var _ = Describe("Konflux Controller", func() {
 			By("verifying DefaultTenant CR was not created")
 			tenant := &konfluxv1alpha1.KonfluxDefaultTenant{}
 			err := k8sClient.Get(ctx, types.NamespacedName{Name: defaulttenant.CRName}, tenant)
-			Expect(errors.IsNotFound(err)).To(BeTrue(), "DefaultTenant CR should not exist when enabled=false")
+			Expect(errors.IsNotFound(err)).To(BeTrue(), "DefaultTenant CR should not exist in spoke type")
 		})
 
-		It("should delete DefaultTenant CR when enabled changes from true to false", func(ctx context.Context) {
+		It("should delete DefaultTenant CR when switching from standard to spoke", func(ctx context.Context) {
 			startManager(createTestClusterInfo())
 
-			By("creating Konflux CR with defaultTenant.enabled=true")
-			enabled := true
+			By("creating Konflux CR with standard installation type")
 			cr := &konfluxv1alpha1.Konflux{
 				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
-				Spec: konfluxv1alpha1.KonfluxSpec{
-					DefaultTenant: &konfluxv1alpha1.DefaultTenantConfig{Enabled: &enabled},
-				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
 			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
@@ -386,18 +360,17 @@ var _ = Describe("Konflux Controller", func() {
 					&konfluxv1alpha1.KonfluxDefaultTenant{})).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
-			By("updating Konflux CR to set enabled=false")
+			By("updating Konflux CR to spoke installation type")
 			updatedKonflux := &konfluxv1alpha1.Konflux{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updatedKonflux)).To(Succeed())
-			disabled := false
-			updatedKonflux.Spec.DefaultTenant = &konfluxv1alpha1.DefaultTenantConfig{Enabled: &disabled}
+			updatedKonflux.Spec.InstallationType = konfluxv1alpha1.InstallationTypeSpoke
 			Expect(k8sClient.Update(ctx, updatedKonflux)).To(Succeed())
 
 			By("waiting for DefaultTenant CR to be deleted")
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, types.NamespacedName{Name: defaulttenant.CRName},
 					&konfluxv1alpha1.KonfluxDefaultTenant{})
-				g.Expect(errors.IsNotFound(err)).To(BeTrue(), "DefaultTenant CR should be deleted when enabled changes to false")
+				g.Expect(errors.IsNotFound(err)).To(BeTrue(), "DefaultTenant CR should be deleted when switching to spoke")
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})
@@ -977,24 +950,10 @@ var _ = Describe("Konflux Controller", func() {
 	Context("Spoke configuration (Info/RBAC only)", func() {
 		const resourceName = "konflux"
 
-		// spokeSpec returns a KonfluxSpec with only info and rbac enabled.
-		// All other components are explicitly disabled.
+		// spokeSpec returns a KonfluxSpec with spoke installation type.
 		spokeSpec := func() konfluxv1alpha1.KonfluxSpec {
-			disabled := false
-			enabled := true
 			return konfluxv1alpha1.KonfluxSpec{
-				ApplicationAPI:            &konfluxv1alpha1.ApplicationAPIConfig{Enabled: &disabled},
-				KonfluxBuildService:       &konfluxv1alpha1.BuildServiceConfig{Enabled: &disabled},
-				KonfluxIntegrationService: &konfluxv1alpha1.IntegrationServiceConfig{Enabled: &disabled},
-				KonfluxReleaseService:     &konfluxv1alpha1.ReleaseServiceConfig{Enabled: &disabled},
-				KonfluxUI:                 &konfluxv1alpha1.KonfluxUIConfig{Enabled: &disabled},
-				NamespaceLister:           &konfluxv1alpha1.NamespaceListerConfig{Enabled: &disabled},
-				EnterpriseContract:        &konfluxv1alpha1.EnterpriseContractConfig{Enabled: &disabled},
-				CertManager:               &konfluxv1alpha1.CertManagerConfig{Enabled: &disabled},
-				DefaultTenant:             &konfluxv1alpha1.DefaultTenantConfig{Enabled: &disabled},
-				CLI:                       &konfluxv1alpha1.CLIConfig{Enabled: &disabled},
-				KonfluxInfo:               &konfluxv1alpha1.KonfluxInfoConfig{Enabled: &enabled},
-				RBAC:                      &konfluxv1alpha1.RBACConfig{Enabled: &enabled},
+				InstallationType: konfluxv1alpha1.InstallationTypeSpoke,
 			}
 		}
 
@@ -1117,20 +1076,19 @@ var _ = Describe("Konflux Controller", func() {
 		})
 	})
 
-	Context("Selective component deployment permutations", func() {
+	Context("Installation type deployment", func() {
 		const resourceName = "konflux"
 
 		boolPtr := func(v bool) *bool { return &v }
 
-		// enabledByDefaultCRNames lists all CRs created when their component defaults to enabled.
-		// This is the expected set when an empty KonfluxSpec is used.
+		// allStandardCRs lists all CRs created under the standard installation type.
 		type crCheck struct {
 			name   string
 			crName string
 			obj    func() client.Object
 		}
 
-		allDefaultEnabledCRs := func() []crCheck {
+		allStandardCRs := func() []crCheck {
 			return []crCheck{
 				{"application-api", applicationapi.CRName, func() client.Object { return &konfluxv1alpha1.KonfluxApplicationAPI{} }},
 				{"build-service", buildservice.CRName, func() client.Object { return &konfluxv1alpha1.KonfluxBuildService{} }},
@@ -1155,76 +1113,10 @@ var _ = Describe("Konflux Controller", func() {
 			}
 		}
 
-		It("should reconcile a build-pipeline-only configuration", func(ctx context.Context) {
+		It("should reconcile with all opt-in components enabled alongside standard defaults", func(ctx context.Context) {
 			startManager(createTestClusterInfo())
 
-			By("creating Konflux CR with only build-pipeline components enabled")
-			// Core CI/CD pipeline: ApplicationAPI + BuildService + IntegrationService +
-			// ReleaseService + EnterpriseContract. Everything else disabled.
-			cr := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
-				Spec: konfluxv1alpha1.KonfluxSpec{
-					ApplicationAPI:            &konfluxv1alpha1.ApplicationAPIConfig{Enabled: boolPtr(true)},
-					KonfluxBuildService:       &konfluxv1alpha1.BuildServiceConfig{Enabled: boolPtr(true)},
-					KonfluxIntegrationService: &konfluxv1alpha1.IntegrationServiceConfig{Enabled: boolPtr(true)},
-					KonfluxReleaseService:     &konfluxv1alpha1.ReleaseServiceConfig{Enabled: boolPtr(true)},
-					EnterpriseContract:        &konfluxv1alpha1.EnterpriseContractConfig{Enabled: boolPtr(true)},
-					KonfluxUI:                 &konfluxv1alpha1.KonfluxUIConfig{Enabled: boolPtr(false)},
-					RBAC:                      &konfluxv1alpha1.RBACConfig{Enabled: boolPtr(false)},
-					KonfluxInfo:               &konfluxv1alpha1.KonfluxInfoConfig{Enabled: boolPtr(false)},
-					NamespaceLister:           &konfluxv1alpha1.NamespaceListerConfig{Enabled: boolPtr(false)},
-					CertManager:               &konfluxv1alpha1.CertManagerConfig{Enabled: boolPtr(false)},
-					DefaultTenant:             &konfluxv1alpha1.DefaultTenantConfig{Enabled: boolPtr(false)},
-					CLI:                       &konfluxv1alpha1.CLIConfig{Enabled: boolPtr(false)},
-				},
-			}
-			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
-
-			By("verifying only build-pipeline CRs are created")
-			expectedEnabled := map[string]bool{
-				applicationapi.CRName:     true,
-				buildservice.CRName:       true,
-				integrationservice.CRName: true,
-				releaseservice.CRName:     true,
-				enterprisecontract.CRName: true,
-			}
-
-			Eventually(func(g Gomega) {
-				updated := &konfluxv1alpha1.Konflux{}
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
-				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)).NotTo(BeNil())
-
-				// Enabled pipeline components should exist
-				for _, tc := range allDefaultEnabledCRs() {
-					obj := tc.obj()
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: tc.crName}, obj)
-					if expectedEnabled[tc.crName] {
-						g.Expect(err).NotTo(HaveOccurred(), "%s CR should exist in build-pipeline config", tc.name)
-					} else {
-						g.Expect(errors.IsNotFound(err)).To(BeTrue(), "%s CR should not exist in build-pipeline config, got: %v", tc.name, err)
-					}
-				}
-
-				// Opt-in components should not be created
-				for _, tc := range allOptInCRs() {
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: tc.crName}, tc.obj())
-					g.Expect(errors.IsNotFound(err)).To(BeTrue(), "%s should not exist", tc.name)
-				}
-
-				// UI-related status fields should be cleared
-				g.Expect(updated.Status.UIURL).To(BeEmpty(), "uiURL should be empty when UI is disabled")
-
-				// CertManagerAvailable should not be present
-				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeCertManagerAvailable)).To(BeNil(),
-					"CertManagerAvailable should not be set when cert-manager is disabled")
-			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-		})
-
-		It("should reconcile with all opt-in components enabled alongside defaults", func(ctx context.Context) {
-			startManager(createTestClusterInfo())
-
-			By("creating Konflux CR with all default + all opt-in components enabled")
+			By("creating Konflux CR with all opt-in components enabled (standard type)")
 			cr := &konfluxv1alpha1.Konflux{
 				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
@@ -1236,14 +1128,14 @@ var _ = Describe("Konflux Controller", func() {
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
 			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
-			By("verifying all default-enabled AND opt-in CRs are created")
+			By("verifying all standard AND opt-in CRs are created")
 			Eventually(func(g Gomega) {
 				updated := &konfluxv1alpha1.Konflux{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
 				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)).NotTo(BeNil())
 
-				// All default-enabled components
-				for _, tc := range allDefaultEnabledCRs() {
+				// All standard components
+				for _, tc := range allStandardCRs() {
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: tc.crName}, tc.obj())).To(Succeed(),
 						"%s CR should exist when all components enabled", tc.name)
 				}
@@ -1256,226 +1148,93 @@ var _ = Describe("Konflux Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
-		It("should report NoComponentsEnabled when every component is disabled", func(ctx context.Context) {
+		It("should reconcile spoke type with opt-in components enabled", func(ctx context.Context) {
 			startManager(createTestClusterInfo())
 
-			By("creating Konflux CR with all components explicitly disabled")
+			By("creating Konflux CR with spoke type and opt-in components")
 			cr := &konfluxv1alpha1.Konflux{
 				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
-					ApplicationAPI:            &konfluxv1alpha1.ApplicationAPIConfig{Enabled: boolPtr(false)},
-					KonfluxBuildService:       &konfluxv1alpha1.BuildServiceConfig{Enabled: boolPtr(false)},
-					KonfluxIntegrationService: &konfluxv1alpha1.IntegrationServiceConfig{Enabled: boolPtr(false)},
-					KonfluxReleaseService:     &konfluxv1alpha1.ReleaseServiceConfig{Enabled: boolPtr(false)},
-					KonfluxUI:                 &konfluxv1alpha1.KonfluxUIConfig{Enabled: boolPtr(false)},
-					RBAC:                      &konfluxv1alpha1.RBACConfig{Enabled: boolPtr(false)},
-					KonfluxInfo:               &konfluxv1alpha1.KonfluxInfoConfig{Enabled: boolPtr(false)},
-					NamespaceLister:           &konfluxv1alpha1.NamespaceListerConfig{Enabled: boolPtr(false)},
-					EnterpriseContract:        &konfluxv1alpha1.EnterpriseContractConfig{Enabled: boolPtr(false)},
-					CertManager:               &konfluxv1alpha1.CertManagerConfig{Enabled: boolPtr(false)},
-					DefaultTenant:             &konfluxv1alpha1.DefaultTenantConfig{Enabled: boolPtr(false)},
-					CLI:                       &konfluxv1alpha1.CLIConfig{Enabled: boolPtr(false)},
+					InstallationType: konfluxv1alpha1.InstallationTypeSpoke,
+					ImageController:  &konfluxv1alpha1.ImageControllerConfig{Enabled: boolPtr(true)},
+					InternalRegistry: &konfluxv1alpha1.InternalRegistryConfig{Enabled: boolPtr(true)},
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
 			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
-			By("verifying Ready=False with NoComponentsEnabled reason")
-			Eventually(func(g Gomega) {
-				updated := &konfluxv1alpha1.Konflux{}
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
-
-				readyCond := apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)
-				g.Expect(readyCond).NotTo(BeNil())
-				g.Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
-				g.Expect(readyCond.Reason).To(Equal("NoComponentsEnabled"))
-
-				// No sub-CRs should exist
-				for _, tc := range allDefaultEnabledCRs() {
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: tc.crName}, tc.obj())
-					g.Expect(errors.IsNotFound(err)).To(BeTrue(), "%s CR should not exist when all disabled", tc.name)
-				}
-				for _, tc := range allOptInCRs() {
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: tc.crName}, tc.obj())
-					g.Expect(errors.IsNotFound(err)).To(BeTrue(), "%s CR should not exist when all disabled", tc.name)
-				}
-			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-		})
-
-		It("should reconcile with only a single component enabled", func(ctx context.Context) {
-			startManager(createTestClusterInfo())
-
-			By("creating Konflux CR with only RBAC enabled")
-			cr := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
-				Spec: konfluxv1alpha1.KonfluxSpec{
-					ApplicationAPI:            &konfluxv1alpha1.ApplicationAPIConfig{Enabled: boolPtr(false)},
-					KonfluxBuildService:       &konfluxv1alpha1.BuildServiceConfig{Enabled: boolPtr(false)},
-					KonfluxIntegrationService: &konfluxv1alpha1.IntegrationServiceConfig{Enabled: boolPtr(false)},
-					KonfluxReleaseService:     &konfluxv1alpha1.ReleaseServiceConfig{Enabled: boolPtr(false)},
-					KonfluxUI:                 &konfluxv1alpha1.KonfluxUIConfig{Enabled: boolPtr(false)},
-					RBAC:                      &konfluxv1alpha1.RBACConfig{Enabled: boolPtr(true)},
-					KonfluxInfo:               &konfluxv1alpha1.KonfluxInfoConfig{Enabled: boolPtr(false)},
-					NamespaceLister:           &konfluxv1alpha1.NamespaceListerConfig{Enabled: boolPtr(false)},
-					EnterpriseContract:        &konfluxv1alpha1.EnterpriseContractConfig{Enabled: boolPtr(false)},
-					CertManager:               &konfluxv1alpha1.CertManagerConfig{Enabled: boolPtr(false)},
-					DefaultTenant:             &konfluxv1alpha1.DefaultTenantConfig{Enabled: boolPtr(false)},
-					CLI:                       &konfluxv1alpha1.CLIConfig{Enabled: boolPtr(false)},
-				},
-			}
-			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
-
-			By("verifying only RBAC CR is created")
+			By("verifying only spoke + opt-in CRs are created")
 			Eventually(func(g Gomega) {
 				updated := &konfluxv1alpha1.Konflux{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
 				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)).NotTo(BeNil())
 
-				// RBAC should be created
+				// Info and RBAC (spoke components) should exist
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: info.CRName}, &konfluxv1alpha1.KonfluxInfo{})).To(Succeed())
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: rbac.CRName}, &konfluxv1alpha1.KonfluxRBAC{})).To(Succeed())
 
-				// All other default-enabled components should not be created
-				for _, tc := range allDefaultEnabledCRs() {
-					if tc.crName == rbac.CRName {
-						continue
-					}
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: tc.crName}, tc.obj())
-					g.Expect(errors.IsNotFound(err)).To(BeTrue(), "%s CR should not exist in single-component config", tc.name)
-				}
-			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-		})
-
-		It("should reconcile with a single default component disabled", func(ctx context.Context) {
-			startManager(createTestClusterInfo())
-
-			By("creating Konflux CR with only BuildService disabled")
-			cr := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
-				Spec: konfluxv1alpha1.KonfluxSpec{
-					KonfluxBuildService: &konfluxv1alpha1.BuildServiceConfig{Enabled: boolPtr(false)},
-				},
-			}
-			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
-
-			By("verifying all default components except BuildService are created")
-			Eventually(func(g Gomega) {
-				updated := &konfluxv1alpha1.Konflux{}
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
-				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)).NotTo(BeNil())
-
-				// All default-enabled except build-service
-				for _, tc := range allDefaultEnabledCRs() {
-					obj := tc.obj()
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: tc.crName}, obj)
-					if tc.crName == buildservice.CRName {
-						g.Expect(errors.IsNotFound(err)).To(BeTrue(), "BuildService CR should not exist when disabled")
-					} else {
-						g.Expect(err).NotTo(HaveOccurred(), "%s CR should exist when only BuildService is disabled", tc.name)
-					}
-				}
-
-				// Opt-in components should still not exist
-				for _, tc := range allOptInCRs() {
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: tc.crName}, tc.obj())
-					g.Expect(errors.IsNotFound(err)).To(BeTrue(), "%s should not exist", tc.name)
-				}
-			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
-		})
-
-		It("should reconcile with only opt-in components enabled and all defaults disabled", func(ctx context.Context) {
-			startManager(createTestClusterInfo())
-
-			By("creating Konflux CR with only ImageController and InternalRegistry enabled")
-			cr := &konfluxv1alpha1.Konflux{
-				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
-				Spec: konfluxv1alpha1.KonfluxSpec{
-					ApplicationAPI:            &konfluxv1alpha1.ApplicationAPIConfig{Enabled: boolPtr(false)},
-					KonfluxBuildService:       &konfluxv1alpha1.BuildServiceConfig{Enabled: boolPtr(false)},
-					KonfluxIntegrationService: &konfluxv1alpha1.IntegrationServiceConfig{Enabled: boolPtr(false)},
-					KonfluxReleaseService:     &konfluxv1alpha1.ReleaseServiceConfig{Enabled: boolPtr(false)},
-					KonfluxUI:                 &konfluxv1alpha1.KonfluxUIConfig{Enabled: boolPtr(false)},
-					RBAC:                      &konfluxv1alpha1.RBACConfig{Enabled: boolPtr(false)},
-					KonfluxInfo:               &konfluxv1alpha1.KonfluxInfoConfig{Enabled: boolPtr(false)},
-					NamespaceLister:           &konfluxv1alpha1.NamespaceListerConfig{Enabled: boolPtr(false)},
-					EnterpriseContract:        &konfluxv1alpha1.EnterpriseContractConfig{Enabled: boolPtr(false)},
-					CertManager:               &konfluxv1alpha1.CertManagerConfig{Enabled: boolPtr(false)},
-					DefaultTenant:             &konfluxv1alpha1.DefaultTenantConfig{Enabled: boolPtr(false)},
-					CLI:                       &konfluxv1alpha1.CLIConfig{Enabled: boolPtr(false)},
-					ImageController:           &konfluxv1alpha1.ImageControllerConfig{Enabled: boolPtr(true)},
-					InternalRegistry:          &konfluxv1alpha1.InternalRegistryConfig{Enabled: boolPtr(true)},
-				},
-			}
-			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
-
-			By("verifying only opt-in CRs are created")
-			Eventually(func(g Gomega) {
-				updated := &konfluxv1alpha1.Konflux{}
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
-				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)).NotTo(BeNil())
-
-				// ImageController and InternalRegistry should exist
+				// Opt-in components should exist
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: imagecontroller.CRName}, &konfluxv1alpha1.KonfluxImageController{})).To(Succeed())
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: internalregistry.CRName}, &konfluxv1alpha1.KonfluxInternalRegistry{})).To(Succeed())
 
-				// No default-enabled components should exist
-				for _, tc := range allDefaultEnabledCRs() {
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: tc.crName}, tc.obj())
-					g.Expect(errors.IsNotFound(err)).To(BeTrue(), "%s CR should not exist when all defaults disabled", tc.name)
+				// Standard-only components should NOT exist
+				for _, tc := range []struct {
+					name string
+					obj  client.Object
+				}{
+					{"application-api", &konfluxv1alpha1.KonfluxApplicationAPI{ObjectMeta: metav1.ObjectMeta{Name: applicationapi.CRName}}},
+					{"build-service", &konfluxv1alpha1.KonfluxBuildService{ObjectMeta: metav1.ObjectMeta{Name: buildservice.CRName}}},
+					{"integration-service", &konfluxv1alpha1.KonfluxIntegrationService{ObjectMeta: metav1.ObjectMeta{Name: integrationservice.CRName}}},
+					{"release-service", &konfluxv1alpha1.KonfluxReleaseService{ObjectMeta: metav1.ObjectMeta{Name: releaseservice.CRName}}},
+					{"ui", &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: uictrl.CRName}}},
+					{"namespace-lister", &konfluxv1alpha1.KonfluxNamespaceLister{ObjectMeta: metav1.ObjectMeta{Name: namespacelister.CRName}}},
+					{"enterprise-contract", &konfluxv1alpha1.KonfluxEnterpriseContract{ObjectMeta: metav1.ObjectMeta{Name: enterprisecontract.CRName}}},
+					{"cert-manager", &konfluxv1alpha1.KonfluxCertManager{ObjectMeta: metav1.ObjectMeta{Name: certmanager.CRName}}},
+					{"default-tenant", &konfluxv1alpha1.KonfluxDefaultTenant{ObjectMeta: metav1.ObjectMeta{Name: defaulttenant.CRName}}},
+					{"cli", &konfluxv1alpha1.KonfluxCLI{ObjectMeta: metav1.ObjectMeta{Name: cli.CRName}}},
+				} {
+					err := k8sClient.Get(ctx, client.ObjectKeyFromObject(tc.obj), tc.obj)
+					g.Expect(errors.IsNotFound(err)).To(BeTrue(), "%s CR should not exist in spoke config, got: %v", tc.name, err)
 				}
 
-				// SegmentBridge (telemetry) should not exist since telemetry was not enabled
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: segmentbridge.CRName}, &konfluxv1alpha1.KonfluxSegmentBridge{})
-				g.Expect(errors.IsNotFound(err)).To(BeTrue(), "SegmentBridge should not exist when telemetry not enabled")
+				// status.uiURL should be empty when UI is disabled
+				g.Expect(updated.Status.UIURL).To(BeEmpty(), "uiURL should be empty in spoke config")
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
-		It("should transition from build-pipeline to all-enabled by restoring components", func(ctx context.Context) {
+		It("should transition from spoke to standard by restoring all components", func(ctx context.Context) {
 			startManager(createTestClusterInfo())
 
-			By("creating Konflux CR with build-pipeline-only config")
+			By("creating Konflux CR with spoke type")
 			cr := &konfluxv1alpha1.Konflux{
 				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
-					ApplicationAPI:            &konfluxv1alpha1.ApplicationAPIConfig{Enabled: boolPtr(true)},
-					KonfluxBuildService:       &konfluxv1alpha1.BuildServiceConfig{Enabled: boolPtr(true)},
-					KonfluxIntegrationService: &konfluxv1alpha1.IntegrationServiceConfig{Enabled: boolPtr(true)},
-					KonfluxReleaseService:     &konfluxv1alpha1.ReleaseServiceConfig{Enabled: boolPtr(true)},
-					EnterpriseContract:        &konfluxv1alpha1.EnterpriseContractConfig{Enabled: boolPtr(true)},
-					KonfluxUI:                 &konfluxv1alpha1.KonfluxUIConfig{Enabled: boolPtr(false)},
-					RBAC:                      &konfluxv1alpha1.RBACConfig{Enabled: boolPtr(false)},
-					KonfluxInfo:               &konfluxv1alpha1.KonfluxInfoConfig{Enabled: boolPtr(false)},
-					NamespaceLister:           &konfluxv1alpha1.NamespaceListerConfig{Enabled: boolPtr(false)},
-					CertManager:               &konfluxv1alpha1.CertManagerConfig{Enabled: boolPtr(false)},
-					DefaultTenant:             &konfluxv1alpha1.DefaultTenantConfig{Enabled: boolPtr(false)},
-					CLI:                       &konfluxv1alpha1.CLIConfig{Enabled: boolPtr(false)},
+					InstallationType: konfluxv1alpha1.InstallationTypeSpoke,
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
 			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
-			By("waiting for build-pipeline CRs to be created")
+			By("waiting for spoke CRs to be created")
 			Eventually(func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: buildservice.CRName}, &konfluxv1alpha1.KonfluxBuildService{})).To(Succeed())
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: applicationapi.CRName}, &konfluxv1alpha1.KonfluxApplicationAPI{})).To(Succeed())
-				// UI should not exist yet
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: uictrl.CRName}, &konfluxv1alpha1.KonfluxUI{})
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: info.CRName}, &konfluxv1alpha1.KonfluxInfo{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: rbac.CRName}, &konfluxv1alpha1.KonfluxRBAC{})).To(Succeed())
+				// Build service should not exist yet
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: buildservice.CRName}, &konfluxv1alpha1.KonfluxBuildService{})
 				g.Expect(errors.IsNotFound(err)).To(BeTrue())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
-			By("updating to full default config (all defaults enabled)")
+			By("updating to standard installation type")
 			updatedKonflux := &konfluxv1alpha1.Konflux{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updatedKonflux)).To(Succeed())
-			updatedKonflux.Spec = konfluxv1alpha1.KonfluxSpec{}
+			updatedKonflux.Spec.InstallationType = konfluxv1alpha1.InstallationTypeStandard
 			Expect(k8sClient.Update(ctx, updatedKonflux)).To(Succeed())
 
-			By("verifying all default-enabled components are restored")
+			By("verifying all standard components are restored")
 			Eventually(func(g Gomega) {
-				for _, tc := range allDefaultEnabledCRs() {
+				for _, tc := range allStandardCRs() {
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: tc.crName}, tc.obj())).To(Succeed(),
-						"%s CR should exist after restoring defaults", tc.name)
+						"%s CR should exist after switching to standard", tc.name)
 				}
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
@@ -1519,11 +1278,10 @@ var _ = Describe("Konflux Controller", func() {
 					"build-service.Ready condition should be copied to parent")
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
-			By("disabling the BuildService component")
+			By("switching to spoke installation type to disable BuildService")
 			updatedKonflux := &konfluxv1alpha1.Konflux{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updatedKonflux)).To(Succeed())
-			disabled := false
-			updatedKonflux.Spec.KonfluxBuildService = &konfluxv1alpha1.BuildServiceConfig{Enabled: &disabled}
+			updatedKonflux.Spec.InstallationType = konfluxv1alpha1.InstallationTypeSpoke
 			Expect(k8sClient.Update(ctx, updatedKonflux)).To(Succeed())
 
 			By("waiting for the stale build-service.Ready condition to be cleaned up")
@@ -1578,11 +1336,10 @@ var _ = Describe("Konflux Controller", func() {
 					"uiURL should be propagated from KonfluxUI status")
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
-			By("disabling the UI component")
+			By("switching to spoke installation type (UI is disabled in spoke)")
 			updatedKonflux := &konfluxv1alpha1.Konflux{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updatedKonflux)).To(Succeed())
-			disabled := false
-			updatedKonflux.Spec.KonfluxUI = &konfluxv1alpha1.KonfluxUIConfig{Enabled: &disabled}
+			updatedKonflux.Spec.InstallationType = konfluxv1alpha1.InstallationTypeSpoke
 			Expect(k8sClient.Update(ctx, updatedKonflux)).To(Succeed())
 
 			By("waiting for the UI URL to be cleared")
@@ -1590,7 +1347,7 @@ var _ = Describe("Konflux Controller", func() {
 				updated := &konfluxv1alpha1.Konflux{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
 				g.Expect(updated.Status.UIURL).To(BeEmpty(),
-					"uiURL should be cleared when UI is disabled")
+					"uiURL should be cleared when switching to spoke")
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})
@@ -1626,23 +1383,10 @@ var _ = Describe("Konflux Controller", func() {
 			startManager(createTestClusterInfo())
 
 			By("creating Konflux CR with spoke configuration (Info+RBAC only)")
-			disabled := false
-			enabled := true
 			cr := &konfluxv1alpha1.Konflux{
 				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
-					ApplicationAPI:            &konfluxv1alpha1.ApplicationAPIConfig{Enabled: &disabled},
-					KonfluxBuildService:       &konfluxv1alpha1.BuildServiceConfig{Enabled: &disabled},
-					KonfluxIntegrationService: &konfluxv1alpha1.IntegrationServiceConfig{Enabled: &disabled},
-					KonfluxReleaseService:     &konfluxv1alpha1.ReleaseServiceConfig{Enabled: &disabled},
-					KonfluxUI:                 &konfluxv1alpha1.KonfluxUIConfig{Enabled: &disabled},
-					NamespaceLister:           &konfluxv1alpha1.NamespaceListerConfig{Enabled: &disabled},
-					EnterpriseContract:        &konfluxv1alpha1.EnterpriseContractConfig{Enabled: &disabled},
-					CertManager:               &konfluxv1alpha1.CertManagerConfig{Enabled: &disabled},
-					DefaultTenant:             &konfluxv1alpha1.DefaultTenantConfig{Enabled: &disabled},
-					CLI:                       &konfluxv1alpha1.CLIConfig{Enabled: &disabled},
-					KonfluxInfo:               &konfluxv1alpha1.KonfluxInfoConfig{Enabled: &enabled},
-					RBAC:                      &konfluxv1alpha1.RBACConfig{Enabled: &enabled},
+					InstallationType: konfluxv1alpha1.InstallationTypeSpoke,
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
@@ -1680,23 +1424,10 @@ var _ = Describe("Konflux Controller", func() {
 			startManager(createTestClusterInfo())
 
 			By("creating Konflux CR with spoke configuration (Info+RBAC only)")
-			disabled := false
-			enabled := true
 			cr := &konfluxv1alpha1.Konflux{
 				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
-					ApplicationAPI:            &konfluxv1alpha1.ApplicationAPIConfig{Enabled: &disabled},
-					KonfluxBuildService:       &konfluxv1alpha1.BuildServiceConfig{Enabled: &disabled},
-					KonfluxIntegrationService: &konfluxv1alpha1.IntegrationServiceConfig{Enabled: &disabled},
-					KonfluxReleaseService:     &konfluxv1alpha1.ReleaseServiceConfig{Enabled: &disabled},
-					KonfluxUI:                 &konfluxv1alpha1.KonfluxUIConfig{Enabled: &disabled},
-					NamespaceLister:           &konfluxv1alpha1.NamespaceListerConfig{Enabled: &disabled},
-					EnterpriseContract:        &konfluxv1alpha1.EnterpriseContractConfig{Enabled: &disabled},
-					CertManager:               &konfluxv1alpha1.CertManagerConfig{Enabled: &disabled},
-					DefaultTenant:             &konfluxv1alpha1.DefaultTenantConfig{Enabled: &disabled},
-					CLI:                       &konfluxv1alpha1.CLIConfig{Enabled: &disabled},
-					KonfluxInfo:               &konfluxv1alpha1.KonfluxInfoConfig{Enabled: &enabled},
-					RBAC:                      &konfluxv1alpha1.RBACConfig{Enabled: &enabled},
+					InstallationType: konfluxv1alpha1.InstallationTypeSpoke,
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
@@ -1726,27 +1457,14 @@ var _ = Describe("Konflux Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
-		It("should transition to Ready=True when the not-ready component is disabled", func(ctx context.Context) {
+		It("should transition to Ready=True when all spoke sub-CRs become ready", func(ctx context.Context) {
 			startManager(createTestClusterInfo())
 
-			By("creating Konflux CR with Info+RBAC enabled")
-			disabled := false
-			enabled := true
+			By("creating Konflux CR with spoke configuration (Info+RBAC)")
 			cr := &konfluxv1alpha1.Konflux{
 				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
-					ApplicationAPI:            &konfluxv1alpha1.ApplicationAPIConfig{Enabled: &disabled},
-					KonfluxBuildService:       &konfluxv1alpha1.BuildServiceConfig{Enabled: &disabled},
-					KonfluxIntegrationService: &konfluxv1alpha1.IntegrationServiceConfig{Enabled: &disabled},
-					KonfluxReleaseService:     &konfluxv1alpha1.ReleaseServiceConfig{Enabled: &disabled},
-					KonfluxUI:                 &konfluxv1alpha1.KonfluxUIConfig{Enabled: &disabled},
-					NamespaceLister:           &konfluxv1alpha1.NamespaceListerConfig{Enabled: &disabled},
-					EnterpriseContract:        &konfluxv1alpha1.EnterpriseContractConfig{Enabled: &disabled},
-					CertManager:               &konfluxv1alpha1.CertManagerConfig{Enabled: &disabled},
-					DefaultTenant:             &konfluxv1alpha1.DefaultTenantConfig{Enabled: &disabled},
-					CLI:                       &konfluxv1alpha1.CLIConfig{Enabled: &disabled},
-					KonfluxInfo:               &konfluxv1alpha1.KonfluxInfoConfig{Enabled: &enabled},
-					RBAC:                      &konfluxv1alpha1.RBACConfig{Enabled: &enabled},
+					InstallationType: konfluxv1alpha1.InstallationTypeSpoke,
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
@@ -1774,13 +1492,12 @@ var _ = Describe("Konflux Controller", func() {
 				g.Expect(readyCond.Message).To(ContainSubstring("rbac is not ready"))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
-			By("disabling RBAC to remove the not-ready component from aggregation")
-			updatedKonflux := &konfluxv1alpha1.Konflux{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updatedKonflux)).To(Succeed())
-			updatedKonflux.Spec.RBAC = &konfluxv1alpha1.RBACConfig{Enabled: boolPtr(false)}
-			Expect(k8sClient.Update(ctx, updatedKonflux)).To(Succeed())
+			By("transitioning RBAC to ready")
+			rbacObj := &konfluxv1alpha1.KonfluxRBAC{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: rbac.CRName}, rbacObj)).To(Succeed())
+			setSubCRReady(ctx, rbacObj, true)
 
-			By("verifying parent becomes Ready=True with only Info contributing to readiness")
+			By("verifying parent becomes Ready=True with both spoke components ready")
 			Eventually(func(g Gomega) {
 				updated := &konfluxv1alpha1.Konflux{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
@@ -1789,31 +1506,18 @@ var _ = Describe("Konflux Controller", func() {
 				g.Expect(readyCond).NotTo(BeNil())
 				g.Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
 				g.Expect(readyCond.Reason).To(Equal("AllComponentsReady"))
-				g.Expect(readyCond.Message).To(ContainSubstring("1 components are ready"))
+				g.Expect(readyCond.Message).To(ContainSubstring("2 components are ready"))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
 		It("should copy sub-CR conditions to parent with correct prefixes", func(ctx context.Context) {
 			startManager(createTestClusterInfo())
 
-			By("creating Konflux CR with Info+RBAC enabled")
-			disabled := false
-			enabled := true
+			By("creating Konflux CR with spoke configuration (Info+RBAC only)")
 			cr := &konfluxv1alpha1.Konflux{
 				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
-					ApplicationAPI:            &konfluxv1alpha1.ApplicationAPIConfig{Enabled: &disabled},
-					KonfluxBuildService:       &konfluxv1alpha1.BuildServiceConfig{Enabled: &disabled},
-					KonfluxIntegrationService: &konfluxv1alpha1.IntegrationServiceConfig{Enabled: &disabled},
-					KonfluxReleaseService:     &konfluxv1alpha1.ReleaseServiceConfig{Enabled: &disabled},
-					KonfluxUI:                 &konfluxv1alpha1.KonfluxUIConfig{Enabled: &disabled},
-					NamespaceLister:           &konfluxv1alpha1.NamespaceListerConfig{Enabled: &disabled},
-					EnterpriseContract:        &konfluxv1alpha1.EnterpriseContractConfig{Enabled: &disabled},
-					CertManager:               &konfluxv1alpha1.CertManagerConfig{Enabled: &disabled},
-					DefaultTenant:             &konfluxv1alpha1.DefaultTenantConfig{Enabled: &disabled},
-					CLI:                       &konfluxv1alpha1.CLIConfig{Enabled: &disabled},
-					KonfluxInfo:               &konfluxv1alpha1.KonfluxInfoConfig{Enabled: &enabled},
-					RBAC:                      &konfluxv1alpha1.RBACConfig{Enabled: &enabled},
+					InstallationType: konfluxv1alpha1.InstallationTypeSpoke,
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
@@ -1858,24 +1562,11 @@ var _ = Describe("Konflux Controller", func() {
 		It("should update aggregated readiness when a sub-CR transitions from not-ready to ready", func(ctx context.Context) {
 			startManager(createTestClusterInfo())
 
-			By("creating Konflux CR with Info+RBAC enabled")
-			disabled := false
-			enabled := true
+			By("creating Konflux CR with spoke configuration (Info+RBAC only)")
 			cr := &konfluxv1alpha1.Konflux{
 				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
-					ApplicationAPI:            &konfluxv1alpha1.ApplicationAPIConfig{Enabled: &disabled},
-					KonfluxBuildService:       &konfluxv1alpha1.BuildServiceConfig{Enabled: &disabled},
-					KonfluxIntegrationService: &konfluxv1alpha1.IntegrationServiceConfig{Enabled: &disabled},
-					KonfluxReleaseService:     &konfluxv1alpha1.ReleaseServiceConfig{Enabled: &disabled},
-					KonfluxUI:                 &konfluxv1alpha1.KonfluxUIConfig{Enabled: &disabled},
-					NamespaceLister:           &konfluxv1alpha1.NamespaceListerConfig{Enabled: &disabled},
-					EnterpriseContract:        &konfluxv1alpha1.EnterpriseContractConfig{Enabled: &disabled},
-					CertManager:               &konfluxv1alpha1.CertManagerConfig{Enabled: &disabled},
-					DefaultTenant:             &konfluxv1alpha1.DefaultTenantConfig{Enabled: &disabled},
-					CLI:                       &konfluxv1alpha1.CLIConfig{Enabled: &disabled},
-					KonfluxInfo:               &konfluxv1alpha1.KonfluxInfoConfig{Enabled: &enabled},
-					RBAC:                      &konfluxv1alpha1.RBACConfig{Enabled: &enabled},
+					InstallationType: konfluxv1alpha1.InstallationTypeSpoke,
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
@@ -1927,35 +1618,25 @@ var _ = Describe("Konflux Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
-		It("should correctly aggregate status with a larger set of enabled components", func(ctx context.Context) {
+		It("should correctly aggregate status with spoke plus optional component", func(ctx context.Context) {
 			startManager(createTestClusterInfo())
 
-			By("creating Konflux CR with Info+RBAC+CLI enabled, rest disabled")
+			By("creating Konflux CR with spoke + imageController enabled")
 			cr := &konfluxv1alpha1.Konflux{
 				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
 				Spec: konfluxv1alpha1.KonfluxSpec{
-					ApplicationAPI:            &konfluxv1alpha1.ApplicationAPIConfig{Enabled: boolPtr(false)},
-					KonfluxBuildService:       &konfluxv1alpha1.BuildServiceConfig{Enabled: boolPtr(false)},
-					KonfluxIntegrationService: &konfluxv1alpha1.IntegrationServiceConfig{Enabled: boolPtr(false)},
-					KonfluxReleaseService:     &konfluxv1alpha1.ReleaseServiceConfig{Enabled: boolPtr(false)},
-					KonfluxUI:                 &konfluxv1alpha1.KonfluxUIConfig{Enabled: boolPtr(false)},
-					NamespaceLister:           &konfluxv1alpha1.NamespaceListerConfig{Enabled: boolPtr(false)},
-					EnterpriseContract:        &konfluxv1alpha1.EnterpriseContractConfig{Enabled: boolPtr(false)},
-					CertManager:               &konfluxv1alpha1.CertManagerConfig{Enabled: boolPtr(false)},
-					DefaultTenant:             &konfluxv1alpha1.DefaultTenantConfig{Enabled: boolPtr(false)},
-					CLI:                       &konfluxv1alpha1.CLIConfig{Enabled: boolPtr(true)},
-					KonfluxInfo:               &konfluxv1alpha1.KonfluxInfoConfig{Enabled: boolPtr(true)},
-					RBAC:                      &konfluxv1alpha1.RBACConfig{Enabled: boolPtr(true)},
+					InstallationType: konfluxv1alpha1.InstallationTypeSpoke,
+					ImageController:  &konfluxv1alpha1.ImageControllerConfig{Enabled: boolPtr(true)},
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
 			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
-			By("waiting for Info, RBAC, and CLI sub-CRs to be created")
+			By("waiting for Info, RBAC, and ImageController sub-CRs to be created")
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: info.CRName}, &konfluxv1alpha1.KonfluxInfo{})).To(Succeed())
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: rbac.CRName}, &konfluxv1alpha1.KonfluxRBAC{})).To(Succeed())
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cli.CRName}, &konfluxv1alpha1.KonfluxCLI{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: imagecontroller.CRName}, &konfluxv1alpha1.KonfluxImageController{})).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			By("setting all three sub-CRs to ready")
@@ -1967,9 +1648,9 @@ var _ = Describe("Konflux Controller", func() {
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: rbac.CRName}, rbacObj)).To(Succeed())
 			setSubCRReady(ctx, rbacObj, true)
 
-			cliObj := &konfluxv1alpha1.KonfluxCLI{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cli.CRName}, cliObj)).To(Succeed())
-			setSubCRReady(ctx, cliObj, true)
+			icObj := &konfluxv1alpha1.KonfluxImageController{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: imagecontroller.CRName}, icObj)).To(Succeed())
+			setSubCRReady(ctx, icObj, true)
 
 			By("verifying parent reports Ready=True with 3 components")
 			Eventually(func(g Gomega) {
@@ -1984,12 +1665,12 @@ var _ = Describe("Konflux Controller", func() {
 				// All three prefixed conditions should be present
 				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), "info.Ready")).NotTo(BeNil())
 				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), "rbac.Ready")).NotTo(BeNil())
-				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), "cli.Ready")).NotTo(BeNil())
+				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), "image-controller.Ready")).NotTo(BeNil())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
-			By("making one component (CLI) not-ready")
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cli.CRName}, cliObj)).To(Succeed())
-			setSubCRReady(ctx, cliObj, false)
+			By("making ImageController not-ready")
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: imagecontroller.CRName}, icObj)).To(Succeed())
+			setSubCRReady(ctx, icObj, false)
 
 			By("verifying parent transitions to Ready=False mentioning the not-ready component")
 			Eventually(func(g Gomega) {
@@ -1999,7 +1680,7 @@ var _ = Describe("Konflux Controller", func() {
 				readyCond := apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)
 				g.Expect(readyCond).NotTo(BeNil())
 				g.Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
-				g.Expect(readyCond.Message).To(ContainSubstring("cli is not ready"))
+				g.Expect(readyCond.Message).To(ContainSubstring("image-controller is not ready"))
 				// Info and RBAC should not be mentioned as not-ready
 				g.Expect(readyCond.Message).NotTo(ContainSubstring("info is not ready"))
 				g.Expect(readyCond.Message).NotTo(ContainSubstring("rbac is not ready"))

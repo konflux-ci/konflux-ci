@@ -40,24 +40,12 @@ func newTestScheme() *runtime.Scheme {
 	return s
 }
 
-// boolPtr returns a pointer to a bool value.
-func boolPtr(v bool) *bool { return &v }
-
-// allDisabledSpec returns a KonfluxSpec with every component explicitly disabled.
-func allDisabledSpec() konfluxv1alpha1.KonfluxSpec {
+// standardSpec returns a KonfluxSpec in standard installation mode.
+// All standard components are enabled; the Patch/Get interceptors target
+// specific kinds, so enabling all components is safe for error testing.
+func standardSpec() konfluxv1alpha1.KonfluxSpec {
 	return konfluxv1alpha1.KonfluxSpec{
-		ApplicationAPI:            &konfluxv1alpha1.ApplicationAPIConfig{Enabled: boolPtr(false)},
-		KonfluxBuildService:       &konfluxv1alpha1.BuildServiceConfig{Enabled: boolPtr(false)},
-		KonfluxIntegrationService: &konfluxv1alpha1.IntegrationServiceConfig{Enabled: boolPtr(false)},
-		KonfluxReleaseService:     &konfluxv1alpha1.ReleaseServiceConfig{Enabled: boolPtr(false)},
-		KonfluxUI:                 &konfluxv1alpha1.KonfluxUIConfig{Enabled: boolPtr(false)},
-		RBAC:                      &konfluxv1alpha1.RBACConfig{Enabled: boolPtr(false)},
-		KonfluxInfo:               &konfluxv1alpha1.KonfluxInfoConfig{Enabled: boolPtr(false)},
-		NamespaceLister:           &konfluxv1alpha1.NamespaceListerConfig{Enabled: boolPtr(false)},
-		EnterpriseContract:        &konfluxv1alpha1.EnterpriseContractConfig{Enabled: boolPtr(false)},
-		CertManager:               &konfluxv1alpha1.CertManagerConfig{Enabled: boolPtr(false)},
-		DefaultTenant:             &konfluxv1alpha1.DefaultTenantConfig{Enabled: boolPtr(false)},
-		CLI:                       &konfluxv1alpha1.CLIConfig{Enabled: boolPtr(false)},
+		InstallationType: konfluxv1alpha1.InstallationTypeStandard,
 	}
 }
 
@@ -76,101 +64,57 @@ func TestReconcile_ApplyErrors(t *testing.T) {
 		{
 			name:     "ApplicationAPI",
 			failKind: "KonfluxApplicationAPI",
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.ApplicationAPI = &konfluxv1alpha1.ApplicationAPIConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:   standardSpec,
 		},
 		{
 			name:     "BuildService",
 			failKind: "KonfluxBuildService",
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.KonfluxBuildService = &konfluxv1alpha1.BuildServiceConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:   standardSpec,
 		},
 		{
 			name:     "IntegrationService",
 			failKind: "KonfluxIntegrationService",
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.KonfluxIntegrationService = &konfluxv1alpha1.IntegrationServiceConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:   standardSpec,
 		},
 		{
 			name:     "ReleaseService",
 			failKind: "KonfluxReleaseService",
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.KonfluxReleaseService = &konfluxv1alpha1.ReleaseServiceConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:   standardSpec,
 		},
 		{
 			name:     "UI",
 			failKind: "KonfluxUI",
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.KonfluxUI = &konfluxv1alpha1.KonfluxUIConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:   standardSpec,
 		},
 		{
 			name:     "RBAC",
 			failKind: "KonfluxRBAC",
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.RBAC = &konfluxv1alpha1.RBACConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:   standardSpec,
 		},
 		{
 			name:     "Info",
 			failKind: "KonfluxInfo",
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.KonfluxInfo = &konfluxv1alpha1.KonfluxInfoConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:   standardSpec,
 		},
 		{
 			name:     "NamespaceLister",
 			failKind: "KonfluxNamespaceLister",
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.NamespaceLister = &konfluxv1alpha1.NamespaceListerConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:   standardSpec,
 		},
 		{
 			name:     "EnterpriseContract",
 			failKind: "KonfluxEnterpriseContract",
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.EnterpriseContract = &konfluxv1alpha1.EnterpriseContractConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:   standardSpec,
 		},
 		{
 			name:     "CertManager",
 			failKind: "KonfluxCertManager",
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.CertManager = &konfluxv1alpha1.CertManagerConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:   standardSpec,
 		},
 		{
 			name:     "CLI",
 			failKind: "KonfluxCLI",
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.CLI = &konfluxv1alpha1.CLIConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:   standardSpec,
 		},
 	}
 
@@ -228,101 +172,57 @@ func TestReconcile_StatusGetErrors(t *testing.T) {
 		{
 			name:       "BuildService",
 			failTarget: func(obj client.Object) bool { _, ok := obj.(*konfluxv1alpha1.KonfluxBuildService); return ok },
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.KonfluxBuildService = &konfluxv1alpha1.BuildServiceConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:     standardSpec,
 		},
 		{
 			name:       "IntegrationService",
 			failTarget: func(obj client.Object) bool { _, ok := obj.(*konfluxv1alpha1.KonfluxIntegrationService); return ok },
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.KonfluxIntegrationService = &konfluxv1alpha1.IntegrationServiceConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:     standardSpec,
 		},
 		{
 			name:       "ReleaseService",
 			failTarget: func(obj client.Object) bool { _, ok := obj.(*konfluxv1alpha1.KonfluxReleaseService); return ok },
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.KonfluxReleaseService = &konfluxv1alpha1.ReleaseServiceConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:     standardSpec,
 		},
 		{
 			name:       "UI",
 			failTarget: func(obj client.Object) bool { _, ok := obj.(*konfluxv1alpha1.KonfluxUI); return ok },
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.KonfluxUI = &konfluxv1alpha1.KonfluxUIConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:     standardSpec,
 		},
 		{
 			name:       "RBAC",
 			failTarget: func(obj client.Object) bool { _, ok := obj.(*konfluxv1alpha1.KonfluxRBAC); return ok },
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.RBAC = &konfluxv1alpha1.RBACConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:     standardSpec,
 		},
 		{
 			name:       "Info",
 			failTarget: func(obj client.Object) bool { _, ok := obj.(*konfluxv1alpha1.KonfluxInfo); return ok },
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.KonfluxInfo = &konfluxv1alpha1.KonfluxInfoConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:     standardSpec,
 		},
 		{
 			name:       "NamespaceLister",
 			failTarget: func(obj client.Object) bool { _, ok := obj.(*konfluxv1alpha1.KonfluxNamespaceLister); return ok },
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.NamespaceLister = &konfluxv1alpha1.NamespaceListerConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:     standardSpec,
 		},
 		{
 			name:       "EnterpriseContract",
 			failTarget: func(obj client.Object) bool { _, ok := obj.(*konfluxv1alpha1.KonfluxEnterpriseContract); return ok },
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.EnterpriseContract = &konfluxv1alpha1.EnterpriseContractConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:     standardSpec,
 		},
 		{
 			name:       "ApplicationAPI",
 			failTarget: func(obj client.Object) bool { _, ok := obj.(*konfluxv1alpha1.KonfluxApplicationAPI); return ok },
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.ApplicationAPI = &konfluxv1alpha1.ApplicationAPIConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:     standardSpec,
 		},
 		{
 			name:       "CLI",
 			failTarget: func(obj client.Object) bool { _, ok := obj.(*konfluxv1alpha1.KonfluxCLI); return ok },
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.CLI = &konfluxv1alpha1.CLIConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:     standardSpec,
 		},
 		{
 			name:       "CertManager",
 			failTarget: func(obj client.Object) bool { _, ok := obj.(*konfluxv1alpha1.KonfluxCertManager); return ok },
-			specFn: func() konfluxv1alpha1.KonfluxSpec {
-				s := allDisabledSpec()
-				s.CertManager = &konfluxv1alpha1.CertManagerConfig{Enabled: boolPtr(true)}
-				return s
-			},
+			specFn:     standardSpec,
 		},
 	}
 

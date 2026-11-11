@@ -2342,7 +2342,7 @@ func (in *KonfluxSpec) DeepCopyInto(out *KonfluxSpec) {
 	if in.ApplicationAPI != nil {
 		in, out := &in.ApplicationAPI, &out.ApplicationAPI
 		*out = new(ApplicationAPIConfig)
-		(*in).DeepCopyInto(*out)
+		**out = **in
 	}
 	if in.ImageController != nil {
 		in, out := &in.ImageController, &out.ImageController
@@ -2382,7 +2382,7 @@ func (in *KonfluxSpec) DeepCopyInto(out *KonfluxSpec) {
 	if in.EnterpriseContract != nil {
 		in, out := &in.EnterpriseContract, &out.EnterpriseContract
 		*out = new(EnterpriseContractConfig)
-		(*in).DeepCopyInto(*out)
+		**out = **in
 	}
 	if in.CertManager != nil {
 		in, out := &in.CertManager, &out.CertManager
@@ -2407,12 +2407,12 @@ func (in *KonfluxSpec) DeepCopyInto(out *KonfluxSpec) {
 	if in.RBAC != nil {
 		in, out := &in.RBAC, &out.RBAC
 		*out = new(RBACConfig)
-		(*in).DeepCopyInto(*out)
+		**out = **in
 	}
 	if in.CLI != nil {
 		in, out := &in.CLI, &out.CLI
 		*out = new(CLIConfig)
-		(*in).DeepCopyInto(*out)
+		**out = **in
 	}
 	if in.ComponentMetrics != nil {
 		in, out := &in.ComponentMetrics, &out.ComponentMetrics

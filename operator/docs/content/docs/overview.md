@@ -33,9 +33,11 @@ any conformant distribution.
   resource limits, ingress settings, or authentication connectors. The operator
   reconciles the change without manual intervention.
 
-- **Selective deployment** - every component has an `enabled` field that controls
-  whether it is deployed. Most components default to enabled; image controller,
-  internal registry, and telemetry default to disabled (opt-in). Disabled components
+- **Installation types** - the `installationType` field controls which services the
+  operator deploys. `standard` (default) deploys all core services; `spoke` deploys
+  only Info and RBAC for MultiKueue spoke clusters. Three optional components
+  (image controller, internal registry, telemetry) have their own `enabled` field
+  and can be toggled independently of the installation type. Disabled components
   are cleaned up automatically - no orphaned resources left behind.
 
 - **Identity provider configuration** - Dex connectors (GitHub, OpenShift, OIDC, LDAP,
@@ -83,27 +85,28 @@ any conformant distribution.
 
 The operator manages the following platform components through the `Konflux` CR:
 
-All components support selective deployment via their `enabled` field in the `Konflux`
-CR spec. Components marked _(opt-in)_ default to disabled and must be explicitly enabled;
-all others default to enabled but can be disabled.
+The `installationType` field selects which components the operator deploys:
+`standard` (default) deploys all core services, while `spoke` deploys only Info and
+RBAC. Components marked _(opt-in)_ have their own `enabled` field and can be toggled
+independently of the installation type.
 
-| Component | Default | Description |
+| Component | Installation type | Description |
 |---|---|---|
-| **UI** | enabled | The Konflux web interface, Caddy reverse proxy, and [Dex](https://dexidp.io/) identity provider. Supports NodePort, Ingress, and OpenShift Route. |
-| **Build Service** | enabled | Controller that manages Tekton-based build pipelines for application components. |
-| **Integration Service** | enabled | Controller that triggers integration test pipelines after each build and evaluates their results. |
-| **Release Service** | enabled | Controller that manages the `Release`, `ReleasePlan`, and `ReleasePlanAdmission` lifecycle for publishing artifacts. |
-| **Application API** | enabled | CRDs and controllers for `Application`, `Component`, `Snapshot`, and related platform resources. |
-| **Conforma** | enabled | Policy evaluation engine used to gate releases against supply chain compliance rules. |
-| **Namespace Lister** | enabled | Service that enumerates tenant namespaces for the UI workspace selector. |
-| **RBAC** | enabled | Cluster roles (`konflux-admin-user-actions`, `konflux-maintainer-user-actions`, `konflux-contributor-user-actions`) and bindings. |
-| **Konflux Info** | enabled | ConfigMap-based cluster configuration consumed by PipelineRuns (OIDC issuer, signing URLs, environment metadata). |
-| **CLI** | enabled | CLI tooling resources for the Konflux platform. |
-| **Cert Manager** | enabled | Creates a `ClusterIssuer` for TLS certificates across platform components. |
-| **Default Tenant** | enabled | A shared `default-tenant` namespace where all authenticated users have maintainer access (convenient for development; disable for strict multi-tenancy). |
-| **Image Controller** _(opt-in)_ | disabled | Automatically provisions Quay.io image repositories when components are onboarded via the UI. |
-| **Internal Registry** _(opt-in)_ | disabled | An in-cluster OCI registry for local or air-gapped environments. |
-| **Telemetry** _(opt-in)_ | disabled | Segment bridge for usage telemetry reporting. |
+| **UI** | standard | The Konflux web interface, Caddy reverse proxy, and [Dex](https://dexidp.io/) identity provider. Supports NodePort, Ingress, and OpenShift Route. |
+| **Build Service** | standard | Controller that manages Tekton-based build pipelines for application components. |
+| **Integration Service** | standard | Controller that triggers integration test pipelines after each build and evaluates their results. |
+| **Release Service** | standard | Controller that manages the `Release`, `ReleasePlan`, and `ReleasePlanAdmission` lifecycle for publishing artifacts. |
+| **Application API** | standard | CRDs and controllers for `Application`, `Component`, `Snapshot`, and related platform resources. |
+| **Conforma** | standard | Policy evaluation engine used to gate releases against supply chain compliance rules. |
+| **Namespace Lister** | standard | Service that enumerates tenant namespaces for the UI workspace selector. |
+| **RBAC** | standard + spoke | Cluster roles (`konflux-admin-user-actions`, `konflux-maintainer-user-actions`, `konflux-contributor-user-actions`) and bindings. |
+| **Konflux Info** | standard + spoke | ConfigMap-based cluster configuration consumed by PipelineRuns (OIDC issuer, signing URLs, environment metadata). |
+| **CLI** | standard | CLI tooling resources for the Konflux platform. |
+| **Cert Manager** | standard | Creates a `ClusterIssuer` for TLS certificates across platform components. |
+| **Default Tenant** | standard | A shared `default-tenant` namespace where all authenticated users have maintainer access (convenient for development; disable for strict multi-tenancy). |
+| **Image Controller** _(opt-in)_ | any (independent) | Automatically provisions Quay.io image repositories when components are onboarded via the UI. |
+| **Internal Registry** _(opt-in)_ | any (independent) | An in-cluster OCI registry for local or air-gapped environments. |
+| **Telemetry** _(opt-in)_ | any (independent) | Segment bridge for usage telemetry reporting. |
 
 To learn more about configuring specific components, see the [Guides]({{< relref "guides" >}}) section.
 
