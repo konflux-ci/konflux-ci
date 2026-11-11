@@ -91,6 +91,24 @@ var _ = Describe("generate-proxy-config.sh", func() {
 		Expect(watson).NotTo(ContainSubstring("__WATSON_HOST__"))
 	})
 
+	It("renders a Tekton Results hostname without a trailing dot", func() {
+		By("running the script with a hostname that has no trailing dot")
+		out, err := runProxyConfigScript(scriptDir, map[string]string{
+			"TEMPLATES_DIR":           templates,
+			"SNIPPETS_DIR":            snippets,
+			"SERVICE_CA_PATH":         serviceCA,
+			"STATIC_DIR":              staticDir,
+			"TEKTON_RESULTS_HOSTNAME": "tekton-results.example.svc",
+		})
+		Expect(err).NotTo(HaveOccurred(), string(out))
+
+		By("appending the template port after the hostname")
+		tekton := readSnippet(snippets, "tekton-results.caddy")
+		Expect(tekton).To(ContainSubstring("https://tekton-results.example.svc:8080"))
+		Expect(tekton).NotTo(ContainSubstring("https://tekton-results.example.svc.:8080"))
+		Expect(tekton).NotTo(ContainSubstring("__TEKTON_RESULTS_HOSTNAME__"))
+	})
+
 	DescribeTable("rejects a hostname that is not a DNS name",
 		func(endpointEnv map[string]string, variable, rejected string, unwritten []string) {
 			By("running the script with a hostname that contains a slash")
