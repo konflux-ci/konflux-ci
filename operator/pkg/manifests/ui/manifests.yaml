@@ -14,6 +14,12 @@ metadata:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
+  name: metrics-scraper
+  namespace: konflux-ui
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
   name: proxy
   namespace: konflux-ui
 ---
@@ -123,321 +129,253 @@ subjects:
   name: proxy
   namespace: konflux-ui
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  annotations:
+    konflux.konflux-ci.dev/metrics-scraper-binding: "true"
+  name: prometheus-konflux-ui-proxy-metrics-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: konflux-ui-proxy-metrics-reader
+subjects: []
+---
 apiVersion: v1
 data:
-  kite.caddy: "handle_path /api/k8s/plugins/kite/* {\n    route {\n        forward_auth
-    127.0.0.1:6000 {\n            uri /oauth2/auth\n            header_up Authorization
-    {http.request.header.Authorization}\n            copy_headers X-Auth-Request-Email\n
-    \       }\n\t\timpersonate {\n\t\t\talways_include system:authenticated\n\t\t}\n\t\tinject_cached_vars\n\t\trequest_header
-    -Authorization\n        reverse_proxy https://__KITE_HOSTNAME__ {\n            header_up
-    Authorization \"Bearer {http.vars.kube_token}\"\n            import /mnt/caddy-snippets/backend-tls.conf\n
-    \       }\n    }\n}\n"
-  kubearchive.caddy: "handle_path /api/k8s/plugins/kubearchive/* {\n    route {\n
-    \       forward_auth 127.0.0.1:6000 {\n            uri /oauth2/auth\n            header_up
-    Authorization {http.request.header.Authorization}\n            copy_headers X-Auth-Request-Email\n
-    \       }\n\t\timpersonate {\n\t\t\talways_include system:authenticated\n\t\t}\n\t\tinject_cached_vars\n\t\trequest_header
-    -Authorization\n        reverse_proxy https://__KUBEARCHIVE_HOSTNAME__:8081 {\n
-    \           header_up Authorization \"Bearer {http.vars.kube_token}\"\n            import
-    /mnt/caddy-snippets/backend-tls.conf\n        }\n    }\n}\n"
-  tekton-results.caddy: "handle_path /api/k8s/plugins/tekton-results/* {\n    route
-    {\n        forward_auth 127.0.0.1:6000 {\n            uri /oauth2/auth\n            header_up
-    Authorization {http.request.header.Authorization}\n            copy_headers X-Auth-Request-Email\n
-    \       }\n\t\timpersonate {\n\t\t\talways_include system:authenticated\n\t\t}\n\t\tinject_cached_vars\n\t\trequest_header
-    -Authorization\n        reverse_proxy https://__TEKTON_RESULTS_HOSTNAME__:8080
-    {\n            # TODO: switch to {http.vars.backend_token} once Tekton Results\n
-    \           # accepts the \"konflux-backend\" audience in TokenReview.\n            #
-    See backend-token volume in proxy.yaml for context.\n            header_up Authorization
-    \"Bearer {http.vars.kube_token}\"\n            import /mnt/caddy-snippets/backend-tls.conf\n
-    \       }\n    }\n}\n"
-  watson.caddy: |
-    handle_path /api/chatbot/* {
-        route {
-            forward_auth 127.0.0.1:6000 {
-                uri /oauth2/auth
-                header_up Authorization {http.request.header.Authorization}
-                copy_headers X-Auth-Request-Email
-            }
-            inject_cached_vars
-            request_header -Authorization
-            reverse_proxy https://__WATSON_HOST__ {
-                header_up Authorization "Basic {http.vars.watson_auth}"
-                header_up Host __WATSON_HOST__
-                import /mnt/caddy-snippets/watson-tls.conf
-            }
-        }
-    }
+  kite.caddy: "handle_path /api/k8s/plugins/kite/* {\r\n    route {\r\n        forward_auth
+    127.0.0.1:6000 {\r\n            uri /oauth2/auth\r\n            header_up Authorization
+    {http.request.header.Authorization}\r\n            copy_headers X-Auth-Request-Email\r\n
+    \       }\r\n\t\timpersonate {\r\n\t\t\talways_include system:authenticated\r\n\t\t}\r\n\t\tinject_cached_vars\r\n\t\trequest_header
+    -Authorization\r\n        reverse_proxy https://__KITE_HOSTNAME__ {\r\n            header_up
+    Authorization \"Bearer {http.vars.kube_token}\"\r\n            import /mnt/caddy-snippets/backend-tls.conf\r\n
+    \       }\r\n    }\r\n}\r\n"
+  kubearchive.caddy: "handle_path /api/k8s/plugins/kubearchive/* {\r\n    route {\r\n
+    \       forward_auth 127.0.0.1:6000 {\r\n            uri /oauth2/auth\r\n            header_up
+    Authorization {http.request.header.Authorization}\r\n            copy_headers
+    X-Auth-Request-Email\r\n        }\r\n\t\timpersonate {\r\n\t\t\talways_include
+    system:authenticated\r\n\t\t}\r\n\t\tinject_cached_vars\r\n\t\trequest_header
+    -Authorization\r\n        reverse_proxy https://__KUBEARCHIVE_HOSTNAME__:8081
+    {\r\n            header_up Authorization \"Bearer {http.vars.kube_token}\"\r\n
+    \           import /mnt/caddy-snippets/backend-tls.conf\r\n        }\r\n    }\r\n}\r\n"
+  tekton-results.caddy: "handle_path /api/k8s/plugins/tekton-results/* {\r\n    route
+    {\r\n        forward_auth 127.0.0.1:6000 {\r\n            uri /oauth2/auth\r\n
+    \           header_up Authorization {http.request.header.Authorization}\r\n            copy_headers
+    X-Auth-Request-Email\r\n        }\r\n\t\timpersonate {\r\n\t\t\talways_include
+    system:authenticated\r\n\t\t}\r\n\t\tinject_cached_vars\r\n\t\trequest_header
+    -Authorization\r\n        reverse_proxy https://__TEKTON_RESULTS_HOSTNAME__:8080
+    {\r\n            # TODO: switch to {http.vars.backend_token} once Tekton Results\r\n
+    \           # accepts the \"konflux-backend\" audience in TokenReview.\r\n            #
+    See backend-token volume in proxy.yaml for context.\r\n            header_up Authorization
+    \"Bearer {http.vars.kube_token}\"\r\n            import /mnt/caddy-snippets/backend-tls.conf\r\n
+    \       }\r\n    }\r\n}\r\n"
+  watson.caddy: "handle_path /api/chatbot/* {\r\n    route {\r\n        forward_auth
+    127.0.0.1:6000 {\r\n            uri /oauth2/auth\r\n            header_up Authorization
+    {http.request.header.Authorization}\r\n            copy_headers X-Auth-Request-Email\r\n
+    \       }\r\n        inject_cached_vars\r\n        request_header -Authorization\r\n
+    \       reverse_proxy https://__WATSON_HOST__ {\r\n            header_up Authorization
+    \"Basic {http.vars.watson_auth}\"\r\n            header_up Host __WATSON_HOST__\r\n
+    \           import /mnt/caddy-snippets/watson-tls.conf\r\n        }\r\n    }\r\n}\r\n"
 kind: ConfigMap
 metadata:
-  name: proxy-caddy-templates-6mtb54gdff
+  name: proxy-caddy-templates-9g4tt4f79d
   namespace: konflux-ui
 ---
 apiVersion: v1
 data:
-  Caddyfile: "{\n\tauto_https off\n\tadmin off\n\t# Enable HTTP middleware metrics
-    (scraped via :2112 /metrics).\n\t# Do not add per_host — Host labels are unbounded
-    on this catch-all :9443 site.\n\tmetrics\n\torder inject_cached_vars before reverse_proxy\n\tfile_watcher
-    {\n\t\tcache kube_token /var/run/secrets/konflux-ci.dev/serviceaccount/token\n\t\tcache
-    backend_token /var/run/secrets/konflux-ci.dev/backend/token\n\t\tcache watson_auth
-    /mnt/watson-config/API_KEY {\n\t\t\tdefault \"\"\n\t\t}\n\t\twatch /var/run/secrets/kubernetes.io/serviceaccount\n\t\twatch
-    /mnt/cluster-ca\n\t\twatch /mnt/service-ca\n\t\twatch /mnt/serving-cert\n\t}\n}\n\n#
-    TODO: protect metrics with kube-rbac-proxy sidecar (https://github.com/openshift/kube-rbac-proxy)\n:2112
-    {\n\tmetrics /metrics\n}\n\n:9443 {\n\ttls {\n\t\tget_certificate file {\n\t\t\tcert
-    /mnt/serving-cert/tls.crt\n\t\t\tkey /mnt/serving-cert/tls.key\n\t\t}\n\t}\n\n\t#
-    Strip any client-supplied impersonation and proxy-auth headers to\n\t# prevent
-    spoofing. This runs at the server level, before any\n\t# handle/route blocks.\n\trequest_header
-    -Impersonate-User\n\trequest_header -Impersonate-Group\n\trequest_header -Impersonate-Uid\n\trequest_header
-    -Impersonate-Extra-*\n\trequest_header -X-User\n\trequest_header -X-Group\n\trequest_header
-    -X-Auth-Request-*\n\n\t# Health endpoint for liveness/readiness probes\n\thandle
-    /health {\n\t\trespond 200\n\t}\n\n\t# Segment bridge files\n\thandle /segment/*
-    {\n\t\troot * /opt/app-root/src\n\t\theader Content-Type text/plain\n\t\tfile_server\n\t}\n\n\t#
-    OAuth2 proxy - browser-facing auth UI/callback\n\thandle /oauth2/* {\n\t\treverse_proxy
-    127.0.0.1:6000\n\t}\n\n\t# Namespace lister (GET only on exact paths)\n\t# Authorization
-    uses the authenticated user plus system:authenticated only.\n\t# always_include
-    appends that group after any X-Auth-Request-Groups values;\n\t# this route does
-    not copy that header, so only system:authenticated is set.\n\t# The konflux-proxy
-    ClusterRole resourceNames rule constrains Impersonate-Group\n\t# on the kube API;
-    namespace-lister authorizes from X-Group itself, so that\n\t# ClusterRole does
-    not enforce the ceiling here.\n\t@nsListGet {\n\t\tmethod GET\n\t\tpath /api/k8s/api/v1/namespaces
-    /api/k8s/api/v1/namespaces/\n\t}\n\thandle @nsListGet {\n\t\troute {\n\t\t\tforward_auth
-    127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\theader_up Authorization {http.request.header.Authorization}\n\t\t\t\tcopy_headers
-    X-Auth-Request-Email\n\t\t\t}\n\t\t\timpersonate {\n\t\t\t\ttarget_user X-User\n\t\t\t\ttarget_group
-    X-Group\n\t\t\t\talways_include system:authenticated\n\t\t\t}\n\t\t\t# Drop the
-    client Dex JWT after forward_auth. reverse_proxy copies\n\t\t\t# incoming headers;
-    this backend authenticates via X-User/X-Group.\n\t\t\trequest_header -Authorization\n\t\t\trewrite
-    * /api/v1/namespaces\n\t\t\treverse_proxy https://namespace-lister.namespace-lister.svc.cluster.local:8080
-    {\n\t\t\t\theader_down -X-Correlation-ID\n\t\t\t\ttransport http {\n\t\t\t\t\tread_timeout
-    30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool file /mnt/cluster-ca/ca-bundle.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
+  Caddyfile: "{\r\n\tauto_https off\r\n\tadmin off\r\n\t# Enable HTTP middleware metrics
+    (scraped via :2112 /metrics).\r\n\t# Do not add per_host — Host labels are unbounded
+    on this catch-all :9443 site.\r\n\tmetrics\r\n\torder inject_cached_vars before
+    reverse_proxy\r\n\tfile_watcher {\r\n\t\tcache kube_token /var/run/secrets/konflux-ci.dev/serviceaccount/token\r\n\t\tcache
+    backend_token /var/run/secrets/konflux-ci.dev/backend/token\r\n\t\tcache watson_auth
+    /mnt/watson-config/API_KEY {\r\n\t\t\tdefault \"\"\r\n\t\t}\r\n\t\twatch /var/run/secrets/kubernetes.io/serviceaccount\r\n\t\twatch
+    /mnt/cluster-ca\r\n\t\twatch /mnt/service-ca\r\n\t\twatch /mnt/serving-cert\r\n\t}\r\n}\r\n\r\n#
+    TODO: protect metrics with kube-rbac-proxy sidecar (https://github.com/openshift/kube-rbac-proxy)\r\n:2112
+    {\r\n\ttls {\r\n\t\tget_certificate file {\r\n\t\t\tcert /mnt/serving-cert/tls.crt\r\n\t\t\tkey
+    /mnt/serving-cert/tls.key\r\n\t\t}\r\n\t}\r\n\tmetrics /metrics\r\n}\r\n\r\n:9443
+    {\r\n\ttls {\r\n\t\tget_certificate file {\r\n\t\t\tcert /mnt/serving-cert/tls.crt\r\n\t\t\tkey
+    /mnt/serving-cert/tls.key\r\n\t\t}\r\n\t}\r\n\r\n\t# Strip any client-supplied
+    impersonation and proxy-auth headers to\r\n\t# prevent spoofing. This runs at
+    the server level, before any\r\n\t# handle/route blocks.\r\n\trequest_header -Impersonate-User\r\n\trequest_header
+    -Impersonate-Group\r\n\trequest_header -Impersonate-Uid\r\n\trequest_header -Impersonate-Extra-*\r\n\trequest_header
+    -X-User\r\n\trequest_header -X-Group\r\n\trequest_header -X-Auth-Request-*\r\n\r\n\t#
+    Health endpoint for liveness/readiness probes\r\n\thandle /health {\r\n\t\trespond
+    200\r\n\t}\r\n\r\n\t# Segment bridge files\r\n\thandle /segment/* {\r\n\t\troot
+    * /opt/app-root/src\r\n\t\theader Content-Type text/plain\r\n\t\tfile_server\r\n\t}\r\n\r\n\t#
+    OAuth2 proxy - browser-facing auth UI/callback\r\n\thandle /oauth2/* {\r\n\t\treverse_proxy
+    127.0.0.1:6000\r\n\t}\r\n\r\n\t# Namespace lister (GET only on exact paths)\r\n\t#
+    Authorization uses the authenticated user plus system:authenticated only.\r\n\t#
+    always_include appends that group after any X-Auth-Request-Groups values;\r\n\t#
+    this route does not copy that header, so only system:authenticated is set.\r\n\t#
+    The konflux-proxy ClusterRole resourceNames rule constrains Impersonate-Group\r\n\t#
+    on the kube API; namespace-lister authorizes from X-Group itself, so that\r\n\t#
+    ClusterRole does not enforce the ceiling here.\r\n\t@nsListGet {\r\n\t\tmethod
+    GET\r\n\t\tpath /api/k8s/api/v1/namespaces /api/k8s/api/v1/namespaces/\r\n\t}\r\n\thandle
+    @nsListGet {\r\n\t\troute {\r\n\t\t\tforward_auth 127.0.0.1:6000 {\r\n\t\t\t\turi
+    /oauth2/auth\r\n\t\t\t\theader_up Authorization {http.request.header.Authorization}\r\n\t\t\t\tcopy_headers
+    X-Auth-Request-Email\r\n\t\t\t}\r\n\t\t\timpersonate {\r\n\t\t\t\ttarget_user
+    X-User\r\n\t\t\t\ttarget_group X-Group\r\n\t\t\t\talways_include system:authenticated\r\n\t\t\t}\r\n\t\t\t#
+    Drop the client Dex JWT after forward_auth. reverse_proxy copies\r\n\t\t\t# incoming
+    headers; this backend authenticates via X-User/X-Group.\r\n\t\t\trequest_header
+    -Authorization\r\n\t\t\trewrite * /api/v1/namespaces\r\n\t\t\treverse_proxy https://namespace-lister.namespace-lister.svc.cluster.local:8080
+    {\r\n\t\t\t\theader_down -X-Correlation-ID\r\n\t\t\t\ttransport http {\r\n\t\t\t\t\tread_timeout
+    30m\r\n\t\t\t\t\twrite_timeout 30m\r\n\t\t\t\t\ttls_trust_pool file /mnt/cluster-ca/ca-bundle.crt\r\n\t\t\t\t}\r\n\t\t\t}\r\n\t\t}\r\n\t}\r\n\r\n\t#
     Backend snippets (tekton-results, kubearchive, etc.) loaded from init-generated
-    configs.\n\t# NOTE: Imported snippets MUST use paths more specific than /api/k8s/
-    to avoid\n\t# shadowing the Kube API catch-all handler below. Caddy evaluates
-    handle blocks\n\t# by specificity (longest path match first), so e.g. /api/k8s/plugins/tekton-results/\n\t#
-    is safe because it is more specific than /api/k8s/.\n\timport /mnt/caddy-snippets/*.caddy\n\n\t#
-    WebSocket to Kube API\n\thandle_path /wss/k8s/* {\n\t\troute {\n\t\t\tforward_auth
-    127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\theader_up Authorization {http.request.header.Authorization}\n\t\t\t\tcopy_headers
-    X-Auth-Request-Email\n\t\t\t}\n\t\t\timpersonate {\n\t\t\t\talways_include system:authenticated\n\t\t\t}\n\t\t\tinject_cached_vars\n\t\t\t#
-    Strip the client JWT after forward_auth. Do not use\n\t\t\t# header_up -Authorization
-    in the same reverse_proxy that sets\n\t\t\t# Authorization: Caddy can apply the
-    delete after the set and\n\t\t\t# drop the proxy SA token, so kube sees system:anonymous.\n\t\t\trequest_header
-    -Authorization\n\t\t\treverse_proxy https://kubernetes.default.svc {\n\t\t\t\theader_up
-    Authorization \"Bearer {http.vars.kube_token}\"\n\t\t\t\ttransport http {\n\t\t\t\t\tread_timeout
-    30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
-    Kube API (catch-all for /api/k8s/)\n\thandle_path /api/k8s/* {\n\t\troute {\n\t\t\tforward_auth
-    127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\theader_up Authorization {http.request.header.Authorization}\n\t\t\t\tcopy_headers
-    X-Auth-Request-Email\n\t\t\t}\n\t\t\timpersonate {\n\t\t\t\talways_include system:authenticated\n\t\t\t}\n\t\t\tinject_cached_vars\n\t\t\trequest_header
-    -Authorization\n\t\t\treverse_proxy https://kubernetes.default.svc {\n\t\t\t\theader_up
-    Authorization \"Bearer {http.vars.kube_token}\"\n\t\t\t\ttransport http {\n\t\t\t\t\tread_timeout
-    30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
-    Dex Identity Provider\n\thandle /idp/* {\n\t\treverse_proxy https://dex.konflux-ui.svc.cluster.local:9443
-    {\n\t\t\theader_up X-Forwarded-Port \"9443\"\n\t\t\ttransport http {\n\t\t\t\ttls_trust_pool
-    file /mnt/serving-cert/ca.crt\n\t\t\t}\n\t\t}\n\t}\n\n\t# Static SPA (catch-all,
-    must be last)\n\thandle {\n\t\troot * /opt/app-root/src/static-content\n\t\ttry_files
-    {path} /index.html\n\t\tfile_server\n\t}\n}\n"
+    configs.\r\n\t# NOTE: Imported snippets MUST use paths more specific than /api/k8s/
+    to avoid\r\n\t# shadowing the Kube API catch-all handler below. Caddy evaluates
+    handle blocks\r\n\t# by specificity (longest path match first), so e.g. /api/k8s/plugins/tekton-results/\r\n\t#
+    is safe because it is more specific than /api/k8s/.\r\n\timport /mnt/caddy-snippets/*.caddy\r\n\r\n\t#
+    WebSocket to Kube API\r\n\thandle_path /wss/k8s/* {\r\n\t\troute {\r\n\t\t\tforward_auth
+    127.0.0.1:6000 {\r\n\t\t\t\turi /oauth2/auth\r\n\t\t\t\theader_up Authorization
+    {http.request.header.Authorization}\r\n\t\t\t\tcopy_headers X-Auth-Request-Email\r\n\t\t\t}\r\n\t\t\timpersonate
+    {\r\n\t\t\t\talways_include system:authenticated\r\n\t\t\t}\r\n\t\t\tinject_cached_vars\r\n\t\t\t#
+    Strip the client JWT after forward_auth. Do not use\r\n\t\t\t# header_up -Authorization
+    in the same reverse_proxy that sets\r\n\t\t\t# Authorization: Caddy can apply
+    the delete after the set and\r\n\t\t\t# drop the proxy SA token, so kube sees
+    system:anonymous.\r\n\t\t\trequest_header -Authorization\r\n\t\t\treverse_proxy
+    https://kubernetes.default.svc {\r\n\t\t\t\theader_up Authorization \"Bearer {http.vars.kube_token}\"\r\n\t\t\t\ttransport
+    http {\r\n\t\t\t\t\tread_timeout 30m\r\n\t\t\t\t\twrite_timeout 30m\r\n\t\t\t\t\ttls_trust_pool
+    file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt\r\n\t\t\t\t}\r\n\t\t\t}\r\n\t\t}\r\n\t}\r\n\r\n\t#
+    Kube API (catch-all for /api/k8s/)\r\n\thandle_path /api/k8s/* {\r\n\t\troute
+    {\r\n\t\t\tforward_auth 127.0.0.1:6000 {\r\n\t\t\t\turi /oauth2/auth\r\n\t\t\t\theader_up
+    Authorization {http.request.header.Authorization}\r\n\t\t\t\tcopy_headers X-Auth-Request-Email\r\n\t\t\t}\r\n\t\t\timpersonate
+    {\r\n\t\t\t\talways_include system:authenticated\r\n\t\t\t}\r\n\t\t\tinject_cached_vars\r\n\t\t\trequest_header
+    -Authorization\r\n\t\t\treverse_proxy https://kubernetes.default.svc {\r\n\t\t\t\theader_up
+    Authorization \"Bearer {http.vars.kube_token}\"\r\n\t\t\t\ttransport http {\r\n\t\t\t\t\tread_timeout
+    30m\r\n\t\t\t\t\twrite_timeout 30m\r\n\t\t\t\t\ttls_trust_pool file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt\r\n\t\t\t\t}\r\n\t\t\t}\r\n\t\t}\r\n\t}\r\n\r\n\t#
+    Dex Identity Provider\r\n\thandle /idp/* {\r\n\t\treverse_proxy https://dex.konflux-ui.svc.cluster.local:9443
+    {\r\n\t\t\theader_up X-Forwarded-Port \"9443\"\r\n\t\t\ttransport http {\r\n\t\t\t\ttls_trust_pool
+    file /mnt/serving-cert/ca.crt\r\n\t\t\t}\r\n\t\t}\r\n\t}\r\n\r\n\t# Static SPA
+    (catch-all, must be last)\r\n\thandle {\r\n\t\troot * /opt/app-root/src/static-content\r\n\t\ttry_files
+    {path} /index.html\r\n\t\tfile_server\r\n\t}\r\n}\r\n"
 kind: ConfigMap
 metadata:
-  name: proxy-caddyfile-b246f95bdc
+  name: proxy-caddyfile-9825t4mdgt
   namespace: konflux-ui
 ---
 apiVersion: v1
 data:
-  generate-proxy-config.sh: |
-    #!/bin/bash
-
-    set -eu
-
-    # Defaults match the proxy pod mounts. Override them to run the script in a unit test.
-    TEMPLATES_DIR=${TEMPLATES_DIR:-/mnt/caddy-templates}
-    SNIPPETS_DIR=${SNIPPETS_DIR:-/mnt/caddy-snippets}
-    SERVICE_CA_PATH=${SERVICE_CA_PATH:-/mnt/service-ca/service-ca.crt}
-
-    # A DNS name with an optional trailing dot and an optional numeric port.
-    # Empty is valid: Tekton Results uses it to clear an override. Keep this
-    # aligned with the kubebuilder Pattern on the proxy hostname fields and with
-    # proxyBackendHostnamePattern in the UI reconciler.
-    proxy_hostname_pattern='^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.?(:[0-9]{1,5})?$'
-
-    for cmd in sed getent printf; do
-      command -v "${cmd}" >/dev/null 2>&1 || { echo "required command not found: ${cmd}"; exit 1; }
-    done
-
-    log() { echo "$(date -Iseconds) generate-proxy-config: $*"; }
-
-    # require_proxy_hostname rejects a value that must not be copied into a Caddyfile.
-    # The failure log names the variable and omits the value.
-    require_proxy_hostname() {
-      local name=$1
-      local value=$2
-      if [[ ! ${value} =~ ${proxy_hostname_pattern} ]]; then
-        log "invalid ${name}"
-        exit 1
-      fi
-    }
-
-    # render_template replaces every placeholder in src. The placeholder is a
-    # fixed string. Callers must pass a value that require_proxy_hostname accepted:
-    # bash still treats '&' and '\' specially in this expansion.
-    render_template() {
-      local placeholder=$1
-      local value=$2
-      local src=$3
-      local dest=$4
-      local template
-      template=$(<"${src}")
-      template=${template//"$placeholder"/$value}
-      printf '%s\n' "${template}" > "${dest}"
-    }
-
-    # resolve_tekton_results outputs the tekton-results hostname.
-    # Env var TEKTON_RESULTS_HOSTNAME takes precedence over DNS probing.
-    resolve_tekton_results() {
-      if [ -n "${TEKTON_RESULTS_HOSTNAME:-}" ]; then
-        echo "${TEKTON_RESULTS_HOSTNAME}"
-        return 0
-      fi
-
-      for host in \
-        tekton-results-api-service.tekton-pipelines.svc.cluster.local \
-        tekton-results-api-service.openshift-pipelines.svc.cluster.local \
-        tekton-results-api-service.tekton-results.svc.cluster.local; do
-        if getent hosts "${host}" > /dev/null 2>&1; then
-          echo "${host}"
-          return 0
-        fi
-      done
-
-      return 1
-    }
-
-    # Process tekton-results template
-    if [ -f "${TEMPLATES_DIR}/tekton-results.caddy" ]; then
-      if hostname=$(resolve_tekton_results); then
-        require_proxy_hostname TEKTON_RESULTS_HOSTNAME "${hostname}"
-        log "tekton-results resolved to ${hostname}"
-        render_template __TEKTON_RESULTS_HOSTNAME__ "${hostname}" \
-          "${TEMPLATES_DIR}/tekton-results.caddy" "${SNIPPETS_DIR}/tekton-results.caddy"
-      else
-        log "tekton-results not available, skipping"
-      fi
-    fi
-
-    # Process kite template
-    if [ "${KITE_ENABLED:-}" = "true" ] && [ -f "${TEMPLATES_DIR}/kite.caddy" ]; then
-      hostname="${KITE_HOSTNAME:-konflux-kite.konflux-kite.svc.cluster.local}"
-      require_proxy_hostname KITE_HOSTNAME "${hostname}"
-      render_template __KITE_HOSTNAME__ "${hostname}" \
-        "${TEMPLATES_DIR}/kite.caddy" "${SNIPPETS_DIR}/kite.caddy"
-      log "kite endpoint enabled (${hostname})"
-    fi
-
-    # Process kubearchive template
-    if [ "${KUBEARCHIVE_ENABLED:-}" = "true" ] && [ -f "${TEMPLATES_DIR}/kubearchive.caddy" ]; then
-      hostname="${KUBEARCHIVE_HOSTNAME:-kubearchive-api-server.product-kubearchive.svc.cluster.local}"
-      require_proxy_hostname KUBEARCHIVE_HOSTNAME "${hostname}"
-      render_template __KUBEARCHIVE_HOSTNAME__ "${hostname}" \
-        "${TEMPLATES_DIR}/kubearchive.caddy" "${SNIPPETS_DIR}/kubearchive.caddy"
-      log "kubearchive endpoint enabled (${hostname})"
-    fi
-
-    # Process watson template.
-    # The API_KEY value is cached by file_watcher directly from the mounted Secret;
-    # the init container only generates the Caddy route and TLS snippets.
-    if [ "${WATSON_ENABLED:-}" = "true" ] && [ -f "${TEMPLATES_DIR}/watson.caddy" ]; then
-      watson_host="${WATSON_HOSTNAME:-api.us-east.assistant.watson.cloud.ibm.com}"
-      watson_default_host="api.us-east.assistant.watson.cloud.ibm.com"
-      require_proxy_hostname WATSON_HOSTNAME "${watson_host}"
-
-      render_template __WATSON_HOST__ "${watson_host}" \
-        "${TEMPLATES_DIR}/watson.caddy" "${SNIPPETS_DIR}/watson.caddy"
-
-      # Generate watson TLS transport config.
-      # - Default external host: always use system roots with SNI (never skip verification).
-      #   One trailing dot is the same host. SNI stays undotted so it matches the
-      #   public certificate. The rendered route keeps the configured hostname.
-      # - Overridden hostname + service CA: use service CA
-      # - Overridden hostname, no service CA: skip verification (in-cluster self-signed)
-      if [ "${watson_host%.}" = "${watson_default_host}" ]; then
-        printf 'transport http {\n    tls_server_name %s\n}\n' "${watson_default_host}" \
-          > "${SNIPPETS_DIR}/watson-tls.conf"
-        log "watson TLS: system roots with SNI (external host)"
-      elif [ -f "${SERVICE_CA_PATH}" ]; then
-        printf 'transport http {\n    tls_trust_pool file %s\n}\n' "${SERVICE_CA_PATH}" \
-          > "${SNIPPETS_DIR}/watson-tls.conf"
-        log "watson TLS: service CA (in-cluster override)"
-      else
-        printf 'transport http {\n    tls_insecure_skip_verify\n}\n' \
-          > "${SNIPPETS_DIR}/watson-tls.conf"
-        log "watson TLS: insecure (in-cluster, no service CA)"
-      fi
-
-      log "watson endpoint enabled (${watson_host})"
-    fi
-
-    # Generate TLS transport config for backend services (Tekton Results, KubeArchive, etc.).
-    # On OpenShift, the service-ca-operator injects the CA bundle into a ConfigMap
-    # mounted at SERVICE_CA_PATH. When present, backends are verified against this CA.
-    # Otherwise, fall back to skipping verification (the default for non-OpenShift
-    # clusters; see docs for how to configure cert-manager to issue trusted certs).
-    if [ -f "${SERVICE_CA_PATH}" ]; then
-      printf 'transport http {\n    tls_trust_pool file %s\n}\n' "${SERVICE_CA_PATH}" \
-        > "${SNIPPETS_DIR}/backend-tls.conf"
-      log "using service CA for backend TLS verification"
-    else
-      printf 'transport http {\n    tls_insecure_skip_verify\n}\n' \
-        > "${SNIPPETS_DIR}/backend-tls.conf"
-      log "no service CA found, backend TLS verification disabled"
-    fi
-
-    STATIC_DIR=${STATIC_DIR:-/opt/app-root/src/static-content}
-    out="${STATIC_DIR}/runtime-config.js"
-    printf 'window.KONFLUX_RUNTIME = window.KONFLUX_RUNTIME || {};\n' > "$out"
-    env | grep '^RUNTIME_' | sort | while IFS= read -r var; do
-      name="${var%%=*}"
-      name="${name#RUNTIME_}"
-      value="${var#*=}"
-      esc=$(printf '%s' "$value" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e "s/$(printf '\r')/\\\\r/g")
-      printf 'window.KONFLUX_RUNTIME["%s"] = "%s";\n' "$name" "$esc" >> "$out"
-    done
-    log "runtime-config.js generated"
-
-    log "done"
+  generate-proxy-config.sh: "#!/bin/bash\r\n\r\nset -eu\r\n\r\n# Defaults match the
+    proxy pod mounts. Override them to run the script in a unit test.\r\nTEMPLATES_DIR=${TEMPLATES_DIR:-/mnt/caddy-templates}\r\nSNIPPETS_DIR=${SNIPPETS_DIR:-/mnt/caddy-snippets}\r\nSERVICE_CA_PATH=${SERVICE_CA_PATH:-/mnt/service-ca/service-ca.crt}\r\n\r\n#
+    A DNS name with an optional trailing dot and an optional numeric port.\r\n# Empty
+    is valid: Tekton Results uses it to clear an override. Keep this\r\n# aligned
+    with the kubebuilder Pattern on the proxy hostname fields and with\r\n# proxyBackendHostnamePattern
+    in the UI reconciler.\r\nproxy_hostname_pattern='^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\\.?(:[0-9]{1,5})?$'\r\n\r\nfor
+    cmd in sed getent printf; do\r\n  command -v \"${cmd}\" >/dev/null 2>&1 || { echo
+    \"required command not found: ${cmd}\"; exit 1; }\r\ndone\r\n\r\nlog() { echo
+    \"$(date -Iseconds) generate-proxy-config: $*\"; }\r\n\r\n# require_proxy_hostname
+    rejects a value that must not be copied into a Caddyfile.\r\n# The failure log
+    names the variable and omits the value.\r\nrequire_proxy_hostname() {\r\n  local
+    name=$1\r\n  local value=$2\r\n  if [[ ! ${value} =~ ${proxy_hostname_pattern}
+    ]]; then\r\n    log \"invalid ${name}\"\r\n    exit 1\r\n  fi\r\n}\r\n\r\n# render_template
+    replaces every placeholder in src. The placeholder is a\r\n# fixed string. Callers
+    must pass a value that require_proxy_hostname accepted:\r\n# bash still treats
+    '&' and '\\' specially in this expansion.\r\nrender_template() {\r\n  local placeholder=$1\r\n
+    \ local value=$2\r\n  local src=$3\r\n  local dest=$4\r\n  local template\r\n
+    \ template=$(<\"${src}\")\r\n  template=${template//\"$placeholder\"/$value}\r\n
+    \ printf '%s\\n' \"${template}\" > \"${dest}\"\r\n}\r\n\r\n# resolve_tekton_results
+    outputs the tekton-results hostname.\r\n# Env var TEKTON_RESULTS_HOSTNAME takes
+    precedence over DNS probing.\r\nresolve_tekton_results() {\r\n  if [ -n \"${TEKTON_RESULTS_HOSTNAME:-}\"
+    ]; then\r\n    echo \"${TEKTON_RESULTS_HOSTNAME}\"\r\n    return 0\r\n  fi\r\n\r\n
+    \ for host in \\\r\n    tekton-results-api-service.tekton-pipelines.svc.cluster.local
+    \\\r\n    tekton-results-api-service.openshift-pipelines.svc.cluster.local \\\r\n
+    \   tekton-results-api-service.tekton-results.svc.cluster.local; do\r\n    if
+    getent hosts \"${host}\" > /dev/null 2>&1; then\r\n      echo \"${host}\"\r\n
+    \     return 0\r\n    fi\r\n  done\r\n\r\n  return 1\r\n}\r\n\r\n# Process tekton-results
+    template\r\nif [ -f \"${TEMPLATES_DIR}/tekton-results.caddy\" ]; then\r\n  if
+    hostname=$(resolve_tekton_results); then\r\n    require_proxy_hostname TEKTON_RESULTS_HOSTNAME
+    \"${hostname}\"\r\n    log \"tekton-results resolved to ${hostname}\"\r\n    render_template
+    __TEKTON_RESULTS_HOSTNAME__ \"${hostname}\" \\\r\n      \"${TEMPLATES_DIR}/tekton-results.caddy\"
+    \"${SNIPPETS_DIR}/tekton-results.caddy\"\r\n  else\r\n    log \"tekton-results
+    not available, skipping\"\r\n  fi\r\nfi\r\n\r\n# Process kite template\r\nif [
+    \"${KITE_ENABLED:-}\" = \"true\" ] && [ -f \"${TEMPLATES_DIR}/kite.caddy\" ];
+    then\r\n  hostname=\"${KITE_HOSTNAME:-konflux-kite.konflux-kite.svc.cluster.local}\"\r\n
+    \ require_proxy_hostname KITE_HOSTNAME \"${hostname}\"\r\n  render_template __KITE_HOSTNAME__
+    \"${hostname}\" \\\r\n    \"${TEMPLATES_DIR}/kite.caddy\" \"${SNIPPETS_DIR}/kite.caddy\"\r\n
+    \ log \"kite endpoint enabled (${hostname})\"\r\nfi\r\n\r\n# Process kubearchive
+    template\r\nif [ \"${KUBEARCHIVE_ENABLED:-}\" = \"true\" ] && [ -f \"${TEMPLATES_DIR}/kubearchive.caddy\"
+    ]; then\r\n  hostname=\"${KUBEARCHIVE_HOSTNAME:-kubearchive-api-server.product-kubearchive.svc.cluster.local}\"\r\n
+    \ require_proxy_hostname KUBEARCHIVE_HOSTNAME \"${hostname}\"\r\n  render_template
+    __KUBEARCHIVE_HOSTNAME__ \"${hostname}\" \\\r\n    \"${TEMPLATES_DIR}/kubearchive.caddy\"
+    \"${SNIPPETS_DIR}/kubearchive.caddy\"\r\n  log \"kubearchive endpoint enabled
+    (${hostname})\"\r\nfi\r\n\r\n# Process watson template.\r\n# The API_KEY value
+    is cached by file_watcher directly from the mounted Secret;\r\n# the init container
+    only generates the Caddy route and TLS snippets.\r\nif [ \"${WATSON_ENABLED:-}\"
+    = \"true\" ] && [ -f \"${TEMPLATES_DIR}/watson.caddy\" ]; then\r\n  watson_host=\"${WATSON_HOSTNAME:-api.us-east.assistant.watson.cloud.ibm.com}\"\r\n
+    \ watson_default_host=\"api.us-east.assistant.watson.cloud.ibm.com\"\r\n  require_proxy_hostname
+    WATSON_HOSTNAME \"${watson_host}\"\r\n\r\n  render_template __WATSON_HOST__ \"${watson_host}\"
+    \\\r\n    \"${TEMPLATES_DIR}/watson.caddy\" \"${SNIPPETS_DIR}/watson.caddy\"\r\n\r\n
+    \ # Generate watson TLS transport config.\r\n  # - Default external host: always
+    use system roots with SNI (never skip verification).\r\n  #   One trailing dot
+    is the same host. SNI stays undotted so it matches the\r\n  #   public certificate.
+    The rendered route keeps the configured hostname.\r\n  # - Overridden hostname
+    + service CA: use service CA\r\n  # - Overridden hostname, no service CA: skip
+    verification (in-cluster self-signed)\r\n  if [ \"${watson_host%.}\" = \"${watson_default_host}\"
+    ]; then\r\n    printf 'transport http {\\n    tls_server_name %s\\n}\\n' \"${watson_default_host}\"
+    \\\r\n      > \"${SNIPPETS_DIR}/watson-tls.conf\"\r\n    log \"watson TLS: system
+    roots with SNI (external host)\"\r\n  elif [ -f \"${SERVICE_CA_PATH}\" ]; then\r\n
+    \   printf 'transport http {\\n    tls_trust_pool file %s\\n}\\n' \"${SERVICE_CA_PATH}\"
+    \\\r\n      > \"${SNIPPETS_DIR}/watson-tls.conf\"\r\n    log \"watson TLS: service
+    CA (in-cluster override)\"\r\n  else\r\n    printf 'transport http {\\n    tls_insecure_skip_verify\\n}\\n'
+    \\\r\n      > \"${SNIPPETS_DIR}/watson-tls.conf\"\r\n    log \"watson TLS: insecure
+    (in-cluster, no service CA)\"\r\n  fi\r\n\r\n  log \"watson endpoint enabled (${watson_host})\"\r\nfi\r\n\r\n#
+    Generate TLS transport config for backend services (Tekton Results, KubeArchive,
+    etc.).\r\n# On OpenShift, the service-ca-operator injects the CA bundle into a
+    ConfigMap\r\n# mounted at SERVICE_CA_PATH. When present, backends are verified
+    against this CA.\r\n# Otherwise, fall back to skipping verification (the default
+    for non-OpenShift\r\n# clusters; see docs for how to configure cert-manager to
+    issue trusted certs).\r\nif [ -f \"${SERVICE_CA_PATH}\" ]; then\r\n  printf 'transport
+    http {\\n    tls_trust_pool file %s\\n}\\n' \"${SERVICE_CA_PATH}\" \\\r\n    >
+    \"${SNIPPETS_DIR}/backend-tls.conf\"\r\n  log \"using service CA for backend TLS
+    verification\"\r\nelse\r\n  printf 'transport http {\\n    tls_insecure_skip_verify\\n}\\n'
+    \\\r\n    > \"${SNIPPETS_DIR}/backend-tls.conf\"\r\n  log \"no service CA found,
+    backend TLS verification disabled\"\r\nfi\r\n\r\nSTATIC_DIR=${STATIC_DIR:-/opt/app-root/src/static-content}\r\nout=\"${STATIC_DIR}/runtime-config.js\"\r\nprintf
+    'window.KONFLUX_RUNTIME = window.KONFLUX_RUNTIME || {};\\n' > \"$out\"\r\nenv
+    | grep '^RUNTIME_' | sort | while IFS= read -r var; do\r\n  name=\"${var%%=*}\"\r\n
+    \ name=\"${name#RUNTIME_}\"\r\n  value=\"${var#*=}\"\r\n  esc=$(printf '%s' \"$value\"
+    | sed -e 's/\\\\/\\\\\\\\/g' -e 's/\"/\\\\\"/g' -e \"s/$(printf '\\r')/\\\\\\\\r/g\")\r\n
+    \ printf 'window.KONFLUX_RUNTIME[\"%s\"] = \"%s\";\\n' \"$name\" \"$esc\" >> \"$out\"\r\ndone\r\nlog
+    \"runtime-config.js generated\"\r\n\r\nlog \"done\"\r\n"
 kind: ConfigMap
 metadata:
-  name: proxy-generate-config-h44mgmftfm
+  name: proxy-generate-config-56bc47bt55
   namespace: konflux-ui
 ---
 apiVersion: v1
 data:
-  run-dex.sh: "#!/bin/bash\n\nset -euo pipefail\n\nORIGINAL_TOKEN=/tmp/var/run/secrets/dex/serviceaccount/token\nTOKEN_PATH=${TOKEN_PATH:-/var/run/secrets/kubernetes.io/serviceaccount/token}\nWAIT_TIME=10\nHALT_TIMEOUT=100\nMAX_JITTER_TIME=10\n\n#
-    auxiliary log function\nlog() { printf \"%s: %s\\n\" \"$(date -Iseconds)\" \"$*\";
-    }\n\n# forward SIGTERM/SIGINT for graceful shutdown\n#\n# shellcheck disable=SC2329\n#
-    ShellCheck is currently bad at figuring out functions that are invoked via trap\nshutdown()
-    {\n  log \"received signal, shutting down\"\n  if [ -n \"${dex_pid:-}\" ] && [
-    -d \"/proc/${dex_pid}\" ]; then\n    kill -s TERM \"${dex_pid}\" 2>/dev/null ||
-    true\n    wait_for_halt || true\n  fi\n  exit 143\n}\n\nwait_for_halt() (\n  counter=0\n
-    \ while [ -d \"/proc/${dex_pid}\" ] && [ $(( counter++ )) -le \"${HALT_TIMEOUT}\"
-    ]; do \n    sleep 1\n  done\n\n  if [ -d \"/proc/${dex_pid}\" ]; then\n    return
-    1\n  fi\n  return 0\n)\n\nstart_with_reload() {\n  while true; do\n    # copy
-    the original token for later use\n    log \"copying the token to ${ORIGINAL_TOKEN}\"\n
-    \   mkdir -p \"$(dirname \"${ORIGINAL_TOKEN}\")\"\n    rm \"${ORIGINAL_TOKEN}\"
-    || true\n    cp \"${TOKEN_PATH}\" \"${ORIGINAL_TOKEN}\"\n\n    # run dex in a
-    subprocess\n    OPENSHIFT_OAUTH_CLIENT_SECRET=\"$(cat \"${ORIGINAL_TOKEN}\")\"
-    \\\n    OPENSHIFT_OAUTH_CLIENT_ID=\"${OPENSHIFT_OAUTH_CLIENT_ID:-system:serviceaccount:${NAMESPACE}:${POD_SERVICE_ACCOUNT}}\"
-    \\\n      /usr/local/bin/dex serve /etc/dex/cfg/config.yaml &\n    dex_pid=\"$!\"\n
-    \   log \"run Dex in background with pid ${dex_pid}\"\n\n    # wait for the token
-    to be refresh by kubelet\n    log \"waiting for the token to be refreshed\"\n
+  run-dex.sh: "#!/bin/bash\r\n\r\nset -euo pipefail\r\n\r\nORIGINAL_TOKEN=/tmp/var/run/secrets/dex/serviceaccount/token\r\nTOKEN_PATH=${TOKEN_PATH:-/var/run/secrets/kubernetes.io/serviceaccount/token}\r\nWAIT_TIME=10\r\nHALT_TIMEOUT=100\r\nMAX_JITTER_TIME=10\r\n\r\n#
+    auxiliary log function\r\nlog() { printf \"%s: %s\\n\" \"$(date -Iseconds)\" \"$*\";
+    }\r\n\r\n# forward SIGTERM/SIGINT for graceful shutdown\r\n#\r\n# shellcheck disable=SC2329\r\n#
+    ShellCheck is currently bad at figuring out functions that are invoked via trap\r\nshutdown()
+    {\r\n  log \"received signal, shutting down\"\r\n  if [ -n \"${dex_pid:-}\" ]
+    && [ -d \"/proc/${dex_pid}\" ]; then\r\n    kill -s TERM \"${dex_pid}\" 2>/dev/null
+    || true\r\n    wait_for_halt || true\r\n  fi\r\n  exit 143\r\n}\r\n\r\nwait_for_halt()
+    (\r\n  counter=0\r\n  while [ -d \"/proc/${dex_pid}\" ] && [ $(( counter++ ))
+    -le \"${HALT_TIMEOUT}\" ]; do \r\n    sleep 1\r\n  done\r\n\r\n  if [ -d \"/proc/${dex_pid}\"
+    ]; then\r\n    return 1\r\n  fi\r\n  return 0\r\n)\r\n\r\nstart_with_reload()
+    {\r\n  while true; do\r\n    # copy the original token for later use\r\n    log
+    \"copying the token to ${ORIGINAL_TOKEN}\"\r\n    mkdir -p \"$(dirname \"${ORIGINAL_TOKEN}\")\"\r\n
+    \   rm \"${ORIGINAL_TOKEN}\" || true\r\n    cp \"${TOKEN_PATH}\" \"${ORIGINAL_TOKEN}\"\r\n\r\n
+    \   # run dex in a subprocess\r\n    OPENSHIFT_OAUTH_CLIENT_SECRET=\"$(cat \"${ORIGINAL_TOKEN}\")\"
+    \\\r\n    OPENSHIFT_OAUTH_CLIENT_ID=\"${OPENSHIFT_OAUTH_CLIENT_ID:-system:serviceaccount:${NAMESPACE}:${POD_SERVICE_ACCOUNT}}\"
+    \\\r\n      /usr/local/bin/dex serve /etc/dex/cfg/config.yaml &\r\n    dex_pid=\"$!\"\r\n
+    \   log \"run Dex in background with pid ${dex_pid}\"\r\n\r\n    # wait for the
+    token to be refresh by kubelet\r\n    log \"waiting for the token to be refreshed\"\r\n
     \   while [ \"$(cksum < \"${ORIGINAL_TOKEN}\")\" = \"$(cksum < \"${TOKEN_PATH}\")\"
-    ]; do sleep \"${WAIT_TIME}\"; done\n\n    # reduce likelihood of having all replicas
-    refreshing at the same time\n    jitter=\"$(( $(od -An -N2 -i /dev/urandom) %
-    MAX_JITTER_TIME ))\"\n    log \"sleeping ${jitter} seconds to prevent all replicas
-    to restart at the same time\"\n    sleep \"${jitter}\"\n\n    # Send SIGTERM to
-    Dex\n    log \"token refreshed, halting Dex via SIGTERM\"\n    if [ -d \"/proc/${dex_pid}\"
-    ]; then\n      kill -s TERM \"${dex_pid}\" || true\n    fi\n\n    # Wait for Dex
-    to halt\n    log \"waiting for Dex to gracefully stop\"\n    if ! wait_for_halt;
-    then\n      log \"Dex didn't stop in ${HALT_TIMEOUT} seconds, breaking\"\n      exit
-    1\n    fi\n  done\n\n  log \"the loop broke unexpectedly\"\n  exit 1\n}\n\nmain()
-    {\n  trap shutdown TERM INT\n\n  start_with_reload\n}\n\nmain\n"
+    ]; do sleep \"${WAIT_TIME}\"; done\r\n\r\n    # reduce likelihood of having all
+    replicas refreshing at the same time\r\n    jitter=\"$(( $(od -An -N2 -i /dev/urandom)
+    % MAX_JITTER_TIME ))\"\r\n    log \"sleeping ${jitter} seconds to prevent all
+    replicas to restart at the same time\"\r\n    sleep \"${jitter}\"\r\n\r\n    #
+    Send SIGTERM to Dex\r\n    log \"token refreshed, halting Dex via SIGTERM\"\r\n
+    \   if [ -d \"/proc/${dex_pid}\" ]; then\r\n      kill -s TERM \"${dex_pid}\"
+    || true\r\n    fi\r\n\r\n    # Wait for Dex to halt\r\n    log \"waiting for Dex
+    to gracefully stop\"\r\n    if ! wait_for_halt; then\r\n      log \"Dex didn't
+    stop in ${HALT_TIMEOUT} seconds, breaking\"\r\n      exit 1\r\n    fi\r\n  done\r\n\r\n
+    \ log \"the loop broke unexpectedly\"\r\n  exit 1\r\n}\r\n\r\nmain() {\r\n  trap
+    shutdown TERM INT\r\n\r\n  start_with_reload\r\n}\r\n\r\nmain\r\n"
 kind: ConfigMap
 metadata:
-  name: run-dex-f654f6k7th
+  name: run-dex-5t2cm288gk
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -596,7 +534,7 @@ spec:
           items:
           - key: run-dex.sh
             path: run-dex.sh
-          name: run-dex-f654f6k7th
+          name: run-dex-5t2cm288gk
         name: run-dex
       - name: tls
         secret:
@@ -799,7 +737,7 @@ spec:
           items:
           - key: generate-proxy-config.sh
             path: generate-proxy-config.sh
-          name: proxy-generate-config-h44mgmftfm
+          name: proxy-generate-config-56bc47bt55
         name: generate-proxy-config-script
       - name: kube-api-token
         projected:
@@ -821,11 +759,11 @@ spec:
           items:
           - key: Caddyfile
             path: Caddyfile
-          name: proxy-caddyfile-b246f95bdc
+          name: proxy-caddyfile-9825t4mdgt
         name: proxy-caddyfile
       - configMap:
           defaultMode: 420
-          name: proxy-caddy-templates-6mtb54gdff
+          name: proxy-caddy-templates-9g4tt4f79d
         name: caddy-templates
       - emptyDir: {}
         name: caddy-snippets
@@ -968,10 +906,20 @@ metadata:
   namespace: konflux-ui
 spec:
   endpoints:
-  - interval: 15s
+  - bearerTokenSecret:
+      key: token
+      name: prometheus-scrape-token
+    interval: 15s
     path: /metrics
     port: metrics
-    scheme: http
+    scheme: https
+    tlsConfig:
+      ca:
+        secret:
+          key: ca.crt
+          name: serving-cert
+      insecureSkipVerify: false
+      serverName: proxy.konflux-ui.svc
   selector:
     matchLabels:
       app: proxy
