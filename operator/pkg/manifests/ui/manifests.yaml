@@ -240,11 +240,11 @@ data:
     SNIPPETS_DIR=${SNIPPETS_DIR:-/mnt/caddy-snippets}
     SERVICE_CA_PATH=${SERVICE_CA_PATH:-/mnt/service-ca/service-ca.crt}
 
-    # A DNS name with an optional numeric port. Empty is valid: Tekton Results
-    # uses it to clear an override. Keep this aligned with the kubebuilder Pattern
-    # on the proxy hostname fields and with proxyBackendHostnamePattern in the
-    # UI reconciler.
-    proxy_hostname_pattern='^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?$'
+    # A DNS name with an optional trailing dot and an optional numeric port.
+    # Empty is valid: Tekton Results uses it to clear an override. Keep this
+    # aligned with the kubebuilder Pattern on the proxy hostname fields and with
+    # proxyBackendHostnamePattern in the UI reconciler.
+    proxy_hostname_pattern='^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.?(:[0-9]{1,5})?$'
 
     for cmd in sed getent printf; do
       command -v "${cmd}" >/dev/null 2>&1 || { echo "required command not found: ${cmd}"; exit 1; }
@@ -390,7 +390,7 @@ data:
     log "done"
 kind: ConfigMap
 metadata:
-  name: proxy-generate-config-hc9k8gg5d8
+  name: proxy-generate-config-2cc5f7gcm5
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -774,7 +774,7 @@ spec:
           items:
           - key: generate-proxy-config.sh
             path: generate-proxy-config.sh
-          name: proxy-generate-config-hc9k8gg5d8
+          name: proxy-generate-config-2cc5f7gcm5
         name: generate-proxy-config-script
       - name: kube-api-token
         projected:

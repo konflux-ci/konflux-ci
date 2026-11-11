@@ -17,7 +17,6 @@ limitations under the License.
 package ui
 
 import (
-	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -60,7 +59,7 @@ var _ = Describe("generate-proxy-config.sh", func() {
 			"SNIPPETS_DIR":            snippets,
 			"SERVICE_CA_PATH":         serviceCA,
 			"STATIC_DIR":              staticDir,
-			"TEKTON_RESULTS_HOSTNAME": "tekton-results.example.svc",
+			"TEKTON_RESULTS_HOSTNAME": "tekton-results.example.svc.",
 			"KITE_ENABLED":            "true",
 			"KITE_HOSTNAME":           "kite.example.svc:8443",
 			"KUBEARCHIVE_ENABLED":     "true",
@@ -70,9 +69,9 @@ var _ = Describe("generate-proxy-config.sh", func() {
 		})
 		Expect(err).NotTo(HaveOccurred(), string(out))
 
-		By("replacing the Tekton Results placeholder")
+		By("replacing the Tekton Results placeholder, including a trailing dot")
 		tekton := readSnippet(snippets, "tekton-results.caddy")
-		Expect(tekton).To(ContainSubstring("https://tekton-results.example.svc:8080"))
+		Expect(tekton).To(ContainSubstring("https://tekton-results.example.svc.:8080"))
 		Expect(tekton).NotTo(ContainSubstring("__TEKTON_RESULTS_HOSTNAME__"))
 
 		By("replacing the Kite placeholder, including its port")
@@ -93,7 +92,7 @@ var _ = Describe("generate-proxy-config.sh", func() {
 	})
 
 	DescribeTable("rejects a hostname that is not a DNS name",
-		func(endpointEnv map[string]string, unwritten []string) {
+		func(endpointEnv map[string]string, variable, rejected string, unwritten []string) {
 			By("running the script with a hostname that contains a slash")
 			env := map[string]string{
 				"TEMPLATES_DIR":   templates,
@@ -101,9 +100,13 @@ var _ = Describe("generate-proxy-config.sh", func() {
 				"SERVICE_CA_PATH": serviceCA,
 				"STATIC_DIR":      staticDir,
 			}
-			maps.Copy(env, endpointEnv)
-			_, err := runProxyConfigScript(scriptDir, env)
+			for key, value := range endpointEnv {
+				env[key] = value
+			}
+			out, err := runProxyConfigScript(scriptDir, env)
 			Expect(err).To(HaveOccurred())
+			Expect(string(out)).To(ContainSubstring("invalid " + variable))
+			Expect(string(out)).NotTo(ContainSubstring(rejected))
 
 			By("leaving that endpoint's snippets unwritten")
 			for _, name := range unwritten {
@@ -111,53 +114,24 @@ var _ = Describe("generate-proxy-config.sh", func() {
 				Expect(os.IsNotExist(statErr)).To(BeTrue(), name)
 			}
 		},
-		Entry(
-			"Tekton Results",
-			map[string]string{
-				"TEMPLATES_DIR":           templates,
-				"SNIPPETS_DIR":            snippets,
-				"SERVICE_CA_PATH":         serviceCA,
-				"STATIC_DIR":              staticDir,
-				"TEKTON_RESULTS_HOSTNAME": "results.example/extra",
-			},
-			[]string{"tekton-results.caddy"},
-		),
-		Entry(
-			"Kite",
-			map[string]string{
-				"TEMPLATES_DIR":   templates,
-				"SNIPPETS_DIR":    snippets,
-				"SERVICE_CA_PATH": serviceCA,
-				"STATIC_DIR":      staticDir,
-				"KITE_ENABLED":    "true",
-				"KITE_HOSTNAME":   "kite.example/extra",
-			},
-			[]string{"kite.caddy"},
-		),
-		Entry(
-			"KubeArchive",
-			map[string]string{
-				"TEMPLATES_DIR":        templates,
-				"SNIPPETS_DIR":         snippets,
-				"SERVICE_CA_PATH":      serviceCA,
-				"STATIC_DIR":           staticDir,
-				"KUBEARCHIVE_ENABLED":  "true",
-				"KUBEARCHIVE_HOSTNAME": "archive.example/extra",
-			},
-			[]string{"kubearchive.caddy"},
-		),
-		Entry(
-			"Watson",
-			map[string]string{
-				"TEMPLATES_DIR":   templates,
-				"SNIPPETS_DIR":    snippets,
-				"SERVICE_CA_PATH": serviceCA,
-				"STATIC_DIR":      staticDir,
-				"WATSON_ENABLED":  "true",
-				"WATSON_HOSTNAME": "watson.example/extra",
-			},
-			[]string{"watson.caddy", "watson-tls.conf"},
-		),
+		Entry("Tekton Results", map[string]string{
+			"TEKTON_RESULTS_HOSTNAME": "results.example/extra",
+		}, "TEKTON_RESULTS_HOSTNAME", "results.example/extra", []string{"tekton-results.caddy"}),
+		Entry("Kite", map[string]string{
+			"TEKTON_RESULTS_HOSTNAME": "tekton-results.example.svc",
+			"KITE_ENABLED":            "true",
+			"KITE_HOSTNAME":           "kite.example/extra",
+		}, "KITE_HOSTNAME", "kite.example/extra", []string{"kite.caddy"}),
+		Entry("KubeArchive", map[string]string{
+			"TEKTON_RESULTS_HOSTNAME": "tekton-results.example.svc",
+			"KUBEARCHIVE_ENABLED":     "true",
+			"KUBEARCHIVE_HOSTNAME":    "archive.example/extra",
+		}, "KUBEARCHIVE_HOSTNAME", "archive.example/extra", []string{"kubearchive.caddy"}),
+		Entry("Watson", map[string]string{
+			"TEKTON_RESULTS_HOSTNAME": "tekton-results.example.svc",
+			"WATSON_ENABLED":          "true",
+			"WATSON_HOSTNAME":         "watson.example/extra",
+		}, "WATSON_HOSTNAME", "watson.example/extra", []string{"watson.caddy", "watson-tls.conf"}),
 	)
 })
 

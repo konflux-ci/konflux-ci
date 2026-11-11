@@ -159,7 +159,7 @@ func TestKonfluxUIConfigSpec_Accessors(t *testing.T) {
 var (
 	ingressFQDNPattern          = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?$`)
 	ingressHostnamePattern      = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
-	proxyBackendHostnamePattern = regexp.MustCompile(`^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?$`)
+	proxyBackendHostnamePattern = regexp.MustCompile(`^$|^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.?(:[0-9]{1,5})?$`)
 )
 
 func TestIngressSpecValidationPatterns(t *testing.T) {
@@ -200,11 +200,13 @@ func TestIngressSpecValidationPatterns(t *testing.T) {
 		}
 	})
 
-	t.Run("proxy backend hostname accepts a DNS name, optional port, and empty", func(t *testing.T) {
+	t.Run("proxy backend hostname accepts a DNS name, trailing dot, optional port, and empty", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 		for _, value := range []string{
 			"",
 			"results.example.com",
+			"results.example.svc.cluster.local.",
+			"results.example.svc.cluster.local.:8080",
 			"kite.custom-namespace.svc.cluster.local",
 			"kubearchive.custom-namespace.svc.cluster.local:8081",
 			"api.us-east.assistant.watson.cloud.ibm.com",
@@ -224,6 +226,7 @@ func TestIngressSpecValidationPatterns(t *testing.T) {
 			"results.example\"x",
 			"-leading.example.com",
 			"example.com:",
+			"results.example.com..",
 		} {
 			g.Expect(proxyBackendHostnamePattern.MatchString(value)).To(gomega.BeFalse(), "hostname %q", value)
 		}
