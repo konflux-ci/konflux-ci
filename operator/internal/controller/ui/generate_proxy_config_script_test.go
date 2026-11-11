@@ -150,7 +150,7 @@ var _ = Describe("generate-proxy-config.sh", func() {
 
 	DescribeTable("rejects a hostname that is not a DNS name",
 		func(endpointEnv map[string]string, variable, rejected string, unwritten []string) {
-			By("running the script with a hostname that contains a slash")
+			By("running the script with a hostname that is not a DNS name")
 			env := map[string]string{
 				"TEMPLATES_DIR":   templates,
 				"SNIPPETS_DIR":    snippets,
@@ -171,9 +171,21 @@ var _ = Describe("generate-proxy-config.sh", func() {
 				Expect(os.IsNotExist(statErr)).To(BeTrue(), name)
 			}
 		},
-		Entry("Tekton Results", map[string]string{
+		Entry("Tekton Results with a slash", map[string]string{
 			"TEKTON_RESULTS_HOSTNAME": "results.example/extra",
 		}, "TEKTON_RESULTS_HOSTNAME", "results.example/extra", []string{"tekton-results.caddy"}),
+		Entry("Tekton Results with a space", map[string]string{
+			"TEKTON_RESULTS_HOSTNAME": "results.example com",
+		}, "TEKTON_RESULTS_HOSTNAME", "results.example com", []string{"tekton-results.caddy"}),
+		Entry("Tekton Results with a quote", map[string]string{
+			"TEKTON_RESULTS_HOSTNAME": "results.example\"x",
+		}, "TEKTON_RESULTS_HOSTNAME", "results.example\"x", []string{"tekton-results.caddy"}),
+		Entry("Tekton Results with a backslash", map[string]string{
+			"TEKTON_RESULTS_HOSTNAME": "results.example\\nbad",
+		}, "TEKTON_RESULTS_HOSTNAME", "results.example\\nbad", []string{"tekton-results.caddy"}),
+		Entry("Tekton Results with a newline", map[string]string{
+			"TEKTON_RESULTS_HOSTNAME": "results.example\nbad",
+		}, "TEKTON_RESULTS_HOSTNAME", "results.example\nbad", []string{"tekton-results.caddy"}),
 		Entry("Kite", map[string]string{
 			"TEKTON_RESULTS_HOSTNAME": "tekton-results.example.svc",
 			"KITE_ENABLED":            "true",
