@@ -107,11 +107,13 @@ if [ "${WATSON_ENABLED:-}" = "true" ] && [ -f "${TEMPLATES_DIR}/watson.caddy" ];
     "${TEMPLATES_DIR}/watson.caddy" "${SNIPPETS_DIR}/watson.caddy"
 
   # Generate watson TLS transport config.
-  # - Default external host: always use system roots with SNI (never skip verification)
+  # - Default external host: always use system roots with SNI (never skip verification).
+  #   One trailing dot is the same host. SNI stays undotted so it matches the
+  #   public certificate. The rendered route keeps the configured hostname.
   # - Overridden hostname + service CA: use service CA
   # - Overridden hostname, no service CA: skip verification (in-cluster self-signed)
-  if [ "${watson_host}" = "${watson_default_host}" ]; then
-    printf 'transport http {\n    tls_server_name %s\n}\n' "${watson_host}" \
+  if [ "${watson_host%.}" = "${watson_default_host}" ]; then
+    printf 'transport http {\n    tls_server_name %s\n}\n' "${watson_default_host}" \
       > "${SNIPPETS_DIR}/watson-tls.conf"
     log "watson TLS: system roots with SNI (external host)"
   elif [ -f "${SERVICE_CA_PATH}" ]; then
