@@ -84,8 +84,6 @@ type rsCRDInfo struct {
 }
 
 var rsManagedCRDs = []rsCRDInfo{
-	{"internalrequests.appstudio.redhat.com", "InternalRequest"},
-	{"internalservicesconfigs.appstudio.redhat.com", "InternalServicesConfig"},
 	{"releaseplanadmissions.appstudio.redhat.com", "ReleasePlanAdmission"},
 	{"releaseplans.appstudio.redhat.com", "ReleasePlan"},
 	{"releases.appstudio.redhat.com", "Release"},
