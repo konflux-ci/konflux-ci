@@ -109,6 +109,45 @@ var _ = Describe("generate-proxy-config.sh", func() {
 		Expect(tekton).NotTo(ContainSubstring("__TEKTON_RESULTS_HOSTNAME__"))
 	})
 
+	DescribeTable("treats the dotted Watson default as the external host",
+		func(withServiceCA bool) {
+			serviceCAPath := serviceCA
+			if withServiceCA {
+				By("mounting a service CA")
+				serviceCAPath = filepath.Join(filepath.Dir(serviceCA), "service-ca.crt")
+				Expect(os.WriteFile(serviceCAPath, []byte("test-ca"), 0o644)).To(Succeed())
+			}
+
+			By("running the script with the default Watson host and a trailing dot")
+			const configured = "api.us-east.assistant.watson.cloud.ibm.com."
+			const sni = "api.us-east.assistant.watson.cloud.ibm.com"
+			out, err := runProxyConfigScript(scriptDir, map[string]string{
+				"TEMPLATES_DIR":           templates,
+				"SNIPPETS_DIR":            snippets,
+				"SERVICE_CA_PATH":         serviceCAPath,
+				"STATIC_DIR":              staticDir,
+				"TEKTON_RESULTS_HOSTNAME": "tekton-results.example.svc",
+				"WATSON_ENABLED":          "true",
+				"WATSON_HOSTNAME":         configured,
+			})
+			Expect(err).NotTo(HaveOccurred(), string(out))
+
+			By("keeping the configured hostname in the route")
+			watson := readSnippet(snippets, "watson.caddy")
+			Expect(watson).To(ContainSubstring("https://" + configured))
+			Expect(watson).To(ContainSubstring("header_up Host " + configured))
+
+			By("using system roots and the undotted SNI")
+			tls := readSnippet(snippets, "watson-tls.conf")
+			Expect(tls).To(ContainSubstring("tls_server_name " + sni + "\n"))
+			Expect(tls).NotTo(ContainSubstring("tls_server_name " + configured))
+			Expect(tls).NotTo(ContainSubstring("tls_trust_pool"))
+			Expect(tls).NotTo(ContainSubstring("tls_insecure_skip_verify"))
+		},
+		Entry("without a service CA", false),
+		Entry("with a service CA", true),
+	)
+
 	DescribeTable("rejects a hostname that is not a DNS name",
 		func(endpointEnv map[string]string, variable, rejected string, unwritten []string) {
 			By("running the script with a hostname that contains a slash")

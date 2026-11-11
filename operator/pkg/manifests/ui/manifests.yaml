@@ -340,11 +340,13 @@ data:
         "${TEMPLATES_DIR}/watson.caddy" "${SNIPPETS_DIR}/watson.caddy"
 
       # Generate watson TLS transport config.
-      # - Default external host: always use system roots with SNI (never skip verification)
+      # - Default external host: always use system roots with SNI (never skip verification).
+      #   One trailing dot is the same host. SNI stays undotted so it matches the
+      #   public certificate. The rendered route keeps the configured hostname.
       # - Overridden hostname + service CA: use service CA
       # - Overridden hostname, no service CA: skip verification (in-cluster self-signed)
-      if [ "${watson_host}" = "${watson_default_host}" ]; then
-        printf 'transport http {\n    tls_server_name %s\n}\n' "${watson_host}" \
+      if [ "${watson_host%.}" = "${watson_default_host}" ]; then
+        printf 'transport http {\n    tls_server_name %s\n}\n' "${watson_default_host}" \
           > "${SNIPPETS_DIR}/watson-tls.conf"
         log "watson TLS: system roots with SNI (external host)"
       elif [ -f "${SERVICE_CA_PATH}" ]; then
@@ -390,7 +392,7 @@ data:
     log "done"
 kind: ConfigMap
 metadata:
-  name: proxy-generate-config-2cc5f7gcm5
+  name: proxy-generate-config-h44mgmftfm
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -788,7 +790,7 @@ spec:
           items:
           - key: generate-proxy-config.sh
             path: generate-proxy-config.sh
-          name: proxy-generate-config-2cc5f7gcm5
+          name: proxy-generate-config-h44mgmftfm
         name: generate-proxy-config-script
       - name: kube-api-token
         projected:
