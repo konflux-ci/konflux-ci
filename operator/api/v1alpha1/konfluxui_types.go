@@ -59,7 +59,7 @@ type IngressSpec struct {
 	// Takes precedence over Hostname when both are set.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?$`
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.?(:([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?$`
 	FQDN string `json:"fqdn,omitempty"`
 	// Hostname is a short DNS label composed with the cluster ingress domain on OpenShift
 	// as "{hostname}.{cluster-ingress-domain}" (no namespace infix).
@@ -89,7 +89,7 @@ type IngressSpec struct {
 	// +listType=atomic
 	// +kubebuilder:validation:MaxItems=16
 	// +kubebuilder:validation:items:MinLength=1
-	// +kubebuilder:validation:items:Pattern=`^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?$`
+	// +kubebuilder:validation:items:Pattern=`^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.?(:([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?$`
 	AdditionalFQDNs []string `json:"additionalFQDNs,omitempty"`
 	// Annotations to add to the ingress resource.
 	// +optional
@@ -133,7 +133,9 @@ type TektonResultsSpec struct {
 	// Hostname overrides DNS discovery for the Results API service.
 	// When tektonResults is present with an empty hostname, the override is
 	// cleared so DNS discovery is used again.
+	// A port is not accepted because the Caddy template appends :8080.
 	// +optional
+	// +kubebuilder:validation:Pattern=`^$|^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.?$`
 	Hostname string `json:"hostname,omitempty"`
 }
 
@@ -160,7 +162,11 @@ type EndpointSpec struct {
 	// +kubebuilder:default=false
 	Enabled bool `json:"enabled,omitempty"`
 	// Hostname overrides the default backend service address.
+	// A port suffix is accepted because some backends (e.g. Kite) need one.
+	// Note: KubeArchive's Caddy template appends :8081, so a user-supplied
+	// port on a KubeArchive hostname would be rendered twice.
 	// +optional
+	// +kubebuilder:validation:Pattern=`^$|^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.?(:([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?$`
 	Hostname string `json:"hostname,omitempty"`
 }
 
@@ -173,6 +179,7 @@ type WatsonEndpointSpec struct {
 	// Hostname overrides the Watson API host.
 	// Defaults to api.us-east.assistant.watson.cloud.ibm.com.
 	// +optional
+	// +kubebuilder:validation:Pattern=`^$|^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.?(:([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?$`
 	Hostname string `json:"hostname,omitempty"`
 	// SecretName is the name of the Secret containing the Watson API key.
 	// The Secret must have a key named API_KEY with the pre-encoded Basic auth

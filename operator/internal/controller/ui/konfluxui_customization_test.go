@@ -1419,7 +1419,8 @@ func TestAppendEndpointOverlays(t *testing.T) {
 			Hostname: "tekton-results-api-service.openshift-pipelines.svc.cluster.local",
 		}
 
-		initOpts := appendTektonResultsOverlays(tektonResults, nil)
+		initOpts, err := appendTektonResultsOverlays(tektonResults, nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
 		c := applyContainerOpts(initOpts)
 		envMap := envToMap(c.Env)
 
@@ -1436,14 +1437,16 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		}
 		cleared := &konfluxv1alpha1.TektonResultsSpec{}
 
-		initOpts := appendTektonResultsOverlays(withHostname, nil)
+		initOpts, err := appendTektonResultsOverlays(withHostname, nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
 		c := applyContainerOpts(initOpts)
 		g.Expect(envToMap(c.Env)).To(gomega.HaveKeyWithValue(
 			"TEKTON_RESULTS_HOSTNAME",
 			"tekton-results-api-service.tekton-pipelines.svc.cluster.local",
 		))
 
-		clearOpts := appendTektonResultsOverlays(cleared, nil)
+		clearOpts, err := appendTektonResultsOverlays(cleared, nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
 		for _, opt := range clearOpts {
 			opt(c, customization.DeploymentContext{})
 		}
@@ -1458,7 +1461,8 @@ func TestAppendEndpointOverlays(t *testing.T) {
 			},
 		}
 
-		initOpts := appendTektonResultsOverlays(nil, nil)
+		initOpts, err := appendTektonResultsOverlays(nil, nil)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
 		for _, opt := range initOpts {
 			opt(c, customization.DeploymentContext{})
 		}
@@ -1520,6 +1524,57 @@ func TestAppendEndpointOverlays(t *testing.T) {
 		initContainer = kubernetes.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
 		g.Expect(initContainer).NotTo(gomega.BeNil())
 		g.Expect(envToMap(initContainer.Env)).To(gomega.HaveKeyWithValue("TEKTON_RESULTS_HOSTNAME", ""))
+	})
+}
+
+func TestValidateProxyHostname(t *testing.T) {
+	t.Parallel()
+
+	t.Run("accepts valid hostnames", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		for _, value := range []string{
+			"",
+			"host.example.com",
+			"host.example.com.",
+			"host:8443",
+			"a",
+		} {
+			g.Expect(validateProxyHostname(value)).To(gomega.Succeed(), "hostname %q", value)
+		}
+	})
+
+	t.Run("rejects invalid hostnames", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		for _, value := range []string{
+			"foo..bar",
+			"-foo.bar",
+			"foo-.bar",
+			"host:0",
+			"host:99999",
+			"host:65536",
+			"host/path",
+			"host name",
+		} {
+			g.Expect(validateProxyHostname(value)).NotTo(gomega.Succeed(), "hostname %q", value)
+		}
+	})
+
+	t.Run("kite rejects invalid hostname", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		endpoints := &konfluxv1alpha1.ProxyEndpointsSpec{
+			Kite: &konfluxv1alpha1.EndpointSpec{Enabled: true, Hostname: "kite.example/extra"},
+		}
+		_, _, err := appendEndpointOverlays(endpoints, nil, nil)
+		g.Expect(err).To(gomega.HaveOccurred())
+	})
+
+	t.Run("tektonResults rejects invalid hostname", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		tektonResults := &konfluxv1alpha1.TektonResultsSpec{
+			Hostname: "results.example/extra",
+		}
+		_, err := appendTektonResultsOverlays(tektonResults, nil)
+		g.Expect(err).To(gomega.HaveOccurred())
 	})
 }
 

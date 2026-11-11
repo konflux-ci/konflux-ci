@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"regexp"
 	"strings"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -511,7 +512,10 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, runtimeConfig 
 	if endpointErr != nil {
 		return nil, endpointErr
 	}
-	initContainerOpts = appendTektonResultsOverlays(spec.TektonResults, initContainerOpts)
+	initContainerOpts, endpointErr = appendTektonResultsOverlays(spec.TektonResults, initContainerOpts)
+	if endpointErr != nil {
+		return nil, endpointErr
+	}
 
 	// Append user overrides after system options
 	reverseProxyOpts = append(reverseProxyOpts, customization.FromContainerSpec(spec.ReverseProxy))
@@ -536,6 +540,25 @@ func buildProxyOverlay(spec *konfluxv1alpha1.ProxyDeploymentSpec, runtimeConfig 
 	return customization.NewPodOverlay(podOpts...), nil
 }
 
+// proxyBackendHostnamePattern matches a DNS name built from RFC-1123 labels
+// (each 1–63 chars, alphanumeric plus interior hyphens), with an optional
+// trailing dot and an optional numeric port in 1–65535. Empty is valid so
+// Tekton Results can clear an override and use DNS discovery. Keep this
+// aligned with the kubebuilder Pattern on the proxy hostname fields and with
+// proxy_hostname_pattern in generate-proxy-config.sh.
+var proxyBackendHostnamePattern = regexp.MustCompile(
+	`^$|^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?` +
+		`(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*` +
+		`\.?(:([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?$`,
+)
+
+func validateProxyHostname(hostname string) error {
+	if proxyBackendHostnamePattern.MatchString(hostname) {
+		return nil
+	}
+	return fmt.Errorf("invalid proxy hostname: must be a DNS name with an optional numeric port (1-65535)")
+}
+
 // appendEndpointOverlays adds init container env vars and pod volumes for each
 // enabled optional proxy endpoint. Returns the updated slices.
 func appendEndpointOverlays(
@@ -548,6 +571,9 @@ func appendEndpointOverlays(
 	}
 
 	if endpoints.Kite != nil && endpoints.Kite.Enabled {
+		if err := validateProxyHostname(endpoints.Kite.Hostname); err != nil {
+			return nil, nil, err
+		}
 		initOpts = append(initOpts,
 			customization.WithEnv(corev1.EnvVar{Name: "KITE_ENABLED", Value: "true"}),
 			customization.WithOptionalEnvOverride("KITE_HOSTNAME", endpoints.Kite.Hostname),
@@ -555,6 +581,9 @@ func appendEndpointOverlays(
 	}
 
 	if endpoints.KubeArchive != nil && endpoints.KubeArchive.Enabled {
+		if err := validateProxyHostname(endpoints.KubeArchive.Hostname); err != nil {
+			return nil, nil, err
+		}
 		initOpts = append(initOpts,
 			customization.WithEnv(corev1.EnvVar{Name: "KUBEARCHIVE_ENABLED", Value: "true"}),
 			customization.WithOptionalEnvOverride("KUBEARCHIVE_HOSTNAME", endpoints.KubeArchive.Hostname),
@@ -562,6 +591,9 @@ func appendEndpointOverlays(
 	}
 
 	if endpoints.Watson != nil && endpoints.Watson.Enabled {
+		if err := validateProxyHostname(endpoints.Watson.Hostname); err != nil {
+			return nil, nil, err
+		}
 		if endpoints.Watson.SecretName == "" {
 			return nil, nil, fmt.Errorf("watson endpoint is enabled but secretName is not set")
 		}
@@ -581,15 +613,18 @@ func appendEndpointOverlays(
 func appendTektonResultsOverlays(
 	tektonResults *konfluxv1alpha1.TektonResultsSpec,
 	initOpts []customization.ContainerOption,
-) []customization.ContainerOption {
+) ([]customization.ContainerOption, error) {
 	if tektonResults == nil {
-		return initOpts
+		return initOpts, nil
+	}
+	if err := validateProxyHostname(tektonResults.Hostname); err != nil {
+		return nil, err
 	}
 	// WithEnvOverride (not WithOptionalEnvOverride) so an empty hostname clears the
 	// override; generate-proxy-config.sh treats an unset/empty value as DNS discovery.
 	return append(initOpts,
 		customization.WithEnvOverride("TEKTON_RESULTS_HOSTNAME", tektonResults.Hostname),
-	)
+	), nil
 }
 
 // runtimeConfigOverlays returns RUNTIME_* env var options for the
