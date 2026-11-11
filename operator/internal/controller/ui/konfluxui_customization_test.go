@@ -311,6 +311,23 @@ func TestBuildProxyOverlay(t *testing.T) {
 			g.Expect(err).To(gomega.HaveOccurred())
 		}
 	})
+
+	t.Run("absolute tektonResults hostname with a trailing dot is accepted", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		const hostname = "results.example.svc.cluster.local."
+		spec := &konfluxv1alpha1.ProxyDeploymentSpec{
+			TektonResults: &konfluxv1alpha1.TektonResultsSpec{Hostname: hostname},
+		}
+
+		deployment := getUIDeployment(t, proxyDeploymentName)
+		overlay, err := buildProxyOverlay(spec, nil, "", false, buildOAuth2ProxyOptions(testEndpoint, false, nil)...)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(overlay.ApplyToDeployment(deployment)).To(gomega.Succeed())
+
+		initContainer := kubernetes.FindContainer(deployment.Spec.Template.Spec.InitContainers, generateProxyConfigContainerName)
+		g.Expect(initContainer).NotTo(gomega.BeNil())
+		g.Expect(envToMap(initContainer.Env)).To(gomega.HaveKeyWithValue("TEKTON_RESULTS_HOSTNAME", hostname))
+	})
 }
 
 func TestBuildOAuth2ProxyOptions(t *testing.T) {
