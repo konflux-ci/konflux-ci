@@ -124,12 +124,14 @@ func DefaultCatalog() (*Catalog, error) {
 					Group:                    TargetGroupComponent,
 					Namespace:                "konflux-ui",
 					Service:                  "proxy",
-					Scheme:                   "http",
+					Scheme:                   "https",
 					PortName:                 "metrics",
 					Port:                     2112,
 					Path:                     "/metrics",
+					TLSInsecureSkipVerify:    &insecureSkipVerify,
+					MetricsCASecret:          "serving-cert",
 					MetricsReaderClusterRole: "konflux-ui-proxy-metrics-reader",
-					UWMUpCheck:               true,
+					ScrapeTokenSecret:        kubernetes.ScrapeTokenSecretName,
 					// Require the HTTP duration family used by UI error-rate recording rules
 					// (caddy_http_request_duration_seconds_count with code=...).
 					BodyMustMatchAny: []string{"caddy_http_request_duration_seconds"},

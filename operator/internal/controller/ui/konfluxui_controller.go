@@ -35,14 +35,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/utils/clock"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	crpredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	crtsource "sigs.k8s.io/controller-runtime/pkg/source"
 
 	konfluxv1alpha1 "github.com/konflux-ci/konflux-ci/operator/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/operator/internal/common"
@@ -73,6 +78,9 @@ const (
 	crKind = "KonfluxUI"
 	// uiNamespace is the namespace for UI resources
 	uiNamespace = "konflux-ui"
+	// Metrics scraping constants
+	uiServiceMonitorName = "konflux-ui-proxy"
+	uiTLSSecretName      = "serving-cert"
 
 	// Deployment names
 	proxyDeploymentName = "proxy"
@@ -147,9 +155,14 @@ var UIClusterScopedAllowList = tracking.ClusterScopedAllowList{
 // KonfluxUIReconciler reconciles a KonfluxUI object
 type KonfluxUIReconciler struct {
 	client.Client
-	Scheme      *runtime.Scheme
-	ObjectStore *manifests.ObjectStore
-	ClusterInfo *clusterinfo.Info
+	Scheme              *runtime.Scheme
+	ObjectStore         *manifests.ObjectStore
+	ClusterInfo         *clusterinfo.Info
+	TokenCreator        kubernetes.TokenCreator
+	Clock               clock.Clock
+	TokenRotationEvents <-chan event.TypedGenericEvent[client.Object]
+	// SecretReader loads metrics TLS Secrets; prefer mgr.GetAPIReader() to avoid stale cache.
+	SecretReader client.Reader
 }
 
 // +kubebuilder:rbac:groups=konflux.konflux-ci.dev,resources=konfluxuis,verbs=get;list;watch;create;update;patch;delete
@@ -162,9 +175,10 @@ type KonfluxUIReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;create;update;list;watch;patch;delete
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=core,resources=serviceaccounts/token,verbs=create
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=dex;konflux-proxy;konflux-proxy-namespace-lister;konflux-ui-proxy-metrics-reader,verbs=bind;escalate
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=dex;konflux-proxy;konflux-proxy-namespace-lister,verbs=bind
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=dex;konflux-proxy;konflux-proxy-namespace-lister;prometheus-konflux-ui-proxy-metrics-reader,verbs=bind
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;patch
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=console.openshift.io,resources=consolelinks,verbs=get;list;watch;create;update;patch;delete
@@ -251,6 +265,43 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return errHandler.HandleWithReason(ctx, err, condition.ReasonSecretCreationFailed, "ensure UI secrets")
 	}
 
+	scrapeResult := reconcile.Result{}
+	if ui.Spec.ComponentMetrics.IsEnabled() && r.TokenCreator != nil {
+		scraper := kubernetes.OperandMetricsScraperSA(uiNamespace)
+		var scrapeErr error
+		scrapeResult, scrapeErr = common.ReconcilePrometheusScrapeToken(ctx, common.ScrapeTokenReconcilerConfig{
+			Client:               r.Client,
+			SecretReader:         r.SecretReader,
+			Clock:                r.Clock,
+			TokenCreator:         r.TokenCreator,
+			Scraper:              scraper,
+			OperandNamespace:     uiNamespace,
+			ServiceMonitorName:   uiServiceMonitorName,
+			MetricsTLSSecretName: uiTLSSecretName,
+			Apply: func(applyCtx context.Context, secret *corev1.Secret) error {
+				return tc.ApplyOwned(applyCtx, secret)
+			},
+			ApplyServiceMonitor: func(applyCtx context.Context) error {
+				objects, storeErr := r.ObjectStore.GetForComponent(manifests.UI)
+				if storeErr != nil {
+					return fmt.Errorf("get manifests for ServiceMonitor apply: %w", storeErr)
+				}
+				sm, ok := common.OperandServiceMonitorFromObjects(objects, uiNamespace, uiServiceMonitorName)
+				if !ok {
+					return fmt.Errorf("operand ServiceMonitor %s/%s not found in embedded manifests",
+						uiNamespace, uiServiceMonitorName)
+				}
+				if err := common.ApplyMetricsScraperBindingSubjects(uiNamespace, sm); err != nil {
+					return fmt.Errorf("apply metrics scraper binding subjects for ServiceMonitor: %w", err)
+				}
+				return tc.ApplyOwned(applyCtx, sm)
+			},
+		})
+		if scrapeErr != nil {
+			return errHandler.HandleWithReason(ctx, scrapeErr, condition.ReasonApplyFailed, "reconcile prometheus scrape token")
+		}
+	}
+
 	// Cleanup orphaned resources - delete any resources with our owner label
 	// that weren't applied during this reconcile. This handles cases like
 	// disabling Ingress (the Ingress resource is automatically deleted).
@@ -275,7 +326,7 @@ func (r *KonfluxUIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	log.Info("Successfully reconciled KonfluxUI")
-	return ctrl.Result{}, nil
+	return scrapeResult, nil
 }
 
 // updateIngressStatus updates the ingress status fields on the KonfluxUI CR.
@@ -323,11 +374,22 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 	}
 
 	metricsEnabled := ui.Spec.ComponentMetrics.IsEnabled()
+	deferServiceMonitor := metricsEnabled && r.TokenCreator != nil
 
 	// Resolve whether OpenShift login should be enabled
 	openShiftLoginEnabled := isOpenShiftLoginEnabled(ui, r.ClusterInfo)
 
 	for _, obj := range objects {
+		// Deferred ServiceMonitor apply: skip operand SM until ReconcilePrometheusScrapeToken
+		// applies it after prometheus-scrape-token is readable and metrics TLS verifies.
+		if deferServiceMonitor && kubernetes.IsComponentMetricsServiceMonitor(obj) {
+			log.V(2).Info("Deferring operand ServiceMonitor apply until scrape token and metrics TLS are ready",
+				"kind", tracking.GetKind(obj),
+				"name", obj.GetName(),
+				"namespace", obj.GetNamespace(),
+			)
+			continue
+		}
 		if !metricsEnabled && kubernetes.IsComponentMetricsScrapeResource(obj) {
 			log.V(1).Info("Skipping component metrics scrape resource",
 				"kind", tracking.GetKind(obj),
@@ -352,6 +414,10 @@ func (r *KonfluxUIReconciler) applyManifests(ctx context.Context, tc *tracking.C
 		// Apply customizations for service accounts
 		if serviceAccount, ok := obj.(*corev1.ServiceAccount); ok {
 			applyUIServiceAccountCustomizations(serviceAccount, openShiftLoginEnabled, endpoint)
+		}
+
+		if err := common.ApplyMetricsScraperBindingSubjects(uiNamespace, obj); err != nil {
+			return fmt.Errorf("apply metrics scraper binding subjects for %s: %w", obj.GetName(), err)
 		}
 
 		if err := tc.ApplyOwned(ctx, obj); err != nil {
@@ -970,6 +1036,28 @@ func (r *KonfluxUIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	if sm, ok := common.OperandServiceMonitorWatchObjectIfInstalled(mgr.GetRESTMapper()); ok {
 		b = b.Owns(sm)
+	}
+
+	if r.TokenCreator != nil {
+		// serving-cert is created by cert-manager (not CR ownerRefs).
+		b = b.Watches(
+			&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
+				if obj.GetNamespace() != uiNamespace {
+					return nil
+				}
+				return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: CRName}}}
+			}),
+			builder.WithPredicates(predicate.MetricsTLSSecretNamedPredicate(uiTLSSecretName)),
+		)
+	}
+	if r.TokenRotationEvents != nil && r.TokenCreator != nil {
+		b = b.WatchesRawSource(crtsource.Channel(
+			r.TokenRotationEvents,
+			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, _ client.Object) []reconcile.Request {
+				return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: CRName}}}
+			}),
+		))
 	}
 
 	return b.Complete(r)

@@ -5,10 +5,21 @@ metadata:
   namespace: konflux-ui
 spec:
   endpoints:
-  - interval: 15s
+  - bearerTokenSecret:
+      key: token
+      name: prometheus-scrape-token
+    interval: 15s
     path: /metrics
     port: metrics
-    scheme: http
+    scheme: https
+    tlsConfig:
+      # SERVICE_NAME.SERVICE_NAMESPACE.svc substituted by kustomize replacements.
+      serverName: SERVICE_NAME.SERVICE_NAMESPACE.svc
+      insecureSkipVerify: false
+      ca:
+        secret:
+          name: serving-cert
+          key: ca.crt
   selector:
     matchLabels:
       app: proxy
