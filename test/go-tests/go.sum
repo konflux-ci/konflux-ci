@@ -1,3 +1,5 @@
+cel.dev/cel-go v0.32.0 h1:irvpFKr5EuGPyxeME03ERh0rii1TX+BDAnB9eL3IvNk=
+cel.dev/cel-go v0.32.0/go.mod h1:DnVip7tpJSsgZymwfT+m1tnEVy3ivAjSMXPx12YrMkU=
 cel.dev/expr v0.25.3 h1:A2jO8jwOugrrovveCWfj0KEZOfqiLgAcwjpHPhzIGw0=
 cel.dev/expr v0.25.3/go.mod h1:hrXvqGP6G6gyx8UAHSHJ5RGk//1Oj5nXQ2NI02Nrsg4=
 codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0 h1:s2fK+FBwvcYsmKDjNhmoe7B8q9zsgs0UrSlYe9r4XjM=
@@ -333,8 +335,8 @@ github.com/sergi/go-diff v1.4.0 h1:n/SP9D5ad1fORl+llWyN+D6qoUETXNZARKjyY2/KVCw=
 github.com/sergi/go-diff v1.4.0/go.mod h1:A0bzQcvG0E7Rwjx0REVgAGH58e96+X0MeOfepqsbeW4=
 github.com/sigstore/protobuf-specs v0.5.2 h1:RSWWUY8QrVTxbYH00jY/jg2e7YnjzrpwP+PeHTMll0E=
 github.com/sigstore/protobuf-specs v0.5.2/go.mod h1:DRBzpFuE+LnvQMN10/dU6nBeKwVLGEQ6o2FovN2Rats=
-github.com/sigstore/sigstore v1.10.11 h1:fjrwDfR0AWmRONYV/hKGJyqbT0osMtaBz9FTZ6MH9XI=
-github.com/sigstore/sigstore v1.10.11/go.mod h1:ecPk+ftLqP8/TmzQFJmn0+QrL2yUQIJvyzVKNmDiw6U=
+github.com/sigstore/sigstore v1.11.0 h1:66TQEtd0aMw79qT9EiGnuOxgK6r8Kkpzszi3KUPGt7c=
+github.com/sigstore/sigstore v1.11.0/go.mod h1:Q8tpy2X80KVswawYR0eTjWl3gM3AU+ak+h/NtPzRfWs=
 github.com/sirupsen/logrus v1.7.0/go.mod h1:yWOB1SBYBC5VeMP7gHvWumXLIWorT60ONWic61uBYv0=
 github.com/sirupsen/logrus v1.10.2 h1:G2SED73/qrAu6YwbdxOD6peLkCBI3z7L+ykJFTXJBBo=
 github.com/sirupsen/logrus v1.10.2/go.mod h1:SLEg8TqYulVKKfIGHldVp2K2aYz2DKSVBq4g/H5bR7Q=
@@ -356,8 +358,8 @@ github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWD
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 github.com/tektoncd/cli v0.46.2 h1:QHPxXdYLaw3NhK1LBl1eIlQXphWqq178BEc+FgtPaBo=
 github.com/tektoncd/cli v0.46.2/go.mod h1:qmLx5HXBJckpzk2nEAkJ+fRt+NHilS1ygj7MzkifKYk=
-github.com/tektoncd/pipeline v1.16.0 h1:J5RXmYft5Tljjvn+WV0zdfdh7paNw0eh8y6UCqZRNn0=
-github.com/tektoncd/pipeline v1.16.0/go.mod h1:s0AvpOqeqnD8i30nG9H6V4cf01OkG3QBNDzueKpzh+A=
+github.com/tektoncd/pipeline v1.18.0 h1:guGm2fIgI0GGzmbliy/Cqr5eMQAH6JXqMlMxKsOJq6Q=
+github.com/tektoncd/pipeline v1.18.0/go.mod h1:BTmaC68LcXHKAWtR6ldBdye94AEVguQ7Ml6DEZvBUFQ=
 github.com/tektoncd/triggers v0.36.4 h1:e5QSSXakZ5Nf+c3BcBM6yX+HUmxokjORafQlEbH5fJc=
 github.com/tektoncd/triggers v0.36.4/go.mod h1:O0u/q77jhBpFrkzUc63k9o75cHgPnRWsEEKT136k8lw=
 github.com/tidwall/gjson v1.18.0 h1:FIDeeyB800efLX89e5a8Y0BNH+LOngJyGrIWxG2FKQY=
