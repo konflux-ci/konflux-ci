@@ -4959,7 +4959,7 @@ spec:
               key: token
               name: release-service-github-token
               optional: true
-        image: quay.io/konflux-ci/release-service:2013e0f1e67b35cce295b488cea53fab60b057c9
+        image: quay.io/konflux-ci/release-service:b2031e5016011fcb903e0b1da069c0da503c1d61
         livenessProbe:
           httpGet:
             path: /healthz
