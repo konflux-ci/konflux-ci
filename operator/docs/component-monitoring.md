@@ -85,6 +85,38 @@ Service-style operands that keep restrictive ingress rules (namespace-lister) in
 metrics port; that NP is gated by `componentMetrics` via
 `IsComponentMetricsScrapeResource`.
 
+## Selecting the ServiceMonitors (kube-prometheus-stack)
+
+Prometheus installed by kube-prometheus-stack selects ServiceMonitors by label
+(`serviceMonitorSelector`). The operator does not take custom labels; instead every
+ServiceMonitor it manages carries a stable label you can select on:
+
+| Label | Value | On |
+|-------|-------|----|
+| `konflux.konflux-ci.dev/metrics` | `"true"` | every operator-managed ServiceMonitor: build-service, image-controller, integration-service, release-service, namespace-lister, konflux-ui-proxy and the operator's own `controller-manager-metrics-monitor` |
+| `konflux.konflux-ci.dev/component` | component name | component ServiceMonitors |
+| `konflux.konflux-ci.dev/owner` | owning CR name | component ServiceMonitors |
+| `app.kubernetes.io/name` | `konflux-operator` | operator ServiceMonitor |
+| `control-plane` | `controller-manager` | operator ServiceMonitor |
+
+`konflux.konflux-ci.dev/metrics: "true"` is the supported selector; the others are
+informational. Tests (`pkg/manifests`, `internal/operatormetrics`) fail if a managed
+ServiceMonitor loses the label.
+
+Example `kube-prometheus-stack` values:
+
+```yaml
+prometheus:
+  prometheusSpec:
+    serviceMonitorSelector:
+      matchLabels:
+        konflux.konflux-ci.dev/metrics: "true"
+    serviceMonitorNamespaceSelector: {}
+```
+
+Add `serviceMonitorSelectorNilUsesHelmValues: false` only if you also want Prometheus to
+keep selecting other ServiceMonitors without the `release` label.
+
 ## Target architecture (unified)
 
 Same model on OpenShift UWM, Kind, and other Kubernetes clusters: HTTPS metrics
