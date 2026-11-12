@@ -170,7 +170,7 @@ spec:
             description: Short globally unique IBM-safe cluster identifier.
         steps:
           - name: hash-pipeline-run-uid
-            image: registry.access.redhat.com/ubi10/go-toolset@sha256:e94c38ff4a099b755af60c73ac87198c613f369eb7f818d45c96fbc3f21047de
+            image: registry.access.redhat.com/ubi10/go-toolset@sha256:05f3da136a4dbe077f30606e2e53a4f5cab185989c98309823ea06a9a1c52a50
             script: |
               #!/usr/bin/env bash
               set -o errexit -o nounset -o pipefail
