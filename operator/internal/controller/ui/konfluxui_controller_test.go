@@ -116,6 +116,74 @@ var _ = Describe("KonfluxUI Controller", func() {
 		})
 	})
 
+	Context("Dex static password validation", func() {
+		newUI := func(pw dex.Password) *konfluxv1alpha1.KonfluxUI {
+			return &konfluxv1alpha1.KonfluxUI{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxUISpec{
+					KonfluxUIConfigSpec: konfluxv1alpha1.KonfluxUIConfigSpec{
+						Dex: &konfluxv1alpha1.DexDeploymentSpec{
+							Config: &dex.DexParams{
+								StaticPasswords: []dex.Password{pw},
+							},
+						},
+					},
+				},
+			}
+		}
+		base := dex.Password{Email: "a@example.com", Username: "a", UserID: "1"}
+
+		It("accepts hash only", func(ctx context.Context) {
+			pw := base
+			pw.Hash = "$2a$10$abcdef"
+			ui := newUI(pw)
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+		})
+
+		It("accepts hashFromEnv only", func(ctx context.Context) {
+			pw := base
+			pw.HashFromEnv = "ADMIN_PASSWORD_HASH"
+			ui := newUI(pw)
+			Expect(k8sClient.Create(ctx, ui)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, ui)
+		})
+
+		It("rejects neither hash nor hashFromEnv", func(ctx context.Context) {
+			err := k8sClient.Create(ctx, newUI(base))
+			Expect(errors.IsInvalid(err)).To(BeTrue(), "unexpected error: %v", err)
+			Expect(err.Error()).To(ContainSubstring("exactly one of hash or hashFromEnv"))
+		})
+
+		It("rejects both hash and hashFromEnv", func(ctx context.Context) {
+			pw := base
+			pw.Hash = "$2a$10$abcdef"
+			pw.HashFromEnv = "ADMIN_PASSWORD_HASH"
+			err := k8sClient.Create(ctx, newUI(pw))
+			Expect(errors.IsInvalid(err)).To(BeTrue(), "unexpected error: %v", err)
+			Expect(err.Error()).To(ContainSubstring("exactly one of hash or hashFromEnv"))
+		})
+
+		DescribeTable("rejects empty values (sent explicitly)",
+			func(ctx context.Context, pw map[string]any) {
+				ui := &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": konfluxv1alpha1.GroupVersion.String(),
+					"kind":       "KonfluxUI",
+					"metadata":   map[string]any{"name": CRName},
+					"spec": map[string]any{"dex": map[string]any{"config": map[string]any{
+						"staticPasswords": []any{pw},
+					}}},
+				}}
+				err := k8sClient.Create(ctx, ui)
+				Expect(errors.IsInvalid(err)).To(BeTrue(), "unexpected error: %v", err)
+				Expect(err.Error()).To(ContainSubstring("exactly one of hash or hashFromEnv"))
+			},
+			Entry("empty hashFromEnv", map[string]any{"email": "a@example.com", "hashFromEnv": ""}),
+			Entry("empty hash", map[string]any{"email": "a@example.com", "hash": ""}),
+			Entry("both empty", map[string]any{"email": "a@example.com", "hash": "", "hashFromEnv": ""}),
+		)
+	})
+
 	Context("CLI login configuration", func() {
 		It("should register the public CLI Dex client and oauth2-proxy extra audience", func(ctx context.Context) {
 			startManager(nil)

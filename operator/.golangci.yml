@@ -40,6 +40,9 @@ linters:
           - lll
         path: api/*
       - linters:
+          - lll
+        source: "^// \\+kubebuilder:"
+      - linters:
           - dupl
           - lll
         path: internal/*
