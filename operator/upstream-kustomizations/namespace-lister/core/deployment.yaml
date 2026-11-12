@@ -25,6 +25,12 @@ spec:
         labelSelector:
           matchLabels:
             apps: namespace-lister
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            apps: namespace-lister
       containers:
       - args:
         - -enable-tls

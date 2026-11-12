@@ -474,6 +474,8 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  annotations:
+    ignore-check.kube-linter.io/no-anti-affinity: Using topologySpreadConstraints
   labels:
     app: dex
   name: dex
@@ -564,6 +566,19 @@ spec:
         - mountPath: /etc/dex/tls
           name: tls
       serviceAccountName: dex
+      topologySpreadConstraints:
+      - labelSelector:
+          matchLabels:
+            app: dex
+        maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+      - labelSelector:
+          matchLabels:
+            app: dex
+        maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
       volumes:
       - emptyDir:
           medium: Memory
@@ -783,6 +798,12 @@ spec:
             app: proxy
         maxSkew: 1
         topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+      - labelSelector:
+          matchLabels:
+            app: proxy
+        maxSkew: 1
+        topologyKey: kubernetes.io/hostname
         whenUnsatisfiable: ScheduleAnyway
       volumes:
       - configMap:

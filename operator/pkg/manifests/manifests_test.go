@@ -5,8 +5,11 @@ import (
 	"testing"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -251,5 +254,56 @@ func TestGetCRDNamesForComponent(t *testing.T) {
 				t.Errorf("GetCRDNamesForComponent(%s) expected non-empty names", tt.component)
 			}
 		})
+	}
+}
+
+// TestDeploymentsSpreadAcrossZonesAndNodes guards the hardcoded soft spread of
+// every scalable operator-managed Deployment.
+func TestDeploymentsSpreadAcrossZonesAndNodes(t *testing.T) {
+	want := map[string]bool{
+		"proxy":                                  true,
+		"dex":                                    true,
+		"namespace-lister":                       true,
+		"build-service-controller-manager":       true,
+		"integration-service-controller-manager": true,
+		"release-service-controller-manager":     true,
+		"image-controller-controller-manager":    true,
+	}
+
+	store, err := NewObjectStore(testScheme(t))
+	if err != nil {
+		t.Fatalf("NewObjectStore() error = %v", err)
+	}
+	for _, component := range AllComponents() {
+		objects, err := store.GetForComponent(component)
+		if err != nil {
+			t.Fatalf("GetForComponent(%s) error = %v", component, err)
+		}
+		for _, obj := range objects {
+			d, ok := obj.(*appsv1.Deployment)
+			if !ok || !want[d.Name] {
+				continue
+			}
+			delete(want, d.Name)
+			podLabels := d.Spec.Template.Labels
+			got := map[string]bool{}
+			for _, c := range d.Spec.Template.Spec.TopologySpreadConstraints {
+				if c.MaxSkew != 1 || c.WhenUnsatisfiable != corev1.ScheduleAnyway {
+					t.Errorf("%s: unexpected constraint %+v", d.Name, c)
+				}
+				if c.LabelSelector == nil || !labels.SelectorFromSet(c.LabelSelector.MatchLabels).Matches(labels.Set(podLabels)) {
+					t.Errorf("%s: labelSelector %v does not match pod labels %v", d.Name, c.LabelSelector, podLabels)
+				}
+				got[c.TopologyKey] = true
+			}
+			for _, key := range []string{"topology.kubernetes.io/zone", "kubernetes.io/hostname"} {
+				if !got[key] {
+					t.Errorf("%s: missing topologySpreadConstraint for %s", d.Name, key)
+				}
+			}
+		}
+	}
+	for name := range want {
+		t.Errorf("deployment %s not found in embedded manifests", name)
 	}
 }
