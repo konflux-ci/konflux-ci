@@ -35,6 +35,15 @@ func isPreProvisioned() bool {
 	return os.Getenv("E2E_MANAGED_NAMESPACE") != ""
 }
 
+// defaultReleasePlanAuthor is the ReleasePlan author setup-release.sh must set
+// explicitly via -A/--release-author (default). release-service's author webhook
+// rejects SA-derived authors when standing-attribution is on and the label is
+// absent; asserting this exact value catches both a missing ReleasePlan and a
+// webhook-derived author (e.g. kubeadmin / system_serviceaccount_...).
+const defaultReleasePlanAuthor = "konflux-ci.noreply"
+
+const releasePlanAuthorLabel = "release.appstudio.openshift.io/author"
+
 // pruneDanglingSASecrets removes references to non-existent Secrets from
 // the release-pipeline ServiceAccount. This is always safe to call, even
 // during concurrent runs, because it only removes references that point
@@ -762,8 +771,10 @@ func cleanupTenantResources(ctx context.Context, fw *framework.Framework, ns, ap
 
 // verifyReleasePrerequisites checks that the critical resources created by
 // setup-release.sh actually exist. This catches silent failures in
-// pre-provisioned mode where some script commands may fail non-fatally.
-func verifyReleasePrerequisites(hub *framework.ControllerHub, managedNS string) error {
+// pre-provisioned mode where some script commands may fail non-fatally, and
+// asserts the ReleasePlan author label matches setup-release.sh's explicit
+// default (so SA webhook rejection or webhook-derived authors fail fast).
+func verifyReleasePrerequisites(hub *framework.ControllerHub, tenantNS, managedNS, releaseName string) error {
 	ctx := context.Background()
 	client := hub.CommonController.KubeRest()
 
@@ -791,6 +802,20 @@ func verifyReleasePrerequisites(hub *framework.ControllerHub, managedNS string) 
 	saKey := crclient.ObjectKey{Namespace: managedNS, Name: "release-pipeline"}
 	if err := client.Get(ctx, saKey, sa); err != nil {
 		return fmt.Errorf("release-pipeline ServiceAccount not found in %s: %w", managedNS, err)
+	}
+
+	// Verify ReleasePlan exists in the tenant namespace with the explicit author
+	// setup-release.sh must set. Missing RP usually means the author webhook
+	// rejected an SA-derived create; a different author means the script omitted
+	// the label and the webhook filled it from the requester.
+	rp := &releaseApi.ReleasePlan{}
+	rpKey := crclient.ObjectKey{Namespace: tenantNS, Name: releaseName}
+	if err := client.Get(ctx, rpKey, rp); err != nil {
+		return fmt.Errorf("ReleasePlan %s/%s not found; setup-release.sh may have failed to create it (e.g. author webhook rejected an SA author): %w", tenantNS, releaseName, err)
+	}
+	author := rp.GetLabels()[releasePlanAuthorLabel]
+	if author != defaultReleasePlanAuthor {
+		return fmt.Errorf("ReleasePlan %s/%s has %s=%q, want %q; setup-release.sh must set the author label explicitly at create time", tenantNS, releaseName, releasePlanAuthorLabel, author, defaultReleasePlanAuthor)
 	}
 
 	return nil
