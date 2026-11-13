@@ -7,6 +7,7 @@ Contributing Guidelines
 - [Cross-Platform Script Compatibility](#cross-platform-script-compatibility)
 - [Editing Markdown Files](#editing-markdown-files)
 - [Using KubeLinter](#using-kubelinter)
+- [Linting GitHub Actions Workflows](#linting-github-actions-workflows)
 - [Operator Development](#operator-development)
 - [CI/CD and Testing](#cicd-and-testing)
   * [Writing tests](#writing-tests)
@@ -105,6 +106,36 @@ Finally, run `kube-linter lint ./.kube-linter` to recursively apply KubeLinter c
 Consider creating a configuration file. To do so, check
 [KubeLinter config documentation](https://docs.kubelinter.io/#/configuring-kubelinter)
 this file will allow you to ignore or include specific KubeLinter checks.
+
+# Linting GitHub Actions Workflows
+
+CI audits workflow files with [zizmor](https://docs.zizmor.sh/) through
+`.github/workflows/zizmor.yaml`, which runs `.github/scripts/run-zizmor.sh`.
+The audit is scoped to the workflows a pull request changes, the same way
+Differential ShellCheck is scoped to the shell scripts it changes, so findings
+elsewhere in the tree do not block unrelated work.
+
+To run the same audit locally before pushing, pass the workflows you edited:
+
+```bash
+pipx run zizmor --offline --min-confidence medium .github/workflows/<file>.yaml
+```
+
+The finding this most often catches is `template-injection`: a `${{ ... }}`
+expansion placed directly in a `run:` block, where the shell evaluates whatever
+it expands to. When the value is attacker-controllable, such as a branch name,
+a tag, a PR title or a `workflow_dispatch` input, bind it to an `env:` variable
+on the step and reference it as `"$VAR"` instead:
+
+```yaml
+- name: Build the tag
+  env:
+    TAG: ${{ inputs.tag }}
+  run: ./build.sh "$TAG"
+```
+
+CI runs with `--min-confidence medium`, so lower-confidence audits are reported
+locally but do not fail the check.
 
 # Operator Development
 
