@@ -31,8 +31,9 @@ func TestDefaultCatalog_TargetGroups(t *testing.T) {
 	assert.False(t, byID["release-service"].UWMUpCheck)
 	assert.Equal(t, kubernetes.ScrapeTokenSecretName, byID["release-service"].ScrapeTokenSecret)
 	assert.Equal(t, "https", byID["release-service"].Scheme)
-	assert.True(t, byID["konflux-ui-proxy"].UWMUpCheck)
-	assert.Empty(t, byID["konflux-ui-proxy"].ScrapeTokenSecret)
+	assert.False(t, byID["konflux-ui-proxy"].UWMUpCheck)
+	assert.Equal(t, kubernetes.ScrapeTokenSecretName, byID["konflux-ui-proxy"].ScrapeTokenSecret)
+	assert.Equal(t, "https", byID["konflux-ui-proxy"].Scheme)
 	assert.Equal(t, []string{"caddy_http_request_duration_seconds"}, byID["konflux-ui-proxy"].BodyMustMatchAny)
 
 	assert.False(t, byID["konflux-operator"].TLSInsecureSkipVerifyForScrape())

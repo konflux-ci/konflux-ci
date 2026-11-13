@@ -34,7 +34,7 @@ func NewClient() (crclient.Client, error) {
 	return crclient.New(cfg, crclient.Options{Scheme: proxyScheme})
 }
 
-func serviceProxyGet(ctx context.Context, namespace, serviceName, portName, path string) ([]byte, error) {
+func serviceProxyGet(ctx context.Context, scheme, namespace, serviceName, portName, path string) ([]byte, error) {
 	if proxyKubeConfig == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
@@ -43,6 +43,6 @@ func serviceProxyGet(ctx context.Context, namespace, serviceName, portName, path
 		return nil, err
 	}
 	return clientset.CoreV1().Services(namespace).
-		ProxyGet("http", serviceName, portName, path, nil).
+		ProxyGet(scheme, serviceName, portName, path, nil).
 		DoRaw(ctx)
 }

@@ -17,3 +17,35 @@ patches:
       - op: add
         path: /spec/progressDeadlineSeconds
         value: 2147483647
+
+replacements:
+  - source:
+      fieldPath: metadata.name
+      kind: Service
+      name: proxy
+    targets:
+      - fieldPaths:
+          - spec.endpoints.0.tlsConfig.serverName
+        options:
+          delimiter: '.'
+          index: 0
+        select:
+          group: monitoring.coreos.com
+          kind: ServiceMonitor
+          name: konflux-ui-proxy
+          version: v1
+  - source:
+      fieldPath: metadata.namespace
+      kind: Service
+      name: proxy
+    targets:
+      - fieldPaths:
+          - spec.endpoints.0.tlsConfig.serverName
+        options:
+          delimiter: '.'
+          index: 1
+        select:
+          group: monitoring.coreos.com
+          kind: ServiceMonitor
+          name: konflux-ui-proxy
+          version: v1
