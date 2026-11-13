@@ -253,3 +253,45 @@ func TestGetCRDNamesForComponent(t *testing.T) {
 		})
 	}
 }
+
+// TestServiceMonitorsCarryMetricsLabel guards the selector documented in
+// docs/component-monitoring.md: every embedded ServiceMonitor must carry the
+// stable metrics label so users can select them with serviceMonitorSelector.
+func TestServiceMonitorsCarryMetricsLabel(t *testing.T) {
+	const labelKey = "konflux.konflux-ci.dev/metrics"
+
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	store, err := NewObjectStore(scheme)
+	if err != nil {
+		t.Fatalf("NewObjectStore() error = %v", err)
+	}
+
+	found := map[Component]string{}
+	err = store.Walk(func(info ParsedManifestInfo) error {
+		for _, obj := range info.Objects {
+			if obj.GetObjectKind().GroupVersionKind().Kind != "ServiceMonitor" {
+				continue
+			}
+			found[info.Component] = obj.GetName()
+			if got := obj.GetLabels()[labelKey]; got != "true" {
+				t.Errorf("%s ServiceMonitor %s: label %s = %q, want \"true\"",
+					info.Component, obj.GetName(), labelKey, got)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Walk() error = %v", err)
+	}
+
+	want := []Component{BuildService, ImageController, Integration, NamespaceLister, Release, UI}
+	for _, c := range want {
+		if _, ok := found[c]; !ok {
+			t.Errorf("no ServiceMonitor found for component %s", c)
+		}
+	}
+	if len(found) != len(want) {
+		t.Errorf("ServiceMonitors found in %d components, want %d: %v", len(found), len(want), found)
+	}
+}
