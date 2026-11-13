@@ -19,6 +19,7 @@ package buildservice
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/onsi/gomega"
@@ -1142,6 +1143,59 @@ func TestReconcileEnsureTrustedCAConfigMapError(t *testing.T) {
 	g.Expect(err).To(gomega.HaveOccurred())
 	g.Expect(err.Error()).To(gomega.ContainSubstring("failed to apply trusted-ca ConfigMap in " + webhookConfigNamespace))
 	g.Expect(err.Error()).To(gomega.ContainSubstring("simulated trusted-ca apply failure"))
+}
+
+// TestReconcileWebhookConfigApplyError covers the failure path of applying the
+// content-hashed webhook config ConfigMap. The revision now goes through the
+// tracking client so CleanupOrphans can reap superseded ones, which means a
+// failure here has to surface rather than leave the Deployment referencing a
+// ConfigMap name that was never written.
+func TestReconcileWebhookConfigApplyError(t *testing.T) {
+	scheme := runtime.NewScheme()
+	g := gomega.NewWithT(t)
+	g.Expect(clientgoscheme.AddToScheme(scheme)).To(gomega.Succeed())
+	g.Expect(konfluxv1alpha1.AddToScheme(scheme)).To(gomega.Succeed())
+
+	bs := &konfluxv1alpha1.KonfluxBuildService{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "konflux.konflux-ci.dev/v1alpha1",
+			Kind:       "KonfluxBuildService",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: CRName,
+			UID:  "test-uid",
+		},
+		Spec: konfluxv1alpha1.NewKonfluxBuildServiceSpec(
+			konfluxv1alpha1.KonfluxBuildServiceConfigSpec{},
+			testutil.DefaultComponentMetricsConfig(),
+		),
+	}
+
+	// Fail only the hashed webhook config revision. Everything applied before it,
+	// trusted-ca included, must still succeed so the reconcile reaches this step.
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(bs).WithStatusSubresource(bs).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Patch: func(_ context.Context, _ client.WithWatch, obj client.Object, _ client.Patch, _ ...client.PatchOption) error {
+				cm, ok := obj.(*corev1.ConfigMap)
+				if ok && cm.Namespace == webhookConfigNamespace &&
+					strings.HasPrefix(cm.Name, webhookConfigBaseName+"-") {
+					return fmt.Errorf("simulated webhook config apply failure")
+				}
+				return nil
+			},
+		}).Build()
+
+	r := &KonfluxBuildServiceReconciler{
+		Client:      c,
+		Scheme:      scheme,
+		ObjectStore: testutil.GetTestObjectStore(t),
+		ClusterInfo: newOpenShiftClusterInfo(t),
+	}
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: CRName}})
+	g.Expect(err).To(gomega.HaveOccurred())
+	g.Expect(err.Error()).To(gomega.ContainSubstring("failed to apply webhook config ConfigMap"))
+	g.Expect(err.Error()).To(gomega.ContainSubstring("simulated webhook config apply failure"))
 }
 
 func boolPtr(b bool) *bool { return &b }
