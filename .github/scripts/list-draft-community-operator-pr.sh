@@ -52,6 +52,21 @@ if [ -z "$RELEASE_TAG" ]; then
   exit 0
 fi
 
+# The tag is scraped from a PR body in UPSTREAM_REPO, so it is untrusted text and
+# the grep above admits shell metacharacters. Require a plain tag name before it
+# reaches $GITHUB_OUTPUT and the PAT-bearing step that consumes it.
+#
+# This exits 1 rather than writing count=0. count=0 means "nothing to promote"
+# and is a normal, silent outcome for the daily run; a tag we refuse to use is
+# not normal, and reporting it as count=0 would stop promotions indefinitely
+# with nothing to show why. Failing matches the already-open-ready-PR case
+# below, and the workflow opens an issue on failure.
+if [[ ! "$RELEASE_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._/+-]*$ ]]; then
+  log "Release tag parsed from PR #${PR_NUMBER} contains disallowed characters: '${RELEASE_TAG}'"
+  log "Refusing to use it. Check the PR body in ${UPSTREAM_REPO}; expected a plain tag like v0.1.5."
+  exit 1
+fi
+
 # Only one non-draft (ready) PR at a time to avoid catalog-update PR conflicts.
 OPEN_READY=$(GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN}}" gh pr list --repo "${UPSTREAM_REPO}" \
   --author "@me" --state open --json number,isDraft -q '[.[] | select(.isDraft == false)] | length')
