@@ -40,6 +40,15 @@ if [ -z "${GIT_REF}" ] || [ -z "${REMOTE_NAME}" ]; then
   exit 1
 fi
 
+# git_ref comes from a workflow_dispatch input. Require a plain ref name: must
+# start alphanumeric (a leading '-' would be parsed as an option by git) and
+# contain no shell metacharacters, so it stays inert even if a caller ever
+# interpolates it instead of binding it to an env var.
+if [[ ! "${GIT_REF}" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]]; then
+  echo "Error: git_ref contains disallowed characters: '${GIT_REF}'"
+  exit 1
+fi
+
 if [[ ! "$DEV_VERSION" =~ ^[0-9]+\.[0-9]+$ ]] || [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then
   echo "Error: dev_version and release_version must be X.Y (e.g. 1.2)"
   exit 1
