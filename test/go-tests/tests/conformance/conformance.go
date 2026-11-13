@@ -129,10 +129,11 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 					if err := verifyPreProvisionedRBAC(fw.AsKubeAdmin, userNamespace); err != nil {
 						klog.Warningf("conformance: pre-provisioned RBAC check failed (non-fatal, tests may still pass): %v", err)
 					}
-					gomega.Expect(verifyReleasePrerequisites(fw.AsKubeAdmin, managedNamespace)).To(gomega.Succeed())
+					gomega.Expect(verifyReleasePrerequisites(fw.AsKubeAdmin, userNamespace, managedNamespace, releaseName)).To(gomega.Succeed())
 				} else {
 					gomega.Expect(patchECPForE2E(fw.AsKubeAdmin, releaseRes.ECPName, managedNamespace)).To(gomega.Succeed())
 					gomega.Expect(grantIntegrationRunnerJobRBAC(fw.AsKubeAdmin, userNamespace)).To(gomega.Succeed())
+					gomega.Expect(verifyReleasePrerequisites(fw.AsKubeAdmin, userNamespace, managedNamespace, releaseName)).To(gomega.Succeed())
 				}
 
 				buildPipelineAnnotation = build.GetBuildPipelineBundleAnnotation(appSpec.ComponentSpec.BuildPipelineType)
