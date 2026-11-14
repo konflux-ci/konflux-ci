@@ -5,7 +5,7 @@ resources:
 - monitoring
 namespace: namespace-lister
 images:
-- digest: sha256:d2b88df3ef9fbbbaef63fcc6c79da8eca935837946054f80bced9472156de191
+- digest: sha256:4c212f41b09d30a8367c77def6a2d977ef8bb0b6365c0b19e4e69c388f5c0bf1
   name: quay.io/konflux-ci/namespace-lister
   newName: quay.io/konflux-ci/namespace-lister
 patches:
