@@ -361,9 +361,18 @@ type ClusterConfigData struct {
 	// Written as "additional-cbom-generation-rules-image" in the cluster-config ConfigMap.
 	// +optional
 	AdditionalCBOMGenerationRulesImage string `json:"additionalCBOMGenerationRulesImage,omitempty"`
+
+	// KFPGitURL is the Git repository URL for Known False Positives.
+	// Written as "kfp-git-url" in the cluster-config ConfigMap.
+	// When empty or omitted, the key is absent from the ConfigMap.
+	// Do not embed credentials in this URL — the ConfigMap is readable by all authenticated users.
+	// Query parameters and fragments are not allowed because they can contain credentials.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="!self.contains('@') && !self.contains('?') && !self.contains('#')",message="URL must not contain credentials (userinfo), query parameters, or fragments."
+	KFPGitURL string `json:"kfpGitUrl,omitempty"`
 }
 
-// ConfigMap key constants for cluster-config proxy fields.
+// ConfigMap key constants for cluster-config fields.
 // These are the kebab-case keys written to the ConfigMap, mapped from camelCase CRD fields.
 const (
 	ClusterConfigKeyAllowCacheProxy                    = "allow-cache-proxy"
@@ -379,6 +388,7 @@ const (
 	ClusterConfigKeyPackageRegistryProxyCargoURL       = "package-registry-proxy-cargo-url"
 	ClusterConfigKeyEnableCBOMGenerationTask           = "enable-cbom-generation-task"
 	ClusterConfigKeyAdditionalCBOMGenerationRulesImage = "additional-cbom-generation-rules-image"
+	ClusterConfigKeyKFPGitURL                          = "kfp-git-url"
 )
 
 // All is an iterator that yields all non-empty key-value pairs from ClusterConfigData.
@@ -516,6 +526,11 @@ func (d ClusterConfigData) All(yield func(key, value string) bool) {
 	}
 	if d.AdditionalCBOMGenerationRulesImage != "" {
 		if !yield(ClusterConfigKeyAdditionalCBOMGenerationRulesImage, d.AdditionalCBOMGenerationRulesImage) {
+			return
+		}
+	}
+	if d.KFPGitURL != "" {
+		if !yield(ClusterConfigKeyKFPGitURL, d.KFPGitURL) {
 			return
 		}
 	}
