@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -312,22 +311,6 @@ func assertAdditionalFQDNOperatorConfig(g Gomega, ctx context.Context, aliasHost
 	ns := uiNamespaceForProxyTests()
 	callback := fmt.Sprintf("https://%s/oauth2/callback", aliasHost)
 
-	cmList := &corev1.ConfigMapList{}
-	g.Expect(proxyClient.List(ctx, cmList,
-		client.InNamespace(ns),
-		client.MatchingLabels{uiDexConfigMapLabel: "true"},
-	)).To(Succeed())
-	g.Expect(cmList.Items).NotTo(BeEmpty(), "expected Dex ConfigMap")
-
-	var dexConfigMapName string
-	for i := range cmList.Items {
-		if data := cmList.Items[i].Data[uiDexConfigMapKey]; strings.Contains(data, callback) {
-			dexConfigMapName = cmList.Items[i].Name
-			break
-		}
-	}
-	g.Expect(dexConfigMapName).NotTo(BeEmpty(), "expected Dex ConfigMap containing alias callback %s", callback)
-
 	dexDep := &appsv1.Deployment{}
 	g.Expect(proxyClient.Get(ctx, client.ObjectKey{
 		Name:      "dex",
@@ -336,8 +319,17 @@ func assertAdditionalFQDNOperatorConfig(g Gomega, ctx context.Context, aliasHost
 	dexVol := kubernetes.FindVolume(dexDep.Spec.Template.Spec.Volumes, "dex")
 	g.Expect(dexVol).NotTo(BeNil(), "expected dex ConfigMap volume")
 	g.Expect(dexVol.ConfigMap).NotTo(BeNil())
-	g.Expect(dexVol.ConfigMap.Name).To(Equal(dexConfigMapName),
-		"dex Deployment must mount the ConfigMap that includes the alias callback")
+
+	// Start from the revision the Deployment mounts rather than looking one up by
+	// label. The revisions no longer carry a dex-specific label, and this way the
+	// assertion is about the config the dex pods actually get.
+	dexCM := &corev1.ConfigMap{}
+	g.Expect(proxyClient.Get(ctx, client.ObjectKey{
+		Name:      dexVol.ConfigMap.Name,
+		Namespace: ns,
+	}, dexCM)).To(Succeed(), "expected the mounted Dex ConfigMap %s to exist", dexVol.ConfigMap.Name)
+	g.Expect(dexCM.Data[uiDexConfigMapKey]).To(ContainSubstring(callback),
+		"the mounted Dex ConfigMap must include the alias callback %s", callback)
 	assertDeploymentRolledOut(g, dexDep)
 
 	proxyDep := &appsv1.Deployment{}

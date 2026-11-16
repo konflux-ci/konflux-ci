@@ -15,7 +15,6 @@ import (
 const (
 	additionalFQDNIngressName = "konflux-ui-additional"
 	additionalFQDNHostPrefix  = "konflux-ui-additional"
-	uiDexConfigMapLabel       = "app.kubernetes.io/managed-by-konflux-ui-reconciler"
 	uiDexConfigMapKey         = "config.yaml"
 )
 
