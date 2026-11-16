@@ -1,0 +1,32 @@
+name: Workflow Lint
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+jobs:
+  zizmor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          # zizmor audits only the workflows this change touches, which needs
+          # the base commit present in the local history.
+          fetch-depth: 0
+          # Nothing here pushes, and a credential left in .git/config is one of
+          # the things zizmor reports (artipacked).
+          persist-credentials: false
+
+      - name: Run zizmor on changed workflows
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+        run: ./.github/scripts/run-zizmor.sh
