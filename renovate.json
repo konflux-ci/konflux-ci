@@ -313,6 +313,36 @@
       "extractVersionTemplate": "^v?(?<version>.*)$"
     },
     {
+      "description": "Track Hugo version in the documentation workflow",
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/pages\\.yml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=github-releases depName=gohugoio/hugo",
+        "HUGO_VERSION:\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "gohugoio/hugo",
+      "extractVersionTemplate": "^v?(?<version>.*)$"
+    },
+    {
+      "description": "Track Dart Sass version in the documentation workflow",
+      "customType": "regex",
+      "matchStringsStrategy": "combination",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/pages\\.yml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=github-releases depName=sass/dart-sass",
+        "DART_SASS_VERSION:\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "sass/dart-sass",
+      "extractVersionTemplate": "^v?(?<version>.*)$"
+    },
+    {
       "description": "Track release-service-catalog development branch SHA in setup-release.sh",
       "customType": "regex",
       "matchStringsStrategy": "combination",

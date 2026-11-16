@@ -11,6 +11,7 @@ on:
       - 'operator/api/**'
       - 'operator/config/samples/**'
       - 'operator/Makefile'
+      - '.github/workflows/pages.yml'
   pull_request:
     paths:
       - 'operator/docs/**'
@@ -19,7 +20,14 @@ on:
       - 'operator/api/**'
       - 'operator/config/samples/**'
       - 'operator/Makefile'
+      - '.github/workflows/pages.yml'
   workflow_dispatch:
+
+env:
+  # renovate: datasource=github-releases depName=gohugoio/hugo
+  HUGO_VERSION: "0.170.0"
+  # renovate: datasource=github-releases depName=sass/dart-sass
+  DART_SASS_VERSION: "1.108.2"
 
 permissions:
   contents: read
@@ -54,10 +62,19 @@ jobs:
         run: npm ci
 
       - name: Install Hugo
-        uses: peaceiris/actions-hugo@2752ce1d29631191ea3f27c23495fa06139a5b78  # v3
-        with:
-          hugo-version: 'latest'
-          extended: true
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/hugo.tar.gz" "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_${HUGO_VERSION}_linux-amd64.tar.gz"
+          tar -xzf "$RUNNER_TEMP/hugo.tar.gz" -C "$RUNNER_TEMP" hugo
+          sudo mv "$RUNNER_TEMP/hugo" /usr/local/bin/hugo
+          hugo version
+
+      - name: Install Dart Sass
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/dart-sass.tar.gz" "https://github.com/sass/dart-sass/releases/download/${DART_SASS_VERSION}/dart-sass-${DART_SASS_VERSION}-linux-x64.tar.gz"
+          tar -xzf "$RUNNER_TEMP/dart-sass.tar.gz" -C "$RUNNER_TEMP"
+          sudo mv "$RUNNER_TEMP/dart-sass" /usr/local/dart-sass
+          echo "/usr/local/dart-sass" >> "$GITHUB_PATH"
+          /usr/local/dart-sass/sass --version
 
       - name: Generate API Reference
         working-directory: ./operator
@@ -107,10 +124,19 @@ jobs:
         run: npm ci
 
       - name: Install Hugo
-        uses: peaceiris/actions-hugo@2752ce1d29631191ea3f27c23495fa06139a5b78  # v3
-        with:
-          hugo-version: 'latest'
-          extended: true
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/hugo.tar.gz" "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_${HUGO_VERSION}_linux-amd64.tar.gz"
+          tar -xzf "$RUNNER_TEMP/hugo.tar.gz" -C "$RUNNER_TEMP" hugo
+          sudo mv "$RUNNER_TEMP/hugo" /usr/local/bin/hugo
+          hugo version
+
+      - name: Install Dart Sass
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/dart-sass.tar.gz" "https://github.com/sass/dart-sass/releases/download/${DART_SASS_VERSION}/dart-sass-${DART_SASS_VERSION}-linux-x64.tar.gz"
+          tar -xzf "$RUNNER_TEMP/dart-sass.tar.gz" -C "$RUNNER_TEMP"
+          sudo mv "$RUNNER_TEMP/dart-sass" /usr/local/dart-sass
+          echo "/usr/local/dart-sass" >> "$GITHUB_PATH"
+          /usr/local/dart-sass/sass --version
 
       - name: Generate API Reference
         working-directory: ./operator
