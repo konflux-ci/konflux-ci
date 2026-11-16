@@ -1285,6 +1285,8 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  annotations:
+    ignore-check.kube-linter.io/no-anti-affinity: Using topologySpreadConstraints
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: image-controller
@@ -1358,6 +1360,19 @@ spec:
           type: RuntimeDefault
       serviceAccountName: image-controller-controller-manager
       terminationGracePeriodSeconds: 10
+      topologySpreadConstraints:
+      - labelSelector:
+          matchLabels:
+            control-plane: controller-manager
+        maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+      - labelSelector:
+          matchLabels:
+            control-plane: controller-manager
+        maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
       volumes:
       - configMap:
           name: quay-ca-bundle

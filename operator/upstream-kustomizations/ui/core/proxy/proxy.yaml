@@ -30,6 +30,12 @@ spec:
         labelSelector:
           matchLabels:
             app: proxy
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: proxy
       initContainers:
       - name: copy-static-content
         image: quay.io/konflux-ci/konflux-ui

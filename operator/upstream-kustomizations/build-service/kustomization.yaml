@@ -26,6 +26,35 @@ patches:
       - op: add
         path: /spec/progressDeadlineSeconds
         value: 2147483647
+  # Spread replicas across zones and nodes (soft constraints)
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: build-service-controller-manager
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: build-service-controller-manager
+        annotations:
+          ignore-check.kube-linter.io/no-anti-affinity: "Using topologySpreadConstraints"
+      spec:
+        template:
+          spec:
+            topologySpreadConstraints:
+              - maxSkew: 1
+                topologyKey: topology.kubernetes.io/zone
+                whenUnsatisfiable: ScheduleAnyway
+                labelSelector:
+                  matchLabels:
+                    control-plane: controller-manager
+              - maxSkew: 1
+                topologyKey: kubernetes.io/hostname
+                whenUnsatisfiable: ScheduleAnyway
+                labelSelector:
+                  matchLabels:
+                    control-plane: controller-manager
 
 replacements:
   # Certificate dnsNames + ServiceMonitor serverName from the metrics Service identity.
