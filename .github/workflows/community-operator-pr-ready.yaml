@@ -28,12 +28,19 @@ jobs:
           GH_TOKEN: ${{ secrets.KONFLUX_CI_BOT_PAT }}
         run: .github/scripts/list-draft-community-operator-pr.sh
 
+      # The tag is scraped from a PR body in an external repository
+      # (list-draft-community-operator-pr.sh), so it is untrusted input. Bind it
+      # to an env var and reference it as "$VAR": a template expression inside a
+      # run: block is substituted into the script before bash parses it, and this
+      # step runs unattended on a schedule with the bot PAT in scope.
+      # list-draft-community-operator-pr.sh validates the format as well.
       - name: Update PR branch and mark ready
         if: steps.list.outputs.count == '1'
         env:
           GITHUB_TOKEN: ${{ secrets.KONFLUX_CI_BOT_PAT }}
+          RELEASE_TAG: ${{ steps.list.outputs.tag }}
         run: |
-          .github/scripts/create-community-operator-pr.sh "${{ steps.list.outputs.tag }}" --update
+          .github/scripts/create-community-operator-pr.sh "${RELEASE_TAG}" --update
 
       - name: Create issue on failure
         if: failure()
