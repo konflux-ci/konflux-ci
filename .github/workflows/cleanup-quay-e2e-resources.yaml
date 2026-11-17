@@ -1,0 +1,64 @@
+# Periodically delete Quay repositories and robot accounts left by e2e runs.
+# Logic lives in .github/scripts/cleanup-quay-e2e-resources.sh so it can be run locally:
+#   set -a && source scripts/deploy-local.env && set +a
+#   DRY_RUN=true .github/scripts/cleanup-quay-e2e-resources.sh
+name: Cleanup Quay E2E Resources
+
+on:
+  schedule:
+    # Daily. max_age_hours must stay below this interval so CI leftovers are
+    # eligible when REQUIRE_MIN_DELETES is enabled (default on).
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'List matching resources without deleting'
+        required: false
+        type: boolean
+        default: true
+      max_age_hours:
+        description: 'Delete resources older than this many hours (keep below the 24h schedule interval)'
+        required: false
+        type: string
+        default: '12'
+      require_min_deletes:
+        description: 'Fail if fewer than one repo and one robot were deleted'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  cleanup-quay-e2e-resources:
+    name: Cleanup Quay repos and robots
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+
+      - name: Cleanup Quay e2e resources
+        env:
+          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+          QUAY_ORG: ${{ secrets.QUAY_ORG }}
+          MAX_AGE_HOURS: ${{ inputs.max_age_hours || '12' }}
+          # schedule: inputs are absent (null). Prefer event_name so null is not treated as false.
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == true && 'true' || 'false' }}
+          REQUIRE_MIN_DELETES: ${{ github.event_name == 'workflow_dispatch' && inputs.require_min_deletes == false && 'false' || 'true' }}
+        run: .github/scripts/cleanup-quay-e2e-resources.sh
+
+      - name: Notify on failure
+        if: ${{ failure() && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_NAME: Cleanup Quay E2E Resources
+        run: |
+          .github/scripts/create-or-update-issue.sh \
+            "⚠️ Quay E2E Resources Cleanup Workflow Failed" \
+            "The scheduled workflow to clean up Quay e2e repositories and robot accounts has failed."
