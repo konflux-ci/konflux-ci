@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/konflux-ci/konflux-ci/operator/pkg/oauth2proxy"
 )
@@ -18,6 +19,15 @@ const (
 	// proxySessionCookieName is OAUTH2_PROXY_COOKIE_NAME from oauth2proxy.WithCookieConfig.
 	proxySessionCookieName = oauth2proxy.SessionCookieName
 	proxyLoginMaxHops      = 20
+
+	// proxyLoginRetryTimeout is how long proxyCookieGETRetry waits for
+	// a transient 502 or connection-refused error to clear. Dex restarts
+	// when its projected ServiceAccount token is rotated; the new process
+	// needs a few seconds to begin listening.
+	proxyLoginRetryTimeout = 20 * time.Second
+
+	// proxyLoginRetryInterval is the polling interval between retries.
+	proxyLoginRetryInterval = 2 * time.Second
 )
 
 // obtainProxySessionCookie completes the browser login through /oauth2/start
@@ -48,7 +58,7 @@ func obtainProxySessionCookie(ctx context.Context) ([]*http.Cookie, error) {
 			return cookies, nil
 		}
 
-		status, location, body, err := proxyCookieGET(ctx, client, current)
+		status, location, body, err := proxyCookieGETRetry(ctx, client, current)
 		if err != nil {
 			return nil, err
 		}
@@ -204,6 +214,53 @@ func postFormForRedirect(ctx context.Context, client *http.Client, actionURL str
 		return resolveURL(actionURL, location)
 	}
 	return "", fmt.Errorf("login form at %s returned HTTP %d without a redirect", redactOAuthURL(actionURL), status)
+}
+
+// proxyCookieGETRetry wraps proxyCookieGET with retries for transient errors
+// that occur while Dex is restarting during a projected-token refresh. It
+// retries HTTP 502 (Bad Gateway) and connection-refused/reset errors for up
+// to proxyLoginRetryTimeout before returning the last result.
+func proxyCookieGETRetry(ctx context.Context, client *http.Client, rawURL string) (int, string, []byte, error) {
+	status, location, body, err := proxyCookieGET(ctx, client, rawURL)
+	if !isRetriableLoginResponse(status, err) {
+		return status, location, body, err
+	}
+
+	retryCtx, cancel := context.WithTimeout(ctx, proxyLoginRetryTimeout)
+	defer cancel()
+
+	for isRetriableLoginResponse(status, err) {
+		select {
+		case <-retryCtx.Done():
+			// Deadline exceeded or parent context cancelled; return the
+			// last attempt's result so the caller sees the real error.
+			return status, location, body, err
+		case <-time.After(proxyLoginRetryInterval):
+		}
+		fmt.Printf("[login-retry] %s: retrying after transient error (status=%d err=%v)\n", rawURL, status, err)
+		status, location, body, err = proxyCookieGET(ctx, client, rawURL)
+	}
+	return status, location, body, err
+}
+
+// isRetriableLoginResponse reports whether the response from a login GET is
+// a transient failure that may resolve when Dex finishes restarting.
+func isRetriableLoginResponse(status int, err error) bool {
+	if err != nil {
+		return isTransientLoginError(err)
+	}
+	return status == http.StatusBadGateway
+}
+
+// isTransientLoginError reports whether err is a connection-refused or
+// connection-reset dial error that may clear when Dex starts listening again.
+func isTransientLoginError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "connection refused") ||
+		strings.Contains(s, "connection reset")
 }
 
 // proxyCookieGET GETs rawURL without following redirects. The client jar keeps cookies.
