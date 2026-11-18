@@ -149,8 +149,8 @@ func TestKonfluxSpec_ExplicitStandard(t *testing.T) {
 	g.Expect(spec.IsRBACEnabled()).To(gomega.BeTrue(), "rbac enabled")
 }
 
-// TestKonfluxSpec_SpokeType verifies that the spoke installation type enables
-// only Info and RBAC, disabling all standard-only components.
+// TestKonfluxSpec_SpokeType verifies that spoke defaults to Info and RBAC,
+// disabling standard-only and opt-in components.
 func TestKonfluxSpec_SpokeType(t *testing.T) {
 	g := gomega.NewWithT(t)
 	spec := &KonfluxSpec{InstallationType: InstallationTypeSpoke}
@@ -165,9 +165,9 @@ func TestKonfluxSpec_SpokeType(t *testing.T) {
 	g.Expect(spec.IsBuildServiceEnabled()).To(gomega.BeFalse(), "buildService disabled in spoke")
 	g.Expect(spec.IsNamespaceListerEnabled()).To(gomega.BeFalse(), "namespaceLister disabled in spoke")
 	g.Expect(spec.IsEnterpriseContractEnabled()).To(gomega.BeFalse(), "enterpriseContract disabled in spoke")
-	g.Expect(spec.IsCertManagerEnabled()).To(gomega.BeFalse(), "certManager disabled in spoke")
 	g.Expect(spec.IsCLIEnabled()).To(gomega.BeFalse(), "cli disabled in spoke")
 	g.Expect(spec.IsDefaultTenantEnabled()).To(gomega.BeFalse(), "defaultTenant disabled in spoke")
+	g.Expect(spec.IsCertManagerEnabled()).To(gomega.BeFalse(), "certManager disabled without PKI consumers")
 
 	// Both-type components: enabled in spoke mode.
 	g.Expect(spec.IsInfoEnabled()).To(gomega.BeTrue(), "info enabled in spoke")
@@ -195,9 +195,39 @@ func TestKonfluxSpec_SpokeWithOptionalComponents(t *testing.T) {
 	g.Expect(spec.IsImageControllerEnabled()).To(gomega.BeTrue(), "imageController enabled in spoke when set")
 	g.Expect(spec.IsInternalRegistryEnabled()).To(gomega.BeTrue(), "internalRegistry enabled in spoke when set")
 	g.Expect(spec.IsTelemetryEnabled()).To(gomega.BeTrue(), "telemetry enabled in spoke when set")
+	g.Expect(spec.IsCertManagerEnabled()).To(gomega.BeTrue(), "certManager required by PKI consumers in spoke")
 
 	// Standard-only components remain disabled.
 	g.Expect(spec.IsBuildServiceEnabled()).To(gomega.BeFalse(), "buildService still disabled in spoke")
+}
+
+// TestKonfluxSpec_SpokePKIDependencies verifies that either opt-in TLS consumer
+// keeps the shared issuer enabled in spoke mode.
+func TestKonfluxSpec_SpokePKIDependencies(t *testing.T) {
+	enabled, disabled := true, false
+	tests := []struct {
+		name             string
+		imageController  *ImageControllerConfig
+		internalRegistry *InternalRegistryConfig
+		want             bool
+	}{
+		{name: "registry enabled", internalRegistry: &InternalRegistryConfig{Enabled: &enabled}, want: true},
+		{name: "image controller enabled", imageController: &ImageControllerConfig{Enabled: &enabled}, want: true},
+		{name: "registry disabled", internalRegistry: &InternalRegistryConfig{Enabled: &disabled}},
+		{name: "image controller disabled", imageController: &ImageControllerConfig{Enabled: &disabled}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+			spec := &KonfluxSpec{
+				InstallationType: InstallationTypeSpoke,
+				ImageController:  tc.imageController,
+				InternalRegistry: tc.internalRegistry,
+			}
+			g.Expect(spec.IsCertManagerEnabled()).To(gomega.Equal(tc.want))
+		})
+	}
 }
 
 // TestKonfluxSpec_DefaultTenantEnabled verifies that the default tenant respects
