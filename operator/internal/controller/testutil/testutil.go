@@ -19,8 +19,10 @@ package testutil
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -30,6 +32,7 @@ import (
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -61,6 +64,10 @@ type TestEnv struct {
 	// stopManager is set by StartManager and called by TeardownTestEnv to
 	// wait for the suite-level manager's goroutines to fully stop.
 	stopManager func()
+
+	// crdStagingDir holds temporary CRD directories built by WithoutCRDFiles.
+	// TeardownTestEnv removes it.
+	crdStagingDir string
 }
 
 const (
@@ -76,6 +83,29 @@ var (
 	sharedObjectStoreErr  error
 )
 
+// TestEnvOption configures the environment built by SetupTestEnv.
+type TestEnvOption func(*testEnvOptions)
+
+type testEnvOptions struct {
+	excludeCRDFiles sets.Set[string]
+}
+
+// WithoutCRDFiles omits CRD manifests from the installed set, named by file base
+// name (e.g. "consolelinks.console.openshift.io.yaml"). Use it to model a cluster
+// where an optional CRD is absent — for example OpenShift installed without the
+// console capability, where console.openshift.io is missing while ClusterVersion
+// (and therefore ClusterInfo.IsOpenShift) is still present. The directory holding
+// an excluded file is staged into a temporary copy without it, so the other CRDs
+// in that directory are still installed.
+func WithoutCRDFiles(names ...string) TestEnvOption {
+	return func(o *testEnvOptions) {
+		if o.excludeCRDFiles == nil {
+			o.excludeCRDFiles = sets.New[string]()
+		}
+		o.excludeCRDFiles.Insert(names...)
+	}
+}
+
 // SetupTestEnv initializes the test environment for Ginkgo tests.
 // Call this in BeforeSuite and store the returned TestEnv.
 // The basePath should be the relative path from the test package to the operator root
@@ -85,7 +115,7 @@ var (
 //   - cert-manager, prometheus: .github/scripts/update-third-party-manifests.sh
 //   - enterprise-contract, release: rebuild-upstream-manifests.sh / verify-manifests-in-sync.sh
 //   - openshift: .github/scripts/update-openshift-test-crds.sh (pinned github.com/openshift/api)
-func SetupTestEnv(basePath string) *TestEnv {
+func SetupTestEnv(basePath string, opts ...TestEnvOption) *TestEnv {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	ctx, cancel := context.WithCancel(context.TODO()) //nolint:gosec // cancel is stored in TestEnv and called by the test teardown
@@ -112,17 +142,27 @@ func SetupTestEnv(basePath string) *TestEnv {
 	objectStore, err := manifests.NewObjectStore(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	options := &testEnvOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	By("bootstrapping test environment")
+	crdPaths := []string{
+		filepath.Join(basePath, "config", "crd", "bases"),
+		filepath.Join(basePath, "test", "crds", "cert-manager"),
+		filepath.Join(basePath, "test", "crds", "trust-manager"),
+		filepath.Join(basePath, "test", "crds", "prometheus"),
+		filepath.Join(basePath, "test", "crds", "enterprise-contract"),
+		filepath.Join(basePath, "test", "crds", "release"),
+		filepath.Join(basePath, "test", "crds", "openshift"),
+	}
+	crdStagingDir := ""
+	if options.excludeCRDFiles.Len() > 0 {
+		crdStagingDir, crdPaths = stageCRDPathsWithout(crdPaths, options.excludeCRDFiles)
+	}
 	testEnv := &envtest.Environment{
-		CRDDirectoryPaths: []string{
-			filepath.Join(basePath, "config", "crd", "bases"),
-			filepath.Join(basePath, "test", "crds", "cert-manager"),
-			filepath.Join(basePath, "test", "crds", "trust-manager"),
-			filepath.Join(basePath, "test", "crds", "prometheus"),
-			filepath.Join(basePath, "test", "crds", "enterprise-contract"),
-			filepath.Join(basePath, "test", "crds", "release"),
-			filepath.Join(basePath, "test", "crds", "openshift"),
-		},
+		CRDDirectoryPaths:     crdPaths,
 		ErrorIfCRDPathMissing: true,
 	}
 
@@ -145,6 +185,8 @@ func SetupTestEnv(basePath string) *TestEnv {
 		Cfg:         cfg,
 		K8sClient:   k8sClient,
 		ObjectStore: objectStore,
+
+		crdStagingDir: crdStagingDir,
 	}
 }
 
@@ -158,6 +200,9 @@ func TeardownTestEnv(env *TestEnv) {
 	}
 	err := env.TestEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
+	if env.crdStagingDir != "" {
+		Expect(os.RemoveAll(env.crdStagingDir)).To(Succeed())
+	}
 }
 
 // GetFirstFoundEnvTestBinaryDir locates the first binary in the specified path.
@@ -174,6 +219,54 @@ func GetFirstFoundEnvTestBinaryDir(basePath string) string {
 		}
 	}
 	return ""
+}
+
+// stageCRDPathsWithout returns a temporary root and a rewritten CRD path list in
+// which every directory containing an excluded file is replaced by a copy of that
+// directory without the excluded files. Directories with nothing to exclude are
+// passed through unchanged. The caller owns the returned root and must remove it.
+func stageCRDPathsWithout(paths []string, exclude sets.Set[string]) (string, []string) {
+	root, err := os.MkdirTemp("", "konflux-envtest-crds-")
+	Expect(err).NotTo(HaveOccurred())
+
+	matched := sets.New[string]()
+	staged := make([]string, 0, len(paths))
+	for i, dir := range paths {
+		entries, err := os.ReadDir(dir)
+		Expect(err).NotTo(HaveOccurred())
+
+		if !slices.ContainsFunc(entries, func(e os.DirEntry) bool { return exclude.Has(e.Name()) }) {
+			staged = append(staged, dir)
+			continue
+		}
+
+		target := filepath.Join(root, fmt.Sprintf("%d-%s", i, filepath.Base(dir)))
+		Expect(os.MkdirAll(target, 0o750)).To(Succeed())
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			if exclude.Has(e.Name()) {
+				matched.Insert(e.Name())
+				continue
+			}
+			//nolint:gosec // G304 - dir is one of the fixed CRD paths above and
+			// the name comes from reading that directory, not from test input.
+			content, err := os.ReadFile(filepath.Join(dir, e.Name()))
+			Expect(err).NotTo(HaveOccurred())
+			//nolint:gosec // G703 - target is under the temp root created above
+			// and the name is a base name from os.ReadDir, so it cannot escape.
+			Expect(os.WriteFile(filepath.Join(target, e.Name()), content, 0o600)).To(Succeed())
+		}
+		staged = append(staged, target)
+	}
+
+	// Fail loudly rather than silently installing a CRD the caller asked to omit:
+	// a renamed manifest would otherwise turn the caller's test into a no-op.
+	Expect(exclude.Difference(matched).UnsortedList()).To(BeEmpty(),
+		"WithoutCRDFiles named files that do not exist in any CRD directory")
+
+	return root, staged
 }
 
 // GetTestObjectStore returns a shared ObjectStore for non-Ginkgo tests.
