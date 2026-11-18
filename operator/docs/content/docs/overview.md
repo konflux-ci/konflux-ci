@@ -35,10 +35,11 @@ any conformant distribution.
 
 - **Installation types** - the `installationType` field controls which services the
   operator deploys. `standard` (default) deploys all core services; `spoke` deploys
-  only Info and RBAC for MultiKueue spoke clusters. Three optional components
+  Info and RBAC by default for MultiKueue spoke clusters. Three optional components
   (image controller, internal registry, telemetry) have their own `enabled` field
-  and can be toggled independently of the installation type. Disabled components
-  are cleaned up automatically - no orphaned resources left behind.
+  and can be toggled independently of the installation type. Enabling the image
+  controller or internal registry in spoke also deploys Cert Manager for TLS.
+  Disabled components are cleaned up automatically - no orphaned resources left behind.
 
 - **Identity provider configuration** - Dex connectors (GitHub, OpenShift, OIDC, LDAP,
   static passwords) are configured directly in the `Konflux` CR, removing the need to
@@ -86,9 +87,10 @@ any conformant distribution.
 The operator manages the following platform components through the `Konflux` CR:
 
 The `installationType` field selects which components the operator deploys:
-`standard` (default) deploys all core services, while `spoke` deploys only Info and
-RBAC. Components marked _(opt-in)_ have their own `enabled` field and can be toggled
-independently of the installation type.
+`standard` (default) deploys all core services, while `spoke` deploys Info and
+RBAC by default. Components marked _(opt-in)_ have their own `enabled` field and
+can be toggled independently of the installation type. In spoke, enabling the
+image controller or internal registry also deploys Cert Manager for TLS.
 
 | Component | Installation type | Description |
 |---|---|---|
@@ -102,7 +104,7 @@ independently of the installation type.
 | **RBAC** | standard + spoke | Cluster roles (`konflux-admin-user-actions`, `konflux-maintainer-user-actions`, `konflux-contributor-user-actions`) and bindings. |
 | **Konflux Info** | standard + spoke | ConfigMap-based cluster configuration consumed by PipelineRuns (OIDC issuer, signing URLs, environment metadata). |
 | **CLI** | standard | CLI tooling resources for the Konflux platform. |
-| **Cert Manager** | standard | Creates a `ClusterIssuer` for TLS certificates across platform components. |
+| **Cert Manager** | standard; spoke with image controller or internal registry | Creates a `ClusterIssuer` for TLS certificates across platform components. |
 | **Default Tenant** | standard | A shared `default-tenant` namespace where all authenticated users have maintainer access (convenient for development; disable for strict multi-tenancy). |
 | **Image Controller** _(opt-in)_ | any (independent) | Automatically provisions Quay.io image repositories when components are onboarded via the UI. |
 | **Internal Registry** _(opt-in)_ | any (independent) | An in-cluster OCI registry for local or air-gapped environments. |

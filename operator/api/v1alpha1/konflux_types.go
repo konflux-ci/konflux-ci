@@ -30,18 +30,20 @@ type InstallationType string
 const (
 	// InstallationTypeStandard deploys all core Konflux services.
 	InstallationTypeStandard InstallationType = "standard"
-	// InstallationTypeSpoke deploys only the services required for a
-	// MultiKueue spoke cluster (Info and RBAC).
+	// InstallationTypeSpoke deploys Info and RBAC for a MultiKueue spoke cluster.
+	// Opt-in components may also deploy their required PKI resources.
 	InstallationTypeSpoke InstallationType = "spoke"
 )
 
 // KonfluxSpec defines the desired state of Konflux.
 type KonfluxSpec struct {
 	// InstallationType selects the set of services the operator deploys.
-	// "standard" deploys all core services; "spoke" deploys only the
-	// services required for a MultiKueue spoke cluster (Info and RBAC).
+	// "standard" deploys all core services; "spoke" deploys Info and RBAC
+	// for a MultiKueue spoke cluster.
 	// Optional components (imageController, internalRegistry, telemetry)
-	// remain independently toggleable via their own enabled fields.
+	// remain independently toggleable via their own enabled fields. Enabling
+	// imageController or internalRegistry in spoke also deploys cert-manager
+	// resources for their TLS certificates.
 	// Defaults to "standard" if not specified.
 	// +optional
 	// +kubebuilder:default=standard
@@ -203,10 +205,13 @@ type EnterpriseContractConfig struct {
 }
 
 // CertManagerConfig defines the configuration for the cert-manager component.
-// Deployment is controlled by the installationType field on KonfluxSpec.
+// Deployed in standard installations and when imageController or internalRegistry
+// is enabled in spoke installations.
 type CertManagerConfig struct {
 	// CreateClusterIssuer controls whether cluster issuer resources are created.
 	// Defaults to true if not specified.
+	// When false, an external ClusterIssuer named konflux-issuer must provide
+	// certificates for components that depend on it.
 	// +optional
 	CreateClusterIssuer *bool `json:"createClusterIssuer,omitempty"`
 
@@ -478,9 +483,10 @@ func (k *KonfluxSpec) IsEnterpriseContractEnabled() bool {
 }
 
 // IsCertManagerEnabled returns true if the cert-manager component should be deployed.
-// Deployed only in standard installation type.
+// Spoke installations also need its PKI when the internal registry or image
+// controller is enabled.
 func (k *KonfluxSpec) IsCertManagerEnabled() bool {
-	return k.IsStandard()
+	return k.IsStandard() || k.IsInternalRegistryEnabled() || k.IsImageControllerEnabled()
 }
 
 // IsRBACEnabled returns true if the RBAC component should be deployed.

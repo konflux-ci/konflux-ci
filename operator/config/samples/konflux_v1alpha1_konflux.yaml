@@ -18,9 +18,11 @@ metadata:
 spec:
   # installationType selects the set of services the operator deploys:
   #   "standard" (default): deploys all core services.
-  #   "spoke": deploys only Info and RBAC for MultiKueue spoke clusters.
+  #   "spoke": deploys Info and RBAC by default for MultiKueue spoke clusters.
   # Optional components (imageController, internalRegistry, telemetry) have their
   # own enabled field and can be toggled independently of the installation type.
+  # Enabling imageController or internalRegistry in spoke also deploys Cert Manager
+  # for their TLS certificates.
   # installationType: standard
   ui:
     spec:
@@ -182,6 +184,8 @@ spec:
   certManager:
     # CreateClusterIssuer controls whether cluster issuer resources are created
     # Defaults to true if not specified
+    # When false, provide an external ClusterIssuer named konflux-issuer for
+    # components that depend on it.
     createClusterIssuer: true
     # DistributeClusterCABundle controls whether the trust-manager Bundle is
     # applied to populate cluster-wide trusted-ca ConfigMaps.

@@ -20,9 +20,11 @@ import (
 	"context"
 	"strings"
 
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	prometheustestutil "github.com/prometheus/client_golang/prometheus/testutil"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -1226,7 +1228,7 @@ var _ = Describe("Konflux Controller", func() {
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
 			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
-			By("verifying only spoke + opt-in CRs are created")
+			By("verifying spoke, PKI, and opt-in CRs are created")
 			Eventually(func(g Gomega) {
 				updated := &konfluxv1alpha1.Konflux{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
@@ -1236,9 +1238,10 @@ var _ = Describe("Konflux Controller", func() {
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: info.CRName}, &konfluxv1alpha1.KonfluxInfo{})).To(Succeed())
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: rbac.CRName}, &konfluxv1alpha1.KonfluxRBAC{})).To(Succeed())
 
-				// Opt-in components should exist
+				// Opt-in components and their PKI dependency should exist
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: imagecontroller.CRName}, &konfluxv1alpha1.KonfluxImageController{})).To(Succeed())
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: internalregistry.CRName}, &konfluxv1alpha1.KonfluxInternalRegistry{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: certmanager.CRName}, &konfluxv1alpha1.KonfluxCertManager{})).To(Succeed())
 
 				// Standard-only components should NOT exist
 				for _, tc := range []struct {
@@ -1252,7 +1255,6 @@ var _ = Describe("Konflux Controller", func() {
 					{"ui", &konfluxv1alpha1.KonfluxUI{ObjectMeta: metav1.ObjectMeta{Name: uictrl.CRName}}},
 					{"namespace-lister", &konfluxv1alpha1.KonfluxNamespaceLister{ObjectMeta: metav1.ObjectMeta{Name: namespacelister.CRName}}},
 					{"enterprise-contract", &konfluxv1alpha1.KonfluxEnterpriseContract{ObjectMeta: metav1.ObjectMeta{Name: enterprisecontract.CRName}}},
-					{"cert-manager", &konfluxv1alpha1.KonfluxCertManager{ObjectMeta: metav1.ObjectMeta{Name: certmanager.CRName}}},
 					{"default-tenant", &konfluxv1alpha1.KonfluxDefaultTenant{ObjectMeta: metav1.ObjectMeta{Name: defaulttenant.CRName}}},
 					{"cli", &konfluxv1alpha1.KonfluxCLI{ObjectMeta: metav1.ObjectMeta{Name: cli.CRName}}},
 				} {
@@ -1262,6 +1264,98 @@ var _ = Describe("Konflux Controller", func() {
 
 				// status.uiURL should be empty when UI is disabled
 				g.Expect(updated.Status.UIURL).To(BeEmpty(), "uiURL should be empty in spoke config")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		It("should retain and reconcile PKI when switching standard to spoke with the registry enabled", func(ctx context.Context) {
+			// The PKI reconciler needs this namespace, just as it does in a real cert-manager installation.
+			certManagerNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "cert-manager"}}
+			Expect(k8sClient.Create(ctx, certManagerNamespace)).To(Succeed())
+			// envtest has no namespace controller to clear the namespace finalizer.
+
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					InternalRegistry: &konfluxv1alpha1.InternalRegistryConfig{Enabled: boolPtr(true)},
+					CertManager: &konfluxv1alpha1.CertManagerConfig{
+						// Keep this test focused on the issuer required by the registry.
+						DistributeClusterCABundle: boolPtr(false),
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			children := append(allSubCRs(),
+				&certmanagerv1.ClusterIssuer{ObjectMeta: metav1.ObjectMeta{Name: "konflux-bootstrap-issuer"}},
+				&certmanagerv1.ClusterIssuer{ObjectMeta: metav1.ObjectMeta{Name: "konflux-issuer"}},
+				&certmanagerv1.Certificate{ObjectMeta: metav1.ObjectMeta{Name: "konflux-ca", Namespace: "cert-manager"}},
+				&certmanagerv1.Certificate{ObjectMeta: metav1.ObjectMeta{Name: "registry-cert", Namespace: internalregistry.RegistryNamespace}},
+				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "registry", Namespace: internalregistry.RegistryNamespace}},
+				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "registry-service", Namespace: internalregistry.RegistryNamespace}},
+				&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "zot-config", Namespace: internalregistry.RegistryNamespace}},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: internalregistry.HtpasswdSecretName, Namespace: internalregistry.RegistryNamespace}},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: internalregistry.ClientCredentialsSecretName, Namespace: internalregistry.RegistryNamespace}},
+			)
+			// Register resource cleanup before manager cleanup so reconcilers stop first.
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, children...)
+
+			mgr := testutil.NewTestManager(testEnv)
+			clusterInfo, err := clusterinfo.DetectWithClient(&certManagerMockDiscoveryClient{hasCertManager: true})
+			Expect(err).NotTo(HaveOccurred())
+			Expect((&KonfluxReconciler{
+				Client: mgr.GetClient(), Scheme: mgr.GetScheme(), ClusterInfo: clusterInfo,
+			}).SetupWithManager(mgr)).To(Succeed())
+			Expect((&certmanager.KonfluxCertManagerReconciler{
+				Client: mgr.GetClient(), Scheme: mgr.GetScheme(), ObjectStore: objectStore, ClusterInfo: clusterInfo,
+			}).SetupWithManager(mgr)).To(Succeed())
+			Expect((&internalregistry.KonfluxInternalRegistryReconciler{
+				Client: mgr.GetClient(), Scheme: mgr.GetScheme(), ObjectStore: objectStore,
+			}).SetupWithManager(mgr)).To(Succeed())
+			mgrCtx, cancel := context.WithCancel(testEnv.Ctx)
+			waitForStop := testutil.StartManagerWithContext(mgrCtx, mgr)
+			DeferCleanup(func() {
+				cancel()
+				waitForStop()
+			})
+
+			By("waiting for the registry Certificate and its ClusterIssuer")
+			issuer := &certmanagerv1.ClusterIssuer{}
+			certificate := &certmanagerv1.Certificate{}
+			certManagerCR := &konfluxv1alpha1.KonfluxCertManager{}
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: certmanager.CRName}, certManagerCR)).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "konflux-issuer"}, issuer)).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "registry-cert", Namespace: internalregistry.RegistryNamespace}, certificate)).To(Succeed())
+				g.Expect(certificate.Spec.IssuerRef.Kind).To(Equal("ClusterIssuer"))
+				g.Expect(certificate.Spec.IssuerRef.Name).To(Equal(issuer.Name))
+				g.Expect(certificate.Spec.SecretName).To(Equal("local-registry-tls"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			certManagerUID := certManagerCR.UID
+			issuerUID := issuer.UID
+
+			By("switching to spoke while leaving the registry enabled")
+			updatedKonflux := &konfluxv1alpha1.Konflux{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updatedKonflux)).To(Succeed())
+			updatedKonflux.Spec.InstallationType = konfluxv1alpha1.InstallationTypeSpoke
+			Expect(k8sClient.Update(ctx, updatedKonflux)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				// A standard-only child disappearing proves that the spoke update was reconciled.
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: buildservice.CRName}, &konfluxv1alpha1.KonfluxBuildService{})
+				g.Expect(errors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
+				cm := &konfluxv1alpha1.KonfluxCertManager{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: certmanager.CRName}, cm)).To(Succeed())
+				g.Expect(cm.UID).To(Equal(certManagerUID))
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: internalregistry.CRName}, &konfluxv1alpha1.KonfluxInternalRegistry{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "konflux-issuer"}, &certmanagerv1.ClusterIssuer{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "registry-cert", Namespace: internalregistry.RegistryNamespace}, &certmanagerv1.Certificate{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying the retained PKI reconciler restores the issuer needed for certificate renewal")
+			Expect(k8sClient.Delete(ctx, issuer)).To(Succeed())
+			Eventually(func(g Gomega) {
+				recreated := &certmanagerv1.ClusterIssuer{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: issuer.Name}, recreated)).To(Succeed())
+				g.Expect(recreated.UID).NotTo(Equal(issuerUID))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
@@ -1682,7 +1776,9 @@ var _ = Describe("Konflux Controller", func() {
 		})
 
 		It("should correctly aggregate status with spoke plus optional component", func(ctx context.Context) {
-			startManager(createTestClusterInfo())
+			clusterInfo, err := clusterinfo.DetectWithClient(&certManagerMockDiscoveryClient{hasCertManager: true})
+			Expect(err).NotTo(HaveOccurred())
+			startManager(clusterInfo)
 
 			By("creating Konflux CR with spoke + imageController enabled")
 			cr := &konfluxv1alpha1.Konflux{
@@ -1695,14 +1791,15 @@ var _ = Describe("Konflux Controller", func() {
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
 			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
 
-			By("waiting for Info, RBAC, and ImageController sub-CRs to be created")
+			By("waiting for Info, RBAC, ImageController, and CertManager sub-CRs to be created")
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: info.CRName}, &konfluxv1alpha1.KonfluxInfo{})).To(Succeed())
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: rbac.CRName}, &konfluxv1alpha1.KonfluxRBAC{})).To(Succeed())
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: imagecontroller.CRName}, &konfluxv1alpha1.KonfluxImageController{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: certmanager.CRName}, &konfluxv1alpha1.KonfluxCertManager{})).To(Succeed())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
-			By("setting all three sub-CRs to ready")
+			By("setting all four sub-CRs to ready")
 			infoObj := &konfluxv1alpha1.KonfluxInfo{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: info.CRName}, infoObj)).To(Succeed())
 			setSubCRReady(ctx, infoObj, true)
@@ -1715,7 +1812,11 @@ var _ = Describe("Konflux Controller", func() {
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: imagecontroller.CRName}, icObj)).To(Succeed())
 			setSubCRReady(ctx, icObj, true)
 
-			By("verifying parent reports Ready=True with 3 components")
+			cmObj := &konfluxv1alpha1.KonfluxCertManager{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: certmanager.CRName}, cmObj)).To(Succeed())
+			setSubCRReady(ctx, cmObj, true)
+
+			By("verifying parent reports Ready=True with 4 components")
 			Eventually(func(g Gomega) {
 				updated := &konfluxv1alpha1.Konflux{}
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
@@ -1723,12 +1824,13 @@ var _ = Describe("Konflux Controller", func() {
 				readyCond := apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)
 				g.Expect(readyCond).NotTo(BeNil())
 				g.Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
-				g.Expect(readyCond.Message).To(ContainSubstring("3 components are ready"))
+				g.Expect(readyCond.Message).To(ContainSubstring("4 components are ready"))
 
-				// All three prefixed conditions should be present
+				// All four prefixed conditions should be present
 				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), "info.Ready")).NotTo(BeNil())
 				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), "rbac.Ready")).NotTo(BeNil())
 				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), "image-controller.Ready")).NotTo(BeNil())
+				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), "cert-manager.Ready")).NotTo(BeNil())
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			By("making ImageController not-ready")
@@ -1744,9 +1846,10 @@ var _ = Describe("Konflux Controller", func() {
 				g.Expect(readyCond).NotTo(BeNil())
 				g.Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
 				g.Expect(readyCond.Message).To(ContainSubstring("image-controller is not ready"))
-				// Info and RBAC should not be mentioned as not-ready
+				// Other components should not be mentioned as not-ready
 				g.Expect(readyCond.Message).NotTo(ContainSubstring("info is not ready"))
 				g.Expect(readyCond.Message).NotTo(ContainSubstring("rbac is not ready"))
+				g.Expect(readyCond.Message).NotTo(ContainSubstring("cert-manager is not ready"))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 	})
