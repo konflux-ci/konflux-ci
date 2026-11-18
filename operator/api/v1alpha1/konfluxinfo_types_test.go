@@ -56,11 +56,12 @@ func TestClusterConfigData_All(t *testing.T) {
 			PackageRegistryProxyCargoURL:       "https://cargo-proxy.example.com",
 			EnableCBOMGenerationTask:           ptr.To(true),
 			AdditionalCBOMGenerationRulesImage: "quay.io/example/cbom-rules:latest",
+			KFPGitURL:                          "https://gitlab.example.com/security/known-false-positives.git",
 		}
 
 		collected := maps.Collect(data.All)
 
-		g.Expect(collected).To(gomega.HaveLen(26))
+		g.Expect(collected).To(gomega.HaveLen(27))
 		g.Expect(collected["defaultOIDCIssuer"]).To(gomega.Equal("https://oidc.example.com"))
 		g.Expect(collected["enableKeylessSigning"]).To(gomega.Equal("true"))
 		g.Expect(collected["fulcioInternalUrl"]).To(gomega.Equal("https://fulcio-internal.example.com"))
@@ -87,6 +88,7 @@ func TestClusterConfigData_All(t *testing.T) {
 		g.Expect(collected[ClusterConfigKeyPackageRegistryProxyCargoURL]).To(gomega.Equal("https://cargo-proxy.example.com"))
 		g.Expect(collected[ClusterConfigKeyEnableCBOMGenerationTask]).To(gomega.Equal("true"))
 		g.Expect(collected[ClusterConfigKeyAdditionalCBOMGenerationRulesImage]).To(gomega.Equal("quay.io/example/cbom-rules:latest"))
+		g.Expect(collected["kfp-git-url"]).To(gomega.Equal("https://gitlab.example.com/security/known-false-positives.git"))
 	})
 
 	t.Run("should not yield empty fields", func(t *testing.T) {
@@ -113,6 +115,7 @@ func TestClusterConfigData_All(t *testing.T) {
 		g.Expect(collected).NotTo(gomega.HaveKey("buildIdentityRegexp"))
 		g.Expect(collected).NotTo(gomega.HaveKey("trustifyOIDCIssuerUrl"))
 		g.Expect(collected).NotTo(gomega.HaveKey("tektonChainsIdentity"))
+		g.Expect(collected).NotTo(gomega.HaveKey(ClusterConfigKeyKFPGitURL))
 	})
 
 	t.Run("should yield nothing for empty struct", func(t *testing.T) {
@@ -156,6 +159,7 @@ func TestClusterConfigData_All(t *testing.T) {
 			PackageRegistryProxyCargoURL:       "https://cargo-proxy.example.com",
 			EnableCBOMGenerationTask:           ptr.To(true),
 			AdditionalCBOMGenerationRulesImage: "quay.io/example/cbom-rules:latest",
+			KFPGitURL:                          "https://gitlab.example.com/security/known-false-positives.git",
 		}
 
 		var yielded []string
@@ -200,6 +204,7 @@ func TestClusterConfigData_All(t *testing.T) {
 			PackageRegistryProxyCargoURL:       "cargo",
 			EnableCBOMGenerationTask:           ptr.To(true),
 			AdditionalCBOMGenerationRulesImage: "cbom-rules",
+			KFPGitURL:                          "https://gitlab.example.com/security/known-false-positives.git",
 		}
 
 		// Count total fields
@@ -208,7 +213,7 @@ func TestClusterConfigData_All(t *testing.T) {
 			totalFields++
 			return true
 		})
-		g.Expect(totalFields).To(gomega.Equal(26))
+		g.Expect(totalFields).To(gomega.Equal(27))
 
 		// Verify early termination works at every position
 		for stopAt := 1; stopAt <= totalFields; stopAt++ {
@@ -252,6 +257,7 @@ func TestClusterConfigData_All(t *testing.T) {
 			PackageRegistryProxyCargoURL:       "https://cargo-proxy.example.com",
 			EnableCBOMGenerationTask:           ptr.To(true),
 			AdditionalCBOMGenerationRulesImage: "quay.io/example/cbom-rules:latest",
+			KFPGitURL:                          "https://gitlab.example.com/security/known-false-positives.git",
 		}
 
 		var keys []string
@@ -287,6 +293,7 @@ func TestClusterConfigData_All(t *testing.T) {
 			ClusterConfigKeyPackageRegistryProxyCargoURL,
 			ClusterConfigKeyEnableCBOMGenerationTask,
 			ClusterConfigKeyAdditionalCBOMGenerationRulesImage,
+			ClusterConfigKeyKFPGitURL,
 		}
 
 		g.Expect(keys).To(gomega.Equal(expectedOrder))
@@ -379,15 +386,17 @@ func TestClusterConfigData_MergeOver(t *testing.T) {
 		base := ClusterConfigData{
 			DefaultOIDCIssuer: "https://oidc.example.com",
 			FulcioInternalUrl: "https://fulcio-internal.example.com",
+			KFPGitURL:         "https://gitlab.example.com/security/known-false-positives.git",
 		}
 
 		override := ClusterConfigData{}
 
 		result := override.MergeOver(base)
 
-		g.Expect(result).To(gomega.HaveLen(2))
+		g.Expect(result).To(gomega.HaveLen(3))
 		g.Expect(result["defaultOIDCIssuer"]).To(gomega.Equal("https://oidc.example.com"))
 		g.Expect(result["fulcioInternalUrl"]).To(gomega.Equal("https://fulcio-internal.example.com"))
+		g.Expect(result[ClusterConfigKeyKFPGitURL]).To(gomega.Equal("https://gitlab.example.com/security/known-false-positives.git"))
 	})
 
 	t.Run("should handle both empty", func(t *testing.T) {
@@ -418,6 +427,7 @@ func TestClusterConfigData_MergeOver(t *testing.T) {
 			BuildIdentityRegexp:       "base-build-identity",
 			TrustifyOIDCIssuerUrl:     "base-trustify-issuer",
 			TektonChainsIdentity:      "https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/base-tekton-chains-controller",
+			KFPGitURL:                 "https://gitlab.example.com/base/known-false-positives.git",
 		}
 
 		override := ClusterConfigData{
@@ -434,11 +444,12 @@ func TestClusterConfigData_MergeOver(t *testing.T) {
 			BuildIdentityRegexp:       "override-build-identity",
 			TrustifyOIDCIssuerUrl:     "override-trustify-issuer",
 			TektonChainsIdentity:      "https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/override-tekton-chains-controller",
+			KFPGitURL:                 "https://gitlab.example.com/override/known-false-positives.git",
 		}
 
 		result := override.MergeOver(base)
 
-		g.Expect(result).To(gomega.HaveLen(13))
+		g.Expect(result).To(gomega.HaveLen(14))
 		g.Expect(result["defaultOIDCIssuer"]).To(gomega.Equal("override-oidc"))
 		g.Expect(result["enableKeylessSigning"]).To(gomega.Equal("true"))
 		g.Expect(result["fulcioInternalUrl"]).To(gomega.Equal("override-fulcio-internal"))
@@ -452,6 +463,7 @@ func TestClusterConfigData_MergeOver(t *testing.T) {
 		g.Expect(result["buildIdentityRegexp"]).To(gomega.Equal("override-build-identity"))
 		g.Expect(result["trustifyOIDCIssuerUrl"]).To(gomega.Equal("override-trustify-issuer"))
 		g.Expect(result["tektonChainsIdentity"]).To(gomega.Equal("https://kubernetes.io/namespaces/tekton-pipelines/serviceaccounts/override-tekton-chains-controller"))
+		g.Expect(result[ClusterConfigKeyKFPGitURL]).To(gomega.Equal("https://gitlab.example.com/override/known-false-positives.git"))
 	})
 
 	t.Run("should combine base and override when no conflicts", func(t *testing.T) {
