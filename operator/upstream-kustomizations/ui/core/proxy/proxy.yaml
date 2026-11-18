@@ -68,6 +68,9 @@ spec:
         - name: service-ca
           mountPath: /mnt/service-ca
           readOnly: true
+        - name: kubearchive-ca
+          mountPath: /mnt/kubearchive-ca
+          readOnly: true
         - name: static-content
           mountPath: /opt/app-root/src/static-content
         securityContext:
@@ -146,6 +149,9 @@ spec:
             readOnly: true
           - name: service-ca
             mountPath: /mnt/service-ca
+            readOnly: true
+          - name: kubearchive-ca
+            mountPath: /mnt/kubearchive-ca
             readOnly: true
           - name: static-content
             mountPath: /opt/app-root/src/static-content
@@ -245,6 +251,15 @@ spec:
           configMap:
             name: openshift-service-ca.crt
             optional: true
+        # Externally managed public CA bundle. The UI controller rolls the proxy
+        # when its contents change so the init container regenerates TLS trust.
+        - name: kubearchive-ca
+          configMap:
+            name: kubearchive-ca-bundle
+            optional: true
+            items:
+              - key: ca-bundle.crt
+                path: ca-bundle.crt
         - name: static-content
           emptyDir: {}
         - name: segment-bridge-config

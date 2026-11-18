@@ -6,6 +6,7 @@ set -eu
 TEMPLATES_DIR=${TEMPLATES_DIR:-/mnt/caddy-templates}
 SNIPPETS_DIR=${SNIPPETS_DIR:-/mnt/caddy-snippets}
 SERVICE_CA_PATH=${SERVICE_CA_PATH:-/mnt/service-ca/service-ca.crt}
+KUBEARCHIVE_CA_PATH=${KUBEARCHIVE_CA_PATH:-/mnt/kubearchive-ca/ca-bundle.crt}
 
 # A DNS name with an optional trailing dot and an optional numeric port.
 # Empty is valid: Tekton Results uses it to clear an override. Keep this
@@ -88,11 +89,34 @@ fi
 
 # Process kubearchive template
 if [ "${KUBEARCHIVE_ENABLED:-}" = "true" ] && [ -f "${TEMPLATES_DIR}/kubearchive.caddy" ]; then
-  hostname="${KUBEARCHIVE_HOSTNAME:-kubearchive-api-server.product-kubearchive.svc.cluster.local}"
-  require_proxy_hostname KUBEARCHIVE_HOSTNAME "${hostname}"
-  render_template __KUBEARCHIVE_HOSTNAME__ "${hostname}" \
+  kubearchive_hostname="${KUBEARCHIVE_HOSTNAME:-kubearchive-api-server.product-kubearchive.svc.cluster.local}"
+  require_proxy_hostname KUBEARCHIVE_HOSTNAME "${kubearchive_hostname}"
+  render_template __KUBEARCHIVE_HOSTNAME__ "${kubearchive_hostname}" \
     "${TEMPLATES_DIR}/kubearchive.caddy" "${SNIPPETS_DIR}/kubearchive.caddy"
-  log "kubearchive endpoint enabled (${hostname})"
+
+  # Trust both issuers during migration so the proxy works before and after
+  # KubeArchive's serving certificate switches from service-ca to cert-manager.
+  if [ -f "${KUBEARCHIVE_CA_PATH}" ] && [ -f "${SERVICE_CA_PATH}" ]; then
+    printf 'transport http {\n    tls_trust_pool file %s %s\n}\n' \
+      "${SERVICE_CA_PATH}" "${KUBEARCHIVE_CA_PATH}" \
+      > "${SNIPPETS_DIR}/kubearchive-tls.conf"
+    log "kubearchive TLS: service and cert-manager CAs"
+  elif [ -f "${SERVICE_CA_PATH}" ]; then
+    printf 'transport http {\n    tls_trust_pool file %s\n}\n' "${SERVICE_CA_PATH}" \
+      > "${SNIPPETS_DIR}/kubearchive-tls.conf"
+    log "kubearchive TLS: service CA (cert-manager bundle not present)"
+  elif [ -f "${KUBEARCHIVE_CA_PATH}" ]; then
+    printf 'transport http {\n    tls_trust_pool file %s\n}\n' "${KUBEARCHIVE_CA_PATH}" \
+      > "${SNIPPETS_DIR}/kubearchive-tls.conf"
+    log "kubearchive TLS: cert-manager CA (service CA not present)"
+  else
+    # Fall back only when neither trust bundle is mounted.
+    printf 'transport http {\n    tls_insecure_skip_verify\n}\n' \
+      > "${SNIPPETS_DIR}/kubearchive-tls.conf"
+    log "kubearchive TLS: verification disabled (no CA bundles mounted)"
+  fi
+
+  log "kubearchive endpoint enabled (${kubearchive_hostname})"
 fi
 
 # Process watson template.
