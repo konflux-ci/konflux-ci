@@ -117,11 +117,6 @@ deploy() {
     deploy_tekton
     COMPLETED_STEPS+=("$CURRENT_STEP")
 
-    CURRENT_STEP="Registry"
-    echo "📦 Deploying Registry..." >&2
-    deploy_registry
-    COMPLETED_STEPS+=("$CURRENT_STEP")
-
     CURRENT_STEP="Smee"
     echo "🔄 Deploying Smee..." >&2
     deploy_smee
@@ -418,27 +413,6 @@ deploy_cluster_issuer() {
         return 0
     fi
     kubectl apply -k "${script_path}/dependencies/cluster-issuer"
-}
-
-deploy_registry() {
-    # NOTE: This dependency-registry deployment path is currently unused in our
-    # regular flows and is to be removed.
-    : "${SKIP_INTERNAL_REGISTRY:=false}"
-    if [[ "${SKIP_INTERNAL_REGISTRY}" == "true" ]]; then
-        echo "⏭️  Skipping Internal Registry deployment (managed by operator)" >&2
-        return 0
-    fi
-    # The registry kustomization includes a trust-manager Bundle CRD resource
-    # (trust-bundle.yaml). Deploying the registry without trust-manager will
-    # fail because the Bundle CRD is not installed.
-    : "${SKIP_TRUST_MANAGER:=false}"
-    if [[ "${SKIP_TRUST_MANAGER}" == "true" ]]; then
-        echo "ERROR: Internal registry requires trust-manager (Bundle CRD). Either deploy trust-manager or set SKIP_INTERNAL_REGISTRY=true." >&2
-        return 1
-    fi
-    kubectl apply -k "${script_path}/dependencies/registry"
-    retry "The local registry did not become available within the allocated time" \
-          kubectl wait --for=condition=Ready --timeout=240s -n kind-registry -l run=registry pod
 }
 
 deploy_smee() {

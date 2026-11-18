@@ -46,7 +46,6 @@ Skip review and retro when **both**:
 2. Diff is limited to the companion allowlist:
    - `operator/upstream-kustomizations/**`
    - `.github/scripts/export-third-party-chart-env.sh`
-   - `dependencies/registry/kustomization.yml` (registry digest bumps only)
    - `operator/go.mod` / `operator/go.sum` (OpenShift envtest CRDs from
      `github.com/openshift/api`)
    - `test/go-tests/go.mod` / `test/go-tests/go.sum` (sidecar when Renovate
