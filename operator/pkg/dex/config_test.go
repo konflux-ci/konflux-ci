@@ -150,6 +150,28 @@ func TestConfig_ToYAML(t *testing.T) {
 		g.Expect(string(yamlData)).To(gomega.ContainSubstring("username: admin"))
 	})
 
+	t.Run("serializes hashFromEnv without hash", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+
+		config := &Config{
+			Issuer:           "https://dex.example.com/idp/",
+			EnablePasswordDB: true,
+			StaticPasswords: []Password{
+				{
+					Email:       "admin@example.com",
+					HashFromEnv: "ADMIN_PASSWORD_HASH",
+					Username:    "admin",
+					UserID:      "admin-id",
+				},
+			},
+		}
+
+		yamlData, err := config.ToYAML()
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(string(yamlData)).To(gomega.ContainSubstring("hashFromEnv: ADMIN_PASSWORD_HASH"))
+		g.Expect(string(yamlData)).NotTo(gomega.MatchRegexp(`(?m)^\s+(- )?hash:`))
+	})
+
 	t.Run("roundtrip serialization", func(t *testing.T) {
 		g := gomega.NewWithT(t)
 

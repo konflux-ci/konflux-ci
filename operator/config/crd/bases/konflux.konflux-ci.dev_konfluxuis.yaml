@@ -198,8 +198,9 @@ spec:
                         description: StaticPasswords are predefined user credentials
                           for the local password database.
                         items:
-                          description: Password represents a static user password
-                            entry.
+                          description: |-
+                            Password represents a static user password entry.
+                            Exactly one of hash or hashFromEnv must be set.
                           properties:
                             email:
                               description: Email is the user's email address (used
@@ -215,6 +216,16 @@ spec:
                               type: array
                             hash:
                               description: Hash is the bcrypt hash of the user's password.
+                              maxLength: 256
+                              type: string
+                            hashFromEnv:
+                              description: |-
+                                HashFromEnv is the name of an environment variable in the Dex container
+                                that holds the bcrypt hash of the user's password. Use it to keep the hash
+                                out of the CR, e.g. by sourcing the variable from a Secret through
+                                spec.dex.dex.env. Mutually exclusive with hash. The variable is read when
+                                Dex starts: after changing the Secret, restart Dex (kubectl rollout restart).
+                              maxLength: 256
                               type: string
                             userID:
                               description: UserID is a unique identifier for the user.
@@ -223,6 +234,12 @@ spec:
                               description: Username is the display name for the user.
                               type: string
                           type: object
+                          x-kubernetes-validations:
+                          - message: exactly one of hash or hashFromEnv must be set
+                              and non-empty
+                            rule: (has(self.hash) && size(self.hash) > 0) != (has(self.hashFromEnv)
+                              && size(self.hashFromEnv) > 0)
+                        maxItems: 100
                         type: array
                     type: object
                   dex:

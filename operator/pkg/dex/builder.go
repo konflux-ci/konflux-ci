@@ -83,6 +83,7 @@ type DexParams struct {
 
 	// StaticPasswords are predefined user credentials for the local password database.
 	// +optional
+	// +kubebuilder:validation:MaxItems=100
 	StaticPasswords []Password `json:"staticPasswords,omitempty"`
 
 	// PasswordConnector specifies the connector ID to use for password grants (e.g., "local").
