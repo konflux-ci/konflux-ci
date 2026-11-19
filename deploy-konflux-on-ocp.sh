@@ -122,7 +122,6 @@ echo "Operator image is available!"
 # - USE_OPENSHIFT_PIPELINES: Use OCP's native Tekton instead of upstream
 # - USE_OPENSHIFT_CERTMANAGER: Use Red Hat cert-manager operator instead of upstream
 # - SKIP_TRUST_MANAGER: OCP injects trusted CA bundles natively
-# - SKIP_INTERNAL_REGISTRY: OCP has its own registry
 # - SKIP_SMEE: Skip Smee when no channel is configured
 echo ""
 echo "=== Step 1/6: Deploying dependencies ==="
@@ -142,7 +141,6 @@ fi
 USE_OPENSHIFT_PIPELINES=true \
 USE_OPENSHIFT_CERTMANAGER=true \
 SKIP_TRUST_MANAGER=true \
-SKIP_INTERNAL_REGISTRY=true \
 SKIP_SMEE="${SKIP_SMEE}" \
 "${REPO_ROOT}/deploy-deps.sh"
 
