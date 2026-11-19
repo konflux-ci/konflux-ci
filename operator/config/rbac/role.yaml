@@ -353,6 +353,7 @@ rules:
   - dex
   - konflux-proxy
   - konflux-proxy-namespace-lister
+  - prometheus-konflux-ui-proxy-metrics-reader
   resources:
   - clusterrolebindings
   verbs:

@@ -301,7 +301,7 @@ var _ = Describe("Test Proxy endpoints", func() {
 
 	Describe("Test metrics endpoint", func() {
 		It("should expose Prometheus metrics on the metrics port", func() {
-			raw, err := serviceProxyGet(context.TODO(), "konflux-ui", "proxy", "metrics", "/metrics")
+			raw, err := serviceProxyGet(context.TODO(), "https", "konflux-ui", "proxy", "metrics", "/metrics")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(raw)).To(ContainSubstring("caddy_"),
 				"metrics should contain Caddy-specific metrics")

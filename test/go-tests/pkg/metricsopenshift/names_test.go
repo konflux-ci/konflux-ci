@@ -35,11 +35,5 @@ func TestUWMUpOnlyTargets(t *testing.T) {
 	assert.NoError(t, err)
 
 	targets := UWMUpOnlyTargets(catalog)
-	assert.Len(t, targets, 1)
-	ids := make([]string, 0, len(targets))
-	for _, target := range targets {
-		ids = append(ids, target.ID)
-		assert.Empty(t, target.ScrapeTokenSecret)
-	}
-	assert.ElementsMatch(t, []string{"konflux-ui-proxy"}, ids)
+	assert.Empty(t, targets)
 }

@@ -326,6 +326,7 @@ func main() {
 	releaseServiceRotation := tokenRotation.Subscribe()
 	integrationServiceRotation := tokenRotation.Subscribe()
 	namespaceListerRotation := tokenRotation.Subscribe()
+	uiRotation := tokenRotation.Subscribe()
 	if err := mgr.Add(tokenRotation); err != nil {
 		setupLog.Error(err, "unable to add scrape token rotation broadcaster")
 		os.Exit(1)
@@ -388,10 +389,13 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&ui.KonfluxUIReconciler{
-		Client:      mgr.GetClient(),
-		Scheme:      mgr.GetScheme(),
-		ObjectStore: objectStore,
-		ClusterInfo: clusterInfo,
+		Client:              mgr.GetClient(),
+		Scheme:              mgr.GetScheme(),
+		ObjectStore:         objectStore,
+		ClusterInfo:         clusterInfo,
+		TokenCreator:        tokenCreator,
+		TokenRotationEvents: uiRotation,
+		SecretReader:        mgr.GetAPIReader(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KonfluxUI")
 		os.Exit(1)

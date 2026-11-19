@@ -20,6 +20,12 @@
 
 # TODO: protect metrics with kube-rbac-proxy sidecar (https://github.com/openshift/kube-rbac-proxy)
 :2112 {
+	tls {
+		get_certificate file {
+			cert /mnt/serving-cert/tls.crt
+			key /mnt/serving-cert/tls.key
+		}
+	}
 	metrics /metrics
 }
 
