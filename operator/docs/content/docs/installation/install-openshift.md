@@ -29,7 +29,26 @@ This is not the only way to install Konflux on OpenShift. You can also use:
 | [Go](https://go.dev/) | v1.26.0 |
 | [openssl](https://www.openssl.org/) | v3.0.13 |
 
-- `cluster-admin` permissions
+- `cluster-admin` permissions on the target OpenShift cluster.
+- **GitHub App (Required for Build Pipelines)**: Konflux uses a GitHub App with [Pipelines-as-Code](https://pipelinesascode.com/) to receive webhook events, trigger build pipelines on pull requests, and report status back to GitHub.
+  - Follow the [GitHub Application Secrets]({{< relref "github-secrets" >}}) guide to create your GitHub App.
+  - Export your GitHub App credentials before running the deployment script. The script validates these credentials before starting and deploys the integration secrets into the cluster.
+
+### Understanding Smee Webhook Proxy
+
+{{< alert color="warning" >}}
+The script skips the Smee webhook proxy unless <code>SMEE_CHANNEL</code> is provided. For GitHub
+to deliver webhook events (triggering build pipelines on pull requests), your cluster
+must be reachable from the internet, or you must configure Smee as described below and in
+<a href="{{< relref "github-secrets" >}}">GitHub Application Secrets</a>.
+{{< /alert >}}
+
+Smee is an open-source webhook payload delivery service that forwards GitHub webhook events to a client running inside your cluster.
+
+The deployment script skips the Smee webhook proxy by default (`SKIP_SMEE=true`). Smee is unnecessary when your OpenShift cluster has a publicly accessible router or ingress that GitHub can reach directly.
+
+If your cluster is private, behind a corporate firewall, or lacks public ingress, configure a Smee channel URL using `SMEE_CHANNEL="https://smee.io/<channel-id>"` so webhook events can reach your cluster.
+
 
 ## Setup
 
@@ -40,12 +59,19 @@ git clone https://github.com/konflux-ci/konflux-ci.git
 cd konflux-ci
 ```
 
-2. Run the deployment script:
+To customise the operator image or Konflux CR before running, see [Script configuration](#script-configuration).
+
+2. Export your GitHub App credentials and run the deployment script:
 
 ```bash
+export GITHUB_APP_ID="<your-github-app-id>"
+export WEBHOOK_SECRET="<your-webhook-secret>"
+export GITHUB_PRIVATE_KEY_PATH="/path/to/your-private-key.pem"
+# Optional: If your cluster lacks public ingress, provide your Smee channel URL:
+# export SMEE_CHANNEL="https://smee.io/<channel-id>"
+
 ./deploy-konflux-on-ocp.sh
 ```
-To customise the operator image or Konflux CR before running, see [Script configuration](#script-configuration).
 
 The script performs all of the following automatically:
 
@@ -54,6 +80,7 @@ The script performs all of the following automatically:
 - Deploys the Konflux Operator into the `konflux-operator` namespace
 - Waits for the Operator to be ready
 - Applies the OpenShift Konflux CR and waits for all components to reach `Ready`
+- Deploys GitHub integration secrets
 
 ## What gets deployed
 
@@ -73,15 +100,7 @@ The following components are not deployed by `deploy-deps.sh` in this configurat
 |---------|--------|
 | trust-manager | Not needed — OpenShift has native CA bundle injection via `config.openshift.io/inject-trusted-cabundle` |
 | Internal OCI registry | OpenShift has its own integrated registry |
-| Smee webhook proxy | Not needed when the cluster is internet-reachable |
-
-{{< alert color="warning" >}}
-The script skips the Smee webhook proxy (<code>SKIP_SMEE=true</code>). For GitHub
-to deliver webhook events (triggering build pipelines on pull requests), your cluster
-must be reachable from the internet. If it is not, you will need to configure Smee
-manually after installation. See
-<a href="{{< relref "github-secrets" >}}">GitHub Application Secrets</a> for details.
-{{< /alert >}}
+| Smee webhook proxy | Skipped by default (`SKIP_SMEE=true`). Not needed when the cluster has a public ingress URL. |
 
 ### Operator and Konflux
 
@@ -90,6 +109,15 @@ manually after installation. See
 | Konflux CRDs | `Konflux` custom resource definition |
 | Konflux Operator | Deployed in the `konflux-operator` namespace |
 | Konflux instance | All Konflux components managed by `konflux-openshift.yaml` |
+
+## Verify the Konflux CR is ready
+
+See [Applying the Konflux Custom Resource]({{< relref "apply-konflux-cr" >}}) for instructions
+on verifying the Konflux CR status and accessing the UI URL.
+
+```bash
+kubectl wait --for=condition=Ready=True konflux konflux --timeout=15m
+```
 
 ## Script configuration
 
@@ -156,19 +184,6 @@ kubectl delete konflux konflux
 kubectl apply -f <your-konflux-cr>.yaml
 kubectl wait --for=condition=Ready=True konflux konflux --timeout=15m
 ```
-
-## Verify the Konflux CR is ready
-
-See [Applying the Konflux Custom Resource]({{< relref "apply-konflux-cr" >}}) for instructions
-on verifying the Konflux CR status and accessing the UI URL.
-
-
-
-## Create GitHub integration secrets
-
-After the script completes, follow the
-[GitHub Application Secrets]({{< relref "github-secrets" >}}) guide to create a
-GitHub App and deploy its credentials into the cluster.
 
 ## Uninstall
 
