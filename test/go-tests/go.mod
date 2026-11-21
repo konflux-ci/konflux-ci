@@ -40,7 +40,7 @@ require (
 	k8s.io/utils v0.0.0-20261023123148-ca04ba58ecab
 	knative.dev/pkg v0.0.0-20261106011441-a8ce7f3f6f84
 	oras.land/oras-go/v2 v2.7.0
-	sigs.k8s.io/controller-runtime v0.25.2
+	sigs.k8s.io/controller-runtime v0.25.3
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -75,7 +75,7 @@ replace (
 	k8s.io/mount-utils => k8s.io/mount-utils v0.37.2
 	k8s.io/pod-security-admission => k8s.io/pod-security-admission v0.37.2
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.37.2
-	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.25.2
+	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.25.3
 	vbom.ml/util => github.com/fvbommel/util v0.0.3
 )
 
