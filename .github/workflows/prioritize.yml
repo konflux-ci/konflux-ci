@@ -33,7 +33,7 @@ concurrency:
 
 jobs:
   prioritize:
-    uses: fullsend-ai/fullsend/.github/workflows/reusable-prioritize.yml@90b7310ff8751a3c70e5d68214770dc168a1cbe7 # v0.54.0
+    uses: fullsend-ai/fullsend/.github/workflows/reusable-prioritize.yml@27c1d6ce1d384fa8b85b6789653fb3505d93c9d3 # v0.56.1
     with:
       event_type: ${{ inputs.event_type }}
       source_repo: ${{ inputs.source_repo }}
