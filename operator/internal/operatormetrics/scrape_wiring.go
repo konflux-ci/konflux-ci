@@ -43,9 +43,10 @@ func desiredOperatorServiceMonitor(namespace string) *unstructured.Unstructured 
 	sm.SetName(operatorServiceMonitorName)
 	sm.SetNamespace(namespace)
 	sm.SetLabels(map[string]string{
-		"control-plane":                "controller-manager",
-		"app.kubernetes.io/name":       OperatorAppName,
-		"app.kubernetes.io/managed-by": OperatorAppName,
+		"control-plane":                          "controller-manager",
+		"app.kubernetes.io/name":                 OperatorAppName,
+		"app.kubernetes.io/managed-by":           OperatorAppName,
+		kubernetes.ServiceMonitorMetricsLabelKey: kubernetes.ServiceMonitorMetricsLabelValue,
 	})
 	sm.Object["spec"] = map[string]interface{}{
 		"endpoints": []interface{}{

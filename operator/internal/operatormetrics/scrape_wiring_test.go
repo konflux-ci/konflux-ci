@@ -108,6 +108,17 @@ func TestDesiredOperatorServiceMonitorSpec(t *testing.T) {
 	if sm.GetNamespace() != OperatorNamespace {
 		t.Fatalf("unexpected namespace: %q", sm.GetNamespace())
 	}
+	// Documented in docs/component-monitoring.md: users select ServiceMonitors by these labels.
+	wantLabels := map[string]string{
+		"konflux.konflux-ci.dev/metrics": "true",
+		"app.kubernetes.io/name":         "konflux-operator",
+		"control-plane":                  "controller-manager",
+	}
+	for k, v := range wantLabels {
+		if got := sm.GetLabels()[k]; got != v {
+			t.Fatalf("label %s = %q, want %q", k, got, v)
+		}
+	}
 	endpoints, found, err := unstructured.NestedSlice(sm.Object, "spec", "endpoints")
 	if err != nil || !found || len(endpoints) != 1 {
 		t.Fatalf("unexpected endpoints: found=%v err=%v len=%d", found, err, len(endpoints))
