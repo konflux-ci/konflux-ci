@@ -25,7 +25,7 @@ on:
 
 env:
   # renovate: datasource=github-releases depName=gohugoio/hugo
-  HUGO_VERSION: "0.170.0"
+  HUGO_VERSION: "0.170.1"
   # renovate: datasource=github-releases depName=sass/dart-sass
   DART_SASS_VERSION: "1.108.2"
 
