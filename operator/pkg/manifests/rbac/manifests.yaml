@@ -518,6 +518,19 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
+  name: konflux-release-pruner-bot-actions
+rules:
+- apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - releases
+  - snapshots
+  verbs:
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
   name: konflux-releaser-bot-actions
 rules:
 - apiGroups:
