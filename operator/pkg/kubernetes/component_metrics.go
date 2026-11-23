@@ -35,6 +35,14 @@ var (
 	clusterRoleBindingGVK = rbacv1.SchemeGroupVersion.WithKind("ClusterRoleBinding")
 )
 
+// ServiceMonitorMetricsLabelKey and ServiceMonitorMetricsLabelValue form the label carried by
+// every ServiceMonitor the operator manages (component and operator). It is a stable
+// selector for Prometheus serviceMonitorSelector; see docs/component-monitoring.md.
+const (
+	ServiceMonitorMetricsLabelKey   = "konflux.konflux-ci.dev/metrics"
+	ServiceMonitorMetricsLabelValue = "true"
+)
+
 // ComponentMetricsAllowTrafficNetworkPolicySuffix names operand NetworkPolicies that permit
 // OpenShift user-workload Prometheus scrape ingress (see namespace-lister monitoring/).
 const ComponentMetricsAllowTrafficNetworkPolicySuffix = "-allow-metrics-traffic"

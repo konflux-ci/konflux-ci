@@ -955,6 +955,8 @@ spec:
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
+  labels:
+    konflux.konflux-ci.dev/metrics: "true"
   name: konflux-ui-proxy
   namespace: konflux-ui
 spec:

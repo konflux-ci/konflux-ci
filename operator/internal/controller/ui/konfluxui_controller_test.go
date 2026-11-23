@@ -2778,8 +2778,9 @@ var _ = Describe("KonfluxUI Controller", func() {
 			})
 
 			Eventually(func(g Gomega) {
-				_, err := getServiceMonitor(ctx)
+				sm, err := getServiceMonitor(ctx)
 				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(sm.GetLabels()).To(HaveKeyWithValue("konflux.konflux-ci.dev/metrics", "true"))
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 
 			Eventually(func(g Gomega) {
