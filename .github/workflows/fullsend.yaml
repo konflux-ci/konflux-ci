@@ -3,8 +3,7 @@
 ---
 # fullsend shim workflow (per-repo installation mode)
 # Routes events to agent workflows via reusable-dispatch.yml.
-# All agent execution happens in this repo's context — no external
-# config repo is needed.
+# All agent execution happens in this repository's context.
 #
 # Security: pull_request_target runs the BASE branch version of this workflow,
 # preventing PRs from modifying it to exfiltrate credentials.
@@ -37,8 +36,7 @@ jobs:
       (github.event_name != 'pull_request_target' && github.event_name != 'pull_request_review'
        || github.event.pull_request.head.ref != 'fullsend/scaffold-install')
       && (github.event_name != 'issue_comment'
-       || (startsWith(github.event.comment.body, '/fs-')
-           && github.event.comment.user.type != 'Bot'))
+       || startsWith(github.event.comment.body, '/fs-'))
     permissions:
       actions: write
       id-token: write
@@ -46,10 +44,9 @@ jobs:
       issues: write
       packages: read
       pull-requests: write
-    uses: fullsend-ai/fullsend/.github/workflows/reusable-dispatch.yml@90b7310ff8751a3c70e5d68214770dc168a1cbe7 # v0.54.0
+    uses: fullsend-ai/fullsend/.github/workflows/reusable-dispatch.yml@27c1d6ce1d384fa8b85b6789653fb3505d93c9d3  # v0.56.1
     with:
       event_action: ${{ github.event.action }}
-      install_mode: per-repo
       mint_url: ${{ vars.FULLSEND_MINT_URL }}
       gcp_region: ${{ vars.FULLSEND_GCP_REGION }}
       project_number: ${{ vars.FULLSEND_PROJECT_NUMBER }}
@@ -57,44 +54,15 @@ jobs:
     secrets:
       FULLSEND_GCP_WIF_PROVIDER: ${{ secrets.FULLSEND_GCP_WIF_PROVIDER }}
       FULLSEND_GCP_PROJECT_ID: ${{ secrets.FULLSEND_GCP_PROJECT_ID }}
+      FULLSEND_OPENAI_API_KEY: ${{ secrets.FULLSEND_OPENAI_API_KEY }}
+      FULLSEND_INFERENCE_GATEWAY_API_KEY: ${{ secrets.FULLSEND_INFERENCE_GATEWAY_API_KEY }}
       OTEL_EXPORTER_OTLP_TRACES_HEADERS: ${{ secrets.OTEL_EXPORTER_OTLP_TRACES_HEADERS }}
       OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}
-
-  review-denied:
-    if: >-
-      github.event_name == 'issue_comment'
-        && github.event.issue.pull_request
-        && github.event.comment.user.type != 'Bot'
-        && (
-          contains(github.event.comment.body, '/fs-review')
-          || contains(github.event.comment.body, '/fullsend-review')
-        )
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      issues: write
-      pull-requests: write
-    steps:
-      - name: Notify unauthorized review request
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.issue.number }}
-          REPO: ${{ github.repository }}
-          COMMENT_BODY: ${{ github.event.comment.body }}
-          COMMENT_AUTHOR_ASSOC: ${{ github.event.comment.author_association }}
-        run: |
-          set -euo pipefail
-          # Keep command parsing in sync with dispatch.yml "Determine stage".
-          COMMAND="$(printf '%s\n' "${COMMENT_BODY}" | head -1 | awk '{print $1}')"
-          case "${COMMAND}" in
-            /fs-review|/fullsend-review) ;;
-            *) exit 0 ;;
-          esac
-          case "${COMMENT_AUTHOR_ASSOC}" in
-            OWNER|MEMBER|COLLABORATOR) exit 0 ;;
-          esac
-          gh pr comment "$PR_NUMBER" --repo "$REPO" \
-            --body "You do not have permission to run \`/fullsend-review\` or \`/fs-review\`. This command is restricted to authorized organization members."
+      FULLSEND_JIRA_TOKEN: ${{ secrets.FULLSEND_JIRA_TOKEN }}
+      FULLSEND_JIRA_EMAIL: ${{ secrets.FULLSEND_JIRA_EMAIL }}
+      FULLSEND_JIRA_CLIENT_ID: ${{ secrets.FULLSEND_JIRA_CLIENT_ID }}
+      FULLSEND_JIRA_CLIENT_SECRET: ${{ secrets.FULLSEND_JIRA_CLIENT_SECRET }}
+      FULLSEND_GITHUB_RUNNER_SECRETS: ${{ secrets.FULLSEND_GITHUB_RUNNER_SECRETS }}
 
   stop-fix:
     # Job-level if: is intentionally coarse — it only screens for the
@@ -125,15 +93,30 @@ jobs:
           # ADR 0054: authorize via the collaborator permission API
           # (admin|maintain|write), not author_association — the latter grants
           # contributor status to anyone with a single merged PR (issue #5421).
-          # Mirrors has_repo_permission() in dispatch.yml; keep the two in sync.
+          # Mirrors has_repo_permission() in reusable-dispatch.yml, including the
+          # custom-role --jq resolution; keep the two in sync.
           # The PR author may always stop the fix agent on their own PR.
           authorized=false
           if [[ -n "$COMMENT_USER_LOGIN" && "$COMMENT_USER_LOGIN" == "$ISSUE_USER_LOGIN" ]]; then
             authorized=true
           else
             if api_err=$(mktemp); then
+              # $p is a jq variable; the single quotes are intentional.
+              # shellcheck disable=SC2016
               if role=$(gh api "repos/$REPO/collaborators/$COMMENT_USER_LOGIN/permission" \
-                --jq '.role_name' 2>"$api_err"); then
+                --jq '.user.permissions as $p
+                  | if (.role_name | type) != "string" or .role_name == "" then "none"
+                    elif (.role_name | IN("admin", "maintain", "write", "triage", "read")) then .role_name
+                    elif $p == null then
+                      if (.permission | IN("admin", "write", "read")) then .permission else "none" end
+                    elif ($p | type) == "object" then
+                      if $p.admin == true then "admin"
+                      elif $p.maintain == true then "maintain"
+                      elif $p.push == true then "write"
+                      elif $p.triage == true then "triage"
+                      elif $p.pull == true then "read"
+                      else "none" end
+                    else "none" end' 2>"$api_err"); then
                 case "$role" in
                   admin|maintain|write) authorized=true ;;
                 esac
@@ -151,7 +134,7 @@ jobs:
           fi
           gh label create "fullsend-no-fix" --repo "$REPO" \
             --description "Skip bot-triggered fix agent runs" --color "FBCA04" \
-            --force 2>/dev/null || true
+            2>/dev/null || true
           gh pr edit "$PR_NUMBER" --repo "$REPO" \
             --add-label "fullsend-no-fix"
           gh pr comment "$PR_NUMBER" --repo "$REPO" \
