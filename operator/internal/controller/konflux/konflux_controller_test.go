@@ -320,6 +320,34 @@ var _ = Describe("Konflux Controller", func() {
 			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
+		It("should not create DefaultTenant CR when disabled in standard installation type", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			By("creating a standard Konflux CR with defaultTenant.enabled=false")
+			disabled := false
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					InstallationType: konfluxv1alpha1.InstallationTypeStandard,
+					DefaultTenant:    &konfluxv1alpha1.DefaultTenantConfig{Enabled: &disabled},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			By("waiting for reconcile to complete")
+			Eventually(func(g Gomega) {
+				updated := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updated)).To(Succeed())
+				g.Expect(apimeta.FindStatusCondition(updated.GetConditions(), constant.ConditionTypeReady)).NotTo(BeNil())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("verifying DefaultTenant CR was not created")
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: defaulttenant.CRName},
+				&konfluxv1alpha1.KonfluxDefaultTenant{})
+			Expect(errors.IsNotFound(err)).To(BeTrue(), "DefaultTenant CR should not exist when enabled=false")
+		})
+
 		It("should not create DefaultTenant CR in spoke installation type", func(ctx context.Context) {
 			startManager(createTestClusterInfo())
 
@@ -344,6 +372,42 @@ var _ = Describe("Konflux Controller", func() {
 			tenant := &konfluxv1alpha1.KonfluxDefaultTenant{}
 			err := k8sClient.Get(ctx, types.NamespacedName{Name: defaulttenant.CRName}, tenant)
 			Expect(errors.IsNotFound(err)).To(BeTrue(), "DefaultTenant CR should not exist in spoke type")
+		})
+
+		It("should delete DefaultTenant CR when disabled in standard installation type", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			By("creating a standard Konflux CR with defaultTenant.enabled=true")
+			enabled := true
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					InstallationType: konfluxv1alpha1.InstallationTypeStandard,
+					DefaultTenant:    &konfluxv1alpha1.DefaultTenantConfig{Enabled: &enabled},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			By("waiting for DefaultTenant CR to be created")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: defaulttenant.CRName},
+					&konfluxv1alpha1.KonfluxDefaultTenant{})).To(Succeed())
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("updating defaultTenant.enabled to false without changing the installation type")
+			updatedKonflux := &konfluxv1alpha1.Konflux{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, updatedKonflux)).To(Succeed())
+			disabled := false
+			updatedKonflux.Spec.DefaultTenant.Enabled = &disabled
+			Expect(k8sClient.Update(ctx, updatedKonflux)).To(Succeed())
+
+			By("waiting for DefaultTenant CR to be deleted")
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: defaulttenant.CRName},
+					&konfluxv1alpha1.KonfluxDefaultTenant{})
+				g.Expect(errors.IsNotFound(err)).To(BeTrue(), "DefaultTenant CR should be deleted when enabled=false")
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
 		})
 
 		It("should delete DefaultTenant CR when switching from standard to spoke", func(ctx context.Context) {
