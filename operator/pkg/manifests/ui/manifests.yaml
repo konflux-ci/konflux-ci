@@ -508,7 +508,7 @@ spec:
             secretKeyRef:
               key: client-secret
               name: oauth2-proxy-client-secret
-        image: quay.io/konflux-ci/dex@sha256:3a4253c9e68c0ddcbd1203b18ec7e9d4773cd2801a514a6dacba15aeeba39e51
+        image: quay.io/konflux-ci/dex@sha256:1bb2ad50d724ee000cfdac0696b1f9876c0b1d0410883d88f41d3b156e2dadee
         livenessProbe:
           failureThreshold: 24
           httpGet:
@@ -710,7 +710,7 @@ spec:
             secretKeyRef:
               key: cookie-secret
               name: oauth2-proxy-cookie-secret
-        image: registry.access.redhat.com/hi/oauth2-proxy@sha256:7d314a40e26d8a6e20823f1048f7f14641e0bbe83b8a10dd6300b09e0ce41930
+        image: registry.access.redhat.com/hi/oauth2-proxy@sha256:fa4516e1c5bf6be0a7fc5291adc536e867951deee3449422a8bcfdef173c8edf
         name: oauth2-proxy
         ports:
         - containerPort: 6000
@@ -732,7 +732,7 @@ spec:
         - -R
         - /opt/app-root/src/.
         - /mnt/static-content/
-        image: quay.io/konflux-ci/konflux-ui@sha256:4cd73fbda98344f00a4bb8cef752c30d9e41df797ff7573617fdd3f6aff1978f
+        image: quay.io/konflux-ci/konflux-ui@sha256:68a15e20134c2d6fa8ce8f741a76b64a7062e149248bf30ef136b1d3247f87d7
         name: copy-static-content
         resources:
           limits:
@@ -750,7 +750,7 @@ spec:
       - command:
         - bash
         - /var/run/scripts/konflux-ci.dev/generate-proxy-config.sh
-        image: quay.io/konflux-ci/konflux-ui@sha256:4cd73fbda98344f00a4bb8cef752c30d9e41df797ff7573617fdd3f6aff1978f
+        image: quay.io/konflux-ci/konflux-ui@sha256:68a15e20134c2d6fa8ce8f741a76b64a7062e149248bf30ef136b1d3247f87d7
         name: generate-proxy-config
         resources:
           limits:
