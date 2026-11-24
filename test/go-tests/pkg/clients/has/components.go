@@ -9,12 +9,12 @@ import (
 
 	"github.com/devfile/library/v2/pkg/util"
 	appservice "github.com/konflux-ci/application-api/api/v1alpha1"
+	imagecontroller "github.com/konflux-ci/image-controller/api/v1alpha1"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/clients/tekton"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/constants"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/logs"
 	"github.com/konflux-ci/konflux-ci/test/go-tests/pkg/utils"
 	tektonUtils "github.com/konflux-ci/konflux-ci/test/go-tests/pkg/utils/tekton"
-	imagecontroller "github.com/konflux-ci/image-controller/api/v1alpha1"
 	ginkgo "github.com/onsi/ginkgo/v2"
 	pipeline "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -216,6 +216,9 @@ func (h *Controller) WaitForComponentPipelineToBeFinished(component *appservice.
 	for {
 		creationDeadline := time.Now().Add(pipelineRunCreationTimeout)
 		prFound := false
+		// PullImageFailed can sit on a running TaskRun for a long time. Report it once,
+		// then keep the one-line progress until the PipelineRun finishes.
+		reportedPullImage := false
 
 		err := wait.PollUntilContextTimeout(context.Background(), constants.PipelineRunPollingInterval, 30*time.Minute, true, func(ctx context.Context) (done bool, err error) {
 			pr, err = h.GetComponentPipelineRunWithType(component.GetName(), app, component.GetNamespace(), pipelineType, sha, eventType)
@@ -235,6 +238,10 @@ func (h *Controller) WaitForComponentPipelineToBeFinished(component *appservice.
 			}
 
 			ginkgo.GinkgoWriter.Printf("PipelineRun %s reason: %s\n", pr.Name, pr.GetStatusCondition().GetCondition(apis.ConditionSucceeded).GetReason())
+			if !reportedPullImage && !pr.IsDone() && t.ShowsPullImageFailure(pr) {
+				reportedPullImage = true
+				ginkgo.GinkgoWriter.Printf("%s\n", t.DescribePipelineRunFailure(pr))
+			}
 
 			if !pr.IsDone() {
 				return false, nil
@@ -267,6 +274,7 @@ func (h *Controller) WaitForComponentPipelineToBeFinished(component *appservice.
 				return fmt.Errorf("PipelineRun cannot be created for the Component %s/%s", component.GetNamespace(), component.GetName())
 			}
 			ginkgo.GinkgoWriter.Printf("attempt %d/%d: PipelineRun %q failed: %+v", attempts, r.Retries+1, pr.GetName(), err)
+			ginkgo.GinkgoWriter.Printf("\n%s\n", t.DescribePipelineRunFailure(pr))
 			// Retry on transient failures: CouldntGetTask (SRVKP-2749),
 			// CouldntGetPipeline (pipeline-level resolver timeout),
 			// TaskRunImagePullFailed (RHTAPBUGS-985, tektoncd/pipeline#7184),
