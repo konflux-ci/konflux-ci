@@ -145,3 +145,6 @@ spec:
       packageRegistryProxyPnpmUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/npm-proxy"
       packageRegistryProxyBundlerUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/rubygems-proxy"
       packageRegistryProxyCargoUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/cargo-proxy"
+
+      # Git repository containing Known False Positives
+      kfpGitUrl: "https://gitlab.example.com/security/known-false-positives.git"
