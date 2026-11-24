@@ -11,7 +11,7 @@ roles:
     - fix
     - review
     - prioritize
-# Manual-only review: skip auto-review on PR open/sync; keep /fs-review.
+# Manual-only review/retro: skip auto on PR open/sync/close; keep /fs-review and /fs-retro.
 # Requires fullsend >= v0.50.0 (agents[].trigger CEL routing).
 agents:
     - name: review
@@ -20,6 +20,12 @@ agents:
         && has(event.entity.linked_change_proposal)
         && has(event.transition.comment.command)
         && event.transition.comment.command == "/fs-review"
+        && event.actor.kind == "human"
+    - name: retro
+      trigger: >-
+        event.transition.kind == "comment_added"
+        && has(event.transition.comment.command)
+        && event.transition.comment.command == "/fs-retro"
         && event.actor.kind == "human"
 allowed_remote_resources:
     - https://raw.githubusercontent.com/fullsend-ai/fullsend/

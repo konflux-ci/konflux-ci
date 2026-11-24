@@ -645,6 +645,69 @@ var _ = Describe("Konflux Controller", func() {
 		})
 	})
 
+	Context("KonfluxInfo KFP Git URL", func() {
+		It("should preserve and forward kfpGitUrl to KonfluxInfo", func(ctx context.Context) {
+			startManager(createTestClusterInfo())
+
+			const kfpURL = "https://gitlab.example.com/security/known-false-positives.git"
+			cr := &konfluxv1alpha1.Konflux{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxSpec{
+					KonfluxInfo: &konfluxv1alpha1.KonfluxInfoConfig{
+						Spec: &konfluxv1alpha1.KonfluxInfoSpec{
+							ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+								Data: &konfluxv1alpha1.ClusterConfigData{KFPGitURL: kfpURL},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			testutil.DeferCleanupParentAndChildren(k8sClient, cr, allSubCRs()...)
+
+			Eventually(func(g Gomega) {
+				parent := &konfluxv1alpha1.Konflux{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, parent)).To(Succeed())
+				g.Expect(parent.Spec.KonfluxInfo).NotTo(BeNil())
+				g.Expect(parent.Spec.KonfluxInfo.Spec).NotTo(BeNil())
+				g.Expect(parent.Spec.KonfluxInfo.Spec.GetClusterConfigData().KFPGitURL).To(Equal(kfpURL))
+
+				child := &konfluxv1alpha1.KonfluxInfo{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: info.CRName}, child)).To(Succeed())
+				g.Expect(child.Spec.GetClusterConfigData().KFPGitURL).To(Equal(kfpURL))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+		})
+
+		DescribeTable("should reject kfpGitUrl containing credentials, query parameters, or fragments",
+			func(ctx context.Context, repositoryURL string) {
+				cr := &konfluxv1alpha1.Konflux{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+					Spec: konfluxv1alpha1.KonfluxSpec{
+						KonfluxInfo: &konfluxv1alpha1.KonfluxInfoConfig{
+							Spec: &konfluxv1alpha1.KonfluxInfoSpec{
+								ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+									Data: &konfluxv1alpha1.ClusterConfigData{
+										KFPGitURL: repositoryURL,
+									},
+								},
+							},
+						},
+					},
+				}
+				err := k8sClient.Create(ctx, cr)
+				DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+				Expect(errors.IsInvalid(err)).To(BeTrue(), "unexpected error: %v", err)
+				Expect(err).To(MatchError(ContainSubstring("kfpGitUrl")))
+				Expect(err).To(MatchError(ContainSubstring("URL must not contain credentials (userinfo), query parameters, or fragments.")))
+			},
+			Entry("userinfo", "https://user:secret@gitlab.example.com/security/known-false-positives.git"),
+			Entry("query token", "https://gitlab.example.com/security/known-false-positives.git?private_token=secret"),
+			Entry("fragment token", "https://gitlab.example.com/security/known-false-positives.git#access_token=secret"),
+			Entry("bare query delimiter", "https://gitlab.example.com/security/known-false-positives.git?"),
+			Entry("bare fragment delimiter", "https://gitlab.example.com/security/known-false-positives.git#"),
+		)
+	})
+
 	Context("NamespaceLister spec propagation", func() {
 		const resourceName = "konflux"
 

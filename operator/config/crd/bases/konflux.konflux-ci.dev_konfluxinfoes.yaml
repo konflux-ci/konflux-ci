@@ -168,6 +168,19 @@ spec:
                         - message: URL must not contain credentials (userinfo). Use
                             a Secret for proxy authentication.
                           rule: '!self.contains(''@'')'
+                      kfpGitUrl:
+                        description: |-
+                          KFPGitURL is the Git repository URL for Known False Positives.
+                          Written as "kfp-git-url" in the cluster-config ConfigMap.
+                          When empty or omitted, the key is absent from the ConfigMap.
+                          Do not embed credentials in this URL — the ConfigMap is readable by all authenticated users.
+                          Query parameters and fragments are not allowed because they can contain credentials.
+                        type: string
+                        x-kubernetes-validations:
+                        - message: URL must not contain credentials (userinfo), query
+                            parameters, or fragments.
+                          rule: '!self.contains(''@'') && !self.contains(''?'') &&
+                            !self.contains(''#'')'
                       noProxy:
                         description: |-
                           NoProxy is a comma-separated list of hosts that should bypass the proxy.
