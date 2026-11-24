@@ -11,6 +11,12 @@
 #   - Running from the root of the konflux-ci repository
 #   - OpenShift cluster with OperatorHub access
 #
+# Required environment variables:
+#   GITHUB_APP_ID         - GitHub App ID for Pipelines-as-Code integration secrets
+#   WEBHOOK_SECRET        - Webhook secret configured on the GitHub App
+#   GITHUB_PRIVATE_KEY    - GitHub App private key string (or set GITHUB_PRIVATE_KEY_PATH)
+#   GITHUB_PRIVATE_KEY_PATH - Path to the GitHub App private key .pem file
+#
 # Environment variables (optional):
 #   OPERATOR_IMAGE        - Full operator image to use (skips SHA-based construction)
 #   KONFLUX_OPERATOR_REPO - Operator image repository (default: quay.io/redhat-user-workloads/konflux-vanguard-tenant/konflux-operator)
@@ -21,6 +27,7 @@
 #                         staticPasswords. Refused by default: those demo users have a
 #                         password published in this repository and must never reach a
 #                         cluster that is reachable from the internet.
+#   SMEE_CHANNEL          - Smee channel URL for webhook proxying (optional, for non-public clusters)
 #
 # Environment variables (set by OpenShift CI/Prow):
 #   REPO_NAME      - Name of the repository being tested (e.g., "konflux-ci", "release")
@@ -35,6 +42,12 @@ set -o pipefail
 
 # Determine the absolute path of the repository root
 REPO_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
+
+# Validate GitHub App credentials before starting the installation.
+(
+    cd "${REPO_ROOT}/operator"
+    VALIDATE_ONLY=true "${REPO_ROOT}/scripts/deploy-secrets.sh"
+)
 
 # Refuse to apply a Konflux CR that enables Dex demo users. The Kind and CI samples
 # carry static passwords whose plaintext is published in this repository; an OpenShift

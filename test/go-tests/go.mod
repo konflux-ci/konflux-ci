@@ -7,13 +7,13 @@ require (
 	github.com/codeready-toolchain/api v0.0.0-20261023161012-10cbbf2156ff
 	github.com/conforma/crds/api v0.1.44
 	github.com/devfile/library/v2 v2.4.0
-	github.com/docker/cli v29.9.3+incompatible
+	github.com/docker/cli v29.10.0+incompatible
 	github.com/gofri/go-github-ratelimit/v2 v2.0.2
 	github.com/google/go-containerregistry v0.22.1
 	github.com/google/go-github/v93 v93.0.0
 	github.com/h2non/gock v1.2.0
 	github.com/konflux-ci/application-api v0.0.0-20261101085949-41d2a0ab82ca
-	github.com/konflux-ci/build-service v0.0.0-20261031054504-bdfcb51c6b34
+	github.com/konflux-ci/build-service v0.0.0-20261113205054-07182b00cba2
 	github.com/konflux-ci/image-controller v0.0.0-20261109132953-2fb397e3564b
 	github.com/konflux-ci/integration-service v0.0.0-20261029165049-252be6df555b
 	github.com/konflux-ci/konflux-ci/operator v0.0.0
@@ -24,7 +24,7 @@ require (
 	github.com/onsi/gomega v1.44.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/openshift-pipelines/pipelines-as-code v0.50.0
-	github.com/openshift/api v0.0.0-20261112171031-b027bed8bb3f
+	github.com/openshift/api v0.0.0-20261123012947-9ac77f18ba5d
 	github.com/openshift/client-go v0.0.0-20261027103500-48133ed95dad
 	github.com/openshift/library-go v0.0.0-20261030161254-298cf2d19148
 	github.com/redhat-appstudio/jvm-build-service v0.0.0-20250301023318-b47170d413c5
@@ -38,9 +38,9 @@ require (
 	k8s.io/client-go v11.0.0+incompatible
 	k8s.io/klog/v2 v2.140.0
 	k8s.io/utils v0.0.0-20261023123148-ca04ba58ecab
-	knative.dev/pkg v0.0.0-20261106011441-a8ce7f3f6f84
+	knative.dev/pkg v0.0.0-20261110182720-ae1437a8b141
 	oras.land/oras-go/v2 v2.7.0
-	sigs.k8s.io/controller-runtime v0.25.2
+	sigs.k8s.io/controller-runtime v0.25.3
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -75,7 +75,7 @@ replace (
 	k8s.io/mount-utils => k8s.io/mount-utils v0.37.2
 	k8s.io/pod-security-admission => k8s.io/pod-security-admission v0.37.2
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.37.2
-	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.25.2
+	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.25.3
 	vbom.ml/util => github.com/fvbommel/util v0.0.3
 )
 
@@ -177,7 +177,7 @@ require (
 	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/skeema/knownhosts v1.3.3 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
+	github.com/spf13/pflag v1.1.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
