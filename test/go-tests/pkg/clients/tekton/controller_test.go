@@ -126,3 +126,31 @@ func TestFindingCosignResults(t *testing.T) {
 	}
 
 }
+
+func TestCollectedContainerLogsReuse(t *testing.T) {
+	var none *collectedContainerLogs
+	assert.False(t, none.podComplete("pod"))
+	assert.False(t, none.podHasLogText("pod"))
+	_, found := none.lookup("pod", "step")
+	assert.False(t, found)
+
+	collected := &collectedContainerLogs{}
+	collected.remember("failed-pod", "step-clone", "clone ok\n")
+	collected.remember("failed-pod", "step-build", "")
+	assert.False(t, collected.podComplete("failed-pod"))
+	assert.True(t, collected.podHasLogText("failed-pod"))
+	log, found := collected.lookup("failed-pod", "step-clone")
+	assert.True(t, found)
+	assert.Equal(t, "clone ok\n", log)
+	_, found = collected.lookup("failed-pod", "step-missing")
+	assert.False(t, found)
+
+	collected.markComplete("failed-pod")
+	assert.True(t, collected.podComplete("failed-pod"))
+
+	empty := &collectedContainerLogs{}
+	empty.remember("failed-pod", "step-build", " \n")
+	empty.markComplete("failed-pod")
+	assert.True(t, empty.podComplete("failed-pod"))
+	assert.False(t, empty.podHasLogText("failed-pod"))
+}
