@@ -86,6 +86,85 @@ var _ = Describe("KonfluxInfo Controller", func() {
 		})
 	})
 
+	Context("KFP Git URL", func() {
+		It("reconciles the repository URL and removes the key when cleared", func(ctx context.Context) {
+			startManager(nil)
+
+			const repositoryURL = "https://gitlab.example.com/security/known-false-positives.git"
+			cr := &konfluxv1alpha1.KonfluxInfo{
+				ObjectMeta: metav1.ObjectMeta{Name: CRName},
+				Spec: konfluxv1alpha1.KonfluxInfoSpec{
+					ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+						Data: &konfluxv1alpha1.ClusterConfigData{
+							KFPGitURL:         repositoryURL,
+							DefaultOIDCIssuer: "https://oidc.example.com",
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+
+			By("preserving the URL in the CR and writing the existing ConfigMap key")
+			cmNN := types.NamespacedName{Name: clusterConfigMapName, Namespace: infoNamespace}
+			Eventually(func(g Gomega) {
+				stored := &konfluxv1alpha1.KonfluxInfo{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, stored)).To(Succeed())
+				g.Expect(stored.Spec.GetClusterConfigData().KFPGitURL).To(Equal(repositoryURL))
+				cm := &corev1.ConfigMap{}
+				g.Expect(k8sClient.Get(ctx, cmNN, cm)).To(Succeed())
+				g.Expect(cm.Data).To(HaveKeyWithValue("kfp-git-url", repositoryURL))
+				g.Expect(cm.Data).NotTo(HaveKey("kfpGitUrl"))
+			}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+			By("updating and then clearing the repository URL")
+			for _, repositoryURL := range []string{"https://gitlab.example.com/security/updated-false-positives.git", ""} {
+				Eventually(func(g Gomega) {
+					stored := &konfluxv1alpha1.KonfluxInfo{}
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: CRName}, stored)).To(Succeed())
+					stored.Spec.ClusterConfig.Data.KFPGitURL = repositoryURL
+					g.Expect(k8sClient.Update(ctx, stored)).To(Succeed())
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+
+				Eventually(func(g Gomega) {
+					cm := &corev1.ConfigMap{}
+					g.Expect(k8sClient.Get(ctx, cmNN, cm)).To(Succeed())
+					if repositoryURL == "" {
+						g.Expect(cm.Data).NotTo(HaveKey("kfp-git-url"))
+					} else {
+						g.Expect(cm.Data).To(HaveKeyWithValue("kfp-git-url", repositoryURL))
+					}
+					g.Expect(cm.Data).To(HaveKeyWithValue("defaultOIDCIssuer", "https://oidc.example.com"))
+				}).WithTimeout(testutil.EventuallyTimeout).WithPolling(testutil.EventuallyPolling).Should(Succeed())
+			}
+		})
+
+		DescribeTable("rejects repository URLs containing credentials, query parameters, or fragments",
+			func(ctx context.Context, repositoryURL string) {
+				cr := &konfluxv1alpha1.KonfluxInfo{
+					ObjectMeta: metav1.ObjectMeta{Name: CRName},
+					Spec: konfluxv1alpha1.KonfluxInfoSpec{
+						ClusterConfig: &konfluxv1alpha1.ClusterConfig{
+							Data: &konfluxv1alpha1.ClusterConfigData{KFPGitURL: repositoryURL},
+						},
+					},
+				}
+				err := k8sClient.Create(ctx, cr)
+				DeferCleanup(testutil.DeleteAndWait, k8sClient, cr)
+				Expect(apierrors.IsInvalid(err)).To(BeTrue(), "expected validation failure, got: %v", err)
+				Expect(err.Error()).To(ContainSubstring("kfpGitUrl"))
+				Expect(err.Error()).To(ContainSubstring("URL must not contain credentials (userinfo), query parameters, or fragments."))
+			},
+			Entry("username and password", "https://user:password@gitlab.example.com/security/known-false-positives.git"),
+			Entry("token", "https://token@gitlab.example.com/security/known-false-positives.git"),
+			Entry("SSH address", "git@gitlab.example.com:security/known-false-positives.git"),
+			Entry("query token", "https://gitlab.example.com/security/known-false-positives.git?private_token=secret"),
+			Entry("fragment token", "https://gitlab.example.com/security/known-false-positives.git#access_token=secret"),
+			Entry("bare query delimiter", "https://gitlab.example.com/security/known-false-positives.git?"),
+			Entry("bare fragment delimiter", "https://gitlab.example.com/security/known-false-positives.git#"),
+		)
+	})
+
 	Context("Proxy URL credential validation (CEL)", func() {
 		It("should reject httpProxy containing credentials", func(ctx context.Context) {
 			cr := &konfluxv1alpha1.KonfluxInfo{

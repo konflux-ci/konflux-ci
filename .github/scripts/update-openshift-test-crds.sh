@@ -5,10 +5,11 @@ set -euo pipefail
 # github.com/openshift/api Go module (operator/go.mod). Writes curated CRDs to
 # operator/test/crds/openshift/.
 #
-# Only the four CRDs referenced by controller tests are copied (Default
-# feature-set variant for clusterversions). Do not load entire
-# zz_generated.crd-manifests directories — some OpenShift CRDs exceed CEL cost
-# budgets on newer Kubernetes envtest versions.
+# Only the four CRDs referenced by controller tests are copied. Prefer the
+# Default feature-set variant when upstream ships feature-set splits; fall back
+# to the ungated filename when schemas have collapsed after gate promotion.
+# Do not load entire zz_generated.crd-manifests directories — some OpenShift
+# CRDs exceed CEL cost budgets on newer Kubernetes envtest versions.
 #
 # Usage:
 #   update-openshift-test-crds.sh [REPO_ROOT]
@@ -40,24 +41,41 @@ fi
 
 mkdir -p "${OUT_DIR}"
 
-# dest_filename|relative_source_path_under-module-root
+# Prefer Default feature-set CRD, else ungated. Upstream manifest-merge emits
+# one or the other for a given stem (never both): per-FeatureSet files when
+# schemas differ, else a single file with no FeatureSet — see
+# https://github.com/openshift/api/blob/0e5fe796a10fe1bfcd453fc8a06baf7ff444cead/README.md#L346-L353
+resolve_openshift_crd() {
+  local dir="$1"
+  local stem="$2"
+  local candidates=(
+    "${dir}/${stem}-Default.crd.yaml"
+    "${dir}/${stem}.crd.yaml"
+  )
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [[ -f "${OPENSHIFT_API_DIR}/${candidate}" ]]; then
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
+  done
+  echo "Missing OpenShift CRD source for ${dir}/${stem} (tried: ${candidates[*]})" >&2
+  return 1
+}
+
+# dest_filename|crd_manifests_dir|filename_stem
 CRDS=(
-  "clusterversions.config.openshift.io.yaml|config/v1/zz_generated.crd-manifests/0000_00_cluster-version-operator_01_clusterversions-Default.crd.yaml"
-  "ingresses.config.openshift.io.yaml|config/v1/zz_generated.crd-manifests/0000_10_config-operator_01_ingresses-Default.crd.yaml"
-  "consolelinks.console.openshift.io.yaml|console/v1/zz_generated.crd-manifests/00_consolelinks.crd.yaml"
-  "securitycontextconstraints.security.openshift.io.yaml|security/v1/zz_generated.crd-manifests/0000_03_config-operator_01_securitycontextconstraints.crd.yaml"
+  "clusterversions.config.openshift.io.yaml|config/v1/zz_generated.crd-manifests|0000_00_cluster-version-operator_01_clusterversions"
+  "ingresses.config.openshift.io.yaml|config/v1/zz_generated.crd-manifests|0000_10_config-operator_01_ingresses"
+  "consolelinks.console.openshift.io.yaml|console/v1/zz_generated.crd-manifests|00_consolelinks"
+  "securitycontextconstraints.security.openshift.io.yaml|security/v1/zz_generated.crd-manifests|0000_03_config-operator_01_securitycontextconstraints"
 )
 
 for entry in "${CRDS[@]}"; do
-  dest="${entry%%|*}"
-  rel_src="${entry#*|}"
+  IFS='|' read -r dest dir stem <<<"${entry}"
+  rel_src="$(resolve_openshift_crd "${dir}" "${stem}")"
   src="${OPENSHIFT_API_DIR}/${rel_src}"
   out="${OUT_DIR}/${dest}"
-
-  if [[ ! -f "${src}" ]]; then
-    echo "Missing OpenShift CRD source: ${src}" >&2
-    exit 1
-  fi
 
   {
     echo "# Source: github.com/openshift/api ${OPENSHIFT_API_VERSION}"
@@ -66,5 +84,5 @@ for entry in "${CRDS[@]}"; do
     cat "${src}"
   } > "${out}"
 
-  echo "Generated ${out} (github.com/openshift/api ${OPENSHIFT_API_VERSION})"
+  echo "Generated ${out} (github.com/openshift/api ${OPENSHIFT_API_VERSION}; ${rel_src})"
 done
