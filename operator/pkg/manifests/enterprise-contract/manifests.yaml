@@ -420,7 +420,7 @@ spec:
       include:
       - '@redhat'
     data:
-    - github.com/konflux-ci/konflux-operator-trusted-sources//data?ref=39f02c01fddf84fdefd6b69fa4452b443f7ba6bd
+    - github.com/konflux-ci/konflux-operator-trusted-sources//data?ref=8eed818669ec5d0cad08d36ce6882e9b864e383e
     name: Default
     policy:
     - oci::quay.io/conforma/release-policy:latest@sha256:507e458392399feb78ae4159718cf322800ede3ccf88e477015aa2283331b948
