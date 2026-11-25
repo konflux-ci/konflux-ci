@@ -76,11 +76,18 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 		}
 
 		ginkgo.Describe(appSpec.Name, ginkgo.Ordered, func() {
+			existingReleasePlan := os.Getenv("E2E_EXISTING_RELEASE_PLAN")
+			var reuseSetupComplete bool
+
 			ginkgo.BeforeAll(func() {
 				if os.Getenv(constants.SKIP_PAC_TESTS_ENV) == "true" {
 					ginkgo.Skip("Skipping: SKIP_PAC_TESTS is set")
 				}
 
+				if existingReleasePlan != "" {
+					gomega.Expect(isPreProvisioned() && os.Getenv("E2E_APPLICATIONS_NAMESPACE") != "").To(gomega.BeTrue(),
+						"E2E_EXISTING_RELEASE_PLAN requires E2E_APPLICATIONS_NAMESPACE and E2E_MANAGED_NAMESPACE")
+				}
 				fw, err = framework.NewFramework(utils.GetGeneratedNamespace(devEnvTestLabel))
 				gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -90,6 +97,21 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 					managedNamespace = "default-managed-tenant"
 				}
 				klog.Infof("conformance: namespaces ready user=%s managed=%s", userNamespace, managedNamespace)
+
+				if existingReleasePlan != "" {
+					ctx := context.Background()
+					releaseName = existingReleasePlan
+					appName, componentName, releaseRes, err = loadExistingReleaseSetup(ctx, fw.AsKubeAdmin.CommonController.KubeRest(),
+						userNamespace, managedNamespace, releaseName, appSpec.ApplicationName, appSpec.ComponentSpec.Name)
+					gomega.Expect(err).NotTo(gomega.HaveOccurred())
+					gomega.Expect(verifyECPPatched(fw.AsKubeAdmin, releaseRes.ECPName, managedNamespace)).To(gomega.Succeed())
+					gomega.Expect(verifyPreProvisionedRBAC(fw.AsKubeAdmin, userNamespace)).To(gomega.Succeed())
+					pacBranchName = constants.PaCPullRequestBranchPrefix + componentName
+					componentRepositoryName = utils.ExtractGitRepositoryNameFromURL(appSpec.ComponentSpec.GitSourceUrl)
+					buildPipelineAnnotation = build.GetBuildPipelineBundleAnnotation(appSpec.ComponentSpec.BuildPipelineType)
+					reuseSetupComplete = true
+					return
+				}
 
 				suffix := util.GenerateRandomString(4)
 				componentName = fmt.Sprintf("%s-%s", appSpec.ComponentSpec.Name, suffix)
@@ -144,7 +166,7 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				if !isPreProvisioned() {
 					skipCleanup = skipCleanup || ginkgo.CurrentSpecReport().Failed() || strings.Contains(ginkgo.GinkgoLabelFilter(), upstreamKonfluxTestLabel)
 				}
-				if skipCleanup {
+				if skipCleanup || (existingReleasePlan != "" && !reuseSetupComplete) {
 					return
 				}
 				klog.Info("conformance: cleaning up")
@@ -153,7 +175,7 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 				defer cancel()
 
 				if isPreProvisioned() {
-					cleanupTenantResources(ctx, fw, userNamespace, appName, componentName, releaseName)
+					cleanupTenantResources(ctx, fw, userNamespace, appName, componentName, releaseName, existingReleasePlan != "")
 				} else {
 					if err := fw.AsKubeAdmin.CommonController.KubeInterface().CoreV1().Namespaces().Delete(ctx, managedNamespace, metav1.DeleteOptions{}); err != nil {
 						klog.Warningf("conformance cleanup: delete managed namespace %s: %v", managedNamespace, err)
@@ -190,7 +212,7 @@ var _ = ginkgo.Describe("[conformance]", ginkgo.Label(devEnvTestLabel, upstreamK
 						}
 						time.Sleep(5 * time.Second)
 					}
-					cleanupManagedResources(ctx, fw, managedNamespace, appName, componentName, releaseName, releaseRes)
+					cleanupManagedResources(ctx, fw, managedNamespace, appName, componentName, releaseName, releaseRes, existingReleasePlan != "")
 				}
 			})
 

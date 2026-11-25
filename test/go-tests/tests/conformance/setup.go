@@ -141,9 +141,9 @@ func runSetupRelease(appName, componentName, tenantNS, managedNS, releaseName st
 		}
 		patches := []scriptPatch{
 			{
-			// Rename the ECP in the heredoc so the managed-namespace copy matches
-			// the name the ReleasePlanAdmission points at.  fatal=true: a no-op here
-			// silently breaks the release run.
+				// Rename the ECP in the heredoc so the managed-namespace copy matches
+				// the name the ReleasePlanAdmission points at.  fatal=true: a no-op here
+				// silently breaks the release run.
 				name:          "ecp-rename",
 				re:            regexp.MustCompile(`(?m)^  name: \$\{CONFORMA_POLICY\}$`),
 				repl:          []byte("  name: " + ecpName),
@@ -597,7 +597,7 @@ func dumpDiagnostics(hub *framework.ControllerHub, componentName, appName, names
 // avoiding interference with concurrent test executions in the same namespace.
 // componentName identifies this run's ImageRepositories so that only their push
 // secrets are removed from the release-pipeline SA.
-func cleanupManagedResources(ctx context.Context, fw *framework.Framework, ns, appName, componentName, releaseName string, releaseRes setupReleaseResult) {
+func cleanupManagedResources(ctx context.Context, fw *framework.Framework, ns, appName, componentName, releaseName string, releaseRes setupReleaseResult, preserveReleaseSetup bool) {
 	client := fw.AsKubeAdmin.CommonController.KubeRest()
 
 	appLabel := crclient.MatchingLabels{"appstudio.openshift.io/application": appName}
@@ -621,6 +621,11 @@ func cleanupManagedResources(ctx context.Context, fw *framework.Framework, ns, a
 				klog.Warningf("conformance cleanup: delete PipelineRun %s/%s: %v", ns, pr.Name, err)
 			}
 		}
+	}
+	// The reusable plan, admission, policy, repositories and their credentials
+	// are provisioned separately. Only clean up this run's PipelineRuns here.
+	if preserveReleaseSetup {
+		return
 	}
 	irNames := []string{componentName, releaseRes.TrustedArtifactsIR}
 
@@ -663,7 +668,7 @@ func cleanupManagedResources(ctx context.Context, fw *framework.Framework, ns, a
 // componentName is used to delete the per-component ImageRepository.
 // releaseName is used to delete the ReleasePlan by name as a fallback, since
 // setup-release.sh does not add the appstudio.openshift.io/application label.
-func cleanupTenantResources(ctx context.Context, fw *framework.Framework, ns, appName, componentName, releaseName string) {
+func cleanupTenantResources(ctx context.Context, fw *framework.Framework, ns, appName, componentName, releaseName string, preserveReleaseSetup bool) {
 	client := fw.AsKubeAdmin.CommonController.KubeRest()
 
 	appLabel := crclient.MatchingLabels{"appstudio.openshift.io/application": appName}
@@ -709,27 +714,29 @@ func cleanupTenantResources(ctx context.Context, fw *framework.Framework, ns, ap
 			}
 		}
 	}
-	rpList := &releaseApi.ReleasePlanList{}
-	if err := client.List(ctx, rpList, crclient.InNamespace(ns), appLabel); err != nil {
-		klog.Warningf("conformance cleanup: list ReleasePlans in %s: %v", ns, err)
-	} else {
-		for i := range rpList.Items {
-			if err := client.Delete(ctx, &rpList.Items[i]); err != nil {
-				klog.Warningf("conformance cleanup: delete ReleasePlan %s/%s: %v", ns, rpList.Items[i].Name, err)
+	if !preserveReleaseSetup {
+		rpList := &releaseApi.ReleasePlanList{}
+		if err := client.List(ctx, rpList, crclient.InNamespace(ns), appLabel); err != nil {
+			klog.Warningf("conformance cleanup: list ReleasePlans in %s: %v", ns, err)
+		} else {
+			for i := range rpList.Items {
+				if err := client.Delete(ctx, &rpList.Items[i]); err != nil {
+					klog.Warningf("conformance cleanup: delete ReleasePlan %s/%s: %v", ns, rpList.Items[i].Name, err)
+				}
 			}
 		}
-	}
-	// Fallback: delete ReleasePlan by name since setup-release.sh does not add
-	// the appstudio.openshift.io/application label.
-	rp := &releaseApi.ReleasePlan{}
-	rpKey := crclient.ObjectKey{Namespace: ns, Name: releaseName}
-	if err := client.Get(ctx, rpKey, rp); err != nil {
-		if !k8sErrors.IsNotFound(err) {
-			klog.Warningf("conformance cleanup: get ReleasePlan %s/%s: %v", ns, releaseName, err)
-		}
-	} else {
-		if err := client.Delete(ctx, rp); err != nil {
-			klog.Warningf("conformance cleanup: delete ReleasePlan %s/%s: %v", ns, releaseName, err)
+		// Fallback: delete ReleasePlan by name since setup-release.sh does not add
+		// the appstudio.openshift.io/application label.
+		rp := &releaseApi.ReleasePlan{}
+		rpKey := crclient.ObjectKey{Namespace: ns, Name: releaseName}
+		if err := client.Get(ctx, rpKey, rp); err != nil {
+			if !k8sErrors.IsNotFound(err) {
+				klog.Warningf("conformance cleanup: get ReleasePlan %s/%s: %v", ns, releaseName, err)
+			}
+		} else {
+			if err := client.Delete(ctx, rp); err != nil {
+				klog.Warningf("conformance cleanup: delete ReleasePlan %s/%s: %v", ns, releaseName, err)
+			}
 		}
 	}
 	relList := &releaseApi.ReleaseList{}

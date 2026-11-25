@@ -68,4 +68,31 @@ When `E2E_MANAGED_NAMESPACE` is set:
 - Cleanup deletes only test-created resources (filtered by application label) instead of deleting the namespace
 - `verifyECPPatched`, `verifyPreProvisionedRBAC`, and `verifyReleasePrerequisites` assert that the environment is correctly configured before tests run
 
+Set `E2E_EXISTING_RELEASE_PLAN` to reuse a ReleasePlan created with an identity
+accepted by the release-service author webhook. Set both namespace variables and
+select the single test application that matches the plan. For example:
+
+```sh
+export E2E_APPLICATIONS_NAMESPACE=conformance-tenant
+export E2E_MANAGED_NAMESPACE=conformance-managed-tenant
+export E2E_EXISTING_RELEASE_PLAN=release-anqa
+```
+
+Provision the ReleasePlan in the tenant namespace and a same-named
+ReleasePlanAdmission in the managed namespace. Enable auto-release on both.
+Set the ReleasePlan application to the test configuration's Application name
+plus a stable suffix, such as
+`konflux-ci-upstream-docker-build-oci-ta-min-anqa`. The admission must list
+that Application, use the tenant namespace as its origin, and reference a policy
+configured for conformance. Its component mappings must match the test component
+name and the trusted-artifacts repository for that suffix.
+
+Provision the managed ImageRepositories (e.g. `konflux-ci-upstream-anqa` and
+`trusted-artifacts-anqa`), attach both push Secrets to `release-pipeline`, and
+provision the release and integration-runner RBAC. The test skips
+`setup-release.sh` and preserves those release prerequisites during cleanup.
+It still creates and deletes its test Application, Component and run resources.
+Use a dedicated test Application name for each plan and serialize runs that
+reuse the same plan.
+
 See `test/e2e/e2e.env.template` for full environment variable documentation.
