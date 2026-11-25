@@ -225,7 +225,7 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
 )
 
-replace github.com/expr-lang/expr => github.com/expr-lang/expr v1.17.8
+replace github.com/expr-lang/expr => github.com/expr-lang/expr v1.18.0
 
 replace github.com/go-chi/chi/v5 => github.com/go-chi/chi/v5 v5.5.0
 
