@@ -60,10 +60,12 @@
 	}
 
 	# Namespace lister (GET only on exact paths)
-	# The namespace-lister performs in-memory RBAC authorization: it checks
-	# RoleBindings for the user AND their groups to decide which namespaces
-	# to return. Without group headers, a user only sees namespaces where
-	# they are bound individually — group-based bindings are invisible.
+	# Authorization uses the authenticated user plus system:authenticated only.
+	# always_include appends that group after any X-Auth-Request-Groups values;
+	# this route does not copy that header, so only system:authenticated is set.
+	# The konflux-proxy ClusterRole resourceNames rule constrains Impersonate-Group
+	# on the kube API; namespace-lister authorizes from X-Group itself, so that
+	# ClusterRole does not enforce the ceiling here.
 	@nsListGet {
 		method GET
 		path /api/k8s/api/v1/namespaces /api/k8s/api/v1/namespaces/
@@ -73,11 +75,12 @@
 			forward_auth 127.0.0.1:6000 {
 				uri /oauth2/auth
 				header_up Authorization {http.request.header.Authorization}
-				copy_headers X-Auth-Request-Email X-Auth-Request-Groups
+				copy_headers X-Auth-Request-Email
 			}
 			impersonate {
 				target_user X-User
 				target_group X-Group
+				always_include system:authenticated
 			}
 			# Drop the client Dex JWT after forward_auth. reverse_proxy copies
 			# incoming headers; this backend authenticates via X-User/X-Group.
@@ -107,9 +110,11 @@
 			forward_auth 127.0.0.1:6000 {
 				uri /oauth2/auth
 				header_up Authorization {http.request.header.Authorization}
-				copy_headers X-Auth-Request-Email X-Auth-Request-Groups
+				copy_headers X-Auth-Request-Email
 			}
-			impersonate
+			impersonate {
+				always_include system:authenticated
+			}
 			inject_cached_vars
 			# Strip the client JWT after forward_auth. Do not use
 			# header_up -Authorization in the same reverse_proxy that sets
@@ -133,9 +138,11 @@
 			forward_auth 127.0.0.1:6000 {
 				uri /oauth2/auth
 				header_up Authorization {http.request.header.Authorization}
-				copy_headers X-Auth-Request-Email X-Auth-Request-Groups
+				copy_headers X-Auth-Request-Email
 			}
-			impersonate
+			impersonate {
+				always_include system:authenticated
+			}
 			inject_cached_vars
 			request_header -Authorization
 			reverse_proxy https://kubernetes.default.svc {

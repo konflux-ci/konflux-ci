@@ -39,12 +39,14 @@ server:
 https://<konflux-host>/api/k8s
 ```
 
-The proxy validates the Dex ID token and impersonates that user (email and
-groups). You only see resources that identity can access. `kubectl oidc-login
-setup` also prints kube-apiserver `--oidc-*` flags and a `clusterrolebinding`;
-**ignore those**. They assume the API server is the OIDC client. Konflux
-authenticates at the proxy instead. `setup` only prints kubeconfig snippets —
-you still need to run `kubectl config set-credentials` / `set-cluster` yourself.
+The proxy validates the Dex ID token and impersonates that user (email) with
+the `system:authenticated` group only — identity-provider groups are not
+forwarded onto Kubernetes API or backend requests. You only see resources
+that identity can access. `kubectl oidc-login setup` also prints
+kube-apiserver `--oidc-*` flags and a `clusterrolebinding`; **ignore those**.
+They assume the API server is the OIDC client. Konflux authenticates at the
+proxy instead. `setup` only prints kubeconfig snippets — you still need to run
+`kubectl config set-credentials` / `set-cluster` yourself.
 
 Configure kubectl with [kubelogin](https://github.com/int128/kubelogin)
 (`kubectl oidc-login`) as an exec credential plugin. `set-credentials` does
@@ -64,6 +66,9 @@ kubectl config set-credentials oidc \
   --exec-arg=--oidc-extra-scope=profile \
   --exec-arg=--oidc-extra-scope=groups \
   --exec-arg=--oidc-extra-scope=offline_access
+# The groups scope is requested for future use; group-based RoleBindings are
+# not enforced through the proxy today (proxied auth uses the user plus
+# system:authenticated only).
 
 kubectl config set-cluster konflux-ui \
   --server=https://<konflux-host>/api/k8s
@@ -320,26 +325,38 @@ for the complete reference.
 
 ## Group Support
 
-Konflux supports group-based access control. When an identity provider returns
-group memberships, Konflux propagates them through the authentication chain so
-that Kubernetes RBAC group bindings work as expected.
+Identity providers can return group memberships, and Dex still includes them
+in the ID token when the `groups` scope is requested. The Konflux proxy does
+**not** forward those groups onto Kubernetes API or backend requests.
+Proxied authorization uses the authenticated user plus `system:authenticated`
+only. That group ceiling is a blast-radius control on the proxy service
+account. It is independent of
+[constrained impersonation](https://kubernetes.io/docs/reference/access-authn-authz/user-impersonation/#constrained-impersonation),
+which limits which actions an impersonator may perform while impersonating a
+given identity and does not put identity-provider groups on proxy traffic.
+
+RoleBindings whose subject is an identity-provider Group therefore do not
+grant access through the UI, kubectl-via-proxy, WebSocket, namespace-lister,
+or in-cluster backends. Bind individual Users for access that must work
+through the proxy.
 
 ### How It Works
 
 1. The identity provider (GitHub orgs/teams, LDAP groups, OIDC groups claim, etc.)
    returns the user's group memberships to Dex.
 2. Dex includes the groups in the ID token when the `groups` scope is requested.
-3. oauth2-proxy reads the groups from the token and passes them to the proxy in
-   the `X-Auth-Request-Groups` header.
-4. The proxy splits the groups and forwards each as a separate `Impersonate-Group`
-   header to the Kubernetes API, along with the static `system:authenticated`
-   group.
+3. oauth2-proxy may expose groups on `X-Auth-Request-Groups` during
+   `forward_auth`; the proxy does not copy that header onto upstream requests.
+4. The proxy sets `Impersonate-User` from the email and
+   `Impersonate-Group: system:authenticated` only (or `X-User` /
+   `X-Group: system:authenticated` for namespace-lister).
 
 ### Enabling Groups
 
-Groups are enabled by default. The proxy requests the `groups` scope from Dex
-automatically. For most connectors (GitHub, LDAP, OIDC), groups are returned as
-long as the connector is configured to fetch them.
+The proxy still requests the `groups` scope from Dex so group claims remain
+available in the ID token if a future change starts applying them under a
+tighter impersonation model. For most connectors (GitHub, LDAP, OIDC),
+groups are returned as long as the connector is configured to fetch them.
 
 For **GitHub**, teams within configured orgs are returned as groups automatically
 when `orgs` are specified in the connector config.
@@ -368,10 +385,13 @@ each user entry (requires Dex v2.45.0+):
 
 ### Limitations
 
-- **Re-login required after group changes.** Group memberships are embedded in
-  the ID token at login time. If a user's groups change in the identity
-  provider, they must log out and log back in to get a fresh token with the
-  updated groups.
+- **Identity-provider groups are not applied on proxy requests.** Proxied
+  requests are authorized as the user plus `system:authenticated` only.
+  Bind Users — not IdP Groups — for access through the proxy.
+- **Group claims in the ID token do not affect proxied RBAC.** Memberships
+  stay in the token until the next login, but the proxy does not forward
+  them onto Kubernetes API or backend requests, so a re-login refreshes
+  the token without changing proxied authorization.
 
 ## Static Passwords (Local Development Only)
 

@@ -156,16 +156,22 @@ subjects:
 
 ### Granting access to groups
 
-Instead of binding individual users, you can bind a **group** so that all members
-of that group automatically receive access. Groups come from the identity provider
-(GitHub teams, LDAP groups, OIDC groups claim, etc.) — see the
-[Group Support]({{< relref "oidc-configuration#group-support" >}}) section in
-the authentication guide.
+Requests through the Konflux proxy are authorized as the authenticated
+**User** plus `system:authenticated` only. Identity-provider groups are not
+forwarded, so a RoleBinding whose subject is a Group (for example a GitHub
+team or LDAP group) does **not** grant access through the UI,
+kubectl-via-proxy, WebSocket, namespace-lister, or in-cluster backends. See
+[Group Support]({{< relref "oidc-configuration#group-support" >}}) in the
+authentication guide.
+
+Do not grant tenant access via `system:authenticated` RoleBindings; that
+group is a proxy impersonation ceiling, not a tenancy subject. Bind
+individual Users for access that must work through the proxy:
 
 ```bash
 kubectl create rolebinding <rolebinding-name> \
   --clusterrole konflux-maintainer-user-actions \
-  --group <group-name> \
+  --user <user-email> \
   -n <namespace-name>
 ```
 
@@ -175,21 +181,21 @@ Or using a manifest:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: team-alpha-maintainers
+  name: developer-maintainers
   namespace: my-team-tenant
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: konflux-maintainer-user-actions
 subjects:
-- kind: Group
-  name: team-alpha
+- kind: User
+  name: developer@example.com
   apiGroup: rbac.authorization.k8s.io
 ```
 
-This is the recommended approach for production environments — managing access
-through group memberships in your identity provider is easier to maintain than
-individual user bindings.
+Group subjects remain valid for clients that authenticate to the API server
+directly with a credential that carries those groups. They are not effective
+for traffic that goes through the Konflux proxy today.
 
 ### Granting multiple users access
 
