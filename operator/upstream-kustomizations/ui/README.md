@@ -73,10 +73,10 @@ Browser ──HTTPS──▶ Caddy (:9443)
                      │                    ├─ Authorization present, JWT not verified by Dex?
                      │                    │     ──▶ 403 (cookie is not used as a fallback)
                      │                    ├─ Verified Dex JWT, or session cookie and no Authorization?
-                     │                    │     ──▶ 200 + X-Auth-Request-Email + X-Auth-Request-Groups
+                     │                    │     ──▶ 200 + X-Auth-Request-Email (+ Groups in session only)
                      │                    └─ No cookie and no bearer? ──▶ 401 (Caddy returns login redirect)
                      │
-                     ├─ impersonate: set Impersonate-User / Impersonate-Group headers
+                     ├─ impersonate: Impersonate-User + Impersonate-Group system:authenticated
                      │
                      └─ reverse_proxy ──▶ upstream (Kube API / Tekton Results / etc.)
 ```
@@ -115,9 +115,9 @@ sequenceDiagram
 
     B->>C: GET /api/k8s/... (with cookie)
     C->>O: forward_auth /oauth2/auth
-    O-->>C: 200 + X-Auth-Request-Email + X-Auth-Request-Groups
-    Note over C: Split groups into Impersonate-Group headers
-    C->>K: GET /... + Authorization (SA token) + Impersonate-User + Impersonate-Group
+    O-->>C: 200 + X-Auth-Request-Email
+    Note over C: Copy email only; set Impersonate-Group system:authenticated
+    C->>K: GET /... + Authorization (SA token) + Impersonate-User + Impersonate-Group system:authenticated
     K-->>C: response
     C-->>B: response
 ```
@@ -140,17 +140,18 @@ sequenceDiagram
 
 4. **Subsequent requests (with session):** Caddy's `forward_auth` sends
    a subrequest to oauth2-proxy, which validates the cookie and returns
-   200 with `X-Auth-Request-Email` and `X-Auth-Request-Groups` headers.
-   Caddy copies these onto the request, and the `impersonate` handler
-   plugin sets `Impersonate-User` and individual `Impersonate-Group`
-   headers (see [Group Impersonation](#group-impersonation)). The request
-   is then forwarded to the Kube API with the proxy's own service account
-   token in the `Authorization` header.
+   200 with `X-Auth-Request-Email` (and `X-Auth-Request-Groups` in the
+   auth response, which the proxy does not copy onto upstream requests).
+   The `impersonate` handler sets `Impersonate-User` from the email and
+   `Impersonate-Group: system:authenticated` only (see
+   [Group Impersonation](#group-impersonation)). The request is then
+   forwarded to the Kube API with the proxy's own service account token
+   in the `Authorization` header.
 
 5. **Kube API impersonation:** The API server authenticates the proxy's
    service account, verifies it has impersonation permissions, and then
    processes the request as if it came from the impersonated user with
-   the specified groups.
+   the `system:authenticated` group.
 
 ### CLI / kubectl (JWT Bearer)
 
@@ -159,40 +160,62 @@ public `cli` OAuth client (`/idp/` issuer) and send
 `Authorization: Bearer <id_token>` on `/api/k8s/` (and other authenticated
 routes). Caddy forwards that header on `forward_auth`; oauth2-proxy
 validates the JWT (`aud` must be `oauth2-proxy` or `cli`) and returns the
-same `X-Auth-Request-Email` / `X-Auth-Request-Groups` headers as for a
-browser session. Impersonation then proceeds as above. The client JWT is
-not forwarded to kube or other backends: after `forward_auth`, Caddy
-deletes `Authorization` on the request (`request_header -Authorization`)
-so `reverse_proxy` does not copy the Dex token. Kube-style backends then
-set the proxy service account token. Namespace-lister uses `X-User` /
-`X-Group` only. Do not pair `header_up -Authorization` with
-`header_up Authorization` in the same `reverse_proxy` — Caddy can apply
-the delete after the set and drop the replacement token.
+`X-Auth-Request-Email` as for a browser session. Impersonation then
+proceeds as above (user identity plus `system:authenticated` only). The
+client JWT is not forwarded to kube or other backends: after
+`forward_auth`, Caddy deletes `Authorization` on the request
+(`request_header -Authorization`) so `reverse_proxy` does not copy the
+Dex token. Kube-style backends then set the proxy service account token.
+Namespace-lister uses `X-User` / `X-Group` with the same group ceiling.
+Do not pair `header_up -Authorization` with `header_up Authorization` in
+the same `reverse_proxy` — Caddy can apply the delete after the set and
+drop the replacement token.
 
 See [Authentication and OIDC Configuration](../../docs/content/docs/guides/oidc-configuration.md)
 for kubectl / kubelogin usage.
 
 ## Group Impersonation
 
-The Kubernetes API requires each group as a separate `Impersonate-Group`
-header. oauth2-proxy returns all groups in a single comma-separated string.
+The proxy service account may impersonate only the group
+`system:authenticated`. That ceiling keeps the proxy from impersonating
+arbitrary groups (for example `system:masters`) if a client or header
+path tries to supply them. Identity-provider groups remain in the Dex ID
+token and oauth2-proxy session, but are not copied onto upstream requests.
 
 The proxy uses a custom Caddy build from
 [konflux-ci/reverse-proxy](https://github.com/konflux-ci/reverse-proxy)
-that includes the `impersonate` handler plugin. This plugin reads
-`X-Auth-Request-Email` and `X-Auth-Request-Groups` from the auth response,
-sets `Impersonate-User`, and splits the comma-separated groups into
-individual `Impersonate-Group` headers — with no arbitrary group limit.
-It also always appends `system:authenticated`.
+that includes the `impersonate` handler plugin. On each authenticated route
+the plugin:
 
-For the namespace-lister, the plugin is configured with custom target
-headers (`X-User` / `X-Group`) instead of the default Kubernetes
-impersonation headers.
+1. Reads `X-Auth-Request-Email` and sets `Impersonate-User` (or `X-User`
+   for namespace-lister).
+2. Splits any groups present on `X-Auth-Request-Groups` into individual
+   target headers, then appends `system:authenticated` via
+   `always_include` (as `Impersonate-Group`, or `X-Group` for
+   namespace-lister). Authenticated routes do not copy
+   `X-Auth-Request-Groups`, so the upstream request carries only
+   `system:authenticated`.
+
+The proxy ClusterRole grants unscoped `impersonate` on `users` and
+`impersonate` on `groups` only for `resourceNames: [system:authenticated]`.
+That `resourceNames` rule constrains `Impersonate-Group` on the Kubernetes
+API. Namespace-lister authorizes from `X-Group` itself, so the ClusterRole
+does not enforce the ceiling on the lister route — that route depends on
+not copying `X-Auth-Request-Groups`.
+
+[Constrained impersonation](https://kubernetes.io/docs/reference/access-authn-authz/user-impersonation/#constrained-impersonation)
+can limit which actions an impersonator may perform while impersonating a
+given identity. It is not required for this group ceiling, and enabling it
+does not put identity-provider groups on proxy requests.
 
 ### Limitations
 
-- Group changes in the identity provider (Dex) require the user to log out
-  and log back in to get a fresh ID token.
+- RoleBindings whose subject is an identity-provider Group do not grant
+  access on requests that go through the proxy (UI, kubectl-via-proxy,
+  WebSocket, Tekton Results, Kite, KubeArchive, or namespace-lister).
+  Bind individual Users for access that must work through the proxy.
+- Group claims still appear in the ID token for future use; they are not
+  applied to proxied authorization today.
 
 ## Token Management
 
