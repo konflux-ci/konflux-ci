@@ -157,11 +157,13 @@ spec:
               value: /var/run/segment-bridge/tekton-results-ca/service-ca.crt
             - name: FETCH_PIPELINERUNS
               value: "false"
+            - name: FETCH_RELEASES
+              value: "false"
             envFrom:
             - secretRef:
                 name: segment-bridge-config
                 optional: true
-            image: quay.io/konflux-ci/segment-bridge:a6e1afcd8efa0186d4d29caead4153ab91482162
+            image: quay.io/konflux-ci/segment-bridge:5fc068772c04c0df9399b7a8d3376b3196dc7e65
             imagePullPolicy: IfNotPresent
             name: segment-bridge
             resources:
