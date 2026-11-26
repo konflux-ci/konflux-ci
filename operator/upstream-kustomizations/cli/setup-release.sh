@@ -97,7 +97,7 @@ RELEASE_NAME="local-release"
 # Must be a valid Kubernetes label value (no '@'; use '.' for email-like values).
 RELEASE_AUTHOR="konflux-ci.noreply"
 # renovate: datasource=git-refs depName=https://github.com/konflux-ci/release-service-catalog currentValue=development
-CATALOG_REVISION="785d4c2d980bbab4e8489d9d1205e23bf4f35356"
+CATALOG_REVISION="025e4775a75af664260e8ad38cdc32174c00a731"
 IMAGE_NAME_PREFIX=""
 COMPONENTS=()
 
