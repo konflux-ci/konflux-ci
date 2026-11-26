@@ -304,6 +304,10 @@ spec:
                     - production
                     - staging
                     type: string
+                  helpPortalUrl:
+                    description: HelpPortalUrl is the URL to the help portal shown
+                      in the UI.
+                    type: string
                   integrations:
                     description: Integrations contains integration configuration
                     properties:

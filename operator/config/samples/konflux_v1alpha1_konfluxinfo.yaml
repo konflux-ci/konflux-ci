@@ -18,6 +18,9 @@ spec:
     # Optional status page URL
     statusPageUrl: "https://status.konflux.example.com"
 
+    # Optional help portal URL, exposed in konflux-public-info for the UI
+    helpPortalUrl: "https://help.konflux.example.com"
+
     # Integration configurations
     integrations:
       # GitHub App integration
