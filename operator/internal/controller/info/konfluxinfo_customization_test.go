@@ -645,6 +645,48 @@ func TestKonfluxInfoBannerCustomization(t *testing.T) {
 	})
 }
 
+func TestGenerateInfoJSONHelpPortal(t *testing.T) {
+	tests := []struct {
+		name   string
+		config string
+		url    string
+	}{
+		{name: "no public info", config: `null`},
+		{name: "no portal configured", config: `{}`},
+		{name: "empty portal URL", config: `{"helpPortalUrl":""}`},
+		{
+			name:   "configured portal",
+			config: `{"helpPortalUrl":"https://help.example.com/portal"}`,
+			url:    "https://help.example.com/portal",
+		},
+		{
+			name:   "custom portal",
+			config: `{"helpPortalUrl":"https://support.example.org/get-help"}`,
+			url:    "https://support.example.org/get-help",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+			var config *konfluxv1alpha1.PublicInfo
+			g.Expect(json.Unmarshal([]byte(tt.config), &config)).To(gomega.Succeed())
+
+			r := &KonfluxInfoReconciler{}
+			data, err := r.generateInfoJSON(config, "v1.29.0", "", "", "")
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+
+			var publicInfo map[string]interface{}
+			g.Expect(json.Unmarshal(data, &publicInfo)).To(gomega.Succeed())
+			if tt.url == "" {
+				g.Expect(publicInfo).NotTo(gomega.HaveKey("helpPortalUrl"))
+			} else {
+				g.Expect(publicInfo).To(gomega.HaveKeyWithValue("helpPortalUrl", tt.url))
+			}
+		})
+	}
+}
+
 func TestApplyInfoDefaultsClusterId(t *testing.T) {
 	r := &KonfluxInfoReconciler{}
 

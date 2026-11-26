@@ -363,6 +363,7 @@ func (r *KonfluxInfoReconciler) applyInfoDefaults(config *konfluxv1alpha1.Public
 	if config.StatusPageUrl != "" {
 		info.StatusPageUrl = config.StatusPageUrl
 	}
+	info.HelpPortalUrl = config.HelpPortalUrl
 	if len(config.RBAC) > 0 {
 		info.RBAC = convertRBACRoles(config.RBAC)
 	} else {
@@ -533,6 +534,7 @@ type infoJSON struct {
 	ImageProxy        *imageProxyJSON                     `json:"imageProxy,omitempty"`
 	Integrations      *konfluxv1alpha1.IntegrationsConfig `json:"integrations,omitempty"`
 	StatusPageUrl     string                              `json:"statusPageUrl,omitempty"`
+	HelpPortalUrl     string                              `json:"helpPortalUrl,omitempty"`
 	RBAC              []rbacRoleJSON                      `json:"rbac,omitempty"`
 }
 

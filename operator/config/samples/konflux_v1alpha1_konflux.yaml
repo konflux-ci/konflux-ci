@@ -154,6 +154,8 @@ spec:
       publicInfo:
         environment: development
         visibility: public
+        # Optional help portal URL, exposed in konflux-public-info for the UI
+        # helpPortalUrl: "https://help.konflux.example.com"
       banner:
         items:
           # Display a banner at the top of the Konflux UI to all users.

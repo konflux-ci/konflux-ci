@@ -74,6 +74,10 @@ type PublicInfo struct {
 	// +optional
 	StatusPageUrl string `json:"statusPageUrl,omitempty"`
 
+	// HelpPortalUrl is the URL to the help portal shown in the UI.
+	// +optional
+	HelpPortalUrl string `json:"helpPortalUrl,omitempty"`
+
 	// RBAC contains RBAC role definitions
 	// +optional
 	RBAC []RBACRole `json:"rbac,omitempty"`
