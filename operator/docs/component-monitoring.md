@@ -209,9 +209,15 @@ SM-before-Secret `InvalidConfiguration` rejection; identical SM SSA alone does
 **not** enqueue UWM when only Secret data changes, so
 `ResyncOperandServiceMonitor` merge-patches `metrics-scrape-resync*` annotations
 (`token-minted` / `token-refreshed` / `secret-sync` / `ca-sync` / `settle-retry`).
-After token mint/refresh, `metrics-scrape-resync-settle` holds an RFC3339 deadline
-(`now` + 15s); early Secret-watch reconciles requeue the remaining delay and only
-issue `settle-retry` once that deadline elapses.
+After token mint/refresh, multi-round settle nudges prometheus-operator several
+times over a window that covers observed UWM config-reload latency (~4-5 min).
+`metrics-scrape-resync-settle` holds an RFC3339 deadline and
+`metrics-scrape-resync-settle-round` tracks the current round (0-indexed).
+Each round fires a `settle-retry` resync nudge, then advances to the next
+round with a longer delay (schedule: 15s, 30s, 60s, 120s, 120s — cumulative
+~5.75 min from rotation). Early Secret-watch reconciles requeue the remaining
+delay without advancing the round. The settle annotations are cleared after
+the final round.
 
 Implementation: `operator/internal/common/scrape_token.go`,
 `operator/pkg/kubernetes/servicemonitor_resync.go`,

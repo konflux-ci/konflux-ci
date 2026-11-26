@@ -19,6 +19,7 @@ package kubernetes
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -49,6 +50,10 @@ const (
 	// Value is the RFC3339 UTC deadline after which settle-retry may run. Legacy
 	// value "pending" (no deadline) is treated as already due.
 	ServiceMonitorResyncSettleAnnotation = "konflux.konflux-ci.dev/metrics-scrape-resync-settle"
+	// ServiceMonitorResyncSettleRoundAnnotation tracks the current settle round
+	// (0-indexed). Multi-round settle nudges prometheus-operator several times over
+	// a window that covers observed UWM config-reload latency (~4-5 min).
+	ServiceMonitorResyncSettleRoundAnnotation = "konflux.konflux-ci.dev/metrics-scrape-resync-settle-round"
 
 	// ServiceMonitor resync reason values (also logged and echoed in e2e artifacts).
 	ServiceMonitorResyncReasonTokenMinted    = "token-minted"
@@ -57,12 +62,29 @@ const (
 	ServiceMonitorResyncReasonCASync         = "ca-sync"
 	ServiceMonitorResyncReasonSettleRetry    = "settle-retry"
 
-	// DefaultServiceMonitorResyncSettleDelay waits before a settle-retry SM patch.
+	// DefaultServiceMonitorResyncSettleDelay is the first settle-retry delay (round 0).
+	// Subsequent rounds use ServiceMonitorResyncSettleSchedule.
 	DefaultServiceMonitorResyncSettleDelay = 15 * time.Second
 
 	// serviceMonitorResyncSettlePendingLegacy is the pre-deadline settle marker.
 	serviceMonitorResyncSettlePendingLegacy = "pending"
 )
+
+// ServiceMonitorResyncSettleSchedule defines the delays between successive
+// settle-retry nudge rounds after a token mint/refresh. Each entry is the
+// wait time before the next settle-retry fires. The cumulative schedule
+// (15s, 45s, 105s, 225s, 345s from rotation) covers the observed 4-5 minute
+// window during which UWM prometheus-operator may lag remounting
+// bearerTokenSecret / reloading scrape config.
+//
+// Round 0 uses DefaultServiceMonitorResyncSettleDelay (15s).
+var ServiceMonitorResyncSettleSchedule = []time.Duration{
+	15 * time.Second,  // round 0: 15s after rotation
+	30 * time.Second,  // round 1: 45s after rotation
+	60 * time.Second,  // round 2: 105s after rotation
+	120 * time.Second, // round 3: 225s after rotation
+	120 * time.Second, // round 4: 345s after rotation
+}
 
 var serviceMonitorGVK = schema.GroupVersionKind{
 	Group:   "monitoring.coreos.com",
@@ -87,11 +109,16 @@ type ServiceMonitorResyncOptions struct {
 	// CAResourceVersion is stored in ServiceMonitorResyncCARVAnnotation.
 	CAResourceVersion string
 	// MarkSettlePending sets metrics-scrape-resync-settle to now+settle delay (RFC3339
-	// deadline) until settle-retry clears it.
+	// deadline) until settle-retry clears it. When set, SettleRound determines
+	// which schedule entry to use.
 	MarkSettlePending bool
-	// ClearSettlePending removes the settle-pending annotation (settle-retry path).
+	// ClearSettlePending removes the settle-pending and settle-round annotations
+	// (final settle-retry round).
 	ClearSettlePending bool
-	Clock              clock.Clock
+	// SettleRound is the 0-indexed round number for multi-round settle. It
+	// selects the delay from ServiceMonitorResyncSettleSchedule.
+	SettleRound int
+	Clock       clock.Clock
 }
 
 // ResyncOperandServiceMonitor patches operand ServiceMonitor annotations so prometheus-operator
@@ -151,11 +178,14 @@ func ResyncOperandServiceMonitor(
 		annotations[ServiceMonitorResyncCARVAnnotation] = opts.CAResourceVersion
 	}
 	if opts.MarkSettlePending {
-		deadline := clk.Now().UTC().Add(DefaultServiceMonitorResyncSettleDelay)
+		delay := SettleDelayForRound(opts.SettleRound)
+		deadline := clk.Now().UTC().Add(delay)
 		annotations[ServiceMonitorResyncSettleAnnotation] = deadline.Format(time.RFC3339)
+		annotations[ServiceMonitorResyncSettleRoundAnnotation] = strconv.Itoa(opts.SettleRound)
 	}
 	if opts.ClearSettlePending {
 		delete(annotations, ServiceMonitorResyncSettleAnnotation)
+		delete(annotations, ServiceMonitorResyncSettleRoundAnnotation)
 	}
 	patch.SetAnnotations(annotations)
 
@@ -241,4 +271,43 @@ func ServiceMonitorResyncCARV(sm *unstructured.Unstructured) string {
 		return ""
 	}
 	return annotations[ServiceMonitorResyncCARVAnnotation]
+}
+
+// ServiceMonitorResyncSettleRound returns the current settle round (0-indexed)
+// from the SM annotations. Returns 0 when the annotation is absent or invalid,
+// which also covers the legacy single-round case.
+func ServiceMonitorResyncSettleRound(sm *unstructured.Unstructured) int {
+	if sm == nil {
+		return 0
+	}
+	annotations := sm.GetAnnotations()
+	if annotations == nil {
+		return 0
+	}
+	raw := annotations[ServiceMonitorResyncSettleRoundAnnotation]
+	if raw == "" {
+		return 0
+	}
+	round, err := strconv.Atoi(raw)
+	if err != nil || round < 0 {
+		return 0
+	}
+	return round
+}
+
+// IsSettleFinalRound reports whether round is the last entry in the settle schedule.
+func IsSettleFinalRound(round int) bool {
+	return round >= len(ServiceMonitorResyncSettleSchedule)-1
+}
+
+// SettleDelayForRound returns the settle delay for the given round. Out-of-range
+// rounds clamp to the last schedule entry.
+func SettleDelayForRound(round int) time.Duration {
+	if round < 0 {
+		round = 0
+	}
+	if round >= len(ServiceMonitorResyncSettleSchedule) {
+		round = len(ServiceMonitorResyncSettleSchedule) - 1
+	}
+	return ServiceMonitorResyncSettleSchedule[round]
 }

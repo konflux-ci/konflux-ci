@@ -164,6 +164,11 @@ func ReconcilePrometheusScrapeToken(ctx context.Context, cfg ScrapeTokenReconcil
 	if settleWait > 0 {
 		return reconcile.Result{RequeueAfter: settleWait}, nil
 	}
+	// A settle-retry that advanced to the next round uses MarkSettlePending with the
+	// next round's delay; requeue for that delay so the next round fires on time.
+	if resyncOpts.MarkSettlePending && resyncOpts.Reason == kubernetes.ServiceMonitorResyncReasonSettleRetry {
+		return reconcile.Result{RequeueAfter: kubernetes.SettleDelayForRound(resyncOpts.SettleRound)}, nil
+	}
 	return reconcile.Result{RequeueAfter: tokenResult.RequeueAfter}, nil
 }
 
@@ -300,16 +305,24 @@ func planServiceMonitorResync(
 		resyncOpts.MarkSettlePending = true
 	case settlePending:
 		// Wait for the settle deadline; early Secret-watch reconciles must not
-		// clear the marker or issue settle-retry before DefaultServiceMonitorResyncSettleDelay.
+		// clear the marker or issue settle-retry before the current round's delay.
 		settleWait = kubernetes.ServiceMonitorResyncSettleRemaining(smApply.Prior, now)
 		if settleWait > 0 {
 			break
 		}
+		currentRound := kubernetes.ServiceMonitorResyncSettleRound(smApply.Prior)
 		resyncOpts.Force = true
 		resyncOpts.Reason = kubernetes.ServiceMonitorResyncReasonSettleRetry
 		resyncOpts.SecretResourceVersion = secretRV
 		resyncOpts.CAResourceVersion = caRV
-		resyncOpts.ClearSettlePending = true
+		if kubernetes.IsSettleFinalRound(currentRound) {
+			// Final round: clear settle annotations.
+			resyncOpts.ClearSettlePending = true
+		} else {
+			// Not the final round: advance to the next round.
+			resyncOpts.MarkSettlePending = true
+			resyncOpts.SettleRound = currentRound + 1
+		}
 	case secretRV != "" && secretRV != storedSecretRV && !settlePending:
 		resyncOpts.Force = true
 		resyncOpts.Reason = kubernetes.ServiceMonitorResyncReasonSecretSync

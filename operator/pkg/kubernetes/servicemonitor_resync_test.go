@@ -112,6 +112,9 @@ func TestResyncOperandServiceMonitorSetsAnnotation(t *testing.T) {
 	if annotations[ServiceMonitorResyncSettleAnnotation] != wantSettle {
 		t.Fatalf("settle deadline: got %q want %q", annotations[ServiceMonitorResyncSettleAnnotation], wantSettle)
 	}
+	if annotations[ServiceMonitorResyncSettleRoundAnnotation] != "0" {
+		t.Fatalf("settle round: got %q want %q", annotations[ServiceMonitorResyncSettleRoundAnnotation], "0")
+	}
 }
 
 func TestResyncOperandServiceMonitorSkipsWhenAnnotated(t *testing.T) {
@@ -156,8 +159,9 @@ func TestResyncOperandServiceMonitorForceWhenAnnotated(t *testing.T) {
 	sm.SetNamespace("build-service")
 	sm.SetName("build-service")
 	sm.SetAnnotations(map[string]string{
-		ServiceMonitorResyncAnnotation:       "2026-07-12T07:00:00Z",
-		ServiceMonitorResyncSettleAnnotation: now.Add(DefaultServiceMonitorResyncSettleDelay).UTC().Format(time.RFC3339),
+		ServiceMonitorResyncAnnotation:            "2026-07-12T07:00:00Z",
+		ServiceMonitorResyncSettleAnnotation:      now.Add(DefaultServiceMonitorResyncSettleDelay).UTC().Format(time.RFC3339),
+		ServiceMonitorResyncSettleRoundAnnotation: "4",
 	})
 
 	c := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).WithObjects(sm).Build()
@@ -183,6 +187,9 @@ func TestResyncOperandServiceMonitorForceWhenAnnotated(t *testing.T) {
 	}
 	if _, ok := annotations[ServiceMonitorResyncSettleAnnotation]; ok {
 		t.Fatalf("expected settle annotation to be cleared")
+	}
+	if _, ok := annotations[ServiceMonitorResyncSettleRoundAnnotation]; ok {
+		t.Fatalf("expected settle round annotation to be cleared")
 	}
 }
 
@@ -337,6 +344,115 @@ func TestServiceMonitorResyncHelpers(t *testing.T) {
 	})
 	if rem := ServiceMonitorResyncSettleRemaining(sm, now); rem != 0 {
 		t.Fatalf("invalid settle deadline remaining: got %v want 0", rem)
+	}
+}
+
+func TestServiceMonitorResyncSettleRoundHelpers(t *testing.T) {
+	t.Parallel()
+
+	// nil and empty SM return round 0.
+	if ServiceMonitorResyncSettleRound(nil) != 0 {
+		t.Fatal("nil SM should return round 0")
+	}
+	if ServiceMonitorResyncSettleRound(&unstructured.Unstructured{}) != 0 {
+		t.Fatal("empty SM should return round 0")
+	}
+
+	sm := &unstructured.Unstructured{}
+	sm.SetAnnotations(map[string]string{
+		ServiceMonitorResyncSettleRoundAnnotation: "2",
+	})
+	if got := ServiceMonitorResyncSettleRound(sm); got != 2 {
+		t.Fatalf("round: got %d want 2", got)
+	}
+
+	// Invalid values return 0.
+	sm.SetAnnotations(map[string]string{
+		ServiceMonitorResyncSettleRoundAnnotation: "not-a-number",
+	})
+	if ServiceMonitorResyncSettleRound(sm) != 0 {
+		t.Fatal("invalid round should return 0")
+	}
+
+	// Negative values return 0.
+	sm.SetAnnotations(map[string]string{
+		ServiceMonitorResyncSettleRoundAnnotation: "-1",
+	})
+	if ServiceMonitorResyncSettleRound(sm) != 0 {
+		t.Fatal("negative round should return 0")
+	}
+}
+
+func TestIsSettleFinalRound(t *testing.T) {
+	t.Parallel()
+	lastIndex := len(ServiceMonitorResyncSettleSchedule) - 1
+	if IsSettleFinalRound(0) {
+		t.Fatal("round 0 should not be final")
+	}
+	if !IsSettleFinalRound(lastIndex) {
+		t.Fatalf("round %d should be final", lastIndex)
+	}
+	if !IsSettleFinalRound(lastIndex + 1) {
+		t.Fatal("round beyond schedule should be final")
+	}
+}
+
+func TestSettleDelayForRound(t *testing.T) {
+	t.Parallel()
+	if got := SettleDelayForRound(0); got != ServiceMonitorResyncSettleSchedule[0] {
+		t.Fatalf("round 0: got %v want %v", got, ServiceMonitorResyncSettleSchedule[0])
+	}
+	last := len(ServiceMonitorResyncSettleSchedule) - 1
+	if got := SettleDelayForRound(last); got != ServiceMonitorResyncSettleSchedule[last] {
+		t.Fatalf("round %d: got %v want %v", last, got, ServiceMonitorResyncSettleSchedule[last])
+	}
+	// Out-of-range clamps to last.
+	if got := SettleDelayForRound(last + 5); got != ServiceMonitorResyncSettleSchedule[last] {
+		t.Fatalf("round %d: got %v want %v", last+5, got, ServiceMonitorResyncSettleSchedule[last])
+	}
+	// Negative clamps to 0.
+	if got := SettleDelayForRound(-1); got != ServiceMonitorResyncSettleSchedule[0] {
+		t.Fatalf("round -1: got %v want %v", got, ServiceMonitorResyncSettleSchedule[0])
+	}
+}
+
+func TestResyncOperandServiceMonitor_SettleRoundAnnotation(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	now := time.Date(2026, 7, 12, 8, 0, 0, 0, time.UTC)
+
+	sm := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{}}}
+	sm.SetGroupVersionKind(serviceMonitorGVK)
+	sm.SetNamespace("build-service")
+	sm.SetName("build-service")
+	sm.SetAnnotations(map[string]string{
+		ServiceMonitorResyncAnnotation: "2026-07-12T07:00:00Z",
+	})
+
+	c := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).WithObjects(sm).Build()
+	err := ResyncOperandServiceMonitor(ctx, c, "build-service", "build-service", ServiceMonitorResyncOptions{
+		Force:             true,
+		Reason:            ServiceMonitorResyncReasonSettleRetry,
+		MarkSettlePending: true,
+		SettleRound:       2,
+		Clock:             testclock.NewFakeClock(now),
+	})
+	if err != nil {
+		t.Fatalf("resync: %v", err)
+	}
+
+	updated := &unstructured.Unstructured{}
+	updated.SetGroupVersionKind(serviceMonitorGVK)
+	if err := c.Get(ctx, client.ObjectKey{Namespace: "build-service", Name: "build-service"}, updated); err != nil {
+		t.Fatalf("get updated SM: %v", err)
+	}
+	annotations := updated.GetAnnotations()
+	if annotations[ServiceMonitorResyncSettleRoundAnnotation] != "2" {
+		t.Fatalf("settle round: got %q want %q", annotations[ServiceMonitorResyncSettleRoundAnnotation], "2")
+	}
+	wantDeadline := now.UTC().Add(SettleDelayForRound(2)).Format(time.RFC3339)
+	if annotations[ServiceMonitorResyncSettleAnnotation] != wantDeadline {
+		t.Fatalf("settle deadline: got %q want %q", annotations[ServiceMonitorResyncSettleAnnotation], wantDeadline)
 	}
 }
 

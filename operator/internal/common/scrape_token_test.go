@@ -19,6 +19,7 @@ package common
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -284,23 +285,62 @@ func TestReconcilePrometheusScrapeToken_MintsAndSettles(t *testing.T) {
 		t.Fatalf("early settle must retain deadline, got %q", updated.GetAnnotations()[kubernetes.ServiceMonitorResyncSettleAnnotation])
 	}
 
-	cfg.Clock = testclock.NewFakeClock(now.Add(kubernetes.DefaultServiceMonitorResyncSettleDelay))
+	// After round 0 deadline, settle-retry advances to round 1 (not final).
+	cumulative := kubernetes.DefaultServiceMonitorResyncSettleDelay
+	cfg.Clock = testclock.NewFakeClock(now.Add(cumulative))
 	settleResult, err := ReconcilePrometheusScrapeToken(ctx, cfg)
 	if err != nil {
-		t.Fatalf("settle reconcile: %v", err)
+		t.Fatalf("settle round 0 reconcile: %v", err)
 	}
-	if settleResult.RequeueAfter != 30*time.Minute-kubernetes.DefaultServiceMonitorResyncSettleDelay {
-		t.Fatalf("expected TTL requeue minus settle delay on settle pass, got %v", settleResult.RequeueAfter)
+	wantRound1Delay := kubernetes.SettleDelayForRound(1)
+	if settleResult.RequeueAfter != wantRound1Delay {
+		t.Fatalf("round 0 settle requeue: got %v want %v", settleResult.RequeueAfter, wantRound1Delay)
 	}
 
 	if err := c.Get(ctx, types.NamespacedName{Namespace: testBuildServiceNamespace, Name: testBuildServiceNamespace}, updated); err != nil {
-		t.Fatalf("get SM after settle: %v", err)
+		t.Fatalf("get SM after settle round 0: %v", err)
 	}
 	if updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation] != kubernetes.ServiceMonitorResyncReasonSettleRetry {
 		t.Fatalf("settle reason: got %q", updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation])
 	}
-	if _, ok := updated.GetAnnotations()[kubernetes.ServiceMonitorResyncSettleAnnotation]; ok {
-		t.Fatalf("expected settle pending to be cleared")
+	// Settle is still pending (advanced to round 1, not cleared).
+	if !kubernetes.ServiceMonitorResyncSettlePending(updated) {
+		t.Fatal("expected settle pending to remain after round 0 (not final round)")
+	}
+	if round := kubernetes.ServiceMonitorResyncSettleRound(updated); round != 1 {
+		t.Fatalf("expected round 1 after settle round 0, got %d", round)
+	}
+
+	// Walk through remaining rounds until settle clears on the final round.
+	schedule := kubernetes.ServiceMonitorResyncSettleSchedule
+	for r := 1; r < len(schedule); r++ {
+		cumulative += schedule[r]
+		cfg.Clock = testclock.NewFakeClock(now.Add(cumulative))
+		settleResult, err = ReconcilePrometheusScrapeToken(ctx, cfg)
+		if err != nil {
+			t.Fatalf("settle round %d reconcile: %v", r, err)
+		}
+		if err := c.Get(ctx, types.NamespacedName{Namespace: testBuildServiceNamespace, Name: testBuildServiceNamespace}, updated); err != nil {
+			t.Fatalf("get SM after settle round %d: %v", r, err)
+		}
+		if updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation] != kubernetes.ServiceMonitorResyncReasonSettleRetry {
+			t.Fatalf("round %d reason: got %q", r, updated.GetAnnotations()[kubernetes.ServiceMonitorResyncReasonAnnotation])
+		}
+		if kubernetes.IsSettleFinalRound(r) {
+			// Final round: settle cleared.
+			if kubernetes.ServiceMonitorResyncSettlePending(updated) {
+				t.Fatalf("expected settle cleared after final round %d", r)
+			}
+		} else {
+			// Intermediate round: settle still pending, advanced.
+			if !kubernetes.ServiceMonitorResyncSettlePending(updated) {
+				t.Fatalf("expected settle pending at round %d", r)
+			}
+			nextDelay := kubernetes.SettleDelayForRound(r + 1)
+			if settleResult.RequeueAfter != nextDelay {
+				t.Fatalf("round %d requeue: got %v want %v", r, settleResult.RequeueAfter, nextDelay)
+			}
+		}
 	}
 }
 
@@ -543,15 +583,16 @@ func TestPlanServiceMonitorResync_SettleDeadlineSingleSample(t *testing.T) {
 	}
 }
 
-func TestPlanServiceMonitorResync_SettleDueIssuesRetry(t *testing.T) {
+func TestPlanServiceMonitorResync_SettleDueAdvancesRound(t *testing.T) {
 	now := time.Date(2026, 7, 12, 8, 0, 0, 0, time.UTC)
 	sm := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{}}}
 	sm.SetGroupVersionKind(operandServiceMonitorGVK)
 	sm.SetAnnotations(map[string]string{
-		kubernetes.ServiceMonitorResyncAnnotation:         "2026-07-12T07:00:00Z",
-		kubernetes.ServiceMonitorResyncSecretRVAnnotation: "100",
-		kubernetes.ServiceMonitorResyncReasonAnnotation:   kubernetes.ServiceMonitorResyncReasonTokenMinted,
-		kubernetes.ServiceMonitorResyncSettleAnnotation:   now.UTC().Format(time.RFC3339),
+		kubernetes.ServiceMonitorResyncAnnotation:            "2026-07-12T07:00:00Z",
+		kubernetes.ServiceMonitorResyncSecretRVAnnotation:    "100",
+		kubernetes.ServiceMonitorResyncReasonAnnotation:      kubernetes.ServiceMonitorResyncReasonTokenMinted,
+		kubernetes.ServiceMonitorResyncSettleAnnotation:      now.UTC().Format(time.RFC3339),
+		kubernetes.ServiceMonitorResyncSettleRoundAnnotation: "0",
 	})
 
 	opts, wait := planServiceMonitorResync(
@@ -563,8 +604,46 @@ func TestPlanServiceMonitorResync_SettleDueIssuesRetry(t *testing.T) {
 	if wait != 0 {
 		t.Fatalf("settle wait: got %v want 0", wait)
 	}
-	if !opts.ClearSettlePending || opts.Reason != kubernetes.ServiceMonitorResyncReasonSettleRetry {
-		t.Fatalf("expected settle-retry when deadline elapsed, got opts=%+v", opts)
+	// Round 0 is not final; should advance to round 1 (MarkSettlePending, not ClearSettlePending).
+	if !opts.MarkSettlePending || opts.ClearSettlePending {
+		t.Fatalf("expected MarkSettlePending for round 1, got opts=%+v", opts)
+	}
+	if opts.SettleRound != 1 {
+		t.Fatalf("expected settle round 1, got %d", opts.SettleRound)
+	}
+	if opts.Reason != kubernetes.ServiceMonitorResyncReasonSettleRetry {
+		t.Fatalf("expected settle-retry reason, got %q", opts.Reason)
+	}
+}
+
+func TestPlanServiceMonitorResync_FinalRoundClearsSettle(t *testing.T) {
+	now := time.Date(2026, 7, 12, 8, 0, 0, 0, time.UTC)
+	finalRound := len(kubernetes.ServiceMonitorResyncSettleSchedule) - 1
+	sm := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{}}}
+	sm.SetGroupVersionKind(operandServiceMonitorGVK)
+	sm.SetAnnotations(map[string]string{
+		kubernetes.ServiceMonitorResyncAnnotation:            "2026-07-12T07:00:00Z",
+		kubernetes.ServiceMonitorResyncSecretRVAnnotation:    "100",
+		kubernetes.ServiceMonitorResyncReasonAnnotation:      kubernetes.ServiceMonitorResyncReasonSettleRetry,
+		kubernetes.ServiceMonitorResyncSettleAnnotation:      now.UTC().Format(time.RFC3339),
+		kubernetes.ServiceMonitorResyncSettleRoundAnnotation: strconv.Itoa(finalRound),
+	})
+
+	opts, wait := planServiceMonitorResync(
+		ScrapeTokenReconcilerConfig{Clock: testclock.NewFakeClock(now)},
+		kubernetes.EnsureScrapeTokenResult{ResourceVersion: "100", RequeueAfter: 30 * time.Minute},
+		kubernetes.MetricsScrapeTLSResult{Ready: true, CAResourceVersion: "ca-1"},
+		DeferredSMApplyResult{ExistedBeforeApply: true, Prior: sm},
+	)
+	if wait != 0 {
+		t.Fatalf("settle wait: got %v want 0", wait)
+	}
+	// Final round: should clear settle.
+	if !opts.ClearSettlePending || opts.MarkSettlePending {
+		t.Fatalf("expected ClearSettlePending on final round, got opts=%+v", opts)
+	}
+	if opts.Reason != kubernetes.ServiceMonitorResyncReasonSettleRetry {
+		t.Fatalf("expected settle-retry reason, got %q", opts.Reason)
 	}
 }
 
