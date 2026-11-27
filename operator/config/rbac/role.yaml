@@ -525,6 +525,7 @@ rules:
   - konflux-kueue-visibility
   - konflux-maintainer-user-actions-core
   - konflux-maintainer-user-actions-extra
+  - konflux-release-pruner-bot-actions
   - konflux-releaser-bot-actions
   - konflux-self-access-reviewer
   - konflux-viewer-user-actions-core
