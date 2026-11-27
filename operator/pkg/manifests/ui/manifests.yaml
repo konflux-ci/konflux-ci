@@ -517,7 +517,7 @@ spec:
             secretKeyRef:
               key: client-secret
               name: oauth2-proxy-client-secret
-        image: quay.io/konflux-ci/dex@sha256:83bfc07e778fd5e73eb186b2eb4037110d2fd423e895724aec54e7260921eda2
+        image: quay.io/konflux-ci/dex@sha256:af49e077f5f53484fbd634b536b2f22e3db00940b08a9c2f8b07aa2a63e2fe83
         livenessProbe:
           failureThreshold: 24
           httpGet:
