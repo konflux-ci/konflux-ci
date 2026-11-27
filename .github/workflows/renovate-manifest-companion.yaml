@@ -38,7 +38,7 @@ jobs:
       - name: Generate GitHub App token
         id: app-token
         continue-on-error: true
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510  # v3
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc  # v3
         with:
           app-id: ${{ secrets.UPDATE_BOT_APP_ID }}
           private-key: ${{ secrets.UPDATE_BOT_PRIVATE_KEY }}
@@ -70,9 +70,6 @@ jobs:
           for file in "${files[@]}"; do
             case "$file" in
               operator/upstream-kustomizations/*) ;;
-              # MintMaker bumps dependencies/registry/kustomization.yml together with
-              # operator/upstream-kustomizations/registry for quay.io/konflux-ci/zot digests.
-              dependencies/registry/kustomization.yml) ;;
               .github/scripts/export-third-party-chart-env.sh) ;;
               operator/go.mod) ;;
               operator/go.sum) ;;
@@ -83,7 +80,7 @@ jobs:
             esac
           done
           if ((${#disallowed[@]})); then
-            echo "::error::Refusing to run: PR changes files outside the manifest companion allowlist (operator/upstream-kustomizations/*, dependencies/registry/kustomization.yml, .github/scripts/export-third-party-chart-env.sh, operator/go.mod, operator/go.sum, test/go-tests/go.mod, test/go-tests/go.sum)."
+            echo "::error::Refusing to run: PR changes files outside the manifest companion allowlist (operator/upstream-kustomizations/*, .github/scripts/export-third-party-chart-env.sh, operator/go.mod, operator/go.sum, test/go-tests/go.mod, test/go-tests/go.sum)."
             printf '%s\n' "${disallowed[@]}" | sed 's/^/  - /' >&2
             exit 1
           fi

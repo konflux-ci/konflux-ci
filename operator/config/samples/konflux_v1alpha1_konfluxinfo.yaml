@@ -18,6 +18,9 @@ spec:
     # Optional status page URL
     statusPageUrl: "https://status.konflux.example.com"
 
+    # Optional help portal URL, exposed in konflux-public-info for the UI
+    helpPortalUrl: "https://help.konflux.example.com"
+
     # Integration configurations
     integrations:
       # GitHub App integration
@@ -145,3 +148,6 @@ spec:
       packageRegistryProxyPnpmUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/npm-proxy"
       packageRegistryProxyBundlerUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/rubygems-proxy"
       packageRegistryProxyCargoUrl: "https://artifact-registry-proxy.caching.svc.cluster.local/repository/cargo-proxy"
+
+      # Git repository containing Known False Positives
+      kfpGitUrl: "https://gitlab.example.com/security/known-false-positives.git"

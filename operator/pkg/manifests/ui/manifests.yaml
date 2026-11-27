@@ -44,6 +44,13 @@ rules:
   - ""
   resources:
   - users
+  verbs:
+  - impersonate
+- apiGroups:
+  - ""
+  resourceNames:
+  - system:authenticated
+  resources:
   - groups
   verbs:
   - impersonate
@@ -120,22 +127,22 @@ apiVersion: v1
 data:
   kite.caddy: "handle_path /api/k8s/plugins/kite/* {\n    route {\n        forward_auth
     127.0.0.1:6000 {\n            uri /oauth2/auth\n            header_up Authorization
-    {http.request.header.Authorization}\n            copy_headers X-Auth-Request-Email
-    X-Auth-Request-Groups\n        }\n\t\timpersonate\n\t\tinject_cached_vars\n\t\trequest_header
+    {http.request.header.Authorization}\n            copy_headers X-Auth-Request-Email\n
+    \       }\n\t\timpersonate {\n\t\t\talways_include system:authenticated\n\t\t}\n\t\tinject_cached_vars\n\t\trequest_header
     -Authorization\n        reverse_proxy https://__KITE_HOSTNAME__ {\n            header_up
     Authorization \"Bearer {http.vars.kube_token}\"\n            import /mnt/caddy-snippets/backend-tls.conf\n
     \       }\n    }\n}\n"
   kubearchive.caddy: "handle_path /api/k8s/plugins/kubearchive/* {\n    route {\n
     \       forward_auth 127.0.0.1:6000 {\n            uri /oauth2/auth\n            header_up
-    Authorization {http.request.header.Authorization}\n            copy_headers X-Auth-Request-Email
-    X-Auth-Request-Groups\n        }\n\t\timpersonate\n\t\tinject_cached_vars\n\t\trequest_header
+    Authorization {http.request.header.Authorization}\n            copy_headers X-Auth-Request-Email\n
+    \       }\n\t\timpersonate {\n\t\t\talways_include system:authenticated\n\t\t}\n\t\tinject_cached_vars\n\t\trequest_header
     -Authorization\n        reverse_proxy https://__KUBEARCHIVE_HOSTNAME__:8081 {\n
     \           header_up Authorization \"Bearer {http.vars.kube_token}\"\n            import
     /mnt/caddy-snippets/backend-tls.conf\n        }\n    }\n}\n"
   tekton-results.caddy: "handle_path /api/k8s/plugins/tekton-results/* {\n    route
     {\n        forward_auth 127.0.0.1:6000 {\n            uri /oauth2/auth\n            header_up
-    Authorization {http.request.header.Authorization}\n            copy_headers X-Auth-Request-Email
-    X-Auth-Request-Groups\n        }\n\t\timpersonate\n\t\tinject_cached_vars\n\t\trequest_header
+    Authorization {http.request.header.Authorization}\n            copy_headers X-Auth-Request-Email\n
+    \       }\n\t\timpersonate {\n\t\t\talways_include system:authenticated\n\t\t}\n\t\tinject_cached_vars\n\t\trequest_header
     -Authorization\n        reverse_proxy https://__TEKTON_RESULTS_HOSTNAME__:8080
     {\n            # TODO: switch to {http.vars.backend_token} once Tekton Results\n
     \           # accepts the \"konflux-backend\" audience in TokenReview.\n            #
@@ -148,7 +155,7 @@ data:
             forward_auth 127.0.0.1:6000 {
                 uri /oauth2/auth
                 header_up Authorization {http.request.header.Authorization}
-                copy_headers X-Auth-Request-Email X-Auth-Request-Groups
+                copy_headers X-Auth-Request-Email
             }
             inject_cached_vars
             request_header -Authorization
@@ -161,7 +168,7 @@ data:
     }
 kind: ConfigMap
 metadata:
-  name: proxy-caddy-templates-fm8mc86t87
+  name: proxy-caddy-templates-6mtb54gdff
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -184,18 +191,20 @@ data:
     /health {\n\t\trespond 200\n\t}\n\n\t# Segment bridge files\n\thandle /segment/*
     {\n\t\troot * /opt/app-root/src\n\t\theader Content-Type text/plain\n\t\tfile_server\n\t}\n\n\t#
     OAuth2 proxy - browser-facing auth UI/callback\n\thandle /oauth2/* {\n\t\treverse_proxy
-    127.0.0.1:6000\n\t}\n\n\t# Namespace lister (GET only on exact paths)\n\t# The
-    namespace-lister performs in-memory RBAC authorization: it checks\n\t# RoleBindings
-    for the user AND their groups to decide which namespaces\n\t# to return. Without
-    group headers, a user only sees namespaces where\n\t# they are bound individually
-    — group-based bindings are invisible.\n\t@nsListGet {\n\t\tmethod GET\n\t\tpath
-    /api/k8s/api/v1/namespaces /api/k8s/api/v1/namespaces/\n\t}\n\thandle @nsListGet
-    {\n\t\troute {\n\t\t\tforward_auth 127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\theader_up
-    Authorization {http.request.header.Authorization}\n\t\t\t\tcopy_headers X-Auth-Request-Email
-    X-Auth-Request-Groups\n\t\t\t}\n\t\t\timpersonate {\n\t\t\t\ttarget_user X-User\n\t\t\t\ttarget_group
-    X-Group\n\t\t\t}\n\t\t\t# Drop the client Dex JWT after forward_auth. reverse_proxy
-    copies\n\t\t\t# incoming headers; this backend authenticates via X-User/X-Group.\n\t\t\trequest_header
-    -Authorization\n\t\t\trewrite * /api/v1/namespaces\n\t\t\treverse_proxy https://namespace-lister.namespace-lister.svc.cluster.local:8080
+    127.0.0.1:6000\n\t}\n\n\t# Namespace lister (GET only on exact paths)\n\t# Authorization
+    uses the authenticated user plus system:authenticated only.\n\t# always_include
+    appends that group after any X-Auth-Request-Groups values;\n\t# this route does
+    not copy that header, so only system:authenticated is set.\n\t# The konflux-proxy
+    ClusterRole resourceNames rule constrains Impersonate-Group\n\t# on the kube API;
+    namespace-lister authorizes from X-Group itself, so that\n\t# ClusterRole does
+    not enforce the ceiling here.\n\t@nsListGet {\n\t\tmethod GET\n\t\tpath /api/k8s/api/v1/namespaces
+    /api/k8s/api/v1/namespaces/\n\t}\n\thandle @nsListGet {\n\t\troute {\n\t\t\tforward_auth
+    127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\theader_up Authorization {http.request.header.Authorization}\n\t\t\t\tcopy_headers
+    X-Auth-Request-Email\n\t\t\t}\n\t\t\timpersonate {\n\t\t\t\ttarget_user X-User\n\t\t\t\ttarget_group
+    X-Group\n\t\t\t\talways_include system:authenticated\n\t\t\t}\n\t\t\t# Drop the
+    client Dex JWT after forward_auth. reverse_proxy copies\n\t\t\t# incoming headers;
+    this backend authenticates via X-User/X-Group.\n\t\t\trequest_header -Authorization\n\t\t\trewrite
+    * /api/v1/namespaces\n\t\t\treverse_proxy https://namespace-lister.namespace-lister.svc.cluster.local:8080
     {\n\t\t\t\theader_down -X-Correlation-ID\n\t\t\t\ttransport http {\n\t\t\t\t\tread_timeout
     30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool file /mnt/cluster-ca/ca-bundle.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
     Backend snippets (tekton-results, kubearchive, etc.) loaded from init-generated
@@ -205,7 +214,7 @@ data:
     is safe because it is more specific than /api/k8s/.\n\timport /mnt/caddy-snippets/*.caddy\n\n\t#
     WebSocket to Kube API\n\thandle_path /wss/k8s/* {\n\t\troute {\n\t\t\tforward_auth
     127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\theader_up Authorization {http.request.header.Authorization}\n\t\t\t\tcopy_headers
-    X-Auth-Request-Email X-Auth-Request-Groups\n\t\t\t}\n\t\t\timpersonate\n\t\t\tinject_cached_vars\n\t\t\t#
+    X-Auth-Request-Email\n\t\t\t}\n\t\t\timpersonate {\n\t\t\t\talways_include system:authenticated\n\t\t\t}\n\t\t\tinject_cached_vars\n\t\t\t#
     Strip the client JWT after forward_auth. Do not use\n\t\t\t# header_up -Authorization
     in the same reverse_proxy that sets\n\t\t\t# Authorization: Caddy can apply the
     delete after the set and\n\t\t\t# drop the proxy SA token, so kube sees system:anonymous.\n\t\t\trequest_header
@@ -214,7 +223,7 @@ data:
     30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
     Kube API (catch-all for /api/k8s/)\n\thandle_path /api/k8s/* {\n\t\troute {\n\t\t\tforward_auth
     127.0.0.1:6000 {\n\t\t\t\turi /oauth2/auth\n\t\t\t\theader_up Authorization {http.request.header.Authorization}\n\t\t\t\tcopy_headers
-    X-Auth-Request-Email X-Auth-Request-Groups\n\t\t\t}\n\t\t\timpersonate\n\t\t\tinject_cached_vars\n\t\t\trequest_header
+    X-Auth-Request-Email\n\t\t\t}\n\t\t\timpersonate {\n\t\t\t\talways_include system:authenticated\n\t\t\t}\n\t\t\tinject_cached_vars\n\t\t\trequest_header
     -Authorization\n\t\t\treverse_proxy https://kubernetes.default.svc {\n\t\t\t\theader_up
     Authorization \"Bearer {http.vars.kube_token}\"\n\t\t\t\ttransport http {\n\t\t\t\t\tread_timeout
     30m\n\t\t\t\t\twrite_timeout 30m\n\t\t\t\t\ttls_trust_pool file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\t#
@@ -225,7 +234,7 @@ data:
     {path} /index.html\n\t\tfile_server\n\t}\n}\n"
 kind: ConfigMap
 metadata:
-  name: proxy-caddyfile-5d5b8824c2
+  name: proxy-caddyfile-b246f95bdc
   namespace: konflux-ui
 ---
 apiVersion: v1
@@ -508,7 +517,7 @@ spec:
             secretKeyRef:
               key: client-secret
               name: oauth2-proxy-client-secret
-        image: quay.io/konflux-ci/dex@sha256:3a4253c9e68c0ddcbd1203b18ec7e9d4773cd2801a514a6dacba15aeeba39e51
+        image: quay.io/konflux-ci/dex@sha256:af49e077f5f53484fbd634b536b2f22e3db00940b08a9c2f8b07aa2a63e2fe83
         livenessProbe:
           failureThreshold: 24
           httpGet:
@@ -626,7 +635,7 @@ spec:
         - /etc/caddy/Caddyfile
         - --adapter
         - caddyfile
-        image: quay.io/konflux-ci/reverse-proxy@sha256:bb1aecc302031811dcbe84132a7887c482fc9a47c387ea306f54570ba14fb75b
+        image: quay.io/konflux-ci/reverse-proxy@sha256:5454876105ed17869e12cfeeb19dfb14d5aba94fcebb71533646647c946bc6fd
         livenessProbe:
           failureThreshold: 3
           httpGet:
@@ -710,7 +719,7 @@ spec:
             secretKeyRef:
               key: cookie-secret
               name: oauth2-proxy-cookie-secret
-        image: registry.access.redhat.com/hi/oauth2-proxy@sha256:7d314a40e26d8a6e20823f1048f7f14641e0bbe83b8a10dd6300b09e0ce41930
+        image: registry.access.redhat.com/hi/oauth2-proxy@sha256:6860337c0ef6e25102284513040a5c4132156c12354943ba23c5a98d1900a580
         name: oauth2-proxy
         ports:
         - containerPort: 6000
@@ -732,7 +741,7 @@ spec:
         - -R
         - /opt/app-root/src/.
         - /mnt/static-content/
-        image: quay.io/konflux-ci/konflux-ui@sha256:4cd73fbda98344f00a4bb8cef752c30d9e41df797ff7573617fdd3f6aff1978f
+        image: quay.io/konflux-ci/konflux-ui@sha256:68a15e20134c2d6fa8ce8f741a76b64a7062e149248bf30ef136b1d3247f87d7
         name: copy-static-content
         resources:
           limits:
@@ -750,7 +759,7 @@ spec:
       - command:
         - bash
         - /var/run/scripts/konflux-ci.dev/generate-proxy-config.sh
-        image: quay.io/konflux-ci/konflux-ui@sha256:4cd73fbda98344f00a4bb8cef752c30d9e41df797ff7573617fdd3f6aff1978f
+        image: quay.io/konflux-ci/konflux-ui@sha256:68a15e20134c2d6fa8ce8f741a76b64a7062e149248bf30ef136b1d3247f87d7
         name: generate-proxy-config
         resources:
           limits:
@@ -812,11 +821,11 @@ spec:
           items:
           - key: Caddyfile
             path: Caddyfile
-          name: proxy-caddyfile-5d5b8824c2
+          name: proxy-caddyfile-b246f95bdc
         name: proxy-caddyfile
       - configMap:
           defaultMode: 420
-          name: proxy-caddy-templates-fm8mc86t87
+          name: proxy-caddy-templates-6mtb54gdff
         name: caddy-templates
       - emptyDir: {}
         name: caddy-snippets

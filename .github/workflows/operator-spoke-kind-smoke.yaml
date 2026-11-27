@@ -1,0 +1,120 @@
+name: Operator Spoke Kind Smoke
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check-changes:
+    name: Check for relevant changes
+    runs-on: ubuntu-26.04-arm
+    outputs:
+      operator: ${{ steps.changed-files.outputs.any_changed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          fetch-depth: 0
+      - name: Check for changes
+        uses: tj-actions/changed-files@24d32ffd492484c1d75e0c0b894501ddb9d30d62  # v47
+        id: changed-files
+        with:
+          files: |
+            operator/**
+            dependencies/cert-manager/**
+            .github/workflows/operator-spoke-kind-smoke.yaml
+
+  spoke-kind-smoke:
+    name: Kind spoke readiness (ARM64)
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 30
+    needs: check-changes
+    if: needs.check-changes.outputs.operator == 'true'
+    env:
+      # renovate: datasource=github-releases depName=kubernetes-sigs/kind
+      KIND_VERSION: "0.33.0"
+      # renovate: datasource=github-releases depName=kubernetes/kubernetes
+      KUBECTL_VERSION: "1.37.2"
+      KIND_EXPERIMENTAL_PROVIDER: podman
+      CLUSTER_NAME: konflux-spoke-smoke
+      OPERATOR_IMAGE: localhost/konflux-operator:local
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+
+      - name: Prepare Podman
+        run: |
+          set -euo pipefail
+          # Ubuntu restricts unprivileged user namespaces by default.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          # Kind's rootless provider requires cgroup v2.
+          podman info --format json | jq -e '.host.cgroupVersion == "v2" and .host.security.rootless == true'
+          printf 'KUBECONFIG=%s/spoke-kubeconfig\n' "${RUNNER_TEMP}" >>"${GITHUB_ENV}"
+
+      - name: Setup Go
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5  # v7
+        with:
+          go-version-file: operator/go.mod
+          cache-dependency-path: operator/go.sum
+
+      - name: Install Kind and kubectl
+        run: |
+          set -euo pipefail
+          curl -fsSLo "${RUNNER_TEMP}/kind" "https://kind.sigs.k8s.io/dl/v${KIND_VERSION}/kind-linux-arm64"
+          curl -fsSLo "${RUNNER_TEMP}/kubectl" "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/arm64/kubectl"
+          chmod +x "${RUNNER_TEMP}/kind" "${RUNNER_TEMP}/kubectl"
+          sudo mv "${RUNNER_TEMP}/kind" "${RUNNER_TEMP}/kubectl" /usr/local/bin/
+
+      - name: Build operator image
+        working-directory: operator
+        run: make docker-build IMG="${OPERATOR_IMAGE}" CONTAINER_TOOL=podman
+
+      - name: Create Kind cluster and load operator image
+        run: |
+          set -euo pipefail
+          kind create cluster --name "${CLUSTER_NAME}" --wait 5m
+          # kind load docker-image calls the docker CLI, including with a Podman cluster.
+          podman save --format docker-archive -o "${RUNNER_TEMP}/operator-image.tar" "${OPERATOR_IMAGE}"
+          kind load image-archive "${RUNNER_TEMP}/operator-image.tar" --name "${CLUSTER_NAME}"
+
+      - name: Install cert-manager
+        run: |
+          set -euo pipefail
+          kubectl apply -k dependencies/cert-manager
+          kubectl wait --for=condition=Available deployment \
+            -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=5m
+
+      - name: Deploy operator
+        working-directory: operator
+        run: |
+          set -euo pipefail
+          make install
+          make deploy IMG="${OPERATOR_IMAGE}"
+          kubectl wait --for=condition=Available \
+            deployment/konflux-operator-controller-manager -n konflux-operator --timeout=5m
+
+      - name: Deploy spoke and verify readiness
+        run: |
+          set -euo pipefail
+          cat <<'EOF' | kubectl apply -f -
+          apiVersion: konflux.konflux-ci.dev/v1alpha1
+          kind: Konflux
+          metadata:
+            name: konflux
+          spec:
+            installationType: spoke
+          EOF
+          kubectl wait --for=condition=Ready konflux/konflux --timeout=5m
+
+      - name: Collect failure diagnostics
+        if: failure()
+        run: |
+          kubectl get konflux/konflux -o yaml || true
+          kubectl get pods -n konflux-operator -o wide || true
+          kubectl logs deployment/konflux-operator-controller-manager -n konflux-operator --tail=120 || true

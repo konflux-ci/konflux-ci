@@ -352,7 +352,6 @@ fi
 # Skip components managed by the operator
 SKIP_KONFLUX_INFO=true \
 SKIP_CLUSTER_ISSUER=true \
-SKIP_INTERNAL_REGISTRY=true \
 SET_SKIP_CHECKS="${SET_SKIP_CHECKS:-false}" \
 "${REPO_ROOT}/deploy-deps.sh"
 

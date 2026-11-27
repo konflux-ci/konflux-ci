@@ -1,7 +1,7 @@
 # Build the conformance test binary. Context must be the repo root (test module
 # uses a replace directive to ../../operator), not test/go-tests/ alone.
 # Build:  podman build -f test/go-tests/Containerfile -t conformance-tests .
-FROM registry.access.redhat.com/ubi10/go-toolset@sha256:05f3da136a4dbe077f30606e2e53a4f5cab185989c98309823ea06a9a1c52a50 AS builder
+FROM registry.access.redhat.com/ubi10/go-toolset@sha256:b9f867772f02ef0c8167b1ac327b615c9c6b06be16f5a42ea322597633d1d25e AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
@@ -31,7 +31,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
 FROM quay.io/konflux-ci/task-runner@sha256:e272c1e1c60a4ecc72ff9c8d65bc48da534de6f1ce0d5aba79db3ac532d11c35 AS tools
 
 # Runtime image — ubi10-minimal, no Go toolchain, no source code.
-FROM registry.access.redhat.com/ubi10/ubi-minimal@sha256:fb2f7f857cc60d88e3fad19da505083a682ca4569d7b55a61f64aaa43641f741
+FROM registry.access.redhat.com/ubi10/ubi-minimal@sha256:d63890a635f8f19177bce1775f74f587a47f4456844f1392456c4e3673a48753
 ARG REVISION
 
 COPY --from=tools /usr/local/bin/oc /usr/local/bin/oc

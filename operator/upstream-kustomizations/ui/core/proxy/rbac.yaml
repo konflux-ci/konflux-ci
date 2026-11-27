@@ -10,8 +10,18 @@ kind: ClusterRole
 metadata:
   name: konflux-proxy
 rules:
+# Impersonate any user. Group impersonation is limited to system:authenticated
+# so the proxy cannot assume arbitrary groups (blast-radius control).
+# Constrained impersonation is a separate feature that limits which actions
+# an impersonator may perform as that identity. It is not required for this
+# group ceiling:
+# https://kubernetes.io/docs/reference/access-authn-authz/user-impersonation/#constrained-impersonation
 - apiGroups: [""]
-  resources: ["users", "groups"]
+  resources: ["users"]
+  verbs: ["impersonate"]
+- apiGroups: [""]
+  resources: ["groups"]
+  resourceNames: ["system:authenticated"]
   verbs: ["impersonate"]
 - apiGroups: ["authorization.k8s.io"]
   resources: ["localsubjectaccessreviews"]

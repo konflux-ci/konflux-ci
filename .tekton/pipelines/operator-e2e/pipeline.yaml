@@ -158,7 +158,7 @@ spec:
       description: >-
         Pinned commit of tekton-integration-catalog for kind-ibm and other catalog tasks (bump when upgrading tasks).
       # renovate: datasource=git-refs depName=https://github.com/konflux-ci/tekton-integration-catalog
-      default: 2d0243d6b0ad1e6f48a2eadd7c5cc41c39b8b52f
+      default: dde7931a319b104a4d9750402a044058c0f4f469
   tasks:
     # IBM VSI instance names are limited to 40 characters. PipelineRun names are
     # too long and PR numbers can collide across repositories, so derive a short
@@ -170,7 +170,7 @@ spec:
             description: Short globally unique IBM-safe cluster identifier.
         steps:
           - name: hash-pipeline-run-uid
-            image: registry.access.redhat.com/ubi10/go-toolset@sha256:05f3da136a4dbe077f30606e2e53a4f5cab185989c98309823ea06a9a1c52a50
+            image: registry.access.redhat.com/ubi10/go-toolset@sha256:b9f867772f02ef0c8167b1ac327b615c9c6b06be16f5a42ea322597633d1d25e
             script: |
               #!/usr/bin/env bash
               set -o errexit -o nounset -o pipefail

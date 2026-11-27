@@ -9,8 +9,8 @@ resources:
   - quay.yaml
 images:
   - name: quay.io/projectquay/quay
-    newTag: "3.18.2@sha256:4456201ca6bfdc0bbe78ca7cfe262887df41147ddbf452dd8d51f8d330a41acb"
+    newTag: "5.0.0@sha256:f0a6c988b34d1456d2799df3112a057b66acaceadfd715ec6b601f4cd8e76391"
   - name: quay.io/sclorg/postgresql-15-c9s
-    newTag: "20261111@sha256:569ab8b00ca074714a530a9230b19bf75237130b7856b05b34ced8aa1ce5d677"
+    newTag: "20261125@sha256:8d4ec9c1765a3c15e127861a25e44e67ec31d7fbab8d0c018f720bfbea5b556c"
   - name: quay.io/sclorg/redis-7-c9s
     newTag: "20250108@sha256:d772acab11507231a2b152850f47c8b9b859dedb6652ca624949e97cb28c5e6f"

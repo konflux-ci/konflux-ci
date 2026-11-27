@@ -5,28 +5,28 @@ go 1.26.10
 require (
 	github.com/coder/websocket v1.8.15
 	github.com/codeready-toolchain/api v0.0.0-20261023161012-10cbbf2156ff
-	github.com/conforma/crds/api v0.1.44
+	github.com/conforma/crds/api v0.1.49
 	github.com/devfile/library/v2 v2.4.0
-	github.com/docker/cli v29.9.3+incompatible
+	github.com/docker/cli v29.10.0+incompatible
 	github.com/gofri/go-github-ratelimit/v2 v2.0.2
 	github.com/google/go-containerregistry v0.22.1
 	github.com/google/go-github/v93 v93.0.0
 	github.com/h2non/gock v1.2.0
 	github.com/konflux-ci/application-api v0.0.0-20261101085949-41d2a0ab82ca
-	github.com/konflux-ci/build-service v0.0.0-20261031054504-bdfcb51c6b34
+	github.com/konflux-ci/build-service v0.0.0-20261113205054-07182b00cba2
 	github.com/konflux-ci/image-controller v0.0.0-20261109132953-2fb397e3564b
 	github.com/konflux-ci/integration-service v0.0.0-20261029165049-252be6df555b
 	github.com/konflux-ci/konflux-ci/operator v0.0.0
 	github.com/konflux-ci/operator-toolkit v0.0.0-20260921214948-0f252ff98994
-	github.com/konflux-ci/release-service v0.0.0-20261104100309-18523d720b13
+	github.com/konflux-ci/release-service v0.0.0-20261113085544-46488d998d96
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/onsi/ginkgo/v2 v2.34.0
 	github.com/onsi/gomega v1.44.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/openshift-pipelines/pipelines-as-code v0.50.0
-	github.com/openshift/api v0.0.0-20261112171031-b027bed8bb3f
-	github.com/openshift/client-go v0.0.0-20261027103500-48133ed95dad
-	github.com/openshift/library-go v0.0.0-20261030161254-298cf2d19148
+	github.com/openshift/api v0.0.0-20261126211652-889c1f5c276a
+	github.com/openshift/client-go v0.0.0-20261117110410-e591d492769c
+	github.com/openshift/library-go v0.0.0-20261120134353-3f167e8fd79a
 	github.com/redhat-appstudio/jvm-build-service v0.0.0-20250301023318-b47170d413c5
 	github.com/stretchr/testify v1.12.1
 	github.com/tektoncd/cli v0.46.2
@@ -38,9 +38,9 @@ require (
 	k8s.io/client-go v11.0.0+incompatible
 	k8s.io/klog/v2 v2.140.0
 	k8s.io/utils v0.0.0-20261023123148-ca04ba58ecab
-	knative.dev/pkg v0.0.0-20261106011441-a8ce7f3f6f84
+	knative.dev/pkg v0.0.0-20261123011003-3a0c08ddeaa2
 	oras.land/oras-go/v2 v2.7.0
-	sigs.k8s.io/controller-runtime v0.25.2
+	sigs.k8s.io/controller-runtime v0.25.3
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -63,7 +63,7 @@ replace (
 	k8s.io/component-base => k8s.io/component-base v0.37.2
 	k8s.io/component-helpers => k8s.io/component-helpers v0.37.2
 	k8s.io/controller-manager => k8s.io/controller-manager v0.37.2
-	k8s.io/cri-api => k8s.io/cri-api v0.37.2
+	k8s.io/cri-api => k8s.io/cri-api v0.37.3
 	k8s.io/csi-translation-lib => k8s.io/csi-translation-lib v0.37.2
 	k8s.io/kube-aggregator => k8s.io/kube-aggregator v0.37.2
 	k8s.io/kube-controller-manager => k8s.io/kube-controller-manager v0.37.2
@@ -72,10 +72,10 @@ replace (
 	k8s.io/kubectl => k8s.io/kubectl v0.37.2
 	k8s.io/kubelet => k8s.io/kubelet v0.37.2
 	k8s.io/metrics => k8s.io/metrics v0.37.2
-	k8s.io/mount-utils => k8s.io/mount-utils v0.37.2
+	k8s.io/mount-utils => k8s.io/mount-utils v0.37.3
 	k8s.io/pod-security-admission => k8s.io/pod-security-admission v0.37.2
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.37.2
-	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.25.2
+	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.25.3
 	vbom.ml/util => github.com/fvbommel/util v0.0.3
 )
 
@@ -139,7 +139,7 @@ require (
 	github.com/google/go-github/v88 v88.0.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/gofuzz v1.2.1-0.20221018181003-5dfa3b7056d4 // indirect
-	github.com/google/pprof v0.0.0-20261016150608-1facf8f91b50 // indirect
+	github.com/google/pprof v0.0.0-20261105003125-4bf881d7fb0b // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
@@ -177,7 +177,7 @@ require (
 	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/skeema/knownhosts v1.3.3 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
+	github.com/spf13/pflag v1.1.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
@@ -195,19 +195,19 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.47.0 // indirect
 	go.opentelemetry.io/otel/trace v1.47.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.11.1 // indirect
-	go.yaml.in/yaml/v2 v2.4.4 // indirect
-	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	go.yaml.in/yaml/v2 v2.4.5 // indirect
+	go.yaml.in/yaml/v3 v3.0.6 // indirect
 	golang.org/x/crypto v0.59.0 // indirect
 	golang.org/x/crypto/openpgp v0.1.0-deprecated // indirect
 	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e // indirect
-	golang.org/x/mod v0.42.0 // indirect
-	golang.org/x/net v0.62.0 // indirect
+	golang.org/x/mod v0.43.0 // indirect
+	golang.org/x/net v0.63.0 // indirect
 	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect
 	golang.org/x/term v0.48.0 // indirect
 	golang.org/x/text v0.44.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
-	golang.org/x/tools v0.52.0 // indirect
+	golang.org/x/tools v0.53.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20261019180522-ce908d29299b // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20261019180522-ce908d29299b // indirect
@@ -225,7 +225,7 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
 )
 
-replace github.com/expr-lang/expr => github.com/expr-lang/expr v1.17.8
+replace github.com/expr-lang/expr => github.com/expr-lang/expr v1.18.1
 
 replace github.com/go-chi/chi/v5 => github.com/go-chi/chi/v5 v5.5.0
 

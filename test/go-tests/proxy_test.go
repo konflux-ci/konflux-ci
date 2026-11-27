@@ -18,7 +18,11 @@ import (
 	"github.com/konflux-ci/konflux-ci/operator/pkg/dex"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	authv1 "k8s.io/api/authorization/v1"
 	v1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -141,12 +145,30 @@ var _ = Describe("Test Proxy endpoints", func() {
 		})
 	})
 
-	Describe("Test group-based RBAC", Label("proxy-dex"), func() {
-		It("should grant access to namespaces the user's groups are bound to", func() {
-			token, err := ExtractTokenForUser(proxyClient, "user1@konflux.dev", "password")
+	Describe("Test proxy ClusterRole group impersonation ceiling", func() {
+		const proxySAUser = "system:serviceaccount:konflux-ui:proxy"
+
+		It("should allow impersonating users and only system:authenticated groups", func(ctx context.Context) {
+			expectImpersonateSAR(ctx, proxySAUser, "groups", "system:masters", false)
+			expectImpersonateSAR(ctx, proxySAUser, "groups", "team-alpha", false)
+			expectImpersonateSAR(ctx, proxySAUser, "groups", "system:authenticated", true)
+			expectImpersonateSAR(ctx, proxySAUser, "users", "user1@konflux.dev", true)
+		})
+	})
+
+	Describe("Test group impersonation ceiling", Label("proxy-dex"), func() {
+		const idpGroupUser = "user1@konflux.dev"
+		const idpGroupName = "team-alpha"
+
+		It("should succeed for a user who has IdP groups without forwarding them", func() {
+			token, err := ExtractTokenForUser(proxyClient, idpGroupUser, "password")
 			Expect(err).NotTo(HaveOccurred())
 
-			request, err := http.NewRequest("GET", proxyURL("/api/k8s/api/v1/namespaces"), nil)
+			// Hit the kube API (not namespace-lister). A 403 here means the
+			// apiserver rejected Impersonate-Group values the proxy SA is
+			// not allowed to impersonate (e.g. IdP groups still forwarded).
+			appsPath := proxyAppStudioPath("applications")
+			request, err := http.NewRequest("GET", proxyURL(appsPath), nil)
 			Expect(err).NotTo(HaveOccurred())
 			request.Header.Set("Authorization", "Bearer "+token)
 
@@ -156,35 +178,167 @@ var _ = Describe("Test Proxy endpoints", func() {
 
 			body, err := io.ReadAll(response.Body)
 			Expect(err).NotTo(HaveOccurred())
-			expectProxyHTTPStatus(response, body, http.StatusOK, "/api/k8s/api/v1/namespaces")
+			expectProxyHTTPStatus(response, body, http.StatusOK, appsPath)
 		})
 
-		It("should pass groups from ID token as Impersonate-Group headers", func() {
-			token, err := ExtractTokenForUser(proxyClient, "user1@konflux.dev", "password")
+		It("should ignore IdP group RoleBindings and honor system:authenticated", func(ctx context.Context) {
+			token, err := ExtractTokenForUser(proxyClient, idpGroupUser, "password")
 			Expect(err).NotTo(HaveOccurred())
 
-			sarBody := `{"apiVersion":"authorization.k8s.io/v1","kind":"SelfSubjectAccessReview","spec":{"resourceAttributes":{"verb":"list","resource":"namespaces"}}}`
-			request, err := http.NewRequest("POST",
-				proxyURL("/api/k8s/apis/authorization.k8s.io/v1/selfsubjectaccessreviews"),
-				strings.NewReader(sarBody))
-			Expect(err).NotTo(HaveOccurred())
-			request.Header.Set("Authorization", "Bearer "+token)
-			request.Header.Set("Content-Type", "application/json")
+			nsName := fmt.Sprintf("proxy-group-ceiling-%d", GinkgoRandomSeed())
+			// namespace-lister only indexes namespaces matching
+			// CACHE_NAMESPACE_LABELSELECTOR (konflux-ci.dev/type=tenant).
+			ns := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{
+				Name: nsName,
+				Labels: map[string]string{
+					"konflux-ci.dev/type": "tenant",
+				},
+			}}
+			Expect(proxyClient.Create(ctx, ns)).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				err := proxyClient.Delete(ctx, ns)
+				Expect(crclient.IgnoreNotFound(err)).NotTo(HaveOccurred())
+			})
 
-			response, err := proxyHTTPClient.Do(request)
-			Expect(err).NotTo(HaveOccurred())
-			defer response.Body.Close()
+			// Narrow Role: configmaps for the kube API assertion, plus
+			// namespaces get so namespace-lister can surface the ns when the
+			// subject is bound (lister requires get on namespaces).
+			role := &rbacv1.Role{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "proxy-group-ceiling-read",
+					Namespace: nsName,
+				},
+				Rules: []rbacv1.PolicyRule{
+					{
+						APIGroups: []string{""},
+						Resources: []string{"configmaps"},
+						Verbs:     []string{"get", "list"},
+					},
+					{
+						APIGroups: []string{""},
+						Resources: []string{"namespaces"},
+						Verbs:     []string{"get"},
+					},
+				},
+			}
+			Expect(proxyClient.Create(ctx, role)).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				err := proxyClient.Delete(ctx, role)
+				Expect(crclient.IgnoreNotFound(err)).NotTo(HaveOccurred())
+			})
 
-			body, err := io.ReadAll(response.Body)
-			Expect(err).NotTo(HaveOccurred())
-			expectProxyHTTPStatus(response, body, http.StatusCreated,
-				"/api/k8s/apis/authorization.k8s.io/v1/selfsubjectaccessreviews")
+			authRB := &rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "system-authenticated-read",
+					Namespace: nsName,
+				},
+				RoleRef: rbacv1.RoleRef{
+					APIGroup: rbacv1.GroupName,
+					Kind:     "Role",
+					Name:     role.Name,
+				},
+				Subjects: []rbacv1.Subject{{
+					APIGroup: rbacv1.GroupName,
+					Kind:     rbacv1.GroupKind,
+					Name:     "system:authenticated",
+				}},
+			}
+			Expect(proxyClient.Create(ctx, authRB)).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				err := proxyClient.Delete(ctx, authRB)
+				Expect(crclient.IgnoreNotFound(err)).NotTo(HaveOccurred())
+			})
+
+			configMapsPath := fmt.Sprintf("/api/k8s/api/v1/namespaces/%s/configmaps", nsName)
+
+			By("proving the namespace is indexed and system:authenticated grants access")
+			Eventually(func(g Gomega) {
+				code, body := proxyGETStatusAndBodyG(g, configMapsPath, token)
+				g.Expect(code).To(Equal(http.StatusOK), string(body))
+			}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+			Eventually(func(g Gomega) {
+				code, body := proxyGETStatusAndBodyG(g, "/api/k8s/api/v1/namespaces", token)
+				g.Expect(code).To(Equal(http.StatusOK), string(body))
+				g.Expect(namespaceListContains(g, body, nsName)).To(BeTrue(),
+					"namespace-lister should honor system:authenticated RoleBindings")
+			}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+
+			By("removing the system:authenticated binding")
+			Expect(proxyClient.Delete(ctx, authRB)).To(Succeed())
+			Eventually(func(g Gomega) {
+				err := proxyClient.Get(ctx, crclient.ObjectKeyFromObject(authRB), &rbacv1.RoleBinding{})
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "unexpected error: %v", err)
+			}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+
+			By("confirming access and listing drop after the binding is gone")
+			Eventually(func(g Gomega) {
+				code, body := proxyGETStatusAndBodyG(g, configMapsPath, token)
+				g.Expect(code).To(Equal(http.StatusForbidden), string(body))
+			}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+			Eventually(func(g Gomega) {
+				code, body := proxyGETStatusAndBodyG(g, "/api/k8s/api/v1/namespaces", token)
+				g.Expect(code).To(Equal(http.StatusOK), string(body))
+				g.Expect(namespaceListContains(g, body, nsName)).To(BeFalse())
+			}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+
+			groupRB := &rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "idp-group-read",
+					Namespace: nsName,
+				},
+				RoleRef: rbacv1.RoleRef{
+					APIGroup: rbacv1.GroupName,
+					Kind:     "Role",
+					Name:     role.Name,
+				},
+				Subjects: []rbacv1.Subject{{
+					APIGroup: rbacv1.GroupName,
+					Kind:     rbacv1.GroupKind,
+					Name:     idpGroupName,
+				}},
+			}
+			Expect(proxyClient.Create(ctx, groupRB)).To(Succeed())
+			DeferCleanup(func(ctx context.Context) {
+				err := proxyClient.Delete(ctx, groupRB)
+				Expect(crclient.IgnoreNotFound(err)).NotTo(HaveOccurred())
+			})
+
+			By("proving the IdP group RoleBinding is live via SubjectAccessReview")
+			Eventually(func(g Gomega) {
+				sar := &authv1.SubjectAccessReview{
+					Spec: authv1.SubjectAccessReviewSpec{
+						User:   idpGroupUser,
+						Groups: []string{idpGroupName, "system:authenticated"},
+						ResourceAttributes: &authv1.ResourceAttributes{
+							Namespace: nsName,
+							Verb:      "list",
+							Group:     "",
+							Resource:  "configmaps",
+						},
+					},
+				}
+				g.Expect(proxyClient.Create(ctx, sar)).To(Succeed())
+				g.Expect(sar.Status.Allowed).To(BeTrue(),
+					"SAR with IdP group should be allowed once the RoleBinding exists: %s", sar.Status.Reason)
+			}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+
+			By("keeping IdP group grants ineffective through the proxy")
+			Consistently(func(g Gomega) {
+				code, body := proxyGETStatusAndBodyG(g, configMapsPath, token)
+				g.Expect(code).To(Equal(http.StatusForbidden),
+					"IdP group RoleBinding must not grant access through the proxy: %s", string(body))
+
+				listCode, listBody := proxyGETStatusAndBodyG(g, "/api/k8s/api/v1/namespaces", token)
+				g.Expect(listCode).To(Equal(http.StatusOK), string(listBody))
+				g.Expect(namespaceListContains(g, listBody, nsName)).To(BeFalse(),
+					"namespace-lister must not treat IdP groups as authorization subjects")
+			}).WithTimeout(10 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
 		})
 	})
 
 	Describe("Test user with no IdP groups", Label("proxy-dex"), func() {
 		It("should succeed when the user has no IdP groups", func() {
-			token, err := ExtractTokenForUser(proxyClient, "user2@konflux.dev", "password")
+			token, err := ExtractTokenForUser(proxyClient, userName, password)
 			Expect(err).NotTo(HaveOccurred())
 
 			request, err := http.NewRequest("GET", proxyURL(proxyAppStudioPath("applications")), nil)
@@ -336,6 +490,10 @@ var _ = Describe("Test Proxy endpoints", func() {
 						"echo should receive Impersonate-User header")
 					g.Expect(lastHeaders["Impersonate-User"][0]).To(Equal(expectedImpersonateUser()),
 						"Impersonate-User should match the authenticated user")
+					g.Expect(lastHeaders).To(HaveKey("Impersonate-Group"),
+						"echo should receive Impersonate-Group header")
+					g.Expect(lastHeaders["Impersonate-Group"]).To(Equal([]string{"system:authenticated"}),
+						"Impersonate-Group must be only system:authenticated")
 				}).WithTimeout(2 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 			} else {
 				expectEndpointRouted(kitePath, token)
@@ -377,6 +535,10 @@ var _ = Describe("Test Proxy endpoints", func() {
 					g.Expect(lastHeaders).To(HaveKey("Impersonate-User"),
 						"echo should receive Impersonate-User header")
 					g.Expect(lastHeaders["Impersonate-User"][0]).To(Equal(expectedImpersonateUser()))
+					g.Expect(lastHeaders).To(HaveKey("Impersonate-Group"),
+						"echo should receive Impersonate-Group header")
+					g.Expect(lastHeaders["Impersonate-Group"]).To(Equal([]string{"system:authenticated"}),
+						"Impersonate-Group must be only system:authenticated")
 				}).WithTimeout(2 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 			} else {
 				expectEndpointRouted(kubearchivePath, token)
@@ -423,6 +585,8 @@ var _ = Describe("Test Proxy endpoints", func() {
 
 				Expect(lastHeaders).NotTo(HaveKey("Impersonate-User"),
 					"watson endpoint should NOT use impersonation")
+				Expect(lastHeaders).NotTo(HaveKey("X-Auth-Request-Groups"),
+					"watson endpoint must not forward identity-provider groups")
 			} else {
 				expectEndpointRouted(watsonPath, token)
 			}
@@ -538,19 +702,93 @@ func expectEndpointRouted(path, token string) {
 func echoGetG(g Gomega, path, token string) map[string][]string {
 	request, err := http.NewRequest("GET", proxyURL(path), nil)
 	g.Expect(err).NotTo(HaveOccurred())
+	if err != nil {
+		return nil
+	}
 	request.Header.Set("Authorization", "Bearer "+token)
 
 	response, err := proxyHTTPClient.Do(request)
 	g.Expect(err).NotTo(HaveOccurred())
+	if err != nil {
+		return nil
+	}
 	defer response.Body.Close()
 
 	body, err := io.ReadAll(response.Body)
 	g.Expect(err).NotTo(HaveOccurred())
+	if err != nil {
+		return nil
+	}
 	g.Expect(response.StatusCode).To(Equal(200), "echo request failed: %s", string(body))
 
 	var echo echoResponseBody
 	g.Expect(json.Unmarshal(body, &echo)).To(Succeed(), "failed to parse echo response: %s", string(body))
 	return echo.Headers
+}
+
+// proxyGETStatusAndBodyG performs an authenticated GET for use inside Eventually.
+func proxyGETStatusAndBodyG(g Gomega, path, token string) (int, []byte) {
+	GinkgoHelper()
+	request, err := http.NewRequest("GET", proxyURL(path), nil)
+	g.Expect(err).NotTo(HaveOccurred())
+	if err != nil {
+		return 0, nil
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+
+	response, err := proxyHTTPClient.Do(request)
+	g.Expect(err).NotTo(HaveOccurred())
+	if err != nil {
+		return 0, nil
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	g.Expect(err).NotTo(HaveOccurred())
+	if err != nil {
+		return 0, nil
+	}
+	return response.StatusCode, body
+}
+
+// expectImpersonateSAR asserts whether user may impersonate resource/name.
+func expectImpersonateSAR(ctx context.Context, user, resource, name string, allowed bool) {
+	GinkgoHelper()
+	sar := &authv1.SubjectAccessReview{
+		Spec: authv1.SubjectAccessReviewSpec{
+			User: user,
+			ResourceAttributes: &authv1.ResourceAttributes{
+				Verb:     "impersonate",
+				Group:    "",
+				Resource: resource,
+				Name:     name,
+			},
+		},
+	}
+	Expect(proxyClient.Create(ctx, sar)).To(Succeed())
+	Expect(sar.Status.Allowed).To(Equal(allowed),
+		"impersonate %s/%s for %s: allowed=%v reason=%s", resource, name, user, sar.Status.Allowed, sar.Status.Reason)
+}
+
+// namespaceListContains reports whether a Kubernetes NamespaceList JSON body
+// includes a namespace with the given name. Unmarshal failures fail soft via g.
+func namespaceListContains(g Gomega, body []byte, name string) bool {
+	GinkgoHelper()
+	var nsList struct {
+		Items []struct {
+			Metadata struct {
+				Name string `json:"name"`
+			} `json:"metadata"`
+		} `json:"items"`
+	}
+	g.Expect(json.Unmarshal(body, &nsList)).To(Succeed(),
+		"expected NamespaceList JSON, got: %s", string(body))
+	for _, item := range nsList.Items {
+		if item.Metadata.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func echoGet(path, token string) map[string][]string {

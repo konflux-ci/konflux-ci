@@ -7,7 +7,7 @@ require (
 	github.com/go-logr/logr v1.4.4
 	github.com/onsi/ginkgo/v2 v2.34.0
 	github.com/onsi/gomega v1.44.0
-	github.com/openshift/api v0.0.0-20261112171031-b027bed8bb3f
+	github.com/openshift/api v0.0.0-20261126211652-889c1f5c276a
 	github.com/prometheus/client_golang v1.25.0
 	golang.org/x/crypto v0.59.0
 	golang.org/x/sync v0.25.0
@@ -16,7 +16,7 @@ require (
 	k8s.io/apimachinery v0.37.2
 	k8s.io/client-go v0.37.2
 	k8s.io/utils v0.0.0-20261023123148-ca04ba58ecab
-	sigs.k8s.io/controller-runtime v0.25.2
+	sigs.k8s.io/controller-runtime v0.25.3
 	sigs.k8s.io/yaml v1.6.0
 )
 

@@ -195,12 +195,14 @@ func proxyTektonWSPath(resource string) string {
 }
 
 // proxySecretsListExpectedStatus is the expected HTTP status for listing secrets in the
-// test tenant. OpenShift CI uses kubeadmin (cluster-admin) → 200. Dex on default-tenant
-// grants maintainer only → 403. Legacy user-ns* demo fixtures bind admin → 200.
+// test tenant. default-tenant grants maintainer only → 403. Legacy user-ns* demo
+// fixtures bind admin → 200.
+//
+// OpenShift CI authenticates as kubeadmin, but the proxy only impersonates the user
+// plus system:authenticated (see #10123). Privileged groups such as system:masters are
+// not forwarded, so kubeadmin does not retain cluster-admin through the proxy and
+// secrets list follows the same tenant RBAC as Dex.
 func proxySecretsListExpectedStatus() int {
-	if proxyAuthMethodFromEnv() == proxyAuthMethodOpenShiftOAuth {
-		return http.StatusOK
-	}
 	if proxyTenantNamespace() == defaultProxyTenantNamespace {
 		return http.StatusForbidden
 	}
