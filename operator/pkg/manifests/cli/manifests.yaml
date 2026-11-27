@@ -123,7 +123,7 @@ data:
     be set explicitly, at create time, to a non-serviceaccount identity.\n# Must be
     a valid Kubernetes label value (no '@'; use '.' for email-like values).\nRELEASE_AUTHOR=\"konflux-ci.noreply\"\n#
     renovate: datasource=git-refs depName=https://github.com/konflux-ci/release-service-catalog
-    currentValue=development\nCATALOG_REVISION=\"025e4775a75af664260e8ad38cdc32174c00a731\"\nIMAGE_NAME_PREFIX=\"\"\nCOMPONENTS=()\n\nwhile
+    currentValue=development\nCATALOG_REVISION=\"ea3364afb4b5b96e0ff7fd39ccb6ca9cb5b6dc70\"\nIMAGE_NAME_PREFIX=\"\"\nCOMPONENTS=()\n\nwhile
     [[ $# -gt 0 ]]; do\n    case $1 in\n        -t|--tenant-namespace)\n            TENANT_NS=\"$2\"\n
     \           shift 2\n            ;;\n        -m|--managed-namespace)\n            MANAGED_NS=\"$2\"\n
     \           shift 2\n            ;;\n        -a|--application)\n            APPLICATION=\"$2\"\n
