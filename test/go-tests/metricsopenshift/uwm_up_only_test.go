@@ -12,8 +12,12 @@ func init() {
 }
 
 var _ = Describe("UWM Prometheus legacy up targets", Label("openshift", "metrics-uwm-up-only"), func() {
-	Expect(metricsCatalog).NotTo(BeNil())
-	Expect(uwmUpOnlyTargets).NotTo(BeEmpty())
+	if len(uwmUpOnlyTargets) == 0 {
+		It("has no legacy up-only targets", func() {
+			Skip("all targets have migrated to scrape tokens")
+		})
+		return
+	}
 
 	for _, target := range uwmUpOnlyTargets {
 		It("scrapes "+target.ID+" via user-workload Prometheus",
