@@ -1078,10 +1078,20 @@ spec:
                     from:
                       description: From is the source component name that triggers
                         the nudge when its build succeeds.
-                      maxLength: 63
-                      minLength: 1
-                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
-                      type: string
+                      properties:
+                        component:
+                          description: Component is the name of the Component
+                          maxLength: 63
+                          minLength: 1
+                          pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                          type: string
+                        version:
+                          description: Version is the version of the Component
+                          maxLength: 253
+                          type: string
+                      required:
+                      - component
+                      type: object
                     gatingGroup:
                       description: GatingGroup is reserved for Phase 2 group-based
                         gating and is not enforced in Phase 1.
@@ -1099,10 +1109,20 @@ spec:
                     to:
                       description: To is the target component name that receives the
                         nudge.
-                      maxLength: 63
-                      minLength: 1
-                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
-                      type: string
+                      properties:
+                        component:
+                          description: Component is the name of the Component
+                          maxLength: 63
+                          minLength: 1
+                          pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                          type: string
+                        version:
+                          description: Version is the version of the Component
+                          maxLength: 253
+                          type: string
+                      required:
+                      - component
+                      type: object
                   required:
                   - from
                   - to
@@ -1179,10 +1199,9 @@ spec:
             type: object
             x-kubernetes-validations:
             - message: 'self-nudge not allowed: from and to must be different'
-              rule: '!has(self.nudges) || self.nudges.all(n, n.from != n.to)'
-            - message: duplicate target not allowed in targetConfig
-              rule: '!has(self.targetConfig) || self.targetConfig.all(i, self.targetConfig.exists_one(j,
-                i.target == j.target))'
+              rule: '!has(self.nudges) || self.nudges.all(n, !(n.from.component ==
+                n.to.component && (!has(n.from.version) || !has(n.to.version) || n.from.version.size()
+                == 0 || n.to.version.size() == 0 || n.from.version == n.to.version)))'
           status:
             description: NudgeConfigStatus defines the observed state of NudgeConfig.
             properties:
@@ -1728,6 +1747,12 @@ rules:
   - list
   - watch
 - apiGroups:
+  - appstudio.redhat.com
+  resources:
+  - imagerepositories
+  verbs:
+  - list
+- apiGroups:
   - konflux-ci.dev
   resources:
   - componentgroups
@@ -2243,7 +2268,7 @@ spec:
         - --leader-elector-retry-period=5s
         command:
         - /manager
-        image: quay.io/konflux-ci/integration-service:7fec046b688788c42ef97eb0a62e7638ee84d980
+        image: quay.io/konflux-ci/integration-service:0f27d6e808f897916c68f10a74b63456e6bb8087
         livenessProbe:
           httpGet:
             path: /healthz
@@ -2327,7 +2352,7 @@ spec:
             - --zap-log-level=debug
             - --pr-snapshots-to-keep=70
             - --non-pr-snapshots-to-keep=640
-            image: quay.io/konflux-ci/integration-service:7fec046b688788c42ef97eb0a62e7638ee84d980
+            image: quay.io/konflux-ci/integration-service:0f27d6e808f897916c68f10a74b63456e6bb8087
             imagePullPolicy: Always
             name: test-gc
             resources:
