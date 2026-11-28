@@ -16,7 +16,7 @@ images:
 - digest: sha256:68a15e20134c2d6fa8ce8f741a76b64a7062e149248bf30ef136b1d3247f87d7
   name: quay.io/konflux-ci/konflux-ui
   newName: quay.io/konflux-ci/konflux-ui
-- digest: sha256:6860337c0ef6e25102284513040a5c4132156c12354943ba23c5a98d1900a580
+- digest: sha256:36ef932c47cd06af925e326508b1f64e0f0901e4252392af2512b50a92fb314d
   name: registry.access.redhat.com/hi/oauth2-proxy
   newName: registry.access.redhat.com/hi/oauth2-proxy
 - digest: sha256:5454876105ed17869e12cfeeb19dfb14d5aba94fcebb71533646647c946bc6fd
